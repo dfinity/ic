@@ -1,7 +1,7 @@
 use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
-use candid::{Encode, Principal};
+use candid::{CandidType, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg, UpgradeArg as IndexUpgradeArg};
+use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_suite_state_machine_tests_constants::{
@@ -21,6 +21,24 @@ const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 const MAX_BLOCKS_FROM_ARCHIVE: u64 = 10;
 
+#[derive(Clone, Debug, CandidType)]
+pub enum MainnetIndexArg {
+    Init(MainnetInitArg),
+    Upgrade(MainnetUpgradeArg),
+}
+
+#[derive(Clone, Debug, CandidType)]
+pub struct MainnetInitArg {
+    pub ledger_id: Principal,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+}
+
+#[derive(Clone, Debug, CandidType)]
+pub struct MainnetUpgradeArg {
+    pub ledger_id: Option<Principal>,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+}
+
 #[test]
 fn should_upgrade_and_downgrade_ledger_canister_suite() {
     let now = SystemTime::now();
@@ -39,7 +57,7 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
     );
     let index_id = install_index_ng(
         env,
-        IndexInitArg {
+        MainnetInitArg {
             ledger_id: Principal::from(ledger_id),
             retrieve_blocks_from_ledger_interval_seconds: None,
         },
@@ -50,7 +68,8 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
 
     let index_upgrade_arg = IndexArg::Upgrade(IndexUpgradeArg {
         ledger_id: None,
-        retrieve_blocks_from_ledger_interval_seconds: None,
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
     });
     env.upgrade_canister(
         index_id,
@@ -132,8 +151,8 @@ fn install_ledger(
     .unwrap()
 }
 
-fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
-    let args = IndexArg::Init(init_arg);
+fn install_index_ng(env: &StateMachine, init_arg: MainnetInitArg) -> CanisterId {
+    let args = MainnetIndexArg::Init(init_arg);
     env.install_canister_with_cycles(
         index_ng_mainnet_wasm(),
         Encode!(&args).unwrap(),

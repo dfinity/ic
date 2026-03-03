@@ -1,11 +1,10 @@
 use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
 use crate::index::verify_ledger_archive_and_index_block_parity;
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Block;
 use ic_icrc1::endpoints::StandardRecord;
-use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_in_memory_ledger::{
     AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
@@ -152,6 +151,28 @@ struct LedgerSuiteConfig {
     extended_testing: bool,
     mainnet_wasms: &'static Wasms,
     master_wasms: &'static Wasms,
+}
+
+#[derive(Clone, Debug, CandidType)]
+pub enum SupersetIndexArg {
+    Init(SupersetIndexInitArg),
+    Upgrade(SupersetIndexUpgradeArg),
+}
+
+#[derive(Clone, Debug, CandidType)]
+pub struct SupersetIndexInitArg {
+    pub ledger_id: Principal,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+    pub min_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+    pub max_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+}
+
+#[derive(Clone, Debug, CandidType)]
+pub struct SupersetIndexUpgradeArg {
+    pub ledger_id: Option<Principal>,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+    pub min_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+    pub max_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
 
 impl LedgerSuiteConfig {
@@ -333,9 +354,11 @@ impl LedgerSuiteConfig {
     fn upgrade_index_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
-        let index_upgrade_arg = IndexArg::Upgrade(IndexUpgradeArg {
+        let index_upgrade_arg = SupersetIndexArg::Upgrade(SupersetIndexUpgradeArg {
             ledger_id: None,
             retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: None,
+            max_retrieve_blocks_from_ledger_interval_seconds: None,
         });
         let args = Encode!(&index_upgrade_arg).unwrap();
         state_machine

@@ -1,35 +1,36 @@
 use crate::common::{
-    MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER, default_archive_options,
-    index_ng_wasm, install_index_ng, install_ledger, wait_until_sync_is_completed,
+    STARTING_CYCLES_PER_CANISTER, default_archive_options, index_ng_wasm, install_index_ng,
+    install_ledger, wait_until_sync_is_completed,
 };
-use candid::{CandidType, Deserialize, Encode, Nat, Principal};
+use candid::{CandidType, Deserialize, Encode, Principal};
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
-use ic_icrc1_test_utils::{arb_account, minter_identity};
-use ic_ledger_suite_state_machine_helpers::send_transfer;
+use ic_icrc1_test_utils::minter_identity;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
 use ic_types::{Cycles, Time};
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
-use num_traits::ToPrimitive;
 use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
 use std::time::{Duration, SystemTime};
 
 mod common;
 
-/// Corresponds to ic_icrc1_index_ng::DEFAULT_MAX_WAIT_TIME_IN_SECS
-const DEFAULT_MAX_WAIT_TIME_IN_SECS: u64 = 1;
+// Corresponds to ic_icrc1_index_ng::MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS
+const MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS: u64 = 1;
+// Corresponds to ic_icrc1_index_ng::MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS
+const MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS: u64 = 64;
 const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
-const IDLE_TIME_IN_SECS: u64 = 10;
-const INDEX_SYNC_TIME_TO_ADVANCE: Duration = Duration::from_secs(60);
 const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[3_u8; 29]);
 
+struct TimerIntervals {
+    min_interval_seconds: Option<u64>,
+    max_interval_seconds: Option<u64>,
+}
+
 fn install_and_upgrade(
-    install_interval: Option<u64>,
-    upgrade_interval: Option<u64>,
+    install_intervals: &TimerIntervals,
+    upgrade_intervals: &TimerIntervals,
 ) -> Result<(), UserError> {
     let env = &StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
@@ -45,7 +46,8 @@ fn install_and_upgrade(
     );
     let args = IndexArg::Init(ic_icrc1_index_ng::InitArg {
         ledger_id: Principal::from(ledger_id),
-        retrieve_blocks_from_ledger_interval_seconds: install_interval,
+        min_retrieve_blocks_from_ledger_interval_seconds: install_intervals.min_interval_seconds,
+        max_retrieve_blocks_from_ledger_interval_seconds: install_intervals.max_interval_seconds,
     });
     let index_id = env.install_canister_with_cycles(
         index_ng_wasm(),
@@ -58,7 +60,8 @@ fn install_and_upgrade(
 
     let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
         ledger_id: None,
-        retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
+        min_retrieve_blocks_from_ledger_interval_seconds: upgrade_intervals.min_interval_seconds,
+        max_retrieve_blocks_from_ledger_interval_seconds: upgrade_intervals.max_interval_seconds,
     });
     env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())?;
 
@@ -71,22 +74,25 @@ fn max_value_for_interval() -> u64 {
     (u64::MAX - GENESIS.as_nanos_since_unix_epoch()) / 1_000_000_000
 }
 
-fn max_index_sync_time() -> u64 {
-    (MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT as u64)
-        .checked_mul(INDEX_SYNC_TIME_TO_ADVANCE.as_secs())
-        .unwrap()
-}
-
 #[test]
 fn should_install_and_upgrade_with_large_interval_value() {
     // Large values for retrieve_blocks_from_ledger_interval_seconds are clamped
     // to the adaptive timer's [MIN, MAX] range. They should no longer cause errors.
-    let large_value = max_value_for_interval() + 1;
+    let large_value = max_value_for_interval() - 1;
     let install_and_upgrade_combinations =
         [(Some(large_value), Some(1)), (Some(1), Some(large_value))];
     for (install_interval, upgrade_interval) in &install_and_upgrade_combinations {
         assert_eq!(
-            install_and_upgrade(*install_interval, *upgrade_interval),
+            install_and_upgrade(
+                &TimerIntervals {
+                    min_interval_seconds: None,
+                    max_interval_seconds: *install_interval,
+                },
+                &TimerIntervals {
+                    min_interval_seconds: None,
+                    max_interval_seconds: *upgrade_interval,
+                }
+            ),
             Ok(()),
             "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
         );
@@ -95,156 +101,145 @@ fn should_install_and_upgrade_with_large_interval_value() {
 
 #[test]
 fn should_install_and_upgrade_with_valid_values() {
-    let max_seconds_for_timer = max_value_for_interval() - max_index_sync_time();
-    let build_index_interval_values = [
-        None,
-        Some(0u64),
-        Some(1u64),
-        Some(10u64),
-        Some(max_seconds_for_timer),
-    ];
-
-    // Installing and upgrading with valid values should succeed
-    for install_interval in &build_index_interval_values {
-        for upgrade_interval in &build_index_interval_values {
-            assert_eq!(
-                install_and_upgrade(*install_interval, *upgrade_interval),
-                Ok(()),
-                "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
-            );
-        }
+    /// Returns true iff the given timer intervals form a valid configuration,
+    /// using `default_min` and `default_max` as fallbacks for `None` values.
+    fn is_valid_config(intervals: &TimerIntervals, default_min: u64, default_max: u64) -> bool {
+        let eff_min = intervals.min_interval_seconds.unwrap_or(default_min);
+        let eff_max = intervals.max_interval_seconds.unwrap_or(default_max);
+        !(eff_min < 1 || eff_min > eff_max)
     }
-}
 
-#[test]
-fn should_sync_according_to_interval() {
-    const INITIAL_BALANCE: u64 = 1_000_000_000;
-    const TRANSFER_AMOUNT: u64 = 1_000_000;
-    const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: u64 = 1;
-
-    fn send_transaction_and_verify_index_sync(
-        env: &StateMachine,
-        ledger_id: CanisterId,
-        index_id: CanisterId,
-        a1: Account,
-        a2: Account,
-        install_interval: Option<u64>,
-        upgrade_interval: Option<u64>,
-    ) {
-        let ledger_chain_length = send_transfer(
-            env,
-            ledger_id,
-            a1.owner,
-            &TransferArg {
-                from_subaccount: a1.subaccount,
-                to: a2,
-                fee: None,
-                created_at_time: None,
-                memo: None,
-                amount: Nat::from(TRANSFER_AMOUNT),
-            },
-        )
-        .expect("send_transfer should succeed")
-        .checked_add(1)
-        .expect("should be able to add 1 to block index");
-        let mut index_num_blocks_synced = common::status(env, index_id)
-            .num_blocks_synced
-            .0
-            .to_u64()
-            .expect("should retrieve num_blocks_synced from index");
-        if index_num_blocks_synced != ledger_chain_length {
-            let time_to_advance = upgrade_interval
-                .or(install_interval)
-                .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL);
-            if time_to_advance > 0 {
-                env.advance_time(Duration::from_secs(time_to_advance));
-                env.tick();
-            }
-            index_num_blocks_synced = common::status(env, index_id)
-                .num_blocks_synced
-                .0
-                .to_u64()
-                .expect("should retrieve num_blocks_synced from index");
-        }
-        assert_eq!(ledger_chain_length, index_num_blocks_synced);
-    }
+    // Generate optional values in [1, MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS]. This
+    // range ensures that when any value is None and falls back to its default (1 or 64),
+    // the resulting configuration has a reasonable chance of being valid.
+    let opt_val = || proptest::option::of(1u64..=MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS);
 
     let mut runner = TestRunner::new(proptest::test_runner::Config::with_cases(4));
     runner
         .run(
-            &(
-                proptest::option::of(0..(max_value_for_interval() / 2)),
-                proptest::option::of(0..(max_value_for_interval() / 2)),
-                arb_account(),
-                arb_account(),
-            )
-                .prop_filter("The accounts must be different", |(_, _, a1, a2)| a1 != a2)
+            &(opt_val(), opt_val(), opt_val(), opt_val())
+                .prop_filter(
+                    "init and upgrade configs must be valid",
+                    |(i_min, i_max, u_min, u_max)| {
+                        let init = TimerIntervals {
+                            min_interval_seconds: *i_min,
+                            max_interval_seconds: *i_max,
+                        };
+                        if !is_valid_config(
+                            &init,
+                            MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS,
+                            MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS,
+                        ) {
+                            return false;
+                        }
+                        // For upgrade, None means "keep the value from init". If init was
+                        // also None, fall back to the global default.
+                        let upgrade_default_min =
+                            i_min.unwrap_or(MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS);
+                        let upgrade_default_max =
+                            i_max.unwrap_or(MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS);
+                        let upgrade = TimerIntervals {
+                            min_interval_seconds: *u_min,
+                            max_interval_seconds: *u_max,
+                        };
+                        is_valid_config(&upgrade, upgrade_default_min, upgrade_default_max)
+                    },
+                )
                 .no_shrink(),
-            |(install_interval, upgrade_interval, a1, a2)| {
-                // Create a new environment with an application subnet
-                let env = &StateMachineBuilder::new()
-                    .with_subnet_type(SubnetType::Application)
-                    .with_subnet_size(28)
-                    .with_time(GENESIS)
-                    .build();
-                // Install a ledger with an initial balance for a1
-                let ledger_id = install_ledger(
-                    env,
-                    vec![(a1, INITIAL_BALANCE)],
-                    default_archive_options(),
-                    None,
-                    minter_identity().sender().unwrap(),
+            |(i_min, i_max, u_min, u_max)| {
+                assert_eq!(
+                    install_and_upgrade(
+                        &TimerIntervals {
+                            min_interval_seconds: i_min,
+                            max_interval_seconds: i_max,
+                        },
+                        &TimerIntervals {
+                            min_interval_seconds: u_min,
+                            max_interval_seconds: u_max,
+                        },
+                    ),
+                    Ok(()),
+                    "init: min={i_min:?}, max={i_max:?}; \
+                     upgrade: min={u_min:?}, max={u_max:?}"
                 );
-                // Install an index with a specific interval
-                let args = IndexArg::Init(InitArg {
-                    ledger_id: Principal::from(ledger_id),
-                    retrieve_blocks_from_ledger_interval_seconds: install_interval,
-                });
-                let index_id = env.install_canister_with_cycles(
-                    index_ng_wasm(),
-                    Encode!(&args).unwrap(),
-                    None,
-                    Cycles::new(STARTING_CYCLES_PER_CANISTER),
-                )?;
-
-                // Send a transaction and verify that the index is synced after the interval
-                // specified during the install, or the default value if the interval specified
-                // during the install was None.
-                send_transaction_and_verify_index_sync(
-                    env,
-                    ledger_id,
-                    index_id,
-                    a1,
-                    a2,
-                    install_interval,
-                    None,
-                );
-
-                // Upgrade the index with a specific interval
-                let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
-                    ledger_id: None,
-                    retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
-                });
-                env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())?;
-
-                // Send a transaction and verify that the index is synced after the interval
-                // specified during the upgrade, or if it is None, the interval specified during
-                // the install, or the default value if the interval specified during the install
-                // was None.
-                send_transaction_and_verify_index_sync(
-                    env,
-                    ledger_id,
-                    index_id,
-                    a1,
-                    a2,
-                    install_interval,
-                    upgrade_interval,
-                );
-
                 Ok(())
             },
         )
         .unwrap();
+}
+
+#[test]
+fn should_fail_to_install_with_invalid_values() {
+    let invalid_values = [
+        // Min interval greater than max interval
+        TimerIntervals {
+            min_interval_seconds: Some(MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS + 1),
+            max_interval_seconds: None,
+        },
+        // Min interval equal to zero
+        TimerIntervals {
+            min_interval_seconds: Some(0),
+            max_interval_seconds: None,
+        },
+    ];
+
+    let env = &StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_subnet_size(28)
+        .with_time(GENESIS)
+        .build();
+    let ledger_id = install_ledger(
+        env,
+        vec![],
+        default_archive_options(),
+        None,
+        minter_identity().sender().unwrap(),
+    );
+
+    for intervals in &invalid_values {
+        let args = IndexArg::Init(InitArg {
+            ledger_id: Principal::from(ledger_id),
+            min_retrieve_blocks_from_ledger_interval_seconds: intervals.min_interval_seconds,
+            max_retrieve_blocks_from_ledger_interval_seconds: intervals.max_interval_seconds,
+        });
+        let err = env
+            .install_canister_with_cycles(
+                index_ng_wasm(),
+                Encode!(&args).unwrap(),
+                None,
+                Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            )
+            .expect_err("index installation with invalid intervals should fail");
+        err.assert_contains(ErrorCode::CanisterCalledTrap, "interval");
+    }
+
+    let args = IndexArg::Init(InitArg {
+        ledger_id: Principal::from(ledger_id),
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
+    });
+    let index_id = env
+        .install_canister_with_cycles(
+            index_ng_wasm(),
+            Encode!(&args).unwrap(),
+            None,
+            Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        )
+        .expect("index installation with valid intervals should succeed");
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    for intervals in &invalid_values {
+        let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
+            ledger_id: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: intervals.min_interval_seconds,
+            max_retrieve_blocks_from_ledger_interval_seconds: intervals.max_interval_seconds,
+        });
+        let err = env
+            .upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())
+            .expect_err("index installation with invalid intervals should fail");
+        err.assert_contains(ErrorCode::CanisterCalledTrap, "interval");
+    }
 }
 
 #[test]
@@ -297,101 +292,78 @@ fn should_install_and_upgrade_without_build_index_interval_field_set() {
     wait_until_sync_is_completed(env, index_id, ledger_id);
 }
 
-struct CyclesConsumptionParameters {
-    initial_interval: Option<u64>,
-    upgrade_interval: Option<u64>,
-    assert_cost: fn(&CycleConsumption, &CycleConsumption),
-}
-
 #[test]
 fn should_consume_expected_amount_of_cycles() {
-    // With adaptive timing, the timer backs off exponentially when idle (no blocks):
-    // 1s -> 2s -> 4s -> 8s -> ... up to 64s max.
-    // After upgrade, the backed-off state persists, so fewer timer fires occur in
-    // the second measurement period.
-    let assert_upgrade_consumes_less =
-        |initial_consumption: &CycleConsumption, upgrade_consumption: &CycleConsumption| {
+    // The initially installed index polls the ledger every second. In the reinstalled index with
+    // adaptive timing, the timer backs off exponentially when idle (no blocks):
+    // 1s -> 2s -> 4s -> 8s -> ... up to 64s max. In this case, it is expected that the reinstalled
+    // index consumes 90+% of the cycles consumed by the initially installed index over a long idle
+    // period, since the adaptive timer will spend most of the time at the max interval of 64s.
+    const IDLE_TIME_IN_SECS: u64 = 128; // 1+2+4+8+16+32+64 = 127s
+    let assert_cost = |initial_consumption: &CycleConsumption,
+                       reinstall_consumption: &CycleConsumption| {
+        for (initial, reinstall) in [
+            (initial_consumption.ledger, reinstall_consumption.ledger),
+            (initial_consumption.index, reinstall_consumption.index),
+        ] {
+            let relative_difference = abs_relative_difference(initial, reinstall);
             assert!(
-                initial_consumption.ledger > upgrade_consumption.ledger,
-                "expected initial ledger cycles ({}) > upgrade ledger cycles ({})",
-                initial_consumption.ledger,
-                upgrade_consumption.ledger
-            );
-            assert!(
-                initial_consumption.index > upgrade_consumption.index,
-                "expected initial index cycles ({}) > upgrade index cycles ({})",
-                initial_consumption.index,
-                upgrade_consumption.index
-            );
-        };
-    for &CyclesConsumptionParameters {
-        initial_interval,
-        upgrade_interval,
-        assert_cost,
-    } in &[
-        // With the adaptive timer, the timer backs off when idle. After upgrade,
-        // the backed-off state persists, so upgrade consumption should be less.
-        CyclesConsumptionParameters {
-            initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
-            upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
-            assert_cost: assert_upgrade_consumes_less,
-        },
-        CyclesConsumptionParameters {
-            initial_interval: None,
-            upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
-            assert_cost: assert_upgrade_consumes_less,
-        },
-        CyclesConsumptionParameters {
-            initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
-            upgrade_interval: None,
-            assert_cost: assert_upgrade_consumes_less,
-        },
-        CyclesConsumptionParameters {
-            initial_interval: None,
-            upgrade_interval: None,
-            assert_cost: assert_upgrade_consumes_less,
-        },
-    ] {
-        let env = &StateMachineBuilder::new()
-            .with_subnet_type(SubnetType::Application)
-            .with_subnet_size(28)
-            .build();
-        env.set_time(SystemTime::from(GENESIS));
-        let ledger_id = install_ledger(
-            env,
-            vec![],
-            default_archive_options(),
-            None,
-            MINTER_PRINCIPAL,
-        );
-        let index_id = install_index_ng(
-            env,
-            InitArg {
-                ledger_id: Principal::from(ledger_id),
-                retrieve_blocks_from_ledger_interval_seconds: initial_interval,
-            },
-        );
+                0.9 < relative_difference && relative_difference < 1.0,
+                "initial cycles: {}, cycles after reinstall: {}, relative_difference: {}",
+                initial,
+                reinstall,
+                relative_difference
+            )
+        }
+    };
 
-        let initial_cycle_consumption =
-            idle_ledger_and_index_cycles_consumption(env, ledger_id, index_id, IDLE_TIME_IN_SECS);
+    let env = &StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_subnet_size(28)
+        .build();
+    env.set_time(SystemTime::from(GENESIS));
+    let ledger_id = install_ledger(
+        env,
+        vec![],
+        default_archive_options(),
+        None,
+        MINTER_PRINCIPAL,
+    );
+    // Install the index with min and max intervals set to 1s to mimic the current default mainnet behavior.
+    let index_id = install_index_ng(
+        env,
+        InitArg {
+            ledger_id: Principal::from(ledger_id),
+            min_retrieve_blocks_from_ledger_interval_seconds: Some(1),
+            max_retrieve_blocks_from_ledger_interval_seconds: Some(1),
+        },
+    );
 
-        let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
-            ledger_id: None,
-            retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
-        });
-        env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())
-            .unwrap();
+    let initial_cycle_consumption =
+        idle_ledger_and_index_cycles_consumption(env, ledger_id, index_id, IDLE_TIME_IN_SECS);
 
-        let upgrade_cycle_consumption =
-            idle_ledger_and_index_cycles_consumption(env, ledger_id, index_id, IDLE_TIME_IN_SECS);
+    // Reinstall the index with default min and max intervals.
+    let reinstall_arg = IndexArg::Init(InitArg {
+        ledger_id: Principal::from(ledger_id),
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
+    });
+    env.reinstall_canister(index_id, index_ng_wasm(), Encode!(&reinstall_arg).unwrap())
+        .unwrap();
 
-        (assert_cost)(&initial_cycle_consumption, &upgrade_cycle_consumption);
-    }
+    let reinstall_cycle_consumption =
+        idle_ledger_and_index_cycles_consumption(env, ledger_id, index_id, IDLE_TIME_IN_SECS);
+
+    (assert_cost)(&initial_cycle_consumption, &reinstall_cycle_consumption);
 }
 
 struct CycleConsumption {
     ledger: i128,
     index: i128,
+}
+
+fn abs_relative_difference(subject: i128, reference: i128) -> f64 {
+    subject.abs_diff(reference) as f64 / (subject as f64)
 }
 
 fn idle_ledger_and_index_cycles_consumption(
