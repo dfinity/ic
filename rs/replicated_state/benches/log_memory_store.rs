@@ -121,6 +121,6 @@ pub fn log_memory_store_records_benchmark(c: &mut Criterion) {
 criterion_group!(
     benchmarks,
     log_memory_store_resize_benchmark,
-    log_memory_store_records_benchmark
+    //log_memory_store_records_benchmark
 );
 criterion_main!(benchmarks);
