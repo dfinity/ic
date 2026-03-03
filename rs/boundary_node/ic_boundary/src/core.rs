@@ -218,24 +218,22 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // Snapshot update notification channels
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
 
-    // Registry Client, IC Agent, and health checking
-    let agent = if cli.registry.registry_local_store_path.is_some() {
-        let (registry_client, agent) = setup_registry(
-            &cli,
-            registry_snapshot.clone(),
-            persister,
-            http_client_check.clone(),
-            &metrics_registry,
-            channel_snapshot_send,
-            channel_snapshot_recv.clone(),
-            &mut tasks,
+    // Registry Client and health checking
+    let registry_client = if cli.registry.registry_local_store_path.is_some() {
+        Some(
+            setup_registry(
+                &cli,
+                registry_snapshot.clone(),
+                persister,
+                http_client_check.clone(),
+                &metrics_registry,
+                channel_snapshot_send,
+                channel_snapshot_recv.clone(),
+                &mut tasks,
+            )
+            .await
+            .context("unable to init Registry")?,
         )
-        .await
-        .context("unable to init Registry")?;
-
-        set_agent_root_key(&agent, &registry_client)?;
-
-        Some(agent)
     } else {
         // Prepare a stub routing table and snapshot if there's no local store specified
         let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
@@ -246,18 +244,28 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         None
     };
 
-    // IC Agent for non-registry use cases (rate limiting, observability)
-    let agent = if agent.is_none()
-        && (cli.rate_limiting.rate_limit_generic_canister_id.is_some()
-            || cli.obs.obs_log_anonymization_canister_id.is_some())
+    // IC Agent (with crypto identity for rate limiting / observability canisters)
+    let agent = if cli.rate_limiting.rate_limit_generic_canister_id.is_some()
+        || cli.obs.obs_log_anonymization_canister_id.is_some()
     {
-        if cli.misc.crypto_config.is_some() {
+        if cli.misc.crypto_config.is_some() && registry_client.is_none() {
             bail!("IC-Agent: registry client is required when crypto-config is in use");
         }
 
-        Some(create_agent(None, None, cli.listen.listen_http_port_loopback).await?)
+        let agent = create_agent(
+            cli.misc.crypto_config.clone(),
+            registry_client.clone(),
+            cli.listen.listen_http_port_loopback,
+        )
+        .await?;
+
+        if let Some(v) = &registry_client {
+            set_agent_root_key(&agent, v)?;
+        }
+
+        Some(agent)
     } else {
-        agent
+        None
     };
 
     // Caching
@@ -610,7 +618,7 @@ fn set_agent_root_key(
     Ok(())
 }
 
-/// Sets up registry client, snapshotter, IC agent, and health check runner.
+/// Sets up registry client, snapshotter, and health check runner.
 async fn setup_registry(
     cli: &Cli,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
@@ -620,12 +628,13 @@ async fn setup_registry(
     channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
     channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     tasks: &mut TaskManager,
-) -> Result<(Arc<dyn RegistryClient>, Agent), Error> {
+) -> Result<Arc<dyn RegistryClient>, Error> {
     let local_store = Arc::new(LocalStoreImpl::new(
         cli.registry.registry_local_store_path.clone().unwrap(),
     ));
 
-    let registry_client = Arc::new(RegistryClientImpl::new(local_store, None));
+    let registry_client: Arc<dyn RegistryClient> =
+        Arc::new(RegistryClientImpl::new(local_store, None));
     registry_client
         .fetch_and_start_polling()
         .context("failed to start registry client")?;
@@ -642,17 +651,13 @@ async fn setup_registry(
     );
     tasks.add_interval("snapshotter", Arc::new(snapshotter), 5 * SECOND);
 
-    // IC Agent
-    let agent = create_agent(
-        cli.misc.crypto_config.clone(),
-        Some(registry_client.clone()),
-        cli.listen.listen_http_port_loopback,
-    )
-    .await?;
+    // Anonymous agent for certified membership fetching (read_state only)
+    let membership_agent = create_agent(None, None, cli.listen.listen_http_port_loopback).await?;
+    set_agent_root_key(&membership_agent, &registry_client)?;
 
     // Health checking and certified membership fetching
     let persister = WithMetricsPersist(persister, MetricParamsPersist::new(metrics_registry));
-    let membership_fetcher = CertifiedMembershipFetcherImpl::new(agent.clone());
+    let membership_fetcher = CertifiedMembershipFetcherImpl::new(membership_agent);
     let checker = Checker::new(http_client_check, cli.health.health_check_timeout);
     let checker = WithMetricsCheck(checker, MetricParamsCheck::new(metrics_registry));
     let check_runner = CheckRunner::new(
@@ -667,7 +672,7 @@ async fn setup_registry(
     );
     tasks.add("check_runner", Arc::new(check_runner));
 
-    Ok((registry_client, agent))
+    Ok(registry_client)
 }
 
 fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
