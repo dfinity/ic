@@ -376,7 +376,7 @@ impl Debug for GuestVmServiceError {
 /// Service responsible for managing the GuestOS virtual machine lifecycle
 pub struct GuestVmService {
     metrics: GuestVmMetrics,
-    libvirt_connection: Arc<dyn LibvirtConnection>,
+    libvirt_connection: Arc<LibvirtConnectionWithReconnect>,
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_ttys: Vec<Mutex<Box<dyn Write + Send + Sync>>>,
@@ -403,7 +403,7 @@ impl GuestVmService {
             .context("Failed to create metrics")?;
         let libvirt_connection = LibvirtConnectionWithReconnect::new(Arc::new(|| {
             let connect = Connect::open(None).context("Failed to connect to libvirt")?;
-            Ok(Arc::new(LibvirtConnectionImpl(connect)) as Arc<dyn LibvirtConnection>)
+            Ok(Box::new(LibvirtConnectionImpl(connect)))
         }));
         let hostos_config: HostOSConfig =
             config_tool::deserialize_config(config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
@@ -771,6 +771,7 @@ mod tests {
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
     use sev_host::testing::mock_host_sev_certificate_provider;
+    use std::collections::VecDeque;
     use std::fs::File;
     use std::os::unix::process::ExitStatusExt;
     use std::path::PathBuf;
@@ -813,7 +814,7 @@ mod tests {
     struct TestServiceInstance {
         task: JoinHandle<Result<()>>,
         vm_domain_name: String,
-        libvirt_connect: Arc<dyn LibvirtConnection>,
+        libvirt_connection: Arc<LibvirtConnectionWithReconnect>,
         console_file: NamedTempFile,
         metrics_file: NamedTempFile,
         systemd_notifier: MockSystemdNotifier,
@@ -848,7 +849,7 @@ mod tests {
         }
 
         fn try_get_domain(&self) -> Result<Box<dyn LibvirtDomain>> {
-            self.libvirt_connect
+            self.libvirt_connection
                 .lookup_domain_by_name(&self.vm_domain_name)
         }
 
@@ -868,7 +869,7 @@ mod tests {
 
         fn check_vm_shutdown(&self) -> Result<()> {
             ensure!(
-                self.libvirt_connect
+                self.libvirt_connection
                     .lookup_domain_by_name(&self.vm_domain_name)
                     .is_err(),
                 "VM is still running"
@@ -878,7 +879,7 @@ mod tests {
 
         fn check_vm_not_exists(&self) -> Result<()> {
             ensure!(
-                self.libvirt_connect
+                self.libvirt_connection
                     .lookup_domain_by_name(&self.vm_domain_name)
                     .is_err(),
                 "Expected VM domain to not exist"
@@ -953,7 +954,7 @@ mod tests {
 
     /// Test fixture for setting up the test environment
     struct TestFixture {
-        libvirt_connection: Arc<dyn LibvirtConnection>,
+        libvirt_connection: Arc<LibvirtConnectionWithReconnect>,
         hostos_config: HostOSConfig,
         guestos_device: PathBuf,
         mock_mounter: ExtractingFilesystemMounter,
@@ -968,16 +969,17 @@ mod tests {
                 NamedTempFile::new().expect("Failed to create libvirt connection");
             std::fs::write(&libvirt_definition, "<node/>").unwrap();
 
-            let libvirt_connection = Arc::new(LibvirtConnectionImpl(
-                Connect::open(Some(&format!(
+            let libvirt_connection_factory = move || {
+                Ok(Box::new(LibvirtConnectionImpl(Connect::open(Some(&format!(
                     "test://{}",
                     libvirt_definition.path().display()
-                )))
-                .unwrap(),
-            ));
+                )))?)) as Box<dyn LibvirtConnection>)
+            };
 
             TestFixture {
-                libvirt_connection,
+                libvirt_connection: Arc::new(LibvirtConnectionWithReconnect::new(Arc::new(
+                    libvirt_connection_factory,
+                ))),
                 hostos_config,
                 guestos_device: GUESTOS_IMAGE.path().to_path_buf(),
                 mock_mounter: ExtractingFilesystemMounter::default(),
@@ -1032,7 +1034,7 @@ mod tests {
                 metrics_file,
                 systemd_notifier,
                 termination_token,
-                libvirt_connect: self.libvirt_connection.clone(),
+                libvirt_connection: self.libvirt_connection.clone(),
                 vm_domain_name: vm_domain_name(guest_vm_type).to_string(),
                 _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
@@ -1261,19 +1263,24 @@ mod tests {
 
         let mut fixture = TestFixture::new(valid_hostos_config());
 
-        // The mock connection always returns an inactive domain. The loop calls
-        // lookup_domain_by_name 4 times: once per iteration (3 restart attempts +
-        // 1 final check that decides to give up).
-        let mut mock_connect = MockLibvirtConnection::new();
-        mock_connect
-            .expect_lookup_domain_by_name()
-            .times(4)
-            .returning(|_name| {
-                let mut domain = MockLibvirtDomain::new();
-                domain.expect_is_active().once().returning(|| Ok(false));
-                Ok(Box::new(domain))
-            });
-        fixture.libvirt_connection = Arc::new(mock_connect);
+        let libvirt_connection_factory = || {
+            // The mock connection always returns an inactive domain. The loop calls
+            // lookup_domain_by_name 4 times: once per iteration (3 restart attempts +
+            // 1 final check that decides to give up).
+            let mut mock_connect = MockLibvirtConnection::new();
+            mock_connect
+                .expect_lookup_domain_by_name()
+                .times(4)
+                .returning(|_name| {
+                    let mut domain = MockLibvirtDomain::new();
+                    domain.expect_is_active().once().returning(|| Ok(false));
+                    Ok(Box::new(domain))
+                });
+            Ok(Box::new(mock_connect) as Box<dyn LibvirtConnection>)
+        };
+        fixture.libvirt_connection = Arc::new(LibvirtConnectionWithReconnect::new(Arc::new(
+            libvirt_connection_factory,
+        )));
         fixture.command_runner = Arc::new(mock_command_runner);
 
         let mut service = fixture.start_service(GuestVMType::Default);
@@ -1316,21 +1323,17 @@ mod tests {
                 Ok(Box::new(domain))
             })
             .return_once(|_| Err(libvirt_connect_error().into()));
+        let mut orig_libvirt_connection = Arc::into_inner(fixture.libvirt_connection);
         // On the first call, the factory returns the mock connection (simulating the libvirt bug
         // where an existing domain gets stuck in an inactive state). On subsequent calls it uses
         // the real test connection so the VM can be started normally after the restart.
-        let connection_with_inactive_domain = Mutex::new(Some(Arc::new(
-            connection_with_inactive_domain,
-        )
-            as Arc<dyn LibvirtConnection>));
-        let orig_libvirt_connection = fixture.libvirt_connection;
+        let connections = Mutex::new(VecDeque::from([
+            Box::new(connection_with_inactive_domain) as Box<dyn LibvirtConnection>,
+            Box::new(orig_libvirt_connection.take().unwrap()) as Box<dyn LibvirtConnection>,
+        ]));
         fixture.libvirt_connection =
             Arc::new(LibvirtConnectionWithReconnect::new(Arc::new(move || {
-                Ok(connection_with_inactive_domain
-                    .lock()
-                    .unwrap()
-                    .take()
-                    .unwrap_or_else(|| orig_libvirt_connection.clone()))
+                Ok(connections.lock().unwrap().pop_front().unwrap())
             })));
         fixture.command_runner = Arc::new(mock_command_runner);
 
