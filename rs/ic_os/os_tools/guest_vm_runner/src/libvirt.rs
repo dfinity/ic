@@ -130,9 +130,9 @@ impl LibvirtConnectionWithReconnect {
         if let Some(conn) = guard.as_ref() {
             return f(conn.as_ref().as_ref());
         }
-        // Note that if the function is called from multiple threads, multiple connections
-        // will be created. This is fine, connections are cheap and the code is not highly
-        // concurrent.
+        // Note that if the function is called from multiple threads concurrently, multiple
+        // connections may be created. This is fine, connections are cheap and the code is not
+        // highly concurrent.
         let conn = Arc::new((self.factory)()?);
         self.connection.store(Some(conn.clone()));
         f(conn.as_ref().as_ref())
