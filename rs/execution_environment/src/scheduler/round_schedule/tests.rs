@@ -13,6 +13,7 @@ use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::{AccumulatedPriority, LongExecutionMode};
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
+use maplit::btreeset;
 use more_asserts::assert_le;
 use std::sync::Arc;
 
@@ -147,8 +148,8 @@ impl RoundScheduleFixture {
             .long_execution_mode = mode;
     }
 
-    fn canister_state(&mut self, canister_id: CanisterId) -> &mut CanisterState {
-        self.state.canister_state_make_mut(&canister_id).unwrap()
+    fn canister_state(&mut self, canister_id: &CanisterId) -> &mut CanisterState {
+        self.state.canister_state_make_mut(canister_id).unwrap()
     }
 
     /// Returns the canister's scheduling priority (or default if not in the subnet
@@ -178,18 +179,14 @@ impl RoundScheduleFixture {
     /// Enqueues an ingress message in the given canister's queue, so that
     /// `next_execution()` returns `StartNew`.
     fn push_input(&mut self, canister_id: CanisterId) {
-        let canister = self
-            .state
-            .canister_state_make_mut(&canister_id)
-            .expect("canister must exist to push ingress");
+        let canister = self.canister_state(&canister_id);
         let ingress = IngressBuilder::new().receiver(canister_id).build();
         canister.system_state.queues_mut().push_ingress(ingress);
     }
 
     /// Adds a paused long execution to the canister's task queue.
     fn add_long_execution(&mut self, canister_id: CanisterId) {
-        let canister = self.state.canister_state_make_mut(&canister_id).unwrap();
-        canister
+        self.canister_state(&canister_id)
             .system_state
             .task_queue
             .enqueue(ExecutionTask::PausedExecution {
@@ -202,7 +199,7 @@ impl RoundScheduleFixture {
     /// so the canister can later report `next_execution()` `None` or `StartNew`.
     /// Used to simulate "long execution completed" for tests.
     fn remove_long_execution(&mut self, canister_id: CanisterId) {
-        let canister = self.state.canister_state_make_mut(&canister_id).unwrap();
+        let canister = self.canister_state(&canister_id);
         assert_matches!(
             canister.system_state.task_queue.pop_front(),
             Some(ExecutionTask::PausedExecution { .. })
@@ -212,8 +209,9 @@ impl RoundScheduleFixture {
     /// Sets the heap delta debit for an already-added canister (for rate-limit
     /// tests). The canister must exist.
     fn set_heap_delta_debit(&mut self, canister_id: CanisterId, bytes: NumBytes) {
-        let canister = self.state.canister_state_make_mut(&canister_id).unwrap();
-        canister.scheduler_state.heap_delta_debit = bytes;
+        self.canister_state(&canister_id)
+            .scheduler_state
+            .heap_delta_debit = bytes;
     }
 
     fn scheduled_canisters(&self) -> &BTreeSet<CanisterId> {
@@ -240,6 +238,19 @@ impl RoundScheduleFixture {
 
     fn rate_limited_canisters(&self) -> &BTreeSet<CanisterId> {
         &self.round_schedule.rate_limited_canisters
+    }
+
+    /// Calls `RoundSchedule::end_iteration` with the given sets.
+    fn end_iteration(
+        &mut self,
+        executed_canisters: &BTreeSet<CanisterId>,
+        canisters_with_completed_messages: &BTreeSet<CanisterId>,
+    ) {
+        self.round_schedule.end_iteration(
+            &mut self.state,
+            executed_canisters,
+            canisters_with_completed_messages,
+        );
     }
 }
 
@@ -352,7 +363,6 @@ fn fixture_add_canister_with_input() {
 
 #[test]
 fn fixture_add_canister_with_long_execution() {
-    use ic_replicated_state::canister_state::NextExecution;
     let mut fixture = RoundScheduleFixture::new();
     let canister_id = fixture.canister_with_long_execution();
 
@@ -362,11 +372,8 @@ fn fixture_add_canister_with_long_execution() {
     assert!(fixture.scheduled_canisters().contains(&canister_id));
     assert!(fixture.long_execution_canisters().contains(&canister_id));
     // Canister should report ContinueLong
-    let next_execution = fixture
-        .state
-        .canister_state(&canister_id)
-        .map(|c| c.next_execution());
-    assert_eq!(next_execution, Some(NextExecution::ContinueLong));
+    let next_execution = fixture.canister_state(&canister_id).next_execution();
+    assert_eq!(next_execution, NextExecution::ContinueLong);
 }
 
 // --- start_iteration tests (TEST_PLAN §1.1) ---
@@ -560,7 +567,7 @@ fn start_iteration_scheduler_compute_allocation_invariant_broken() {
     let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
     let canister_id = fixture.canister_with_input();
     fixture
-        .canister_state(canister_id)
+        .canister_state(&canister_id)
         .system_state
         .compute_allocation = ComputeAllocation::try_from(100).unwrap();
 
@@ -576,5 +583,85 @@ fn start_iteration_scheduler_compute_allocation_invariant_broken() {
             .scheduler_compute_allocation_invariant_broken
             .get(),
         1
+    );
+}
+
+// --- end_iteration tests (TEST_PLAN §1.2) ---
+
+/// end_iteration accumulates executed_canisters and canisters_with_completed_messages.
+#[test]
+fn end_iteration_accumulates_executed_and_completed() {
+    let mut fixture = RoundScheduleFixture::new();
+    let canister_a = fixture.canister_with_input();
+    let canister_b = fixture.canister_with_input();
+    let canister_c = fixture.canister_with_long_execution();
+
+    let executed = btreeset! {canister_a, canister_b};
+    let completed = btreeset! {canister_b};
+    fixture.end_iteration(&executed, &completed);
+
+    assert_eq!(fixture.executed_canisters(), &executed);
+    assert_eq!(fixture.canisters_with_completed_messages(), &completed);
+
+    fixture.end_iteration(&btreeset! {canister_b, canister_c}, &btreeset! {canister_c});
+
+    assert_eq!(
+        fixture.executed_canisters(),
+        &btreeset! {canister_a, canister_b, canister_c}
+    );
+    assert_eq!(
+        fixture.canisters_with_completed_messages(),
+        &btreeset! {canister_b, canister_c}
+    );
+}
+
+/// end_iteration resets long_execution_mode to Opportunistic for canisters in
+/// canisters_with_completed_messages.
+#[test]
+fn end_iteration_resets_long_execution_mode_to_opportunistic() {
+    let mut fixture = RoundScheduleFixture::new();
+    let canister_a = fixture.canister_with_long_execution();
+    fixture.set_long_execution_mode(canister_a, LongExecutionMode::Prioritized);
+    let canister_b = fixture.canister_with_long_execution();
+    fixture.set_long_execution_mode(canister_b, LongExecutionMode::Prioritized);
+
+    let executed = btreeset! {canister_a, canister_b};
+    let completed = btreeset! {canister_b};
+    fixture.end_iteration(&executed, &completed);
+
+    assert_eq!(
+        fixture.canister_priority(&canister_a).long_execution_mode,
+        LongExecutionMode::Prioritized
+    );
+    assert_eq!(
+        fixture.canister_priority(&canister_b).long_execution_mode,
+        LongExecutionMode::Opportunistic
+    );
+}
+
+/// end_iteration adds canisters with completed messages and
+/// `next_execution() == None` to fully_executed_canisters.
+#[test]
+fn end_iteration_adds_idle_completed_to_fully_executed() {
+    let mut fixture = RoundScheduleFixture::new();
+    let new = fixture.canister_with_input();
+    let long = fixture.canister_with_long_execution();
+    let fully_executed = fixture.canister();
+    let all = btreeset! {new, long, fully_executed};
+    let none = btreeset! {};
+
+    // All canisters executed, none completed an execution.
+    fixture.end_iteration(&all, &none);
+
+    // fully_executed_canisters should be empty.
+    assert_eq!(fixture.fully_executed_canisters(), &btreeset! {});
+
+    // All executed, all completed an execution.
+    fixture.end_iteration(&all, &all);
+
+    // Only the canister with `next_execution() == None` is fully executed.
+    assert_eq!(
+        fixture.fully_executed_canisters(),
+        &btreeset! {fully_executed}
     );
 }
