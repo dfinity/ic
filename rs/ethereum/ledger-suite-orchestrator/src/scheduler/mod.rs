@@ -863,7 +863,8 @@ async fn install_ledger_suite<R: CanisterRuntime>(
 
     let index_arg = Some(IndexArg::Init(IndexInitArg {
         ledger_id: ledger_canister_id,
-        retrieve_blocks_from_ledger_interval_seconds: None,
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
     }));
     install_canister_once::<Index, _, _>(
         &args.contract,

@@ -158,7 +158,8 @@ impl SnsTestsInitPayloadBuilder {
 
         let index_ng = Some(IndexArg::Init(InitArg {
             ledger_id: CanisterId::from_u64(0).into(),
-            retrieve_blocks_from_ledger_interval_seconds: Some(5),
+            min_retrieve_blocks_from_ledger_interval_seconds: None,
+            max_retrieve_blocks_from_ledger_interval_seconds: None,
         }));
 
         let mut governance = GovernanceCanisterInitPayloadBuilder::new();
