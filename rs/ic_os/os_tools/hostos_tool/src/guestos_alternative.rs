@@ -15,6 +15,7 @@ const GRUB_PARTITION_UUID: Uuid =
             panic!("Failed to parse GRUB partition UUID");
         };
 
+/// Prints the current GuestOS boot alternative.
 pub fn show_guestos_alternative() -> Result<()> {
     show_guestos_alternative_impl(&GptPartitionProvider::new(GUESTOS_DEVICE.into())?)
 }
@@ -50,6 +51,7 @@ fn show_guestos_alternative_impl(
     Ok(())
 }
 
+/// Changes the GuestOS boot alternative to `target` or toggles to the opposite if `None`.
 pub fn swap_guestos_alternative(target: Option<grub::BootAlternative>) -> Result<()> {
     println!(
         "This will swap the GuestOS boot alternative. Only use this command if instructed during node recovery."
