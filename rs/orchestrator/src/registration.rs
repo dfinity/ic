@@ -640,20 +640,16 @@ impl NodeRegistration {
         let mut urls_and_configs: Vec<(Url, rustls::ClientConfig)> = t_infos
             .iter()
             .filter_map(|(n_id, n_record)| {
-                n_record
-                    .http
-                    .as_ref()
-                    .and_then(|h| {
-                        https_endpoint_to_url(h)
-                            .inspect_err(|e| warn!(self.log, "{}", e))
-                            .ok()
-                    })
-                    .zip(
-                        self.crypto_tls_config
-                            .client_config(*n_id, version)
-                            .inspect_err(|e| warn!(self.log, "{}", e))
-                            .ok(),
-                    )
+                let url = https_endpoint_to_url(n_record.http.as_ref()?)
+                    .inspect_err(|e| warn!(self.log, "{}", e))
+                    .ok()?;
+                let config = self
+                    .crypto_tls_config
+                    .client_config(*n_id, version)
+                    .inspect_err(|e| warn!(self.log, "{}", e))
+                    .ok()?;
+
+                Some((url, config))
             })
             .collect();
 
