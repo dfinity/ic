@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [[bin]]
-name = "blob-store"
+name = "blob_store_canister"
 path = "src/main.rs"
 
 [lib]
