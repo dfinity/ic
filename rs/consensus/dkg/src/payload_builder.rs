@@ -190,6 +190,9 @@ pub(crate) fn create_early_remote_transcripts(
 
     let state_ref = state.get_ref();
     let callback_id_map = build_target_id_callback_map(state_ref);
+
+    // Try to create transcripts for all configs of each target_id. Note that we either include
+    // all transcript results for a target_id or none of them.
     let mut selected_transcripts = vec![];
     for (target_id, configs) in remote_configs {
         // Lookup the callback id and the expected number of configs for this target_id
@@ -200,7 +203,7 @@ pub(crate) fn create_early_remote_transcripts(
         // Check that we have the expected number of configs for this target_id
         if configs.len() != *expected_config_num {
             // This may happen if we only managed to create one transcript (out of two) as part
-            // of the last summary block. We will handle this in the next summary block.
+            // of the last summary block. We will handle this in the next summary block instead.
             continue;
         }
 
@@ -214,7 +217,7 @@ pub(crate) fn create_early_remote_transcripts(
             continue;
         }
 
-        // For each config, try to build the necessary (dkg_id, callback_id, transcript) triple
+        // For each config, try to build the necessary (dkg_id, callback_id, transcript_result) triple
         for config in configs.iter() {
             // Generate the transcript. We need to retry transient errors, as a payload containing
             // transient errors may not be verifiable by peers.
@@ -289,12 +292,12 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
-    let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent);
+    let (all_dealings, completed_dkgs) = utils::get_dkg_dealings(pool_reader, parent);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
-        if completed.contains(dkg_id) {
+        if completed_dkgs.contains(dkg_id) {
             // Skip DKGs that have already been completed as part of data blocks
             continue;
         }
@@ -369,13 +372,8 @@ pub(super) fn create_summary_payload(
         .map(|(id, _, result)| (id.clone(), result.clone()))
         .collect();
 
-    let completed_target_ids: BTreeSet<NiDkgTargetId> = completed
-        .iter()
-        .filter_map(|id| match id.target_subnet {
-            NiDkgTargetSubnet::Remote(target_id) => Some(target_id),
-            NiDkgTargetSubnet::Local => None,
-        })
-        .collect();
+    let completed_target_ids =
+        get_completed_target_ids(last_summary.configs.keys(), &completed_dkgs);
 
     let (mut configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
         compute_remote_dkg_data(
@@ -972,6 +970,28 @@ fn get_node_list(
         .collect())
 }
 
+/// Returns the set of remote target IDs for which all configured DKGs have
+/// been completed.
+fn get_completed_target_ids<'a>(
+    config_ids: impl Iterator<Item = &'a NiDkgId>,
+    completed: &BTreeSet<NiDkgId>,
+) -> BTreeSet<NiDkgTargetId> {
+    let mut remote_dkgs_by_target: BTreeMap<NiDkgTargetId, Vec<&NiDkgId>> = BTreeMap::new();
+    for dkg_id in config_ids {
+        if let NiDkgTargetSubnet::Remote(target_id) = dkg_id.target_subnet {
+            remote_dkgs_by_target
+                .entry(target_id)
+                .or_default()
+                .push(dkg_id);
+        }
+    }
+    remote_dkgs_by_target
+        .into_iter()
+        .filter(|(_, dkg_ids)| dkg_ids.iter().all(|id| completed.contains(id)))
+        .map(|(target_id, _)| target_id)
+        .collect()
+}
+
 /// Compares two DKG ids without considering the start block heights. This
 /// function is only used for DKGs for other subnets, as the start block height
 /// is not used to differentiate two DKGs for the same subnet.
@@ -1182,7 +1202,7 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         RegistryVersion,
-        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
         time::UNIX_EPOCH,
     };
     use std::collections::BTreeSet;
@@ -2032,5 +2052,29 @@ mod tests {
                 assert!(current_transcript.is_some() && next_transcript.is_some());
             }
         });
+    }
+
+    #[test]
+    fn test_get_completed_target_ids() {
+        let targets: Vec<_> = (1..=3).map(|i| NiDkgTargetId::new([i; 32])).collect();
+        let tags = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
+
+        let config_ids: Vec<_> = targets
+            .iter()
+            .flat_map(|t| {
+                tags.iter().map(|tag| NiDkgId {
+                    start_block_height: Height::from(1),
+                    dealer_subnet: subnet_test_id(1),
+                    dkg_tag: tag.clone(),
+                    target_subnet: NiDkgTargetSubnet::Remote(*t),
+                })
+            })
+            .collect();
+
+        // target 0 is fully completed, target 1 only has low completed, target 2 is not completed
+        let completed: BTreeSet<_> = config_ids[..3].iter().cloned().collect();
+
+        let result = get_completed_target_ids(config_ids.iter(), &completed);
+        assert_eq!(result, BTreeSet::from([targets[0]]));
     }
 }
