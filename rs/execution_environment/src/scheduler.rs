@@ -1030,6 +1030,7 @@ impl SchedulerImpl {
 
     /// Aborts paused execution above `max_paused_executions` based on scheduler priority.
     fn abort_paused_executions_above_limit(&self, state: &mut ReplicatedState) {
+        // TODO(DSM-103): Have RoundSchedule return an iterator over prioritized paused executions.
         let mut paused_round_states = state
             .canisters_iter()
             .filter_map(|canister| {
@@ -1500,7 +1501,7 @@ impl Scheduler for SchedulerImpl {
                     }
                 }
 
-                for canister_id in round_schedule.round_scheduled_canisters() {
+                for canister_id in round_schedule.scheduled_canisters() {
                     let Some(canister) = state.canister_state_mut_arc(canister_id) else {
                         continue;
                     };
@@ -1555,7 +1556,7 @@ impl Scheduler for SchedulerImpl {
                     &round_log,
                     &current_round,
                     &state,
-                    round_schedule.round_scheduled_canisters(),
+                    round_schedule.scheduled_canisters(),
                 );
 
                 // NOTE: The logic for deleting canisters assumes that transitioning

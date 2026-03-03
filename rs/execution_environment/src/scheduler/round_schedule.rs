@@ -117,9 +117,9 @@ pub struct IterationSchedule {
     schedule: Vec<CanisterId>,
     /// Number of scheduler cores.
     scheduler_cores: usize,
-    /// Number of cores reserved for long executions this iteration.
+    /// Number of cores reserved for long executions.
     long_execution_cores: usize,
-    /// Current iteration: number of long execution canisters.
+    /// Number of canisters with long executions.
     long_executions_count: usize,
 }
 
@@ -178,18 +178,18 @@ pub struct RoundSchedule {
     config: Config,
 
     /// Canisters that were scheduled.
-    round_scheduled_canisters: BTreeSet<CanisterId>,
+    scheduled_canisters: BTreeSet<CanisterId>,
     /// Canisters that had a long execution at round start.
-    round_long_execution_canisters: BTreeSet<CanisterId>,
+    long_execution_canisters: BTreeSet<CanisterId>,
     /// Canisters that advanced or completed a message execution.
     executed_canisters: BTreeSet<CanisterId>,
     /// Canisters that completed message executions.
     canisters_with_completed_messages: BTreeSet<CanisterId>,
-    /// Canisters that got a "full execution" (scheduled first or
-    /// consumed all inputs).
+    /// Canisters that got a "full execution" (scheduled first or consumed all
+    /// inputs). This also includes canisters that were scheduled first but whose
+    /// long execution was later aborted.
     fully_executed_canisters: BTreeSet<CanisterId>,
-    /// Canisters that were heap delta rate-limited in at least one
-    /// iteration.
+    /// Canisters that were heap delta rate-limited in at least one iteration.
     rate_limited_canisters: BTreeSet<CanisterId>,
 }
 
@@ -206,9 +206,9 @@ impl RoundSchedule {
         };
         Self {
             config,
-            round_scheduled_canisters: BTreeSet::new(),
+            scheduled_canisters: BTreeSet::new(),
             executed_canisters: BTreeSet::new(),
-            round_long_execution_canisters: BTreeSet::new(),
+            long_execution_canisters: BTreeSet::new(),
             canisters_with_completed_messages: BTreeSet::new(),
             fully_executed_canisters: BTreeSet::new(),
             rate_limited_canisters: BTreeSet::new(),
@@ -242,21 +242,23 @@ impl RoundSchedule {
                 {
                     // Record and filter out rate limited canisters.
                     self.rate_limited_canisters.insert(*canister_id);
-                    self.round_scheduled_canisters.insert(*canister_id);
+                    self.scheduled_canisters.insert(*canister_id);
                     return None;
                 }
 
                 let canister_round_state = match canister.next_execution() {
                     NextExecution::StartNew => {
-                        // Don't schedule canisters that completed a long execution this round.
-                        if self.round_long_execution_canisters.contains(canister_id) {
+                        // Don't schedule canisters that started the round with a long execution and
+                        // completed it. We need canisters to move between the long execution and new
+                        // execution pools, so the two groups' priorities don't drift apart.
+                        if self.long_execution_canisters.contains(canister_id) {
                             return None;
                         }
                         CanisterRoundState::new(canister, subnet_schedule.get(canister_id))
                     }
                     NextExecution::ContinueLong => {
                         if is_first_iteration {
-                            self.round_long_execution_canisters.insert(*canister_id);
+                            self.long_execution_canisters.insert(*canister_id);
                         }
                         let rs =
                             CanisterRoundState::new(canister, subnet_schedule.get(canister_id));
@@ -268,19 +270,18 @@ impl RoundSchedule {
                 };
 
                 total_compute_allocation += canister_round_state.compute_allocation;
-                self.round_scheduled_canisters.insert(*canister_id);
+                self.scheduled_canisters.insert(*canister_id);
 
                 Some(canister_round_state)
             })
             .collect();
         schedule.sort();
-        let schedule: Vec<CanisterId> = schedule.into_iter().map(|rs| rs.canister_id).collect();
 
         // Compute the number of long execution cores by dividing
         // `long_executions_compute_allocation` by `100%` and rounding up (as one
         // scheduler core is reserved to guarantee long executions progress).
         let compute_capacity = self.compute_capacity();
-        let long_execution_cores = if schedule.is_empty() {
+        let long_execution_cores = if schedule.is_empty() || long_executions_count == 0 {
             0
         } else {
             let free_compute = compute_capacity - total_compute_allocation;
@@ -293,8 +294,8 @@ impl RoundSchedule {
             )
         };
 
-        // Assert there is at least `1%` of free capacity to distribute across canisters.
-        // It's guaranteed by `validate_compute_allocation()`
+        // There is at least `1%` of free capacity to distribute across canisters.
+        // This is guaranteed by `validate_compute_allocation()`.
         debug_assert_or_critical_error!(
             total_compute_allocation + ONE_PERCENT <= compute_capacity,
             metrics.scheduler_compute_allocation_invariant_broken,
@@ -304,7 +305,7 @@ impl RoundSchedule {
             total_compute_allocation,
             compute_capacity
         );
-        // If there are long executions, the `long_execution_cores` must be non-zero.
+        // If there are long executions, `long_execution_cores` must be non-zero.
         debug_assert_or_critical_error!(
             long_executions_count == 0 || long_execution_cores > 0,
             metrics.scheduler_cores_invariant_broken,
@@ -325,11 +326,8 @@ impl RoundSchedule {
             self.config.scheduler_cores
         );
 
+        let schedule: Vec<CanisterId> = schedule.into_iter().map(|rs| rs.canister_id).collect();
         if is_first_iteration {
-            // TODO(DSM-103): We should not consider an aborted long execution (e.g. due to
-            // exceeding the paused execution limit) as fully executed, even if the canister
-            // was scheduled first.
-
             // First iteration: mark the first canisters on each core as fully executed.
             schedule
                 .iter()
@@ -372,9 +370,7 @@ impl RoundSchedule {
         for canister_id in canisters_with_completed_messages {
             // If a canister has completed a long execution, reset its long execution mode.
             state
-                .metadata
-                .subnet_schedule
-                .get_mut(*canister_id)
+                .canister_priority_mut(*canister_id)
                 .long_execution_mode = LongExecutionMode::Opportunistic;
 
             match state
@@ -404,11 +400,12 @@ impl RoundSchedule {
 
         // Charge canisters for full executions in this round.
         for canister_id in self.fully_executed_canisters.iter() {
-            let canister_priority = subnet_schedule.get_mut(*canister_id);
-            if canister_states.get(canister_id).is_some() {
+            // Don't re-create `CanisterPriority` for deleted canisters.
+            if canister_states.contains_key(canister_id) {
+                let canister_priority = subnet_schedule.get_mut(*canister_id);
                 canister_priority.priority_credit += ONE_HUNDRED_PERCENT;
+                canister_priority.last_full_execution_round = current_round;
             }
-            canister_priority.last_full_execution_round = current_round;
             #[cfg(debug_assertions)]
             subnet_schedule
                 .fully_executed_canisters
@@ -420,7 +417,7 @@ impl RoundSchedule {
         // free allocation (as the deviation from zero of all canisters' total
         // accumulated priority, including priority credit).
         let mut free_allocation = ZERO;
-        for canister_id in &self.round_scheduled_canisters {
+        for canister_id in &self.scheduled_canisters {
             let Some(canister) = canister_states.get_mut(canister_id) else {
                 // Canister was deleted.
                 subnet_schedule.remove(canister_id);
@@ -522,6 +519,8 @@ impl RoundSchedule {
             .set((accumulated_priority_deviation / subnet_schedule.len() as f64).sqrt());
 
         self.observe_round_metrics(state, current_round, metrics);
+
+        // TODO(DSM-103): `debug_assert` that all active canisters are in the subnet schedule.
     }
 
     /// Exports round-level metrics derived from this schedule's accumulators.
@@ -532,9 +531,9 @@ impl RoundSchedule {
         metrics: &SchedulerMetrics,
     ) {
         // Export the age of all scheduled canisters.
-        for canister_id in self.round_scheduled_canisters() {
+        for canister_id in self.scheduled_canisters() {
             let last_full_execution_round = if self.fully_executed_canisters.contains(canister_id) {
-                // Canister priority might have been dropped, don't look it up.
+                // `CanisterPriority` might have been dropped, don't look it up.
                 current_round
             } else {
                 state
@@ -549,7 +548,7 @@ impl RoundSchedule {
         }
         metrics
             .executable_canisters_per_round
-            .observe(self.round_scheduled_canisters.len() as f64);
+            .observe(self.scheduled_canisters.len() as f64);
         metrics
             .executed_canisters_per_round
             .observe(self.executed_canisters.len() as f64);
@@ -584,8 +583,8 @@ impl RoundSchedule {
     }
 
     /// Canisters that were scheduled this round.
-    pub fn round_scheduled_canisters(&self) -> &BTreeSet<CanisterId> {
-        &self.round_scheduled_canisters
+    pub fn scheduled_canisters(&self) -> &BTreeSet<CanisterId> {
+        &self.scheduled_canisters
     }
 }
 

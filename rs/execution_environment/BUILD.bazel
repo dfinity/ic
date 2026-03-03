@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "execution_environment",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     compile_data = glob(["tests/test-data/**"]),
     crate_name = "ic_execution_environment",
     version = "0.9.0",
