@@ -216,6 +216,9 @@ thread_local! {
     // This covers both taking and loading canister snapshots.
     static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };
+
+    static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
+        = const { Cell::new(false) };
 }
 
 thread_local! {
@@ -317,6 +320,15 @@ pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
     Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_subnet_splitting_proposals() -> Temporary {
+    Temporary::new(&ENABLE_SUBNET_SPLITTING_PROPOSALS, true)
+}
+
+pub fn are_subnet_splitting_proposals_enabled() -> bool {
+    ENABLE_SUBNET_SPLITTING_PROPOSALS.get()
 }
 
 pub fn decoder_config() -> DecoderConfig {

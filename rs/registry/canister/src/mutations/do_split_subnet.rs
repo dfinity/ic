@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 use crate::registry::{Registry, Version};
 use candid::{CandidType, Encode};
 use dfn_core::call;
@@ -47,6 +48,13 @@ const ENABLED: bool = true;
 /// For now we only support splitting application subnets. Splitting system subnets is not allowed.
 const SUPPORTED_SUBNET_TYPES: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
+=======
+use crate::registry::Registry;
+use candid::CandidType;
+use ic_registry_routing_table::CanisterIdRange;
+use ic_types::{NodeId, SubnetId};
+use serde::{Deserialize, Serialize};
+>>>>>>> kpop/feat_nns_interface_changes
 
 impl Registry {
     /// Validates the payload and applies the mutation derived from the payload to the registry.
@@ -61,6 +69,7 @@ impl Registry {
     ///    the newly added subnet,
     /// 6. modify the CanisterMigrations entry, to also include the information that the source
     ///    subnet is being split.
+<<<<<<< HEAD
     pub async fn split_subnet(&mut self, payload: SplitSubnetPayload) -> Result<(), String> {
         let pre_call_registry_version = self.latest_version();
 
@@ -380,6 +389,10 @@ impl Registry {
             .unwrap_or_else(|| {
                 panic!("Record for {record_key} not found in registry");
             })
+=======
+    pub async fn split_subnet(&mut self, _payload: SplitSubnetPayload) -> Result<(), String> {
+        unimplemented!();
+>>>>>>> kpop/feat_nns_interface_changes
     }
 }
 
@@ -389,6 +402,7 @@ pub struct SplitSubnetPayload {
     pub destination_node_ids: Vec<NodeId>,
     pub source_subnet_id: SubnetId,
 }
+<<<<<<< HEAD
 
 impl std::fmt::Display for PayloadValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -810,3 +824,5 @@ mod tests {
         (registry, node_infos)
     }
 }
+=======
+>>>>>>> kpop/feat_nns_interface_changes

@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 use crate::{
-    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled, decoder_config,
+    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled,
+    are_subnet_splitting_proposals_enabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -4844,6 +4845,13 @@ impl Governance {
             ValidNnsFunction::AddOrRemoveDataCenters => {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
+            }
+            ValidNnsFunction::SplitSubnet => {
+                if !are_subnet_splitting_proposals_enabled() {
+                    return Err(invalid_proposal_error(String::from(
+                        "Subnet Splitting proposals not yet enabled",
+                    )));
+                }
             }
             _ => {}
         };
