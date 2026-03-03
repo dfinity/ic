@@ -225,7 +225,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
                 &cli,
                 registry_snapshot.clone(),
                 persister,
-                http_client_check.clone(),
+                http_client_check,
                 &metrics_registry,
                 channel_snapshot_send,
                 channel_snapshot_recv.clone(),
