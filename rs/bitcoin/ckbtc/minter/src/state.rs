@@ -1996,7 +1996,7 @@ impl From<InitArgs> for CkBtcMinterState {
             min_confirmations,
             mode,
             check_fee,
-            kyt_fee,
+            kyt_fee: _,
             btc_checker_principal,
             kyt_principal: _,
             get_utxos_cache_expiration_seconds,
@@ -2050,9 +2050,7 @@ impl From<InitArgs> for CkBtcMinterState {
             mode,
             last_fee_per_vbyte: vec![FeeRate::from_millis_per_byte(1); 100],
             last_median_fee_per_vbyte: Some(FeeRate::from_millis_per_byte(1)),
-            check_fee: check_fee
-                .or(kyt_fee)
-                .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),
+            check_fee: check_fee.unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),
             owed_kyt_amount: Default::default(),
             checked_utxos: Default::default(),
             suspended_utxos: Default::default(),
