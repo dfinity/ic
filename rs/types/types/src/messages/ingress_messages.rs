@@ -94,6 +94,25 @@ impl SignedIngressContent {
             nonce,
         }
     }
+
+    /// Public only for use in tests.
+    pub fn new_for_testing(
+        sender: UserId,
+        canister_id: CanisterId,
+        method_name: String,
+        arg: Vec<u8>,
+        ingress_expiry: u64,
+        nonce: Option<Vec<u8>>,
+    ) -> Self {
+        Self {
+            sender,
+            canister_id,
+            method_name,
+            arg,
+            ingress_expiry,
+            nonce,
+        }
+    }
 }
 
 impl HasCanisterId for SignedIngressContent {

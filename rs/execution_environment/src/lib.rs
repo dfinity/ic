@@ -17,6 +17,8 @@ pub mod units;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
+pub use canister_manager::check_if_wasm64_module;
+pub use canister_manager::types::WasmSource;
 use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
     CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,

@@ -19,8 +19,8 @@ pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
-    IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
-    execute_canister,
+    IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits, WasmSource,
+    check_if_wasm64_module, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -66,6 +66,7 @@ use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
+use ic_types::messages::SignedIngressContent;
 use ic_types::{
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
@@ -74,14 +75,14 @@ use ic_types::{
     messages::{
         CallbackId, CanisterCall, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
-        QuerySource, RequestOrResponse, Response, SubnetMessage,
+        QuerySource, RequestOrResponse, Response, SubnetMessage, extract_effective_canister_id,
     },
     time::UNIX_EPOCH,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::{BinaryEncodedWasm, CanisterModule, WasmHash};
 use maplit::{btreemap, btreeset};
 use num_traits::ops::saturating::SaturatingAdd;
 use prometheus::IntCounter;
@@ -1446,6 +1447,90 @@ impl ExecutionTest {
         message_id
     }
 
+    fn expected_cycles_balance_change(
+        &self,
+        message: SubnetMessage,
+        instructions_used: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        let message = match message {
+            SubnetMessage::Response(_) => return Cycles::zero(),
+            SubnetMessage::Request(request) => CanisterCall::Request(request),
+            SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
+        };
+        let method_name = message.method_name();
+        if method_name == "install_code" || method_name == "install_chunked_code" {
+            let wasm_source = if method_name == "install_code" {
+                let wasm_module = InstallCodeArgsV2::decode(message.method_payload())
+                    .unwrap()
+                    .wasm_module;
+                WasmSource::CanisterModule(CanisterModule::new(wasm_module))
+            } else {
+                let payload = InstallChunkedCodeArgs::decode(message.method_payload()).unwrap();
+                WasmSource::ChunkStore {
+                    wasm_chunk_store: self
+                        .state
+                        .as_ref()
+                        .unwrap()
+                        .canister_state(
+                            &CanisterId::try_from(
+                                payload.store_canister.unwrap_or(payload.target_canister),
+                            )
+                            .unwrap(),
+                        )
+                        .unwrap()
+                        .system_state
+                        .wasm_chunk_store
+                        .clone(),
+                    chunk_hashes_list: payload
+                        .chunk_hashes_list
+                        .into_iter()
+                        .map(|chunk_hash| chunk_hash.hash)
+                        .collect(),
+                    wasm_module_hash: WasmHash::try_from(payload.wasm_module_hash).unwrap(),
+                }
+            };
+            let execution_mode = if check_if_wasm64_module(wasm_source) {
+                WasmExecutionMode::Wasm64
+            } else {
+                WasmExecutionMode::Wasm32
+            };
+            self.cycles_account_manager().execution_cost(
+                instructions_used,
+                subnet_size,
+                cost_schedule,
+                execution_mode,
+            )
+        } else if method_name == "upload_chunk"
+            || method_name == "take_canister_snapshot"
+            || method_name == "read_canister_snapshot_data"
+            || method_name == "upload_canister_snapshot_metadata"
+            || method_name == "upload_canister_snapshot_data"
+        {
+            self.cycles_account_manager().execution_cost(
+                instructions_used,
+                subnet_size,
+                cost_schedule,
+                WasmExecutionMode::Wasm32,
+            )
+        } else if method_name == "load_canister_snapshot" {
+            self.cycles_account_manager().execution_cost(
+                NumInstructions::new(0),
+                subnet_size,
+                cost_schedule,
+                WasmExecutionMode::Wasm32,
+            ) + self.cycles_account_manager().execution_cost(
+                instructions_used,
+                subnet_size,
+                cost_schedule,
+                WasmExecutionMode::Wasm32,
+            )
+        } else {
+            unreachable!()
+        }
+    }
+
     /// Executes a single subnet message from the subnet input queue.
     /// Return a progress flag indicating if the message was executed or not.
     pub fn execute_subnet_message(&mut self) -> bool {
@@ -1459,7 +1544,8 @@ impl ExecutionTest {
                 return false;
             }
         };
-        let maybe_canister_id = get_canister_id_if_install_code(message.clone());
+        let maybe_canister_id = get_effective_canister_id(message.clone());
+        let is_install_code = check_is_install_code(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1469,8 +1555,20 @@ impl ExecutionTest {
         };
 
         let remaining_round_instructions_before = round_limits.instructions;
+        let cycles_used_before = maybe_canister_id.as_ref().and_then(|canister_id| {
+            let canister = state.canister_state(canister_id)?;
+            Some(
+                canister
+                    .system_state
+                    .canister_metrics()
+                    .consumed_cycles_by_use_cases()
+                    .get(&CyclesUseCase::Instructions)
+                    .cloned()
+                    .unwrap_or_default(),
+            )
+        });
         let (new_state, execute_subnet_message_result_type) = self.exec_env.execute_subnet_message(
-            message,
+            message.clone(),
             state,
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
@@ -1497,11 +1595,47 @@ impl ExecutionTest {
                         self.install_code_instruction_limits.message(),
                     );
                     assert_eq!(message_instructions_used, capped_slice_instructions_used);
-                    self.update_execution_stats(
-                        canister_id,
-                        message_instructions_used,
-                        cost_schedule,
-                    );
+                    if let Some(canister) =
+                        self.state.as_ref().unwrap().canister_state(&canister_id)
+                    {
+                        let cycles_used_after = canister
+                            .system_state
+                            .canister_metrics()
+                            .consumed_cycles_by_use_cases()
+                            .get(&CyclesUseCase::Instructions)
+                            .cloned()
+                            .unwrap_or_default();
+                        assert!(cycles_used_after >= cycles_used_before.unwrap());
+                        if capped_slice_instructions_used.get() != 0 {
+                            let expected_cycles_balance_change = self
+                                .expected_cycles_balance_change(
+                                    message.clone(),
+                                    capped_slice_instructions_used,
+                                    self.subnet_size(),
+                                    self.cost_schedule(),
+                                );
+                            assert_eq!(
+                                cycles_used_after - cycles_used_before.unwrap(),
+                                expected_cycles_balance_change.into()
+                            );
+                        } else {
+                            let baseline_cost = self.cycles_account_manager().execution_cost(
+                                NumInstructions::new(0),
+                                self.subnet_size(),
+                                self.cost_schedule(),
+                                WasmExecutionMode::Wasm32,
+                            );
+                            let cycles_used = cycles_used_after - cycles_used_before.unwrap();
+                            assert!(cycles_used.get() == 0 || cycles_used == baseline_cost.into());
+                        }
+                    }
+                    if is_install_code {
+                        self.update_execution_stats(
+                            canister_id,
+                            message_instructions_used,
+                            cost_schedule,
+                        );
+                    }
                 }
                 ExecuteSubnetMessageResultType::Processing => {
                     // such subnet messages should not consume any instructions
@@ -1513,6 +1647,15 @@ impl ExecutionTest {
                         NumInstructions::from(slice_instructions_used.get() as u64),
                     );
                 }
+            }
+        } else {
+            assert_eq!(slice_instructions_used.get(), 0);
+            match execute_subnet_message_result_type {
+                ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
+                    assert_eq!(message_instructions_used.get(), 0);
+                }
+                ExecuteSubnetMessageResultType::Processing => (),
+                ExecuteSubnetMessageResultType::Paused => unreachable!(),
             }
         }
         true
@@ -2904,23 +3047,31 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
     output
 }
 
-fn get_canister_id_if_install_code(message: SubnetMessage) -> Option<CanisterId> {
+fn get_effective_canister_id(message: SubnetMessage) -> Option<CanisterId> {
+    match message {
+        SubnetMessage::Response(_) => None,
+        SubnetMessage::Request(request) => request.extract_effective_canister_id(),
+        SubnetMessage::Ingress(ingress) => {
+            let signed_ingress_content = SignedIngressContent::new_for_testing(
+                ingress.source,
+                ingress.receiver,
+                ingress.method_name.clone(),
+                ingress.method_payload.clone(),
+                0,
+                None,
+            );
+            extract_effective_canister_id(&signed_ingress_content).ok()?
+        }
+    }
+}
+
+fn check_is_install_code(message: SubnetMessage) -> bool {
     let message = match message {
-        SubnetMessage::Response(_) => return None,
+        SubnetMessage::Response(_) => return false,
         SubnetMessage::Request(request) => CanisterCall::Request(request),
         SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
-    if message.method_name() == "install_code" {
-        InstallCodeArgsV2::decode(message.method_payload())
-            .map(|args| CanisterId::try_from(args.canister_id).unwrap())
-            .ok()
-    } else if message.method_name() == "install_chunked_code" {
-        InstallChunkedCodeArgs::decode(message.method_payload())
-            .map(|args| CanisterId::try_from(args.target_canister).unwrap())
-            .ok()
-    } else {
-        None
-    }
+    message.method_name() == "install_code" || message.method_name() == "install_chunked_code"
 }
 
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
