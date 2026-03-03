@@ -137,7 +137,6 @@ rust_test(
         "RUST_TEST_THREADS": "4",
         "RUST_TEST_NOCAPTURE": "1",
     },
-    flaky = True,
     tags = [
         "cpu:4",
     ],
