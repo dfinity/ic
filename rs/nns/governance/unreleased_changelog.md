@@ -9,31 +9,25 @@ on the process that this file is part of, see
 
 ## Added
 
-
-* Enabled BlessAlternativeGuestOsVersion, which would generally be used to
-  recover a subnet where a) orchestrator is not working for whatever reason, and
-  b) SEV is enabled and/or there is no DFINITY node in the subnet.
-
-* Proposal types for taking and loading a snapshot of a canister controlled by the NNS Root canister.
-
-* Enabled self-describing proposals:
-
-- A `self_describing_action` field is added to `Proposal` when it's created, to describe the
-  proposal in a generic way, which can be parsed by a client without having to constantly adapt to
-  the new proposal types.
-- APIs like `get_proposal_info`, `list_proposals` and `get_pending_proposals` returns this new field
-  (`list_proposals` and `get_pending_proposals` require passing an additional boolean flag in order
-  to get this new behavior).
-- This field is backfilled for existing proposals.
+* Added an optional field `max_ingress_bytes_per_block` to `CreateSubnetPayload`
+and `UpdateSubnetPayload` which, when present, will set a limit on how big the ingress payload can
+be in blocks produced by the created/updated subnet.
+* A `create_neuron` method to create neurons through staking ICPs using the ICRC2 standard.
 
 ## Changed
 
-- Change the minimum requirement for maturity disbursement from ~1.06 to 1 (ICP equivalent).
+* Lowered the maximum page size of list_neurons to 50. The vast majority (> 95%)
+  have no more than 50 neurons, so for them, this has no noticeable impact.
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
+
+* The Bitcoin and Dogecoin Watchdog canisters are now considered "protocol"
+  canisters; thus, proposals to upgrade these canisters now fall into the
+  "Protocol Canister Management" topic, instead of the "Application Canister
+  Management" topic.
 
 ## Security

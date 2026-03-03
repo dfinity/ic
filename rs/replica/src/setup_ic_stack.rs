@@ -116,7 +116,7 @@ pub fn construct_ic_stack(
                     registry_cup.height()
                 );
 
-                let registry_cup_proto = pb::CatchUpPackage::from(&registry_cup);
+                let registry_cup_proto = pb::CatchUpPackage::from(registry_cup.clone());
                 (registry_cup, registry_cup_proto)
             }
         }

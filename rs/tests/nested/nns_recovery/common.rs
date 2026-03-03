@@ -2,8 +2,7 @@ use std::path::Path;
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
-    get_admin_keys_and_generate_backup_keys,
+    BACKUP_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes, get_ssh_keys_for_user,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
     node_with_highest_certification_share_height, remote_recovery,
 };
@@ -44,16 +43,15 @@ use slog::{Logger, info};
 use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(16)),
-    memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
+    vcpus: Some(NrOfVCPUs::new(32)),
+    memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
     boot_image_minimal_size_gibibytes: None,
 };
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
-/// DKG interval of 9 is large enough for a subnet of that size and as small as possible to keep the
-/// test runtime low
-pub const DKG_INTERVAL: u64 = 9;
+/// DKG interval as small as possible to keep the test runtime low
+pub const DKG_INTERVAL: u64 = 4 * SUBNET_SIZE as u64 + 13;
 
 /// 40 nodes and DKG interval of 499 are the production values for the NNS but 49 was chosen for
 /// the DKG interval to make the test faster
@@ -70,6 +68,7 @@ pub struct SetupConfig {
     pub impersonate_upstreams: bool,
     pub subnet_size: usize,
     pub dkg_interval: u64,
+    pub nested_nodes_vm_resources: VmResources,
 }
 
 #[derive(Debug)]
@@ -181,7 +180,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    NestedNodes::new_with_resources(&host_vm_names, NNS_RECOVERY_VM_RESOURCES)
+    NestedNodes::new_with_resources(&host_vm_names, cfg.nested_nodes_vm_resources)
         .setup_and_start(&env)
         .unwrap();
 }
@@ -191,14 +190,16 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
 
-    let AdminAndUserKeys {
-        ssh_admin_priv_key_path,
-        admin_auth,
-        ssh_user_priv_key_path: ssh_backup_priv_key_path,
-        user_auth: backup_auth,
-        ssh_user_pub_key: ssh_backup_pub_key,
-        ..
-    } = get_admin_keys_and_generate_backup_keys(&env);
+    let SshKeys {
+        ssh_priv_key_path: ssh_admin_priv_key_path,
+        auth: admin_auth,
+        ssh_pub_key: _,
+    } = get_ssh_keys_for_user(&env, SSH_USERNAME);
+    let SshKeys {
+        ssh_priv_key_path: ssh_backup_priv_key_path,
+        auth: backup_auth,
+        ssh_pub_key: ssh_backup_pub_key,
+    } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);

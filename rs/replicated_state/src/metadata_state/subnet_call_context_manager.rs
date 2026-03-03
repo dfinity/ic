@@ -16,7 +16,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, id::ni_dkg_target_id},
     },
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
-    node_id_into_protobuf, node_id_try_from_option,
+    node_id_into_protobuf, node_id_try_from_protobuf,
 };
 use phantom_newtype::Id;
 use std::{
@@ -592,6 +592,7 @@ pub struct SignWithThresholdContext {
     pub derivation_path: Arc<Vec<Vec<u8>>>,
     pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
     pub batch_time: Time,
+    /// DEPRECATED: Match on `args` to use `args.pre_signature`, instead.
     pub matched_pre_signature: Option<(PreSigId, Height)>,
     pub nonce: Option<[u8; NONCE_SIZE]>,
 }
@@ -608,13 +609,21 @@ impl SignWithThresholdContext {
 
     pub fn requires_pre_signature(&self) -> bool {
         match &self.args {
+            ThresholdArguments::Ecdsa(args) => args.pre_signature.is_none(),
+            ThresholdArguments::Schnorr(args) => args.pre_signature.is_none(),
+            ThresholdArguments::VetKd(_) => false,
+        }
+    }
+
+    pub fn height(&self) -> Option<Height> {
+        match &self.args {
             ThresholdArguments::Ecdsa(args) => {
-                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+                args.pre_signature.as_ref().map(|pre_sig| pre_sig.height)
             }
             ThresholdArguments::Schnorr(args) => {
-                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+                args.pre_signature.as_ref().map(|pre_sig| pre_sig.height)
             }
-            ThresholdArguments::VetKd(_) => false,
+            ThresholdArguments::VetKd(args) => Some(args.height),
         }
     }
 

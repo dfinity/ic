@@ -647,8 +647,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             //    new key added, between the time that retain on the crypto component was called,
             //    and the time that we actually call retain here. In this case, a newly-created key
             //    may be deleted. This is currently not an issue given how the crypto component is
-            //    called from consensus, but an approach similar to the one proposed for NI-DKG in
-            //    CRP-1094 (adding the registry version to the keys) could be applied here also.
+            //    called from consensus, but an approach similar to the one proposed for NI-DKG
+            //    (adding the registry version to the keys) could be applied here also.
             self.canister_sks_write_lock()
                 .retain(
                     filter,

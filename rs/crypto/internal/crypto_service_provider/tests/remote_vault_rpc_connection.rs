@@ -99,8 +99,7 @@ fn should_unfortunately_be_dead_after_response_from_server_cannot_be_received_by
     // `tarpc` seems to have a race condition in this particular, very rare
     // case: https://github.com/google/tarpc/issues/415. Adding a delay
     // in this test temporarily fixes the issue until it is fixed in
-    // `tarpc`.
-    // TODO(CRP-2348): bump `tarpc` version when there is a fix and remove
+    // `tarpc`. Bump `tarpc` version when there is a fix and remove
     // the `sleep`.
     std::thread::sleep(std::time::Duration::from_millis(100));
 

@@ -578,6 +578,14 @@ pub async fn install_bitcoin_canister_with_network(
     bitcoin_canister.canister_id()
 }
 
+/// Dogecoin canister init arg (release/2026-02-06+).
+/// TODO(DEFI-2672): once new version of ic-doge-interface is released, use type from this crate.
+#[derive(candid::CandidType)]
+#[allow(non_camel_case_types)]
+enum DogecoinCanisterArg {
+    init(ic_doge_interface::InitConfig),
+}
+
 pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
     use ic_doge_interface::{Fees, Flag, InitConfig, Network};
     info!(&logger, "Installing dogecoin canister ...");
@@ -585,7 +593,7 @@ pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> Ca
     let mut dogecoin_canister =
         create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
 
-    let args = InitConfig {
+    let init_config = InitConfig {
         stability_threshold: Some(1440), //Proposal 139760
         network: Some(Network::Regtest),
         blocks_source: Some(Principal::management_canister()),
@@ -611,6 +619,7 @@ pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> Ca
         lazily_evaluate_fee_percentiles: Some(Flag::Enabled),
     };
 
+    let args = DogecoinCanisterArg::init(init_config);
     install_rust_canister_from_path(
         &mut dogecoin_canister,
         get_dependency_path_from_env("DOGE_WASM_PATH"),

@@ -7,7 +7,7 @@ use crate::driver::farm::{CreateVmRequest, HostFeature};
 use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
-use crate::driver::nested::NestedNode;
+use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
     get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
@@ -15,6 +15,7 @@ use crate::driver::test_env_api::{
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -36,14 +37,14 @@ pub struct ResourceRequest {
     pub vm_configs: Vec<VmSpec>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct DiskImage {
     pub image_type: ImageType,
     pub url: Url,
     pub sha256: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub enum ImageType {
     IcOsImage,
     PrometheusImage,
@@ -105,8 +106,9 @@ pub struct VmSpec {
     pub alternate_template: Option<VmType>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Serialize, Deserialize)]
 pub enum BootImage {
+    #[default]
     GroupDefault,
     Image(DiskImage),
     File(FileId),
@@ -139,6 +141,7 @@ pub struct AllocatedVm {
     pub ipv6: Ipv6Addr,
     pub mac6: String,
     pub ipv4: Option<Ipv4Addr>,
+    pub bare_metal: bool,
 }
 
 /// This translates the configuration structure from InternetComputer to a
@@ -169,6 +172,7 @@ pub fn get_resource_request(
 }
 
 /// Create a `ResourceRequest` for a set of nested nodes.
+/// This function only supports virtual (non-bare metal) nodes.
 pub fn get_resource_request_for_nested_nodes(
     nodes: &[NestedNode],
     test_env: &TestEnv,
@@ -187,7 +191,7 @@ pub fn get_resource_request_for_nested_nodes(
     let default_vm_resources = group_setup.default_vm_resources;
     res_req.group_name = group_name.to_string();
     for node in nodes {
-        res_req.add_vm_request(vm_spec_from_nested_node(node, default_vm_resources));
+        res_req.add_vm_request(vm_spec_from_nested_node(node, default_vm_resources)?);
     }
 
     Ok(res_req)
@@ -311,7 +315,8 @@ pub fn allocate_resources(
                     ipv4: None,
                     ipv6,
                     mac6,
-                })
+                    bare_metal: false,
+                });
             }
         }
     }
@@ -332,7 +337,7 @@ fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmS
                 .and_then(|vm_resources| vm_resources.memory_kibibytes)
                 .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
         }),
-        boot_image: BootImage::GroupDefault,
+        boot_image: n.boot_image.clone(),
         boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
             || {
                 default_vm_resources
@@ -350,9 +355,14 @@ fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmS
 fn vm_spec_from_nested_node(
     node: &NestedNode,
     default_vm_resources: Option<VmResources>,
-) -> VmSpec {
-    let vm_resources = &node.vm_resources;
-    VmSpec {
+) -> anyhow::Result<VmSpec> {
+    let vm_resources = match &node.node_spec {
+        NestedNodeSpec::Vm(vm_resources) => vm_resources,
+        NestedNodeSpec::BareMetal { .. } => {
+            bail!("Bare metal nodes are not supported by get_resource_request_for_nested_nodes")
+        }
+    };
+    Ok(VmSpec {
         name: node.name.clone(),
         // Note that the nested GuestOS VM uses half the vCPUs and memory of this host VM.
         vcpus: vm_resources.vcpus.unwrap_or_else(|| {
@@ -365,7 +375,7 @@ fn vm_spec_from_nested_node(
                 .and_then(|vm_resources| vm_resources.memory_kibibytes)
                 .unwrap_or(HOSTOS_MEMORY_KIB_PER_VM)
         }),
-        boot_image: BootImage::GroupDefault,
+        boot_image: node.boot_image.clone(),
         boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
             || {
                 default_vm_resources
@@ -376,5 +386,5 @@ fn vm_spec_from_nested_node(
         vm_allocation: None,
         required_host_features: Vec::new(),
         alternate_template: None,
-    }
+    })
 }

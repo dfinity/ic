@@ -227,22 +227,18 @@ impl RegistryHelper {
     /// version
     pub(crate) fn get_recalled_replica_versions(
         &self,
-        _subnet_id: SubnetId,
-        _registry_version: RegistryVersion,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
     ) -> OrchestratorResult<Vec<ReplicaVersion>> {
-        // TODO(NODE-1754): Remove this placeholder and replace with the commented code below once
-        // registry changes were merged
-        Ok(vec![])
-
-        // let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
-        // subnet_record
-        //     .recalled_replica_version_ids
-        //     .iter()
-        //     .map(|version_str| {
-        //         ReplicaVersion::try_from(version_str.as_ref())
-        //             .map_err(OrchestratorError::ReplicaVersionParseError)
-        //     })
-        //     .collect()
+        let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
+        subnet_record
+            .recalled_replica_version_ids
+            .iter()
+            .map(|version_str| {
+                ReplicaVersion::try_from(version_str.as_ref())
+                    .map_err(OrchestratorError::ReplicaVersionParseError)
+            })
+            .collect()
     }
 
     pub(crate) fn get_expected_replica_version(
@@ -313,6 +309,22 @@ impl RegistryHelper {
         });
 
         node_operator_record.map(|v| v.dc_id)
+    }
+
+    pub(crate) fn get_ssh_recovery_access(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> OrchestratorResult<Vec<String>> {
+        match self
+            .registry_client
+            .get_node_record(self.node_id, registry_version)?
+        {
+            Some(record) => Ok(record.ssh_node_state_write_access),
+            None => Err(OrchestratorError::NodeRecordMissingError(
+                self.node_id,
+                registry_version,
+            )),
+        }
     }
 
     /// Get the HostOS version of this node in the given registry version

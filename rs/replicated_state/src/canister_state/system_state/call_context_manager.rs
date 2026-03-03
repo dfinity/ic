@@ -19,7 +19,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::{From, TryFrom, TryInto};
 use std::sync::Arc;
-use std::time::Duration;
 
 #[cfg(test)]
 use std::collections::BTreeMap;
@@ -610,18 +609,6 @@ impl CallContextManager {
         self.next_callback_id += 1;
         let callback_id = CallbackId::from(self.next_callback_id);
 
-        self.insert_callback(callback_id, callback);
-
-        callback_id
-    }
-
-    /// Inserts a callback under the given ID. Returns an error if the canister is
-    /// `Stopped`.
-    //
-    // TODO(DSM-95) Drop this when we drop the legacy `CanisterMessage::Response`
-    // variant and no longer need forward compatible decoding.
-    #[doc(hidden)]
-    pub fn insert_callback(&mut self, callback_id: CallbackId, callback: Callback) {
         self.stats.on_register_callback(&callback);
         if callback.deadline != NO_DEADLINE {
             self.unexpired_callbacks
@@ -641,6 +628,8 @@ impl CallContextManager {
             self.outstanding_callbacks
         );
         debug_assert!(self.stats_ok());
+
+        callback_id
     }
 
     /// If we get a response for one of the outstanding calls, we unregister
@@ -725,30 +714,29 @@ impl CallContextManager {
         self.next_callback_id
     }
 
-    /// Returns a collection of all call contexts older than the provided age.
+    /// Returns the number of call contexts older than the provided threshold time,
+    /// calling the provided function on each such call context.
     pub fn call_contexts_older_than(
         &self,
-        current_time: Time,
-        age: Duration,
-    ) -> Vec<(&CallOrigin, Time)> {
+        threshold_time: Time,
+        for_each: impl Fn(&CallOrigin, Time),
+    ) -> usize {
         // Call contexts are stored in order of increasing CallContextId, and
         // the IDs are generated sequentially, so we are iterating in order of
         // creation time. This means we can stop as soon as we encounter a call
         // context that isn't old enough.
         self.call_contexts
             .iter()
-            .take_while(|(_, call_context)| call_context.time() + age <= current_time)
-            .filter_map(|(_, call_context)| {
+            .take_while(|(_, call_context)| call_context.time() <= threshold_time)
+            .inspect(|(_, call_context)| {
                 if !call_context.is_deleted() {
-                    return Some((call_context.call_origin(), call_context.time()));
+                    for_each(call_context.call_origin(), call_context.time());
                 }
-                None
             })
-            .collect()
+            .count()
     }
 
     /// Returns the number of unresponded canister update call contexts, also taking
-    /// into account a potential paused or aborted canister request execution
     /// (equivalent to one extra call context).
     ///
     /// Time complexity: `O(1)`.
@@ -941,6 +929,11 @@ pub mod testing {
 
         /// Testing only: Publicly exposes `unregister_callback()`.
         fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>>;
+
+        /// Testing only: Publicly exposes `next_callback_id`.
+        //
+        // TODO(DSM-95): Drop when no longer needed.
+        fn set_next_callback_id(&mut self, next_callback_id: u64);
     }
 
     impl CallContextManagerTesting for CallContextManager {
@@ -964,6 +957,10 @@ pub mod testing {
 
         fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
             self.unregister_callback(callback_id)
+        }
+
+        fn set_next_callback_id(&mut self, next_callback_id: u64) {
+            self.next_callback_id = next_callback_id;
         }
     }
 }

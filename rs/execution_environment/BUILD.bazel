@@ -36,6 +36,7 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
+        "//rs/utils",
         "//rs/utils/lru_cache",
         "//rs/utils/thread",
         "@crate_index//:candid",
@@ -111,10 +112,14 @@ rust_ic_test_suite(
     size = "large",
     srcs = glob(
         ["tests/*.rs"],
-        # Exclude the dts test, which has a separate dts_test target below
-        # because it suffered from long running times on CI
-        # so we want to experiment with different configuration options.
-        exclude = ["tests/dts.rs"],
+        exclude = [
+            # Exclude the dts and storage_reservation tests,
+            # which have separate dts_test and storage_reservation_test targets below
+            # because they suffer from long running times on CI
+            # so we want to experiment with different configuration options.
+            "tests/dts.rs",
+            "tests/storage_reservation.rs",
+        ],
     ),
     compile_data = glob(["tests/test-data/**"]),
     data = [
@@ -191,8 +196,6 @@ rust_ic_test_suite(
     ],
 )
 
-# TODO: move this dts test back into the :execution_environment_misc_integration target above
-# when we get its P90 running time back under 5 minutes.
 rust_ic_test(
     name = "dts_test",
     size = "large",
@@ -227,6 +230,33 @@ rust_ic_test(
         "@crate_index//:more-asserts",
         "@crate_index//:strum",
         "@crate_index//:wat",
+    ],
+)
+
+rust_ic_test(
+    name = "storage_reservation_test",
+    size = "large",
+    srcs = ["tests/storage_reservation.rs"],
+    data = [
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
+    env = {
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "RUST_TEST_THREADS": "4",
+    },
+    tags = [
+        "cpu:4",
+        "test_all_platforms_slow",
+    ],
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/registry/subnet_type",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
     ],
 )
 
@@ -306,6 +336,7 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//rs/config",
+        "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/types/base_types",
         "//rs/types/types",

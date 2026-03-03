@@ -74,6 +74,9 @@ fn consensus_produces_expected_batches() {
             .expect_list_state_hashes_to_certify()
             .return_const(vec![]);
         state_manager
+            .expect_list_state_heights_to_certify()
+            .return_const(vec![]);
+        state_manager
             .expect_latest_certified_height()
             .return_const(Height::new(0));
         state_manager
@@ -137,7 +140,7 @@ fn consensus_produces_expected_batches() {
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            (&make_genesis(summary)).into(),
+            make_genesis(summary).into(),
             pool_config.clone(),
             MetricsRegistry::new(),
             no_op_logger(),

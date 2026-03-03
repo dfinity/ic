@@ -1,6 +1,6 @@
 use crate::partitions::get_boot_partition_uuid;
-use crate::proposal::read_and_verify_bless_alternative_guest_os_version_proposal;
-use anyhow::{Context, Result, ensure};
+use crate::proposal::read_and_verify_signed_bless_alternative_guest_os_version_proposal;
+use anyhow::{Context, Result};
 use attestation::attestation_package::AttestationPackageVerifier;
 use attestation::custom_data::{SevCustomData, SevCustomDataNamespace};
 use command_runner::CommandRunner;
@@ -10,9 +10,6 @@ use rand::prelude::thread_rng;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
 use std::path::Path;
-
-#[cfg(feature = "dev")]
-use std::fs;
 
 pub const CONFIG_PARTITION_LABEL: &str = "CONFIG";
 pub const RECOVERY_PROPOSAL_FILE_NAME: &str = "alternative_guestos_proposal.cbor";
@@ -24,7 +21,7 @@ pub fn extract_and_verify_recovery_rootfs_hash(
     sev_firmware: &mut dyn SevGuestFirmware,
     command_runner: &dyn CommandRunner,
     partition_provider: &dyn PartitionProvider,
-) -> Result<Option<String>> {
+) -> Result<String> {
     let config_mount = partition_provider
         .mount_partition(
             PartitionSelector::ByLabel(CONFIG_PARTITION_LABEL.to_string()),
@@ -40,7 +37,7 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         .trusted_execution_environment_config
         .context("Missing trusted_execution_environment_config in GuestOS config")?;
 
-    #[cfg(feature = "dev")]
+    #[cfg(any(feature = "dev", test))]
     let nns_public_key_override = get_nns_public_key_override(config_mount.mount_point())?;
 
     drop(config_mount);
@@ -52,22 +49,13 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         },
     )?;
 
-    let Some(proposal) = read_and_verify_bless_alternative_guest_os_version_proposal(
+    let proposal = read_and_verify_signed_bless_alternative_guest_os_version_proposal(
         &boot_mount.mount_point().join(RECOVERY_PROPOSAL_FILE_NAME),
-        #[cfg(feature = "dev")]
+        #[cfg(any(feature = "dev", test))]
         nns_public_key_override.as_deref(),
-    )?
-    else {
-        // No alternative GuestOS proposal found
-        return Ok(None);
-    };
+    )?;
 
     drop(boot_mount);
-
-    ensure!(
-        proposal.rootfs_hash.is_some(),
-        "Proposal missing rootfs_hash"
-    );
 
     // Generate an attestation package and verify the contents of the proposal against it.
     let attestation_package = generate_attestation_package(
@@ -102,10 +90,10 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         .verify_measurement(&guest_launch_measurements)
         .context("This node is not running a GuestOS with one of the base launch measurements")?;
 
-    Ok(proposal.rootfs_hash)
+    proposal.rootfs_hash.context("Proposal missing rootfs_hash")
 }
 
-#[cfg(feature = "dev")]
+#[cfg(any(feature = "dev", test))]
 fn get_nns_public_key_override(config_media_path: &Path) -> Result<Option<Vec<u8>>> {
     let nns_public_key_override_path = config_media_path.join("nns_public_key_override.pem");
     if !nns_public_key_override_path.exists() {
@@ -114,12 +102,13 @@ fn get_nns_public_key_override(config_media_path: &Path) -> Result<Option<Vec<u8
 
     eprintln!("Dev mode: reading NNS public key override from {nns_public_key_override_path:?}");
 
-    let pem_contents = fs::read_to_string(&nns_public_key_override_path).with_context(|| {
-        format!(
-            "Failed to read NNS public key override from {:?}",
-            nns_public_key_override_path
-        )
-    })?;
+    let pem_contents =
+        std::fs::read_to_string(&nns_public_key_override_path).with_context(|| {
+            format!(
+                "Failed to read NNS public key override from {:?}",
+                nns_public_key_override_path
+            )
+        })?;
     let pem_object = pem::parse(&pem_contents).context("Failed to parse PEM")?;
 
     Ok(Some(pem_object.into_contents()))

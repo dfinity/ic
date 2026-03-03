@@ -76,11 +76,11 @@ impl Scalar {
     /// group order.
     pub fn from_wide_bytes(bytes: &[u8]) -> Option<Self> {
         /*
-        As the p256 crates is lacking a native function that reduces an input
+        As the p256 crate is lacking a native function that reduces an input
         modulo the group order we have to synthesize it using other operations.
 
         Do so by splitting up the input into two parts each of which is at most
-        scalar_len bytes long. Then compute s0*2^X + s1
+        scalar_len bytes long. Then compute s0*2^256 + s1
         */
 
         if bytes.len() > Self::BYTES * 2 {
@@ -94,15 +94,16 @@ impl Scalar {
         let fb0 = p256::FieldBytes::from_slice(&extended[..Self::BYTES]);
         let fb1 = p256::FieldBytes::from_slice(&extended[Self::BYTES..]);
 
-        let mut s0 = <p256::Scalar as Reduce<p256::U256>>::reduce_bytes(fb0);
+        let s0 = <p256::Scalar as Reduce<p256::U256>>::reduce_bytes(fb0);
         let s1 = <p256::Scalar as Reduce<p256::U256>>::reduce_bytes(fb1);
 
-        for _bit in 1..=Self::BYTES * 8 {
-            s0 = s0.double();
-        }
-        s0 += s1;
+        // 2^256 mod n (secp256r1 group order)
+        let shift = p256::Scalar::from_repr(p256::FieldBytes::from(hex!(
+            "00000000ffffffff00000000000000004319055258e8617b0c46353d039cdaaf"
+        )))
+        .unwrap();
 
-        Some(Self::new(s0))
+        Some(Self::new(s0 * shift + s1))
     }
 
     /// Return constant zero
@@ -241,9 +242,24 @@ impl Point {
     /// Perform multi-exponentiation
     ///
     /// Equivalent to p1*s1 + p2*s2
-    pub fn lincomb(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
+    pub fn lincomb_vartime(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
         // Use mul2 table here!
         Self::new(p256::ProjectivePoint::lincomb(&p1.p, &s1.s, &p2.p, &s2.s))
+    }
+
+    /// Perform multi-exponentiation
+    ///
+    /// Equivalent to p1*s1 + p2*s2 + p3*s3
+    pub fn lincomb3_vartime(
+        p1: &Point,
+        s1: &Scalar,
+        p2: &Point,
+        s2: &Scalar,
+        p3: &Point,
+        s3: &Scalar,
+    ) -> Self {
+        // p256 doesn't currently offer anything for this
+        Self::lincomb_vartime(p1, s1, p2, s2).add(&p3.mul(s3))
     }
 
     pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {

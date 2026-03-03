@@ -39,13 +39,14 @@ use ic_nns_constants::{
     canister_id_to_nns_canister_name, memory_allocation_of,
 };
 use ic_nns_governance_api::{
-    self as nns_governance_pb, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest,
-    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfoRequest,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, ProposalStatus, RewardNodeProviders, Vote,
+    self as nns_governance_pb, CreateNeuronRequest, CreateNeuronResponse, Empty,
+    ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance, GovernanceError, InstallCodeRequest, ListNeuronVotesRequest,
+    ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+    ListNodeProviderRewardsResponse, ListProposalInfoRequest, ListProposalInfoResponse,
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, ProposalActionRequest, ProposalInfo,
+    ProposalStatus, RewardNodeProviders, Vote,
     manage_neuron::{
         self, AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse,
         DisburseMaturity, Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
@@ -82,9 +83,12 @@ use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo,
     SendArgs, Tokens,
 };
-use icrc_ledger_types::icrc1::{
-    account::Account,
-    transfer::{TransferArg, TransferError},
+use icrc_ledger_types::{
+    icrc1::{
+        account::Account,
+        transfer::{TransferArg, TransferError},
+    },
+    icrc2::approve::{ApproveArgs, ApproveError},
 };
 use num_traits::ToPrimitive;
 use prost::Message;
@@ -932,6 +936,32 @@ pub fn nns_send_icp_to_claim_or_refresh_neuron(
     .unwrap();
 }
 
+pub fn nns_approve_governance_to_spend_from_account(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    amount: Tokens,
+) {
+    icrc2_approve(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        sender,
+        ApproveArgs {
+            from_subaccount: None,
+            spender: Account {
+                owner: GOVERNANCE_CANISTER_ID.get().0,
+                subaccount: None,
+            },
+            amount: Nat::from(amount.get_e8s()),
+            created_at_time: None,
+            fee: None,
+            memo: None,
+            expires_at: None,
+            expected_allowance: None,
+        },
+    )
+    .unwrap();
+}
+
 fn manage_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1100,6 +1130,32 @@ pub fn nns_claim_or_refresh_neuron(
     *neuron_id
 }
 
+pub fn nns_create_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    amount_e8s: u64,
+) -> Result<NeuronId, String> {
+    let result: Result<CreateNeuronResponse, String> = update_with_sender(
+        state_machine,
+        GOVERNANCE_CANISTER_ID,
+        "create_neuron",
+        CreateNeuronRequest {
+            amount_e8s: Some(amount_e8s),
+            source_subaccount: None,
+            controller: None,
+            followees: None,
+            dissolve_delay_seconds: None,
+            dissolving: None,
+            auto_stake_maturity: None,
+        },
+        sender,
+    );
+    result
+        .unwrap()
+        .map(|r| r.neuron_id.unwrap())
+        .map_err(|e| format!("Error when creating neuron: {:?}", e))
+}
+
 pub fn nns_disburse_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1251,10 +1307,14 @@ pub fn wait_for_canister_upgrade_to_succeed(
     new_wasm_hash: &[u8; 32],
     // For most NNS canisters, ROOT_CANISTER_ID would be passed here (modulo conversion).
     controller_principal_id: PrincipalId,
+    reject_remote_callbacks_while_waiting: bool,
 ) {
     let mut last_status = None;
     for i in 0..25 {
         state_machine.tick();
+        if reject_remote_callbacks_while_waiting {
+            state_machine.reject_remote_callbacks();
+        }
 
         // Fetch status of the canister being upgraded.
         let status_result = get_canister_status(
@@ -1876,6 +1936,26 @@ pub fn icrc1_token_logo(machine: &StateMachine, ledger_id: CanisterId) -> Option
             MetadataValue::Text(s) => s,
             m => panic!("Unexpected metadata value {m:?}"),
         })
+}
+
+pub fn icrc2_approve(
+    state_machine: &StateMachine,
+    ledger_id: CanisterId,
+    sender: PrincipalId,
+    icrc2_approve_args: ApproveArgs,
+) -> Result<BlockIndex, String> {
+    let result: Result<Result<Nat, ApproveError>, String> = update_with_sender(
+        state_machine,
+        ledger_id,
+        "icrc2_approve",
+        icrc2_approve_args,
+        sender,
+    );
+    let result = result.unwrap();
+    match result {
+        Ok(n) => Ok(n.0.to_u64().unwrap()),
+        Err(e) => Err(format!("{:?}", e)),
+    }
 }
 
 /// Claim a staked neuron for an SNS StateMachine test

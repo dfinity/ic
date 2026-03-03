@@ -9,7 +9,7 @@ use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -132,6 +132,7 @@ pub fn default_read_certified_state(
     let mht = MixedHashTree::Leaf(Vec::new());
     let cert = Certification {
         height: Height::from(1),
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             signature: ThresholdSignature {
                 signer: NiDkgId {
@@ -184,15 +185,15 @@ pub fn default_certified_state_reader()
 pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
 
-    let network_topology = NetworkTopology {
-        subnets: Default::default(),
-        routing_table: Arc::new(RoutingTable::default()),
-        canister_migrations: Arc::new(CanisterMigrations::default()),
-        nns_subnet_id: subnet_test_id(1),
-        chain_key_enabled_subnets: Default::default(),
-        bitcoin_mainnet_canister_id: None,
-        bitcoin_testnet_canister_id: None,
-    };
+    let network_topology = NetworkTopology::new(
+        Default::default(),
+        Arc::new(RoutingTable::default()),
+        Arc::new(CanisterMigrations::default()),
+        subnet_test_id(1),
+        Default::default(),
+        None,
+        None,
+    );
 
     metadata.network_topology = network_topology;
     metadata.batch_time = UNIX_EPOCH;

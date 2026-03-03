@@ -12,7 +12,7 @@ use url::Url;
 use config_tool::{DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{Ipv6Config, SetupOSConfig};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
@@ -72,7 +72,6 @@ pub fn main() -> Result<()> {
             let generated_mac = calculate_deterministic_mac(
                 &setupos_config.icos_settings.mgmt_mac,
                 setupos_config.icos_settings.deployment_environment,
-                IpVariant::V6,
                 NodeType::SetupOS,
             );
             eprintln!("Using generated mac {generated_mac}");
@@ -95,7 +94,6 @@ pub fn main() -> Result<()> {
             let generated_mac = calculate_deterministic_mac(
                 &setupos_config.icos_settings.mgmt_mac,
                 setupos_config.icos_settings.deployment_environment,
-                IpVariant::V6,
                 node_type,
             );
             eprintln!("Using generated mac address {generated_mac}");

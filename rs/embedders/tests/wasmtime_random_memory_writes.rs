@@ -82,6 +82,7 @@ fn test_api_for_update(
             SubnetType::Application => SchedulerConfig::application_subnet(),
             SubnetType::System => SchedulerConfig::system_subnet(),
             SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
@@ -983,6 +984,9 @@ mod tests {
                                 .dirty_page_overhead
                                 .get()
                         }
+                        SubnetType::CloudEngine => {
+                            SchedulerConfig::cloud_engine().dirty_page_overhead.get()
+                        }
                     },
                     _ => 0,
                 };
@@ -1063,6 +1067,7 @@ mod tests {
                 SubnetType::System => SchedulerConfig::system_subnet(),
                 SubnetType::Application => SchedulerConfig::application_subnet(),
                 SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+                SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
             }
             .dirty_page_overhead,
             ..EmbeddersConfig::default()

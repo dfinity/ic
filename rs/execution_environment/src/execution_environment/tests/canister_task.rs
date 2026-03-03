@@ -1225,8 +1225,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     // Hence hook should be executed next.
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -1248,8 +1247,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     // The hook status is still `Ready`.
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -1270,8 +1268,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
 
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -2023,8 +2020,7 @@ fn low_wasm_memory_hook_is_run_when_memory_limit_is_exceeded() {
     // The update will also satisfy condition for `low_wasm_memory` hook.
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -2042,8 +2038,7 @@ fn low_wasm_memory_hook_is_run_when_memory_limit_is_exceeded() {
 
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
