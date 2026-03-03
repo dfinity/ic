@@ -110,8 +110,10 @@ rust_bench(
         ":replicated_state",
         "//rs/config",
         "//rs/criterion_time",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:more-asserts",
     ],
 )
 
