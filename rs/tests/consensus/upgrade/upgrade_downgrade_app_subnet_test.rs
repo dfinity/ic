@@ -177,6 +177,8 @@ fn main() -> Result<()> {
         // TODO(CON-1644): remove once the mainnet version no longer handles
         // duplicate artifacts as invalid.
         .remove_metrics_to_check("idkg_invalidated_artifacts")
+        // TODO(CON-1658): Re-enable after certification witnesses are deployed to all subnets.
+        .remove_metrics_to_check("certification_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }
