@@ -15882,6 +15882,7 @@ dependencies = [
  "ic-universal-canister",
  "ic_consensus_system_test_utils",
  "k256 0.13.4",
+ "leb128",
  "p256",
  "rand 0.8.5",
  "reqwest",
