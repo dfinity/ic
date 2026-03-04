@@ -755,9 +755,31 @@ impl Player {
         let latest_version = self.registry.get_latest_version();
         println!("RegistryLocalStore latest version: {latest_version}");
 
-        let all_new_records = self
-            .get_changes_since(zero_version.get(), current_time() + Duration::from_secs(60))
-            .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {err}"));
+        // We need to fetch all records since version 0 to be able to check that the current local
+        // store is a prefix of the new one. Since there can be a lot of records,
+        // `get_changes_since` returns them in batches, so we need to call it multiple times until
+        // we get all records.
+        let mut all_new_records = Vec::new();
+        let mut requesting_version = zero_version;
+        loop {
+            let records = self
+                .get_changes_since(
+                    requesting_version.get(),
+                    current_time() + Duration::from_secs(60),
+                )
+                .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {err}"));
+
+            if records.is_empty() {
+                break;
+            }
+
+            requesting_version = records
+                .iter()
+                .map(|record| record.version)
+                .max()
+                .expect("This should never fail since we checked that records is not empty");
+            all_new_records.extend(records);
+        }
 
         let local_store = LocalStoreImpl::new(&self.local_store_path);
         let all_current_records = local_store
