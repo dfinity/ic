@@ -19,8 +19,8 @@ fn only_application_subnets_can_be_free_cycles_cost_schedule() {
         setup_minimal_registry_snapshot_for_check_subnet_invariants(
             system_subnet_id,
             test_subnet_id,
-            1,
-            false,
+            1,     // num_nodes_in_test_subnet
+            false, // with_chip_id
         );
 
     // Trivial case. (Never forget the trivial case, because this is an edge
@@ -59,7 +59,7 @@ fn only_application_subnets_can_be_free_cycles_cost_schedule() {
 }
 
 #[test]
-fn only_sev_enabled_subnets_consist_of_sev_enabled_nodes() {
+fn not_all_nodes_have_a_chip_id() {
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
     let test_node_id = node_test_id(103);
@@ -69,8 +69,8 @@ fn only_sev_enabled_subnets_consist_of_sev_enabled_nodes() {
         setup_minimal_registry_snapshot_for_check_subnet_invariants(
             system_subnet_id,
             test_subnet_id,
-            4,
-            false,
+            4,     // num_nodes_in_test_subnet
+            false, // with_chip_id
         );
 
     // a non SEV-enabled subnet only with nodes without chip ID is compliant
@@ -81,41 +81,56 @@ fn only_sev_enabled_subnets_consist_of_sev_enabled_nodes() {
         chip_id: Some("a chip id".into()),
         ..Default::default()
     };
+    // replace the existing node record with the updated one with a node with chip ID
     snapshot.insert(
         make_node_record_key(test_node_id).into_bytes(),
         test_node_record.encode_to_vec(),
     );
     check_subnet_invariants(&snapshot).unwrap();
 
-    // an SEV-enabled subnet only with nodes without chip ID is NOT compliant
+    // an SEV-enabled subnet with some nodes with and some without chip ID is NOT compliant
     test_subnet_record.features = Some(SubnetFeatures {
         sev_enabled: Some(true),
         ..Default::default()
     });
+    // replace the existing subnet record with the updated one with SEV enabled
     snapshot.insert(
         make_subnet_record_key(test_subnet_id).into_bytes(),
         test_subnet_record.encode_to_vec(),
     );
+    assert_non_compliant_record(
+        &snapshot,
+        "is sev-enabled, but the following nodes are missing a chip id:",
+    );
+
+    // an SEV-enabled subnet only with nodes without chip ID is NOT compliant
     let test_node_record = NodeRecord {
         chip_id: None,
         ..Default::default()
     };
+    // replace the existing node record with the updated one with a node without chip ID
     snapshot.insert(
         make_node_record_key(test_node_id).into_bytes(),
         test_node_record.encode_to_vec(),
     );
     assert_non_compliant_record(
         &snapshot,
-        "subnet fbysm-3acaa-aaaaa-aaaap-yai is sev-enabled but at least one of its nodes is not",
+        "is sev-enabled, but the following nodes are missing a chip id:",
     );
+}
 
+#[test]
+fn all_nodes_have_a_chip_id() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let test_node_id = node_test_id(103);
     // get a snapshot with chip IDs
     let (mut snapshot, mut test_subnet_record) =
         setup_minimal_registry_snapshot_for_check_subnet_invariants(
             system_subnet_id,
             test_subnet_id,
-            4,
-            true,
+            4,    // num_nodes_in_test_subnet
+            true, // with_chip_id
         );
 
     // a non SEV-enabled subnet only with nodes without chip ID is compliant
@@ -126,25 +141,12 @@ fn only_sev_enabled_subnets_consist_of_sev_enabled_nodes() {
         sev_enabled: Some(true),
         ..Default::default()
     });
+    // replace the existing subnet record with the updated one with SEV enabled
     snapshot.insert(
         make_subnet_record_key(test_subnet_id).into_bytes(),
         test_subnet_record.encode_to_vec(),
     );
     check_subnet_invariants(&snapshot).unwrap();
-
-    // an SEV-enabled subnet with some nodes with and some without chip ID is NOT compliant
-    let test_node_record = NodeRecord {
-        chip_id: None,
-        ..Default::default()
-    };
-    snapshot.insert(
-        make_node_record_key(test_node_id).into_bytes(),
-        test_node_record.encode_to_vec(),
-    );
-    assert_non_compliant_record(
-        &snapshot,
-        "subnet fbysm-3acaa-aaaaa-aaaap-yai is sev-enabled but at least one of its nodes is not",
-    );
 }
 
 fn setup_minimal_registry_snapshot_for_check_subnet_invariants(

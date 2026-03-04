@@ -113,7 +113,12 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
     nodes: u64,
     node_operator_id: PrincipalId,
 ) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
-    prepare_registry_raw(start_mutation_id, nodes, node_operator_id, false)
+    prepare_registry_raw(
+        start_mutation_id,
+        nodes,
+        node_operator_id,
+        false, // with_chip_id
+    )
 }
 
 /// Same as above, just with the possibility to have a chip_id.

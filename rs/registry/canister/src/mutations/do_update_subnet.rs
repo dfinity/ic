@@ -142,14 +142,12 @@ impl Registry {
         }
     }
 
-    /// Validates that the SEV (AMD Secure Encrypted Virtualization) feature is only
-    /// enabled, but never disabled on an existing subnet.
+    /// Validates that AMD Secure Encrypted Virtualization (SEV) is never disabled on a subnet.
     ///
     /// Panics when attempting to turn off SEV for an SEV-enabled subnet
     fn validate_update_sev_feature(&self, payload: &UpdateSubnetPayload) {
         let subnet_id = payload.subnet_id;
 
-        // Ensure the subnet record exists for this subnet ID.
         let Some(subnet_features) = self.get_subnet_or_panic(subnet_id).features else {
             return;
         };
@@ -158,16 +156,14 @@ impl Registry {
             return;
         };
 
-        match (subnet_features.sev_enabled, update_features.sev_enabled) {
-            (Some(true), Some(false)) => {
-                panic!(
-                    "{LOG_PREFIX}Proposal attempts to disable SEV for Subnet '{subnet_id}', \
+        // panic if SEV is enable and the update tries to disable it
+        let attempting_to_disable =
+            subnet_features.sev_enabled == Some(true) && update_features.sev_enabled == Some(false);
+        if attempting_to_disable {
+            panic!(
+                "{LOG_PREFIX}Proposal attempts to disable SEV for Subnet '{subnet_id}', \
                      but SEV cannot be turned off once enabled.",
-                );
-            }
-            _ => {
-                // All other cases are allowed, including when SEV is not being updated or when it is being enabled on an existing subnet.
-            }
+            );
         }
     }
 
@@ -1013,10 +1009,10 @@ mod tests {
     }
 
     #[test]
-    fn test_sev_enabled_can_be_enabled_if_disabled() {
+    fn test_can_enable_sev_if_disabled() {
         let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
 
-        // transition from false -> true
+        // transition from unset -> false -> true
         registry.do_update_subnet(update_sev(subnet_id, false));
         registry.do_update_subnet(update_sev(subnet_id, true));
 
@@ -1034,7 +1030,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sev_enabled_can_be_enabled_if_unset() {
+    fn test_can_enable_sev_if_unset() {
         let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
 
         // transition from unset (implicitly) -> true
@@ -1058,9 +1054,10 @@ mod tests {
         expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
         but SEV cannot be turned off once enabled."
     )]
-    fn test_sev_enabled_cannot_be_disabled() {
+    fn test_cannot_disable_sev_if_enabled() {
         let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
 
+        // Enable SEV first as it is initially unset.
         registry.do_update_subnet(update_sev(subnet_id, true));
         // This should trigger the panic
         registry.do_update_subnet(update_sev(subnet_id, false));
