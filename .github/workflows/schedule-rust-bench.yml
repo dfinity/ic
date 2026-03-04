@@ -24,9 +24,9 @@ jobs:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:62ef680d95901d1c191442d2a5f382315ed4b916e97a81335c8d13baba2fe30d
+      image: ghcr.io/dfinity/ic-build@sha256:59e782e6278dd127f8c19344403cc61f73dcb6f446247b22e1c8214cff5ba26a
       # running on bare metal machine using ubuntu user
-      options: --user ubuntu --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
+      options: --user ubuntu --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
     strategy:
       matrix:
@@ -51,7 +51,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+      - uses: ./.github/actions/netrc
       - name: Run Rust Benchmarks
         uses: ./.github/actions/bazel
         env:
@@ -64,7 +64,7 @@ jobs:
             trap "rm -rf $CRITERION_HOME" INT TERM EXIT
 
             while IFS= read -r tgt; do
-                bazel run "$tgt" -- --criterion-home "$CRITERION_HOME"
+                CRITERION_HOME="$CRITERION_HOME" bazel run "$tgt"
             done < <(bazel query "attr(tags, 'rust_bench', ${{ matrix.target }})")
 
             while IFS= read -r bench_dir; do

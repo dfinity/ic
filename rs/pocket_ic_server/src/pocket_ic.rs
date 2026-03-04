@@ -1,7 +1,7 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, DogecoinCanisterArg,
-    InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig,
-    SnsAggregatorConfig, StaticCaptchaTrigger,
+    BitcoinCanisterArg, CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
+    DogecoinCanisterArg, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
+    RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -2266,11 +2266,12 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, BITCOIN_TESTNET_CANISTER_ID);
 
             // Install the Bitcoin testnet canister.
-            let args = BitcoinInitConfig {
+            let init_config = BitcoinInitConfig {
                 network: Some(BitcoinNetwork::Regtest),
                 fees: Some(BitcoinFees::testnet()),
                 ..Default::default()
             };
+            let args = BitcoinCanisterArg::Init(init_config);
             btc_subnet
                 .state_machine
                 .install_wasm_in_mode(

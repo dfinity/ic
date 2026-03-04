@@ -516,7 +516,7 @@ impl RoundSchedule {
 
         metrics
             .scheduler_accumulated_priority_deviation
-            .set((accumulated_priority_deviation / subnet_schedule.len() as f64).sqrt());
+            .set((accumulated_priority_deviation / subnet_schedule.len().max(1) as f64).sqrt());
 
         self.observe_round_metrics(state, current_round, metrics);
 

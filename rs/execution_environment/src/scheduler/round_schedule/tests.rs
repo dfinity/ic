@@ -11,10 +11,10 @@ use ic_replicated_state::{CanisterMetrics, CanisterPriority, ExecutionTask, Repl
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
-use ic_types::{AccumulatedPriority, LongExecutionMode};
+use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
 use maplit::btreeset;
-use more_asserts::assert_le;
+use more_asserts::{assert_gt, assert_le};
 use std::sync::Arc;
 
 /// Fixture for testing `RoundSchedule` in isolation: a `RoundSchedule` and a
@@ -251,6 +251,12 @@ impl RoundScheduleFixture {
             executed_canisters,
             canisters_with_completed_messages,
         );
+    }
+
+    /// Calls `RoundSchedule::finish_round` with the given round number.
+    fn finish_round(&mut self, current_round: ExecutionRound) {
+        self.round_schedule
+            .finish_round(&mut self.state, current_round, &self.metrics);
     }
 }
 
@@ -663,5 +669,172 @@ fn end_iteration_adds_idle_completed_to_fully_executed() {
     assert_eq!(
         fixture.fully_executed_canisters(),
         &btreeset! {fully_executed}
+    );
+}
+
+// --- finish_round tests (TEST_PLAN §1.3) ---
+
+/// finish_round gives fully_executed canisters priority_credit += 100% and
+/// last_full_execution_round = current_round (the credit is then applied in
+/// the same round, so priority_credit is cleared by the end of finish_round).
+#[test]
+fn finish_round_fully_executed_get_credit() {
+    let round_schedule = RoundScheduleBuilder::new().with_cores(2).build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
+    let long = fixture.canister_with_long_execution();
+    let new = fixture.canister_with_input();
+
+    fixture.start_iteration(true);
+    fixture.end_iteration(&btreeset! {long, new}, &btreeset! {new});
+    assert_eq!(fixture.fully_executed_canisters(), &btreeset! {long, new});
+
+    let current_round = ExecutionRound::new(1);
+    fixture.finish_round(current_round);
+
+    for canister_id in [long, new] {
+        let priority = fixture.canister_priority(&canister_id);
+        assert_eq!(
+            priority.last_full_execution_round, current_round,
+            "fully executed canister should have last_full_execution_round set"
+        );
+    }
+}
+
+/// finish_round grants scheduled canisters their compute allocation and
+/// observe_round_scheduled() on metrics.
+#[test]
+fn finish_round_scheduled_get_compute_allocation_and_metrics() {
+    let round_schedule = RoundScheduleBuilder::new().with_cores(2).build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
+    // Add three canisters so the one we check is not in the first two (not fully
+    // executed), so it does not get priority_credit applied which would reduce its AP.
+    let mut canister_with_compute_allocation = |percent| {
+        let canister = fixture.canister_with_input();
+        fixture
+            .canister_state(&canister)
+            .system_state
+            .compute_allocation = ComputeAllocation::try_from(percent).unwrap();
+        canister
+    };
+    let canister_a = canister_with_compute_allocation(30);
+    let canister_b = canister_with_compute_allocation(20);
+    let canister_c = canister_with_compute_allocation(10);
+
+    fixture.start_iteration(true);
+    let all = btreeset! {canister_a, canister_b, canister_c};
+    fixture.end_iteration(&all, &all);
+    assert_eq!(
+        fixture.fully_executed_canisters(),
+        &btreeset! {canister_a, canister_b}
+    );
+
+    // All three canisters still have `next_execution() != StartNew`.
+    fixture.finish_round(ExecutionRound::new(1));
+
+    let priority = fixture.canister_priority(&canister_c);
+    assert_gt!(priority.accumulated_priority.get(), 10 * MULTIPLIER);
+    assert_eq!(
+        fixture
+            .canister_metrics(&canister_c)
+            .unwrap()
+            .rounds_scheduled(),
+        1,
+        "observe_round_scheduled should have been called"
+    );
+}
+
+/// finish_round preserves zero sum: sum of (accumulated_priority - priority_credit)
+/// over subnet_schedule is 0.
+#[test]
+fn finish_round_free_allocation_zero_sum() {
+    let mut fixture = RoundScheduleFixture::new();
+    let _a = fixture.canister_with_input();
+    let _b = fixture.canister_with_input();
+
+    fixture.start_iteration(true);
+    fixture.finish_round(ExecutionRound::new(1));
+
+    let sum_true_priority: i64 = fixture
+        .state
+        .metadata
+        .subnet_schedule
+        .iter()
+        .map(|(_, p)| p.true_priority().get())
+        .sum();
+    assert_eq!(
+        sum_true_priority, 0,
+        "sum of true_priority over schedule should be 0"
+    );
+}
+
+/// finish_round drops an idle canister with zero true priority from the subnet
+/// schedule when it has no inputs and !must_be_in_schedule().
+#[test]
+fn finish_round_idle_at_zero_dropped_from_schedule() {
+    let mut fixture = RoundScheduleFixture::new();
+    let canister_id = fixture.canister_with_input();
+    fixture.start_iteration(true);
+    // Simulate "canister ran and consumed its input".
+    fixture
+        .canister_state(&canister_id)
+        .system_state
+        .pop_input();
+    fixture.end_iteration(&btreeset! {canister_id}, &btreeset! {canister_id});
+
+    assert!(fixture.fully_executed_canisters().contains(&canister_id));
+    assert!(
+        fixture
+            .state
+            .metadata
+            .subnet_schedule
+            .iter()
+            .any(|(id, _)| *id == canister_id),
+        "canister should be in schedule before finish_round"
+    );
+
+    fixture.finish_round(ExecutionRound::new(1));
+
+    assert!(
+        !fixture
+            .state
+            .metadata
+            .subnet_schedule
+            .iter()
+            .any(|(id, _)| *id == canister_id),
+        "idle canister with zero priority should be dropped from schedule"
+    );
+}
+
+/// finish_round applies priority_credit (clears credit, reduces accumulated_priority,
+/// resets long_execution_mode) for canisters not in ContinueLong or in
+/// canisters_with_completed_messages.
+#[test]
+fn finish_round_apply_priority_credit() {
+    let mut fixture = RoundScheduleFixture::new();
+    let canister_id = fixture.canister_with_input();
+    fixture.start_iteration(true);
+    // Set Prioritized and priority_credit; do not add to completed so end_iteration
+    // does not reset long_execution_mode — we want finish_round to apply_priority_credit.
+    fixture.set_long_execution_mode(canister_id, LongExecutionMode::Prioritized);
+    fixture.set_priority(
+        canister_id,
+        CanisterPriority {
+            priority_credit: AccumulatedPriority::new(50 * MULTIPLIER),
+            ..*fixture.canister_priority(&canister_id)
+        },
+    );
+
+    fixture.finish_round(ExecutionRound::new(1));
+
+    let priority = fixture.canister_priority(&canister_id);
+    assert_eq!(
+        priority.priority_credit.get(),
+        0,
+        "priority_credit should be cleared after apply_priority_credit"
+    );
+    assert_eq!(
+        priority.long_execution_mode,
+        LongExecutionMode::Opportunistic,
+        "long_execution_mode should be reset to default"
     );
 }
