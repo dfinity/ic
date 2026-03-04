@@ -172,25 +172,6 @@ impl RingBuffer {
         }
     }
 
-    // fn make_free_space(&mut self, added_size: MemorySize) {
-    //     let capacity = MemorySize::new(self.byte_capacity() as u64);
-    //     while MemorySize::new(self.bytes_used() as u64) + added_size > capacity {
-    //         if self.remove_front().is_none() {
-    //             break; // No more records to pop, limit reached.
-    //         }
-    //     }
-    // }
-
-    // fn remove_front(&mut self) -> Option<()> {
-    //     let mut h = self.io.load_header();
-    //     let descriptor = self.io.load_record_without_content(&h, h.data_head)?;
-    //     let removed_size = MemorySize::new(descriptor.bytes_len() as u64);
-    //     h.data_head = h.advance_position(h.data_head, removed_size);
-    //     h.data_size = h.data_size.saturating_sub(removed_size);
-    //     self.io.save_header(&h);
-    //     Some(())
-    // }
-
     #[cfg(test)]
     fn pop_front(&mut self) -> Option<CanisterLogRecord> {
         let mut h = self.io.load_header();
