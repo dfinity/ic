@@ -418,6 +418,11 @@ impl CanisterHttpPayloadBuilderImpl {
             return Ok(());
         }
 
+        // Flexible responses are not yet supported
+        if !payload.flexible_responses.is_empty() {
+            return invalid_artifact(InvalidCanisterHttpPayloadReason::FlexibleResponsesNotEmpty);
+        }
+
         // Check whether feature is enabled and reject if it isn't.
         // NOTE: All payloads that are processed at this point are non-empty
         if !self.is_enabled(validation_context).map_err(|err| {
