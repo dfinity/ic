@@ -1,6 +1,7 @@
 use ic_nns_governance_api as api;
 use ic_protobuf::registry::replica_version::v1 as pb;
 
+#[inline] // Inline keeps the governance canister a few kB smaller
 pub fn convert_guest_launch_measurements_from_pb_to_api(
     item: pb::GuestLaunchMeasurements,
 ) -> api::GuestLaunchMeasurements {
@@ -14,6 +15,7 @@ pub fn convert_guest_launch_measurements_from_pb_to_api(
     }
 }
 
+#[inline] // Inline keeps the governance canister a few kB smaller
 pub fn convert_guest_launch_measurements_from_api_to_pb(
     item: api::GuestLaunchMeasurements,
 ) -> pb::GuestLaunchMeasurements {
