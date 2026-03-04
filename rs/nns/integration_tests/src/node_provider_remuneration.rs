@@ -1045,11 +1045,14 @@ fn test_automated_node_provider_remuneration() {
 /// Keeps ticking the state machine until the most recent rewards timestamp changes,
 /// indicating that governance completed the full minting flow (including all
 /// inter-canister calls to NRC, CMC, and Ledger).
+/// Each iteration advances time by 1 second so that timer-based periodic tasks
+/// (if minting ever switches from heartbeat to timer) are also triggered.
 fn wait_for_rewards_minting(
     state_machine: &StateMachine,
     previous_timestamp: u64,
 ) -> MonthlyNodeProviderRewards {
     for i in 0..500 {
+        state_machine.advance_time(Duration::from_secs(1));
         state_machine.tick();
         if let Some(rewards) = nns_get_most_recent_monthly_node_provider_rewards(state_machine)
             && rewards.timestamp != previous_timestamp
