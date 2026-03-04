@@ -55,15 +55,24 @@ pub struct FlexibleCanisterHttpResponseWithProof {
 impl CanisterHttpPayload {
     /// Returns the number of responses that this payload contains
     pub fn num_responses(&self) -> usize {
-        self.responses.len()
-            + self.timeouts.len()
-            + self.divergence_responses.len()
-            + self.flexible_responses.len()
+        let CanisterHttpPayload {
+            responses,
+            timeouts,
+            divergence_responses,
+            flexible_responses,
+        } = self;
+        responses.len() + timeouts.len() + divergence_responses.len() + flexible_responses.len()
     }
 
     /// Returns the number of non_timeout responses
     pub fn num_non_timeout_responses(&self) -> usize {
-        self.responses.len() + self.flexible_responses.len()
+        let CanisterHttpPayload {
+            responses,
+            timeouts: _,
+            divergence_responses: _,
+            flexible_responses,
+        } = self;
+        responses.len() + flexible_responses.len()
     }
 
     /// Returns true, if this is an empty payload
