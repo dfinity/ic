@@ -23,8 +23,8 @@ fi
 export BAZEL_ACTION_BAZEL_WRAPPED="1"
 
 if [ -n "${STARTUP_OPTIONS:-}" ]; then
-    # Use read to split into array properly
-    IFS=' ' read -r -a startup_options <<< "$STARTUP_OPTIONS"
+    # Split into array
+    eval "startup_options=($STARTUP_OPTIONS)"
 else
     startup_options=()
 fi
