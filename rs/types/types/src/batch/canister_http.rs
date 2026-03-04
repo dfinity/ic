@@ -393,7 +393,6 @@ impl From<CanisterHttpResponseArtifact> for pb::CanisterHttpArtifact {
 mod tests {
     use super::*;
     use crate::exhaustive::ExhaustiveSet;
-    use candid::Encode;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 
     /// Tests that a roundtrip of protobuf conversions for `CanisterHttpResponse`
