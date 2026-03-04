@@ -2162,15 +2162,8 @@ impl Governance {
                 parent_neuron.controller(),
                 memo,
             ));
-            // Deterministic subaccount: fail immediately on collision since
-            // retrying would produce the same result.
-            if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "There is already a neuron with the same subaccount.",
-                ));
-            }
-            to_subaccount
+            self.neuron_store
+                .validate_deterministic_subaccount(to_subaccount)?
         } else {
             self.neuron_store
                 .new_neuron_subaccount(&mut *self.randomness)?
@@ -2622,15 +2615,8 @@ impl Governance {
             Some(nonce_val) => {
                 let to_subaccount =
                     ledger::compute_neuron_staking_subaccount(child_controller, nonce_val);
-                // Deterministic subaccount: fail immediately on collision since
-                // retrying would produce the same result.
-                if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::PreconditionFailed,
-                        "There is already a neuron with the same subaccount.",
-                    ));
-                }
-                to_subaccount
+                self.neuron_store
+                    .validate_deterministic_subaccount(to_subaccount)?
             }
         };
 
@@ -2913,14 +2899,9 @@ impl Governance {
             child_controller,
             disburse_to_neuron.nonce,
         ));
-
-        // Make sure there isn't already a neuron with the same sub-account.
-        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "There is already a neuron with the same subaccount.",
-            ));
-        }
+        let to_subaccount = self
+            .neuron_store
+            .validate_deterministic_subaccount(to_subaccount)?;
 
         let in_flight_command = NeuronInFlightCommand {
             timestamp: created_timestamp_seconds,
