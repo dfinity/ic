@@ -464,18 +464,18 @@ fn install_code(
 
 fn with_setup<F>(f: F)
 where
-    F: FnOnce(CanisterManager, ReplicatedState, SubnetId, &BTreeSet<PrincipalId>),
+    F: FnOnce(CanisterManager, ReplicatedState, SubnetId, Option<BTreeSet<PrincipalId>>),
 {
     let subnet_id = subnet_test_id(1);
     let canister_manager = CanisterManagerBuilder::default()
         .with_subnet_id(subnet_id)
         .build();
-    let subnet_admins = BTreeSet::new();
+    let subnet_admins = None;
     f(
         canister_manager,
         initial_state(subnet_id, false),
         subnet_id,
-        &subnet_admins,
+        subnet_admins,
     );
 }
 
@@ -1606,7 +1606,7 @@ fn get_canister_status_of_stopped_canister() {
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
                 false,
-                subnet_admins,
+                subnet_admins.clone(),
             )
             .unwrap();
         assert_eq!(status_res.status(), CanisterStatusType::Stopped);
@@ -3082,7 +3082,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             &mut state,
             &mut round_limits,
             &no_op_counter,
-            &BTreeSet::new(),
+            None,
         )
         .unwrap();
 
@@ -8252,6 +8252,7 @@ fn non_subnet_admin_cannot_perform_subnet_admin_actions_on_canister_but_controll
         !test
             .state()
             .get_own_subnet_admins()
+            .unwrap()
             .contains(controller.get_ref())
     );
 
@@ -8289,6 +8290,7 @@ fn non_controller_and_non_subnet_admin_cannot_perform_subnet_admin_actions_on_ca
         !test
             .state()
             .get_own_subnet_admins()
+            .unwrap()
             .contains(test_user.get_ref())
     );
 

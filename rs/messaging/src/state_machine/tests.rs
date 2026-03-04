@@ -129,7 +129,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             subnet_features: SubnetFeatures::default(),
             chain_keys_held: BTreeSet::new(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
-            subnet_admins: BTreeSet::new(),
+            subnet_admins: None,
         },
     );
 

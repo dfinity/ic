@@ -32,7 +32,7 @@ use ic_registry_client_helpers::subnet::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
+use ic_replicated_state::metadata_state::{ApiBoundaryNodeEntry, can_have_subnet_admins};
 use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
@@ -1079,40 +1079,35 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     ))
                 })?,
             );
-            let mut subnet_admins = BTreeSet::new();
-            // Only rented subnets, i.e., application subnets on a "free" cost
-            // schedule, and cloud engines on a "free" cost schedule can have a non-empty subnet admins list. In this case,
-            // parse the protobuf field to populate the list.
-            #[allow(clippy::nonminimal_bool)]
-            if (subnet_type == SubnetType::Application
-                && cost_schedule == CanisterCyclesCostSchedule::Free)
-                || (subnet_type == SubnetType::CloudEngine
-                    && cost_schedule == CanisterCyclesCostSchedule::Free)
-            {
+            let subnet_admins = if can_have_subnet_admins(subnet_type, cost_schedule) {
+                let mut subnet_admins_set = BTreeSet::new();
                 for p in subnet_record.subnet_admins.into_iter() {
                     let subnet_admin = PrincipalId::try_from(p).map_err(|err| {
                         ReadRegistryError::Persistent(format!(
                             "'failed to read subnet admins from subnet record', err: {err:?}"
                         ))
                     })?;
-                    subnet_admins.insert(subnet_admin);
+                    subnet_admins_set.insert(subnet_admin);
                 }
-            } else if !subnet_record.subnet_admins.is_empty() {
-                // If the subnet is not rented and it has a non-empty subnet
-                // admins list, it indicates a bug and a critical error is
-                // raised. No admins are parsed out in that case and the list
-                // remains empty.
-                self.metrics
-                    .critical_error_illegal_non_empty_subnet_admins
-                    .inc();
-                warn!(
-                    self.log,
-                    "{}: subnet {} is a non-rental subnet, but has a non-empty list of subnet admins {:?}.",
-                    CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS,
-                    subnet_id,
-                    subnet_admins,
-                );
-            }
+                Some(subnet_admins_set)
+            } else {
+                if !subnet_record.subnet_admins.is_empty() {
+                    // If the subnet cannot have subnet admins but has a non-empty subnet
+                    // admins list, it indicates a bug and a critical error is raised.
+                    // No admins are parsed out and set in that case.
+                    self.metrics
+                        .critical_error_illegal_non_empty_subnet_admins
+                        .inc();
+                    warn!(
+                        self.log,
+                        "{}: subnet {} is a non-rental subnet, but has a non-empty list of subnet admins {:?}.",
+                        CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS,
+                        subnet_id,
+                        subnet_record.subnet_admins,
+                    );
+                }
+                None
+            };
 
             subnets.insert(
                 *subnet_id,

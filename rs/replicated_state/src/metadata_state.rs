@@ -317,7 +317,19 @@ pub struct SubnetTopology {
     /// holding the key as backup to actually produce signatures or VetKd key derivations.
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
-    pub subnet_admins: BTreeSet<PrincipalId>,
+    pub subnet_admins: Option<BTreeSet<PrincipalId>>,
+}
+
+/// Only rented subnets, i.e., application subnets on a "free" cost schedule,
+/// and cloud engines on a "free" cost schedule can have subnet admins set.
+#[allow(clippy::nonminimal_bool)]
+pub fn can_have_subnet_admins(
+    subnet_type: SubnetType,
+    cost_schedule: CanisterCyclesCostSchedule,
+) -> bool {
+    (subnet_type == SubnetType::Application && cost_schedule == CanisterCyclesCostSchedule::Free)
+        || (subnet_type == SubnetType::CloudEngine
+            && cost_schedule == CanisterCyclesCostSchedule::Free)
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]

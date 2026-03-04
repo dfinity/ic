@@ -130,7 +130,13 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
             canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
                 item.cost_schedule,
             )),
-            subnet_admins: item.subnet_admins.iter().map(|sa| (*sa).into()).collect(),
+            subnet_admins: item
+                .subnet_admins
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|sa| sa.into())
+                .collect(),
         }
     }
 }
@@ -157,10 +163,17 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 },
             )?,
         );
-        let mut subnet_admins = BTreeSet::new();
+        let mut subnet_admins_set = BTreeSet::new();
         for subnet_admin in item.subnet_admins {
-            subnet_admins.insert(PrincipalId::try_from(subnet_admin)?);
+            subnet_admins_set.insert(PrincipalId::try_from(subnet_admin)?);
         }
+
+        let subnet_type = SubnetType::try_from(item.subnet_type).unwrap_or(SubnetType::Application);
+        let subnet_admins = if can_have_subnet_admins(subnet_type, cost_schedule) {
+            Some(subnet_admins_set)
+        } else {
+            None
+        };
 
         Ok(Self {
             public_key: item.public_key,
@@ -168,7 +181,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             // It is fine to use an arbitrary value here. We always reset the
             // field before we actually use it. We pick the value of least
             // privilege just to be sure.
-            subnet_type: SubnetType::try_from(item.subnet_type).unwrap_or(SubnetType::Application),
+            subnet_type,
             subnet_features: item
                 .subnet_features
                 .map(SubnetFeatures::from)

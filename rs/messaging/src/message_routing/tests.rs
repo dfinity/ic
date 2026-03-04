@@ -1633,18 +1633,18 @@ fn try_read_registry_succeeds_and_populates_subnet_admins() {
 
         // Check that subnet admins are populated properly.
         let own_subnet_record_from_topo = network_topology.subnets().get(&own_subnet_id).unwrap();
-        assert_eq!(own_subnet_record_from_topo.subnet_admins, BTreeSet::new());
+        assert_eq!(own_subnet_record_from_topo.subnet_admins, None);
         let rental_subnet_record_from_topo =
             network_topology.subnets().get(&rental_subnet_id).unwrap();
         assert_eq!(
             rental_subnet_record_from_topo.subnet_admins,
-            btreeset! {rental_subnet_admin.get()}
+            Some(btreeset! {rental_subnet_admin.get()})
         );
         let engine_subnet_record_from_topo =
             network_topology.subnets().get(&engine_subnet_id).unwrap();
         assert_eq!(
             engine_subnet_record_from_topo.subnet_admins,
-            btreeset! {engine_subnet_admin.get()}
+            Some(btreeset! {engine_subnet_admin.get()})
         );
     });
 }
@@ -1716,15 +1716,12 @@ fn try_read_registry_succeeds_and_resets_subnet_admins() {
 
         // Check that subnet admins are reset and a critical error is raised.
         let own_subnet_record_from_topo = network_topology.subnets().get(&own_subnet_id).unwrap();
-        assert_eq!(own_subnet_record_from_topo.subnet_admins, BTreeSet::new());
+        assert_eq!(own_subnet_record_from_topo.subnet_admins, None);
         let engine_subnet_record_from_topo =
             network_topology.subnets().get(&engine_subnet_id).unwrap();
-        assert_eq!(
-            engine_subnet_record_from_topo.subnet_admins,
-            BTreeSet::new()
-        );
+        assert_eq!(engine_subnet_record_from_topo.subnet_admins, None);
         let nns_subnet_record_from_topo = network_topology.subnets().get(&nns_subnet_id).unwrap();
-        assert_eq!(nns_subnet_record_from_topo.subnet_admins, BTreeSet::new());
+        assert_eq!(nns_subnet_record_from_topo.subnet_admins, None);
         assert_eq!(
             metrics.critical_error_illegal_non_empty_subnet_admins.get(),
             3

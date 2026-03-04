@@ -734,14 +734,13 @@ impl ReplicatedState {
     }
 
     /// Returns the list of subnet admins of this subnet.
-    pub fn get_own_subnet_admins(&self) -> BTreeSet<PrincipalId> {
+    pub fn get_own_subnet_admins(&self) -> Option<BTreeSet<PrincipalId>> {
         let subnet_id = self.metadata.own_subnet_id;
         self.metadata
             .network_topology
             .subnets()
             .get(&subnet_id)
-            .map(|x| x.subnet_admins.clone())
-            .unwrap_or_default()
+            .and_then(|x| x.subnet_admins.clone())
     }
 
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
