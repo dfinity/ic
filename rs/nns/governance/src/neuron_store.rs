@@ -66,6 +66,9 @@ pub enum NeuronStoreError {
     },
     NeuronIdGenerationUnavailable,
     NeuronSubaccountGenerationUnavailable,
+    SubaccountAlreadyExists {
+        subaccount: Subaccount,
+    },
     InvalidOperation {
         reason: String,
     },
@@ -177,6 +180,12 @@ impl Display for NeuronStoreError {
                     Likely due to uninitialized RNG."
                 )
             }
+            NeuronStoreError::SubaccountAlreadyExists { subaccount } => {
+                write!(
+                    f,
+                    "There is already a neuron with subaccount {subaccount:?}."
+                )
+            }
             NeuronStoreError::InvalidOperation { reason } => {
                 write!(f, "Invalid operation: {reason}")
             }
@@ -204,6 +213,7 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
             NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
             NeuronStoreError::NeuronSubaccountGenerationUnavailable => ErrorType::Unavailable,
+            NeuronStoreError::SubaccountAlreadyExists { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::InvalidOperation { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalPotentialVotingPowerOverflow => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalDecidingVotingPowerOverflow => ErrorType::PreconditionFailed,
@@ -472,7 +482,20 @@ impl NeuronStore {
         })
     }
 
-    pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
+    /// Checks that a deterministic (caller-supplied) subaccount is not already
+    /// in use. Unlike random subaccounts (which retry on collision), deterministic
+    /// subaccounts must fail immediately since retrying would produce the same result.
+    pub fn validate_deterministic_subaccount(
+        &self,
+        subaccount: Subaccount,
+    ) -> Result<Subaccount, NeuronStoreError> {
+        if self.has_neuron_with_subaccount(subaccount) {
+            return Err(NeuronStoreError::SubaccountAlreadyExists { subaccount });
+        }
+        Ok(subaccount)
+    }
+
+    fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
         self.get_neuron_id_for_subaccount(subaccount).is_some()
     }
 
