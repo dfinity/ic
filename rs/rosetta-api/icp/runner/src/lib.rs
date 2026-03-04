@@ -149,8 +149,16 @@ pub async fn start_rosetta(
         )
     }));
 
+    // Wait for port file to be created (with timeout to avoid infinite loop if Rosetta crashes)
+    let mut port_file_tries = NUM_TRIES;
     while !port_file.exists() {
         sleep(WAIT_BETWEEN_ATTEMPTS).await;
+        port_file_tries -= 1;
+        if port_file_tries == 0 {
+            panic!(
+                "Rosetta did not create port file within timeout. Check if Rosetta crashed during startup."
+            );
+        }
     }
 
     let port = std::fs::read_to_string(port_file).expect("Expected port in port file");
