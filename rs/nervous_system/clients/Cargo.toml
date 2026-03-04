@@ -11,6 +11,8 @@ path = "src/lib.rs"
 async-trait = { workspace = true }
 candid = { workspace = true }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
+ic-cdk = { workspace = true }
+ic-xrc-types = "1.0.0"
 ic-base-types = { path = "../../types/base_types" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }

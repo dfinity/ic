@@ -3,126 +3,19 @@ use crate::{
     ONE_MINUTE_SECONDS, State, do_set_icp_xdr_conversion_rate, environment::Environment,
     mutate_state, read_state,
 };
-use async_trait::async_trait;
 use candid::CandidType;
 use cycles_minting_canister::IcpXdrConversionRate;
-use ic_base_types::CanisterId;
-use ic_cdk::call::{Call, CallFailed, InsufficientLiquidCycleBalance, Response};
-use ic_nns_common::types::UpdateIcpXdrConversionRatePayloadReason;
-use ic_xrc_types::{
-    Asset, AssetClass, ExchangeRate, ExchangeRateError, GetExchangeRateRequest,
-    GetExchangeRateResult,
+use ic_nervous_system_clients::exchange_rate_canister_client::{
+    ExchangeRateCanisterClient, validate_exchange_rate,
 };
+use ic_nns_common::types::UpdateIcpXdrConversionRatePayloadReason;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, thread::LocalKey};
 
-const ICP_SYMBOL: &str = "ICP";
-/// CXDR is an asset whose rate is derived from more sources than the XDR rate.
-const CXDR_SYMBOL: &str = "CXDR";
+pub use ic_nervous_system_clients::exchange_rate_canister_client::RealExchangeRateCanisterClient;
 
 /// If the rate is older than this value, the CMC should ask for a new rate.
 const REFRESH_RATE_INTERVAL_SECONDS: u64 = 5 * ONE_MINUTE_SECONDS;
-
-/// The minimum number of received sources to consider an ICP/CXDR rate's base asset valid.
-const MINIMUM_ICP_SOURCES: usize = 4;
-
-/// The minimum number of received sources to consider an ICP/CXDR rate's quote asset valid.
-const MINIMUM_CXDR_SOURCES: usize = 4;
-
-#[async_trait]
-pub trait ExchangeRateCanisterClient {
-    async fn get_exchange_rate(&self) -> Result<ExchangeRate, GetExchangeRateError>;
-}
-
-pub struct RealExchangeRateCanisterClient(CanisterId);
-
-impl RealExchangeRateCanisterClient {
-    pub fn new(canister_id: CanisterId) -> Self {
-        Self(canister_id)
-    }
-}
-
-#[async_trait]
-impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
-    async fn get_exchange_rate(&self) -> Result<ExchangeRate, GetExchangeRateError> {
-        // Prepare request.
-        let request = GetExchangeRateRequest {
-            base_asset: Asset {
-                class: AssetClass::Cryptocurrency,
-                symbol: ICP_SYMBOL.to_string(),
-            },
-            quote_asset: Asset {
-                class: AssetClass::FiatCurrency,
-                symbol: CXDR_SYMBOL.to_string(),
-            },
-            timestamp: None,
-        };
-
-        // Send the request. If it takes too long, time out (a "bounded wait").
-        let exchange_rate_canister_id = self.0.get().0; // The callee.
-        let result: Result<Response, CallFailed> =
-            Call::bounded_wait(exchange_rate_canister_id, "get_exchange_rate")
-                .with_arg(request)
-                .await;
-
-        // Unwrap the many layers of result.
-
-        let result: Response = result.map_err(call_failed_to_get_exchange_rate_error)?;
-
-        // Decode reply.
-        let result = result
-            .candid::<GetExchangeRateResult>()
-            // Handle decode fail.
-            .map_err(|candid_decode_failed| GetExchangeRateError::Call {
-                code: -1,
-                message: format!(
-                    "Got a reply from the Exchange Rate canister, \
-                         but it was not decodable as a GetExchangeRateResult: \
-                         {candid_decode_failed:?}",
-                ),
-            })?;
-
-        result.map_err(GetExchangeRateError::Xrc)
-    }
-}
-
-fn call_failed_to_get_exchange_rate_error(call_failed: CallFailed) -> GetExchangeRateError {
-    let (code, message) = match call_failed {
-        CallFailed::InsufficientLiquidCycleBalance(err) => {
-            let InsufficientLiquidCycleBalance {
-                available,
-                required,
-            } = err;
-
-            // This would never happen here in the Cycles Minting canister,
-            // because it runs on the NNS subnet.
-            let message = format!(
-                "The cycles in the Cycles Minting canister is insufficient to \
-                 call the Exchange Rate canister: \
-                 available={available} vs. required={required}",
-            );
-
-            (-1, message)
-        }
-
-        CallFailed::CallPerformFailed(_no_data) => {
-            // This message is copied more or less verbatim from the ic_cdk documentation.
-            (
-                -1,
-                "The underlying ic0.call_perform operation returned a non-zero code.".to_string(),
-            )
-        }
-
-        CallFailed::CallRejected(err) => {
-            let code = err.reject_code().map(|code| code as i32).unwrap_or(-1);
-            let message = err.reject_message().to_string();
-
-            (code, message)
-        }
-    };
-
-    GetExchangeRateError::Call { code, message }
-}
 
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -291,82 +184,6 @@ impl UpdateExchangeRateGuard {
 }
 
 #[derive(Debug)]
-pub enum GetExchangeRateError {
-    Xrc(ExchangeRateError),
-    Call { code: i32, message: String },
-}
-
-impl std::fmt::Display for GetExchangeRateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            GetExchangeRateError::Xrc(error) => {
-                match error {
-                    ExchangeRateError::AnonymousPrincipalNotAllowed => {
-                        write!(f, "The XRC does not accept calls from anonymous principals")
-                    }
-                    // Note: The CMC is a privileged canister so it will bypass this error.
-                    ExchangeRateError::Pending => {
-                        write!(f, "The XRC is processing a similar request")
-                    }
-                    ExchangeRateError::CryptoBaseAssetNotFound => {
-                        write!(f, "The crypto base asset could not be found")
-                    }
-                    ExchangeRateError::CryptoQuoteAssetNotFound => {
-                        write!(f, "The crypto quote asset could not be found")
-                    }
-                    ExchangeRateError::StablecoinRateNotFound => {
-                        write!(
-                            f,
-                            "The XRC could not retrieve the necessary stablecoin rates"
-                        )
-                    }
-                    ExchangeRateError::StablecoinRateTooFewRates => {
-                        write!(f, "The XRC could not find enough stablecoin rates")
-                    }
-                    ExchangeRateError::StablecoinRateZeroRate => {
-                        write!(
-                            f,
-                            "The XRC's stablecoin rate is zero and it cannot determine a valid rate"
-                        )
-                    }
-                    ExchangeRateError::ForexInvalidTimestamp => {
-                        write!(f, "The request's timestamp could not be found in the XRC")
-                    }
-                    ExchangeRateError::ForexBaseAssetNotFound => {
-                        write!(f, "The forex base asset in the request could not be found")
-                    }
-                    ExchangeRateError::ForexQuoteAssetNotFound => {
-                        write!(f, "The forex quote asset in the request could not be found")
-                    }
-                    ExchangeRateError::ForexAssetsNotFound => {
-                        write!(f, "The forex assets in the request could not be found")
-                    }
-                    // Note: The CMC is a privileged canister in the XRC so it can ignore these errors.
-                    // This is merely for completeness.
-                    ExchangeRateError::RateLimited => {
-                        write!(f, "Request to the XRC has been rate limited")
-                    }
-                    // Note: The CMC does not need to send cycles as it is a privileged canister.
-                    // This is merely for completeness.
-                    ExchangeRateError::NotEnoughCycles => {
-                        write!(f, "Not enough cycles sent to the XRC")
-                    }
-                    ExchangeRateError::InconsistentRatesReceived => {
-                        write!(f, "Inconsistency between the collected rates occurred")
-                    }
-                    ExchangeRateError::Other(err) => {
-                        write!(f, "Code: {} Message: {}", err.code, err.description)
-                    }
-                }
-            }
-            GetExchangeRateError::Call { code, message } => {
-                write!(f, "Code: {code} Message: {message}")
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum UpdateExchangeRateError {
     UpdateAlreadyInProgress,
     Disabled,
@@ -428,7 +245,7 @@ pub async fn update_exchange_rate(
         round_down_to_multiple_of(now_timestamp_seconds, ONE_MINUTE_SECONDS);
 
     UpdateExchangeRateGuard::with_guard(safe_state, current_minute_seconds, async {
-        let call_xrc_result = xrc_client.get_exchange_rate().await;
+        let call_xrc_result = xrc_client.get_exchange_rate(None).await;
         // Check if updating the rate via the exchange rate canister was disabled while retrieving the rate.
         // If it has, exit early.
         let is_updating_rate_disabled = read_state(safe_state, |state| {
@@ -514,44 +331,6 @@ pub fn set_update_exchange_rate_state(
     }
 }
 
-enum ValidateExchangeRateError {
-    NotEnoughIcpSources { received: usize, queried: usize },
-    NotEnoughCxdrSources { received: usize, queried: usize },
-}
-
-impl std::fmt::Display for ValidateExchangeRateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ValidateExchangeRateError::NotEnoughIcpSources { received, queried } => write!(
-                f,
-                "Not enough exchange sources for rate's ICP base asset. Expected: {MINIMUM_ICP_SOURCES} Received: {received} Queried: {queried}"
-            ),
-            ValidateExchangeRateError::NotEnoughCxdrSources { received, queried } => write!(
-                f,
-                "Not enough forex sources for rate's CXDR quote asset. Expected: {MINIMUM_CXDR_SOURCES} Received: {received} Queried: {queried}"
-            ),
-        }
-    }
-}
-
-fn validate_exchange_rate(exchange_rate: &ExchangeRate) -> Result<(), ValidateExchangeRateError> {
-    if exchange_rate.metadata.base_asset_num_received_rates < MINIMUM_ICP_SOURCES {
-        return Err(ValidateExchangeRateError::NotEnoughIcpSources {
-            received: exchange_rate.metadata.base_asset_num_received_rates,
-            queried: exchange_rate.metadata.base_asset_num_queried_sources,
-        });
-    }
-
-    if exchange_rate.metadata.quote_asset_num_received_rates < MINIMUM_CXDR_SOURCES {
-        return Err(ValidateExchangeRateError::NotEnoughCxdrSources {
-            received: exchange_rate.metadata.quote_asset_num_received_rates,
-            queried: exchange_rate.metadata.quote_asset_num_queried_sources,
-        });
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod test {
 
@@ -561,9 +340,14 @@ mod test {
         DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
         DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
     };
+    use async_trait::async_trait;
     use futures::FutureExt;
+    use ic_nervous_system_clients::exchange_rate_canister_client::{
+        CXDR_SYMBOL, ExchangeRateCanisterClient, GetExchangeRateError, ICP_SYMBOL,
+        MINIMUM_CXDR_SOURCES, MINIMUM_ICP_SOURCES,
+    };
     use ic_nervous_system_time_helpers::now_seconds;
-    use ic_xrc_types::ExchangeRateMetadata;
+    use ic_xrc_types::{Asset, AssetClass, ExchangeRate, ExchangeRateError, ExchangeRateMetadata};
     use std::{
         cell::RefCell,
         collections::VecDeque,
@@ -608,7 +392,10 @@ mod test {
 
     #[async_trait]
     impl ExchangeRateCanisterClient for MockExchangeRateCanisterClient {
-        async fn get_exchange_rate(&self) -> Result<ExchangeRate, GetExchangeRateError> {
+        async fn get_exchange_rate(
+            &self,
+            _timestamp: Option<u64>,
+        ) -> Result<ExchangeRate, GetExchangeRateError> {
             self.calls.lock().unwrap().pop_front().unwrap()
         }
     }
@@ -1076,7 +863,10 @@ mod test {
 
         #[async_trait]
         impl ExchangeRateCanisterClient for TestExchangeRateCanisterClient {
-            async fn get_exchange_rate(&self) -> Result<ExchangeRate, GetExchangeRateError> {
+            async fn get_exchange_rate(
+                &self,
+                _timestamp: Option<u64>,
+            ) -> Result<ExchangeRate, GetExchangeRateError> {
                 mutate_state(&STATE, |state| {
                     // Set the state to disabled to simulate a diverged rate proposal came during call to XRC.
                     state
