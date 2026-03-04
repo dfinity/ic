@@ -345,6 +345,9 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
         guest_launch_measurements: None,
+        replica_urls: vec![],
+        replica_sha256_hex: None,
+        fast_upgrade: false,
     };
     registry_data_provider
         .add(
@@ -391,6 +394,7 @@ fn add_subnet_local_registry_records(
                 port: 8080,
             }),
             hostos_version_id: None,
+            slow_version_id: None,
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
