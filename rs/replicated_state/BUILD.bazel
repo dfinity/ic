@@ -141,6 +141,7 @@ rust_test_with_binary(
         "@crate_index//:proptest",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
+        "@crate_index//:pprof",
     ],
 )
 

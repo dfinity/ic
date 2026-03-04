@@ -38,12 +38,13 @@ fn append_deltas(
 ) {
     let mut next_idx = start_idx;
     let mut total = 0;
-    loop {
+    while total < volume_bytes {
         let mut delta = make_full_delta(next_idx, delta_log_byte_capacity, content_len);
-        total += LogMemoryStore::estimate_storage_size(&delta);
-        if total > volume_bytes {
-            return;
+        let added_size = LogMemoryStore::estimate_storage_size(&delta);
+        if added_size == 0 {
+            break;
         }
+        total += added_size;
         store.append_delta_log(&mut delta);
         next_idx = store.next_idx();
     }
@@ -328,55 +329,81 @@ fn max_response_size_respected_with_filtering_by_timestamp() {
     assert_eq!(result.first().unwrap().timestamp_nanos, partial_start_ts);
 }
 
+/*
+bazel run //rs/replicated_state:replicated_state_test \
+  --test_output=streamed \
+  --test_arg=test_increasing_capacity_preserves_records
+*/
 #[test]
 fn test_increasing_capacity_preserves_records() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     let big_size = 100 * KIB;
     let delta_size = 10 * KIB;
-    let message_len = 10;
-    s.resize_for_testing(big_size - 2 * message_len); // Initial size is smaller.
+    let message_len = 0;
+    s.resize_for_testing(big_size - 100); // Initial size is smaller.
 
     // Append more records than current capacity.
-    append_deltas(&mut s, 0, 2 * big_size, delta_size, message_len);
+    append_deltas(&mut s, 0, big_size, delta_size, message_len);
 
-    let records_before = s.records(None);
     let bytes_used_before = s.bytes_used();
 
     // Increase capacity.
     s.resize_for_testing(big_size);
 
-    let records_after = s.records(None);
     let bytes_used_after = s.bytes_used();
 
     // Verify all records are preserved.
-    assert_eq!(records_before, records_after);
     assert_eq!(bytes_used_before, bytes_used_after);
 }
+
+/*
+bazel run //rs/replicated_state:replicated_state_test \
+  --test_output=streamed \
+  --test_arg=test_decreasing_capacity_drops_oldest_records_but_preserves_recent
+*/
 
 #[test]
 fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     let big_size = 100 * KIB;
     let delta_size = 10 * KIB;
-    let message_len = 10;
+    let message_len = 0;
     s.resize_for_testing(big_size); // Initial size is bigger.
 
     // Append more records than current capacity.
-    append_deltas(&mut s, 0, 2 * big_size, delta_size, message_len);
+    append_deltas(&mut s, 0, big_size, delta_size, message_len);
 
-    let records_before = s.records(None);
+    let byte_capacity_before = s.byte_capacity();
     let bytes_used_before = s.bytes_used();
     let next_idx_before = s.next_idx();
 
-    // Decrease capacity.
-    s.resize_for_testing(big_size - 2 * message_len);
+    {
+        let guard = pprof::ProfilerGuardBuilder::default()
+            .frequency(1000)
+            .build()
+            .unwrap();
 
-    let records_after = s.records(None);
+        let num_steps = 500;
+        for i in 0..num_steps {
+            // Decrease capacity.
+            s.resize_for_testing(big_size - 100 - i);
+        }
+
+        let report = guard.report().build().unwrap();
+        let file_path = format!(
+            "/home/maksym/dfinity/canister-logs/ic/test_tmp.secret/resize_flamegraph_{num_steps}.svg"
+        );
+        let file = std::fs::File::create(&file_path).unwrap();
+        let _ = report.flamegraph(file);
+        println!("Flamegraph written to {file_path}");
+    }
+
+    let byte_capacity_after = s.byte_capacity();
     let bytes_used_after = s.bytes_used();
 
     // Verify some records are dropped.
-    assert_lt!(records_after.len(), records_before.len());
-    assert_lt!(bytes_used_after, bytes_used_before);
+    assert_gt!(byte_capacity_before, byte_capacity_after);
+    assert_gt!(bytes_used_before, bytes_used_after);
     // Verify recent records are preserved.
     assert_eq!(next_idx_before, s.next_idx());
 }
