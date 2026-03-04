@@ -24,7 +24,7 @@ export BAZEL_ACTION_BAZEL_WRAPPED="1"
 
 if [ -n "${STARTUP_OPTIONS:-}" ]; then
     # Split into array
-    eval "startup_options=($STARTUP_OPTIONS)"
+    startup_options=($STARTUP_OPTIONS)
 else
     startup_options=()
 fi
