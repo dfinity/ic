@@ -138,7 +138,6 @@ rust_test_with_binary(
         "//rs/test_utilities/types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
-        "@crate_index//:pprof",
         "@crate_index//:proptest",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",

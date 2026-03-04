@@ -13344,7 +13344,6 @@ dependencies = [
  "more-asserts",
  "nix 0.24.3",
  "phantom_newtype",
- "pprof",
  "prometheus",
  "proptest",
  "prost 0.13.4",
