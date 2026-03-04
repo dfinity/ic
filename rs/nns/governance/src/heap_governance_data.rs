@@ -1,9 +1,9 @@
 use crate::{
     neuron::Neuron,
     pb::v1::{
-        Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics,
-        NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent, Topic,
-        XdrConversionRate as XdrConversionRatePb,
+        Followees, Governance as GovernanceProto, IcpXdrRateHistory, MonthlyNodeProviderRewards,
+        NetworkEconomics, NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary,
+        RewardEvent, Topic, XdrConversionRate as XdrConversionRatePb,
         governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
     },
 };
@@ -36,6 +36,7 @@ pub struct HeapGovernanceData {
     pub xdr_conversion_rate: XdrConversionRate,
     pub restore_aging_summary: Option<RestoreAgingSummary>,
     pub topic_of_garbage_collected_proposals: HashMap<u64, Topic>,
+    pub icp_xdr_rate_history: Option<IcpXdrRateHistory>,
 }
 
 /// Internal representation for `XdrConversionRatePb`.
@@ -205,6 +206,7 @@ pub fn initialize_governance(
         xdr_conversion_rate,
         restore_aging_summary,
         topic_of_garbage_collected_proposals: HashMap::new(),
+        icp_xdr_rate_history: None,
     };
 
     // Finally, return the result.
@@ -245,6 +247,7 @@ pub fn split_governance_proto(
         restore_aging_summary,
         topic_of_garbage_collected_proposals,
         rng_seed,
+        icp_xdr_rate_history,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds = neuron_management_voting_period_seconds
@@ -287,6 +290,7 @@ pub fn split_governance_proto(
                 .into_iter()
                 .map(|(k, v)| (k, Topic::try_from(v).unwrap_or(Topic::Unspecified)))
                 .collect(),
+            icp_xdr_rate_history,
         },
         rng_seed,
     )
@@ -324,6 +328,7 @@ pub fn reassemble_governance_proto(
         xdr_conversion_rate,
         restore_aging_summary,
         topic_of_garbage_collected_proposals,
+        icp_xdr_rate_history,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
@@ -355,6 +360,7 @@ pub fn reassemble_governance_proto(
             .map(|(k, v)| (k, v as i32))
             .collect(),
         rng_seed: rng_seed.map(|seed| seed.to_vec()),
+        icp_xdr_rate_history,
     }
 }
 
@@ -394,6 +400,7 @@ mod tests {
             restore_aging_summary: None,
             topic_of_garbage_collected_proposals: hashmap! { 1 => Topic::Unspecified as i32 },
             rng_seed: Some(vec![1u8; 32]),
+            icp_xdr_rate_history: None,
         }
     }
 

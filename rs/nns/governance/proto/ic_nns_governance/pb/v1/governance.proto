@@ -1959,6 +1959,26 @@ message LoadCanisterSnapshot {
   bytes snapshot_id = 2;
 }
 
+// A single daily ICP/XDR rate entry.
+message IcpXdrRate {
+  // Days since Unix epoch (i.e. timestamp_seconds / 86400).
+  uint64 days_since_epoch = 1;
+  uint64 xdr_permyriad_per_icp = 2;
+}
+
+// History of daily ICP/XDR rates fetched from the Exchange Rate Canister (XRC). Used for computing
+// maturity modulation and (in the future) the average conversion rate for the Neurons' Fund.
+message IcpXdrRateHistory {
+  // Ring buffer of daily ICP/XDR rates (up to 365 entries, ordered by days_since_epoch).
+  repeated IcpXdrRate recent_icp_xdr_rates = 1;
+
+  // Most recent computed maturity modulation in permyriad (basis points). None if not yet computed.
+  optional int32 current_maturity_modulation_permyriad = 2;
+
+  // Day (days_since_epoch) when current_maturity_modulation_permyriad was last computed.
+  optional uint64 maturity_modulation_updated_at_days_since_epoch = 3;
+}
+
 // This represents the whole NNS governance system. It contains all
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
@@ -2196,6 +2216,9 @@ message Governance {
 
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";
+
+  // History of daily ICP/XDR rates from the Exchange Rate Canister (XRC).
+  optional IcpXdrRateHistory icp_xdr_rate_history = 31;
 
   reserved 6;
   reserved "authz";

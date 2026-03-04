@@ -164,7 +164,9 @@ pub fn get_tla_globals(p: &UnsafeSendPtr<Governance>) -> GlobalState {
     state.add(
         "cached_maturity_basis_points",
         gov.heap_data
-            .cached_daily_maturity_modulation_basis_points
+            .icp_xdr_rate_history
+            .as_ref()
+            .and_then(|h| h.current_maturity_modulation_permyriad)
             .unwrap_or(0)
             .to_tla_value(),
     );

@@ -7,6 +7,7 @@ use crate::{
     test_utils::{MockEnvironment, MockRandomness},
 };
 
+use crate::pb::v1::IcpXdrRateHistory;
 use futures::FutureExt;
 use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockIcpLedger};
 use ic_nervous_system_common::NervousSystemError;
@@ -537,15 +538,16 @@ fn set_governance_for_test(
     maturity_modulation: i32,
 ) {
     let mut governance = Governance::new(
-        GovernanceApi {
-            cached_daily_maturity_modulation_basis_points: Some(maturity_modulation),
-            ..Default::default()
-        },
+        GovernanceApi::default(),
         MOCK_ENVIRONMENT.with(|env| env.clone()),
         Arc::new(mock_ledger),
         Arc::new(MockCMC::default()),
         Box::new(MockRandomness::new()),
     );
+    governance.heap_data.icp_xdr_rate_history = Some(IcpXdrRateHistory {
+        current_maturity_modulation_permyriad: Some(maturity_modulation),
+        ..Default::default()
+    });
     for neuron in neurons {
         governance.neuron_store.add_neuron(neuron).unwrap();
     }
@@ -617,9 +619,7 @@ async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
         DEFAULT_MATURITY_MODULATION_BASIS_POINTS,
     );
     TEST_GOVERNANCE.with_borrow_mut(|governance| {
-        governance
-            .heap_data
-            .cached_daily_maturity_modulation_basis_points = None;
+        governance.heap_data.icp_xdr_rate_history = None;
     });
 
     // Step 2: Initiate the maturity disbursement and advance to disbursement time.
