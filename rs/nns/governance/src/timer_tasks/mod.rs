@@ -2,15 +2,18 @@ use backfill_self_describing_action::BackfillSelfDescribingActionTask;
 use calculate_distributable_rewards::CalculateDistributableRewardsTask;
 use finalize_maturity_disbursements::FinalizeMaturityDisbursementsTask;
 use ic_metrics_encoder::MetricsEncoder;
+use ic_nervous_system_clients::exchange_rate_canister_client::RealExchangeRateCanisterClient;
 use ic_nervous_system_timer_task::{
     PeriodicSyncTask, RecurringAsyncTask, RecurringSyncTask, TimerTaskMetricsRegistry,
 };
+use ic_nns_constants::EXCHANGE_RATE_CANISTER_ID;
 use neuron_data_validation::NeuronDataValidationTask;
 use prune_following::PruneFollowingTask;
 use seeding::SeedingTask;
 use snapshot_voting_power::SnapshotVotingPowerTask;
 use std::cell::RefCell;
 use unstake_maturity_of_dissolved_neurons::UnstakeMaturityOfDissolvedNeuronsTask;
+use update_icp_xdr_rates::UpdateIcpXdrRatesTask;
 
 use crate::{
     canister_state::GOVERNANCE, is_self_describing_proposal_actions_enabled,
@@ -26,6 +29,7 @@ mod prune_following;
 mod seeding;
 mod snapshot_voting_power;
 mod unstake_maturity_of_dissolved_neurons;
+mod update_icp_xdr_rates;
 
 thread_local! {
     static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
@@ -39,6 +43,10 @@ pub fn schedule_tasks() {
     FinalizeMaturityDisbursementsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     UnstakeMaturityOfDissolvedNeuronsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     NeuronDataValidationTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+    let xrc_client = std::sync::Arc::new(RealExchangeRateCanisterClient::new(
+        EXCHANGE_RATE_CANISTER_ID,
+    ));
+    UpdateIcpXdrRatesTask::new(&GOVERNANCE, xrc_client).schedule(&METRICS_REGISTRY);
 
     if is_self_describing_proposal_actions_enabled() {
         BackfillSelfDescribingActionTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);

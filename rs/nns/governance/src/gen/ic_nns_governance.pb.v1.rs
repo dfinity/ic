@@ -2887,6 +2887,46 @@ pub struct LoadCanisterSnapshot {
     #[prost(bytes = "vec", tag = "2")]
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
+/// A single daily ICP/XDR rate entry.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct IcpXdrRate {
+    /// Days since Unix epoch (i.e. timestamp_seconds / 86400).
+    #[prost(uint64, tag = "1")]
+    pub days_since_epoch: u64,
+    #[prost(uint64, tag = "2")]
+    pub xdr_permyriad_per_icp: u64,
+}
+/// History of daily ICP/XDR rates fetched from the Exchange Rate Canister (XRC). Used for computing
+/// maturity modulation and (in the future) the average conversion rate for the Neurons' Fund.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct IcpXdrRateHistory {
+    /// Ring buffer of daily ICP/XDR rates (up to 365 entries, ordered by days_since_epoch).
+    #[prost(message, repeated, tag = "1")]
+    pub recent_icp_xdr_rates: ::prost::alloc::vec::Vec<IcpXdrRate>,
+    /// Most recent computed maturity modulation in permyriad (basis points). None if not yet computed.
+    #[prost(int32, optional, tag = "2")]
+    pub current_maturity_modulation_permyriad: ::core::option::Option<i32>,
+    /// Day (days_since_epoch) when current_maturity_modulation_permyriad was last computed.
+    #[prost(uint64, optional, tag = "3")]
+    pub maturity_modulation_updated_at_days_since_epoch: ::core::option::Option<u64>,
+}
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -3006,6 +3046,9 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
+    /// History of daily ICP/XDR rates from the Exchange Rate Canister (XRC).
+    #[prost(message, optional, tag = "31")]
+    pub icp_xdr_rate_history: ::core::option::Option<IcpXdrRateHistory>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {

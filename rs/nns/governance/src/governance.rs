@@ -9,7 +9,7 @@ use crate::{
         split_neuron::{SplitNeuronEffect, calculate_split_neuron_effect},
     },
     heap_governance_data::{
-        HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
+        HeapGovernanceData, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
     is_comprehensive_neuron_list_enabled, is_neuron_follow_restrictions_enabled,
@@ -81,7 +81,6 @@ use crate::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use chrono::NaiveDate;
-use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
 use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
@@ -101,8 +100,8 @@ use ic_nervous_system_rate_limits::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    NODE_REWARDS_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
@@ -1077,6 +1076,11 @@ pub struct Governance {
     ledger: Arc<dyn IcpLedger>,
 
     /// Implementation of the interface with the CMC canister.
+    ///
+    /// Previously used for `neuron_maturity_modulation()` calls; governance now computes
+    /// maturity modulation locally. Kept to avoid a large constructor-signature change across
+    /// 25+ call sites; will be removed in a subsequent PR.
+    #[allow(dead_code)]
     cmc: Arc<dyn CMC>,
 
     /// Implementation of a randomness generator
@@ -6153,97 +6157,9 @@ impl Governance {
                     GovernanceError::from(e),
                 ),
             }
-        // Try to update maturity modulation (once per day).
-        } else if self.should_update_maturity_modulation() {
-            self.update_maturity_modulation().await;
-        } else {
-            // This is the lowest-priority async task. All other tasks should have their own
-            // `else if`, like the ones above.
-            let refresh_xdr_rate_result = self.maybe_refresh_xdr_rate().await;
-            if let Err(err) = refresh_xdr_rate_result {
-                println!(
-                    "{}Error when refreshing XDR rate in run_periodic_tasks: {}",
-                    LOG_PREFIX, err,
-                );
-            }
         }
 
         self.maybe_gc();
-    }
-
-    fn should_update_maturity_modulation(&self) -> bool {
-        // Check if we're already updating the neuron maturity modulation.
-        let now_seconds = self.env.now();
-        let last_updated = self
-            .heap_data
-            .maturity_modulation_last_updated_at_timestamp_seconds;
-        last_updated.is_none() || last_updated.unwrap() + ONE_DAY_SECONDS <= now_seconds
-    }
-
-    async fn update_maturity_modulation(&mut self) {
-        if !self.should_update_maturity_modulation() {
-            return;
-        };
-
-        let now_seconds = self.env.now();
-        let maturity_modulation = match self.cmc.neuron_maturity_modulation().await {
-            Ok(maturity_modulation) => maturity_modulation,
-            Err(err) => {
-                let silence_message =
-                    err.contains("Canister rkp4c-7iaaa-aaaaa-aaaca-cai not found");
-                if !silence_message {
-                    println!(
-                        "{}Couldn't update maturity modulation. Error: {}",
-                        LOG_PREFIX, err
-                    );
-                }
-                return;
-            }
-        };
-        println!(
-            "{}Updated daily maturity modulation rate to (in basis points): {}, at: {}. Last updated: {:?}",
-            LOG_PREFIX,
-            maturity_modulation,
-            now_seconds,
-            self.heap_data
-                .maturity_modulation_last_updated_at_timestamp_seconds,
-        );
-        self.heap_data.cached_daily_maturity_modulation_basis_points = Some(maturity_modulation);
-        self.heap_data
-            .maturity_modulation_last_updated_at_timestamp_seconds = Some(now_seconds);
-    }
-
-    fn should_refresh_xdr_rate(&self) -> bool {
-        let xdr_conversion_rate = &self.heap_data.xdr_conversion_rate;
-
-        let now_seconds = self.env.now();
-
-        let seconds_since_last_conversion_rate_refresh =
-            now_seconds.saturating_sub(xdr_conversion_rate.timestamp_seconds);
-
-        // Return `true` if more than 1 day has passed since the last `xdr_conversion_rate` was
-        // updated. This assumes that `xdr_conversion_rate.timestamp_seconds` is rounded down to
-        // the nearest day's beginning.
-        seconds_since_last_conversion_rate_refresh > ONE_DAY_SECONDS
-    }
-
-    async fn maybe_refresh_xdr_rate(&mut self) -> Result<(), GovernanceError> {
-        if !self.should_refresh_xdr_rate() {
-            return Ok(());
-        };
-
-        // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
-        let IcpXdrConversionRate {
-            timestamp_seconds,
-            xdr_permyriad_per_icp,
-        } = self.get_average_icp_xdr_conversion_rate().await?.data;
-
-        self.heap_data.xdr_conversion_rate = XdrConversionRate {
-            timestamp_seconds,
-            xdr_permyriad_per_icp,
-        };
-
-        Ok(())
     }
 
     pub fn maybe_run_validations(&mut self) {
@@ -6304,7 +6220,11 @@ impl Governance {
         }
 
         let now_seconds = self.env.now();
-        let maturity_modulation = match self.heap_data.cached_daily_maturity_modulation_basis_points
+        let maturity_modulation = match self
+            .heap_data
+            .icp_xdr_rate_history
+            .as_ref()
+            .and_then(|h| h.current_maturity_modulation_permyriad)
         {
             None => return,
             Some(value) => value,
@@ -7537,9 +7457,9 @@ impl Governance {
             .get_node_providers_xdr_permyriad_rewards(start_date, end_date)
             .await?;
 
-        // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
-        let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
-        let avg_xdr_permyriad_per_icp = icp_xdr_conversion_rate.xdr_permyriad_per_icp;
+        // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP, computed
+        // locally from the rate history maintained by the UpdateIcpXdrRatesTask timer task.
+        let avg_xdr_permyriad_per_icp = self.heap_data.xdr_conversion_rate.xdr_permyriad_per_icp;
 
         // Convert minimum_icp_xdr_rate to basis points for comparison with avg_xdr_permyriad_per_icp
         let minimum_xdr_permyriad_per_icp = self
@@ -7565,10 +7485,7 @@ impl Governance {
             }
         }
 
-        let xdr_conversion_rate = XdrConversionRate {
-            timestamp_seconds: icp_xdr_conversion_rate.timestamp_seconds,
-            xdr_permyriad_per_icp: icp_xdr_conversion_rate.xdr_permyriad_per_icp,
-        };
+        let xdr_conversion_rate = self.heap_data.xdr_conversion_rate.clone();
 
         Ok(MonthlyNodeProviderRewards {
             timestamp: now,
@@ -7606,9 +7523,9 @@ impl Governance {
             )
         })?;
 
-        // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
-        let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
-        let avg_xdr_permyriad_per_icp = icp_xdr_conversion_rate.xdr_permyriad_per_icp;
+        // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP, computed
+        // locally from the rate history maintained by the UpdateIcpXdrRatesTask timer task.
+        let avg_xdr_permyriad_per_icp = self.heap_data.xdr_conversion_rate.xdr_permyriad_per_icp;
 
         // Convert minimum_icp_xdr_rate to basis points for comparison with avg_xdr_permyriad_per_icp
         let minimum_xdr_permyriad_per_icp = self
@@ -7634,10 +7551,7 @@ impl Governance {
             }
         }
 
-        let xdr_conversion_rate = XdrConversionRate {
-            timestamp_seconds: icp_xdr_conversion_rate.timestamp_seconds,
-            xdr_permyriad_per_icp: icp_xdr_conversion_rate.xdr_permyriad_per_icp,
-        };
+        let xdr_conversion_rate = self.heap_data.xdr_conversion_rate.clone();
 
         Ok(MonthlyNodeProviderRewards {
             timestamp: self.env.now(),
@@ -7706,37 +7620,6 @@ impl Governance {
             "get_node_providers_monthly_xdr_rewards returned empty response, \
                 which should be impossible.",
         ))
-    }
-
-    /// A helper for the CMC's get_average_icp_xdr_conversion_rate method
-    async fn get_average_icp_xdr_conversion_rate(
-        &self,
-    ) -> Result<IcpXdrConversionRateCertifiedResponse, GovernanceError> {
-        let cmc_response:
-            Vec<u8> = self
-            .env
-            .call_canister_method(
-                CYCLES_MINTING_CANISTER_ID,
-                "get_average_icp_xdr_conversion_rate",
-                Encode!().unwrap(),
-            )
-            .await
-            .map_err(|(code, msg)| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Error calling 'get_average_icp_xdr_conversion_rate': code: {code:?}, message: {msg}"
-                    ),
-                )
-            })?;
-
-        Decode!(&cmc_response, IcpXdrConversionRateCertifiedResponse)
-            .map_err(|err| GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Cannot decode return type from get_average_icp_xdr_conversion_rate'. Error: {err}",
-                ),
-            ))
     }
 
     /// Return the cached governance metrics.

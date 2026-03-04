@@ -121,6 +121,7 @@ DEPENDENCIES = [
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:ic-xrc-types",
     "@crate_index//:strum",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
