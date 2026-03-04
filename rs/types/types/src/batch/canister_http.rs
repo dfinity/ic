@@ -396,80 +396,6 @@ mod tests {
     use candid::Encode;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 
-    /// Tests, whether a roundtrip of protobuf conversions generates the same
-    /// `CanisterHttpResponseWithConsensus`
-    #[test]
-    fn canister_http_response_with_consensus_conversion() {
-        let payload = CanisterHttpResponseWithConsensus {
-            content: CanisterHttpResponse {
-                id: CanisterHttpRequestId::new(1),
-                timeout: Time::from_nanos_since_unix_epoch(1234),
-                canister_id: crate::CanisterId::from(1),
-                content: CanisterHttpResponseContent::Success(
-                    Encode!(
-                        &ic_management_canister_types_private::CanisterHttpResponsePayload {
-                            status: 200,
-                            headers: vec![ic_management_canister_types_private::HttpHeader {
-                                name: "test_header1".to_string(),
-                                value: "value1".to_string()
-                            }],
-                            body: b"Test data in body".to_vec(),
-                        }
-                    )
-                    .unwrap(),
-                ),
-            },
-            proof: Signed {
-                content: CanisterHttpResponseMetadata {
-                    id: CanisterHttpRequestId::new(1),
-                    timeout: Time::from_nanos_since_unix_epoch(1234),
-                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
-                        0, 1, 2, 3,
-                    ])),
-                    registry_version: RegistryVersion::new(1),
-                    replica_version: ReplicaVersion::default(),
-                },
-                signature: BasicSignatureBatch {
-                    signatures_map: vec![(
-                        NodeId::from(PrincipalId::new_node_test_id(1)),
-                        BasicSigOf::new(BasicSig(vec![0, 1, 2, 3])),
-                    )]
-                    .into_iter()
-                    .collect(),
-                },
-            },
-        };
-        let pb_payload = pb::CanisterHttpResponseWithConsensus::from(&payload);
-        let new_payload = CanisterHttpResponseWithConsensus::try_from(pb_payload).unwrap();
-        assert_eq!(payload, new_payload);
-    }
-
-    /// Tests, whether a roundtrip of protobuf conversions generates the same
-    /// `CanisterHttpResponseDivergence`
-    #[test]
-    fn canister_http_diverge_response_conversion() {
-        let payload = CanisterHttpResponseDivergence {
-            shares: vec![Signed {
-                content: CanisterHttpResponseMetadata {
-                    id: CanisterHttpRequestId::new(1),
-                    timeout: Time::from_nanos_since_unix_epoch(1234),
-                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
-                        0, 1, 2, 3,
-                    ])),
-                    registry_version: RegistryVersion::new(1),
-                    replica_version: ReplicaVersion::default(),
-                },
-                signature: BasicSignature {
-                    signer: NodeId::from(PrincipalId::new_node_test_id(1)),
-                    signature: BasicSigOf::new(BasicSig(vec![0, 1, 2, 3])),
-                },
-            }],
-        };
-        let pb_payload = pb::CanisterHttpResponseDivergence::from(&payload);
-        let new_payload = CanisterHttpResponseDivergence::try_from(pb_payload).unwrap();
-        assert_eq!(payload, new_payload);
-    }
-
     /// Tests that a roundtrip of protobuf conversions for `CanisterHttpResponse`
     /// works correctly.
     #[test]
@@ -542,14 +468,32 @@ mod tests {
     }
 
     #[test]
-    fn flexible_canister_http_responses_conversion() {
+    fn canister_http_payload_exhaustive_conversion() {
         let rng = &mut ReproducibleRng::new();
-        let flexible_responses_set = FlexibleCanisterHttpResponses::exhaustive_set(rng);
 
-        for element in flexible_responses_set {
-            let pb_element = pb::FlexibleCanisterHttpResponses::from(&element);
-            let new_element = FlexibleCanisterHttpResponses::try_from(pb_element).unwrap();
-            assert_eq!(element, new_element);
+        for payload in CanisterHttpPayload::exhaustive_set(rng) {
+            let CanisterHttpPayload {
+                responses,
+                divergence_responses,
+                flexible_responses,
+                timeouts: _, // skipped because there is no dedicated protobuf conversion for this
+            } = payload;
+
+            for response in &responses {
+                let pb = pb::CanisterHttpResponseWithConsensus::from(response);
+                let roundtripped = CanisterHttpResponseWithConsensus::try_from(pb).unwrap();
+                assert_eq!(*response, roundtripped);
+            }
+            for divergence in &divergence_responses {
+                let pb = pb::CanisterHttpResponseDivergence::from(divergence);
+                let roundtripped = CanisterHttpResponseDivergence::try_from(pb).unwrap();
+                assert_eq!(*divergence, roundtripped);
+            }
+            for flexible in &flexible_responses {
+                let pb = pb::FlexibleCanisterHttpResponses::from(flexible);
+                let roundtripped = FlexibleCanisterHttpResponses::try_from(pb).unwrap();
+                assert_eq!(*flexible, roundtripped);
+            }
         }
     }
 }
