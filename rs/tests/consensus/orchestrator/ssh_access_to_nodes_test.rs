@@ -846,36 +846,39 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
         std::thread::sleep(2 * ORCHESTRATOR_TASK_CHECK_INTERVAL + Duration::from_secs(1));
 
         if SshSession::default()
-            .login(&node_ip, "recovery", &recovery_mean)
+            .login(&node_ip, "backup", &backup_mean)
             .is_err()
         {
             break;
         }
 
-        info!(logger, "Recovery authentication still works.");
+        info!(logger, "Backup authentication still works.");
 
         let earliest_registry_version_in_use = maybe_earliest_registry_version_in_use.expect(
-            "The node kept access to the recovery account even though it left the subnet. Indeed, \
+            "The node kept access to the backup account even though it left the subnet. Indeed, \
             the metrics endpoint is down, so the replica process must have been stopped.",
         );
 
         assert!(
             earliest_registry_version_in_use < registry_version_without_node,
-            "The node kept access to the recovery account even though it should have detected by \
+            "The node kept access to the backup account even though it should have detected by \
             the oldest registry version in use that it left the subnet.",
         );
     }
-    // "readonly" and "backup" access are removed first, so these must hold
+    // "readonly" access is removed first, so this must hold
     assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
-    assert_authentication_fails(&node_ip, "backup", &backup_mean);
 
     // Now that the node has removed its SSH access, it must be that the replica process has been
     // stopped, so the metrics endpoints should be down.
     let maybe_earliest_registry_version_in_use = get_node_earliest_topology_version(&app_node);
     assert!(
         maybe_earliest_registry_version_in_use.is_err(),
-        "The node removed access to the recovery account before completely leaving the subnet"
+        "The node removed access to the backup account before completely leaving the subnet"
     );
+
+    // Finally, recovery access should still work because it is not a subnet property, but a node
+    // property instead.
+    assert_authentication_works(&node_ip, "recovery", &recovery_mean);
 }
 
 fn main() -> Result<()> {
