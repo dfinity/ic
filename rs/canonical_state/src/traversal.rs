@@ -776,7 +776,7 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: None,
+                subnet_admins: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
@@ -785,7 +785,7 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: None,
+                subnet_admins: BTreeSet::new(),
             },
             subnet_test_id(2) => SubnetTopology {
                 public_key: vec![9, 10, 11, 12],
@@ -794,7 +794,7 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: None,
+                subnet_admins: BTreeSet::new(),
             },
             subnet_test_id(3) => SubnetTopology {
                 public_key: vec![13, 14, 15, 16],
@@ -803,7 +803,7 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: None,
+                subnet_admins: BTreeSet::new(),
             }
         });
         state.metadata.network_topology.set_routing_table(
@@ -1041,7 +1041,7 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: None,
+                subnet_admins: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
@@ -1050,7 +1050,7 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: None,
+                subnet_admins: BTreeSet::new(),
             }
         });
         state.metadata.network_topology.set_routing_table(

@@ -133,14 +133,14 @@ pub fn generate_subnets(
     own_subnet_type: SubnetType,
     own_subnet_size: usize,
     own_subnet_cost_schedule: CanisterCyclesCostSchedule,
-    own_subnet_admins: Option<BTreeSet<PrincipalId>>,
+    own_subnet_admins: BTreeSet<PrincipalId>,
 ) -> BTreeMap<SubnetId, SubnetTopology> {
     let mut result: BTreeMap<SubnetId, SubnetTopology> = Default::default();
     for subnet_id in subnet_ids {
         let mut subnet_type = SubnetType::System;
         let mut nodes = btreeset! {};
         let mut cost_schedule = CanisterCyclesCostSchedule::Normal;
-        let mut subnet_admins = None;
+        let mut subnet_admins = BTreeSet::new();
         if subnet_id == own_subnet_id {
             subnet_type = own_subnet_type;
             cost_schedule = own_subnet_cost_schedule;
@@ -179,7 +179,7 @@ pub fn generate_network_topology(
     subnets: Vec<SubnetId>,
     routing_table: Option<RoutingTable>,
     own_subnet_cost_schedule: CanisterCyclesCostSchedule,
-    own_subnet_admins: Option<BTreeSet<PrincipalId>>,
+    own_subnet_admins: BTreeSet<PrincipalId>,
 ) -> NetworkTopology {
     let mut topo = NetworkTopology::default();
     topo.nns_subnet_id = nns_subnet_id;
@@ -2055,7 +2055,7 @@ pub struct ExecutionTestBuilder {
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
     cost_schedule: CanisterCyclesCostSchedule,
-    subnet_admins: Option<BTreeSet<PrincipalId>>,
+    subnet_admins: BTreeSet<PrincipalId>,
     network_topology: Option<NetworkTopology>,
     log_level: Option<Level>,
 }
@@ -2092,7 +2092,7 @@ impl Default for ExecutionTestBuilder {
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
-            subnet_admins: None,
+            subnet_admins: BTreeSet::new(),
             network_topology: None,
             log_level: Some(Level::Warning),
         }
@@ -2543,7 +2543,7 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
-        self.subnet_admins = Some(subnet_admins.into_iter().collect());
+        self.subnet_admins = subnet_admins.into_iter().collect();
         self
     }
 

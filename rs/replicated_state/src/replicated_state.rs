@@ -8,7 +8,9 @@ use crate::canister_state::system_state::{
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
-use crate::metadata_state::{IngressHistoryState, Stream, StreamMap, SystemMetadata};
+use crate::metadata_state::{
+    IngressHistoryState, Stream, StreamMap, SystemMetadata, can_have_subnet_admins,
+};
 use crate::{
     CanisterPriority, CanisterQueues, CanisterState, DroppedMessageMetrics, SubnetSchedule,
 };
@@ -736,11 +738,12 @@ impl ReplicatedState {
     /// Returns the list of subnet admins of this subnet.
     pub fn get_own_subnet_admins(&self) -> Option<BTreeSet<PrincipalId>> {
         let subnet_id = self.metadata.own_subnet_id;
-        self.metadata
-            .network_topology
-            .subnets()
-            .get(&subnet_id)
-            .and_then(|x| x.subnet_admins.clone())
+        let subnet_topology = self.metadata.network_topology.subnets().get(&subnet_id)?;
+        if can_have_subnet_admins(subnet_topology.subnet_type, subnet_topology.cost_schedule) {
+            Some(subnet_topology.subnet_admins.clone())
+        } else {
+            None
+        }
     }
 
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {

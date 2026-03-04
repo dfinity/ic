@@ -711,7 +711,7 @@ pub(crate) struct SchedulerTestBuilder {
     round_summary: Option<ExecutionRoundSummary>,
     replica_version: ReplicaVersion,
     cost_schedule: CanisterCyclesCostSchedule,
-    subnet_admins: Option<BTreeSet<PrincipalId>>,
+    subnet_admins: BTreeSet<PrincipalId>,
 }
 
 impl Default for SchedulerTestBuilder {
@@ -742,7 +742,7 @@ impl Default for SchedulerTestBuilder {
             round_summary: None,
             replica_version: ReplicaVersion::default(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
-            subnet_admins: None,
+            subnet_admins: BTreeSet::new(),
         }
     }
 }

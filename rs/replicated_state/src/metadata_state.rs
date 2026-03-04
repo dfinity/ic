@@ -317,7 +317,7 @@ pub struct SubnetTopology {
     /// holding the key as backup to actually produce signatures or VetKd key derivations.
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
-    pub subnet_admins: Option<BTreeSet<PrincipalId>>,
+    pub subnet_admins: BTreeSet<PrincipalId>,
 }
 
 /// Only rented subnets, i.e., application subnets on a "free" cost schedule,
