@@ -25,7 +25,7 @@ inputs:
   startup-options:
     required: false
     default: ""
-    description: "Additional bazel startup options to include in the bazel invocation. For example, --output_base=/var/tmp/bazel-output to ensure the output base is wiped after the run."
+    description: "Additional bazel startup options to include in the bazel invocation."
   GPG_PASSPHRASE:
     required: true
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
