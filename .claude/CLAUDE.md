@@ -33,7 +33,7 @@ After changing Rust code (`*.rs`) follow these steps in order:
 3. **Build** the directly affected bazel targets by running the following from the root of the repository:
    ```
    cd "$(git rev-parse --show-toplevel)"
-   TARGETS="$(bazel query 'kind(rule, rdeps(//..., set(<MODIFIED_FILES>), 1))' --keep_going 2>/dev/null)"
+   TARGETS="$(bazel query 'kind(rule, rdeps(//..., set(<MODIFIED_FILES>), 1))' --keep_going 2>/dev/null)" || true
    if [ -n "$TARGETS" ]; then
        bazel build $TARGETS
    fi
@@ -44,7 +44,7 @@ After changing Rust code (`*.rs`) follow these steps in order:
 4. **Test** the directly affected bazel tests by running the following from the root of the repository:
    ```
    cd "$(git rev-parse --show-toplevel)"
-   TESTS="$(bazel query 'kind(".*_test|test_suite", kind(rule, rdeps(//..., set(<MODIFIED_FILES>), 2)))' --keep_going 2>/dev/null)"
+   TESTS="$(bazel query 'kind(".*_test|test_suite", kind(rule, rdeps(//..., set(<MODIFIED_FILES>), 2)))' --keep_going 2>/dev/null)" || true
    if [ -n "$TESTS" ]; then
        bazel test --test_output=errors $TESTS
    fi
