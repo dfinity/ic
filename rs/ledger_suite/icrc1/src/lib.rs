@@ -54,6 +54,22 @@ pub enum Operation<Tokens: TokensType> {
         caller: Option<Principal>,
         mthd: Option<String>,
     },
+    /// A mint performed by a ledger controller via ICRC-152 (`icrc152_mint`).
+    /// Produces a `122mint` block.
+    AuthorizedMint {
+        to: Account,
+        amount: Tokens,
+        caller: Principal,
+        reason: Option<String>,
+    },
+    /// A burn performed by a ledger controller via ICRC-152 (`icrc152_burn`).
+    /// Produces a `122burn` block.
+    AuthorizedBurn {
+        from: Account,
+        amount: Tokens,
+        caller: Principal,
+        reason: Option<String>,
+    },
 }
 
 // A [Transaction] but flattened meaning that [Operation]
@@ -122,6 +138,10 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mthd: Option<String>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -161,6 +181,22 @@ impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
                 fee_collector: value.fee_collector,
                 caller: value.caller,
                 mthd: value.mthd,
+            },
+            Some("122mint") => Operation::AuthorizedMint {
+                to: value.to.ok_or("`to` required for `122mint` block")?,
+                amount: value.amount.ok_or("`amt` required for `122mint` block")?,
+                caller: value
+                    .caller
+                    .ok_or("`caller` required for `122mint` block")?,
+                reason: value.reason,
+            },
+            Some("122burn") => Operation::AuthorizedBurn {
+                from: value.from.ok_or("`from` required for `122burn` block")?,
+                amount: value.amount.ok_or("`amt` required for `122burn` block")?,
+                caller: value
+                    .caller
+                    .ok_or("`caller` required for `122burn` block")?,
+                reason: value.reason,
             },
             _ => Operation::try_from(value)
                 .map_err(|e| format!("{} and/or unknown btype {:?}", e, btype_str))?,
@@ -241,14 +277,16 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => Some("mint".to_string()),
                 Transfer { .. } => Some("xfer".to_string()),
                 Approve { .. } => Some("approve".to_string()),
-                FeeCollector { .. } => None,
+                FeeCollector { .. } | AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
             },
             from: match &t.operation {
                 Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
+                AuthorizedBurn { from, .. } => Some(*from),
                 _ => None,
             },
             to: match &t.operation {
                 Mint { to, .. } | Transfer { to, .. } => Some(*to),
+                AuthorizedMint { to, .. } => Some(*to),
                 _ => None,
             },
             spender: match &t.operation {
@@ -261,6 +299,9 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
                 | Approve { amount, .. } => Some(amount.clone()),
+                AuthorizedMint { amount, .. } | AuthorizedBurn { amount, .. } => {
+                    Some(amount.clone())
+                }
                 FeeCollector { .. } => None,
             },
             fee: match &t.operation {
@@ -268,7 +309,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Approve { fee, .. }
                 | Mint { fee, .. }
                 | Burn { fee, .. } => fee.to_owned(),
-                FeeCollector { .. } => None,
+                FeeCollector { .. } | AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
             },
             expected_allowance: match &t.operation {
                 Approve {
@@ -285,11 +326,16 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 _ => None,
             },
             caller: match &t.operation {
-                FeeCollector { caller, .. } => caller.to_owned(),
+                FeeCollector { caller, .. } => *caller,
+                AuthorizedMint { caller, .. } | AuthorizedBurn { caller, .. } => Some(*caller),
                 _ => None,
             },
             mthd: match &t.operation {
                 FeeCollector { mthd, .. } => mthd.to_owned(),
+                _ => None,
+            },
+            reason: match &t.operation {
+                AuthorizedMint { reason, .. } | AuthorizedBurn { reason, .. } => reason.clone(),
                 _ => None,
             },
         }
@@ -485,6 +531,12 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
+            Operation::AuthorizedMint { to, amount, .. } => {
+                context.balances_mut().mint(to, amount.clone())?;
+            }
+            Operation::AuthorizedBurn { from, amount, .. } => {
+                context.balances_mut().burn(from, amount.clone())?;
+            }
         }
         Ok(())
     }
@@ -669,6 +721,11 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         effective_fee: Tokens,
         fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self {
+        let btype = match &transaction.operation {
+            Operation::AuthorizedMint { .. } => Some("122mint".to_string()),
+            Operation::AuthorizedBurn { .. } => Some("122burn".to_string()),
+            _ => None,
+        };
         let effective_fee = match &transaction.operation {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
@@ -692,10 +749,163 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             timestamp: timestamp.as_nanos_since_unix_epoch(),
             fee_collector,
             fee_collector_block_index,
-            btype: None,
+            btype,
         }
     }
 }
 
 pub type LedgerBalances<Tokens> = Balances<BTreeMap<Account, Tokens>>;
 pub type LedgerAllowances<Tokens> = AllowanceTable<HeapAllowancesData<Account, Tokens>>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candid::Principal;
+    use ic_icrc1_tokens_u64::U64;
+    use ic_ledger_core::block::BlockType;
+    use ic_ledger_hash_of::HashOf;
+
+    type Tokens = U64;
+
+    fn controller() -> Principal {
+        Principal::from_slice(&[1u8; 29])
+    }
+
+    fn account(seed: u8) -> Account {
+        Account {
+            owner: Principal::from_slice(&[seed; 29]),
+            subaccount: None,
+        }
+    }
+
+    fn make_authorized_mint_tx(created_at_time: Option<u64>) -> Transaction<Tokens> {
+        Transaction {
+            operation: Operation::AuthorizedMint {
+                to: account(2),
+                amount: U64::from(1000u64),
+                caller: controller(),
+                reason: Some("test mint".to_string()),
+            },
+            created_at_time,
+            memo: None,
+        }
+    }
+
+    fn make_authorized_burn_tx(created_at_time: Option<u64>) -> Transaction<Tokens> {
+        Transaction {
+            operation: Operation::AuthorizedBurn {
+                from: account(2),
+                amount: U64::from(500u64),
+                caller: controller(),
+                reason: None,
+            },
+            created_at_time,
+            memo: None,
+        }
+    }
+
+    /// Serialise a Transaction via its FlattenedTransaction impl and deserialise it back.
+    fn cbor_roundtrip(tx: &Transaction<Tokens>) -> Transaction<Tokens> {
+        let mut buf = vec![];
+        ciborium::ser::into_writer(tx, &mut buf).expect("serialise");
+        ciborium::de::from_reader(buf.as_slice()).expect("deserialise")
+    }
+
+    #[test]
+    fn authorized_mint_cbor_roundtrip() {
+        let tx = make_authorized_mint_tx(Some(1_000_000_000));
+        let recovered = cbor_roundtrip(&tx);
+        assert_eq!(tx, recovered);
+    }
+
+    #[test]
+    fn authorized_burn_cbor_roundtrip() {
+        let tx = make_authorized_burn_tx(Some(2_000_000_000));
+        let recovered = cbor_roundtrip(&tx);
+        assert_eq!(tx, recovered);
+    }
+
+    #[test]
+    fn authorized_mint_cbor_roundtrip_no_reason() {
+        let tx = Transaction {
+            operation: Operation::AuthorizedMint {
+                to: account(3),
+                amount: U64::from(42u64),
+                caller: controller(),
+                reason: None,
+            },
+            created_at_time: None,
+            memo: None,
+        };
+        assert_eq!(tx, cbor_roundtrip(&tx));
+    }
+
+    #[test]
+    fn authorized_mint_block_has_122mint_btype() {
+        let tx = make_authorized_mint_tx(None);
+        let block = Block::<Tokens>::from_transaction(
+            None,
+            tx,
+            TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            Tokens::from(0u64),
+            None,
+        );
+        assert_eq!(block.btype.as_deref(), Some("122mint"));
+    }
+
+    #[test]
+    fn authorized_burn_block_has_122burn_btype() {
+        let tx = make_authorized_burn_tx(None);
+        let block = Block::<Tokens>::from_transaction(
+            None,
+            tx,
+            TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            Tokens::from(0u64),
+            None,
+        );
+        assert_eq!(block.btype.as_deref(), Some("122burn"));
+    }
+
+    #[test]
+    fn regular_mint_block_has_no_btype() {
+        let tx = Transaction::<Tokens>::mint(account(2), Tokens::from(100u64), None, None);
+        let block = Block::<Tokens>::from_transaction(
+            None,
+            tx,
+            TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            Tokens::from(0u64),
+            None,
+        );
+        assert_eq!(block.btype, None);
+    }
+
+    #[test]
+    fn block_encode_decode_roundtrip_authorized_mint() {
+        let tx = make_authorized_mint_tx(Some(999_999));
+        let block = Block::<Tokens>::from_transaction(
+            Some(HashOf::new([0u8; 32])),
+            tx,
+            TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            Tokens::from(0u64),
+            None,
+        );
+        let encoded = block.clone().encode();
+        let decoded = Block::<Tokens>::decode(encoded).expect("decode failed");
+        assert_eq!(block, decoded);
+    }
+
+    #[test]
+    fn block_encode_decode_roundtrip_authorized_burn() {
+        let tx = make_authorized_burn_tx(Some(888_888));
+        let block = Block::<Tokens>::from_transaction(
+            None,
+            tx,
+            TimeStamp::from_nanos_since_unix_epoch(2_000_000_000),
+            Tokens::from(0u64),
+            None,
+        );
+        let encoded = block.clone().encode();
+        let decoded = Block::<Tokens>::decode(encoded).expect("decode failed");
+        assert_eq!(block, decoded);
+    }
+}
