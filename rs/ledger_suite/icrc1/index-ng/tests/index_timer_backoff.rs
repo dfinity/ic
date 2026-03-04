@@ -118,21 +118,21 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     );
 
     // ---------------------------------------------------------------
-    // Phase 2: Idle — verify the timer doubles until it hits 64 s
+    // Phase 2: Idle — verify the timer doubles until it hits 10 s
     // ---------------------------------------------------------------
     // With no new transactions the timer should back off:
-    // 1 → 2 → 4 → 8 → 16 → 32 → 64.
+    // 1 → 2 → 4 → 8 → 10 (clamped).
     // The total time for all these fires is:
-    //   1 + 2 + 4 + 8 + 16 + 32 + 64 = 127 s.
-    // After the fire at 64 s, compute_wait_time(0) doubles to 128 s,
-    // which is clamped to the maximum of 64 s.
-    advance(&env, Duration::from_secs(1), 130);
+    //   1 + 2 + 4 + 8 + 10 = 25 s.
+    // After the fire at 10 s, compute_wait_time(0) doubles to 20 s,
+    // which is clamped to the maximum of 10 s.
+    advance(&env, Duration::from_secs(1), 30);
 
     let wait_time = get_last_wait_time(&env, index_id);
     assert_eq!(
         wait_time,
-        Duration::from_secs(64),
-        "After prolonged idle the timer should have backed off to the maximum of 64 s, got {:?}",
+        Duration::from_secs(10),
+        "After prolonged idle the timer should have backed off to the maximum of 10 s, got {:?}",
         wait_time
     );
 
@@ -141,9 +141,8 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     // ---------------------------------------------------------------
     // Send a transaction every second. This ensures that each time the
     // timer fires, there are pending blocks and it halves its interval.
-    // Starting from 64 s, it takes 64 + 32 + 16 + 8 + 4 + 2 = 126 s
-    // to reach 1 s.
-    for _ in 0..130 {
+    // Starting from 10 s, it takes 10 + 5 + 2 = 17 s to reach 1 s.
+    for _ in 0..20 {
         send_tx(&env, ledger_id, a1, a2);
         advance(&env, Duration::from_secs(1), 1);
     }
@@ -159,16 +158,16 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     // ---------------------------------------------------------------
     // Phase 4: Steady transaction rate — verify the timer oscillates
     // ---------------------------------------------------------------
-    // We send one transaction every 24 seconds. The halve/double
+    // We send one transaction every 6 seconds. The halve/double
     // algorithm causes the timer to oscillate between two values in
     // steady state:
-    //   - Timer at 16 s fires, finds a block → halves to 8 s.
-    //   - Timer at 8 s fires, no block yet → doubles to 16 s.
-    //   - Cycle length: 8 + 16 = 24 s, which matches the tx interval.
+    //   - Timer at 4 s fires, finds a block → halves to 2 s.
+    //   - Timer at 2 s fires, no block yet → doubles to 4 s.
+    //   - Cycle length: 2 + 4 = 6 s, which matches the tx interval.
     //
     // We run enough rounds for the timer to stabilize and then collect
     // the wait time after each round to verify the oscillation.
-    let tx_interval_secs = 24u64;
+    let tx_interval_secs = 6u64;
     let stabilization_rounds = 20u64;
     for _ in 0..stabilization_rounds {
         send_tx(&env, ledger_id, a1, a2);
@@ -176,7 +175,7 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     }
 
     // Collect the wait times over several more rounds to verify
-    // the oscillation between 8 s and 16 s.
+    // the oscillation between 2 s and 4 s.
     let mut observed_wait_times = std::collections::BTreeSet::new();
     let observation_rounds = 10u64;
     for _ in 0..observation_rounds {
@@ -190,12 +189,12 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     }
 
     let expected: std::collections::BTreeSet<Duration> =
-        [Duration::from_secs(8), Duration::from_secs(16)]
+        [Duration::from_secs(2), Duration::from_secs(4)]
             .into_iter()
             .collect();
     assert_eq!(
         observed_wait_times, expected,
-        "With transactions every {} s the timer should oscillate between 8 s and 16 s, \
+        "With transactions every {} s the timer should oscillate between 2 s and 4 s, \
          but observed: {:?}",
         tx_interval_secs, observed_wait_times
     );

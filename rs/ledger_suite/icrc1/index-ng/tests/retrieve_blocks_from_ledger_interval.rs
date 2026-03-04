@@ -19,7 +19,7 @@ mod common;
 // Corresponds to ic_icrc1_index_ng::MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS
 const MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS: u64 = 1;
 // Corresponds to ic_icrc1_index_ng::MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS
-const MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS: u64 = 64;
+const MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS: u64 = 10;
 const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[3_u8; 29]);
 
@@ -296,10 +296,10 @@ fn should_install_and_upgrade_without_build_index_interval_field_set() {
 fn should_consume_expected_amount_of_cycles() {
     // The initially installed index polls the ledger every second. In the reinstalled index with
     // adaptive timing, the timer backs off exponentially when idle (no blocks):
-    // 1s -> 2s -> 4s -> 8s -> ... up to 64s max. In this case, it is expected that the reinstalled
-    // index consumes 90+% of the cycles consumed by the initially installed index over a long idle
-    // period, since the adaptive timer will spend most of the time at the max interval of 64s.
-    const IDLE_TIME_IN_SECS: u64 = 128; // 1+2+4+8+16+32+64 = 127s
+    // 1s -> 2s -> 4s -> 8s -> up to 10s max. In this case, it is expected that the reinstalled
+    // index consumes around 88% less cycles compared to the initially installed index over a long
+    // idle period, since the adaptive timer will spend most of the time at the max interval of 10s.
+    const IDLE_TIME_IN_SECS: u64 = 30; // 1+2+4+8+10 = 25s for a full backoff cycle.
     let assert_cost = |initial_consumption: &CycleConsumption,
                        reinstall_consumption: &CycleConsumption| {
         for (initial, reinstall) in [
@@ -308,7 +308,7 @@ fn should_consume_expected_amount_of_cycles() {
         ] {
             let relative_difference = abs_relative_difference(initial, reinstall);
             assert!(
-                0.9 < relative_difference && relative_difference < 1.0,
+                0.8 < relative_difference && relative_difference < 0.85,
                 "initial cycles: {}, cycles after reinstall: {}, relative_difference: {}",
                 initial,
                 reinstall,

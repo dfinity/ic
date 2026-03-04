@@ -57,7 +57,7 @@ const ACCOUNT_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 const MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
-const MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(64);
+const MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(10);
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
