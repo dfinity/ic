@@ -102,7 +102,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
             let args = Encode!(&canister_id_record).unwrap_or_default();
             ProxiedCanisterCallsTracker::start_tracking(
                 tracker,
-                dfn_core::api::caller(),
+                PrincipalId::from(ic_cdk::api::msg_caller()),
                 IC_00,
                 "canister_status",
                 &args,
@@ -117,7 +117,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
             let args = Encode!(&settings).unwrap_or_default();
             ProxiedCanisterCallsTracker::start_tracking(
                 tracker,
-                dfn_core::api::caller(),
+                PrincipalId::from(ic_cdk::api::msg_caller()),
                 IC_00,
                 "update_settings",
                 &args,
@@ -136,7 +136,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
             let args = Encode!(&(canister_id, &name)).unwrap_or_default();
             ProxiedCanisterCallsTracker::start_tracking(
                 tracker,
-                dfn_core::api::caller(),
+                PrincipalId::from(ic_cdk::api::msg_caller()),
                 IC_00,
                 "canister_metadata",
                 &args,
@@ -158,7 +158,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
             let args = Encode!(&canister_id_record).unwrap_or_default();
             ProxiedCanisterCallsTracker::start_tracking(
                 tracker,
-                dfn_core::api::caller(),
+                PrincipalId::from(ic_cdk::api::msg_caller()),
                 IC_00,
                 "stop_canister",
                 &args,
@@ -176,7 +176,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
             let args = Encode!(&canister_id_record).unwrap_or_default();
             ProxiedCanisterCallsTracker::start_tracking(
                 tracker,
-                dfn_core::api::caller(),
+                PrincipalId::from(ic_cdk::api::msg_caller()),
                 IC_00,
                 "delete_canister",
                 &args,
@@ -194,7 +194,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
             let encoded_args = Encode!(&args).unwrap_or_default();
             ProxiedCanisterCallsTracker::start_tracking(
                 tracker,
-                dfn_core::api::caller(),
+                PrincipalId::from(ic_cdk::api::msg_caller()),
                 IC_00,
                 "take_canister_snapshot",
                 &encoded_args,
@@ -212,7 +212,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
             let encoded_args = Encode!(&args).unwrap_or_default();
             ProxiedCanisterCallsTracker::start_tracking(
                 tracker,
-                dfn_core::api::caller(),
+                PrincipalId::from(ic_cdk::api::msg_caller()),
                 IC_00,
                 "load_canister_snapshot",
                 &encoded_args,
