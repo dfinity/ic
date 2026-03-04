@@ -150,22 +150,22 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-pub mod disburse_maturity;
+#[cfg(feature = "canbench-rs")]
+mod benches;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
-pub mod test_data;
 #[cfg(test)]
 mod tests;
-pub mod voting_power_snapshots;
 
-#[cfg(feature = "canbench-rs")]
-mod benches;
-
-#[macro_use]
-pub mod tla_macros;
+pub mod create_neuron;
+pub mod disburse_maturity;
+pub mod test_data;
 #[cfg(feature = "tla")]
 pub mod tla;
+#[macro_use]
+pub mod tla_macros;
+pub mod voting_power_snapshots;
 
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
@@ -240,7 +240,7 @@ pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 20;
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
 /// The maximum number of neurons returned by `list_neurons`
-pub const MAX_LIST_NEURONS_RESULTS: usize = 500;
+pub const MAX_LIST_NEURONS_RESULTS: usize = 50;
 
 const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 

@@ -2,7 +2,6 @@
 
 use anyhow::bail;
 use attestation::attestation_package::SevRootCertificateVerification;
-use attestation_testing::registry::setup_mock_registry_client_with_blessed_versions;
 use config_types::{
     GuestOSConfig, GuestOSUpgradeConfig, GuestVMType, ICOSSettings,
     TrustedExecutionEnvironmentConfig,
@@ -15,6 +14,9 @@ use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
 };
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_registry::{add_blessed_replica_versions, add_replica_version_record};
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
@@ -98,29 +100,34 @@ impl DiskEncryptionKeyExchangeTestFixture {
     fn new(config: TestConfig) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
-        let registry_client = Arc::new(setup_mock_registry_client_with_blessed_versions(
-            1.into(),
-            &[REPLICA_VERSION],
-            &[(
-                REPLICA_VERSION,
-                ReplicaVersionRecord {
-                    release_package_sha256_hex: "abc".to_string(),
-                    guest_launch_measurements: Some(GuestLaunchMeasurements {
-                        guest_launch_measurements: vec![
-                            GuestLaunchMeasurement {
-                                measurement: DEFAULT_CLIENT_MEASUREMENT.into(),
-                                metadata: None,
-                            },
-                            GuestLaunchMeasurement {
-                                measurement: DEFAULT_SERVER_MEASUREMENT.into(),
-                                metadata: None,
-                            },
-                        ],
-                    }),
-                    release_package_urls: vec![],
-                },
-            )],
-        ));
+        let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+        add_blessed_replica_versions(&registry_data_provider, 1, &[REPLICA_VERSION]);
+
+        add_replica_version_record(
+            &registry_data_provider,
+            1,
+            REPLICA_VERSION,
+            ReplicaVersionRecord {
+                release_package_sha256_hex: "abc".to_string(),
+                guest_launch_measurements: Some(GuestLaunchMeasurements {
+                    guest_launch_measurements: vec![
+                        GuestLaunchMeasurement {
+                            measurement: DEFAULT_CLIENT_MEASUREMENT.into(),
+                            metadata: None,
+                        },
+                        GuestLaunchMeasurement {
+                            measurement: DEFAULT_SERVER_MEASUREMENT.into(),
+                            metadata: None,
+                        },
+                    ],
+                }),
+                release_package_urls: vec![],
+            },
+        );
+
+        let registry_client = Arc::new(FakeRegistryClient::new(registry_data_provider));
+        registry_client.update_to_latest_version();
 
         let fake_attestation_report_signer = FakeAttestationReportSigner::default();
 

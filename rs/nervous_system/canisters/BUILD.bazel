@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:mockall",
     "@crate_index//:prost",
+    "@crate_index//:rust_decimal",
 ]
 
 MACRO_DEPENDENCIES = [

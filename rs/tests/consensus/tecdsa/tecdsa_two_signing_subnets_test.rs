@@ -46,7 +46,7 @@ use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{Logger, info};
 
 const NODES_COUNT: usize = 4;
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const MR_REGISTRY_VERSION: &str = "mr_registry_version";
 
 fn setup(env: TestEnv) {
