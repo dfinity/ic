@@ -5,10 +5,12 @@ use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMeth
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_machine_tests::{StateMachine, two_subnets_simple};
 use ic_subnet_splitting::post_split_estimations::{Estimates, LoadEstimates, StateSizeEstimates};
+use ic_test_utilities_logger::with_test_logger;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{CanisterId, Cycles};
 use ic_universal_canister::{call_args, wasm};
 use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
+use slog::{Logger, info};
 
 /// Checks whether the first argument is equal to the second argument with a relative error
 /// tolerance up to the third argument.
@@ -32,138 +34,144 @@ macro_rules! assert_near {
 /// 3. `subnet-splitting-tool`, which takes the outputs from the above two tools, and returns
 ///    estimated loads/sizes after splitting a subnet.
 fn load_metrics_e2e_test() {
-    println!("Creating state machines");
-    let dir = ic_test_utilities_tmpdir::tmpdir("testdir");
-    let (state_machine, other_state_machine) = two_subnets_simple();
+    with_test_logger(|logger| {
+        info!(logger, "Creating state machines");
+        let dir = ic_test_utilities_tmpdir::tmpdir("testdir");
+        let (state_machine, other_state_machine) = two_subnets_simple();
 
-    // Use `state-tool` to extract the canister metrics baseline from the replicated state.
-    state_machine.checkpointed_tick();
-    state_machine.state_manager.flush_tip_channel();
-    let checkpoint_dir =
-        std::fs::read_dir(state_machine.state_manager.state_layout().checkpoints())
+        // Use `state-tool` to extract the canister metrics baseline from the replicated state.
+        state_machine.checkpointed_tick();
+        state_machine.state_manager.flush_tip_channel();
+        let checkpoint_dir =
+            std::fs::read_dir(state_machine.state_manager.state_layout().checkpoints())
+                .unwrap()
+                .last()
+                .expect("There should be at least one checkpoint")
+                .unwrap()
+                .path();
+        let load_samples_baseline_path = dir.path().join("load_samples_baseline.csv");
+        ic_state_tool::commands::canister_metrics::get(checkpoint_dir, &load_samples_baseline_path)
+            .expect("Should compute canister metrics for a valid checkpoint");
+
+        info!(logger, "Setting up state machines");
+        set_up(
+            state_machine.as_ref(),
+            other_state_machine.as_ref(),
+            /*canisters_count=*/ 50,
+            &logger,
+        );
+        info!(logger, "Creating a checkpoint");
+        state_machine.checkpointed_tick();
+        state_machine.state_manager.flush_tip_channel();
+        let state_layout = state_machine.state_manager.state_layout();
+        let mut checkpoint_dirs = std::fs::read_dir(state_layout.checkpoints())
             .unwrap()
-            .last()
-            .expect("There should be at least one checkpoint")
-            .unwrap()
-            .path();
-    let load_samples_baseline_path = dir.path().join("load_samples_baseline.csv");
-    ic_state_tool::commands::canister_metrics::get(checkpoint_dir, &load_samples_baseline_path)
-        .expect("Should compute canister metrics for a valid checkpoint");
+            .map(|dir| dir.unwrap().path())
+            .collect::<Vec<_>>();
+        // Note: there could be multiple checkpoints so we sort them and take the latest one.
+        checkpoint_dirs.sort();
+        let checkpoint_dir = checkpoint_dirs.last().expect(
+            "There should be at least one checkpoint because we did `checkpointed_tick()` above",
+        );
 
-    println!("Setting up state machines");
-    set_up(
-        state_machine.as_ref(),
-        other_state_machine.as_ref(),
-        /*canisters_count=*/ 100,
-    );
-    println!("Creating a checkpoint");
-    state_machine.checkpointed_tick();
-    state_machine.state_manager.flush_tip_channel();
-    let state_layout = state_machine.state_manager.state_layout();
-    let mut checkpoint_dirs = std::fs::read_dir(state_layout.checkpoints())
-        .unwrap()
-        .map(|dir| dir.unwrap().path())
-        .collect::<Vec<_>>();
-    // Note: there could be multiple checkpoints so we sort them and take the latest one.
-    checkpoint_dirs.sort();
-    let checkpoint_dir = checkpoint_dirs.last().expect(
-        "There should be at least one checkpoint because we did `checkpointed_tick()` above",
-    );
+        info!(logger, "Using `state-tool` to compute the state manifest.");
+        let manifest_path = dir.path().join("manifest.data");
+        let content = ic_state_tool::commands::manifest::compute_manifest(checkpoint_dir)
+            .expect("Should compute the manifest for a valid checkpoint");
+        let mut output_file = std::fs::File::create(&manifest_path).unwrap();
+        write!(output_file, "{content}").unwrap();
 
-    println!("Using `state-tool` to compute the state manifest.");
-    let manifest_path = dir.path().join("manifest.data");
-    let content = ic_state_tool::commands::manifest::compute_manifest(checkpoint_dir)
-        .expect("Should compute the manifest for a valid checkpoint");
-    let mut output_file = std::fs::File::create(&manifest_path).unwrap();
-    write!(output_file, "{content}").unwrap();
+        info!(
+            logger,
+            "Using `state-tool` to extract the canister metrics from the replicated state."
+        );
+        let load_samples_path = dir.path().join("load_samples.csv");
+        ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
+            .expect("Should compute canister metrics for a valid checkpoint");
 
-    println!("Using `state-tool` to extract the canister metrics from the replicated state.");
-    let load_samples_path = dir.path().join("load_samples.csv");
-    ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
-        .expect("Should compute canister metrics for a valid checkpoint");
+        // TODO(CON-1569): use a tool for finding a good split, once it's in the `ic-public` repo.
+        // For now we use a static set of ranges.
+        let mut canister_ids = state_machine.get_canister_ids();
+        canister_ids.sort();
+        // middle half of the canisters
+        let canister_id_ranges = vec![CanisterIdRange {
+            start: canister_ids[25],
+            end: canister_ids[74],
+        }];
 
-    // TODO(CON-1569): use a tool for finding a good split, once it's in the `ic-public` repo.
-    // For now we use a static set of ranges.
-    let mut canister_ids = state_machine.get_canister_ids();
-    canister_ids.sort();
-    // middle half of the canisters
-    let canister_id_ranges = vec![CanisterIdRange {
-        start: canister_ids[50],
-        end: canister_ids[150],
-    }];
+        // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
+        // split.
+        let (
+            StateSizeEstimates { states_sizes_bytes },
+            LoadEstimates {
+                canisters_installed,
+                instructions_executed,
+                ingress_messages_executed,
+                remote_subnet_messages_executed_lower_bound,
+                local_subnet_messages_executed_upper_bound,
+                http_outcalls_executed,
+                heartbeats_and_global_timers_executed,
+            },
+        ) = dbg!(
+            ic_subnet_splitting::post_split_estimations::estimate(
+                canister_id_ranges,
+                manifest_path,
+                load_samples_path,
+                load_samples_baseline_path,
+            )
+            .expect("Should succeed given valid inputs")
+        );
 
-    // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
-    // split.
-    let (
-        StateSizeEstimates { states_sizes_bytes },
-        LoadEstimates {
+        assert_eq!(
             canisters_installed,
-            instructions_executed,
+            Estimates {
+                source: 50,
+                destination: 50,
+            }
+        );
+        // Accept up to 10% error. The precise values are not important here and they're very sensitive
+        // to the changes to the replicated state / execution. It's mostly a sanity check that the
+        // returned values are not too ridiculous and they might have to be updated once in a while.
+        assert_near!(states_sizes_bytes.source, 23351651, 0.1);
+        assert_near!(states_sizes_bytes.destination, 23359887, 0.1);
+        assert_near!(instructions_executed.source, 39131279, 0.1);
+        assert_near!(instructions_executed.destination, 39119275, 0.1);
+        assert_eq!(
             ingress_messages_executed,
+            Estimates {
+                source: 99,
+                destination: 100,
+            }
+        );
+        assert_eq!(
             remote_subnet_messages_executed_lower_bound,
+            Estimates {
+                source: 25,
+                destination: 25,
+            }
+        );
+        assert_eq!(
             local_subnet_messages_executed_upper_bound,
+            Estimates {
+                source: 73,
+                destination: 75,
+            }
+        );
+        assert_eq!(
             http_outcalls_executed,
+            Estimates {
+                source: 25,
+                destination: 25,
+            }
+        );
+        assert_eq!(
             heartbeats_and_global_timers_executed,
-        },
-    ) = dbg!(
-        ic_subnet_splitting::post_split_estimations::estimate(
-            canister_id_ranges,
-            manifest_path,
-            load_samples_path,
-            load_samples_baseline_path,
-        )
-        .expect("Should succeed given valid inputs")
-    );
-
-    assert_eq!(
-        canisters_installed,
-        Estimates {
-            source: 99,
-            destination: 101,
-        }
-    );
-    // Accept up to 10% error. The precise values are not important here and they're very sensitive
-    // to the changes to the replicated state / execution. It's mostly a sanity check that the
-    // returned values are not too ridiculous and they might have to be updated once in a while.
-    assert_near!(states_sizes_bytes.source, 44877226, 0.1);
-    assert_near!(states_sizes_bytes.destination, 46071116, 0.1);
-    assert_near!(instructions_executed.source, 79487011, 0.1);
-    assert_near!(instructions_executed.destination, 80691936, 0.1);
-    assert_eq!(
-        ingress_messages_executed,
-        Estimates {
-            source: 196,
-            destination: 203,
-        }
-    );
-    assert_eq!(
-        remote_subnet_messages_executed_lower_bound,
-        Estimates {
-            source: 49,
-            destination: 51,
-        }
-    );
-    assert_eq!(
-        local_subnet_messages_executed_upper_bound,
-        Estimates {
-            source: 146,
-            destination: 152,
-        }
-    );
-    assert_eq!(
-        http_outcalls_executed,
-        Estimates {
-            source: 50,
-            destination: 50,
-        }
-    );
-    assert_eq!(
-        heartbeats_and_global_timers_executed,
-        Estimates {
-            source: 32401,
-            destination: 33048,
-        }
-    );
+            Estimates {
+                source: 8399,
+                destination: 8075,
+            }
+        );
+    })
 }
 
 /// Sets up two state machines which talk to each other and sends a couple of ingress messages to
@@ -172,6 +180,7 @@ fn set_up(
     state_machine: &StateMachine,
     other_state_machine: &StateMachine,
     canisters_count: usize,
+    logger: &Logger,
 ) {
     let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
         .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
@@ -185,7 +194,7 @@ fn set_up(
 
     let mut previous_canister_id = None;
     for i in 1..=canisters_count {
-        println!("Setting up {i}th canister");
+        info!(logger, "Setting up {i}th canister");
         let canister_id = create_canister(state_machine, uc_wasm.to_vec());
         let http_outcalls_canister_id = create_canister(state_machine, http_outcalls_wasm.to_vec());
 
