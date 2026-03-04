@@ -115,6 +115,7 @@ use ic_types::{
     CanisterId, Cycles, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
     SubnetId,
     artifact::UnvalidatedArtifactMutation,
+    batch::CanisterCyclesCostSchedule,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
         CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
@@ -312,6 +313,7 @@ struct RawTopologyInternal {
 struct SubnetConfigInternal {
     pub subnet_id: SubnetId,
     pub subnet_kind: SubnetKind,
+    pub subnet_admins: Option<Vec<PrincipalId>>,
     pub instruction_config: SubnetInstructionConfig,
     pub ranges: Vec<CanisterIdRange>,
     pub alloc_range: Option<CanisterIdRange>,
@@ -623,6 +625,7 @@ impl PocketIcSubnets {
         state_machine_state_dir: Box<dyn StateMachineStateDir>,
         runtime: Arc<Runtime>,
         subnet_kind: SubnetKind,
+        subnet_admins: Option<Vec<PrincipalId>>,
         subnet_seed: [u8; 32],
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -634,6 +637,17 @@ impl PocketIcSubnets {
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
+        let cost_schedule = match subnet_kind {
+            SubnetKind::CloudEngine => CanisterCyclesCostSchedule::Free,
+            SubnetKind::Application
+            | SubnetKind::Bitcoin
+            | SubnetKind::Fiduciary
+            | SubnetKind::II
+            | SubnetKind::NNS
+            | SubnetKind::SNS
+            | SubnetKind::System
+            | SubnetKind::VerifiedApplication => CanisterCyclesCostSchedule::Normal,
+        };
         let mut subnet_config = SubnetConfig::new(subnet_type);
         // using `let IcpConfig { }` with explicit field names
         // to force an update after adding a new field to `IcpConfig`
@@ -695,18 +709,23 @@ impl PocketIcSubnets {
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         let state_machine_config = StateMachineConfig::new(subnet_config, hypervisor_config);
-        StateMachineBuilder::new()
+        let mut builder = StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(state_machine_config))
             .with_subnet_seed(subnet_seed)
             .with_subnet_size(subnet_size.try_into().unwrap())
             .with_subnet_type(subnet_type)
+            .with_cost_schedule(cost_schedule)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
             .with_bitcoin_testnet_uds_path(bitcoin_adapter_uds_path)
             .with_dogecoin_testnet_uds_path(dogecoin_adapter_uds_path)
-            .create_at_registry_version(create_at_registry_version)
+            .create_at_registry_version(create_at_registry_version);
+        if let Some(subnet_admins) = subnet_admins {
+            builder = builder.with_subnet_admins(subnet_admins);
+        }
+        builder
     }
 
     fn new(
@@ -812,6 +831,7 @@ impl PocketIcSubnets {
             subnet_id,
             subnet_state_dir,
             subnet_kind,
+            subnet_admins,
             instruction_config,
             expected_state_time,
         } = subnet_config_info;
@@ -858,6 +878,7 @@ impl PocketIcSubnets {
             state_machine_state_dir,
             self.runtime.clone(),
             subnet_kind,
+            subnet_admins.clone(),
             subnet_seed,
             instruction_config.clone(),
             self.registry_data_provider.clone(),
@@ -1016,6 +1037,7 @@ impl PocketIcSubnets {
         let subnet_config = SubnetConfigInternal {
             subnet_id,
             subnet_kind,
+            subnet_admins,
             instruction_config,
             ranges,
             alloc_range,
@@ -2627,6 +2649,12 @@ impl PocketIc {
             let subnet_seed = compute_subnet_seed(config.ranges.clone(), config.alloc_range);
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
+                subnet_admins: config.subnet_admins.as_ref().map(|subnet_admins| {
+                    subnet_admins
+                        .iter()
+                        .map(|subnet_admin| subnet_admin.0.into())
+                        .collect()
+                }),
                 subnet_seed,
                 canister_ranges,
                 instruction_config: config.instruction_config.clone(),
@@ -2729,17 +2757,30 @@ impl PocketIc {
                         subnet_id: Some(config.subnet_id),
                         subnet_state_dir: None,
                         subnet_kind: config.subnet_kind,
+                        subnet_admins: config.subnet_admins.map(|subnet_admins| {
+                            subnet_admins
+                                .iter()
+                                .map(|subnet_admin| Principal::from(*subnet_admin).into())
+                                .collect()
+                        }),
                         instruction_config: config.instruction_config,
                         expected_state_time,
                     }
                 })
                 .collect()
         } else {
-            let fixed_range_subnets = subnet_configs.get_named();
+            let fixed_range_subnets: Vec<_> = subnet_configs
+                .get_named()
+                .into_iter()
+                .map(|(subnet_kind, subnet_state_dir, instruction_config)| {
+                    (subnet_kind, None, subnet_state_dir, instruction_config)
+                })
+                .collect();
             let flexible_subnets = {
                 let sys = subnet_configs.system.iter().map(|spec| {
                     (
                         SubnetKind::System,
+                        None,
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2747,6 +2788,15 @@ impl PocketIc {
                 let app = subnet_configs.application.iter().map(|spec| {
                     (
                         SubnetKind::Application,
+                        None,
+                        spec.get_state_path(),
+                        spec.get_instruction_config(),
+                    )
+                });
+                let cloud_engine = subnet_configs.cloud_engine.iter().map(|spec| {
+                    (
+                        SubnetKind::CloudEngine,
+                        spec.get_subnet_admins(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2754,11 +2804,12 @@ impl PocketIc {
                 let verified_app = subnet_configs.verified_application.iter().map(|spec| {
                     (
                         SubnetKind::VerifiedApplication,
+                        None,
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
                 });
-                sys.chain(app).chain(verified_app)
+                sys.chain(app).chain(cloud_engine).chain(verified_app)
             };
 
             let mut all_subnets: Vec<_> = fixed_range_subnets
@@ -2770,14 +2821,15 @@ impl PocketIc {
             // so that their canister ranges do not conflict with canister ranges
             // of fresh subnets (which are more flexible)
             all_subnets.sort_by(
-                |(_, a, _): &(_, Option<PathBuf>, _), (_, b, _): &(_, Option<PathBuf>, _)| {
+                |(_, _, a, _): &(_, _, Option<PathBuf>, _),
+                 (_, _, b, _): &(_, _, Option<PathBuf>, _)| {
                     a.is_none().cmp(&b.is_none())
                 },
             );
 
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
-            for (subnet_kind, subnet_state_dir, instruction_config) in all_subnets {
+            for (subnet_kind, subnet_admins, subnet_state_dir, instruction_config) in all_subnets {
                 let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
@@ -2893,6 +2945,9 @@ impl PocketIc {
                     subnet_id,
                     subnet_state_dir,
                     subnet_kind,
+                    subnet_admins: subnet_admins.map(|subnet_admins| {
+                        subnet_admins.into_iter().map(PrincipalId::from).collect()
+                    }),
                     instruction_config,
                     expected_state_time: None,
                 });
@@ -2939,21 +2994,20 @@ impl PocketIc {
             subnet_configs.push(subnet_config_internal);
         }
 
-        let default_effective_canister_id = subnet_configs
-            .iter()
-            .find(|config| config.subnet_kind == SubnetKind::Application)
-            .unwrap_or_else(|| {
-                subnet_configs
-                    .iter()
-                    .find(|config| config.subnet_kind == SubnetKind::VerifiedApplication)
-                    .unwrap_or_else(|| {
-                        subnet_configs
-                            .iter()
-                            .find(|config| config.subnet_kind == SubnetKind::System)
-                            .unwrap_or_else(|| subnet_configs.first().unwrap())
-                    })
-            })
-            .default_effective_canister_id();
+        let default_effective_canister_id = [
+            SubnetKind::Application,
+            SubnetKind::CloudEngine,
+            SubnetKind::VerifiedApplication,
+            SubnetKind::System,
+        ]
+        .iter()
+        .find_map(|kind| {
+            subnet_configs
+                .iter()
+                .find(|config| config.subnet_kind == *kind)
+        })
+        .unwrap_or_else(|| subnet_configs.first().unwrap())
+        .default_effective_canister_id();
 
         subnets.persist_topology(default_effective_canister_id);
 
@@ -3010,6 +3064,7 @@ fn conv_type(inp: rest::SubnetKind) -> SubnetType {
     use rest::SubnetKind::*;
     match inp {
         Application | Fiduciary | SNS => SubnetType::Application,
+        CloudEngine => SubnetType::CloudEngine,
         Bitcoin | II | NNS | System => SubnetType::System,
         VerifiedApplication => SubnetType::VerifiedApplication,
     }
@@ -3019,6 +3074,7 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
     use rest::SubnetKind::*;
     match subnet {
         Application => 13,
+        CloudEngine => 13,
         VerifiedApplication => 13,
         Fiduciary => 34,
         SNS => 34,
@@ -3039,7 +3095,7 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
 fn subnet_kind_subnet_id(subnet_kind: SubnetKind) -> Option<SubnetId> {
     use rest::SubnetKind::*;
     match subnet_kind {
-        Application | VerifiedApplication | System => None,
+        Application | CloudEngine | VerifiedApplication | System => None,
         NNS => Some(PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into()),
         II => Some(PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into()),
         Bitcoin => Some(
@@ -3157,6 +3213,7 @@ struct SubnetConfigInfo {
     pub subnet_id: Option<SubnetId>,
     pub subnet_state_dir: Option<PathBuf>,
     pub subnet_kind: SubnetKind,
+    pub subnet_admins: Option<Vec<PrincipalId>>,
     pub instruction_config: SubnetInstructionConfig,
     pub expected_state_time: Option<SystemTime>,
 }
@@ -5209,6 +5266,7 @@ fn route(
                             subnet_id: Some(subnet_id),
                             subnet_state_dir: None,
                             subnet_kind,
+                            subnet_admins: None,
                             instruction_config,
                             expected_state_time: None,
                         },

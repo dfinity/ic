@@ -4,7 +4,6 @@ use std::fmt::{Debug, Display, Formatter};
 pub mod attestation_package;
 pub mod custom_data;
 mod proto_gen;
-pub mod registry;
 
 #[cfg(test)]
 mod e2e_tests;

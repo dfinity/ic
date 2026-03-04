@@ -135,6 +135,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
+    "//rs/nervous_system/query_instruction_logger",
     "//rs/nns/governance/derive_self_describing",
     "@crate_index//:async-trait",
     "@crate_index//:rust_decimal_macros",

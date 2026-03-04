@@ -1,16 +1,11 @@
-use ic_nns_governance_api::{
-    GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
-};
-use ic_protobuf::registry::replica_version::v1::{
-    GuestLaunchMeasurement as PbGuestLaunchMeasurement,
-    GuestLaunchMeasurementMetadata as PbGuestLaunchMeasurementMetadata,
-    GuestLaunchMeasurements as PbGuestLaunchMeasurements,
-};
+use ic_nns_governance_api as api;
+use ic_protobuf::registry::replica_version::v1 as pb;
 
+#[inline] // Inline keeps the governance canister a few kB smaller
 pub fn convert_guest_launch_measurements_from_pb_to_api(
-    item: PbGuestLaunchMeasurements,
-) -> GuestLaunchMeasurements {
-    GuestLaunchMeasurements {
+    item: pb::GuestLaunchMeasurements,
+) -> api::GuestLaunchMeasurements {
+    api::GuestLaunchMeasurements {
         guest_launch_measurements: Some(
             item.guest_launch_measurements
                 .into_iter()
@@ -20,10 +15,11 @@ pub fn convert_guest_launch_measurements_from_pb_to_api(
     }
 }
 
+#[inline] // Inline keeps the governance canister a few kB smaller
 pub fn convert_guest_launch_measurements_from_api_to_pb(
-    item: GuestLaunchMeasurements,
-) -> PbGuestLaunchMeasurements {
-    PbGuestLaunchMeasurements {
+    item: api::GuestLaunchMeasurements,
+) -> pb::GuestLaunchMeasurements {
+    pb::GuestLaunchMeasurements {
         guest_launch_measurements: item
             .guest_launch_measurements
             .unwrap_or_default()
@@ -34,9 +30,9 @@ pub fn convert_guest_launch_measurements_from_api_to_pb(
 }
 
 fn convert_guest_launch_measurement_from_pb_to_api(
-    item: PbGuestLaunchMeasurement,
-) -> GuestLaunchMeasurement {
-    GuestLaunchMeasurement {
+    item: pb::GuestLaunchMeasurement,
+) -> api::GuestLaunchMeasurement {
+    api::GuestLaunchMeasurement {
         measurement: Some(item.measurement),
         metadata: item
             .metadata
@@ -45,9 +41,9 @@ fn convert_guest_launch_measurement_from_pb_to_api(
 }
 
 fn convert_guest_launch_measurement_from_api_to_pb(
-    item: GuestLaunchMeasurement,
-) -> PbGuestLaunchMeasurement {
-    PbGuestLaunchMeasurement {
+    item: api::GuestLaunchMeasurement,
+) -> pb::GuestLaunchMeasurement {
+    pb::GuestLaunchMeasurement {
         measurement: item.measurement.unwrap_or_default(),
         metadata: item
             .metadata
@@ -56,17 +52,17 @@ fn convert_guest_launch_measurement_from_api_to_pb(
 }
 
 fn convert_guest_launch_measurement_metadata_from_pb_to_api(
-    item: PbGuestLaunchMeasurementMetadata,
-) -> GuestLaunchMeasurementMetadata {
-    GuestLaunchMeasurementMetadata {
+    item: pb::GuestLaunchMeasurementMetadata,
+) -> api::GuestLaunchMeasurementMetadata {
+    api::GuestLaunchMeasurementMetadata {
         kernel_cmdline: item.kernel_cmdline,
     }
 }
 
 fn convert_guest_launch_measurement_metadata_from_api_to_pb(
-    item: GuestLaunchMeasurementMetadata,
-) -> PbGuestLaunchMeasurementMetadata {
-    PbGuestLaunchMeasurementMetadata {
+    item: api::GuestLaunchMeasurementMetadata,
+) -> pb::GuestLaunchMeasurementMetadata {
+    pb::GuestLaunchMeasurementMetadata {
         kernel_cmdline: item.kernel_cmdline,
     }
 }
