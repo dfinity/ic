@@ -218,9 +218,16 @@ pub struct StateV2 {
     /// timestamp is the UNIX epoch time in seconds at the start of the last
     /// considered day, which should correspond to midnight of the current
     /// day.
+    ///
+    /// Deprecated: NNS Governance now computes the 30-day average locally from its own
+    /// `icp_xdr_rate_history` ring buffer and no longer queries this field. Kept in state
+    /// for upgrade safety (removing a serialized field causes data loss on upgrade).
     pub average_icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
 
     /// The recent ICP/XDR rates used to compute the average rate.
+    ///
+    /// Deprecated: NNS Governance maintains its own 365-day ring buffer and no longer
+    /// uses this field. Kept in state for upgrade safety.
     pub recent_icp_xdr_rates: Option<Vec<IcpXdrConversionRate>>,
 
     /// How many cycles 1 XDR is worth.
@@ -260,6 +267,9 @@ pub struct StateV2 {
 
     /// The current maturity modulation in basis points (permyriad), i.e.,
     /// a value of 123 corresponds to 1.23%.
+    ///
+    /// Deprecated: NNS Governance now computes maturity modulation locally and no longer
+    /// queries this field. Kept in state for upgrade safety.
     pub maturity_modulation_permyriad: Option<i32>,
 
     /// Maintains the mapping of subnet types to subnet ids. Users can choose to
@@ -885,6 +895,12 @@ fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
     })
 }
 
+/// Deprecated: NNS Governance now computes the 30-day average ICP/XDR rate locally
+/// from its own ring buffer and no longer calls this endpoint. The endpoint is kept
+/// for backward compatibility with any other callers.
+#[deprecated(
+    note = "NNS Governance computes the average rate locally; this endpoint will be removed in a future release."
+)]
 #[query(hidden = true)]
 fn get_average_icp_xdr_conversion_rate(_: ()) -> IcpXdrConversionRateCertifiedResponse {
     with_state(|state| {
@@ -908,10 +924,8 @@ fn get_average_icp_xdr_conversion_rate(_: ()) -> IcpXdrConversionRateCertifiedRe
     })
 }
 
-/// The function updates the vector of recent rates, which are used to compute
-/// the average rate over `NUM_ICP_XDR_RATES_FOR_AVERAGE` days.
-/// The first received rate for each day is stored, ideally with a timestamp
-/// exactly at the start of the day.
+/// Deprecated: Superseded by `UpdateIcpXdrRatesTask` in NNS Governance, which maintains
+/// its own ring buffer. CMC still calls this to keep the deprecated state fields consistent.
 fn update_recent_icp_xdr_rates(state: &mut State, new_rate: &IcpXdrConversionRate) {
     let day = new_rate.timestamp_seconds / 86_400;
     // The index is the day modulo `ICP_XDR_CONVERSION_RATE_CACHE_SIZE`.
@@ -938,11 +952,9 @@ fn update_recent_icp_xdr_rates(state: &mut State, new_rate: &IcpXdrConversionRat
     }
 }
 
-/// The function returns the average ICP/XDR price over the past
-/// NUM_ICP_XDR_RATES_FOR_AVERAGE` days ending on the day at the provided timestamp in seconds.
-/// If there are no valid data points for
-/// the time between the given UNIX epoch timestamp and
-/// `NUM_DAYS_FOR_ICP_XDR_AVERAGE` in the past, 'None' is returned.
+/// Deprecated: NNS Governance uses `compute_average_icp_xdr_rate` from the shared
+/// `ic_nervous_system_clients` library instead. CMC retains this for its own deprecated
+/// `update_recent_icp_xdr_rates` path.
 fn compute_average_icp_xdr_rate_at_time(
     recent_rates: &[IcpXdrConversionRate],
     time_s: u64,
@@ -1036,6 +1048,12 @@ fn do_set_icp_xdr_conversion_rate(
     })
 }
 
+/// Deprecated: NNS Governance now computes maturity modulation locally from its own
+/// `icp_xdr_rate_history` ring buffer and no longer calls this endpoint. The endpoint
+/// is kept for backward compatibility.
+#[deprecated(
+    note = "NNS Governance computes maturity modulation locally; this endpoint will be removed in a future release."
+)]
 /// The function returns the current maturity modulation in basis points.
 #[query(hidden = true)]
 fn neuron_maturity_modulation() -> Result<i32, String> {
@@ -1044,8 +1062,8 @@ fn neuron_maturity_modulation() -> Result<i32, String> {
     }))
 }
 
-/// The function computes the maturity modulation for the current time/day, based on the given
-/// start-of-day conversion rates.
+/// Deprecated: NNS Governance computes maturity modulation locally via `compute_maturity_modulation_permyriad`
+/// in `update_icp_xdr_rates.rs`. CMC retains this for its own deprecated state.
 fn compute_maturity_modulation(rates: &[IcpXdrConversionRate], time_s: u64) -> i32 {
     let day = time_s / 86_400;
     // Get the rate for four seven-day periods.
@@ -1057,10 +1075,7 @@ fn compute_maturity_modulation(rates: &[IcpXdrConversionRate], time_s: u64) -> i
     (rate1 + rate2 + rate3 + rate4) / 4
 }
 
-/// The function returns the capped relative change of the start-of-day ICP/XDR rate between the
-/// given start day and end day, both in UNIX epoch time, where start day <= end day.
-/// The relative change is capped so that it lies in the interval defined by
-/// `MIN_MATURITY_MODULATION_PERMYRIAD` and `MAX_MATURITY_MODULATION_PERMYRIAD`.
+/// Deprecated: Helper for the deprecated `compute_maturity_modulation` function.
 fn compute_capped_maturity_modulation(
     rates: &[IcpXdrConversionRate],
     start_day: u64,
