@@ -1,7 +1,7 @@
 use crate::external_canister_types::{
     BitcoinCanisterArg, CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
     DogecoinCanisterArg, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
-    RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
+    OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -2105,6 +2105,7 @@ impl PocketIcSubnets {
                   auth_uri: "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
                   auth_scope: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
                   fedcm_uri: Some("".to_string()),
+                  email_verification: Some(OpenIdEmailVerification::Google),
                 }])
             } else {
                 None
@@ -2129,6 +2130,8 @@ impl PocketIcSubnets {
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
+                backend_canister_id: None,
+                backend_origin: None,
             });
             ii_subnet
                 .state_machine
