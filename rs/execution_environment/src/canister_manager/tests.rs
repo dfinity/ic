@@ -7311,12 +7311,12 @@ fn create_canister_as_non_subnet_admin_fails() {
     let test_user = user_test_id(2);
     for (subnet_admins, expected_err_code, expected_err_desc) in [
         (
-            vec![subnet_admin.get()],
+            Some(vec![subnet_admin.get()]),
             ErrorCode::InvalidSubnetAdmin,
             "Only the subnet admins can perform certain actions",
         ),
         (
-            vec![],
+            None,
             ErrorCode::CanisterContractViolation,
             "create_canister cannot be called by a user",
         ),
@@ -7325,10 +7325,11 @@ fn create_canister_as_non_subnet_admin_fails() {
             CanisterCyclesCostSchedule::Normal,
             CanisterCyclesCostSchedule::Free,
         ] {
-            let mut test = ExecutionTestBuilder::new()
-                .with_cost_schedule(cost_schedule)
-                .with_subnet_admins(subnet_admins.clone())
-                .build();
+            let mut builder = ExecutionTestBuilder::new().with_cost_schedule(cost_schedule);
+            if let Some(subnet_admins) = &subnet_admins {
+                builder = builder.with_subnet_admins(subnet_admins.clone());
+            }
+            let mut test = builder.build();
 
             test.set_user_id(test_user);
 
