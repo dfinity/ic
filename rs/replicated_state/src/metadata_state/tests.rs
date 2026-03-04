@@ -1041,7 +1041,6 @@ fn sign_with_threshold_context_roundtrip() {
                     derivation_path: Arc::new(vec![]),
                     pseudo_random_id: [1; 32],
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: None,
                     nonce: Some([3; 32]),
                 },
             );

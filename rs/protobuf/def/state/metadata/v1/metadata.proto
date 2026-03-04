@@ -107,8 +107,10 @@ message SignWithThresholdContext {
   repeated bytes derivation_path_vec = 3;
   bytes pseudo_random_id = 4;
   uint64 batch_time = 5;
-  optional uint64 pre_signature_id = 6;
-  optional uint64 height = 7;
+  reserved 6;
+  reserved "pre_signature_id";
+  reserved 7;
+  reserved "height";
   optional bytes nonce = 8;
 }
 

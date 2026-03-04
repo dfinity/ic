@@ -275,7 +275,6 @@ mod tests {
             pseudo_random_id: [id as u8; 32],
             derivation_path: Arc::new(vec![]),
             batch_time: UNIX_EPOCH,
-            matched_pre_signature: None,
             nonce: None,
         };
 
@@ -313,7 +312,6 @@ mod tests {
         expected_id: u64,
         expected_height: Height,
     ) {
-        assert!(context.matched_pre_signature.is_none());
         match &context.args {
             ThresholdArguments::Ecdsa(args) => {
                 let pre_sig = args.pre_signature.clone().unwrap();
