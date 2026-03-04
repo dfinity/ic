@@ -22,11 +22,15 @@ fn create_populated_store(capacity: u64, message_len: u64) -> LogMemoryStore {
     let log_message = vec![b'a'; len];
 
     let mut idx = 0;
-    let mut logs_written = 0;
-    while logs_written <= capacity as usize {
+    let mut total_size = 0;
+    while total_size < capacity as usize {
         let mut delta = CanisterLog::new_delta_with_next_index(idx, TEST_DELTA_LOG_CAPACITY);
         delta.add_record(idx, log_message.clone());
-        logs_written += LogMemoryStore::estimate_storage_size(&delta);
+        let added_size = LogMemoryStore::estimate_storage_size(&delta);
+        if added_size == 0 {
+            break;
+        }
+        total_size += added_size;
         idx += 1;
         store.append_delta_log(&mut delta);
     }
@@ -67,19 +71,17 @@ fn run_bench_resize<M: criterion::measurement::Measurement>(
 pub fn log_memory_store_resize_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("log_memory_store_resize");
 
-    //for message_len in [1, 10, 100, 1_000, 10_000] {
-    for message_len in [0] {
-        run_bench_resize(
-            &mut group,
-            &format!("from:2MiB/to:-1/msg:{message_len}"),
-            (2 * MIB, 2 * MIB - 1, message_len),
-        );
-        run_bench_resize(
-            &mut group,
-            &format!("from:-1/to:2MiB/msg:{message_len}"),
-            (2 * MIB - 1, 2 * MIB, message_len),
-        );
-    }
+    let message_len = 0;
+    run_bench_resize(
+        &mut group,
+        &format!("from:2MiB/to:-1/msg:{message_len}"),
+        (2 * MIB, 2 * MIB - 1, message_len),
+    );
+    run_bench_resize(
+        &mut group,
+        &format!("from:-1/to:2MiB/msg:{message_len}"),
+        (2 * MIB - 1, 2 * MIB, message_len),
+    );
 }
 
 // --- Records benchmarks ---
@@ -121,6 +123,6 @@ pub fn log_memory_store_records_benchmark(c: &mut Criterion) {
 criterion_group!(
     benchmarks,
     log_memory_store_resize_benchmark,
-    //log_memory_store_records_benchmark
+    log_memory_store_records_benchmark
 );
 criterion_main!(benchmarks);
