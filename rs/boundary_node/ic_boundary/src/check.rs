@@ -12,7 +12,6 @@ use candid::Principal;
 use derive_new::new;
 use http::Method;
 use ic_agent::Agent;
-use ic_agent::hash_tree::{HashTree, HashTreeNode, Label, SubtreeLookupResult};
 use ic_bn_lib_common::traits::{Run, http::Client};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
@@ -819,8 +818,8 @@ pub trait CertifiedMembershipFetcher: Send + Sync {
     ) -> Result<HashSet<Principal>, Error>;
 }
 
-/// Implementation that uses the IC Agent to query the subnet's read_state endpoint
-/// and extracts the set of node Principals from the certified state tree.
+/// Implementation that uses the IC Agent's `fetch_subnet_by_id` to retrieve
+/// the certified node membership from the subnet's state tree.
 #[derive(new)]
 pub struct CertifiedMembershipFetcherImpl {
     agent: Agent,
@@ -832,64 +831,19 @@ impl CertifiedMembershipFetcher for CertifiedMembershipFetcherImpl {
         &self,
         subnet_id: Principal,
     ) -> Result<HashSet<Principal>, Error> {
-        let paths: Vec<Vec<Label<Vec<u8>>>> = vec![vec![
-            Label::from("subnet"),
-            Label::from(subnet_id.as_slice()),
-            Label::from("node"),
-        ]];
-
-        let certificate = self
+        let subnet = self
             .agent
-            .read_subnet_state_raw(paths, subnet_id)
+            .fetch_subnet_by_id(&subnet_id)
             .await
-            .map_err(|e| anyhow::anyhow!("read_state failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("fetch_subnet_by_id failed: {e}"))?;
 
-        extract_node_ids_from_tree(&certificate.tree, subnet_id)
-    }
-}
+        let members: HashSet<Principal> = subnet.iter_nodes().collect();
 
-/// Extracts the set of node Principals from the `subnet/<id>/node` subtree of a certified state tree.
-fn extract_node_ids_from_tree(
-    tree: &HashTree<Vec<u8>>,
-    subnet_id: Principal,
-) -> Result<HashSet<Principal>, Error> {
-    let node_subtree =
-        match tree.lookup_subtree(&[b"subnet" as &[u8], subnet_id.as_slice(), b"node"]) {
-            SubtreeLookupResult::Found(subtree) => subtree,
-            SubtreeLookupResult::Absent => {
-                anyhow::bail!("Node subtree absent in certificate");
-            }
-            SubtreeLookupResult::Unknown => {
-                anyhow::bail!("Node subtree unknown/pruned in certificate");
-            }
-        };
-
-    let mut members = HashSet::new();
-    collect_node_ids(node_subtree.as_ref(), &mut members);
-
-    if members.is_empty() {
-        anyhow::bail!("Certificate contained no node members");
-    }
-
-    Ok(members)
-}
-
-/// Recursively walk the tree collecting top-level Labeled keys as node Principals.
-fn collect_node_ids(tree: &HashTreeNode<Vec<u8>>, members: &mut HashSet<Principal>) {
-    match tree {
-        HashTreeNode::Labeled(label, _) => match Principal::try_from_slice(label.as_bytes()) {
-            Ok(id) => {
-                members.insert(id);
-            }
-            Err(e) => {
-                warn!("Unexpected label in node subtree: {e}");
-            }
-        },
-        HashTreeNode::Fork(lr) => {
-            collect_node_ids(&lr.0, members);
-            collect_node_ids(&lr.1, members);
+        if members.is_empty() {
+            anyhow::bail!("Subnet contained no node members");
         }
-        _ => {}
+
+        Ok(members)
     }
 }
 
@@ -903,7 +857,6 @@ pub(crate) mod test {
 
     use arc_swap::ArcSwapOption;
     use candid::Principal;
-    use ic_agent::hash_tree::{Label, empty, fork, label, leaf};
     use ic_registry_subnet_type::SubnetType;
 
     use super::*;
@@ -1323,51 +1276,4 @@ pub(crate) mod test {
         Ok(())
     }
 
-    fn build_node_tree(subnet_id: Principal, node_ids: &[Principal]) -> HashTree<Vec<u8>> {
-        let node_subtree: HashTree<Vec<u8>> = match node_ids.len() {
-            0 => empty(),
-            1 => label(Label::from(node_ids[0].as_slice()), leaf(vec![1])),
-            _ => {
-                let mut tree = fork(
-                    label(Label::from(node_ids[0].as_slice()), leaf(vec![1])),
-                    label(Label::from(node_ids[1].as_slice()), leaf(vec![1])),
-                );
-                for id in &node_ids[2..] {
-                    tree = fork(tree, label(Label::from(id.as_slice()), leaf(vec![1])));
-                }
-                tree
-            }
-        };
-
-        label(
-            "subnet",
-            label(
-                Label::from(subnet_id.as_slice()),
-                label("node", node_subtree),
-            ),
-        )
-    }
-
-    #[test]
-    fn test_extract_node_ids_happy_path() {
-        let subnet_id = subnet_test_id(0).get().0;
-        let ids = vec![node_id(0), node_id(1), node_id(2)];
-        let tree = build_node_tree(subnet_id, &ids);
-
-        let result = extract_node_ids_from_tree(&tree, subnet_id).unwrap();
-        assert_eq!(result.len(), 3);
-        for id in &ids {
-            assert!(result.contains(id));
-        }
-    }
-
-    #[test]
-    fn test_extract_node_ids_empty_subtree() {
-        let subnet_id = subnet_test_id(0).get().0;
-        let tree = build_node_tree(subnet_id, &[]);
-
-        let result = extract_node_ids_from_tree(&tree, subnet_id);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no node members"));
-    }
 }
