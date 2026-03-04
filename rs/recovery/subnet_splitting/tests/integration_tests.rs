@@ -58,7 +58,7 @@ fn load_metrics_e2e_test() {
             state_machine.as_ref(),
             other_state_machine.as_ref(),
             /*canisters_count=*/ 50,
-            &logger,
+            logger,
         );
         info!(logger, "Creating a checkpoint");
         state_machine.checkpointed_tick();
