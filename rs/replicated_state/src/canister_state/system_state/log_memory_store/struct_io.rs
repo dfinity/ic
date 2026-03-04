@@ -250,16 +250,16 @@ impl StructIO {
         let len = MemorySize::new(N as u64);
         let remaining = Self::remaining(position, capacity);
         if len <= remaining {
-            // No wrap.
-            let (bytes, _addr) = self.read_raw_vec(offset + position, len);
-            result.copy_from_slice(&bytes);
+            // No wrap — read directly into stack array
+            self.buffer
+                .read(&mut result, (offset + position).get() as usize);
         } else {
-            // Wraps around.
-            let first_part_size = remaining.get() as usize;
-            let (first_part, _addr) = self.read_raw_vec(offset + position, remaining);
-            result[..first_part_size].copy_from_slice(&first_part);
-            let (second_part, _addr) = self.read_raw_vec(offset, len - remaining);
-            result[first_part_size..].copy_from_slice(&second_part);
+            // Wraps around — two reads into slices of the stack array
+            let split = remaining.get() as usize;
+            self.buffer
+                .read(&mut result[..split], (offset + position).get() as usize);
+            self.buffer
+                .read(&mut result[split..], offset.get() as usize);
         }
         (result, (position + len) % capacity)
     }
