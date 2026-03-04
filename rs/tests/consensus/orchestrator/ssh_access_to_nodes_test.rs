@@ -269,7 +269,7 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     let no_key_payload = get_setsubnetoperationallevelpayload_with_keys(
         None,
         None,
-        Some((unassigned_node.node_id, vec![])),
+        Some(vec![(unassigned_node.node_id, vec![])]),
     );
     block_on(set_subnet_operational_level(
         nns_node.get_public_url(),
@@ -495,6 +495,10 @@ fn updating_recovery_does_not_remove_recovery_and_backup_keys(env: TestEnv) {
         None,
         Some(vec![(app_node.node_id, vec![recovery_public_key])]),
     );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload2,
+    ));
 
     // Check that the recovery key can authenticate now and the previous keys can still
     // authenticate too.
@@ -552,7 +556,8 @@ fn can_add_max_number_of_keys(env: TestEnv) {
     ));
 
     // Also do that for unassigned nodes
-    let payload_for_the_unassigned = get_updatesshreadonlyaccesskeyspayload(vec![public_key; 50]);
+    let payload_for_the_unassigned =
+        get_updatesshreadonlyaccesskeyspayload(vec![public_key.clone(); 50]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload_for_the_unassigned,
@@ -562,7 +567,7 @@ fn can_add_max_number_of_keys(env: TestEnv) {
         None,
         Some(vec![(
             unassigned_node.node_id,
-            vec![public_key.clone(); MAX_NUM_SSH_KEYS],
+            vec![public_key; MAX_NUM_SSH_KEYS],
         )]),
     );
     block_on(set_subnet_operational_level(
@@ -616,7 +621,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
 
     // Also do that for unassigned nodes
     let readonly_payload_for_the_unassigned =
-        get_updatesshreadonlyaccesskeyspayload(vec![public_key; MAX_NUM_SSH_KEYS + 1]);
+        get_updatesshreadonlyaccesskeyspayload(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]);
     block_on(fail_updating_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         readonly_payload_for_the_unassigned,
@@ -626,7 +631,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
         None,
         Some(vec![(
             unassigned_node.node_id,
-            vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1],
+            vec![public_key; MAX_NUM_SSH_KEYS + 1],
         )]),
     );
     block_on(fail_to_set_subnet_operational_level(
@@ -660,7 +665,7 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     let payload = get_setsubnetoperationallevelpayload_with_keys(
         Some(app_subnet_id),
         None,
-        Some(vec![(app_node.node_id, vec![recovery_public_key])]),
+        Some(vec![(app_node.node_id, vec![recovery_public_key.clone()])]),
     );
     block_on(set_subnet_operational_level(
         nns_node.get_public_url(),
@@ -677,10 +682,7 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     let payload = get_setsubnetoperationallevelpayload_with_keys(
         None,
         None,
-        Some(vec![(
-            unassigned_node.node_id,
-            vec![recovery_public_key.clone()],
-        )]),
+        Some(vec![(unassigned_node.node_id, vec![recovery_public_key])]),
     );
     block_on(set_subnet_operational_level(
         nns_node.get_public_url(),
