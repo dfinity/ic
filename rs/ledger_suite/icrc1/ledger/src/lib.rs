@@ -595,11 +595,19 @@ pub struct Ledger {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct FeatureFlags {
     pub icrc2: bool,
+    /// Enable the ICRC-152 privileged supply-change endpoints (`icrc152_mint`,
+    /// `icrc152_burn`), callable only by ledger controllers.  Defaults to
+    /// `false`; must be explicitly opted in via `InitArgs` or `UpgradeArgs`.
+    #[serde(default)]
+    pub icrc152: bool,
 }
 
 impl FeatureFlags {
     const fn const_default() -> Self {
-        Self { icrc2: true }
+        Self {
+            icrc2: true,
+            icrc152: false,
+        }
     }
 }
 
