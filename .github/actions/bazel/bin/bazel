@@ -22,7 +22,12 @@ if [ -n "${BAZEL_ACTION_BAZEL_WRAPPED:-}" ]; then
 fi
 export BAZEL_ACTION_BAZEL_WRAPPED="1"
 
-startup_options=( ${STARTUP_OPTIONS:-} )
+if [ -n "${STARTUP_OPTIONS:-}" ]; then
+    # Use read to split into array properly
+    IFS=' ' read -r -a startup_options <<< "$STARTUP_OPTIONS"
+else
+    startup_options=()
+fi
 
 # Basic argument parsing, just making sure startup options are not
 # used (because we can't easily parse e.g. `bazel --some_key some-val build :target`
