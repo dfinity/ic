@@ -589,6 +589,15 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .signature_request_contexts()
             .iter()
             .flat_map(|(callback_id, context)| {
+                if let Some(pre_sig_id) = context.matched_pre_signature {
+                    warn!(
+                        every_n_seconds => 15,
+                        self.log,
+                        "Context {:?}, is still paired with a pre-signature ID {:?}",
+                        callback_id,
+                        pre_sig_id
+                    );
+                }
                 context.height().map(|height| RequestId {
                     callback_id: *callback_id,
                     height,
@@ -631,7 +640,7 @@ impl ThresholdSigner for ThresholdSignerImpl {
     }
 }
 
-pub(crate) trait ThresholdSignatureBuilder {
+pub(crate) trait ThresholdSignatureBuilder: Send + Sync {
     /// Returns the signature for the given context, if it can be successfully
     /// built from the current sig shares in the IDKG pool
     fn get_completed_signature(
@@ -1892,7 +1901,7 @@ mod tests {
                     pseudo_random_id: [1; 32],
                     derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: Some((pre_sig_id, req_id.height)),
+                    matched_pre_signature: None,
                     nonce: Some(nonce),
                 };
 
@@ -2022,7 +2031,7 @@ mod tests {
                     pseudo_random_id: [1; 32],
                     derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: Some((pre_sig_id, req_id.height)),
+                    matched_pre_signature: None,
                     nonce: Some(nonce),
                 };
 

@@ -40,14 +40,14 @@ use ic_consensus_system_test_subnet_recovery::utils::{
     break_nodes, node_with_highest_certification_share_height,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
-use ic_nested_nns_recovery_common::SetupConfig;
+use ic_nested_nns_recovery_common::{NNS_RECOVERY_VM_RESOURCES, SetupConfig};
 use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
+use ic_testnet_mainnet_nns::MAINNET_NODE_VM_RESOURCES;
 use slog::{info, warn};
 use std::time::Duration;
 
@@ -62,6 +62,11 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
+    let vm_resources = if use_mainnet_state {
+        MAINNET_NODE_VM_RESOURCES.or(&NNS_RECOVERY_VM_RESOURCES);
+    } else {
+        NNS_RECOVERY_VM_RESOURCES
+    };
     ic_nested_nns_recovery_common::setup(
         env.clone(),
         SetupConfig {
@@ -69,6 +74,7 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
             use_mainnet_state,
             subnet_size,
             dkg_interval,
+            nested_nodes_vm_resources: vm_resources,
         },
     );
 }

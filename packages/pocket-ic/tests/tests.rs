@@ -1,5 +1,6 @@
 use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
+use ic_agent::Agent;
 use ic_certification::Label;
 use ic_management_canister_types::{
     Bip341, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
@@ -8,14 +9,16 @@ use ic_management_canister_types::{
 };
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
+use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::{
     DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
     PocketIcState, RejectCode, StartServerParams, Time,
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
-        CanisterIdRange, CreateInstanceResponse, HttpGatewayDetails, HttpsConfig, IcpFeatures,
-        IcpFeaturesConfig, InitialTime, InstanceConfig, InstanceHttpGatewayConfig,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
+        CanisterIdRange, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayDetails,
+        HttpsConfig, IcpFeatures, IcpFeaturesConfig, InitialTime, InstanceConfig,
+        InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetConfigSet, SubnetKind, SubnetSpec,
     },
     nonblocking::PocketIc as PocketIcAsync,
     query_candid, start_server, update_candid,
@@ -2827,6 +2830,7 @@ fn with_http_gateway_config_but_no_auto_progress() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
@@ -2901,6 +2905,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_server_url(server_url.clone())
@@ -2982,6 +2987,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let auto_progress_config = AutoProgressConfig {
         artificial_delay_ms: None,
@@ -3027,6 +3033,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_server_url(server_url.clone())
@@ -3097,6 +3104,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
             cert_path: "".to_string(),
             key_path: "".to_string(),
         }),
+        domain_custom_provider_local_file: None,
     };
     let subnet_config_set = SubnetConfigSet {
         application: 1,
@@ -3150,6 +3158,7 @@ fn canister_not_found() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
@@ -3276,4 +3285,67 @@ fn mainnet_nns_subnet_id() {
         Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap()
     );
+}
+
+#[tokio::test]
+async fn cloud_engine_with_subnet_admins() {
+    // Create a PocketIC instance with a single (cloud) engine.
+    let admin = Principal::anonymous();
+    let subnet_spec = SubnetSpec::default().with_subnet_admins(vec![admin]);
+    let config = ExtendedSubnetConfigSet {
+        cloud_engine: vec![subnet_spec],
+        ..Default::default()
+    };
+    let mut pic = PocketIcBuilder::new_with_config(config).build_async().await;
+
+    // Derive the engine's subnet ID and an effective canister ID for canister creation.
+    let topology = pic.topology().await;
+    let cloud_engine = topology.get_cloud_engines()[0];
+    let config = topology.subnet_configs.get(&cloud_engine).unwrap();
+    let effective_canister_id: Principal = config.canister_ranges[0].start.clone().into();
+
+    // Create an IC agent to interact with the (live) PocketIC instance.
+    let url = pic.make_live(None).await;
+    let agent = Agent::builder().with_url(url).build().unwrap();
+    agent.fetch_root_key().await.unwrap();
+
+    // Create a canister on the engine via the IC agent.
+    let mgr = ManagementCanister::create(&agent);
+    let canister_id: Principal = mgr
+        .create_canister()
+        .with_effective_canister_id(effective_canister_id)
+        .await
+        .unwrap()
+        .0;
+
+    // Check that the canister has been deployed to the engine
+    // and has zero balance.
+    assert_eq!(topology.get_subnet(canister_id).unwrap(), cloud_engine);
+    assert_eq!(pic.cycle_balance(canister_id).await, 0);
+
+    // The canister can be installed on an engine even if it has zero balance.
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None)
+        .await;
+}
+
+#[test]
+fn cloud_engine_default_effective_canister_id() {
+    // Create a PocketIC instance with a single (cloud) engine and NNS subnet.
+    let admin = Principal::anonymous();
+    let subnet_spec = SubnetSpec::default().with_subnet_admins(vec![admin]);
+    let config = ExtendedSubnetConfigSet {
+        nns: Some(SubnetSpec::default()),
+        cloud_engine: vec![subnet_spec],
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new_with_config(config).build();
+
+    // Derive the engine's subnet ID and an effective canister ID for canister creation.
+    let topology = pic.topology();
+    let cloud_engine = topology.get_cloud_engines()[0];
+    let config = topology.subnet_configs.get(&cloud_engine).unwrap();
+    let effective_canister_id: Principal = config.canister_ranges[0].start.clone().into();
+    let default_effective_canister_id: Principal =
+        topology.default_effective_canister_id.clone().into();
+    assert_eq!(effective_canister_id, default_effective_canister_id);
 }

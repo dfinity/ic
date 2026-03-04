@@ -558,12 +558,15 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .map(CanisterCyclesCostSchedulePb::from)
                 .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
                 as i32,
+
             subnet_admins: val
                 .subnet_admins
                 .unwrap_or_default()
                 .into_iter()
                 .map(PrincipalIdPb::from)
                 .collect(),
+
+            recalled_replica_version_ids: vec![],
         }
     }
 }
