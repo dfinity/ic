@@ -7302,28 +7302,29 @@ fn create_canister_as_subnet_admin_fails_on_normal_cost_schedule() {
     let err = test
         .subnet_message(Method::CreateCanister, create_canister_args.encode())
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesForCreateCanister);
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains("create_canister cannot be called by a user")
+    );
 }
 
 #[test]
 fn create_canister_as_non_subnet_admin_fails() {
     let subnet_admin = user_test_id(1);
     let test_user = user_test_id(2);
-    for (subnet_admins, expected_err_code, expected_err_desc) in [
-        (
-            vec![subnet_admin.get()],
-            ErrorCode::InvalidSubnetAdmin,
-            "Only the subnet admins can perform certain actions",
-        ),
-        (
-            vec![],
-            ErrorCode::CanisterContractViolation,
-            "create_canister cannot be called by a user",
-        ),
-    ] {
-        for cost_schedule in [
-            CanisterCyclesCostSchedule::Normal,
-            CanisterCyclesCostSchedule::Free,
+    for subnet_admins in [vec![subnet_admin.get()], vec![]] {
+        for (cost_schedule, expected_err_code, expected_err_desc) in [
+            (
+                CanisterCyclesCostSchedule::Normal,
+                ErrorCode::CanisterContractViolation,
+                "create_canister cannot be called by a user",
+            ),
+            (
+                CanisterCyclesCostSchedule::Free,
+                ErrorCode::InvalidSubnetAdmin,
+                "Only the subnet admins can perform certain actions",
+            ),
         ] {
             let mut test = ExecutionTestBuilder::new()
                 .with_cost_schedule(cost_schedule)
@@ -8242,6 +8243,7 @@ fn non_subnet_admin_cannot_perform_subnet_admin_actions_on_canister_but_controll
     let controller = user_test_id(1);
     let subnet_admin = user_test_id(2);
     let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .with_subnet_admins(vec![subnet_admin.get()])
         .build();
 
@@ -8269,6 +8271,7 @@ fn non_controller_and_non_subnet_admin_cannot_perform_subnet_admin_actions_on_ca
     let controller = user_test_id(1);
     let subnet_admin = user_test_id(2);
     let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .with_subnet_admins(vec![subnet_admin.get()])
         .build();
 
@@ -8359,6 +8362,7 @@ fn non_controller_and_non_subnet_admin_cannot_perform_subnet_admin_actions_on_ca
 fn subnet_admin_can_perform_actions_on_canister() {
     let subnet_admin = user_test_id(42);
     let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .with_subnet_admins(vec![subnet_admin.get()])
         .build();
 
