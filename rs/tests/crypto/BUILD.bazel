@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-certification",
     "@crate_index//:k256",
+    "@crate_index//:leb128",
     "@crate_index//:p256",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
