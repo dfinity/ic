@@ -83,6 +83,7 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
+    "//rs/nns/governance/conversions",
     "//rs/nns/governance/init",
     "//rs/nns/handlers/lifeline/interface",
     "//rs/nns/handlers/root/interface",
