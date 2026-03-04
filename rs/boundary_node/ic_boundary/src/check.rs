@@ -300,9 +300,8 @@ impl SubnetActor {
             token: token_nodes.child_token(),
         };
 
-        let interval = membership_fetch_interval;
         tracker.spawn(async move {
-            membership_actor.run(interval).await;
+            membership_actor.run(membership_fetch_interval).await;
         });
 
         Self {
@@ -468,7 +467,7 @@ impl SubnetActor {
                 // Refresh healthy nodes when membership changes
                 Ok(()) = self.membership_recv.changed() => {
                     let new_members = self.membership_recv.borrow_and_update().clone();
-                    if new_members.as_deref() != self.certified_members.as_deref() {
+                    if new_members != self.certified_members {
                         self.certified_members = new_members;
                         self.update().await;
                     }
@@ -849,6 +848,7 @@ impl CertifiedMembershipFetcher for CertifiedMembershipFetcherImpl {
     }
 }
 
+/// Extracts the set of node Principals from the `subnet/<id>/node` subtree of a certified state tree.
 fn extract_node_ids_from_tree(
     tree: &HashTree<Vec<u8>>,
     subnet_id: Principal,
