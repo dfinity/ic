@@ -146,8 +146,10 @@ bazel_bes() {
     return "$bazel_exitcode"
 }
 
+# creates a directory inside the containers file system, not bind-mounted from the host
+mkdir -p /bazel-output
 startup_options=(
-    --output_base=/tmp/bazel-output
+    --output_base=/bazel-output
 )
 
 # Add the original arguments back
