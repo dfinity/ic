@@ -60,6 +60,7 @@ use registry_canister::{
         },
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
+        do_update_nodes_guestos_version::DeployGuestosToSomeNodes,
         do_update_nodes_hostos_version::{
             DeployHostosToSomeNodes, UpdateNodesHostosVersionPayload,
         },
@@ -588,6 +589,18 @@ fn deploy_hostos_to_some_nodes() {
 #[candid_method(update, rename = "deploy_hostos_to_some_nodes")]
 fn deploy_hostos_to_some_nodes_(payload: DeployHostosToSomeNodes) {
     registry_mut().do_deploy_hostos_to_some_nodes(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update deploy_guestos_to_some_nodes")]
+fn deploy_guestos_to_some_nodes() {
+    check_caller_is_governance_and_log("deploy_guestos_to_some_nodes");
+    over(candid_one, deploy_guestos_to_some_nodes_);
+}
+
+#[candid_method(update, rename = "deploy_guestos_to_some_nodes")]
+fn deploy_guestos_to_some_nodes_(payload: DeployGuestosToSomeNodes) {
+    registry_mut().do_deploy_guestos_to_some_nodes(payload);
     recertify_registry();
 }
 

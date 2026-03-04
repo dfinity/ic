@@ -19,7 +19,7 @@ use {
 pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
     handle: Handle,
     registry_client: Arc<dyn RegistryClient>,
-) -> Option<DiskEncryptionKeyExchangeServerAgent> {
+) -> Option<Arc<DiskEncryptionKeyExchangeServerAgent>> {
     let is_sev_active = is_sev_active().unwrap_or_else(|err| {
         eprintln!("Failed to check if SEV is active, assuming it is not active: {err:?}");
         false
@@ -63,13 +63,13 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
     let sev_firmware_factory =
         Arc::new(|| Ok(Box::new(Firmware::open().context("Could not open SEV firmware")?) as _));
 
-    Some(DiskEncryptionKeyExchangeServerAgent::new(
+    Some(Arc::new(DiskEncryptionKeyExchangeServerAgent::new(
         handle,
         Box::new(LinuxVSockClient::default()),
         sev_firmware_factory,
         trusted_execution_config,
         registry_client,
-    ))
+    )))
 }
 
 /// Non-Linux stub that always returns None.

@@ -230,7 +230,7 @@ pub(crate) struct Upgrade {
     init_time: Instant,
     pub logger: ReplicaLogger,
     node_id: NodeId,
-    disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
+    disk_encryption_key_exchange_agent: Option<Arc<DiskEncryptionKeyExchangeServerAgent>>,
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     pub prepared_upgrade_version: Option<ReplicaVersion>,
     pub orchestrator_data_directory: PathBuf,
@@ -252,7 +252,7 @@ impl Upgrade {
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
         orchestrator_data_directory: PathBuf,
-        disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
+        disk_encryption_key_exchange_agent: Option<Arc<DiskEncryptionKeyExchangeServerAgent>>,
     ) -> Self {
         let init_time = Instant::now();
 
