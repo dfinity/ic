@@ -392,7 +392,9 @@ impl From<CanisterHttpResponseArtifact> for pb::CanisterHttpArtifact {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::exhaustive::ExhaustiveSet;
     use candid::Encode;
+    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 
     /// Tests, whether a roundtrip of protobuf conversions generates the same
     /// `CanisterHttpResponseWithConsensus`
@@ -541,66 +543,13 @@ mod tests {
 
     #[test]
     fn flexible_canister_http_responses_conversion() {
-        let callback_id = CallbackId::new(42);
-        let timeout = Time::from_nanos_since_unix_epoch(5000);
-        let registry_version = RegistryVersion::new(1);
-        let replica_version = ReplicaVersion::default();
+        let rng = &mut ReproducibleRng::new();
+        let flexible_responses_set = FlexibleCanisterHttpResponses::exhaustive_set(rng);
 
-        let flexible_responses = FlexibleCanisterHttpResponses {
-            callback_id,
-            responses: vec![
-                FlexibleCanisterHttpResponseWithProof {
-                    response: CanisterHttpResponse {
-                        id: callback_id,
-                        timeout,
-                        canister_id: crate::CanisterId::from(1),
-                        content: CanisterHttpResponseContent::Success(b"response_a".to_vec()),
-                    },
-                    proof: Signed {
-                        content: CanisterHttpResponseMetadata {
-                            id: callback_id,
-                            timeout,
-                            content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(
-                                vec![10, 11, 12],
-                            )),
-                            registry_version,
-                            replica_version: replica_version.clone(),
-                        },
-                        signature: BasicSignature {
-                            signer: NodeId::from(PrincipalId::new_node_test_id(1)),
-                            signature: BasicSigOf::new(BasicSig(vec![20, 21])),
-                        },
-                    },
-                },
-                FlexibleCanisterHttpResponseWithProof {
-                    response: CanisterHttpResponse {
-                        id: callback_id,
-                        timeout,
-                        canister_id: crate::CanisterId::from(1),
-                        content: CanisterHttpResponseContent::Success(b"response_b".to_vec()),
-                    },
-                    proof: Signed {
-                        content: CanisterHttpResponseMetadata {
-                            id: callback_id,
-                            timeout,
-                            content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(
-                                vec![30, 31, 32],
-                            )),
-                            registry_version,
-                            replica_version,
-                        },
-                        signature: BasicSignature {
-                            signer: NodeId::from(PrincipalId::new_node_test_id(2)),
-                            signature: BasicSigOf::new(BasicSig(vec![40, 41])),
-                        },
-                    },
-                },
-            ],
-        };
-
-        let pb_flex_responses = pb::FlexibleCanisterHttpResponses::from(&flexible_responses);
-        let new_flex_responses =
-            FlexibleCanisterHttpResponses::try_from(pb_flex_responses).unwrap();
-        assert_eq!(flexible_responses, new_flex_responses);
+        for element in flexible_responses_set {
+            let pb_element = pb::FlexibleCanisterHttpResponses::from(&element);
+            let new_element = FlexibleCanisterHttpResponses::try_from(pb_element).unwrap();
+            assert_eq!(element, new_element);
+        }
     }
 }
