@@ -36,38 +36,40 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
     Ok(payload)
 }
 
-pub(crate) fn payload_to_bytes(payload: &CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
-    let message_iterator =
-        payload
-            .timeouts
-            .iter()
-            .map(|timeout| CanisterHttpResponseMessage {
-                message_type: Some(MessageType::Timeout(timeout.get())),
-            })
-            .chain(payload.divergence_responses.iter().map(|response| {
-                CanisterHttpResponseMessage {
-                    message_type: Some(MessageType::DivergenceResponse(
-                        pb::CanisterHttpResponseDivergence::from(response),
+pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
+    let message_iterator = payload
+        .timeouts
+        .into_iter()
+        .map(|timeout| CanisterHttpResponseMessage {
+            message_type: Some(MessageType::Timeout(timeout.get())),
+        })
+        .chain(payload.divergence_responses.into_iter().map(|response| {
+            CanisterHttpResponseMessage {
+                message_type: Some(MessageType::DivergenceResponse(
+                    pb::CanisterHttpResponseDivergence::from(response),
+                )),
+            }
+        }))
+        .chain(
+            payload
+                .responses
+                .into_iter()
+                .map(|response| CanisterHttpResponseMessage {
+                    message_type: Some(MessageType::Response(
+                        pb::CanisterHttpResponseWithConsensus::from(response),
                     )),
-                }
-            }))
-            .chain(
-                payload
-                    .responses
-                    .iter()
-                    .map(|response| CanisterHttpResponseMessage {
-                        message_type: Some(MessageType::Response(
-                            pb::CanisterHttpResponseWithConsensus::from(response),
-                        )),
-                    }),
-            )
-            .chain(payload.flexible_responses.iter().map(|flex_responses| {
-                CanisterHttpResponseMessage {
+                }),
+        )
+        .chain(
+            payload
+                .flexible_responses
+                .into_iter()
+                .map(|flex_responses| CanisterHttpResponseMessage {
                     message_type: Some(MessageType::FlexibleResponses(
                         pb::FlexibleCanisterHttpResponses::from(flex_responses),
                     )),
-                }
-            }));
+                }),
+        );
 
     iterator_to_bytes(message_iterator, max_size)
 }
