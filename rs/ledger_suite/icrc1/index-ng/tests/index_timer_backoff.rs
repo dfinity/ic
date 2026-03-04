@@ -188,10 +188,8 @@ fn should_adapt_timer_interval_to_ledger_activity() {
         }
     }
 
-    let expected: std::collections::BTreeSet<Duration> =
-        [Duration::from_secs(2), Duration::from_secs(4)]
-            .into_iter()
-            .collect();
+    let expected =
+        std::collections::BTreeSet::from([Duration::from_secs(2), Duration::from_secs(4)]);
     assert_eq!(
         observed_wait_times, expected,
         "With transactions every {} s the timer should oscillate between 2 s and 4 s, \

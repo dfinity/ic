@@ -104,9 +104,9 @@ fn should_install_and_upgrade_with_valid_values() {
     /// Returns true iff the given timer intervals form a valid configuration,
     /// using `default_min` and `default_max` as fallbacks for `None` values.
     fn is_valid_config(intervals: &TimerIntervals, default_min: u64, default_max: u64) -> bool {
-        let eff_min = intervals.min_interval_seconds.unwrap_or(default_min);
-        let eff_max = intervals.max_interval_seconds.unwrap_or(default_max);
-        !(eff_min < 1 || eff_min > eff_max)
+        let effective_min = intervals.min_interval_seconds.unwrap_or(default_min);
+        let effective_max = intervals.max_interval_seconds.unwrap_or(default_max);
+        effective_min >= 1 && effective_min <= effective_max
     }
 
     // Generate optional values in [1, MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS]. This
