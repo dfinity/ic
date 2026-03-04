@@ -5309,6 +5309,7 @@ dependencies = [
 name = "grub"
 version = "1.0.0"
 dependencies = [
+ "clap 4.5.27",
  "ic-sys",
  "regex",
  "strum 0.26.3",
@@ -5868,14 +5869,19 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "command_runner",
  "config_tool",
  "config_types",
  "deterministic_ips",
+ "grub",
+ "ic_device",
  "itertools 0.12.1",
  "manual_guestos_recovery",
  "network",
  "regex",
+ "tempfile",
  "utils",
+ "uuid",
 ]
 
 [[package]]
