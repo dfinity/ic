@@ -58,7 +58,7 @@ fn bitcoin_integration_test() {
         p2p: true,
         ..Conf::default()
     };
-    let bitcoind = Daemon::new(&bitcoind_path, BtcNetwork::Regtest, conf);
+    let bitcoind = Daemon::new(&bitcoind_path, BtcNetwork::Regtest, &conf);
 
     let icp_features = IcpFeatures {
         bitcoin: Some(IcpFeaturesConfig::DefaultConfig),

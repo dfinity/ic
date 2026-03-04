@@ -4,7 +4,10 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/ic_os/boot/grub",
+    "//rs/ic_os/command_runner",
     "//rs/ic_os/config/types:config_types",
+    "//rs/ic_os/device",
     "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/networking/network",
     "//rs/ic_os/os_tools/manual_guestos_recovery",
@@ -13,9 +16,13 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:itertools",
     "@crate_index//:regex",
+    "@crate_index//:uuid",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:tempfile",
+]
 
 MACRO_DEPENDENCIES = []
 
@@ -49,5 +56,8 @@ rust_binary(
 rust_test(
     name = "hostos_tool_test",
     crate = ":hostos_tool",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

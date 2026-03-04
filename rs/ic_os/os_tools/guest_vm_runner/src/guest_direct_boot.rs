@@ -76,6 +76,7 @@ pub async fn prepare_direct_boot(
             PartitionSelector::ByUuid(GRUB_PARTITION_UUID),
             MountOptions {
                 file_system: GRUB_PARTITION_FS,
+                read_only: false, // Partition may need repair
             },
         )
         .context("Could not mount grub partition")?;
@@ -97,6 +98,8 @@ pub async fn prepare_direct_boot(
         boot_alternative = boot_alternative.get_opposite();
     }
 
+    println!("Will boot into {boot_alternative} from {guest_vm_type:?} GuestVM");
+
     // The variable name inside 'boot_args' that contains the kernel command line parameters.
     // Note that this depends on the boot alternative since they contain the root partition and
     // other boot alternative-specific parameters.
@@ -110,6 +113,7 @@ pub async fn prepare_direct_boot(
             PartitionSelector::ByUuid(boot_partition_uuid),
             MountOptions {
                 file_system: BOOT_PARTITION_FS,
+                read_only: false, // Partition may need repair
             },
         )
         .with_context(|| format!("Could not mount boot partition {boot_alternative}"))?;

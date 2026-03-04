@@ -50,6 +50,9 @@ use tracing_subscriber::EnvFilter;
 // wait time between polling requests
 const POLLING_PERIOD_MS: u64 = 10;
 
+// the default value of the `--hard-ttl` CLI option of the PocketIC server
+const HARD_TTL_SECS: u64 = 600; // 10 minutes
+
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
@@ -153,6 +156,7 @@ impl PocketIc {
                 server_binary,
                 reuse: true,
                 ttl: None,
+                hard_ttl: Some(Duration::from_secs(HARD_TTL_SECS)),
             })
             .await;
             server_url
@@ -485,6 +489,7 @@ impl PocketIc {
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
             domains: domains.clone(),
             https_config: https_config.clone(),
+            domain_custom_provider_local_file: None,
         };
         let res = self
             .reqwest_client
