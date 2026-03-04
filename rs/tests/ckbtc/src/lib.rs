@@ -538,7 +538,7 @@ pub async fn install_bitcoin_canister_with_network(
     logger: &Logger,
     network: ic_btc_interface::Network,
 ) -> CanisterId {
-    use ic_btc_interface::{Config, Fees, Flag, Network};
+    use ic_btc_interface::{Fees, Flag, Network};
     info!(&logger, "Installing bitcoin canister ...");
     let canister_id = match network {
         Network::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
