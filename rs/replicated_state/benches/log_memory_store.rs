@@ -11,7 +11,7 @@ const MIB: u64 = 1024 * KIB;
 const TEST_LOG_MEMORY_STORE_FEATURE: FlagStatus = FlagStatus::Enabled;
 const TEST_DELTA_LOG_CAPACITY: usize = 2 * MIB as usize;
 const MAX_LOG_MESSAGE_LEN: u64 = 32 * KIB;
-const LOG_MESSAGE_LEN: u64 = 100;
+const AVG_LOG_MESSAGE_LEN: u64 = 100;
 
 /// Creates a `LogMemoryStore` resized to `capacity` and filled
 /// with log records of `message_len` bytes each.
@@ -71,17 +71,18 @@ fn run_bench_resize<M: criterion::measurement::Measurement>(
 pub fn log_memory_store_resize_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("log_memory_store_resize");
 
-    let message_len = 0;
-    run_bench_resize(
-        &mut group,
-        &format!("from:2MiB/to:-1/msg:{message_len}"),
-        (2 * MIB, 2 * MIB - 1, message_len),
-    );
-    run_bench_resize(
-        &mut group,
-        &format!("from:-1/to:2MiB/msg:{message_len}"),
-        (2 * MIB - 1, 2 * MIB, message_len),
-    );
+    for message_len in [0, AVG_LOG_MESSAGE_LEN] {
+        run_bench_resize(
+            &mut group,
+            &format!("from:2MiB/to:-1/msg:{message_len}"),
+            (2 * MIB, 2 * MIB - 1, message_len),
+        );
+        run_bench_resize(
+            &mut group,
+            &format!("from:-1/to:2MiB/msg:{message_len}"),
+            (2 * MIB - 1, 2 * MIB, message_len),
+        );
+    }
 }
 
 // --- Records benchmarks ---
@@ -89,11 +90,12 @@ pub fn log_memory_store_resize_benchmark(c: &mut Criterion) {
 fn run_bench_records<M: criterion::measurement::Measurement>(
     group: &mut BenchmarkGroup<M>,
     bench_name: &str,
+    message_len: u64,
     filter: Option<FetchCanisterLogsFilter>,
 ) {
     group.bench_function(bench_name, |b| {
         b.iter_batched(
-            || create_populated_store(2 * MIB, LOG_MESSAGE_LEN),
+            || create_populated_store(2 * MIB, message_len),
             |store| {
                 let _records = store.records(filter);
             },
@@ -103,26 +105,29 @@ fn run_bench_records<M: criterion::measurement::Measurement>(
 }
 
 pub fn log_memory_store_records_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("log_memory_store_records");
+    let mut group = c.benchmark_group("log_memory_store_read_records");
 
-    run_bench_records(&mut group, "no_filter", None);
+    run_bench_records(&mut group, "no_filter", 0, None);
 
-    for batch_size in [1, 10, 50, 100, 500, 1000] {
-        let start = 7; // some random offset
-        let end = start + batch_size;
-        run_bench_records(
-            &mut group,
-            &format!("by_idx/{batch_size}"),
-            Some(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange::new(
-                start, end,
-            ))),
-        );
+    for message_len in [0, AVG_LOG_MESSAGE_LEN] {
+        for batch_size in [1, 10, 100, 1000] {
+            let start = 7; // some random offset
+            let end = start + batch_size;
+            run_bench_records(
+                &mut group,
+                &format!("by_idx/msg:{message_len}/batch:{batch_size}"),
+                message_len,
+                Some(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange::new(
+                    start, end,
+                ))),
+            );
+        }
     }
 }
 
 criterion_group!(
     benchmarks,
     log_memory_store_resize_benchmark,
-    //log_memory_store_records_benchmark
+    log_memory_store_records_benchmark
 );
 criterion_main!(benchmarks);
