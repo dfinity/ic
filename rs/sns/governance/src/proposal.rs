@@ -5143,6 +5143,7 @@ Version {
             freezing_threshold: Some(1_000),
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(LogVisibility::Public as i32),
+            snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             wasm_memory_limit: Some(1_000_000_000),
             wasm_memory_threshold: Some(1_000_000),
         })
@@ -5274,6 +5275,7 @@ Payload rendering here"#
                 freezing_threshold: Some(1_000),
                 reserved_cycles_limit: Some(1_000_000_000_000),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
                 wasm_memory_limit: Some(1_000_000_000),
                 wasm_memory_threshold: Some(1_000_000),
             })
@@ -5289,6 +5291,7 @@ Payload rendering here"#
              # Set freezing threshold to: 1000 seconds\n\
              # Set reserved cycles limit to: 1000000000000 \n\
              # Set log visibility to: Public \n\
+             # Set snapshot visibility to: Public \n\
              # Set Wasm memory limit to: 1000000000\n"
         );
     }
