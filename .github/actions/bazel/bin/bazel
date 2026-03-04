@@ -24,7 +24,7 @@ export BAZEL_ACTION_BAZEL_WRAPPED="1"
 
 startup_options=()
 if [ -n "${STARTUP_OPTIONS:-}" ]; then
-    export startup_options=( $STARTUP_OPTIONS )
+    startup_options=( $STARTUP_OPTIONS )
 fi
 
 # Basic argument parsing, just making sure startup options are not
