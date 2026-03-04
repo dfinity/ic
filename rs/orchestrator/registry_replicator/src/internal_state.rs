@@ -604,6 +604,7 @@ mod test {
             chain_key_config: None,
             canister_cycles_cost_schedule: 0,
             subnet_admins: vec![],
+            recalled_replica_version_ids: vec![],
         }
     }
 

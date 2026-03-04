@@ -11,10 +11,3 @@ rsa = { workspace = true }
 sev = { workspace = true }
 sha2 = { workspace = true }
 x509-cert = { workspace = true }
-
-ic-interfaces-registry-mocks = { path = "../../../../interfaces/registry/mocks" }
-ic-protobuf = { path = "../../../../protobuf" }
-ic-registry-keys = { path = "../../../../registry/keys" }
-ic-types = { path = "../../../../types/types" }
-mockall = { workspace = true }
-prost = { workspace = true }
