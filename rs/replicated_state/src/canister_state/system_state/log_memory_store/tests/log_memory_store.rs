@@ -366,8 +366,31 @@ fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
     let bytes_used_before = s.bytes_used();
     let next_idx_before = s.next_idx();
 
-    // Decrease capacity.
-    s.resize_for_testing(big_size - 100);
+    {
+        /*
+        bazel run //rs/replicated_state:replicated_state_test \
+          --test_output=streamed \
+          --test_arg=test_decreasing_capacity_drops_oldest_records_but_preserves_recent
+        */
+        let guard = pprof::ProfilerGuardBuilder::default()
+            .frequency(1000)
+            .build()
+            .unwrap();
+
+        let num_steps = 500;
+        for i in 0..num_steps {
+            // Decrease capacity.
+            s.resize_for_testing(big_size - 100 - i);
+        }
+
+        let report = guard.report().build().unwrap();
+        let file_path = format!(
+            "/home/maksym/dfinity/canister-logs/ic/test_tmp.secret/resize_flamegraph_{num_steps}.svg"
+        );
+        let file = std::fs::File::create(&file_path).unwrap();
+        let _ = report.flamegraph(file);
+        println!("Flamegraph written to {file_path}");
+    }
 
     let byte_capacity_after = s.byte_capacity();
     let bytes_used_after = s.bytes_used();
