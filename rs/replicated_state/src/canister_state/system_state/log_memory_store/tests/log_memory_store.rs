@@ -124,9 +124,9 @@ fn test_memory_usage_after_appending_logs() {
 fn test_memory_usage_after_appending_empty_log_records() {
     // Collect some delta logs with no messages.
     let mut delta = CanisterLog::default_delta();
-    delta.add_record(100, b"".to_vec());
-    delta.add_record(200, b"".to_vec());
-    delta.add_record(300, b"".to_vec());
+    delta.add_record(100, vec![]);
+    delta.add_record(200, vec![]);
+    delta.add_record(300, vec![]);
 
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
@@ -337,7 +337,7 @@ fn test_increasing_capacity_preserves_records() {
     let message_len = 0;
     s.resize_for_testing(big_size - 100); // Initial size is smaller.
 
-    // Append more records than current capacity.
+    // Append records.
     append_deltas(&mut s, 0, big_size, delta_size, message_len);
 
     let bytes_used_before = s.bytes_used();
@@ -359,7 +359,7 @@ fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
     let message_len = 0;
     s.resize_for_testing(big_size); // Initial size is bigger.
 
-    // Append more records than current capacity.
+    // Append records.
     append_deltas(&mut s, 0, big_size, delta_size, message_len);
 
     let byte_capacity_before = s.byte_capacity();
