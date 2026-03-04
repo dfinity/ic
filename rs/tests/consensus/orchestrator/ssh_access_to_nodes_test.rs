@@ -1,13 +1,16 @@
 /* tag::catalog[]
 Title:: SSH Key Management Test
 
-Goal:: Testing the newly-added registry support for readonly and backup SSH key management.
+Goal:: Testing the newly-added registry support for readonly, backup and recovery SSH key management.
 
 Coverage::
-. adding/removing backup keys,
 . adding/removing readonly keys,
-. adding/removing a mixture of both,
-. the max number of keys cannot be exceeded.
+. adding/removing backup keys,
+. adding/removing recovery keys,
+. adding/removing a mixture of them,
+. the max number of keys cannot be exceeded,
+. keys are not removed on restart,
+. keys are removed when leaving a subnet.
 
 end::catalog[] */
 
@@ -17,11 +20,12 @@ use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
         AuthMean, SshSession, assert_authentication_fails, assert_authentication_works,
-        fail_to_update_subnet_record, fail_updating_ssh_keys_for_all_unassigned_nodes,
-        generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
-        get_updatesubnetpayload_with_keys, update_ssh_keys_for_all_unassigned_nodes,
-        update_subnet_record, wait_until_authentication_fails,
-        wait_until_authentication_is_granted,
+        fail_to_set_subnet_operational_level, fail_to_update_subnet_record,
+        fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
+        get_setsubnetoperationallevelpayload_with_keys, get_updatesshreadonlyaccesskeyspayload,
+        get_updatesubnetpayload_with_keys, set_subnet_operational_level,
+        update_ssh_keys_for_all_unassigned_nodes, update_subnet_record,
+        wait_until_authentication_fails, wait_until_authentication_is_granted,
     },
 };
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
@@ -45,6 +49,8 @@ use slog::info;
 use std::{net::IpAddr, time::Duration};
 
 const ORCHESTRATOR_TASK_CHECK_INTERVAL: Duration = Duration::from_secs(10);
+
+const SSH_USERS: [&str; 5] = ["root", "admin", "readonly", "backup", "recovery"];
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -90,32 +96,38 @@ fn fetch_nodes_ips(topo_snapshot: TopologySnapshot) -> (IpAddr, IpAddr, IpAddr) 
     (nns_node_ip, app_node_ip, unassigned_node_ip)
 }
 
-fn root_cannot_authenticate(env: TestEnv) {
+fn ssh_users_cannot_authenticate_with_easy_password(env: TestEnv) {
     let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
 
-    let mean = AuthMean::Password("root".to_string());
-    assert_authentication_fails(&nns_node_ip, "root", &mean);
-    assert_authentication_fails(&app_node_ip, "root", &mean);
-    assert_authentication_fails(&unassigned_node_ip, "root", &mean);
+    for user in SSH_USERS {
+        let mean = AuthMean::Password(user.to_string());
+        assert_authentication_fails(&nns_node_ip, user, &mean);
+        assert_authentication_fails(&app_node_ip, user, &mean);
+        assert_authentication_fails(&unassigned_node_ip, user, &mean);
+    }
 }
 
-fn readonly_cannot_authenticate_without_a_key(env: TestEnv) {
+fn ssh_users_cannot_authenticate_without_a_key(env: TestEnv) {
     let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
 
-    let mean = AuthMean::None;
-    assert_authentication_fails(&nns_node_ip, "readonly", &mean);
-    assert_authentication_fails(&app_node_ip, "readonly", &mean);
-    assert_authentication_fails(&unassigned_node_ip, "readonly", &mean);
+    for user in SSH_USERS {
+        let mean = AuthMean::None;
+        assert_authentication_fails(&nns_node_ip, user, &mean);
+        assert_authentication_fails(&app_node_ip, user, &mean);
+        assert_authentication_fails(&unassigned_node_ip, user, &mean);
+    }
 }
 
-fn readonly_cannot_authenticate_with_random_key(env: TestEnv) {
+fn ssh_users_cannot_authenticate_with_random_key(env: TestEnv) {
     let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
 
-    let (private_key, _public_key) = generate_key_strings();
-    let mean = AuthMean::PrivateKey(private_key);
-    assert_authentication_fails(&nns_node_ip, "readonly", &mean);
-    assert_authentication_fails(&app_node_ip, "readonly", &mean);
-    assert_authentication_fails(&unassigned_node_ip, "readonly", &mean);
+    for user in SSH_USERS {
+        let (private_key, _public_key) = generate_key_strings();
+        let mean = AuthMean::PrivateKey(private_key);
+        assert_authentication_fails(&nns_node_ip, user, &mean);
+        assert_authentication_fails(&app_node_ip, user, &mean);
+        assert_authentication_fails(&unassigned_node_ip, user, &mean);
+    }
 }
 
 fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
@@ -139,9 +151,9 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
     // Orchestrator updates checks if there is a new version of the registry every
-    // 10 seconds. If so, it updates first the readonly and then the backup
-    // keys. If backup key can authenticate we know that the readonly keys are
-    // already updated too.
+    // 10 seconds. If so, it updates first the readonly, then the backup and then
+    // the recovery keys. If recovery key can authenticate we know that the
+    // readonly and backup keys are already updated too.
     info!(logger, "Waiting for backup authentication to be granted...");
     wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
     info!(
@@ -163,6 +175,50 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
 }
 
+fn keys_in_the_node_record_can_be_updated(env: TestEnv) {
+    let logger = env.logger();
+    let (nns_node, app_node, _unassigned_node, app_subnet) =
+        topology_entities(env.topology_snapshot());
+
+    let app_subnet_id = app_subnet.subnet_id;
+    let node_ip: IpAddr = app_node.get_ip_addr();
+
+    info!(logger, "Updating the registry with new pairs of keys...");
+    let (recovery_private_key, recovery_public_key) = generate_key_strings();
+    let payload = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        None,
+        Some(vec![(app_node.node_id, vec![recovery_public_key])]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload,
+    ));
+
+    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
+    // Orchestrator updates checks if there is a new version of the registry every
+    // 10 seconds.
+    info!(
+        logger,
+        "Waiting for recovery authentication to be granted..."
+    );
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean);
+
+    // Clear the keys in the registry
+    let no_key_payload = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        None,
+        Some(vec![(app_node.node_id, vec![])]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        no_key_payload,
+    ));
+
+    // Check that the access for these keys are also removed.
+    wait_until_authentication_fails(&logger, &node_ip, "recovery", &recovery_mean);
+}
+
 fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     let logger = env.logger();
     let (nns_node, _, unassigned_node, _) = topology_entities(env.topology_snapshot());
@@ -171,14 +227,38 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
 
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
+    let (recovery_private_key, recovery_public_key) = generate_key_strings();
     let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
     ));
+    let payload = get_setsubnetoperationallevelpayload_with_keys(
+        None,
+        None,
+        Some(vec![(unassigned_node.node_id, vec![recovery_public_key])]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload,
+    ));
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
-    wait_until_authentication_is_granted(&logger, &node_ip, "readonly", &readonly_mean);
+    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
+    // Orchestrator updates checks if there is a new version of the registry every
+    // 10 seconds. If so, it updates first the readonly, then the backup and then
+    // the recovery keys. If recovery key can authenticate we know that the
+    // readonly and backup keys are already updated too.
+    info!(
+        logger,
+        "Waiting for recovery authentication to be granted..."
+    );
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean);
+    info!(
+        logger,
+        "Readonly authentication should now also be granted."
+    );
+    assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
     // Clear the keys in the registry
     let no_key_payload = get_updatesshreadonlyaccesskeyspayload(vec![]);
@@ -186,9 +266,19 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
         nns_node.get_public_url(),
         no_key_payload,
     ));
+    let no_key_payload = get_setsubnetoperationallevelpayload_with_keys(
+        None,
+        None,
+        Some((unassigned_node.node_id, vec![])),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        no_key_payload,
+    ));
 
     // Check that the access for these keys are also removed.
-    wait_until_authentication_fails(&logger, &node_ip, "readonly", &readonly_mean);
+    wait_until_authentication_fails(&logger, &node_ip, "recovery", &recovery_mean);
+    assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
 }
 
 fn multiple_keys_can_access_one_account(env: TestEnv) {
@@ -205,6 +295,9 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
     let (backup_private_key1, backup_public_key1) = generate_key_strings();
     let (backup_private_key2, backup_public_key2) = generate_key_strings();
     let (backup_private_key3, backup_public_key3) = generate_key_strings();
+    let (recovery_private_key1, recovery_public_key1) = generate_key_strings();
+    let (recovery_private_key2, recovery_public_key2) = generate_key_strings();
+    let (recovery_private_key3, recovery_public_key3) = generate_key_strings();
     let payload = get_updatesubnetpayload_with_keys(
         app_subnet_id,
         Some(vec![
@@ -219,6 +312,22 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
         ]),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
+    let payload = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        None,
+        Some(vec![(
+            app_node.node_id,
+            vec![
+                recovery_public_key1,
+                recovery_public_key2,
+                recovery_public_key3,
+            ],
+        )]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload,
+    ));
 
     let readonly_mean1 = AuthMean::PrivateKey(readonly_private_key1);
     let readonly_mean2 = AuthMean::PrivateKey(readonly_private_key2);
@@ -226,16 +335,25 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
     let backup_mean1 = AuthMean::PrivateKey(backup_private_key1);
     let backup_mean2 = AuthMean::PrivateKey(backup_private_key2);
     let backup_mean3 = AuthMean::PrivateKey(backup_private_key3);
+    let recovery_mean1 = AuthMean::PrivateKey(recovery_private_key1);
+    let recovery_mean2 = AuthMean::PrivateKey(recovery_private_key2);
+    let recovery_mean3 = AuthMean::PrivateKey(recovery_private_key3);
     // Orchestrator updates checks if there is a new version of the registry every
-    // 10 seconds. If so, it updates first the readonly and then the backup
-    // keys. If backup key can authenticate we know that the readonly keys are
-    // already updated too.
-    info!(logger, "Waiting for backup authentication to be granted...");
-    wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean1);
+    // 10 seconds. If so, it updates first the readonly, then the backup and then
+    // the recovery keys. If recovery key can authenticate we know that the
+    // readonly and backup keys are already updated too.
+    info!(
+        logger,
+        "Waiting for recovery authentication to be granted..."
+    );
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean1);
     info!(
         logger,
         "All other authentications should now also be granted."
     );
+    assert_authentication_works(&node_ip, "recovery", &recovery_mean2);
+    assert_authentication_works(&node_ip, "recovery", &recovery_mean3);
+    assert_authentication_works(&node_ip, "backup", &backup_mean1);
     assert_authentication_works(&node_ip, "backup", &backup_mean2);
     assert_authentication_works(&node_ip, "backup", &backup_mean3);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean1);
@@ -253,6 +371,9 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
     let (readonly_private_key2, readonly_public_key2) = generate_key_strings();
     let (readonly_private_key3, readonly_public_key3) = generate_key_strings();
+    let (recovery_private_key1, recovery_public_key1) = generate_key_strings();
+    let (recovery_private_key2, recovery_public_key2) = generate_key_strings();
+    let (recovery_private_key3, recovery_public_key3) = generate_key_strings();
     let payload = get_updatesshreadonlyaccesskeyspayload(vec![
         readonly_public_key1,
         readonly_public_key2,
@@ -262,23 +383,45 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
         nns_node.get_public_url(),
         payload,
     ));
+    let payload = get_setsubnetoperationallevelpayload_with_keys(
+        None,
+        None,
+        Some(vec![(
+            unassigned_node.node_id,
+            vec![
+                recovery_public_key1,
+                recovery_public_key2,
+                recovery_public_key3,
+            ],
+        )]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload,
+    ));
 
     let readonly_mean1 = AuthMean::PrivateKey(readonly_private_key1);
     let readonly_mean2 = AuthMean::PrivateKey(readonly_private_key2);
     let readonly_mean3 = AuthMean::PrivateKey(readonly_private_key3);
+    let recovery_mean1 = AuthMean::PrivateKey(recovery_private_key1);
+    let recovery_mean2 = AuthMean::PrivateKey(recovery_private_key2);
+    let recovery_mean3 = AuthMean::PrivateKey(recovery_private_key3);
     // Orchestrator updates checks if there is a new version of the registry every
-    // 10 seconds. If so, it updates first the readonly and then the backup
-    // keys. If backup key can authenticate we know that the readonly keys are
-    // already updated too.
+    // 10 seconds. If so, it updates first the readonly, then the backup and then
+    // the recovery keys. If recovery key can authenticate we know that the
+    // readonly and backup keys are already updated too.
     info!(
         logger,
-        "Waiting for readonly authentication to be granted..."
+        "Waiting for recovery authentication to be granted..."
     );
-    wait_until_authentication_is_granted(&logger, &node_ip, "readonly", &readonly_mean1);
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean1);
     info!(
         logger,
         "All other authentications should now also be granted."
     );
+    assert_authentication_works(&node_ip, "recovery", &recovery_mean2);
+    assert_authentication_works(&node_ip, "recovery", &recovery_mean3);
+    assert_authentication_works(&node_ip, "readonly", &readonly_mean1);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean2);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
 }
@@ -322,8 +465,65 @@ fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 }
 
-fn can_add_max_number_of_readonly_and_backup_keys(env: TestEnv) {
-    let (nns_node, _, _, app_subnet) = topology_entities(env.topology_snapshot());
+fn updating_recovery_does_not_remove_recovery_and_backup_keys(env: TestEnv) {
+    let logger = env.logger();
+    let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
+
+    let app_subnet_id = app_subnet.subnet_id;
+    let node_ip: IpAddr = app_node.get_ip_addr();
+
+    // Add a readonly and backup keys.
+    let (readonly_private_key, readonly_public_key) = generate_key_strings();
+    let (backup_private_key, backup_public_key) = generate_key_strings();
+    let payload1 = get_updatesubnetpayload_with_keys(
+        app_subnet_id,
+        Some(vec![readonly_public_key]),
+        Some(vec![backup_public_key]),
+    );
+    block_on(update_subnet_record(nns_node.get_public_url(), payload1));
+
+    // Check that the keys can authenticate.
+    let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
+    let backup_mean = AuthMean::PrivateKey(backup_private_key);
+    wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
+    assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+
+    // Now add a recovery key.
+    let (recovery_private_key, recovery_public_key) = generate_key_strings();
+    let payload2 = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        None,
+        Some(vec![(app_node.node_id, vec![recovery_public_key])]),
+    );
+
+    // Check that the recovery key can authenticate now and the previous keys can still
+    // authenticate too.
+    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean);
+    assert_authentication_works(&node_ip, "backup", &backup_mean);
+    assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+
+    // Now send a proposal that only removes the recovery keys.
+    let payload3 = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        None,
+        Some(vec![(app_node.node_id, vec![])]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload3,
+    ));
+
+    // Wait until the recovery key loses its access and ensure previous keys still have
+    // access.
+    wait_until_authentication_fails(&logger, &node_ip, "recovery", &recovery_mean);
+    assert_authentication_works(&node_ip, "backup", &backup_mean);
+    assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+}
+
+fn can_add_max_number_of_keys(env: TestEnv) {
+    let (nns_node, app_node, unassigned_node, app_subnet) =
+        topology_entities(env.topology_snapshot());
 
     let app_subnet_id = app_subnet.subnet_id;
 
@@ -338,6 +538,18 @@ fn can_add_max_number_of_readonly_and_backup_keys(env: TestEnv) {
         nns_node.get_public_url(),
         payload_for_subnet,
     ));
+    let payload_for_assigned_recovery_keys = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        None,
+        Some(vec![(
+            app_node.node_id,
+            vec![public_key.clone(); MAX_NUM_SSH_KEYS],
+        )]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload_for_assigned_recovery_keys,
+    ));
 
     // Also do that for unassigned nodes
     let payload_for_the_unassigned = get_updatesshreadonlyaccesskeyspayload(vec![public_key; 50]);
@@ -345,10 +557,23 @@ fn can_add_max_number_of_readonly_and_backup_keys(env: TestEnv) {
         nns_node.get_public_url(),
         payload_for_the_unassigned,
     ));
+    let payload_for_unassigned_recovery_keys = get_setsubnetoperationallevelpayload_with_keys(
+        None,
+        None,
+        Some(vec![(
+            unassigned_node.node_id,
+            vec![public_key.clone(); MAX_NUM_SSH_KEYS],
+        )]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload_for_unassigned_recovery_keys,
+    ));
 }
 
-fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) {
-    let (nns_node, _, _, app_subnet) = topology_entities(env.topology_snapshot());
+fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
+    let (nns_node, app_node, unassigned_node, app_subnet) =
+        topology_entities(env.topology_snapshot());
     let app_subnet_id = app_subnet.subnet_id;
 
     let (_private_key, public_key) = generate_key_strings();
@@ -375,12 +600,38 @@ fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) {
         backup_payload,
     ));
 
+    // Try to update the registry with MAX_NUM_SSH_KEYS recovery keys.
+    let recovery_payload = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        None,
+        Some(vec![(
+            app_node.node_id,
+            vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1],
+        )]),
+    );
+    block_on(fail_to_set_subnet_operational_level(
+        nns_node.get_public_url(),
+        recovery_payload,
+    ));
+
     // Also do that for unassigned nodes
     let readonly_payload_for_the_unassigned =
         get_updatesshreadonlyaccesskeyspayload(vec![public_key; MAX_NUM_SSH_KEYS + 1]);
     block_on(fail_updating_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         readonly_payload_for_the_unassigned,
+    ));
+    let recovery_payload_for_the_unassigned = get_setsubnetoperationallevelpayload_with_keys(
+        None,
+        None,
+        Some(vec![(
+            unassigned_node.node_id,
+            vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1],
+        )]),
+    );
+    block_on(fail_to_set_subnet_operational_level(
+        nns_node.get_public_url(),
+        recovery_payload_for_the_unassigned,
     ));
 }
 
@@ -396,6 +647,8 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let (backup_private_key, backup_public_key) = generate_key_strings();
+    let (recovery_private_key, recovery_public_key) = generate_key_strings();
+
     info!(logger, "Updating app subnet record...");
     let payload = get_updatesubnetpayload_with_keys(
         app_subnet_id,
@@ -403,34 +656,65 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
         Some(vec![backup_public_key]),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
+    info!(logger, "Updating app node record...");
+    let payload = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        None,
+        Some(vec![(app_node.node_id, vec![recovery_public_key])]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload,
+    ));
+
     info!(logger, "Updating unassigned nodes record...");
     let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
     ));
+    info!(logger, "Updating unassigned node record...");
+    let payload = get_setsubnetoperationallevelpayload_with_keys(
+        None,
+        None,
+        Some(vec![(
+            unassigned_node.node_id,
+            vec![recovery_public_key.clone()],
+        )]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload,
+    ));
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
+    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
     // Orchestrator updates checks if there is a new version of the registry every
-    // 10 seconds. If so, it updates first the readonly and then the backup
-    // keys. If backup key can authenticate we know that the readonly keys are
-    // already updated too.
+    // 10 seconds. If so, it updates first the readonly, then the backup and then
+    // the recovery keys. If recovery key can authenticate we know that the
+    // readonly and backup keys are already updated too.
     info!(
         logger,
-        "Waiting for backup authentication to be granted on app node..."
+        "Waiting for recovery authentication to be granted on app node..."
     );
-    wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean);
     info!(
         logger,
-        "Readonly authentication should now also be granted on app node."
+        "Readonly and backup authentication should now also be granted on app node."
     );
+    assert_authentication_works(&node_ip, "backup", &backup_mean);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
     info!(
         logger,
-        "Waiting for readonly authentication to be granted on unassigned node..."
+        "Waiting for recovery authentication to be granted on unassigned node..."
     );
-    wait_until_authentication_is_granted(&logger, &unassigned_node_ip, "readonly", &readonly_mean);
+    wait_until_authentication_is_granted(&logger, &unassigned_node_ip, "recovery", &recovery_mean);
+    info!(
+        logger,
+        "Readonly authentication should now also be granted on unassigned node."
+    );
+    assert_authentication_works(&unassigned_node_ip, "readonly", &readonly_mean);
 
     info!(logger, "Restarting the app node orchestrator...");
     app_node
@@ -448,8 +732,10 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     );
     const CHECK_INTERVAL: Duration = Duration::from_secs(2);
     while !app_node.status_is_healthy().is_ok_and(|healthy| healthy) {
+        assert_authentication_works(&node_ip, "recovery", &recovery_mean);
         assert_authentication_works(&node_ip, "backup", &backup_mean);
         assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+        assert_authentication_works(&unassigned_node_ip, "recovery", &recovery_mean);
         assert_authentication_works(&unassigned_node_ip, "readonly", &readonly_mean);
         // Unassigned nodes do not have backup keys
         assert_authentication_fails(&unassigned_node_ip, "backup", &backup_mean);
@@ -461,8 +747,10 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     // seconds.
     info!(logger, "Checking again for longer to be sure...");
     for _ in 0..((ORCHESTRATOR_TASK_CHECK_INTERVAL.as_secs() + 1) / CHECK_INTERVAL.as_secs()) {
+        assert_authentication_works(&node_ip, "recovery", &recovery_mean);
         assert_authentication_works(&node_ip, "backup", &backup_mean);
         assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+        assert_authentication_works(&unassigned_node_ip, "recovery", &recovery_mean);
         assert_authentication_works(&unassigned_node_ip, "readonly", &readonly_mean);
         // Unassigned nodes do not have backup keys
         assert_authentication_fails(&unassigned_node_ip, "backup", &backup_mean);
@@ -482,26 +770,41 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let (backup_private_key, backup_public_key) = generate_key_strings();
+    let (recovery_private_key, recovery_public_key) = generate_key_strings();
     let payload = get_updatesubnetpayload_with_keys(
         app_subnet_id,
         Some(vec![readonly_public_key]),
         Some(vec![backup_public_key]),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
+    let payload = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        None,
+        Some(vec![(app_node.node_id, vec![recovery_public_key])]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload,
+    ));
     let topology = block_on(topology.block_for_newer_registry_version()).unwrap();
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
+    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
     // Orchestrator updates checks if there is a new version of the registry every
-    // 10 seconds. If so, it updates first the readonly and then the backup
-    // keys. If backup key can authenticate we know that the readonly keys are
-    // already updated too.
-    info!(logger, "Waiting for backup authentication to be granted...");
-    wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
+    // 10 seconds. If so, it updates first the readonly, then the backup and then
+    // the recovery keys. If recovery key can authenticate we know that the
+    // readonly and backup keys are already updated too.
     info!(
         logger,
-        "Readonly authentication should now also be granted."
+        "Waiting for recovery authentication to be granted..."
     );
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean);
+    info!(
+        logger,
+        "Readonly and backup authentication should now also be granted."
+    );
+    assert_authentication_works(&node_ip, "backup", &backup_mean);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
     info!(logger, "Removing the node from its subnet...");
@@ -541,54 +844,57 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
         std::thread::sleep(2 * ORCHESTRATOR_TASK_CHECK_INTERVAL + Duration::from_secs(1));
 
         if SshSession::default()
-            .login(&node_ip, "backup", &backup_mean)
+            .login(&node_ip, "recovery", &recovery_mean)
             .is_err()
         {
             break;
         }
 
-        info!(logger, "Backup authentication still works.");
+        info!(logger, "Recovery authentication still works.");
 
         let earliest_registry_version_in_use = maybe_earliest_registry_version_in_use.expect(
-            "The node kept access to the backup account even though it left the subnet. Indeed, \
+            "The node kept access to the recovery account even though it left the subnet. Indeed, \
             the metrics endpoint is down, so the replica process must have been stopped.",
         );
 
         assert!(
             earliest_registry_version_in_use < registry_version_without_node,
-            "The node kept access to the backup account even though it should have detected by \
+            "The node kept access to the recovery account even though it should have detected by \
             the oldest registry version in use that it left the subnet.",
         );
     }
-    // "readonly" access is removed first, so this must hold
+    // "readonly" and "backup" access are removed first, so these must hold
     assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
+    assert_authentication_fails(&node_ip, "backup", &backup_mean);
 
     // Now that the node has removed its SSH access, it must be that the replica process has been
     // stopped, so the metrics endpoints should be down.
     let maybe_earliest_registry_version_in_use = get_node_earliest_topology_version(&app_node);
     assert!(
         maybe_earliest_registry_version_in_use.is_err(),
-        "The node removed access to the backup account before completely leaving the subnet"
+        "The node removed access to the recovery account before completely leaving the subnet"
     );
 }
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(root_cannot_authenticate))
-        .add_test(systest!(readonly_cannot_authenticate_without_a_key))
-        .add_test(systest!(readonly_cannot_authenticate_with_random_key))
+        .add_test(systest!(ssh_users_cannot_authenticate_with_easy_password))
+        .add_test(systest!(ssh_users_cannot_authenticate_without_a_key))
+        .add_test(systest!(ssh_users_cannot_authenticate_with_random_key))
         .add_test(systest!(keys_in_the_subnet_record_can_be_updated))
+        .add_test(systest!(keys_in_the_node_record_can_be_updated))
         .add_test(systest!(keys_for_unassigned_nodes_can_be_updated))
         .add_test(systest!(multiple_keys_can_access_one_account))
         .add_test(systest!(
             multiple_keys_can_access_one_account_on_unassigned_nodes
         ))
         .add_test(systest!(updating_readonly_does_not_remove_backup_keys))
-        .add_test(systest!(can_add_max_number_of_readonly_and_backup_keys))
         .add_test(systest!(
-            cannot_add_more_than_max_number_of_readonly_or_backup_keys
+            updating_recovery_does_not_remove_recovery_and_backup_keys
         ))
+        .add_test(systest!(can_add_max_number_of_keys))
+        .add_test(systest!(cannot_add_more_than_max_number_of_keys))
         .add_test(systest!(node_does_not_remove_keys_on_restart))
         .add_test(systest!(
             node_keeps_keys_until_it_completely_leaves_its_subnet

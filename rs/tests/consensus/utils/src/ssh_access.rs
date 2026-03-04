@@ -12,9 +12,10 @@ use ic_system_test_driver::{
 
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
-use ic_types::SubnetId;
+use ic_types::{NodeId, SubnetId};
 use openssh_keys::PublicKey;
 use registry_canister::mutations::{
+    do_set_subnet_operational_level::{NodeSshAccess, SetSubnetOperationalLevelPayload},
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     do_update_subnet::UpdateSubnetPayload,
 };
@@ -282,6 +283,59 @@ pub async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
     .await;
 
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
+}
+
+pub fn get_setsubnetoperationallevelpayload_with_keys(
+    subnet_id: Option<SubnetId>,
+    readonly_keys: Option<Vec<String>>,
+    state_write_access: Option<Vec<(NodeId, Vec<String>)>>,
+) -> SetSubnetOperationalLevelPayload {
+    SetSubnetOperationalLevelPayload {
+        subnet_id,
+        operational_level: None,
+        ssh_readonly_access: readonly_keys,
+        ssh_node_state_write_access: state_write_access.map(|accesses| {
+            accesses
+                .into_iter()
+                .map(|(node_id, public_keys)| NodeSshAccess {
+                    node_id: Some(node_id),
+                    public_keys: Some(public_keys),
+                })
+                .collect()
+        }),
+        recalled_replica_version_ids: None,
+    }
+}
+
+pub async fn set_subnet_operational_level(nns_url: Url, payload: SetSubnetOperationalLevelPayload) {
+    let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
+    let gov_can = get_governance_canister(&r);
+
+    let proposal_id = submit_external_proposal_with_test_id(
+        &gov_can,
+        NnsFunction::SetSubnetOperationalLevel,
+        payload,
+    )
+    .await;
+
+    vote_execute_proposal_assert_executed(&gov_can, proposal_id).await;
+}
+
+pub async fn fail_to_set_subnet_operational_level(
+    nns_url: Url,
+    payload: SetSubnetOperationalLevelPayload,
+) {
+    let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
+    let gov_can = get_governance_canister(&r);
+
+    let proposal_id = submit_external_proposal_with_test_id(
+        &gov_can,
+        NnsFunction::SetSubnetOperationalLevel,
+        payload,
+    )
+    .await;
+
+    vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too many elements").await;
 }
 
 pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, String> {
