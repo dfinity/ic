@@ -90,6 +90,7 @@ impl RingBuffer {
     }
 
     /// Returns the data size of the ring buffer.
+    #[cfg(test)]
     pub fn bytes_used(&self) -> usize {
         self.io.load_header().data_size.get() as usize
     }
@@ -114,16 +115,16 @@ impl RingBuffer {
     /// Appends records from an iterator.
     pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
         let mut index_table = self.io.load_index_table();
+        let mut header = self.io.load_header();
         for r in records {
             let record = LogRecord::from(r);
 
             // Check that records are added in order, otherwise it breaks the index.
-            let h = self.io.load_header();
-            if record.idx < h.next_idx {
+            if record.idx < header.next_idx {
                 debug_assert!(false, "Log record idx must be >= than next idx");
                 continue;
             }
-            if record.timestamp < h.max_timestamp {
+            if record.timestamp < header.max_timestamp {
                 debug_assert!(false, "Log record timestamp must be >= than max timestamp");
                 continue;
             }
@@ -134,39 +135,66 @@ impl RingBuffer {
                 debug_assert!(false, "Log record size exceeds ring buffer capacity");
                 return;
             }
-            self.make_free_space(added_size);
+            //self.make_free_space(added_size);
+            self.evict_for_size(&mut header, added_size);
 
             // Save the record at the tail position.
-            let mut h = self.io.load_header();
-            self.io.save_record(h.data_tail, &record);
+            self.io.save_record(&header, header.data_tail, &record);
 
             // Update header with new tail position, size and next idx.
-            let position = h.data_tail;
-            h.data_tail = h.advance_position(position, added_size);
-            h.data_size = h.data_size.saturating_add(added_size);
-            h.next_idx = record.idx + 1;
-            h.max_timestamp = record.timestamp;
-            self.io.save_header(&h);
+            let position = header.data_tail;
+            header.data_tail = header.advance_position(position, added_size);
+            header.data_size = header.data_size.saturating_add(added_size);
+            header.next_idx = record.idx + 1;
+            header.max_timestamp = record.timestamp;
 
             // Update the index table with the latest record position.
             index_table.update(position, &record);
         }
-        // It's fine to save the index table only once after saving all the records.
+        // Write header and index ONCE at the end.
+        self.io.save_header(&header);
         self.io.save_index_table(&index_table);
     }
 
-    fn make_free_space(&mut self, added_size: MemorySize) {
-        let capacity = MemorySize::new(self.byte_capacity() as u64);
-        while MemorySize::new(self.bytes_used() as u64) + added_size > capacity {
-            if self.pop_front().is_none() {
-                break; // No more records to pop, limit reached.
-            }
+    /// Evicts oldest records from the front until `added_size` fits.
+    /// Mutates `header` in place; the caller is responsible for saving it.
+    fn evict_for_size(&self, header: &mut Header, added_size: MemorySize) {
+        while header.data_size + added_size > header.data_capacity {
+            let Some(front) = self
+                .io
+                .load_record_without_content(header, header.data_head)
+            else {
+                break;
+            };
+            let removed = MemorySize::new(front.bytes_len() as u64);
+            header.data_head = header.advance_position(header.data_head, removed);
+            header.data_size = header.data_size.saturating_sub(removed);
         }
     }
 
+    // fn make_free_space(&mut self, added_size: MemorySize) {
+    //     let capacity = MemorySize::new(self.byte_capacity() as u64);
+    //     while MemorySize::new(self.bytes_used() as u64) + added_size > capacity {
+    //         if self.remove_front().is_none() {
+    //             break; // No more records to pop, limit reached.
+    //         }
+    //     }
+    // }
+
+    // fn remove_front(&mut self) -> Option<()> {
+    //     let mut h = self.io.load_header();
+    //     let descriptor = self.io.load_record_without_content(&h, h.data_head)?;
+    //     let removed_size = MemorySize::new(descriptor.bytes_len() as u64);
+    //     h.data_head = h.advance_position(h.data_head, removed_size);
+    //     h.data_size = h.data_size.saturating_sub(removed_size);
+    //     self.io.save_header(&h);
+    //     Some(())
+    // }
+
+    #[cfg(test)]
     fn pop_front(&mut self) -> Option<CanisterLogRecord> {
         let mut h = self.io.load_header();
-        let record = self.io.load_record(h.data_head)?;
+        let record = self.io.load_record(&h, h.data_head)?;
         let removed_size = MemorySize::new(record.bytes_len() as u64);
         h.data_head = h.advance_position(h.data_head, removed_size);
         h.data_size = h.data_size.saturating_sub(removed_size);
@@ -202,7 +230,7 @@ impl RingBuffer {
                 // Load the contiguous records in [start, end].
                 let mut records: Vec<CanisterLogRecord> = Vec::new();
                 let mut pos = start_entry.position;
-                while let Some(record) = self.io.load_record(pos) {
+                while let Some(record) = self.io.load_record(&header, pos) {
                     if record.idx > end_entry.idx {
                         break;
                     }
@@ -237,7 +265,7 @@ impl RingBuffer {
                 let mut records: Vec<CanisterLogRecord> = Vec::new();
                 let mut total_size = 0;
                 let mut pos = approx_start.position;
-                while let Some(record) = self.io.load_record(pos) {
+                while let Some(record) = self.io.load_record(&header, pos) {
                     let distance = MemorySize::new(record.bytes_len() as u64);
                     if record.matches(&filter) {
                         let canister_log_record = CanisterLogRecord::from(record);
@@ -293,7 +321,7 @@ impl<'a> Iterator for RingBufferIterator<'a> {
             return None;
         }
 
-        let record = self.io.load_record(self.pos)?;
+        let record = self.io.load_record(&self.header, self.pos)?;
         let len = record.bytes_len();
 
         // Safety check to prevent infinite loops or panics on corruption
