@@ -479,9 +479,17 @@ mod tests {
             } = payload;
 
             for response in &responses {
-                let pb = pb::CanisterHttpResponseWithConsensus::from(response);
+                // The protobuf format for CanisterHttpResponseWithConsensus doesn't
+                // store id/timeout separately in the metadata — it reuses the
+                // response's values on deserialization. Normalize here so the
+                // roundtrip comparison holds.
+                let mut response = response.clone();
+                response.proof.content.id = response.content.id;
+                response.proof.content.timeout = response.content.timeout;
+
+                let pb = pb::CanisterHttpResponseWithConsensus::from(&response);
                 let roundtripped = CanisterHttpResponseWithConsensus::try_from(pb).unwrap();
-                assert_eq!(*response, roundtripped);
+                assert_eq!(response, roundtripped);
             }
             for divergence in &divergence_responses {
                 let pb = pb::CanisterHttpResponseDivergence::from(divergence);
