@@ -8,11 +8,13 @@ After changing Rust code (`*.rs`) follow these steps in order:
 
 1. **Format** by running the following from the root of the repository:
    ```
+   cd "$(git rev-parse --show-toplevel)"
    rustfmt <MODIFIED_RUST_FILES>
    ```
    where `<MODIFIED_RUST_FILES>` is a space separated list of paths of all modified Rust files relative to the root of the repository.
 2. **Lint** by running the following from the root of the repository:
    ```
+   cd "$(git rev-parse --show-toplevel)"
    cargo clippy --all-features <CRATES> -- \
        -D warnings \
        -D clippy::all \
@@ -30,6 +32,7 @@ After changing Rust code (`*.rs`) follow these steps in order:
    Fix any linting errors.
 3. **Build** the directly affected bazel targets by running the following from the root of the repository:
    ```
+   cd "$(git rev-parse --show-toplevel)"
    TARGETS="$(bazel query 'kind(rule, rdeps(//..., set(<MODIFIED_FILES>), 1))' --keep_going 2>/dev/null)"
    if [ -n "$TARGETS" ]; then
        bazel build $TARGETS
@@ -40,6 +43,7 @@ After changing Rust code (`*.rs`) follow these steps in order:
    Fix all build errors.
 4. **Test** the directly affected bazel tests by running the following from the root of the repository:
    ```
+   cd "$(git rev-parse --show-toplevel)"
    TESTS="$(bazel query 'kind(".*_test|test_suite", kind(rule, rdeps(//..., set(<MODIFIED_FILES>), 2)))' --keep_going 2>/dev/null)"
    if [ -n "$TESTS" ]; then
        bazel test --test_output=errors $TESTS
