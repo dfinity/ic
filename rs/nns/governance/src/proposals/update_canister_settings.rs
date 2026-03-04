@@ -313,6 +313,7 @@ mod tests {
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             }),
         };
 
@@ -343,6 +344,7 @@ mod tests {
                     compute_allocation: Some(Nat::from(10u64)),
                     freezing_threshold: Some(Nat::from(100u64)),
                     log_visibility: Some(RootLogVisibility::Public),
+                    snapshot_visibility: Some(RootSnapshotVisibility::Public),
                     reserved_cycles_limit: None,
                     wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
                 }
@@ -365,6 +367,7 @@ mod tests {
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             }),
         };
 
@@ -393,6 +396,7 @@ mod tests {
                 compute_allocation: Some(Nat::from(10u64)),
                 freezing_threshold: Some(Nat::from(100u64)),
                 log_visibility: Some(RootLogVisibility::Public),
+                snapshot_visibility: Some(RootSnapshotVisibility::Public),
                 reserved_cycles_limit: None,
                 wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
             }
@@ -438,6 +442,7 @@ mod tests {
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             }),
         };
 
@@ -459,6 +464,7 @@ mod tests {
                     "compute_allocation".to_string() => SelfDescribingValue::from(10_u64),
                     "freezing_threshold".to_string() => SelfDescribingValue::from(100_u64),
                     "log_visibility".to_string() => SelfDescribingValue::from("Public"),
+                    "snapshot_visibility".to_string() => SelfDescribingValue::from("Public"),
                 }),
             })
         );
@@ -489,6 +495,7 @@ mod tests {
                     "wasm_memory_limit".to_string() => SelfDescribingValue::Null,
                     "wasm_memory_threshold".to_string() => SelfDescribingValue::Null,
                     "log_visibility".to_string() => SelfDescribingValue::Null,
+                    "snapshot_visibility".to_string() => SelfDescribingValue::Null,
                 }),
             })
         );
