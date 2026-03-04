@@ -364,6 +364,7 @@ mod test {
                 nonce: None,
                 sender: Blob(vec![0x04]),
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         let request1 = HttpRequestEnvelope::<HttpCallContent> {
@@ -381,6 +382,7 @@ mod test {
                 nonce: None,
                 sender: Blob(vec![0x04]),
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         let request2 = HttpRequestEnvelope::<HttpCallContent> {

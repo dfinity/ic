@@ -59,6 +59,7 @@ impl Query {
                 *ingress_expiry,
                 user_id.get().into_vec(),
                 nonce.as_deref(),
+                None,
             )),
             QuerySource::System => MessageId::from(representation_independent_hash_call_or_query(
                 CallOrQuery::Query,
@@ -67,6 +68,7 @@ impl Query {
                 self.method_payload.clone(),
                 0,
                 IC_00.get().into_vec(),
+                None,
                 None,
             )),
         }

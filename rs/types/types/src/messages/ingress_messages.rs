@@ -44,6 +44,7 @@ pub struct SignedIngressContent {
     arg: Vec<u8>,
     ingress_expiry: u64,
     nonce: Option<Vec<u8>>,
+    sender_info: Option<bool>,
 }
 
 impl SignedIngressContent {
@@ -84,6 +85,7 @@ impl SignedIngressContent {
         arg: Vec<u8>,
         ingress_expiry: u64,
         nonce: Option<Vec<u8>>,
+        sender_info: Option<bool>,
     ) -> Self {
         Self {
             sender,
@@ -92,6 +94,7 @@ impl SignedIngressContent {
             arg,
             ingress_expiry,
             nonce,
+            sender_info,
         }
     }
 }
@@ -112,6 +115,7 @@ impl HttpRequestContent for SignedIngressContent {
             self.ingress_expiry,
             self.sender.get().into_vec(),
             self.nonce.as_deref(),
+            self.sender_info,
         ))
     }
 
@@ -125,6 +129,10 @@ impl HttpRequestContent for SignedIngressContent {
 
     fn nonce(&self) -> Option<Vec<u8>> {
         self.nonce.clone()
+    }
+
+    fn sender_info(&self) -> Option<bool> {
+        self.sender_info
     }
 }
 
@@ -147,6 +155,7 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
             arg: update.arg.0,
             ingress_expiry: update.ingress_expiry,
             nonce: update.nonce.map(|n| n.0),
+            sender_info: update.sender_info,
         })
     }
 }
@@ -624,6 +633,7 @@ mod test {
             arg: vec![],
             ingress_expiry: 0,
             nonce: None,
+            sender_info: None,
         };
         let result = extract_effective_canister_id(&msg);
         assert!(
@@ -641,6 +651,7 @@ mod test {
             arg: vec![],
             ingress_expiry: 0,
             nonce: None,
+            sender_info: None,
         };
         assert_eq!(
             extract_effective_canister_id(&msg),

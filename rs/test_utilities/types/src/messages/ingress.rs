@@ -103,6 +103,7 @@ impl Default for SignedIngressBuilder {
             sender: Blob(PrincipalId::new_anonymous().into()),
             ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
             nonce: None,
+            sender_info: None,
         };
         Self {
             update,

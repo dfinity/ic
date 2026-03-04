@@ -1032,11 +1032,12 @@ mod crypto_hash_stability {
             sender: Blob(vec![0x42; 29]),
             ingress_expiry: 1234567890,
             nonce: Some(Blob(vec![0x42; 8])),
+            sender_info: None,
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "1fc89a61eb9215d4c379b3ac99c23ff73140ff1ba89a8fbd531c7fc62fc0c762",
+            "311f37cc4558b65279d560e52f4cfa3497ac34ed1c2d21ce3f0297ca56b11be5",
             "Hash of HttpCanisterUpdate changed"
         );
     }

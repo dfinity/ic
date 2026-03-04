@@ -835,6 +835,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                             sender: Blob(sender.principal().as_slice().to_vec()),
                             ingress_expiry: expiry_time().as_nanos() as u64,
                             nonce: None,
+                            sender_info: None,
                         },
                     };
 
@@ -880,6 +881,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                                 sender: Blob(sender.principal().as_slice().to_vec()),
                                 ingress_expiry: expiry_time().as_nanos() as u64,
                                 nonce: None,
+                                sender_info: None,
                             },
                         };
 
@@ -1528,6 +1530,7 @@ async fn perform_update_call_with_delegations(
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -1565,6 +1568,7 @@ async fn perform_read_state_call_with_delegations(
                 sender: Blob(sender.principal().as_slice().to_vec()),
                 ingress_expiry: expiry_time().as_nanos() as u64,
                 nonce: None,
+                sender_info: None,
             },
         };
 
@@ -1661,6 +1665,7 @@ async fn perform_update_with_expiry(
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry,
             nonce: None,
+            sender_info: None,
         },
     };
 

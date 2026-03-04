@@ -42,6 +42,7 @@ pub(crate) fn representation_independent_hash_call_or_query(
     ingress_expiry: u64,
     sender: Vec<u8>,
     nonce: Option<&[u8]>,
+    sender_info: Option<bool>,
 ) -> [u8; 32] {
     use RawHttpRequestVal::*;
     let mut map = btreemap! {
@@ -57,6 +58,9 @@ pub(crate) fn representation_independent_hash_call_or_query(
     };
     if let Some(some_nonce) = nonce {
         map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
+    }
+    if let Some(sender_info) = sender_info {
+        map.insert("sender_info".to_string(), U64(sender_info as u64));
     }
     hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
 }
@@ -104,6 +108,8 @@ pub struct HttpCanisterUpdate {
     // Do not include omitted fields in MessageId calculation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nonce: Option<Blob>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_info: Option<bool>,
 }
 
 impl HttpCanisterUpdate {
@@ -117,6 +123,7 @@ impl HttpCanisterUpdate {
             self.ingress_expiry,
             self.sender.0.clone(),
             self.nonce.as_ref().map(|x| x.0.as_slice()),
+            self.sender_info,
         )
     }
 
@@ -235,6 +242,7 @@ impl HttpUserQuery {
             self.ingress_expiry,
             self.sender.0.clone(),
             self.nonce.as_ref().map(|x| x.0.as_slice()),
+            None,
         )
     }
 }
@@ -291,6 +299,8 @@ pub trait HttpRequestContent {
     fn ingress_expiry(&self) -> u64;
 
     fn nonce(&self) -> Option<Vec<u8>>;
+
+    fn sender_info(&self) -> Option<bool>;
 }
 
 /// A trait implemented by HTTP requests that contain a `canister_id`.
@@ -313,6 +323,10 @@ impl<C: HttpRequestContent> HttpRequest<C> {
 
     pub fn nonce(&self) -> Option<Vec<u8>> {
         self.content.nonce()
+    }
+
+    pub fn sender_info(&self) -> Option<bool> {
+        self.content.sender_info()
     }
 }
 
@@ -352,6 +366,10 @@ impl HttpRequestContent for Query {
             QuerySource::System => None,
         }
     }
+
+    fn sender_info(&self) -> Option<bool> {
+        None
+    }
 }
 
 impl HttpRequestContent for ReadState {
@@ -369,6 +387,10 @@ impl HttpRequestContent for ReadState {
 
     fn nonce(&self) -> Option<Vec<u8>> {
         self.nonce.clone()
+    }
+
+    fn sender_info(&self) -> Option<bool> {
+        None
     }
 }
 

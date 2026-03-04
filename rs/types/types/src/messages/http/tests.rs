@@ -74,6 +74,7 @@ mod try_from {
                 sender: Blob(fixed::principal_id().to_vec()),
                 ingress_expiry: fixed::ingress_expiry(),
                 nonce: Some(Blob(fixed::nonce())),
+                sender_info: None,
             }
         }
 
@@ -85,6 +86,7 @@ mod try_from {
                 fixed::arg().0,
                 fixed::ingress_expiry(),
                 Some(fixed::nonce()),
+                None,
             )
         }
 

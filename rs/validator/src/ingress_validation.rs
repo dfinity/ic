@@ -200,6 +200,9 @@ fn validate_request_content<C: HttpRequestContent, R: RootOfTrustProvider>(
 where
     R::Error: std::error::Error,
 {
+    if request.content().sender_info().is_some_and(|b| !b) {
+        return Err(InvalidSenderInfo);
+    }
     validate_nonce(request)?;
     validate_user_id_and_signature(
         ingress_signature_verifier,
@@ -258,6 +261,8 @@ pub enum RequestValidationError {
         "Nonce in request is too big: got {num_bytes} bytes, but at most {maximum} are allowed."
     )]
     NonceTooBig { num_bytes: usize, maximum: usize },
+    #[error("Sender info is not allowed to be false.")]
+    InvalidSenderInfo,
 }
 
 /// Error in verifying the signature or authentication part of a request.
