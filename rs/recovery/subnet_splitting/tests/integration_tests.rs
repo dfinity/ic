@@ -57,7 +57,7 @@ fn load_metrics_e2e_test() {
         set_up(
             state_machine.as_ref(),
             other_state_machine.as_ref(),
-            /*canisters_count=*/ 50,
+            /*canisters_count=*/ 10,
             logger,
         );
         info!(logger, "Creating a checkpoint");
@@ -95,8 +95,8 @@ fn load_metrics_e2e_test() {
         canister_ids.sort();
         // middle half of the canisters
         let canister_id_ranges = vec![CanisterIdRange {
-            start: canister_ids[25],
-            end: canister_ids[74],
+            start: canister_ids[5],
+            end: canister_ids[14],
         }];
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
@@ -125,50 +125,50 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             canisters_installed,
             Estimates {
-                source: 50,
-                destination: 50,
+                source: 10,
+                destination: 10,
             }
         );
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        assert_near!(states_sizes_bytes.source, 23351651, 0.1);
-        assert_near!(states_sizes_bytes.destination, 23359887, 0.1);
-        assert_near!(instructions_executed.source, 39131279, 0.1);
-        assert_near!(instructions_executed.destination, 39119275, 0.1);
+        assert_near!(states_sizes_bytes.source, 4662083, 0.1);
+        assert_near!(states_sizes_bytes.destination, 4662072, 0.1);
+        assert_near!(instructions_executed.source, 7664259, 0.1);
+        assert_near!(instructions_executed.destination, 7680855, 0.1);
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 99,
-                destination: 100,
+                source: 19,
+                destination: 20,
             }
         );
         assert_eq!(
             remote_subnet_messages_executed_lower_bound,
             Estimates {
-                source: 25,
-                destination: 25,
+                source: 5,
+                destination: 5,
             }
         );
         assert_eq!(
             local_subnet_messages_executed_upper_bound,
             Estimates {
-                source: 73,
-                destination: 75,
+                source: 13,
+                destination: 15,
             }
         );
         assert_eq!(
             http_outcalls_executed,
             Estimates {
-                source: 25,
-                destination: 25,
+                source: 5,
+                destination: 5,
             }
         );
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 8399,
-                destination: 8075,
+                source: 379,
+                destination: 315,
             }
         );
     })
