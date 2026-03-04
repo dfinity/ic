@@ -110,7 +110,7 @@ fn should_install_and_upgrade_with_valid_values() {
     }
 
     // Generate optional values in [1, MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS]. This
-    // range ensures that when any value is None and falls back to its default (1 or 64),
+    // range ensures that when any value is None and falls back to its default (1 or 10),
     // the resulting configuration has a reasonable chance of being valid.
     let opt_val = || proptest::option::of(1u64..=MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS);
 
