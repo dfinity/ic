@@ -1,6 +1,7 @@
 use anyhow::{Error, Result};
+use arc_swap::ArcSwapOption;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use virt::sys::virDomainState;
 
 /// Facade trait for operations on a libvirt domain.
@@ -102,62 +103,49 @@ impl Drop for LibvirtConnectionImpl {
     }
 }
 
+pub type LibvirtConnectionFactory = dyn Fn() -> Result<Box<dyn LibvirtConnection>> + Send + Sync;
+
 /// Caching wrapper around a libvirt connection factory.
 ///
 /// The connection is created lazily on first use and then reused for subsequent
-/// calls. If a call fails with [`virt::error::ErrorNumber::InvalidConn`] the
-/// cached connection is discarded, a fresh one is obtained from the factory,
-/// and the failing call is retried once with the new connection.
+/// calls. If a call fails with connection error, the cached connection is discarded, a fresh one
+/// is obtained from the factory, and the failing call is retried once with the new connection.
 pub struct LibvirtConnectionWithReconnect {
-    factory: Arc<dyn Fn() -> Result<Arc<dyn LibvirtConnection>> + Send + Sync>,
-    connection: Mutex<Option<Arc<dyn LibvirtConnection>>>,
-}
-
-/// Clones the connection factory (the cached connection is not cloned).
-impl Clone for LibvirtConnectionWithReconnect {
-    fn clone(&self) -> Self {
-        Self {
-            factory: self.factory.clone(),
-            connection: Mutex::new(None),
-        }
-    }
+    factory: Arc<LibvirtConnectionFactory>,
+    // ArcSwapOption requires Sized for the inner type, so dyn LibvirtConnection must be
+    // wrapped in a Box.
+    connection: ArcSwapOption<Box<dyn LibvirtConnection>>,
 }
 
 impl LibvirtConnectionWithReconnect {
-    pub fn new(factory: Arc<dyn Fn() -> Result<Arc<dyn LibvirtConnection>> + Send + Sync>) -> Self {
+    pub fn new(factory: Arc<LibvirtConnectionFactory>) -> Self {
         Self {
             factory,
-            connection: Mutex::new(None),
+            connection: ArcSwapOption::empty(),
         }
     }
 
-    fn get_or_connect(&self) -> Result<Arc<dyn LibvirtConnection>> {
-        let mut guard = self.connection.lock().unwrap();
+    fn call_with_conn<T>(&self, f: impl Fn(&dyn LibvirtConnection) -> Result<T>) -> Result<T> {
+        let guard = self.connection.load();
         if let Some(conn) = guard.as_ref() {
-            return Ok(conn.clone());
+            return f(conn.as_ref().as_ref());
         }
-        let conn = (self.factory)()?;
-        *guard = Some(conn.clone());
-        Ok(conn)
-    }
-
-    /// Discards the cached connection so the next call will invoke the factory.
-    ///
-    /// Call this whenever an external event (e.g. a libvirtd restart) has made
-    /// the existing connection stale.
-    fn invalidate(&self) {
-        *self.connection.lock().unwrap() = None;
+        // Note that if the function is called from multiple threads concurrently, multiple
+        // connections may be created. This is fine, connections are cheap and the code is not
+        // highly concurrent.
+        let conn = Arc::new((self.factory)()?);
+        self.connection.store(Some(conn.clone()));
+        f(conn.as_ref().as_ref())
     }
 
     fn call_with_reconnect<T>(&self, f: impl Fn(&dyn LibvirtConnection) -> Result<T>) -> Result<T> {
-        let conn = self.get_or_connect()?;
-        let result = f(conn.as_ref());
+        let result = self.call_with_conn(&f);
         match result {
             Err(ref e) if Self::is_connection_error(e) => {
                 eprintln!("Libvirt connection is invalid, recreating and retrying");
-                self.invalidate();
-                let new_conn = self.get_or_connect()?;
-                f(new_conn.as_ref())
+                // Discard the cached connection so the next call will invoke the factory.
+                self.connection.store(None);
+                self.call_with_conn(f)
             }
             other => other,
         }
@@ -209,6 +197,7 @@ pub(crate) mod testing {
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+    use std::sync::Mutex;
 
     #[test]
     fn test_reconnect_on_error() {
@@ -228,15 +217,15 @@ mod tests {
             Ok(Box::new(domain))
         });
 
-        let connections: Arc<Mutex<VecDeque<Arc<dyn LibvirtConnection>>>> =
+        let connections: Arc<Mutex<VecDeque<Box<dyn LibvirtConnection>>>> =
             Arc::new(Mutex::new(VecDeque::from([
-                Arc::new(conn1) as Arc<dyn LibvirtConnection>,
-                Arc::new(conn2) as Arc<dyn LibvirtConnection>,
+                Box::new(conn1) as Box<dyn LibvirtConnection>,
+                Box::new(conn2) as Box<dyn LibvirtConnection>,
             ])));
 
         let factory = {
             let connections = connections.clone();
-            Arc::new(move || -> Result<Arc<dyn LibvirtConnection>> {
+            Arc::new(move || -> Result<Box<dyn LibvirtConnection>> {
                 Ok(connections.lock().unwrap().pop_front().unwrap())
             })
         };

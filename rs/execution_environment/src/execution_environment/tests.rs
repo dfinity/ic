@@ -7,7 +7,7 @@ use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusResultV2,
-    CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
+    CanisterStatusType, CreateCanisterArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, IC_00, LogVisibilityV2, MasterPublicKeyId, Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
@@ -2819,6 +2819,7 @@ fn management_message_with_forbidden_method_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
 
     for forbidden_method in [
+        "create_canister",
         "raw_rand",
         "http_request",
         "ecdsa_public_key",
@@ -2829,6 +2830,13 @@ fn management_message_with_forbidden_method_is_not_accepted() {
             .should_accept_ingress_message(IC_00, forbidden_method, vec![])
             .unwrap_err();
         assert_eq!(ErrorCode::CanisterRejectedMessage, err.code());
+        assert!(
+            err.description()
+                .contains("Only canisters can call ic00 method")
+                || err
+                    .description()
+                    .contains("can not be called via ingress messages")
+        );
     }
 }
 
@@ -2865,6 +2873,29 @@ fn management_message_with_invalid_sender_is_not_accepted_with_subnet_admins() {
         ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
         err.code()
     );
+}
+
+#[test]
+fn management_message_to_create_canister_with_subnet_admins() {
+    let subnet_admin = user_test_id(1);
+    let test_user = user_test_id(2);
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    test.set_user_id(test_user);
+    let arg: CreateCanisterArgs = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+    let err = test
+        .should_accept_ingress_message(IC_00, "create_canister", Encode!(&arg).unwrap())
+        .unwrap_err();
+    assert_eq!(ErrorCode::InvalidSubnetAdmin, err.code());
+
+    test.set_user_id(subnet_admin);
+    test.should_accept_ingress_message(IC_00, "create_canister", Encode!(&arg).unwrap())
+        .unwrap();
 }
 
 // A Wasm module that allocates 10 wasm pages of heap memory and 10 wasm

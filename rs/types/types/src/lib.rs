@@ -107,6 +107,7 @@ use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_snapshot_bits::v1 as pb_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
+use more_asserts::debug_assert_gt;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -153,6 +154,10 @@ pub struct QueryStatsTag {}
 pub type QueryStatsEpoch = AmountOf<QueryStatsTag, u64>;
 
 pub fn epoch_from_height(height: Height, epoch_length: u64) -> QueryStatsEpoch {
+    debug_assert_gt!(epoch_length, 0, "epoch_length must not be zero");
+    if epoch_length == 0 {
+        return QueryStatsEpoch::from(0);
+    }
     QueryStatsEpoch::from(height.get() / epoch_length)
 }
 

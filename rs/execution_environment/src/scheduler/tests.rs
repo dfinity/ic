@@ -62,6 +62,8 @@ use std::{convert::TryFrom, time::Duration};
 const M: usize = 1_000_000;
 const B: usize = 1_000 * M;
 
+const PAGE_SIZE: NumBytes = NumBytes::new(ic_sys::PAGE_SIZE as u64);
+
 const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
 fn assert_floats_are_equal(val0: f64, val1: f64) {
@@ -77,13 +79,6 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(1 << 30),
-            max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_query_message: NumInstructions::from(5),
-            max_instructions_per_slice: NumInstructions::from(5),
-            max_instructions_per_install_code_slice: NumInstructions::from(5),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -164,6 +159,13 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
 
 #[test]
 fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached() {
+    fn rounds_skipped_metric(test: &SchedulerTest) -> u64 {
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get()
+    }
+
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
@@ -179,28 +181,27 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
     test.send_ingress(canister_id, ingress(10).dirty_pages(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test.ingress_queue_size(canister_id), 0);
+    assert_ne!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
 
+    // Enqueue a message and execute a round. The round should be skipped due to
+    // exceeding the heap delta capacity; and the message should still be enqueued.
     test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(canister_id), 1);
+    assert_eq!(rounds_skipped_metric(&test), 1);
+    assert_ne!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
+
+    // Execute a checkpoint round. The round should still be skipped, but the heap
+    // delta estimate should be reset.
     test.execute_round(ExecutionRoundType::CheckpointRound);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     assert_eq!(test.ingress_queue_size(canister_id), 1);
-    assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_skipped_due_to_current_heap_delta_above_limit
-            .get(),
-        1
-    );
+    assert_eq!(rounds_skipped_metric(&test), 2);
 
+    // A new round execution should finally execute the message.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test.ingress_queue_size(canister_id), 0);
-    assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_skipped_due_to_current_heap_delta_above_limit
-            .get(),
-        1
-    );
+    assert_eq!(rounds_skipped_metric(&test), 2);
 
     assert_eq!(
         test.state()
@@ -215,15 +216,14 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn smooth_heap_delta_rate_limiting() {
-    let page_size = 4_096;
     // Create scheduler test allowing one dirty page per round.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            subnet_heap_delta_capacity: NumBytes::from(10 * page_size + 1),
+            subnet_heap_delta_capacity: PAGE_SIZE * 10,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
-            heap_delta_initial_reserve: NumBytes::from(page_size),
+            heap_delta_initial_reserve: NumBytes::from(1),
             ..SchedulerConfig::application_subnet()
         })
         .with_round_summary(ExecutionRoundSummary {
@@ -269,15 +269,21 @@ fn smooth_heap_delta_rate_limiting() {
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn smooth_heap_delta_rate_limiting_with_initial_burst() {
-    let page_size = 4_096;
+    fn rounds_skipped_metric(test: &SchedulerTest) -> u64 {
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get()
+    }
+
     // Create scheduler test allowing one dirty page per round with 2 pages burst.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            subnet_heap_delta_capacity: NumBytes::from(12 * page_size),
+            subnet_heap_delta_capacity: PAGE_SIZE * 10,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
-            heap_delta_initial_reserve: NumBytes::from(page_size),
+            heap_delta_initial_reserve: PAGE_SIZE * 2,
             ..SchedulerConfig::application_subnet()
         })
         .with_round_summary(ExecutionRoundSummary {
@@ -298,30 +304,19 @@ fn smooth_heap_delta_rate_limiting_with_initial_burst() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // Thanks to the burst, the execution should be successful again.
     assert_eq!(test.ingress_queue_size(canister_id), 0);
-    assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_skipped_due_to_current_heap_delta_above_limit
-            .get(),
-        0
-    );
+    assert_eq!(rounds_skipped_metric(&test), 0);
 
     test.send_ingress(canister_id, ingress(10).dirty_pages(1));
     test.send_ingress(canister_id, ingress(10).dirty_pages(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // Now it should be rate limited
     assert_eq!(test.ingress_queue_size(canister_id), 2);
-    assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_skipped_due_to_current_heap_delta_above_limit
-            .get(),
-        1
-    );
+    assert_eq!(rounds_skipped_metric(&test), 1);
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // The previous messages should be executed in this round.
     assert_eq!(test.ingress_queue_size(canister_id), 0);
+    assert_eq!(rounds_skipped_metric(&test), 1);
 
     assert_eq!(
         test.state()
@@ -336,17 +331,16 @@ fn smooth_heap_delta_rate_limiting_with_initial_burst() {
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn smooth_heap_delta_rate_limiting_reaches_the_limit() {
-    let page_size = 4_096;
     let rounds = 10;
     // Create scheduler test allowing two dirty page per round.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            subnet_heap_delta_capacity: NumBytes::from(rounds * page_size * 2 + 1),
+            subnet_heap_delta_capacity: PAGE_SIZE * rounds * 2,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
-            max_heap_delta_per_iteration: NumBytes::from(page_size),
-            heap_delta_initial_reserve: NumBytes::from(page_size * 2),
+            max_heap_delta_per_iteration: PAGE_SIZE,
+            heap_delta_initial_reserve: 1.into(),
             ..SchedulerConfig::application_subnet()
         })
         .with_round_summary(ExecutionRoundSummary {
@@ -377,15 +371,14 @@ fn smooth_heap_delta_rate_limiting_reaches_the_limit() {
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn smooth_heap_delta_rate_limiting_for_two_canisters() {
-    let page_size = 4_096;
     // Create scheduler test allowing one dirty page per round.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            subnet_heap_delta_capacity: NumBytes::from(10 * page_size + 1),
+            subnet_heap_delta_capacity: PAGE_SIZE * 10,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
-            heap_delta_initial_reserve: NumBytes::from(page_size),
+            heap_delta_initial_reserve: 1.into(),
             ..SchedulerConfig::application_subnet()
         })
         .with_round_summary(ExecutionRoundSummary {
@@ -494,7 +487,6 @@ fn canister_gets_heap_delta_rate_limited() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            subnet_heap_delta_capacity: NumBytes::from(10),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -503,18 +495,21 @@ fn canister_gets_heap_delta_rate_limited() {
         .build();
     let heap_delta_rate_limit = SchedulerConfig::application_subnet().heap_delta_rate_limit;
 
+    // Execute a message that produces just under 3 rounds worth of heap delta.
     let canister_id = test.create_canister();
-    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
-    test.canister_state_mut(canister_id)
-        .scheduler_state
-        .heap_delta_debit = heap_delta_rate_limit * 2 - NumBytes::from(1);
+    test.send_ingress(
+        canister_id,
+        ingress(10).dirty_pages(3 * (heap_delta_rate_limit / PAGE_SIZE) as usize - 1),
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
 
     // Current heap delta debit is over the limit, so the canister shouldn't run.
+    test.send_ingress(canister_id, ingress(10));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test.ingress_queue_size(canister_id), 1);
 
-    // After getting a single round of credits we should be below the limit and able
-    // to run.
+    // After one more round of credits we should be below the limit and able to run.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test.ingress_queue_size(canister_id), 0);
 
@@ -523,7 +518,7 @@ fn canister_gets_heap_delta_rate_limited() {
             .metadata
             .subnet_metrics
             .update_transactions_total,
-        1
+        2
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
@@ -5866,11 +5861,9 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
 
     let expected_height = Height::from(test.last_round().get());
 
+    // Deprecated field should be none
+    assert_eq!(sign_with_ecdsa_context.matched_pre_signature, None);
     // Check that quadruple was matched
-    assert_eq!(
-        sign_with_ecdsa_context.matched_pre_signature,
-        Some((pre_sig_id, expected_height))
-    );
     assert_eq!(
         sign_with_ecdsa_context
             .ecdsa_args()
@@ -5901,11 +5894,9 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
         .sign_with_ecdsa_contexts();
     let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
+    // Deprecated field should be none
+    assert_eq!(sign_with_ecdsa_context.matched_pre_signature, None);
     // Check that quadruple is still matched
-    assert_eq!(
-        sign_with_ecdsa_context.matched_pre_signature,
-        Some((pre_sig_id, expected_height))
-    );
     assert_eq!(
         sign_with_ecdsa_context
             .ecdsa_args()
@@ -6033,10 +6024,8 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     let expected_height = Height::from(test.last_round().get() - 1);
     let context1 = sign_with_ecdsa_contexts.get(&CallbackId::from(1)).unwrap();
     assert!(context1.nonce.is_some());
-    assert_eq!(
-        context1.matched_pre_signature,
-        Some((*pre_sigs1.keys().next().unwrap(), expected_height))
-    );
+    // Deprecated field should be none
+    assert_eq!(context1.matched_pre_signature, None);
     assert_eq!(
         context1.ecdsa_args().pre_signature.clone().unwrap(),
         EcdsaMatchedPreSignature {
@@ -6049,10 +6038,8 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
 
     let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
     assert!(context2.nonce.is_some());
-    assert_eq!(
-        context2.matched_pre_signature,
-        Some((*pre_sigs0.keys().next().unwrap(), expected_height))
-    );
+    // Deprecated field should be none
+    assert_eq!(context2.matched_pre_signature, None);
     assert_eq!(
         context2.ecdsa_args().pre_signature.clone().unwrap(),
         EcdsaMatchedPreSignature {

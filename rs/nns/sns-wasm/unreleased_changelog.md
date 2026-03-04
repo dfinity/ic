@@ -11,9 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-- Set `retrieve_blocks_from_ledger_interval_seconds` to 5s for the SNS index-ng
-  canister when creating a new SNS (previously used the default of 1s).
-
 ## Deprecated
 
 ## Removed

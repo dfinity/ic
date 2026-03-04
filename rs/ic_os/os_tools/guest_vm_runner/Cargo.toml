@@ -16,6 +16,7 @@ grub = { path = "../../boot/grub" }
 sev_host = { path = "../../sev/host" }
 
 anyhow = { workspace = true }
+arc-swap = { workspace = true }
 askama = { workspace = true }
 clap = { workspace = true }
 devicemapper = { workspace = true }
