@@ -5493,6 +5493,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
         );
 
@@ -5891,6 +5892,7 @@ fn certified_read_can_exclude_canister_ranges() {
                     subnet_features: SubnetFeatures::default(),
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
                 },
             );
             routing_table
@@ -5938,6 +5940,7 @@ fn certified_read_can_exclude_canister_ranges() {
                         label(subnet_test_id(0).get_ref()) =>
                             SubTree(flatmap! {
                                 label("public_key") => Leaf(vec![0_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             }),
                         label(subnet_test_id(1).get_ref()) =>
                             SubTree(flatmap! {
@@ -5947,14 +5950,17 @@ fn certified_read_can_exclude_canister_ranges() {
                                     )
                                 ),
                                 label("public_key") => Leaf(vec![1_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             }),
                         label(subnet_test_id(2).get_ref()) =>
                             SubTree(flatmap! {
                                 label("public_key") => Leaf(vec![2_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             }),
                         label(subnet_test_id(3).get_ref()) =>
                             SubTree(flatmap! {
                                 label("public_key") => Leaf(vec![3_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             })
                     })
             })
@@ -9216,7 +9222,7 @@ fn remove_inmemory_states_below_prunes_certification() {
     state_manager_test(|metrics, sm| {
         // consensus delivers certification for the next height
         let cert_height = Height::new(1);
-        // the state hash was derived from the panic message in `commit_and_certify`
+        // the state hash was derived from the panic message
         let state_hash = CryptoHash(
             hex::decode("4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353")
                 .unwrap(),
@@ -9416,12 +9422,25 @@ fn list_state_heights_to_certify() {
         let mut state_heights_to_certify: Vec<_> = (1..21).map(Height::new).collect();
         assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
 
+        // deliver a certification for the tip height (optimization did not trigger)
+        // the state hash was derived from the panic message
+        let state_hash = CryptoHash(
+            hex::decode("4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353")
+                .unwrap(),
+        );
+        let certification = fake_certification_for_height_with_hash(no_opt_height, state_hash);
+        sm.deliver_state_certification(certification);
+
+        // now `list_state_heights_to_certify` omits the height with a certification delivered
+        state_heights_to_certify.retain(|h| *h != no_opt_height);
+        assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
+
         // deliver a certification for a future height after the tip height
         let certification_height = Height::new(2);
         let certification = fake_certification_for_height(certification_height);
         sm.deliver_state_certification(certification);
 
-        // now `list_state_heights_to_certify` omits the height with a certification delivered
+        // now `list_state_heights_to_certify` omits both heights with a certification delivered
         state_heights_to_certify.retain(|h| *h != certification_height);
         assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
     });
@@ -9432,7 +9451,7 @@ fn commit_and_certify_reuses_certification() {
     state_manager_test(|metrics, sm| {
         // consensus delivers certification for the next height
         let no_opt_height = Height::new(1);
-        // the state hash was derived from the panic message in `commit_and_certify`
+        // the state hash was derived from the panic message
         let state_hash = CryptoHash(
             hex::decode("4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353")
                 .unwrap(),

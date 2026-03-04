@@ -276,6 +276,7 @@ fi
 docker run \
   --name {COLOCATE_CONTAINER_NAME} \
   --network host \
+  --ulimit nofile=65536:65536 \
   -v /home/admin/test:/home/root/test \
   -v /home/admin/dashboards:{dashboards_path_in_docker}:ro \
   --workdir /home/root/test \

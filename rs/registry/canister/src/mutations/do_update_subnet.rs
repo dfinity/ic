@@ -581,6 +581,7 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            recalled_replica_version_ids: vec![],
         };
 
         let key_id = EcdsaKeyId {
@@ -676,6 +677,7 @@ mod tests {
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                recalled_replica_version_ids: vec![],
             }
         );
     }
@@ -704,6 +706,7 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            recalled_replica_version_ids: vec![],
         };
 
         let payload = UpdateSubnetPayload {
@@ -767,6 +770,7 @@ mod tests {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                recalled_replica_version_ids: vec![],
             }
         );
     }

@@ -178,6 +178,18 @@ pub enum Replication {
     },
 }
 
+impl Replication {
+    /// Returns true if the given node is authorized to sign a share, assuming
+    /// it is part of the canister HTTP committee.
+    pub fn is_authorized_signer(&self, signer: &NodeId) -> bool {
+        match self {
+            Replication::FullyReplicated => true,
+            Replication::NonReplicated(node_id) => node_id == signer,
+            Replication::Flexible { committee, .. } => committee.contains(signer),
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
 #[repr(u32)]
 pub enum PricingVersion {
@@ -495,12 +507,14 @@ impl CanisterHttpRequestContext {
         request: &Request,
         args: CanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
-        subnet_size: usize,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
         validate_http_headers_and_body(args.headers.get(), args.body.as_ref().unwrap_or(&vec![]))?;
+        if node_ids.is_empty() {
+            return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
+        }
 
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
@@ -567,7 +581,7 @@ impl CanisterHttpRequestContext {
             refund_status: RefundStatus {
                 //TODO(IC-1937): subtract the base fee from the refundable amount.
                 refundable_cycles: request.payment,
-                per_replica_allowance: request.payment / subnet_size.max(1),
+                per_replica_allowance: request.payment / node_ids.len(),
                 refunded_cycles: Cycles::new(0),
                 refunding_nodes: BTreeSet::new(),
             },
@@ -1205,6 +1219,28 @@ mod tests {
     }
 
     #[test]
+    fn replication_authorized_signer() {
+        let node1 = node_test_id(1);
+        let node2 = node_test_id(2);
+
+        let fully_replicated = Replication::FullyReplicated;
+        assert!(fully_replicated.is_authorized_signer(&node1));
+        assert!(fully_replicated.is_authorized_signer(&node2));
+
+        let non_replicated = Replication::NonReplicated(node1);
+        assert!(non_replicated.is_authorized_signer(&node1));
+        assert!(!non_replicated.is_authorized_signer(&node2));
+
+        let flexible = Replication::Flexible {
+            committee: BTreeSet::from([node1, node_test_id(3)]),
+            min_responses: 1,
+            max_responses: 2,
+        };
+        assert!(flexible.is_authorized_signer(&node1));
+        assert!(!flexible.is_authorized_signer(&node2));
+    }
+
+    #[test]
     fn put_requires_non_replicated() {
         let rng = &mut ReproducibleRng::new();
         let node_ids = BTreeSet::from([node_test_id(1)]);
@@ -1213,7 +1249,7 @@ mod tests {
         // PUT with is_replicated None -> rejected
         let args = dummy_args(HttpMethod::PUT, None);
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1223,7 +1259,7 @@ mod tests {
         // PUT with is_replicated Some(true) -> rejected
         let args = dummy_args(HttpMethod::PUT, Some(true));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1233,7 +1269,7 @@ mod tests {
         // PUT with is_replicated Some(false) -> accepted
         let args = dummy_args(HttpMethod::PUT, Some(false));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1253,7 +1289,7 @@ mod tests {
         // DELETE with is_replicated None -> rejected
         let args = dummy_args(HttpMethod::DELETE, None);
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1263,7 +1299,7 @@ mod tests {
         // DELETE with is_replicated Some(true) -> rejected
         let args = dummy_args(HttpMethod::DELETE, Some(true));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1273,7 +1309,7 @@ mod tests {
         // DELETE with is_replicated Some(false) -> accepted
         let args = dummy_args(HttpMethod::DELETE, Some(false));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1301,12 +1337,29 @@ mod tests {
         });
 
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
 
         assert_matches!(
             result,
             Err(CanisterHttpRequestContextError::TransformPrincipalId(_))
+        );
+    }
+
+    #[test]
+    fn rejects_empty_node_ids() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::new();
+        let request = dummy_request();
+        let args = dummy_args(HttpMethod::GET, None);
+
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)
         );
     }
 

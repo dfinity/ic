@@ -1,4 +1,7 @@
 use candid::{CandidType, Principal};
+use ic_btc_interface::{
+    InitConfig as BitcoinInitConfig, SetConfigRequest as BitcoinSetConfigRequest,
+};
 use ic_doge_interface::{Fees, Flag, InitConfig as DogecoinInitConfig};
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -87,6 +90,13 @@ pub struct CaptchaConfig {
 }
 
 #[derive(CandidType)]
+pub enum OpenIdEmailVerification {
+    Unknown,
+    Google,
+    Microsoft,
+}
+
+#[derive(CandidType)]
 pub struct OpenIdConfig {
     pub name: String,
     pub logo: String,
@@ -96,6 +106,7 @@ pub struct OpenIdConfig {
     pub auth_uri: String,
     pub auth_scope: Vec<String>,
     pub fedcm_uri: Option<String>,
+    pub email_verification: Option<OpenIdEmailVerification>,
 }
 
 #[allow(dead_code)]
@@ -129,6 +140,17 @@ pub struct InternetIdentityInit {
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
+    pub backend_canister_id: Option<Principal>,
+    pub backend_origin: Option<String>,
+}
+
+/* Bitcoin canister */
+#[derive(CandidType, serde::Deserialize)]
+pub enum BitcoinCanisterArg {
+    #[serde(rename = "init")]
+    Init(BitcoinInitConfig),
+    #[serde(rename = "upgrade")]
+    Upgrade(Option<BitcoinSetConfigRequest>),
 }
 
 /* Dogecoin canister */
