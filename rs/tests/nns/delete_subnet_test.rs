@@ -7,7 +7,8 @@ end::catalog[] */
 
 use anyhow::Result;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_canister_client::Sender;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_protobuf::registry::subnet::v1::DeletedSubnetListRecord;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
@@ -125,46 +126,24 @@ pub fn test(env: TestEnv) {
         let original_subnets = get_subnet_list_from_registry(&client).await;
         info!(log, "original subnets: {:?}", original_subnets);
 
-        // get current replica version and Governance canister
-        let version = get_software_version_from_snapshot(&nns_endpoint)
-            .await
-            .expect("could not obtain replica software version");
         let nns = runtime_from_url(
             nns_endpoint.get_public_url(),
             nns_endpoint.effective_canister_id(),
         );
         let registry_canister = nns::get_registry_canister(&nns);
 
-        let bytes = registry_canister
-            .query("get_subnet_for_canister")
-            .bytes(
-                Encode!(&GetSubnetForCanisterArgs {
-                    principal: Some(REGISTRY_CANISTER_ID.into())
-                })
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-        let Ok(GetSubnetForCanisterResponse { subnet_id }) =
-            Decode!(&bytes, Result<GetSubnetForCanisterResponse, String>).unwrap()
-        else {
-            panic!("Expected Ok(_)");
-        };
-
         let arg = DeleteSubnetPayload {
             subnet_id: engine_subnet.subnet_id.get().into(),
         };
         let bytes = registry_canister
             .update("delete_subnet")
-            .bytes(Encode!(&arg).unwrap())
+            .bytes_with_sender(
+                Encode!(&arg).unwrap(),
+                &Sender::PrincipalId(GOVERNANCE_CANISTER_ID.get()),
+            )
             .await
             .unwrap();
-        let Ok(()) = Decode!(&bytes, Result<(), String>).unwrap() else {
-            let Err(e) = Decode!(&bytes, Result<(), String>).unwrap() else {
-                unreachable!()
-            };
-            panic!("Expected Ok(()), got {:?}", e);
-        };
+        Decode!(&bytes, Result<(), String>).unwrap().unwrap();
 
         let new_topology_snapshot = topology_snapshot
             .block_for_min_registry_version(RegistryVersion::new(2))
