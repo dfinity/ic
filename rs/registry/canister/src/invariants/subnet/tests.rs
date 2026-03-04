@@ -123,7 +123,7 @@ fn not_all_nodes_have_a_chip_id() {
 fn all_nodes_have_a_chip_id() {
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
-    let test_node_id = node_test_id(103);
+
     // get a snapshot with chip IDs
     let (mut snapshot, mut test_subnet_record) =
         setup_minimal_registry_snapshot_for_check_subnet_invariants(
