@@ -1593,10 +1593,12 @@ impl Scheduler for SchedulerImpl {
                 final_state.canister_states().len() as u64;
         }
 
+        // Update canister priorities.
         {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
             round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
         }
+
         final_state
     }
 
