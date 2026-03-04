@@ -401,6 +401,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 .collect(),
             timeouts,
             divergence_responses,
+            // TODO(flexible-http-outcalls): implement flexible responses
+            flexible_responses: vec![],
         }
     }
 
@@ -414,6 +416,11 @@ impl CanisterHttpPayloadBuilderImpl {
         // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
+        }
+
+        // Flexible responses are not yet supported
+        if !payload.flexible_responses.is_empty() {
+            return invalid_artifact(InvalidCanisterHttpPayloadReason::FlexibleResponsesNotEmpty);
         }
 
         // Check whether feature is enabled and reject if it isn't.
