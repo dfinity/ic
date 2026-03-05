@@ -109,10 +109,9 @@ impl Registry {
                 response.high_threshold_transcript_record,
             ),
             chain_key_initializations,
+            cup_type: Some(CupType::Genesis(GenesisArgs {})),
             ..Default::default()
         };
-
-        cup_contents.cup_type = Some(CupType::Genesis(GenesisArgs {}));
 
         let new_subnet_dkg = RegistryMutation {
             mutation_type: registry_mutation::Type::Insert as i32,
