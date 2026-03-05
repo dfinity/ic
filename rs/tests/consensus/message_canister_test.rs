@@ -17,7 +17,7 @@ use ic_system_test_driver::{
         test_env_api::*,
     },
     systest,
-    util::{block_on, MESSAGE_CANISTER_WASM},
+    util::{MESSAGE_CANISTER_WASM, block_on},
 };
 use ic_types::CanisterId;
 use slog::info;
@@ -51,7 +51,10 @@ fn test(env: TestEnv) {
         .next()
         .expect("No nodes in application subnet");
 
-    info!(logger, "Waiting for the application subnet to make progress");
+    info!(
+        logger,
+        "Waiting for the application subnet to make progress"
+    );
     cert_state_makes_progress_with_retries(
         &app_node.get_public_url(),
         app_node.effective_canister_id(),
@@ -116,17 +119,12 @@ fn test(env: TestEnv) {
 
         info!(logger, "Reading message back");
         let result = agent
-            .execute_query(
-                &canister_id,
-                "read",
-                Encode!(&()).unwrap(),
-            )
+            .execute_query(&canister_id, "read", Encode!(&()).unwrap())
             .await
             .expect("Failed to read message")
             .expect("Empty reply from read");
 
-        let read_msg =
-            Decode!(&result, Option<String>).expect("Failed to decode read result");
+        let read_msg = Decode!(&result, Option<String>).expect("Failed to decode read result");
 
         info!(logger, "Read message: {:?}", read_msg);
         assert_eq!(read_msg, Some(msg.to_string()));

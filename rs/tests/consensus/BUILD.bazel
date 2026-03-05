@@ -408,7 +408,7 @@ system_test_nns(
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/canister_client:canister_client",
+        "//rs/canister_client",
         "//rs/registry/subnet_type",
         "//rs/test_utilities/identity",
         "//rs/tests/consensus/utils",
