@@ -15,10 +15,10 @@ use ic_interfaces::crypto::{
 };
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
+    chain_key::{ChainKeyPayloadValidationFailure, InvalidChainKeyPayloadReason},
     consensus::PayloadValidationError,
     consensus_pool::ConsensusPoolCache,
     idkg::IDkgPool,
-    chain_key::{InvalidChainKeyPayloadReason, ChainKeyPayloadValidationFailure},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -39,8 +39,8 @@ use ic_types::crypto::vetkd::{
 use ic_types::{
     CountBytes, Height, NumBytes, SubnetId, Time,
     batch::{
-        ConsensusResponse, ValidationContext, ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload,
-        bytes_to_chain_key_payload, chain_key_payload_to_bytes,
+        ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, ConsensusResponse,
+        ValidationContext, bytes_to_chain_key_payload, chain_key_payload_to_bytes,
     },
     consensus::idkg::common::{BuildSignatureInputsError, RequestId, ThresholdSigInputs},
     crypto::{
@@ -420,13 +420,15 @@ impl ChainKeyPayloadBuilderImpl {
                 .into_par_iter()
                 .map(|(id, agreement)| {
                     if delivered_ids.contains(&id) {
-                        return invalid_artifact_err(InvalidChainKeyPayloadReason::DuplicateResponse(
-                            id,
-                        ));
+                        return invalid_artifact_err(
+                            InvalidChainKeyPayloadReason::DuplicateResponse(id),
+                        );
                     }
 
                     let Some(context) = contexts.get(&id) else {
-                        return invalid_artifact_err(InvalidChainKeyPayloadReason::MissingContext(id));
+                        return invalid_artifact_err(InvalidChainKeyPayloadReason::MissingContext(
+                            id,
+                        ));
                     };
 
                     let expected_reject =
@@ -515,12 +517,11 @@ impl ChainKeyPayloadBuilderImpl {
                     })
             }
             ThresholdArguments::Ecdsa(_) => {
-                let (_, sig_inputs) =
-                    build_signature_inputs(id, context).map_err(|err| {
-                        invalid_artifact(InvalidChainKeyPayloadReason::DecodingError(format!(
-                            "Failed to build ECDSA signature inputs: {err:?}"
-                        )))
-                    })?;
+                let (_, sig_inputs) = build_signature_inputs(id, context).map_err(|err| {
+                    invalid_artifact(InvalidChainKeyPayloadReason::DecodingError(format!(
+                        "Failed to build ECDSA signature inputs: {err:?}"
+                    )))
+                })?;
                 let ThresholdSigInputs::Ecdsa(inputs) = &sig_inputs else {
                     return invalid_artifact_err(InvalidChainKeyPayloadReason::DecodingError(
                         "Expected ECDSA inputs".to_string(),
@@ -541,7 +542,10 @@ impl ChainKeyPayloadBuilderImpl {
                 )
                 .map_err(|err| {
                     if err.is_reproducible() {
-                        warn!(self.log, "Invalid ECDSA signature in chain key payload: {err:?}");
+                        warn!(
+                            self.log,
+                            "Invalid ECDSA signature in chain key payload: {err:?}"
+                        );
                         invalid_artifact(InvalidChainKeyPayloadReason::DecodingError(format!(
                             "ECDSA signature verification failed: {err:?}"
                         )))
@@ -558,12 +562,11 @@ impl ChainKeyPayloadBuilderImpl {
                 })
             }
             ThresholdArguments::Schnorr(_) => {
-                let (_, sig_inputs) =
-                    build_signature_inputs(id, context).map_err(|err| {
-                        invalid_artifact(InvalidChainKeyPayloadReason::DecodingError(format!(
-                            "Failed to build Schnorr signature inputs: {err:?}"
-                        )))
-                    })?;
+                let (_, sig_inputs) = build_signature_inputs(id, context).map_err(|err| {
+                    invalid_artifact(InvalidChainKeyPayloadReason::DecodingError(format!(
+                        "Failed to build Schnorr signature inputs: {err:?}"
+                    )))
+                })?;
                 let ThresholdSigInputs::Schnorr(inputs) = &sig_inputs else {
                     return invalid_artifact_err(InvalidChainKeyPayloadReason::DecodingError(
                         "Expected Schnorr inputs".to_string(),
@@ -584,7 +587,10 @@ impl ChainKeyPayloadBuilderImpl {
                 )
                 .map_err(|err| {
                     if err.is_reproducible() {
-                        warn!(self.log, "Invalid Schnorr signature in chain key payload: {err:?}");
+                        warn!(
+                            self.log,
+                            "Invalid Schnorr signature in chain key payload: {err:?}"
+                        );
                         invalid_artifact(InvalidChainKeyPayloadReason::DecodingError(format!(
                             "Schnorr signature verification failed: {err:?}"
                         )))
@@ -666,13 +672,16 @@ impl BatchPayloadBuilder for ChainKeyPayloadBuilderImpl {
         {
             Ok(state) => state,
             Err(err) => {
-                return validation_failed_err(ChainKeyPayloadValidationFailure::StateUnavailable(err));
+                return validation_failed_err(ChainKeyPayloadValidationFailure::StateUnavailable(
+                    err,
+                ));
             }
         };
 
         let delivered_ids = parse_past_payload_ids(past_payloads, &self.log);
-        let payload = bytes_to_chain_key_payload(payload)
-            .map_err(|e| invalid_artifact(InvalidChainKeyPayloadReason::DeserializationFailed(e)))?;
+        let payload = bytes_to_chain_key_payload(payload).map_err(|e| {
+            invalid_artifact(InvalidChainKeyPayloadReason::DeserializationFailed(e))
+        })?;
 
         self.validate_chain_key_payload_impl(
             payload,
@@ -828,7 +837,9 @@ mod tests {
     use ic_consensus_mocks::{
         Dependencies, dependencies_with_subnet_records_with_raw_state_manager,
     };
-    use ic_interfaces::chain_key::{InvalidChainKeyPayloadReason, ChainKeyPayloadValidationFailure};
+    use ic_interfaces::chain_key::{
+        ChainKeyPayloadValidationFailure, InvalidChainKeyPayloadReason,
+    };
     use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationFailure};
     use ic_interfaces::idkg::IDkgChangeAction;
     use ic_interfaces::p2p::consensus::MutablePool;
@@ -1102,15 +1113,11 @@ mod tests {
                 let mut payload_deserialized = bytes_to_chain_key_payload(&payload).unwrap();
                 assert_eq!(payload_deserialized.agreements.len(), 2);
                 assert_matches!(
-                    payload_deserialized
-                        .agreements
-                        .get(&CallbackId::from(1)),
+                    payload_deserialized.agreements.get(&CallbackId::from(1)),
                     Some(ChainKeyAgreement::Success(_))
                 );
                 assert_matches!(
-                    payload_deserialized
-                        .agreements
-                        .get(&CallbackId::from(2)),
+                    payload_deserialized.agreements.get(&CallbackId::from(2)),
                     Some(ChainKeyAgreement::Success(_))
                 );
 
@@ -1474,10 +1481,7 @@ mod tests {
                     match context.key_id() {
                         MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
                             if let Some(agreement) = payload.agreements.get(&id) {
-                                assert_eq!(
-                                    agreement,
-                                    &ChainKeyAgreement::Reject(expected_error)
-                                );
+                                assert_eq!(agreement, &ChainKeyAgreement::Reject(expected_error));
                             }
                         }
                         MasterPublicKeyId::VetKd(_) => {

@@ -6,10 +6,10 @@ use crate::consensus::{
     metrics::{BatchStats, BlockStats},
     status::{self, Status},
 };
+use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_idkg::utils::get_idkg_subnet_public_keys_and_pre_signatures;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
-use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{

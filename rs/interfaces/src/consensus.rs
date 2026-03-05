@@ -5,6 +5,7 @@ use crate::{
         CanisterHttpPayloadValidationError, CanisterHttpPayloadValidationFailure,
         InvalidCanisterHttpPayloadReason,
     },
+    chain_key::{ChainKeyPayloadValidationFailure, InvalidChainKeyPayloadReason},
     ingress_manager::{
         IngressPayloadValidationError, IngressPayloadValidationFailure, InvalidIngressPayloadReason,
     },
@@ -15,7 +16,6 @@ use crate::{
         SelfValidatingPayloadValidationFailure,
     },
     validation::{ValidationError, ValidationResult},
-    chain_key::{InvalidChainKeyPayloadReason, ChainKeyPayloadValidationFailure},
 };
 use ic_base_types::{NumBytes, SubnetId};
 use ic_types::{

@@ -15,8 +15,7 @@ use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{
-    ReplicatedState,
-    metadata_state::subnet_call_context_manager::ReshareChainKeyContext,
+    ReplicatedState, metadata_state::subnet_call_context_manager::ReshareChainKeyContext,
 };
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId, Time,
@@ -727,9 +726,7 @@ mod tests {
     use crate::{
         MAX_IDKG_THREADS,
         test_utils::*,
-        utils::{
-            block_chain_reader, build_thread_pool,
-        },
+        utils::{block_chain_reader, build_thread_pool},
     };
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{Dependencies, dependencies};
@@ -1404,7 +1401,6 @@ mod tests {
             let mut summary_proto = pb::IDkgPayload::from(&summary);
             let summary_from_proto = IDkgPayload::try_from(summary_proto.clone()).unwrap();
             assert_eq!(summary, summary_from_proto);
-
         })
     }
 

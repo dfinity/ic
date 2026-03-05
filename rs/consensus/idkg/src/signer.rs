@@ -27,8 +27,7 @@ use ic_types::{
     },
     crypto::{
         canister_threshold_sig::error::{
-            ThresholdEcdsaCreateSigShareError,
-            ThresholdEcdsaVerifySigShareError,
+            ThresholdEcdsaCreateSigShareError, ThresholdEcdsaVerifySigShareError,
             ThresholdSchnorrCreateSigShareError, ThresholdSchnorrVerifySigShareError,
         },
         vetkd::{VetKdKeyShareCreationError, VetKdKeyShareVerificationError},

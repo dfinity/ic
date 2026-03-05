@@ -25,9 +25,9 @@ use ic_types::{
     consensus::{
         Block, HasHeight,
         idkg::{
-            HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
-            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
-            TranscriptLookupError, TranscriptRef,
+            HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgMessage,
+            IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId, TranscriptLookupError,
+            TranscriptRef,
             common::{BuildSignatureInputsError, ThresholdSigInputs},
         },
     },

@@ -1,8 +1,8 @@
 use ic_interfaces::{
     batch_payload::PastPayload,
+    chain_key::{ChainKeyPayloadValidationFailure, InvalidChainKeyPayloadReason},
     consensus::{InvalidPayloadReason, PayloadValidationError, PayloadValidationFailure},
     validation::ValidationError,
-    chain_key::{InvalidChainKeyPayloadReason, ChainKeyPayloadValidationFailure},
 };
 use ic_logger::{ReplicaLogger, error};
 use ic_protobuf::types::v1 as pb;
@@ -25,7 +25,9 @@ pub(super) fn invalid_artifact_err(
 }
 
 pub(super) fn validation_failed(err: ChainKeyPayloadValidationFailure) -> PayloadValidationError {
-    ValidationError::ValidationFailed(PayloadValidationFailure::ChainKeyPayloadValidationFailed(err))
+    ValidationError::ValidationFailed(PayloadValidationFailure::ChainKeyPayloadValidationFailed(
+        err,
+    ))
 }
 
 pub(super) fn invalid_artifact(reason: InvalidChainKeyPayloadReason) -> PayloadValidationError {

@@ -43,10 +43,7 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, HasHeight,
-        idkg::{
-            self, IDkgBlockReader, TranscriptRef,
-            common::BuildSignatureInputsError,
-        },
+        idkg::{self, IDkgBlockReader, TranscriptRef, common::BuildSignatureInputsError},
     },
     crypto::canister_threshold_sig::{
         error::{

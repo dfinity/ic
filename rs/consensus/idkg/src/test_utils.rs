@@ -19,9 +19,7 @@ use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    SignWithThresholdContext,
-};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::*, idkg::*};
