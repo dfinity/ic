@@ -86,14 +86,22 @@ fn test_ledger_upgrade_synchronization() {
 
     runner
         .run(
-            &(valid_transactions_strategy(
-                (*MINTING_IDENTITY).clone(),
-                DEFAULT_TRANSFER_FEE,
-                *MAX_NUM_GENERATED_BLOCKS * 2,
-                SystemTime::now(),
+            &(
+                valid_transactions_strategy(
+                    (*MINTING_IDENTITY).clone(),
+                    DEFAULT_TRANSFER_FEE,
+                    *MAX_NUM_GENERATED_BLOCKS,
+                    SystemTime::now(),
+                ),
+                valid_transactions_strategy(
+                    (*MINTING_IDENTITY).clone(),
+                    DEFAULT_TRANSFER_FEE,
+                    *MAX_NUM_GENERATED_BLOCKS,
+                    SystemTime::now(),
+                ),
             )
-            .no_shrink()),
-            |args_with_caller| {
+                .no_shrink(),
+            |(first_block_batch, second_block_batch)| {
                 let rt = Runtime::new().unwrap();
                 rt.block_on(async {
                     let mut env = RosettaTestingEnvironment::builder()
@@ -153,12 +161,8 @@ fn test_ledger_upgrade_synchronization() {
                         )
                         .await;
 
-                    // We split up the transactions into two batches to make sure we have a valid blockchain
-                    let (first_block_batch, second_block_batch) =
-                        args_with_caller.split_at(args_with_caller.len() / 2);
-
                     // Let's create a few transactions to make sure rosetta is working with the mainnet ledger version
-                    env.generate_blocks(first_block_batch.to_owned()).await;
+                    env.generate_blocks(first_block_batch.clone()).await;
 
                     wait_for_rosetta_to_sync_up_to_block(
                         &env.rosetta_client,
@@ -193,12 +197,13 @@ fn test_ledger_upgrade_synchronization() {
                         .unwrap();
 
                     // Let's create a few transactions on the new ledger version
-                    env.generate_blocks(second_block_batch.to_owned()).await;
+                    env.generate_blocks(second_block_batch.clone()).await;
 
+                    let total_blocks = first_block_batch.len() + second_block_batch.len();
                     wait_for_rosetta_to_sync_up_to_block(
                         &env.rosetta_client,
                         env.network_identifier.clone(),
-                        args_with_caller.len() as u64,
+                        total_blocks as u64,
                     )
                     .await
                     .unwrap();
@@ -228,18 +233,22 @@ fn test_load_from_storage() {
 
     runner
         .run(
-            &(valid_transactions_strategy(
-                (*MINTING_IDENTITY).clone(),
-                DEFAULT_TRANSFER_FEE,
-                *MAX_NUM_GENERATED_BLOCKS * 2,
-                SystemTime::now(),
+            &(
+                valid_transactions_strategy(
+                    (*MINTING_IDENTITY).clone(),
+                    DEFAULT_TRANSFER_FEE,
+                    *MAX_NUM_GENERATED_BLOCKS,
+                    SystemTime::now(),
+                ),
+                valid_transactions_strategy(
+                    (*MINTING_IDENTITY).clone(),
+                    DEFAULT_TRANSFER_FEE,
+                    *MAX_NUM_GENERATED_BLOCKS,
+                    SystemTime::now(),
+                ),
             )
-            .no_shrink()),
-            |args_with_caller| {
-                // We split up the transactions into two batches to make sure we have a valid blockchain
-                let (first_block_batch, second_block_batch) =
-                    args_with_caller.split_at(args_with_caller.len() / 2);
-
+                .no_shrink(),
+            |(first_block_batch, second_block_batch)| {
                 let rt = Runtime::new().unwrap();
                 rt.block_on(async {
                     let mut env = RosettaTestingEnvironment::builder()
@@ -247,7 +256,7 @@ fn test_load_from_storage() {
                         .with_persistent_storage(true)
                         .build()
                         .await;
-                    env.generate_blocks(first_block_batch.to_owned()).await;
+                    env.generate_blocks(first_block_batch.clone()).await;
 
                     wait_for_rosetta_to_sync_up_to_block(
                         &env.rosetta_client,
@@ -294,11 +303,12 @@ fn test_load_from_storage() {
                         )
                         .await;
 
-                    env.generate_blocks(second_block_batch.to_owned()).await;
+                    env.generate_blocks(second_block_batch.clone()).await;
+                    let total_blocks = first_block_batch.len() + second_block_batch.len();
                     wait_for_rosetta_to_sync_up_to_block(
                         &env.rosetta_client,
                         env.network_identifier.clone(),
-                        args_with_caller.len() as u64,
+                        total_blocks as u64,
                     )
                     .await;
 
