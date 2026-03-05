@@ -748,7 +748,7 @@ fn archives() -> Vec<ArchiveInfo> {
 
 #[query(name = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
-    let standards = vec![
+    let mut standards = vec![
         StandardRecord {
             name: "ICRC-1".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
@@ -777,11 +777,13 @@ fn supported_standards() -> Vec<StandardRecord> {
             name: "ICRC-106".to_string(),
             url: "https://github.com/dfinity/ICRC/pull/106".to_string(),
         },
-        StandardRecord {
+    ];
+    if Access::with_ledger(|l| l.feature_flags().icrc152) {
+        standards.push(StandardRecord {
             name: "ICRC-152".to_string(),
             url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-152.md".to_string(),
-        },
-    ];
+        });
+    }
     standards
 }
 
@@ -933,7 +935,7 @@ fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
 fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::SupportedBlockType> {
     use icrc_ledger_types::icrc3::blocks::SupportedBlockType;
 
-    vec![
+    let mut block_types = vec![
         SupportedBlockType {
             block_type: "1burn".to_string(),
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
@@ -959,15 +961,18 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
         },
-        SupportedBlockType {
+    ];
+    if Access::with_ledger(|l| l.feature_flags().icrc152) {
+        block_types.push(SupportedBlockType {
             block_type: "122burn".to_string(),
             url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-122.md".to_string(),
-        },
-        SupportedBlockType {
+        });
+        block_types.push(SupportedBlockType {
             block_type: "122mint".to_string(),
             url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-122.md".to_string(),
-        },
-    ]
+        });
+    }
+    block_types
 }
 
 #[query]
