@@ -187,16 +187,6 @@ struct WatData {
     data: Vec<u8>,
 }
 
-impl WatData {
-    #[cfg(test)]
-    fn new(offset: i32, data: &[u8]) -> Self {
-        Self {
-            offset: WatConst::I32(offset),
-            data: data.to_vec(),
-        }
-    }
-}
-
 fn format_bytes(bytes: &[u8]) -> String {
     bytes
         .iter()
