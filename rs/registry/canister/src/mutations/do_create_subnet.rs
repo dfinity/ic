@@ -103,7 +103,7 @@ impl Registry {
         };
 
         // 3. Create subnet record and associated entries
-        let mut cup_contents = CatchUpPackageContents {
+        let cup_contents = CatchUpPackageContents {
             initial_ni_dkg_transcript_low_threshold: Some(response.low_threshold_transcript_record),
             initial_ni_dkg_transcript_high_threshold: Some(
                 response.high_threshold_transcript_record,
