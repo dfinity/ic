@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use strum_macros::EnumIter;
 
 #[cfg(test)]
