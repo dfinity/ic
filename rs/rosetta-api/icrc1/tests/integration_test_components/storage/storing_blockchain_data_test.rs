@@ -297,6 +297,7 @@ fn test_icrc122_authorized_mint_and_burn() {
 
         // Burn 200 tokens from TEST_ACCOUNT via an authorized burn (122burn block)
         let block1 = BlockBuilder::<Tokens>::new(1, 2000)
+            .with_parent_hash(block0.clone().hash().to_vec())
             .authorized_burn(*TEST_ACCOUNT, Tokens::from(200u64), caller)
             .build();
 
