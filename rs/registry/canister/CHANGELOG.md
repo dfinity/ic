@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-02-27: Proposal 140599
+
+http://dashboard.internetcomputer.org/proposal/140599
+
+## Added
+
+* Added an optional field `max_ingress_bytes_per_block` to `CreateSubnetPayload` and
+`UpdateSubnetPayload` which, when present, will set a limit on how big the ingress payload can be in
+blocks produced by the created/updated subnet.
+
+
 # 2026-02-20: Proposal 140510
 
 http://dashboard.internetcomputer.org/proposal/140510

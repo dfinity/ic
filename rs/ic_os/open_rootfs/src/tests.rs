@@ -1,5 +1,5 @@
 use crate::partitions::{A_BOOT_UUID, A_ROOT_UUID, B_BOOT_UUID, B_ROOT_UUID};
-use crate::recovery::{CONFIG_PARTITION_LABEL, RECOVERY_PROPOSAL_FILE_NAME};
+use crate::recovery::{CONFIG_DEVICE_LABEL, RECOVERY_PROPOSAL_FILE_NAME};
 use anyhow::{Context, Result};
 use candid::Encode;
 use command_runner::MockCommandRunner;
@@ -72,7 +72,7 @@ impl TestFixture {
             Arc::new(TempDir::with_prefix("b_boot").unwrap()),
         );
         partitions.insert(
-            PartitionSelector::ByLabel(CONFIG_PARTITION_LABEL.to_string()),
+            PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()),
             config_media,
         );
 
@@ -222,9 +222,7 @@ impl TestFixture {
         // Write NNS public key override to CONFIG media
         fs::write(
             self.partition_provider
-                .get_partition(PartitionSelector::ByLabel(
-                    CONFIG_PARTITION_LABEL.to_string(),
-                ))
+                .get_partition(PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()))
                 .unwrap()
                 .join("nns_public_key_override.pem"),
             &nns_public_key,
@@ -440,9 +438,7 @@ fn test_nns_root_key_mismatch() {
     fs::remove_file(
         fixture
             .partition_provider
-            .get_partition(PartitionSelector::ByLabel(
-                CONFIG_PARTITION_LABEL.to_string(),
-            ))
+            .get_partition(PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()))
             .unwrap()
             .join("nns_public_key_override.pem"),
     )

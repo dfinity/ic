@@ -11,7 +11,7 @@ use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
 use std::path::Path;
 
-pub const CONFIG_PARTITION_LABEL: &str = "CONFIG";
+pub const CONFIG_DEVICE_LABEL: &str = "CONFIG";
 pub const RECOVERY_PROPOSAL_FILE_NAME: &str = "alternative_guestos_proposal.cbor";
 
 /// Reads and verifies an alternative GuestOS proposal, returning the rootfs hash from it.
@@ -24,9 +24,10 @@ pub fn extract_and_verify_recovery_rootfs_hash(
 ) -> Result<String> {
     let config_mount = partition_provider
         .mount_partition(
-            PartitionSelector::ByLabel(CONFIG_PARTITION_LABEL.to_string()),
+            PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()),
             MountOptions {
                 file_system: FileSystem::Vfat,
+                read_only: true,
             },
         )
         .context("Failed to mount CONFIG partition")?;
@@ -46,6 +47,7 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         PartitionSelector::ByUuid(get_boot_partition_uuid(root_device, command_runner)?),
         MountOptions {
             file_system: FileSystem::Ext4,
+            read_only: false, // Partition may need repair
         },
     )?;
 

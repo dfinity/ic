@@ -37,7 +37,7 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:2157bda72421ff05104e22333a5c1271faa41b575d7d9045930ec97494afbce7
+      image: ghcr.io/dfinity/ic-build@sha256:18d23aef1f5e9e7e1eef94c32563f8ed15531ae79065bb00bb5206a643fc49fe
       options: >-
          -e NODE_NAME --mount type=tmpfs,target="/tmp/containers"
     steps:
@@ -47,6 +47,7 @@ jobs:
           # Ensures we fetch the merge-base, which we compare against
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.commit-sha }}
+      - uses: ./.github/actions/netrc
       - name: Run candid compatibility checks
         uses: ./.github/actions/bazel
         with:
@@ -77,6 +78,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
           token: ${{ steps.app-token.outputs.token }}
+      - uses: ./.github/actions/netrc
       - name: Run Linter
         id: linter
         uses: ./.github/actions/bazel
