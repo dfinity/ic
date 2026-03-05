@@ -260,6 +260,72 @@ fn icrc3_test_ledger() -> Vec<u8> {
     std::fs::read(std::env::var("ICRC3_TEST_LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap()
 }
 
+#[test]
+fn test_icrc122_authorized_mint_and_burn() {
+    let rt = Runtime::new().unwrap();
+
+    let mut pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build();
+
+    let init_args = InitArgsBuilder::for_tests().build();
+
+    let icrc_ledger_canister_id =
+        create_and_install_custom_icrc_ledger(&pocket_ic, init_args, icrc3_test_ledger(), None);
+    let endpoint = pocket_ic.make_live(None);
+    let port = endpoint.port().unwrap();
+
+    rt.block_on(async {
+        let agent = Arc::new(Icrc1Agent {
+            agent: local_replica::get_testing_agent(port).await,
+            ledger_canister_id: icrc_ledger_canister_id,
+        });
+        let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
+
+        let controller = PrincipalId::new_user_test_id(99);
+        let caller = candid::Principal::from(controller);
+
+        // Mint 1000 tokens to TEST_ACCOUNT via an authorized mint (122mint block)
+        let block0 = BlockBuilder::<Tokens>::new(0, 1000)
+            .authorized_mint(*TEST_ACCOUNT, Tokens::from(1_000u64), caller)
+            .with_reason("initial supply".to_string())
+            .build();
+
+        let result0 = add_block(&agent, &block0).await.unwrap();
+        assert_eq!(result0, Nat::from(0u64));
+
+        // Burn 200 tokens from TEST_ACCOUNT via an authorized burn (122burn block)
+        let block1 = BlockBuilder::<Tokens>::new(1, 2000)
+            .authorized_burn(*TEST_ACCOUNT, Tokens::from(200u64), caller)
+            .build();
+
+        let result1 = add_block(&agent, &block1).await.unwrap();
+        assert_eq!(result1, Nat::from(1u64));
+
+        blocks_synchronizer::start_synching_blocks(
+            agent.clone(),
+            storage_client.clone(),
+            10,
+            Arc::new(AsyncMutex::new(vec![])),
+            RecurrencyMode::OneShot,
+            Box::new(|| {}),
+        )
+        .await
+        .unwrap();
+        storage_client.update_account_balances().await.unwrap();
+
+        assert_eq!(
+            storage_client
+                .get_account_balance(&TEST_ACCOUNT)
+                .await
+                .unwrap()
+                .unwrap(),
+            Nat::from(800u64) // mint 1000 - burn 200
+        );
+    });
+}
+
 /// Adds the block to the ledger
 pub async fn add_block(agent: &Arc<Icrc1Agent>, block: &ICRC3Value) -> Result<Nat, String> {
     let result = agent

@@ -138,7 +138,9 @@ impl RosettaBlock {
                 IcrcOperation::Transfer { fee, .. } => fee,
                 IcrcOperation::Approve { fee, .. } => fee,
                 IcrcOperation::Burn { fee, .. } => fee,
-                IcrcOperation::FeeCollector { .. } => None,
+                IcrcOperation::FeeCollector { .. }
+                | IcrcOperation::AuthorizedMint { .. }
+                | IcrcOperation::AuthorizedBurn { .. } => None,
             }))
     }
 
@@ -373,6 +375,18 @@ pub enum IcrcOperation {
         expires_at: Option<u64>,
         fee: Option<Nat>,
     },
+    AuthorizedMint {
+        to: Account,
+        amount: Nat,
+        caller: ByteBuf,
+        reason: Option<String>,
+    },
+    AuthorizedBurn {
+        from: Account,
+        amount: Nat,
+        caller: ByteBuf,
+        reason: Option<String>,
+    },
     FeeCollector {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
@@ -444,6 +458,32 @@ impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
                         expires_at,
                     })
                 }
+                "152mint" => {
+                    let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
+                    let caller: ByteBuf = get_field(&map, FIELD_PREFIX, "caller")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::AuthorizedMint {
+                        to,
+                        amount: amount.ok_or_else(|| {
+                            anyhow!("Missing field 'amt' for AuthorizedMint operation")
+                        })?,
+                        caller,
+                        reason,
+                    })
+                }
+                "152burn" => {
+                    let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
+                    let caller: ByteBuf = get_field(&map, FIELD_PREFIX, "caller")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::AuthorizedBurn {
+                        from,
+                        amount: amount.ok_or_else(|| {
+                            anyhow!("Missing field 'amt' for AuthorizedBurn operation")
+                        })?,
+                        caller,
+                        reason,
+                    })
+                }
                 BTYPE_107 => {
                     let fee_collector: Option<Account> =
                         get_opt_field(&map, FIELD_PREFIX, "fee_collector")?;
@@ -457,7 +497,7 @@ impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
                 }
                 found => {
                     bail!(
-                        "Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}"
+                        "Expected field 'op' to be 'burn', 'mint', 'xfer', 'approve', '152mint', or '152burn' but found {found}"
                     )
                 }
             }
@@ -537,6 +577,34 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 map.insert("amt".to_string(), Value::Nat(amount));
                 if let Some(fee) = fee {
                     map.insert("fee".to_string(), Value::Nat(fee));
+                }
+            }
+            Op::AuthorizedMint {
+                to,
+                amount,
+                caller,
+                reason,
+            } => {
+                map.insert("op".to_string(), Value::text("152mint"));
+                map.insert("to".to_string(), Value::from(to));
+                map.insert("amt".to_string(), Value::Nat(amount));
+                map.insert("caller".to_string(), Value::Blob(caller));
+                if let Some(reason) = reason {
+                    map.insert("reason".to_string(), Value::text(reason));
+                }
+            }
+            Op::AuthorizedBurn {
+                from,
+                amount,
+                caller,
+                reason,
+            } => {
+                map.insert("op".to_string(), Value::text("152burn"));
+                map.insert("from".to_string(), Value::from(from));
+                map.insert("amt".to_string(), Value::Nat(amount));
+                map.insert("caller".to_string(), Value::Blob(caller));
+                if let Some(reason) = reason {
+                    map.insert("reason".to_string(), Value::text(reason));
                 }
             }
             Op::FeeCollector {
@@ -675,6 +743,28 @@ where
                 fee_collector,
                 caller,
                 mthd,
+            },
+            Op::AuthorizedMint {
+                to,
+                amount,
+                caller,
+                reason,
+            } => Self::AuthorizedMint {
+                to,
+                amount: amount.into(),
+                caller: ByteBuf::from(caller.as_slice()),
+                reason,
+            },
+            Op::AuthorizedBurn {
+                from,
+                amount,
+                caller,
+                reason,
+            } => Self::AuthorizedBurn {
+                from,
+                amount: amount.into(),
+                caller: ByteBuf::from(caller.as_slice()),
+                reason,
             },
         }
     }
@@ -1096,6 +1186,44 @@ mod tests {
                 assert_eq!(fee_collector, rosetta_fee_collector, "fee_collector");
                 assert_eq!(caller, rosetta_caller, "caller");
                 assert_eq!(mthd, rosetta_mthd, "mthd");
+            }
+            (
+                ic_icrc1::Operation::AuthorizedMint {
+                    to,
+                    amount,
+                    caller,
+                    reason,
+                },
+                IcrcOperation::AuthorizedMint {
+                    to: rosetta_to,
+                    amount: rosetta_amount,
+                    caller: rosetta_caller,
+                    reason: rosetta_reason,
+                },
+            ) => {
+                assert_eq!(to, rosetta_to, "to");
+                assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(ByteBuf::from(caller.as_slice()), rosetta_caller, "caller");
+                assert_eq!(reason, rosetta_reason, "reason");
+            }
+            (
+                ic_icrc1::Operation::AuthorizedBurn {
+                    from,
+                    amount,
+                    caller,
+                    reason,
+                },
+                IcrcOperation::AuthorizedBurn {
+                    from: rosetta_from,
+                    amount: rosetta_amount,
+                    caller: rosetta_caller,
+                    reason: rosetta_reason,
+                },
+            ) => {
+                assert_eq!(from, rosetta_from, "from");
+                assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(ByteBuf::from(caller.as_slice()), rosetta_caller, "caller");
+                assert_eq!(reason, rosetta_reason, "reason");
             }
             (l, r) => panic!(
                 "Found different type of operations. Operation:{l:?} rosetta's Operation:{r:?}"
