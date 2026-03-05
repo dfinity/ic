@@ -25,7 +25,7 @@ use slog::info;
 fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
         .setup_and_start(&env)
         .expect("Failed to set up IC under test");
 
