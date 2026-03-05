@@ -768,7 +768,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     stop_noisy_canister(&state_machine);
 
     for canister_config in canister_configs {
-        canister_config.perform_upgrade_downgrade_testing(&state_machine);
+        canister_config.perform_upgrade_downgrade_testing(&state_machine, true);
     }
 }
 
