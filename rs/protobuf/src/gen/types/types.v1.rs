@@ -612,10 +612,24 @@ pub struct CanisterHttpResponseDivergence {
     pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpResponseWithProof {
+    #[prost(message, optional, tag = "1")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+    #[prost(message, optional, tag = "2")]
+    pub proof: ::core::option::Option<CanisterHttpShare>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpResponses {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseMessage {
     #[prost(
         oneof = "canister_http_response_message::MessageType",
-        tags = "1, 2, 3"
+        tags = "1, 2, 3, 4"
     )]
     pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
 }
@@ -629,6 +643,8 @@ pub mod canister_http_response_message {
         Timeout(u64),
         #[prost(message, tag = "3")]
         DivergenceResponse(super::CanisterHttpResponseDivergence),
+        #[prost(message, tag = "4")]
+        FlexibleResponses(super::FlexibleCanisterHttpResponses),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
