@@ -81,38 +81,38 @@ impl CanisterHttpPayload {
     }
 }
 
-impl From<&CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithConsensus {
-    fn from(payload: &CanisterHttpResponseWithConsensus) -> Self {
+impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithConsensus {
+    fn from(payload: CanisterHttpResponseWithConsensus) -> Self {
         pb::CanisterHttpResponseWithConsensus {
             response: Some(pb::CanisterHttpResponse {
                 id: payload.content.id.get(),
                 timeout: payload.content.timeout.as_nanos_since_unix_epoch(),
                 content: Some(pb::CanisterHttpResponseContent::from(
-                    &payload.content.content,
+                    payload.content.content,
                 )),
                 canister_id: Some(pb::CanisterId::from(payload.content.canister_id)),
             }),
-            hash: payload.proof.content.content_hash.clone().get().0,
+            hash: payload.proof.content.content_hash.get().0,
             registry_version: payload.proof.content.registry_version.get(),
-            replica_version: payload.proof.content.replica_version.clone().into(),
+            replica_version: payload.proof.content.replica_version.into(),
             signatures: payload
                 .proof
                 .signature
                 .signatures_map
-                .iter()
+                .into_iter()
                 .map(|(signer, signature)| pb::CanisterHttpResponseSignature {
-                    signer: (*signer).get().into_vec(),
-                    signature: signature.clone().get().0,
+                    signer: signer.get().into_vec(),
+                    signature: signature.get().0,
                 })
                 .collect(),
         }
     }
 }
 
-impl From<&CanisterHttpResponseDivergence> for pb::CanisterHttpResponseDivergence {
-    fn from(payload: &CanisterHttpResponseDivergence) -> Self {
+impl From<CanisterHttpResponseDivergence> for pb::CanisterHttpResponseDivergence {
+    fn from(payload: CanisterHttpResponseDivergence) -> Self {
         pb::CanisterHttpResponseDivergence {
-            shares: payload.shares.iter().cloned().map(Into::into).collect(),
+            shares: payload.shares.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -184,15 +184,15 @@ impl TryFrom<pb::CanisterHttpResponseDivergence> for CanisterHttpResponseDiverge
     }
 }
 
-impl From<&CanisterHttpResponseContent> for pb::CanisterHttpResponseContent {
-    fn from(content: &CanisterHttpResponseContent) -> Self {
+impl From<CanisterHttpResponseContent> for pb::CanisterHttpResponseContent {
+    fn from(content: CanisterHttpResponseContent) -> Self {
         let inner = match content {
             CanisterHttpResponseContent::Success(payload) => {
-                pb::canister_http_response_content::Status::Success(payload.clone())
+                pb::canister_http_response_content::Status::Success(payload)
             }
             CanisterHttpResponseContent::Reject(error) => {
                 pb::canister_http_response_content::Status::Reject(pb::CanisterHttpReject {
-                    message: error.message.clone(),
+                    message: error.message,
                     reject_code: pb::RejectCode::from(error.reject_code).into(),
                 })
             }
@@ -283,11 +283,11 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
     }
 }
 
-impl From<&FlexibleCanisterHttpResponseWithProof> for pb::FlexibleCanisterHttpResponseWithProof {
-    fn from(entry: &FlexibleCanisterHttpResponseWithProof) -> Self {
+impl From<FlexibleCanisterHttpResponseWithProof> for pb::FlexibleCanisterHttpResponseWithProof {
+    fn from(entry: FlexibleCanisterHttpResponseWithProof) -> Self {
         pb::FlexibleCanisterHttpResponseWithProof {
-            response: Some(pb::CanisterHttpResponse::from(entry.response.clone())),
-            proof: Some(pb::CanisterHttpShare::from(entry.proof.clone())),
+            response: Some(pb::CanisterHttpResponse::from(entry.response)),
+            proof: Some(pb::CanisterHttpShare::from(entry.proof)),
         }
     }
 }
@@ -309,11 +309,11 @@ impl TryFrom<pb::FlexibleCanisterHttpResponseWithProof> for FlexibleCanisterHttp
     }
 }
 
-impl From<&FlexibleCanisterHttpResponses> for pb::FlexibleCanisterHttpResponses {
-    fn from(responses: &FlexibleCanisterHttpResponses) -> Self {
+impl From<FlexibleCanisterHttpResponses> for pb::FlexibleCanisterHttpResponses {
+    fn from(responses: FlexibleCanisterHttpResponses) -> Self {
         pb::FlexibleCanisterHttpResponses {
             callback_id: responses.callback_id.get(),
-            responses: responses.responses.iter().map(Into::into).collect(),
+            responses: responses.responses.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -356,7 +356,7 @@ impl From<CanisterHttpResponse> for pb::CanisterHttpResponse {
         pb::CanisterHttpResponse {
             id: response.id.get(),
             timeout: response.timeout.as_nanos_since_unix_epoch(),
-            content: Some(pb::CanisterHttpResponseContent::from(&response.content)),
+            content: Some(pb::CanisterHttpResponseContent::from(response.content)),
             canister_id: Some(pb::CanisterId::from(response.canister_id)),
         }
     }
@@ -478,28 +478,27 @@ mod tests {
                 timeouts: _, // skipped because there is no dedicated protobuf conversion for this
             } = payload;
 
-            for response in &responses {
+            for mut response in responses {
                 // The protobuf format for CanisterHttpResponseWithConsensus doesn't
                 // store id/timeout separately in the metadata — it reuses the
                 // response's values on deserialization. Normalize here so the
                 // roundtrip comparison holds.
-                let mut response = response.clone();
                 response.proof.content.id = response.content.id;
                 response.proof.content.timeout = response.content.timeout;
 
-                let pb = pb::CanisterHttpResponseWithConsensus::from(&response);
+                let pb = pb::CanisterHttpResponseWithConsensus::from(response.clone());
                 let roundtripped = CanisterHttpResponseWithConsensus::try_from(pb).unwrap();
                 assert_eq!(response, roundtripped);
             }
-            for divergence in &divergence_responses {
-                let pb = pb::CanisterHttpResponseDivergence::from(divergence);
+            for divergence in divergence_responses {
+                let pb = pb::CanisterHttpResponseDivergence::from(divergence.clone());
                 let roundtripped = CanisterHttpResponseDivergence::try_from(pb).unwrap();
-                assert_eq!(*divergence, roundtripped);
+                assert_eq!(divergence, roundtripped);
             }
-            for flexible in &flexible_responses {
-                let pb = pb::FlexibleCanisterHttpResponses::from(flexible);
+            for flexible in flexible_responses {
+                let pb = pb::FlexibleCanisterHttpResponses::from(flexible.clone());
                 let roundtripped = FlexibleCanisterHttpResponses::try_from(pb).unwrap();
-                assert_eq!(*flexible, roundtripped);
+                assert_eq!(flexible, roundtripped);
             }
         }
     }
