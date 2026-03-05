@@ -15,9 +15,10 @@ const MAX_LOG_MESSAGE_LEN: u64 = 32 * KIB;
 fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
     group: &mut BenchmarkGroup<M>,
     bench_name: &str,
-    params: (u64, u64, u64),
+    params: (u64, u64, u64, u64),
 ) {
-    let (canisters_number, initial_log_memory_limit, new_log_memory_limit) = params;
+    let (canisters_number, initial_log_memory_limit, new_log_memory_limit, log_message_size) =
+        params;
 
     group.bench_function(bench_name, |b| {
         b.iter_batched(
@@ -35,7 +36,7 @@ fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
                     .with_log_memory_limit(initial_log_memory_limit)
                     .with_log_visibility(LogVisibilityV2::Public)
                     .build();
-                let log_message_size = initial_log_memory_limit.min(MAX_LOG_MESSAGE_LEN);
+                let log_message_size = log_message_size.min(MAX_LOG_MESSAGE_LEN);
                 let log_message = vec![b'a'; log_message_size as usize];
                 let canister_ids: Vec<_> = (0..canisters_number)
                     // Create all canisters.
@@ -94,12 +95,12 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
     run_bench_resize_canister_log(
         &mut group,
         "canisters:1/from:2MiB/to:-1",
-        (1, 2 * MIB, 2 * MIB - 1),
+        (1, 2 * MIB, 2 * MIB - 1, 0),
     );
     run_bench_resize_canister_log(
         &mut group,
         "canisters:1/from:-1/to:2MiB",
-        (1, 2 * MIB - 1, 2 * MIB),
+        (1, 2 * MIB - 1, 2 * MIB, 0),
     );
 }
 
