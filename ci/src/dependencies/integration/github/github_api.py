@@ -3,6 +3,7 @@ import os
 import traceback
 import typing
 from parser.bazel_toml_parser import parse_bazel_toml_to_gh_manifest
+from time import sleep
 
 import requests
 from github import Github
@@ -91,10 +92,21 @@ class GithubApi:
             manifests.append(parse_bazel_toml_to_gh_manifest(basedir, filepath))
 
         req = GHSubRequest(0, job, get_sha(), os.environ["GITHUB_REF"], detector, manifests)
+        req_json = req.to_json()
 
         # https://docs.github.com/en/rest/dependency-graph/dependency-submission?apiVersion=2022-11-28#create-a-snapshot-of-dependencies-for-a-repository
         url = f'https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/dependency-graph/snapshots'
-        logging.debug(f"Submitting request to {url} with payload: {req.to_json()}")
-        resp = requests.post(url, headers={"Authorization": f"Bearer {GITHUB_TOKEN}"}, json=req.to_json())
-        if resp.status_code != 201:
-            raise RuntimeError(f"Dependency submission failed with status code {resp.status_code}")
+        logging.debug(f"Submitting request to {url} with payload: {req_json}")
+        last_error = None
+        for retry in range(6):
+            if retry > 0:
+                sleep(2**retry)
+            resp = requests.post(url, headers={"Authorization": f"Bearer {GITHUB_TOKEN}"}, json=req_json)
+            if resp.status_code == 201:
+                return
+            error = f"Dependency submission failed with status code {resp.status_code}"
+            body = resp.text
+            if body is not None and len(body) > 0:
+                error += f" and body:\n\n{body}"
+            last_error = RuntimeError(error)
+        raise last_error

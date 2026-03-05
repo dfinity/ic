@@ -317,6 +317,7 @@ pub struct SubnetTopology {
     /// holding the key as backup to actually produce signatures or VetKd key derivations.
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
+    pub subnet_admins: BTreeSet<PrincipalId>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]

@@ -1647,7 +1647,7 @@ pub struct MetricsFetcher {
 impl MetricsFetcher {
     /// Create a new [`MetricsFetcher`]
     pub fn new(nodes: impl Iterator<Item = IcNodeSnapshot>, metrics: Vec<String>) -> Self {
-        Self::new_with_port(nodes, metrics, 9090)
+        Self::new_with_port(nodes, metrics, REPLICA_METRICS_PORT)
     }
 
     /// Create a new [`MetricsFetcher`] for a specific port

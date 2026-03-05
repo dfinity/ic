@@ -306,6 +306,10 @@ impl CanisterHttpPayloadBuilderImpl {
                                         .find(|share| share.signature.signer == *node_id)
                                         .map(|correct_share| (metadata, vec![*correct_share]))
                                 }
+                                Some(Replication::Flexible { .. }) => {
+                                    // TODO(flexible-http-outcalls): implement Flexible payload construction
+                                    None
+                                }
                                 None | Some(Replication::FullyReplicated) => {
                                     let signers: BTreeSet<_> =
                                         shares.iter().map(|share| share.signature.signer).collect();
@@ -397,6 +401,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 .collect(),
             timeouts,
             divergence_responses,
+            // TODO(flexible-http-outcalls): implement flexible responses
+            flexible_responses: vec![],
         }
     }
 
@@ -410,6 +416,11 @@ impl CanisterHttpPayloadBuilderImpl {
         // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
+        }
+
+        // Flexible responses are not yet supported
+        if !payload.flexible_responses.is_empty() {
+            return invalid_artifact(InvalidCanisterHttpPayloadReason::FlexibleResponsesNotEmpty);
         }
 
         // Check whether feature is enabled and reject if it isn't.
@@ -529,6 +540,11 @@ impl CanisterHttpPayloadBuilderImpl {
                     ..
                 }) => (vec![*node_id], 1),
                 None
+                // TODO(flexible-http-outcalls): implement Flexible payload validation
+                | Some(&CanisterHttpRequestContext {
+                    replication: Replication::Flexible { .. },
+                    ..
+                })
                 | Some(&CanisterHttpRequestContext {
                     replication: Replication::FullyReplicated,
                     ..
@@ -664,7 +680,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         );
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = self.get_canister_http_payload_impl(height, context, delivered_ids, max_size);
-        parse::payload_to_bytes(&payload, max_size)
+        parse::payload_to_bytes(payload, max_size)
     }
 
     fn validate_payload(

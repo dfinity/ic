@@ -6,6 +6,7 @@ use reqwest::{Proxy, Response};
 use sev::firmware::host::{Identifier, SnpPlatformStatus};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tempfile::NamedTempFile;
 
 mod firmware;
@@ -130,10 +131,8 @@ impl HostSevCertificateProviderImpl {
         }
 
         let vcek_der = self
-            .load_vcek_from_amd_key_server(&chip_id, &status)
+            .load_vcek_from_amd_key_server_with_retry(&chip_id, &status)
             .await?;
-        // Verify VCEK DER before saving to cache.
-        Document::from_der(&vcek_der).context("Failed to parse downloaded VCEK")?;
 
         if let Err(err) = self.save_to_cache(&cache_path, &vcek_der) {
             eprintln!("Failed to save VCEK to cache: {err}");
@@ -174,6 +173,27 @@ impl HostSevCertificateProviderImpl {
         )
     }
 
+    async fn load_vcek_from_amd_key_server_with_retry(
+        &self,
+        chip_id: &Identifier,
+        status: &SnpPlatformStatus,
+    ) -> Result<Vec<u8>> {
+        const MAX_ATTEMPTS: usize = 5;
+        for attempt in 1..=MAX_ATTEMPTS {
+            println!("Fetching VCEK from AMD key server, attempt {attempt} / {MAX_ATTEMPTS}");
+            let result = self.load_vcek_from_amd_key_server(chip_id, status).await;
+            if let Err(err) = result {
+                eprintln!("Failed to fetch VCEK from AMD key server, will retry: {err}");
+                tokio::time::sleep(Duration::from_secs(2 * attempt as u64)).await;
+            } else {
+                return result;
+            }
+        }
+        Err(anyhow!(
+            "Failed to fetch VCEK from AMD key server after multiple attempts"
+        ))
+    }
+
     async fn load_vcek_from_amd_key_server(
         &self,
         chip_id: &Identifier,
@@ -197,6 +217,9 @@ impl HostSevCertificateProviderImpl {
             .bytes()
             .await
             .context("Could not extract VCEK from response")?;
+
+        // Verify VCEK DER before returning it.
+        Document::from_der(&vcek).context("Failed to parse downloaded VCEK")?;
 
         Ok(vcek.to_vec())
     }

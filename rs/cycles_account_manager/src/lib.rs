@@ -31,6 +31,7 @@ use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
+    nominal_cycles::NominalCycles,
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -207,9 +208,13 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
+        debug_assert_ne!(
+            self.config.reference_subnet_size, 0,
+            "prevent divide by zero panic"
+        );
         match cost_schedule {
             CanisterCyclesCostSchedule::Normal => {
-                (cycles * subnet_size) / self.config.reference_subnet_size
+                (cycles * subnet_size) / self.config.reference_subnet_size.max(1)
             }
             CanisterCyclesCostSchedule::Free => Cycles::new(0),
         }
@@ -1015,12 +1020,17 @@ impl CyclesAccountManager {
     ///
     /// Returns a `CanisterOutOfCyclesError` if the requested amount cannot be
     /// withdrawn.
-    pub fn can_withdraw_cycles(
+    ///
+    /// Note: If a 0 cycles amount is requested, the check is equivalent to the
+    /// canister being frozen *currently*, otherwise it would become frozen if
+    /// the requested amount was witdrawn from its balance.
+    pub fn can_withdraw_cycles_with_threshold(
         &self,
         system_state: &SystemState,
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
+        canister_reserved_balance: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         reveal_top_up: bool,
@@ -1033,7 +1043,7 @@ impl CyclesAccountManager {
             system_state.compute_allocation,
             subnet_size,
             cost_schedule,
-            system_state.reserved_balance(),
+            canister_reserved_balance,
         );
 
         if threshold + requested > system_state.balance() {
@@ -1418,6 +1428,15 @@ impl CyclesAccountManager {
             subnet_size,
             cost_schedule,
         )
+    }
+
+    /// Returns the amount of cycles that are leftover and would be discarded when
+    /// the canister is deleted.
+    pub fn leftover_cycles_for_canister_to_deleted(
+        &self,
+        system_state: &SystemState,
+    ) -> NominalCycles {
+        NominalCycles::from(system_state.balance() + system_state.reserved_balance())
     }
 }
 

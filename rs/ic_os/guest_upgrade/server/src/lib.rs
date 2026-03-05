@@ -1,9 +1,9 @@
 use crate::service::DiskEncryptionKeyExchangeServiceImpl;
 use attestation::attestation_package::SevRootCertificateVerification;
-use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use config_types::TrustedExecutionEnvironmentConfig;
 use guest_upgrade_shared::DEFAULT_SERVER_PORT;
 use ic_interfaces_registry::RegistryClient;
+use ic_registry_client_helpers::blessed_replica_version::BlessedReplicaVersionRegistry;
 use server::DiskEncryptionKeyExchangeServer;
 use sev_guest::firmware::SevGuestFirmware;
 use std::sync::Arc;
@@ -96,14 +96,15 @@ impl DiskEncryptionKeyExchangeServerAgent {
                 ))
             })?;
 
-        let blessed_measurements = get_blessed_guest_launch_measurements_from_registry(
-            &*self.registry_client,
-        )
-        .map_err(|err| {
-            DiskEncryptionKeyExchangeError::ServerStartError(format!(
-                "Failed to get blessed measurements: {err}"
-            ))
-        })?;
+        let registry_version = self.registry_client.get_latest_version();
+        let blessed_measurements = self
+            .registry_client
+            .get_blessed_guest_launch_measurements(registry_version)
+            .map_err(|err| {
+                DiskEncryptionKeyExchangeError::ServerStartError(format!(
+                    "Failed to get blessed measurements: {err}"
+                ))
+            })?;
         let upgrade_service = Arc::new(DiskEncryptionKeyExchangeServiceImpl::new(
             self.sev_firmware_factory.clone(),
             self.sev_root_certificate_verification,

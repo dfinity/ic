@@ -605,6 +605,8 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
+    stop_noisy_canister(&state_machine);
+
     LedgerSuiteConfig::new_with_params(
         (
             CK_BTC_LEDGER_CANISTER_ID,
@@ -746,8 +748,30 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
+    stop_noisy_canister(&state_machine);
+
     for canister_config in canister_configs {
         canister_config.perform_upgrade_downgrade_testing(&state_machine);
+    }
+}
+
+fn stop_noisy_canister(state_machine: &StateMachine) {
+    let canister_id = CanisterId::unchecked_from_principal(
+        PrincipalId::from_str("72ch2-fiaaa-aaaar-qbsvq-cai").unwrap(),
+    );
+    let controllers = state_machine.get_controllers(canister_id).unwrap();
+    match controllers.first() {
+        None => {
+            panic!("Canister {canister_id} has no controllers, cannot be stopped");
+        }
+        Some(controller) => {
+            state_machine
+                .stop_canister_as(*controller, canister_id)
+                .unwrap_or_else(|e| {
+                    panic!("should successfully stop canister '{canister_id}': {e}")
+                });
+            println!("Stopped canister {canister_id}");
+        }
     }
 }
 
