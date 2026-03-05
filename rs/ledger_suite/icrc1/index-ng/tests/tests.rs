@@ -1931,3 +1931,93 @@ mod fees_in_burn_and_mint_blocks {
         );
     }
 }
+
+mod icrc122_authorized_blocks {
+    use super::*;
+    use ic_icrc1_test_utils::icrc3::BlockBuilder;
+    use ic_types::time::GENESIS;
+
+    #[test]
+    fn should_credit_authorized_mint_to_recipient() {
+        const TEST_USER: PrincipalId = PrincipalId::new_user_test_id(1);
+        const TEST_ACCOUNT: Account = Account {
+            owner: TEST_USER.0,
+            subaccount: None,
+        };
+        const CONTROLLER: PrincipalId = PrincipalId::new_user_test_id(99);
+        const MINT_AMOUNT: u64 = 5_000_000;
+
+        let env = StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(&env);
+
+        let caller = Principal::from(CONTROLLER);
+        let block = BlockBuilder::<Tokens>::new(0, GENESIS.as_nanos_since_unix_epoch())
+            .authorized_mint(TEST_ACCOUNT, Tokens::from(MINT_AMOUNT), caller)
+            .with_reason("initial distribution".to_string())
+            .build();
+
+        assert_eq!(
+            Nat::from(0u64),
+            add_block(&env, ledger_id, &block)
+                .expect("error adding 122mint block to ICRC-3 test ledger")
+        );
+
+        let index_id = install_index_ng(&env, index_init_arg_without_interval(ledger_id));
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+
+        let balance = icrc1_balance_of(&env, index_id, Account::from(Principal::from(TEST_USER)));
+        assert_eq!(
+            balance, MINT_AMOUNT,
+            "Balance after 122mint should equal mint amount"
+        );
+    }
+
+    #[test]
+    fn should_debit_authorized_burn_from_account() {
+        const TEST_USER: PrincipalId = PrincipalId::new_user_test_id(1);
+        const TEST_ACCOUNT: Account = Account {
+            owner: TEST_USER.0,
+            subaccount: None,
+        };
+        const CONTROLLER: PrincipalId = PrincipalId::new_user_test_id(99);
+        const MINT_AMOUNT: u64 = 10_000_000;
+        const BURN_AMOUNT: u64 = 3_000_000;
+
+        let env = StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(&env);
+
+        let caller = Principal::from(CONTROLLER);
+
+        // First give the account some balance via a regular mint
+        let mint_block = BlockBuilder::<Tokens>::new(0, GENESIS.as_nanos_since_unix_epoch())
+            .mint(TEST_ACCOUNT, Tokens::from(MINT_AMOUNT))
+            .build();
+
+        assert_eq!(
+            Nat::from(0u64),
+            add_block(&env, ledger_id, &mint_block)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+
+        // Now authorized burn
+        let burn_block = BlockBuilder::<Tokens>::new(1, GENESIS.as_nanos_since_unix_epoch())
+            .authorized_burn(TEST_ACCOUNT, Tokens::from(BURN_AMOUNT), caller)
+            .build();
+
+        assert_eq!(
+            Nat::from(1u64),
+            add_block(&env, ledger_id, &burn_block)
+                .expect("error adding 122burn block to ICRC-3 test ledger")
+        );
+
+        let index_id = install_index_ng(&env, index_init_arg_without_interval(ledger_id));
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+
+        let balance = icrc1_balance_of(&env, index_id, Account::from(Principal::from(TEST_USER)));
+        assert_eq!(
+            balance,
+            MINT_AMOUNT - BURN_AMOUNT,
+            "Balance after 122burn should be reduced by burn amount"
+        );
+    }
+}
