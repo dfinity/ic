@@ -88,7 +88,7 @@ pub fn prepare_update<S: ToString>(
             nonce: Some(Blob(nonce)),
             sender: sender_field,
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            sender_info: None,
+            sender_info: Some(true),
         },
     };
 

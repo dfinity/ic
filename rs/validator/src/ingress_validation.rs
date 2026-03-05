@@ -200,6 +200,10 @@ fn validate_request_content<C: HttpRequestContent, R: RootOfTrustProvider>(
 where
     R::Error: std::error::Error,
 {
+    println!(
+        "Validating request with sender info: {:?}",
+        request.content().sender_info()
+    );
     if request.content().sender_info().is_some_and(|b| !b) {
         return Err(InvalidSenderInfo);
     }
