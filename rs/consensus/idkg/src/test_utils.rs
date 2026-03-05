@@ -2,7 +2,7 @@ use crate::{
     MAX_IDKG_THREADS,
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
-    signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
+    signer::ThresholdSignerImpl,
     utils::build_thread_pool,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
@@ -20,7 +20,7 @@ use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    IDkgSignWithThresholdContext, SignWithThresholdContext,
+    SignWithThresholdContext,
 };
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
@@ -36,7 +36,7 @@ use ic_types::{
         MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
         SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening, TranscriptAttributes,
         TranscriptLookupError, TranscriptRef, UnmaskedTranscript, VetKdKeyShare,
-        common::{CombinedSignature, PreSignatureRef},
+        common::PreSignatureRef,
     },
     crypto::{
         AlgorithmId,
@@ -60,15 +60,6 @@ use std::{
     convert::TryFrom,
     sync::{Arc, Mutex},
 };
-
-pub fn into_idkg_contexts(
-    contexts: &BTreeMap<CallbackId, SignWithThresholdContext>,
-) -> BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>> {
-    contexts
-        .iter()
-        .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
-        .collect()
-}
 
 #[derive(Clone)]
 pub(crate) struct TestTranscriptParams {
@@ -372,34 +363,6 @@ impl IDkgTranscriptBuilder for TestIDkgTranscriptBuilder {
             .get(&transcript_id)
             .cloned()
             .unwrap_or_default()
-    }
-}
-
-pub(crate) struct TestThresholdSignatureBuilder {
-    pub(crate) signatures: BTreeMap<RequestId, CombinedSignature>,
-}
-
-impl TestThresholdSignatureBuilder {
-    pub(crate) fn new() -> Self {
-        Self {
-            signatures: BTreeMap::new(),
-        }
-    }
-}
-
-impl ThresholdSignatureBuilder for TestThresholdSignatureBuilder {
-    fn get_completed_signature(
-        &self,
-        callback_id: CallbackId,
-        context: &SignWithThresholdContext,
-    ) -> Option<CombinedSignature> {
-        let height = context.height()?;
-        self.signatures
-            .get(&RequestId {
-                callback_id,
-                height,
-            })
-            .cloned()
     }
 }
 

@@ -7,10 +7,7 @@ use crate::consensus::{
     status::{self, Status},
 };
 use ic_consensus_dkg::get_vetkey_public_keys;
-use ic_consensus_idkg::utils::{
-    generate_responses_to_signature_request_contexts,
-    get_idkg_subnet_public_keys_and_pre_signatures,
-};
+use ic_consensus_idkg::utils::get_idkg_subnet_public_keys_and_pre_signatures;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_error_types::RejectCode;
@@ -337,9 +334,6 @@ fn generate_responses_to_subnet_calls(
         ));
 
         if let Some(payload) = &block_payload.idkg {
-            consensus_responses.append(&mut generate_responses_to_signature_request_contexts(
-                payload,
-            ));
             consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
         }
 

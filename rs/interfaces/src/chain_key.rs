@@ -1,7 +1,7 @@
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    Height, batch::ChainKeyAgreement, crypto::vetkd::VetKdKeyVerificationError, messages::CallbackId,
-    registry::RegistryClientError, state_manager::StateManagerError,
+    Height, batch::ChainKeyAgreement, crypto::vetkd::VetKdKeyVerificationError,
+    messages::CallbackId, registry::RegistryClientError, state_manager::StateManagerError,
 };
 
 #[derive(Debug)]
@@ -38,4 +38,6 @@ pub enum ChainKeyPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     /// Crypto failed to determine the validity of the key
     VetKdKeyVerificationError(VetKdKeyVerificationError),
+    /// Crypto failed to verify a signature
+    SignatureVerificationError(String),
 }

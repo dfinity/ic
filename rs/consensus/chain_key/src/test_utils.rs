@@ -27,7 +27,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use strum::EnumCount;
 
 /// Create a map of agreements with all possible types
-pub(super) fn make_chain_key_agreements(
+pub(super) fn make_vetkd_agreements(
     id1: u64,
     id2: u64,
     id3: u64,
@@ -51,7 +51,7 @@ pub(super) fn make_chain_key_agreements(
 }
 
 /// Create a map of agreements with the same, given type
-pub(super) fn make_chain_key_agreements_with_payload(
+pub(super) fn make_vetkd_agreements_with_payload(
     ids: &[u64],
     agreement: ChainKeyAgreement,
 ) -> BTreeMap<CallbackId, ChainKeyAgreement> {
