@@ -32,7 +32,7 @@ build --incompatible_strict_action_env # use an environment with a static value 
 build --compilation_mode=opt
 build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
-build --@rules_rust//:extra_rustc_flag=--remap-path-prefix=/something=/__bazel_output__
+build --action_env=BUILD_ID=20260305 # rebuilds cache based on current date
 build --strip=never
 
 # Build everything ic-os without sandbox
