@@ -193,3 +193,42 @@ fn test_comprehensive_integration() {
     assert!(wat.contains(r#"(export "canister_query test_2")"#));
     assert!(wat.contains(r#"(export "canister_composite_query test_3")"#));
 }
+
+#[test]
+fn test_loop_calls_scaling() {
+    // Generate a Wasm file that loops 200,000 times.
+    // This proves that `count` does not affect Wasm size or builder speed,
+    // avoiding the parser memory blowups of O(n) unrolled loops.
+    let wat = wat_canister()
+        .update(
+            "spam",
+            wat_fn().repeat(200_000, wat_fn().debug_print(b"spam")),
+        )
+        .build();
+
+    let wasm_module = wat::parse_str(&wat).unwrap();
+    assert!(!wasm_module.is_empty());
+
+    // Verify native loop constructs
+    assert!(wat.contains("(local $loop_counter_0 i32)"));
+    assert!(wat.contains("(loop $loop_label_0"));
+    assert!(wat.contains("(i32.const 200000)"));
+}
+
+#[test]
+fn test_loop_calls_nested() {
+    let wat = wat_canister()
+        .update(
+            "nested",
+            wat_fn().repeat(10, wat_fn().repeat(5, wat_fn().debug_print(b"inner"))),
+        )
+        .build();
+
+    wat::parse_str(&wat).unwrap();
+
+    // Verify it correctly allocated two distinct loop locals at the top boundary
+    assert!(wat.contains("(local $loop_counter_0 i32)"));
+    assert!(wat.contains("(local $loop_counter_1 i32)"));
+    assert!(wat.contains("(loop $loop_label_0"));
+    assert!(wat.contains("(loop $loop_label_1"));
+}
