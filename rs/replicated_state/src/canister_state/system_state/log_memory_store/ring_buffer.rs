@@ -114,11 +114,13 @@ impl RingBuffer {
 
     /// Appends records from an iterator.
     pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
+        let mut iter = records.into_iter().peekable();
+        if iter.peek().is_none() {
+            return; // Exit early if no records.
+        }
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
-        for r in records {
-            let record = LogRecord::from(r);
-
+        for record in iter.map(LogRecord::from) {
             // Check that records are added in order, otherwise it breaks the index.
             if record.idx < h.next_idx {
                 debug_assert!(false, "Log record idx must be >= than next idx");
@@ -301,7 +303,10 @@ impl<'a> Iterator for RingBufferIterator<'a> {
             return None;
         }
 
-        let record = self.io.load_record(&self.header, self.pos)?;
+        let record = self.io.load_record(&self.header, self.pos).or_else(|| {
+            self.remaining_size = 0;
+            None
+        })?;
         let len = record.bytes_len();
 
         // Safety check to prevent infinite loops or panics on corruption
@@ -310,7 +315,7 @@ impl<'a> Iterator for RingBufferIterator<'a> {
             return None;
         }
 
-        self.remaining_size -= len;
+        self.remaining_size = self.remaining_size.saturating_sub(len);
         self.pos = self
             .header
             .advance_position(self.pos, MemorySize::new(len as u64));
