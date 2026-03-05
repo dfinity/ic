@@ -599,6 +599,8 @@ fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidID
 // New signatures are those that are Unreported in the curr_payload and not in prev_payload.
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeSet;
+
     use super::*;
     use crate::{
         MAX_IDKG_THREADS,
