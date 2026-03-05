@@ -14,6 +14,7 @@ const _: () = assert!(MEMORY_FILL_MAX < MEMORY_OFFSET_START);
 
 const MEMORY_LIMIT: i32 = 64 * 1_024;
 
+#[derive(Clone)]
 enum FnCall {
     StableGrow(i32),
     StableRead(i32, i32, i32),
@@ -37,6 +38,14 @@ impl WatFnCode {
     /// Create the content of a WAT function.
     pub fn new() -> Self {
         Self { calls: vec![] }
+    }
+
+    /// Repeat a sequence of calls `count` times.
+    pub fn repeat(mut self, count: usize, repeated: WatFnCode) -> Self {
+        for _ in 0..count {
+            self.calls.extend(repeated.calls.iter().cloned());
+        }
+        self
     }
 
     /// Call the `ic0.stable_grow` function.

@@ -5,7 +5,7 @@ use ic_config::execution_environment::{
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
-use ic_execution_environment::units::KIB;
+use ic_execution_environment::units::{KIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
@@ -154,6 +154,17 @@ fn fetch_canister_logs(
         "fetch_canister_logs",
         FetchCanisterLogsRequest::new(canister_id).encode(),
     )
+}
+
+fn fetch_log_records(
+    env: &StateMachine,
+    sender: PrincipalId,
+    canister_id: CanisterId,
+) -> Vec<CanisterLogRecord> {
+    let reply = fetch_canister_logs(env, sender, canister_id);
+    FetchCanisterLogsResponse::decode(&get_reply(reply))
+        .unwrap()
+        .canister_log_records
 }
 
 #[test]
@@ -1988,76 +1999,123 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
     assert_eq!(response.canister_log_records.len(), 0);
 }
 
+/*
+TODO: remove debug code
+
+$ ./ci/container/container-run.sh
+$ bazel test \
+  //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_canister_resize_up_preserves_logs
+
+*/
 #[test]
 fn test_canister_resize_up_preserves_logs() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
+    let log_memory_limit = 2 * MIB;
+    let env = setup_env();
     let controller = PrincipalId::new_anonymous();
+    let log_message_len = 100;
+    let log_message = vec![b'a'; log_message_len];
+    let log_records_per_call = 1000;
+    let update_calls =
+        (log_memory_limit as usize / (log_records_per_call * log_message_len)) as usize;
     let wasm = wat_canister()
-        .update("test", wat_fn().debug_print(b"hello"))
+        .update(
+            "generate_logs",
+            wat_fn().repeat(log_records_per_call, wat_fn().debug_print(&log_message)),
+        )
         .build_wasm();
-    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit - 1) // Initial log memory limit is smaller.
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wasm,
+    );
 
-    // Before resizing.
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_before = response.canister_log_records;
-    assert_eq!(logs_before.len(), 3);
+    // Populate logs before resizing.
+    for _ in 0..update_calls {
+        let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
+    }
+    let logs_before = fetch_log_records(&env, controller, canister_id);
 
-    // Resize up.
-    let new_memory_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT + 1000) as u64;
+    // Resize log memory store.
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(new_memory_limit)
+            .with_log_memory_limit(log_memory_limit)
             .build(),
     );
 
     // After resizing.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_after = response.canister_log_records;
-    assert_eq!(logs_after.len(), 3);
+    let logs_after = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
+
+/*
+TODO: remove debug code
+
+$ ./ci/container/container-run.sh
+$ bazel test \
+  //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_canister_resize_down_preserves_logs
+
+*/
 
 #[test]
 fn test_canister_resize_down_preserves_logs() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
+    let log_memory_limit = 2 * MIB;
+    let env = setup_env();
     let controller = PrincipalId::new_anonymous();
+    let log_message_len = 100;
+    let log_message = vec![b'a'; log_message_len];
+    let log_records_per_call = 1000;
+    let update_calls =
+        (log_memory_limit as usize / (log_records_per_call * log_message_len)) as usize;
     let wasm = wat_canister()
-        .update("test", wat_fn().debug_print(b"hello"))
+        .update(
+            "generate_logs",
+            wat_fn().repeat(log_records_per_call, wat_fn().debug_print(&log_message)),
+        )
         .build_wasm();
-    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit) // Initial log memory limit is larger.
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wasm,
+    );
 
-    // Before resizing.
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_before = response.canister_log_records;
-    assert_eq!(logs_before.len(), 3);
+    // Populate logs before resizing.
+    for _ in 0..update_calls {
+        let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
+    }
+    let logs_before = fetch_log_records(&env, controller, canister_id);
 
-    // Resize down.
-    let new_memory_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT - 1000) as u64;
+    // Resize log memory store.
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(new_memory_limit)
+            .with_log_memory_limit(log_memory_limit - 1)
             .build(),
     );
 
     // After resizing.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_after = response.canister_log_records;
-    assert_eq!(logs_after.len(), 3);
+    let logs_after = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
