@@ -132,7 +132,7 @@ fn get_block_btype(env: &StateMachine, ledger: CanisterId, block_idx: u64) -> St
     match &block.block {
         ICRC3Value::Map(map) => map
             .iter()
-            .find(|(k, _)| k == "btype")
+            .find(|(k, _)| k.as_str() == "btype")
             .and_then(|(_, v)| {
                 if let ICRC3Value::Text(s) = v {
                     Some(s.clone())
@@ -352,13 +352,15 @@ pub fn test_icrc152_feature_flag_disabled<T>(
             reason: None,
         },
     );
-    assert!(
-        matches!(
-            mint_result,
-            Err(Icrc152MintError::GenericError { error_code, .. }) if error_code == Nat::from(4u64)
-        ),
-        "disabled icrc152 should return GenericError(4), got {mint_result:?}"
-    );
+    if let Err(Icrc152MintError::GenericError { error_code, .. }) = &mint_result {
+        assert_eq!(
+            *error_code,
+            Nat::from(4u64),
+            "disabled icrc152 should return GenericError(4)"
+        );
+    } else {
+        panic!("disabled icrc152 should return GenericError(4), got {mint_result:?}");
+    }
 }
 
 pub fn test_icrc152_insufficient_balance<T>(
@@ -430,13 +432,15 @@ where
         .unwrap();
 
     let second = try_icrc152_mint(&env, ledger, controller, &arg);
-    assert!(
-        matches!(
-            second,
-            Err(Icrc152MintError::Duplicate { duplicate_of }) if duplicate_of == Nat::from(block_idx)
-        ),
-        "duplicate transaction should return Duplicate, got {second:?}"
-    );
+    if let Err(Icrc152MintError::Duplicate { duplicate_of }) = &second {
+        assert_eq!(
+            *duplicate_of,
+            Nat::from(block_idx),
+            "duplicate transaction should return Duplicate with correct index"
+        );
+    } else {
+        panic!("duplicate transaction should return Duplicate, got {second:?}");
+    }
 }
 
 pub fn test_icrc152_supported_block_types<T>(
