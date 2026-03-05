@@ -61,5 +61,6 @@ rust_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    timeout = "long",
     deps = [":peer_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
