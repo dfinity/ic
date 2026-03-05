@@ -267,7 +267,7 @@ impl WatCanisterBuilder {
                 instructions: Vec::new(),
             };
 
-            let top_level_locals = state.count_loops(&func.code.calls);
+            let top_level_locals = RenderState::count_loops(&func.code.calls);
             state.process_calls(&func.code.calls, STEP);
 
             // Piece together the exact Text block.
@@ -377,11 +377,11 @@ struct RenderState<'a> {
 
 impl<'a> RenderState<'a> {
     /// Count the exact number of Nested/Successive Loops required to allocate local descriptors.
-    fn count_loops(&self, calls: &[FnCall]) -> usize {
+    fn count_loops(calls: &[FnCall]) -> usize {
         let mut count = 0;
         for call in calls {
             if let FnCall::Loop(_, inner) = call {
-                count += 1 + self.count_loops(inner);
+                count += 1 + Self::count_loops(inner);
             }
         }
         count
