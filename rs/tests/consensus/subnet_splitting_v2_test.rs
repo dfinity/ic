@@ -312,16 +312,28 @@ async fn check_chatting_canisters_metrics(
             "Instructing canister {canister_id} to stop chatting and collecting metrics"
         );
         let canister = Canister::new(&runtime, *canister_id);
+
+        let metrics_before: Metrics = canister
+            .query_("metrics", candid, ())
+            .await
+            .expect("Failed to make a query call");
+        // Let it run for a bit longer, to make sure that calls are still being made.
+        tokio::time::sleep(Duration::from_secs(10)).await;
         let _: String = canister
             .update_("stop", candid, ())
             .await
             .expect("Failed to make an update call");
-        let metrics = canister
+        let metrics_after: Metrics = canister
             .query_("metrics", candid, ())
             .await
             .expect("Failed to make a query call");
 
-        aggregated_metrics.merge(&metrics);
+        assert!(
+            metrics_after.requests_sent() > metrics_before.requests_sent(),
+            "The canister should be still sending requests to other canisters"
+        );
+
+        aggregated_metrics.merge(&metrics_after);
     }
 
     assert_eq!(aggregated_metrics.call_errors, 0);
