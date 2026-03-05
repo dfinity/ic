@@ -1,7 +1,7 @@
 //! This module provides the component responsible for generating and validating
-//! payloads relevant to VetKd.
+//! payloads relevant to chain key.
 
-use crate::metrics::VetKdPayloadBuilderMetrics;
+use crate::metrics::ChainKeyPayloadBuilderMetrics;
 use crate::utils::{
     group_shares_by_callback_id, invalid_artifact, invalid_artifact_err, parse_past_payload_ids,
     validation_failed, validation_failed_err,
@@ -16,7 +16,7 @@ use ic_interfaces::{
     consensus::PayloadValidationError,
     consensus_pool::ConsensusPoolCache,
     idkg::IDkgPool,
-    vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
+    chain_key::{InvalidChainKeyPayloadReason, ChainKeyPayloadValidationFailure},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -35,8 +35,8 @@ use ic_types::crypto::vetkd::{
 use ic_types::{
     CountBytes, Height, NumBytes, SubnetId, Time,
     batch::{
-        ConsensusResponse, ValidationContext, VetKdAgreement, VetKdErrorCode, VetKdPayload,
-        bytes_to_vetkd_payload, vetkd_payload_to_bytes,
+        ConsensusResponse, ValidationContext, ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload,
+        bytes_to_chain_key_payload, chain_key_payload_to_bytes,
     },
     crypto::vetkd::{VetKdArgs, VetKdEncryptedKey},
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
@@ -77,8 +77,8 @@ struct RequestExpiry {
     height: Height,
 }
 
-/// Implementation of the [`BatchPayloadBuilder`] for the VetKd feature.
-pub struct VetKdPayloadBuilderImpl {
+/// Implementation of the [`BatchPayloadBuilder`] for the chain key feature.
+pub struct ChainKeyPayloadBuilderImpl {
     pool: Arc<RwLock<dyn IDkgPool>>,
     cache: Arc<dyn ConsensusPoolCache>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -86,12 +86,12 @@ pub struct VetKdPayloadBuilderImpl {
     thread_pool: Arc<ThreadPool>,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient>,
-    metrics: VetKdPayloadBuilderMetrics,
+    metrics: ChainKeyPayloadBuilderMetrics,
     log: ReplicaLogger,
 }
 
-impl VetKdPayloadBuilderImpl {
-    /// Create and initialize an instance of [`VetKdPayloadBuilderImpl`].
+impl ChainKeyPayloadBuilderImpl {
+    /// Create and initialize an instance of [`ChainKeyPayloadBuilderImpl`].
     pub fn new(
         pool: Arc<RwLock<dyn IDkgPool>>,
         cache: Arc<dyn ConsensusPoolCache>,
@@ -111,7 +111,7 @@ impl VetKdPayloadBuilderImpl {
             thread_pool,
             subnet_id,
             registry,
-            metrics: VetKdPayloadBuilderMetrics::new(metrics_registry),
+            metrics: ChainKeyPayloadBuilderMetrics::new(metrics_registry),
             log,
         }
     }
@@ -128,10 +128,10 @@ impl VetKdPayloadBuilderImpl {
         else {
             warn!(
                 self.log,
-                "Failed to obtain consensus registry version and interval length in VetKd payload builder"
+                "Failed to obtain consensus registry version and interval length in chain key payload builder"
             );
             return Err(validation_failed(
-                VetKdPayloadValidationFailure::DkgSummaryUnavailable(height),
+                ChainKeyPayloadValidationFailure::DkgSummaryUnavailable(height),
             ));
         };
 
@@ -141,15 +141,15 @@ impl VetKdPayloadBuilderImpl {
         {
             Ok(Some(config)) => config,
             Ok(None) => {
-                return Err(invalid_artifact(InvalidVetKdPayloadReason::Disabled));
+                return Err(invalid_artifact(InvalidChainKeyPayloadReason::Disabled));
             }
             Err(err) => {
                 warn!(
                     self.log,
-                    "VetKdPayloadBuilder: Registry unavailable: {:?}", err
+                    "ChainKeyPayloadBuilder: Registry unavailable: {:?}", err
                 );
                 return Err(validation_failed(
-                    VetKdPayloadValidationFailure::RegistryClientError(err),
+                    ChainKeyPayloadValidationFailure::RegistryClientError(err),
                 ));
             }
         };
@@ -164,9 +164,9 @@ impl VetKdPayloadBuilderImpl {
             .map_err(|err| {
                 warn!(
                     self.log,
-                    "VetKdPayloadBuilder: Registry unavailable: {:?}", err
+                    "ChainKeyPayloadBuilder: Registry unavailable: {:?}", err
                 );
-                validation_failed(VetKdPayloadValidationFailure::RegistryClientError(err))
+                validation_failed(ChainKeyPayloadValidationFailure::RegistryClientError(err))
             })?
             .unwrap_or_default();
 
@@ -195,14 +195,14 @@ impl VetKdPayloadBuilderImpl {
         ))
     }
 
-    fn get_vetkd_payload_impl(
+    fn get_chain_key_payload_impl(
         &self,
         request_expiry: RequestExpiry,
         valid_keys: BTreeSet<MasterPublicKeyId>,
         state: &ReplicatedState,
         delivered_ids: HashSet<CallbackId>,
         max_payload_size: NumBytes,
-    ) -> VetKdPayload {
+    ) -> ChainKeyPayload {
         let grouped_shares = {
             let pool_access = self.pool.read().unwrap();
             group_shares_by_callback_id(
@@ -257,11 +257,11 @@ impl VetKdPayloadBuilderImpl {
                     match self.crypto.combine_encrypted_key_shares(shares, &args) {
                         Ok(key) => {
                             self.metrics
-                                .payload_metrics_inc("vetkd_agreement_completed", &key_id);
+                                .payload_metrics_inc("chain_key_agreement_completed", &key_id);
                             let result = VetKdDeriveKeyResult {
                                 encrypted_key: key.encrypted_key,
                             };
-                            Some((*callback_id, VetKdAgreement::Success(result.encode())))
+                            Some((*callback_id, ChainKeyAgreement::Success(result.encode())))
                         }
                         Err(
                             VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
@@ -296,14 +296,14 @@ impl VetKdPayloadBuilderImpl {
                 .collect::<BTreeMap<_, _>>()
         });
 
-        VetKdPayload {
-            vetkd_agreements: candidates,
+        ChainKeyPayload {
+            agreements: candidates,
         }
     }
 
-    fn validate_vetkd_payload_impl(
+    fn validate_chain_key_payload_impl(
         &self,
-        payload: VetKdPayload,
+        payload: ChainKeyPayload,
         request_expiry: RequestExpiry,
         valid_keys: BTreeSet<MasterPublicKeyId>,
         state: &ReplicatedState,
@@ -313,22 +313,22 @@ impl VetKdPayloadBuilderImpl {
 
         self.thread_pool.install(|| {
             payload
-                .vetkd_agreements
+                .agreements
                 .into_par_iter()
                 .map(|(id, agreement)| {
                     if delivered_ids.contains(&id) {
-                        return invalid_artifact_err(InvalidVetKdPayloadReason::DuplicateResponse(
+                        return invalid_artifact_err(InvalidChainKeyPayloadReason::DuplicateResponse(
                             id,
                         ));
                     }
 
                     let Some(context) = contexts.get(&id) else {
-                        return invalid_artifact_err(InvalidVetKdPayloadReason::MissingContext(id));
+                        return invalid_artifact_err(InvalidChainKeyPayloadReason::MissingContext(id));
                     };
 
                     if !context.is_vetkd() {
                         return invalid_artifact_err(
-                            InvalidVetKdPayloadReason::UnexpectedIDkgContext(id),
+                            InvalidChainKeyPayloadReason::UnexpectedIDkgContext(id),
                         );
                     }
 
@@ -336,22 +336,22 @@ impl VetKdPayloadBuilderImpl {
                         reject_if_invalid(&valid_keys, context, &request_expiry, None);
 
                     match agreement {
-                        VetKdAgreement::Success(data) => {
+                        ChainKeyAgreement::Success(data) => {
                             if expected_reject.is_some() {
                                 return invalid_artifact_err(
-                                    InvalidVetKdPayloadReason::MismatchedAgreement {
+                                    InvalidChainKeyPayloadReason::MismatchedAgreement {
                                         expected: expected_reject,
                                         received: None,
                                     },
                                 );
                             } else {
-                                self.validate_vetkd_agreement(id, context, data)?
+                                self.validate_chain_key_agreement(id, context, data)?
                             }
                         }
                         reject => {
                             if Some(&reject) != expected_reject.as_ref() {
                                 return invalid_artifact_err(
-                                    InvalidVetKdPayloadReason::MismatchedAgreement {
+                                    InvalidChainKeyPayloadReason::MismatchedAgreement {
                                         expected: expected_reject,
                                         received: Some(reject),
                                     },
@@ -369,14 +369,14 @@ impl VetKdPayloadBuilderImpl {
     }
 
     /// Validate the VetKD key given in `data` according to the context of its request.
-    fn validate_vetkd_agreement(
+    fn validate_chain_key_agreement(
         &self,
         id: CallbackId,
         context: &SignWithThresholdContext,
         data: Vec<u8>,
     ) -> Result<(), PayloadValidationError> {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
-            return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
+            return invalid_artifact_err(InvalidChainKeyPayloadReason::UnexpectedIDkgContext(id));
         };
         debug_assert_eq!(context.derivation_path.len(), 1);
         let args = VetKdArgs {
@@ -391,7 +391,7 @@ impl VetKdPayloadBuilderImpl {
         let reply = match VetKdDeriveKeyResult::decode(&data) {
             Ok(data) => data,
             Err(error) => {
-                return invalid_artifact_err(InvalidVetKdPayloadReason::DecodingError(format!(
+                return invalid_artifact_err(InvalidChainKeyPayloadReason::DecodingError(format!(
                     "{error:?}",
                 )));
             }
@@ -403,10 +403,10 @@ impl VetKdPayloadBuilderImpl {
             .verify_encrypted_key(&encrypted_key, &args)
             .map_err(|err| {
                 if err.is_reproducible() {
-                    warn!(self.log, "Invalid VetKD payload: {err:?}");
-                    invalid_artifact(InvalidVetKdPayloadReason::VetKdKeyVerificationError(err))
+                    warn!(self.log, "Invalid chain key payload: {err:?}");
+                    invalid_artifact(InvalidChainKeyPayloadReason::VetKdKeyVerificationError(err))
                 } else {
-                    warn!(self.log, "VetKD payload validation failure: {err:?}");
+                    warn!(self.log, "chain key payload validation failure: {err:?}");
                     let label = match err {
                         VetKdKeyVerificationError::ThresholdSigDataNotFound(_) => {
                             "validation_failed_nidkg_transcript_not_loaded"
@@ -414,7 +414,7 @@ impl VetKdPayloadBuilderImpl {
                         _ => "validation_failed",
                     };
                     self.metrics.payload_errors_inc(label, &context.key_id());
-                    validation_failed(VetKdPayloadValidationFailure::VetKdKeyVerificationError(
+                    validation_failed(ChainKeyPayloadValidationFailure::VetKdKeyVerificationError(
                         err,
                     ))
                 }
@@ -422,7 +422,7 @@ impl VetKdPayloadBuilderImpl {
     }
 }
 
-impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
+impl BatchPayloadBuilder for ChainKeyPayloadBuilderImpl {
     fn build_payload(
         &self,
         height: Height,
@@ -447,14 +447,14 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
         };
 
         let delivered_ids = parse_past_payload_ids(past_payloads, &self.log);
-        let payload = self.get_vetkd_payload_impl(
+        let payload = self.get_chain_key_payload_impl(
             request_expiry,
             valid_keys,
             state.get_ref(),
             delivered_ids,
             max_size,
         );
-        vetkd_payload_to_bytes(payload, max_size)
+        chain_key_payload_to_bytes(payload, max_size)
     }
 
     fn validate_payload(
@@ -484,15 +484,15 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
         {
             Ok(state) => state,
             Err(err) => {
-                return validation_failed_err(VetKdPayloadValidationFailure::StateUnavailable(err));
+                return validation_failed_err(ChainKeyPayloadValidationFailure::StateUnavailable(err));
             }
         };
 
         let delivered_ids = parse_past_payload_ids(past_payloads, &self.log);
-        let payload = bytes_to_vetkd_payload(payload)
-            .map_err(|e| invalid_artifact(InvalidVetKdPayloadReason::DeserializationFailed(e)))?;
+        let payload = bytes_to_chain_key_payload(payload)
+            .map_err(|e| invalid_artifact(InvalidChainKeyPayloadReason::DeserializationFailed(e)))?;
 
-        self.validate_vetkd_payload_impl(
+        self.validate_chain_key_payload_impl(
             payload,
             request_expiry,
             valid_keys,
@@ -502,26 +502,26 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
     }
 }
 
-impl IntoMessages<Vec<ConsensusResponse>> for VetKdPayloadBuilderImpl {
+impl IntoMessages<Vec<ConsensusResponse>> for ChainKeyPayloadBuilderImpl {
     fn into_messages(payload: &[u8]) -> Vec<ConsensusResponse> {
-        let messages = bytes_to_vetkd_payload(payload)
+        let messages = bytes_to_chain_key_payload(payload)
             .expect("Failed to parse a payload that was already validated");
 
         messages
-            .vetkd_agreements
+            .agreements
             .into_iter()
             .map(|(id, response)| {
                 ConsensusResponse::new(
                     id,
                     match response {
-                        VetKdAgreement::Success(data) => ResponsePayload::Data(data),
-                        VetKdAgreement::Reject(error_code) => {
+                        ChainKeyAgreement::Success(data) => ResponsePayload::Data(data),
+                        ChainKeyAgreement::Reject(error_code) => {
                             ResponsePayload::Reject(match error_code {
-                                VetKdErrorCode::TimedOut => RejectContext::new(
+                                ChainKeyErrorCode::TimedOut => RejectContext::new(
                                     RejectCode::SysTransient,
                                     "VetKD request expired",
                                 ),
-                                VetKdErrorCode::InvalidKey => RejectContext::new(
+                                ChainKeyErrorCode::InvalidKey => RejectContext::new(
                                     RejectCode::SysTransient,
                                     "Invalid or disabled key_id in VetKD request",
                                 ),
@@ -542,14 +542,14 @@ fn reject_if_invalid(
     valid_keys: &BTreeSet<MasterPublicKeyId>,
     context: &SignWithThresholdContext,
     request_expiry: &RequestExpiry,
-    metrics: Option<&VetKdPayloadBuilderMetrics>,
-) -> Option<VetKdAgreement> {
+    metrics: Option<&ChainKeyPayloadBuilderMetrics>,
+) -> Option<ChainKeyAgreement> {
     let key_id = context.key_id();
     if !valid_keys.contains(&key_id) {
         if let Some(metrics) = metrics {
             metrics.payload_errors_inc("invalid_key_id", &key_id);
         }
-        return Some(VetKdAgreement::Reject(VetKdErrorCode::InvalidKey));
+        return Some(ChainKeyAgreement::Reject(ChainKeyErrorCode::InvalidKey));
     }
 
     if request_expiry
@@ -559,7 +559,7 @@ fn reject_if_invalid(
         if let Some(metrics) = metrics {
             metrics.payload_errors_inc("expired_request", &key_id);
         }
-        return Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut));
+        return Some(ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut));
     }
 
     // We time out vetKD requests that take longer than one DKG interval.
@@ -571,7 +571,7 @@ fn reject_if_invalid(
         if let Some(metrics) = metrics {
             metrics.payload_errors_inc("expired_transcript", &key_id);
         }
-        return Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut));
+        return Some(ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut));
     }
 
     None
@@ -630,16 +630,16 @@ mod tests {
 
     #[test]
     fn test_into_messages() {
-        let agreements = make_vetkd_agreements(0, 1, 2);
+        let agreements = make_chain_key_agreements(0, 1, 2);
         let payload = as_bytes(agreements.clone());
-        let messages = VetKdPayloadBuilderImpl::into_messages(&payload);
+        let messages = ChainKeyPayloadBuilderImpl::into_messages(&payload);
         for i in 0..3 {
             let id = CallbackId::from(i);
             let agreement = agreements.get(&id).unwrap();
             let response = &messages[i as usize];
             assert_eq!(id, response.callback);
             match agreement {
-                VetKdAgreement::Reject(VetKdErrorCode::InvalidKey) => {
+                ChainKeyAgreement::Reject(ChainKeyErrorCode::InvalidKey) => {
                     let ResponsePayload::Reject(context) = &response.payload else {
                         panic!("Unexpected response: {response:?}");
                     };
@@ -648,13 +648,13 @@ mod tests {
                         "Invalid or disabled key_id in VetKD request",
                     );
                 }
-                VetKdAgreement::Reject(VetKdErrorCode::TimedOut) => {
+                ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut) => {
                     let ResponsePayload::Reject(context) = &response.payload else {
                         panic!("Unexpected response: {response:?}");
                     };
                     context.assert_contains(RejectCode::SysTransient, "VetKD request expired");
                 }
-                VetKdAgreement::Success(data) => {
+                ChainKeyAgreement::Success(data) => {
                     let ResponsePayload::Data(response_data) = &response.payload else {
                         panic!("Unexpected response: {response:?}");
                     };
@@ -670,7 +670,7 @@ mod tests {
         config: Option<ChainKeyConfig>,
         contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
         shares: Vec<IDkgMessage>,
-        run: impl FnOnce(VetKdPayloadBuilderImpl) -> T,
+        run: impl FnOnce(ChainKeyPayloadBuilderImpl) -> T,
     ) -> T {
         test_payload_builder_with_num_threads(config, contexts, shares, NUM_THREADS, run)
     }
@@ -680,7 +680,7 @@ mod tests {
         contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
         shares: Vec<IDkgMessage>,
         num_threads: usize,
-        run: impl FnOnce(VetKdPayloadBuilderImpl) -> T,
+        run: impl FnOnce(ChainKeyPayloadBuilderImpl) -> T,
     ) -> T {
         test_payload_builder_ext(
             config,
@@ -702,7 +702,7 @@ mod tests {
         certified_height: Height,
         finalize_last_summary: bool,
         num_threads: usize,
-        run: impl FnOnce(VetKdPayloadBuilderImpl) -> T,
+        run: impl FnOnce(ChainKeyPayloadBuilderImpl) -> T,
     ) -> T {
         let committee = (0..4).map(|id| node_test_id(id as u64)).collect::<Vec<_>>();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -786,7 +786,7 @@ mod tests {
                 .collect();
             idkg_pool.write().unwrap().apply(mutations);
 
-            let payload_builder = VetKdPayloadBuilderImpl::new(
+            let payload_builder = ChainKeyPayloadBuilderImpl::new(
                 idkg_pool.clone(),
                 pool.get_cache(),
                 crypto,
@@ -809,7 +809,7 @@ mod tests {
     }
 
     fn build_and_validate(
-        builder: &VetKdPayloadBuilderImpl,
+        builder: &ChainKeyPayloadBuilderImpl,
         max_size: NumBytes,
         past_payloads: &[PastPayload],
         context: &ValidationContext,
@@ -854,31 +854,31 @@ mod tests {
             |builder| {
                 let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
 
-                let mut payload_deserialized = bytes_to_vetkd_payload(&payload).unwrap();
-                assert_eq!(payload_deserialized.vetkd_agreements.len(), 2);
+                let mut payload_deserialized = bytes_to_chain_key_payload(&payload).unwrap();
+                assert_eq!(payload_deserialized.agreements.len(), 2);
                 assert_matches!(
                     payload_deserialized
-                        .vetkd_agreements
+                        .agreements
                         .get(&CallbackId::from(1)),
-                    Some(VetKdAgreement::Success(_))
+                    Some(ChainKeyAgreement::Success(_))
                 );
                 assert_matches!(
                     payload_deserialized
-                        .vetkd_agreements
+                        .agreements
                         .get(&CallbackId::from(2)),
-                    Some(VetKdAgreement::Success(_))
+                    Some(ChainKeyAgreement::Success(_))
                 );
 
                 // payload containing aggreements that can't be decoded should be invalid
                 payload_deserialized
-                    .vetkd_agreements
-                    .insert(CallbackId::from(1), VetKdAgreement::Success(vec![]));
-                let payload = as_bytes(payload_deserialized.vetkd_agreements);
+                    .agreements
+                    .insert(CallbackId::from(1), ChainKeyAgreement::Success(vec![]));
+                let payload = as_bytes(payload_deserialized.agreements);
                 let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
                 assert_matches!(
                     validation.unwrap_err(),
-                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                        InvalidVetKdPayloadReason::DecodingError(_)
+                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                        InvalidChainKeyPayloadReason::DecodingError(_)
                     ))
                 );
 
@@ -887,23 +887,23 @@ mod tests {
                     builder.validate_payload(HEIGHT, &proposal_context, &[1, 2, 3], &[]);
                 assert_matches!(
                     validation.unwrap_err(),
-                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                        InvalidVetKdPayloadReason::DeserializationFailed(_)
+                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                        InvalidChainKeyPayloadReason::DeserializationFailed(_)
                     ))
                 );
 
                 // payload that rejects valid contexts should be invalid
-                let payload = as_bytes(make_vetkd_agreements_with_payload(
+                let payload = as_bytes(make_chain_key_agreements_with_payload(
                     &[1, 2],
-                    VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
+                    ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut),
                 ));
                 let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
                 assert_matches!(
                     validation.unwrap_err(),
-                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                        InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
+                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                        InvalidChainKeyPayloadReason::MismatchedAgreement { expected, received }
                     )) if expected.is_none()
-                       && received == Some(VetKdAgreement::Reject(VetKdErrorCode::TimedOut))
+                       && received == Some(ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut))
                 );
 
                 // Empty payloads should always be valid
@@ -926,12 +926,12 @@ mod tests {
             };
 
             // Non-empty payloads should be rejected
-            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
+            let payload = as_bytes(make_chain_key_agreements(0, 1, 2));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::Disabled
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                    InvalidChainKeyPayloadReason::Disabled
                 ))
             );
         })
@@ -957,13 +957,13 @@ mod tests {
             };
 
             // Non-empty payload validation should be fail if we don't have the state
-            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
+            let payload = as_bytes(make_chain_key_agreements(0, 1, 2));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::ValidationFailed(
-                    PayloadValidationFailure::VetKdPayloadValidationFailed(
-                        VetKdPayloadValidationFailure::StateUnavailable(_)
+                    PayloadValidationFailure::ChainKeyPayloadValidationFailed(
+                        ChainKeyPayloadValidationFailure::StateUnavailable(_)
                     )
                 )
             );
@@ -1003,17 +1003,17 @@ mod tests {
             let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
             // Payload size should exceed the smaller limit
             assert!(payload.len() as u64 > max.get());
-            let payload_deserialized = bytes_to_vetkd_payload(&payload).unwrap();
-            assert_eq!(payload_deserialized.vetkd_agreements.len(), 2);
+            let payload_deserialized = bytes_to_chain_key_payload(&payload).unwrap();
+            assert_eq!(payload_deserialized.agreements.len(), 2);
 
             // Now enforce the smaller limit
             let payload = build_and_validate(&builder, max, &[], &VALIDATION_CONTEXT);
             assert!(payload.len() as u64 <= max.get());
-            let payload_deserialized = bytes_to_vetkd_payload(&payload).unwrap();
+            let payload_deserialized = bytes_to_chain_key_payload(&payload).unwrap();
             // Only one of the agreements should have been included
-            assert_eq!(payload_deserialized.vetkd_agreements.len(), 1);
-            let (id, agreement) = payload_deserialized.vetkd_agreements.iter().next().unwrap();
-            assert_matches!(agreement, VetKdAgreement::Success(_));
+            assert_eq!(payload_deserialized.agreements.len(), 1);
+            let (id, agreement) = payload_deserialized.agreements.iter().next().unwrap();
+            assert_matches!(agreement, ChainKeyAgreement::Success(_));
             assert!(id.get() == 1 || id.get() == 2);
         })
     }
@@ -1023,8 +1023,8 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let payloads = [
-            as_bytes(make_vetkd_agreements(0, 1, 2)),
-            as_bytes(make_vetkd_agreements(2, 3, 4)),
+            as_bytes(make_chain_key_agreements(0, 1, 2)),
+            as_bytes(make_chain_key_agreements(2, 3, 4)),
         ];
         let past_payloads = payloads
             .iter()
@@ -1037,7 +1037,7 @@ mod tests {
             assert!(payload.is_empty());
 
             // Payload with agreements that are already part of past payloads should be rejected
-            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
+            let payload = as_bytes(make_chain_key_agreements(0, 1, 2));
             let validation = builder.validate_payload(
                 HEIGHT,
                 &ProposalContext {
@@ -1049,8 +1049,8 @@ mod tests {
             );
             assert_matches!(
                 validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::DuplicateResponse(_)
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                    InvalidChainKeyPayloadReason::DuplicateResponse(_)
                 ))
             );
         })
@@ -1067,22 +1067,22 @@ mod tests {
         };
         test_payload_builder_with_num_threads(Some(config), contexts, shares, 1, |builder| {
             // Payload with agreements for IDKG contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
+            let payload = as_bytes(make_chain_key_agreements(0, 1, 2));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::UnexpectedIDkgContext(id)
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                    InvalidChainKeyPayloadReason::UnexpectedIDkgContext(id)
                 )) if id.get() == 0
             );
 
             // Payload with agreements for unknown contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements(3, 4, 5));
+            let payload = as_bytes(make_chain_key_agreements(3, 4, 5));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::MissingContext(id)
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                    InvalidChainKeyPayloadReason::MissingContext(id)
                 )) if id.get() >= 3 && id.get() <= 5
             );
         })
@@ -1106,8 +1106,8 @@ mod tests {
             TestConfig {
                 enabled_keys: true,
                 finalize_last_summary: true,
-                expected_error: VetKdErrorCode::InvalidKey,
-                rejected_error: VetKdErrorCode::TimedOut,
+                expected_error: ChainKeyErrorCode::InvalidKey,
+                rejected_error: ChainKeyErrorCode::TimedOut,
             },
         );
     }
@@ -1121,8 +1121,8 @@ mod tests {
             TestConfig {
                 enabled_keys: false,
                 finalize_last_summary: true,
-                expected_error: VetKdErrorCode::InvalidKey,
-                rejected_error: VetKdErrorCode::TimedOut,
+                expected_error: ChainKeyErrorCode::InvalidKey,
+                rejected_error: ChainKeyErrorCode::TimedOut,
             },
         );
     }
@@ -1141,8 +1141,8 @@ mod tests {
             TestConfig {
                 enabled_keys: true,
                 finalize_last_summary: true,
-                expected_error: VetKdErrorCode::TimedOut,
-                rejected_error: VetKdErrorCode::InvalidKey,
+                expected_error: ChainKeyErrorCode::TimedOut,
+                rejected_error: ChainKeyErrorCode::InvalidKey,
             },
         );
     }
@@ -1162,8 +1162,8 @@ mod tests {
             TestConfig {
                 enabled_keys: true,
                 finalize_last_summary: true,
-                expected_error: VetKdErrorCode::TimedOut,
-                rejected_error: VetKdErrorCode::InvalidKey,
+                expected_error: ChainKeyErrorCode::TimedOut,
+                rejected_error: ChainKeyErrorCode::InvalidKey,
             },
         );
     }
@@ -1183,8 +1183,8 @@ mod tests {
             TestConfig {
                 enabled_keys: true,
                 finalize_last_summary: false,
-                expected_error: VetKdErrorCode::TimedOut,
-                rejected_error: VetKdErrorCode::InvalidKey,
+                expected_error: ChainKeyErrorCode::TimedOut,
+                rejected_error: ChainKeyErrorCode::InvalidKey,
             },
         );
     }
@@ -1192,8 +1192,8 @@ mod tests {
     struct TestConfig {
         enabled_keys: bool,
         finalize_last_summary: bool,
-        expected_error: VetKdErrorCode,
-        rejected_error: VetKdErrorCode,
+        expected_error: ChainKeyErrorCode,
+        rejected_error: ChainKeyErrorCode,
     }
 
     fn reject_invalid_contexts_test(
@@ -1224,48 +1224,48 @@ mod tests {
             |builder| {
                 let serialized_payload =
                     build_and_validate(&builder, MAX_SIZE, &[], &validation_context);
-                let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
-                assert_eq!(payload.vetkd_agreements.len(), 2);
+                let payload = bytes_to_chain_key_payload(&serialized_payload).unwrap();
+                assert_eq!(payload.agreements.len(), 2);
                 for (id, context) in contexts {
                     match context.key_id() {
                         MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
-                            assert!(!payload.vetkd_agreements.contains_key(&id));
+                            assert!(!payload.agreements.contains_key(&id));
                         }
                         MasterPublicKeyId::VetKd(_) => {
                             assert_eq!(
-                                payload.vetkd_agreements.get(&id).unwrap(),
-                                &VetKdAgreement::Reject(expected_error)
+                                payload.agreements.get(&id).unwrap(),
+                                &ChainKeyAgreement::Reject(expected_error)
                             );
                         }
                     }
                 }
 
                 // payload with different rejects for the same contexts should be rejected
-                let payload = as_bytes(make_vetkd_agreements_with_payload(
+                let payload = as_bytes(make_chain_key_agreements_with_payload(
                     &[1, 2],
-                    VetKdAgreement::Reject(rejected_error),
+                    ChainKeyAgreement::Reject(rejected_error),
                 ));
                 let height = validation_context.certified_height.increment();
                 let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
                 assert_matches!(
                     validation.unwrap_err(),
-                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                        InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
-                    )) if expected == Some(VetKdAgreement::Reject(expected_error))
-                       && received == Some(VetKdAgreement::Reject(rejected_error))
+                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                        InvalidChainKeyPayloadReason::MismatchedAgreement { expected, received }
+                    )) if expected == Some(ChainKeyAgreement::Reject(expected_error))
+                       && received == Some(ChainKeyAgreement::Reject(rejected_error))
                 );
 
                 // payload with success responses for the same contexts should be rejected
-                let payload = as_bytes(make_vetkd_agreements_with_payload(
+                let payload = as_bytes(make_chain_key_agreements_with_payload(
                     &[1, 2],
-                    VetKdAgreement::Success(vec![1, 1, 1]),
+                    ChainKeyAgreement::Success(vec![1, 1, 1]),
                 ));
                 let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
                 assert_matches!(
                     validation.unwrap_err(),
-                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                        InvalidVetKdPayloadReason::MismatchedAgreement { expected, received }
-                    )) if expected == Some(VetKdAgreement::Reject(expected_error))
+                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                        InvalidChainKeyPayloadReason::MismatchedAgreement { expected, received }
+                    )) if expected == Some(ChainKeyAgreement::Reject(expected_error))
                        && received.is_none()
                 );
 
@@ -1284,8 +1284,8 @@ mod tests {
                 .unwrap_err();
             assert_matches!(
                 res,
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
-                    InvalidVetKdPayloadReason::Disabled
+                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                    InvalidChainKeyPayloadReason::Disabled
                 ))
             )
         })

@@ -1319,7 +1319,7 @@ impl From<&Block> for pb::Block {
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
-                batch.vetkd.clone(),
+                batch.chain_key.clone(),
                 payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
             )
         };
@@ -1368,7 +1368,7 @@ impl TryFrom<pb::Block> for Block {
                 .unwrap_or_default(),
             canister_http: block.canister_http_payload_bytes,
             query_stats: block.query_stats_payload_bytes,
-            vetkd: block.vetkd_payload_bytes,
+            chain_key: block.vetkd_payload_bytes,
         };
 
         let payload = match dkg_payload {

@@ -13,7 +13,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 };
 use ic_types::{
     Height, NumBytes,
-    batch::{VetKdAgreement, VetKdErrorCode, VetKdPayload, vetkd_payload_to_bytes},
+    batch::{ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, chain_key_payload_to_bytes},
     consensus::idkg::VetKdKeyShare,
     crypto::vetkd::VetKdEncryptedKeyShare,
     crypto::vetkd::VetKdEncryptedKeyShareContent,
@@ -27,34 +27,34 @@ use std::{collections::BTreeMap, sync::Arc};
 use strum::EnumCount;
 
 /// Create a map of agreements with all possible types
-pub(super) fn make_vetkd_agreements(
+pub(super) fn make_chain_key_agreements(
     id1: u64,
     id2: u64,
     id3: u64,
-) -> BTreeMap<CallbackId, VetKdAgreement> {
-    assert_eq!(VetKdAgreement::COUNT, 2);
-    assert_eq!(VetKdErrorCode::COUNT, 2);
+) -> BTreeMap<CallbackId, ChainKeyAgreement> {
+    assert_eq!(ChainKeyAgreement::COUNT, 2);
+    assert_eq!(ChainKeyErrorCode::COUNT, 2);
     BTreeMap::from([
         (
             CallbackId::from(id1),
-            VetKdAgreement::Success(vec![1, 2, 3, 4]),
+            ChainKeyAgreement::Success(vec![1, 2, 3, 4]),
         ),
         (
             CallbackId::from(id2),
-            VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
+            ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut),
         ),
         (
             CallbackId::from(id3),
-            VetKdAgreement::Reject(VetKdErrorCode::InvalidKey),
+            ChainKeyAgreement::Reject(ChainKeyErrorCode::InvalidKey),
         ),
     ])
 }
 
 /// Create a map of agreements with the same, given type
-pub(super) fn make_vetkd_agreements_with_payload(
+pub(super) fn make_chain_key_agreements_with_payload(
     ids: &[u64],
-    agreement: VetKdAgreement,
-) -> BTreeMap<CallbackId, VetKdAgreement> {
+    agreement: ChainKeyAgreement,
+) -> BTreeMap<CallbackId, ChainKeyAgreement> {
     let mut map = BTreeMap::new();
     for id in ids {
         map.insert(CallbackId::new(*id), agreement.clone());
@@ -63,8 +63,8 @@ pub(super) fn make_vetkd_agreements_with_payload(
 }
 
 /// Convert the given agreements payload to bytes, using a maximum size of 1KiB.
-pub(super) fn as_bytes(vetkd_agreements: BTreeMap<CallbackId, VetKdAgreement>) -> Vec<u8> {
-    vetkd_payload_to_bytes(VetKdPayload { vetkd_agreements }, NumBytes::new(1024))
+pub(super) fn as_bytes(agreements: BTreeMap<CallbackId, ChainKeyAgreement>) -> Vec<u8> {
+    chain_key_payload_to_bytes(ChainKeyPayload { agreements }, NumBytes::new(1024))
 }
 
 /// Turn the given payload bytes into a generic [`PastPayload`]

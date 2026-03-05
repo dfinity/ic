@@ -15,7 +15,7 @@ use crate::{
         SelfValidatingPayloadValidationFailure,
     },
     validation::{ValidationError, ValidationResult},
-    vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
+    chain_key::{InvalidChainKeyPayloadReason, ChainKeyPayloadValidationFailure},
 };
 use ic_base_types::{NumBytes, SubnetId};
 use ic_types::{
@@ -74,7 +74,7 @@ pub enum InvalidPayloadReason {
     InvalidSelfValidatingPayload(InvalidSelfValidatingPayloadReason),
     InvalidCanisterHttpPayload(InvalidCanisterHttpPayloadReason),
     InvalidQueryStatsPayload(InvalidQueryStatsPayloadReason),
-    InvalidVetKdPayload(InvalidVetKdPayloadReason),
+    InvalidChainKeyPayload(InvalidChainKeyPayloadReason),
     /// The overall block size is too large, even though the individual payloads are valid
     PayloadTooBig {
         expected: NumBytes,
@@ -89,7 +89,7 @@ pub enum PayloadValidationFailure {
     SelfValidatingPayloadValidationFailed(SelfValidatingPayloadValidationFailure),
     CanisterHttpPayloadValidationFailed(CanisterHttpPayloadValidationFailure),
     QueryStatsPayloadValidationFailed(QueryStatsPayloadValidationFailure),
-    VetKdPayloadValidationFailed(VetKdPayloadValidationFailure),
+    ChainKeyPayloadValidationFailed(ChainKeyPayloadValidationFailure),
     RegistryUnavailable(RegistryClientError),
     SubnetNotFound(SubnetId),
 }

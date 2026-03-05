@@ -65,7 +65,7 @@ members = [
     "rs/consensus/idkg",
     "rs/consensus/mocks",
     "rs/consensus/utils",
-    "rs/consensus/vetkd",
+    "rs/consensus/chain_key",
     "rs/criterion_time",
     "rs/cross-chain/proposal-cli",
     "rs/crypto",

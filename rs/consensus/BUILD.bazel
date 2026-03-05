@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/consensus/certification",
     "//rs/consensus/dkg",
     "//rs/consensus/utils",
-    "//rs/consensus/vetkd",
+    "//rs/consensus/chain_key",
     "//rs/crypto/prng",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/https_outcalls/consensus",
