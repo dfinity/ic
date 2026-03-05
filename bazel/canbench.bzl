@@ -35,24 +35,17 @@ def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = 
         opt = opt,
     )
 
-    canbench_bin = "$(location @crate_index//:canbench__canbench)"
-    wasm_path = "$(location :{name}_wasm)".format(name = name)
-    pocket_ic_bin = "$(rootpath //:pocket-ic-mainnet)"
     data = data + [
         ":{name}_wasm".format(name = name),
         "@crate_index//:canbench__canbench",
         results_file,
-        "//:WORKSPACE.bazel",
         "//:pocket-ic-mainnet",
     ]
-    canbench_results_path = "$(rootpath {results_file})".format(results_file = results_file)
     env = env | {
-        "CANBENCH_BIN": canbench_bin,
-        "WASM_PATH": wasm_path,
-        "CANBENCH_RESULTS_PATH": canbench_results_path,
-        "POCKET_IC_BIN": pocket_ic_bin,
-        # Hack to escape the sandbox and update the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "CANBENCH_BIN": "$(location @crate_index//:canbench__canbench)",
+        "WASM_PATH": "$(location :{name}_wasm)".format(name = name),
+        "CANBENCH_RESULTS_PATH": "$(rootpath {results_file})".format(results_file = results_file),
+        "POCKET_IC_BIN": "$(rootpath //:pocket-ic-mainnet)",
     }
 
     if noise_threshold:
