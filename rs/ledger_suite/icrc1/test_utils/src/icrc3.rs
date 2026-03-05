@@ -132,6 +132,40 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         }
     }
 
+    /// Create an authorized mint operation (ICRC-122 122mint block)
+    pub fn authorized_mint(
+        self,
+        to: Account,
+        amount: Tokens,
+        caller: Principal,
+    ) -> AuthorizedMintBuilder<Tokens> {
+        AuthorizedMintBuilder {
+            builder: self.with_btype("122mint".to_string()),
+            to,
+            amount,
+            caller,
+            reason: None,
+            created_at_time: None,
+        }
+    }
+
+    /// Create an authorized burn operation (ICRC-122 122burn block)
+    pub fn authorized_burn(
+        self,
+        from: Account,
+        amount: Tokens,
+        caller: Principal,
+    ) -> AuthorizedBurnBuilder<Tokens> {
+        AuthorizedBurnBuilder {
+            builder: self.with_btype("122burn".to_string()),
+            from,
+            amount,
+            caller,
+            reason: None,
+            created_at_time: None,
+        }
+    }
+
     /// Create a fee collector block
     pub fn fee_collector(
         self,
@@ -381,6 +415,92 @@ impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
     }
 }
 
+/// Builder for authorized mint operations (ICRC-122 122mint blocks)
+pub struct AuthorizedMintBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    to: Account,
+    amount: Tokens,
+    caller: Principal,
+    reason: Option<String>,
+    created_at_time: Option<u64>,
+}
+
+impl<Tokens: TokensType> AuthorizedMintBuilder<Tokens> {
+    /// Set the reason for the authorized mint
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    /// Set the created_at_time (tx-level timestamp)
+    pub fn with_created_at_time(mut self, ts: u64) -> Self {
+        self.created_at_time = Some(ts);
+        self
+    }
+
+    /// Build the 122mint block
+    pub fn build(self) -> ICRC3Value {
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("to".to_string(), account_to_icrc3_value(&self.to));
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
+        tx_fields.insert(
+            "caller".to_string(),
+            ICRC3Value::Blob(ByteBuf::from(self.caller.as_slice())),
+        );
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        if let Some(ts) = self.created_at_time {
+            tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
+        }
+        self.builder
+            .build_with_operation(Some("152mint"), tx_fields)
+    }
+}
+
+/// Builder for authorized burn operations (ICRC-122 122burn blocks)
+pub struct AuthorizedBurnBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    from: Account,
+    amount: Tokens,
+    caller: Principal,
+    reason: Option<String>,
+    created_at_time: Option<u64>,
+}
+
+impl<Tokens: TokensType> AuthorizedBurnBuilder<Tokens> {
+    /// Set the reason for the authorized burn
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    /// Set the created_at_time (tx-level timestamp)
+    pub fn with_created_at_time(mut self, ts: u64) -> Self {
+        self.created_at_time = Some(ts);
+        self
+    }
+
+    /// Build the 122burn block
+    pub fn build(self) -> ICRC3Value {
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("from".to_string(), account_to_icrc3_value(&self.from));
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
+        tx_fields.insert(
+            "caller".to_string(),
+            ICRC3Value::Blob(ByteBuf::from(self.caller.as_slice())),
+        );
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        if let Some(ts) = self.created_at_time {
+            tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
+        }
+        self.builder
+            .build_with_operation(Some("152burn"), tx_fields)
+    }
+}
+
 /// Builder for custom transactions
 pub struct CustomTxBuilder<Tokens: TokensType> {
     builder: BlockBuilder<Tokens>,
@@ -460,6 +580,72 @@ mod builder_tests {
             assert!(block_map.contains_key("ts"));
             assert!(block_map.contains_key("tx"));
             assert!(block_map.contains_key("phash"));
+        } else {
+            panic!("Expected ICRC3Value::Map");
+        }
+    }
+
+    #[test]
+    fn test_authorized_mint_builder() {
+        let caller = Principal::from(PrincipalId::new_user_test_id(10));
+        let block = BlockBuilder::<Tokens>::new(1, 1609459200)
+            .authorized_mint(test_account(2), tokens(1000), caller)
+            .with_reason("airdrop".to_string())
+            .with_created_at_time(1609459100)
+            .build();
+
+        if let ICRC3Value::Map(block_map) = &block {
+            assert_eq!(
+                block_map.get("btype"),
+                Some(&ICRC3Value::Text("122mint".to_string()))
+            );
+            assert!(block_map.contains_key("phash")); // block_id > 0
+            if let Some(ICRC3Value::Map(tx_map)) = block_map.get("tx") {
+                assert_eq!(
+                    tx_map.get("op"),
+                    Some(&ICRC3Value::Text("152mint".to_string()))
+                );
+                assert!(tx_map.contains_key("to"));
+                assert!(tx_map.contains_key("amt"));
+                assert!(tx_map.contains_key("caller"));
+                assert_eq!(
+                    tx_map.get("reason"),
+                    Some(&ICRC3Value::Text("airdrop".to_string()))
+                );
+                assert!(tx_map.contains_key("ts"));
+            } else {
+                panic!("Expected tx map");
+            }
+        } else {
+            panic!("Expected ICRC3Value::Map");
+        }
+    }
+
+    #[test]
+    fn test_authorized_burn_builder() {
+        let caller = Principal::from(PrincipalId::new_user_test_id(10));
+        let block = BlockBuilder::<Tokens>::new(2, 1609459200)
+            .authorized_burn(test_account(1), tokens(500), caller)
+            .build();
+
+        if let ICRC3Value::Map(block_map) = &block {
+            assert_eq!(
+                block_map.get("btype"),
+                Some(&ICRC3Value::Text("122burn".to_string()))
+            );
+            if let Some(ICRC3Value::Map(tx_map)) = block_map.get("tx") {
+                assert_eq!(
+                    tx_map.get("op"),
+                    Some(&ICRC3Value::Text("152burn".to_string()))
+                );
+                assert!(tx_map.contains_key("from"));
+                assert!(tx_map.contains_key("amt"));
+                assert!(tx_map.contains_key("caller"));
+                assert!(!tx_map.contains_key("reason"));
+                assert!(!tx_map.contains_key("ts"));
+            } else {
+                panic!("Expected tx map");
+            }
         } else {
             panic!("Expected ICRC3Value::Map");
         }
