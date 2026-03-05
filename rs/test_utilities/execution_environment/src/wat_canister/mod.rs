@@ -286,7 +286,7 @@ impl WatCanisterBuilder {
             }
         }
 
-        let functions_block = rendered_functions.join("\n");
+        let functions_block = rendered_functions.join("\n            ");
 
         let mut data_entries: Vec<_> = self.memory.into_iter().collect();
         data_entries.sort_by_key(|&(_, offset)| offset);
@@ -297,7 +297,7 @@ impl WatCanisterBuilder {
                 format!(
                     r#"(data (i32.const {}) "{}")"#,
                     offset,
-                    message.escape_ascii()
+                    format_wasm_string(&message)
                 )
             })
             .collect::<Vec<_>>()
@@ -463,4 +463,20 @@ impl<'a> RenderState<'a> {
             }
         }
     }
+}
+
+/// WebAssembly text format requires byte escapes to be specifically formatted
+/// as `\hh` where `h` is a hex character. Rust's `.escape_ascii()` creates
+/// `\xhh` which causes strict `wat` parsers to panic at construction.
+fn format_wasm_string(data: &[u8]) -> String {
+    let mut s = String::with_capacity(data.len() * 3);
+    for &b in data {
+        if b.is_ascii_graphic() && b != b'\\' && b != b'"' || b == b' ' {
+            s.push(b as char);
+        } else {
+            use std::fmt::Write;
+            let _ = write!(&mut s, "\\{:02x}", b);
+        }
+    }
+    s
 }

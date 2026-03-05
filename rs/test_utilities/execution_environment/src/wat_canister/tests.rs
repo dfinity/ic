@@ -37,14 +37,19 @@ fn test_instruction_emission() {
     assert!(wat.contains(r#"(data (i32.const 1000) "hi")"#));
     assert!(wat.contains(r#"(data (i32.const 1002) "error")"#));
 
-    // Check that calls are present in the function
-    assert!(wat.contains(r#"(call $ic0_stable_grow (i32.const 1))"#));
-    assert!(wat.contains(r#"(call $ic0_stable_read (i32.const 0) (i32.const 4) (i32.const 7))"#));
-    assert!(wat.contains(r#"(call $ic0_global_timer_set (i64.const 42))"#));
-    assert!(wat.contains(r#"(call $ic0_debug_print (i32.const 1000) (i32.const 2))"#));
-    assert!(wat.contains(r#"(call $ic0_trap (i32.const 1002) (i32.const 5))"#));
-    assert!(wat.contains(r#"(call $ic0_trap (i32.const 1007) (i32.const 0))"#));
-    assert!(wat.contains(r#"(call $_wait (i64.const 10000))"#));
+    // Check that calls are present in the function in the expected order
+    assert!(wat.contains(
+        r#"
+            (func $test_instructions (export "canister_update test_instructions")
+                (drop (call $ic0_stable_grow (i32.const 1)))
+                (call $ic0_stable_read (i32.const 0) (i32.const 4) (i32.const 7))
+                (drop (call $ic0_global_timer_set (i64.const 42)))
+                (call $ic0_debug_print (i32.const 1000) (i32.const 2))
+                (call $ic0_trap (i32.const 1002) (i32.const 5))
+                (call $ic0_trap (i32.const 1007) (i32.const 0))
+                (call $_wait (i64.const 10000))
+            )"#
+    ));
 }
 
 #[test]
@@ -187,11 +192,31 @@ fn test_comprehensive_integration() {
     let wasm_module = wat::parse_str(&wat).unwrap();
     assert!(!wasm_module.is_empty());
 
-    // Basic heuristic checks to ensure exported functions are present
-    assert!(wat.contains(r#"(export "canister_init")"#));
-    assert!(wat.contains(r#"(export "canister_update test_1")"#));
-    assert!(wat.contains(r#"(export "canister_query test_2")"#));
-    assert!(wat.contains(r#"(export "canister_composite_query test_3")"#));
+    // Basic heuristic checks to ensure exported functions are present in order.
+    // We check a subset of the exported functions to verify sequence and naming.
+    assert!(wat.contains(
+        r#"
+            (func $init (export "canister_init")
+                (call $ic0_debug_print (i32.const 1005) (i32.const 4))
+                (drop (call $ic0_global_timer_set (i64.const 1)))
+            )
+            (func $pre_upgrade (export "canister_pre_upgrade")"#
+    ));
+    assert!(wat.contains(
+        r#"
+            (func $test_1 (export "canister_update test_1")
+                (call $ic0_debug_print (i32.const 1068) (i32.const 2))"#
+    ));
+    assert!(wat.contains(
+        r#"
+            (func $test_2 (export "canister_query test_2")
+                (call $ic0_debug_print (i32.const 1073) (i32.const 4))"#
+    ));
+    assert!(wat.contains(
+        r#"
+            (func $test_3 (export "canister_composite_query test_3")
+                (call $ic0_trap (i32.const 1082) (i32.const 15))"#
+    ));
 }
 
 #[test]
@@ -209,10 +234,13 @@ fn test_loop_calls_scaling() {
     let wasm_module = wat::parse_str(&wat).unwrap();
     assert!(!wasm_module.is_empty());
 
-    // Verify native loop constructs
-    assert!(wat.contains("(local $loop_counter_0 i32)"));
-    assert!(wat.contains("(loop $loop_label_0"));
-    assert!(wat.contains("(i32.const 200000)"));
+    // Verify native loop constructs and iteration count
+    assert!(wat.contains(
+        r#"
+                (local $loop_counter_0 i32)
+                (local.set $loop_counter_0 (i32.const 200000))
+                (loop $loop_label_0"#
+    ));
 }
 
 #[test]
@@ -227,8 +255,80 @@ fn test_loop_calls_nested() {
     wat::parse_str(&wat).unwrap();
 
     // Verify it correctly allocated two distinct loop locals at the top boundary
-    assert!(wat.contains("(local $loop_counter_0 i32)"));
-    assert!(wat.contains("(local $loop_counter_1 i32)"));
-    assert!(wat.contains("(loop $loop_label_0"));
-    assert!(wat.contains("(loop $loop_label_1"));
+    // and loops are appropriately scoped and ordered.
+    assert!(wat.contains(
+        r#"
+                (local $loop_counter_0 i32)
+                (local $loop_counter_1 i32)
+                (local.set $loop_counter_0 (i32.const 10))
+                (loop $loop_label_0"#
+    ));
+}
+
+#[test]
+fn test_loop_calls_sequential() {
+    let wat = wat_canister()
+        .update(
+            "sequential",
+            wat_fn()
+                .repeat(5, wat_fn().debug_print(b"first"))
+                .repeat(10, wat_fn().debug_print(b"second")),
+        )
+        .build();
+
+    wat::parse_str(&wat).unwrap();
+
+    // Verify it sequentially allocated two distinct loop locals at the top block
+    // and correctly ordered the looping bodies sequentially.
+    assert!(wat.contains(
+        r#"
+                (local $loop_counter_0 i32)
+                (local $loop_counter_1 i32)
+                (local.set $loop_counter_0 (i32.const 5))
+                (loop $loop_label_0"#
+    ));
+
+    assert!(wat.contains(
+        r#"
+                (local.set $loop_counter_1 (i32.const 10))
+                (loop $loop_label_1"#
+    ));
+}
+
+#[test]
+fn test_memory_limit_exact_bound() {
+    // MEMORY_OFFSET_START is 1000.
+    // WAIT_SCRATCHPAD_START is 65000.
+    // Total available payload space is precisely 64,000 bytes.
+    let exactly_fitting = vec![0u8; 64_000];
+    let wat = wat_canister()
+        .update("fits", wat_fn().debug_print(&exactly_fitting))
+        .build();
+
+    wat::parse_str(&wat).unwrap(); // Should not panic
+}
+
+#[test]
+fn test_memory_limit_off_by_one() {
+    // 64,001 bytes crosses the 65,000 reserved threshold by 1 byte.
+    let overflowing = vec![0u8; 64_001];
+
+    let result = std::panic::catch_unwind(|| {
+        wat_canister()
+            .update("overflows", wat_fn().debug_print(&overflowing))
+            .build();
+    });
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_build_wasm_and_default_traits() {
+    // Verify `Default` trait derivations
+    let wasm_bytes = WatCanisterBuilder::default()
+        .update("foo", WatFnCode::default().debug_print(b"hello"))
+        .build_wasm();
+
+    // Valid WebAssembly binaries always begin with the `\0asm` magic module header format.
+    assert!(wasm_bytes.starts_with(b"\0asm"));
 }
