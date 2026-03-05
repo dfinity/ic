@@ -177,7 +177,11 @@ pub mod catch_up_package_contents {
     }
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
-pub struct GenesisArgs {}
+pub struct GenesisArgs {
+    /// Initial height of the subnet
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RecoveryArgs {
     /// The blockchain height that the CUP should have

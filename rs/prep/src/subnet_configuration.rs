@@ -18,8 +18,8 @@ use ic_crypto_utils_threshold_sig_der::{KeyConversionError, threshold_sig_public
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
-        CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig,
-        InitialNiDkgTranscriptRecord, SubnetRecord,
+        CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig, GenesisArgs,
+        InitialNiDkgTranscriptRecord, SubnetRecord, catch_up_package_contents::CupType,
     },
 };
 use ic_registry_subnet_features::SubnetFeatures;
@@ -413,7 +413,13 @@ impl SubnetConfig {
             )),
             state_hash,
             height: self.initial_height,
-            ..Default::default()
+            time: 0,
+            registry_store_uri: None,
+            ecdsa_initializations: vec![],
+            chain_key_initializations: vec![],
+            cup_type: Some(CupType::Genesis(GenesisArgs {
+                height: self.initial_height,
+            })),
         };
 
         Ok(InitializedSubnet {

@@ -167,7 +167,10 @@ message CatchUpPackageContents {
   }
 }
 
-message GenesisArgs {}
+message GenesisArgs {
+  // Initial height of the subnet
+  uint64 height = 1;
+}
 
 message RecoveryArgs {
   // The blockchain height that the CUP should have
