@@ -659,10 +659,10 @@ fn end_iteration_adds_idle_completed_to_fully_executed() {
     // All canisters executed, none completed an execution.
     fixture.end_iteration(&all, &none);
 
-    // fully_executed_canisters should be empty.
+    // No canister got marked as fully executed (as none completed an execution).
     assert_eq!(fixture.fully_executed_canisters(), &btreeset! {});
 
-    // All executed, all completed an execution.
+    // All executed, all completed at least one execution.
     fixture.end_iteration(&all, &all);
 
     // Only the canister with `next_execution() == None` is fully executed.
@@ -767,8 +767,8 @@ fn finish_round_free_allocation_zero_sum() {
     );
 }
 
-/// finish_round drops an idle canister with zero true priority from the subnet
-/// schedule when it has no inputs and !must_be_in_schedule().
+/// finish_round drops an idle canister with zero accumulated priority from the
+/// subnet schedule when it has no inputs and !must_be_in_schedule().
 #[test]
 fn finish_round_idle_at_zero_dropped_from_schedule() {
     let mut fixture = RoundScheduleFixture::new();
@@ -811,18 +811,21 @@ fn finish_round_idle_at_zero_dropped_from_schedule() {
 #[test]
 fn finish_round_apply_priority_credit() {
     let mut fixture = RoundScheduleFixture::new();
-    let canister_id = fixture.canister_with_input();
-    fixture.start_iteration(true);
-    // Set Prioritized and priority_credit; do not add to completed so end_iteration
-    // does not reset long_execution_mode — we want finish_round to apply_priority_credit.
-    fixture.set_long_execution_mode(canister_id, LongExecutionMode::Prioritized);
+    // A canister with a long execution and non-zero priority_credit.
+    let canister_id = fixture.canister_with_long_execution();
     fixture.set_priority(
         canister_id,
         CanisterPriority {
-            priority_credit: AccumulatedPriority::new(50 * MULTIPLIER),
+            priority_credit: AccumulatedPriority::new(1 * MULTIPLIER),
             ..*fixture.canister_priority(&canister_id)
         },
     );
+
+    fixture.start_iteration(true);
+    // Set Prioritized and priority_credit; do not add to completed so end_iteration
+    // does not reset long_execution_mode — we want finish_round to apply_priority_credit.
+    // fixture.set_long_execution_mode(canister_id, LongExecutionMode::Prioritized);
+    fixture.remove_long_execution(canister_id);
 
     fixture.finish_round(ExecutionRound::new(1));
 

@@ -1902,10 +1902,11 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     let mut canister_ids = vec![];
     for _ in 0..num_canisters {
         let canister_id = test.create_canister();
+        test.send_ingress(canister_id, ingress(slice_instructions));
         canister_ids.push(canister_id);
     }
 
-    // Start another long execution on the penalized canister.
+    // Start a long execution on the penalized canister.
     test.send_ingress(penalized_long_id, ingress(message_instructions));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);

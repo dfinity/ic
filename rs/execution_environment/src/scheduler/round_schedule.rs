@@ -413,9 +413,7 @@ impl RoundSchedule {
         }
 
         // Add all canisters that we (tried to) schedule this round to the subnet
-        // schedule; grant them their compute allocation; and calculate the subnet-wide
-        // free allocation (as the deviation from zero of all canisters' total
-        // accumulated priority, including priority credit).
+        // schedule; and apply their respective priority credits.
         let mut free_allocation = ZERO;
         for canister_id in &self.scheduled_canisters {
             let Some(canister) = canister_states.get_mut(canister_id) else {
@@ -423,13 +421,46 @@ impl RoundSchedule {
                 subnet_schedule.remove(canister_id);
                 continue;
             };
+
+            // Add the canister to the subnet schedule, if not already there.
             let canister_priority = subnet_schedule.get_mut(*canister_id);
-            canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
-            free_allocation -= canister_priority.true_priority();
+
+            // Apply the priority credit if not in the same long execution as at the
+            // beginning of the round.
+            if canister_priority.priority_credit != ZERO
+                && (canister.next_execution() != NextExecution::ContinueLong
+                    || self
+                        .canisters_with_completed_messages
+                        .contains(&canister_id))
+            {
+                canister_priority.accumulated_priority -=
+                    std::mem::take(&mut canister_priority.priority_credit);
+            }
+
             Arc::make_mut(canister)
                 .system_state
                 .canister_metrics_mut()
                 .observe_round_scheduled();
+        }
+
+        // Remove any deleted canisters from the subnet schedule. Beyond this point it
+        // is safe to assume that the subnet schedule only refers to existing canisters.
+        let deleted_canisters: Vec<_> = subnet_schedule
+            .iter()
+            .map(|(canister_id, _)| *canister_id)
+            .filter(|canister_id| !canister_states.contains_key(canister_id))
+            .collect();
+        for canister_id in deleted_canisters {
+            subnet_schedule.remove(&canister_id);
+        }
+
+        // Grant all canisters in the subnet schedule their compute allocation; and
+        // calculate the subnet-wide free allocation (as the deviation from zero of the
+        // sum of all canisters' accumulated priority).
+        for (canister_id, canister_priority) in subnet_schedule.iter_mut() {
+            let canister = canister_states.get_mut(canister_id).unwrap();
+            canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
+            free_allocation -= canister_priority.accumulated_priority;
         }
 
         // Only ever apply positive free allocation. If the sum of all canisters'
@@ -443,29 +474,26 @@ impl RoundSchedule {
         // Fully distribute the free allocation among all canisters, ensuring that we
         // end up with exactly zero at the end of the loop.
         //
-        // Sort the canisters by their real accumulated priority in descending order.
-        // Credit each its share of the free allocation, dropping it from the schedule
-        // if it has no more inputs and has reached zero accumulated priority.
+        // Sort the canisters by their accumulated priority in descending order. Credit
+        // each its share of the free allocation, dropping it from the schedule if it
+        // has no more inputs and has reached zero accumulated priority.
         let mut sorted_canister_priorities = subnet_schedule
             .iter()
-            .map(|(c, p)| (*c, p.true_priority()))
+            .map(|(c, p)| (*c, p.accumulated_priority))
             .collect::<Vec<_>>();
         sorted_canister_priorities.sort_by_key(|(c, p)| (std::cmp::Reverse(*p), *c));
         let mut accumulated_priority_deviation = 0.0;
         let mut remaining_canisters = sorted_canister_priorities.len() as i64;
         for (canister_id, priority) in sorted_canister_priorities.into_iter() {
             let canister_free_allocation = free_allocation / remaining_canisters;
-            let canister_state = canister_states.get(&canister_id);
-            let next_execution = match canister_state.map(|c| c.next_execution()) {
-                Some(NextExecution::None)
-                    if canister_state.is_some_and(|canister| {
-                        has_heartbeat(canister) || has_active_timer(canister, now)
-                    }) =>
+            let canister_state = canister_states.get(&canister_id).unwrap();
+            let next_execution = match canister_state.next_execution() {
+                NextExecution::None
+                    if has_heartbeat(canister_state) || has_active_timer(canister_state, now) =>
                 {
                     NextExecution::StartNew
                 }
-                Some(other) => other,
-                None => NextExecution::None,
+                other => other,
             };
             if priority >= -canister_free_allocation && next_execution == NextExecution::None {
                 // Canister with no inputs that has just reached zero accumulated priority.
@@ -474,8 +502,7 @@ impl RoundSchedule {
 
                 // Drop it from the subnet schedule iff it has no heap delta or install code
                 // debits.
-                if canister_state.is_none_or(|canister_state| !canister_state.must_be_in_schedule())
-                {
+                if !canister_state.must_be_in_schedule() {
                     subnet_schedule.remove(&canister_id);
                 }
             } else {
@@ -500,16 +527,6 @@ impl RoundSchedule {
                 let accumulated_priority =
                     canister_priority.accumulated_priority.get() as f64 / MULTIPLIER as f64;
                 accumulated_priority_deviation += accumulated_priority * accumulated_priority;
-
-                // Not in the same long execution as at the beginning of the round. Safe to
-                // apply the priority credit.
-                if next_execution != NextExecution::ContinueLong
-                    || self
-                        .canisters_with_completed_messages
-                        .contains(&canister_id)
-                {
-                    RoundSchedule::apply_priority_credit(canister_priority);
-                }
             }
             remaining_canisters -= 1;
         }
@@ -570,16 +587,6 @@ impl RoundSchedule {
     /// For the DTS scheduler, it's `(number of cores - 1) * 100%`
     fn compute_capacity(&self) -> AccumulatedPriority {
         ONE_HUNDRED_PERCENT * (self.config.scheduler_cores as i64 - 1)
-    }
-
-    /// Applies priority credit and resets long execution mode.
-    fn apply_priority_credit(canister_priority: &mut CanisterPriority) {
-        canister_priority.accumulated_priority -=
-            std::mem::take(&mut canister_priority.priority_credit);
-        // Aborting a long-running execution moves the canister to the
-        // default execution mode because the canister does not have a
-        // pending execution anymore.
-        canister_priority.long_execution_mode = LongExecutionMode::default();
     }
 
     /// Canisters that were scheduled this round.

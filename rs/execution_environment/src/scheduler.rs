@@ -595,6 +595,10 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
+
+            // TODO(DSM-103): `debug_assert` that all scheduled canisters that have not completed a
+            // message execution still have a `next_execution`.
+
             // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canisters {
