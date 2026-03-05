@@ -148,7 +148,7 @@ bazel_bes() {
 
 # creates a directory inside the containers file system, not bind-mounted from the host
 sudo mkdir -p /bazel-output
-chmod 777 /bazel-output
+sudo chmod 777 /bazel-output
 startup_options=(
     --output_base=/bazel-output
 )
