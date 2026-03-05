@@ -20,15 +20,19 @@
 
 set -eEuo pipefail
 
-RUNFILES="$PWD"
-REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
-REPO_RESULTS_PATH="${REPO_PATH}/${CANBENCH_RESULTS_PATH}"
 CANBENCH_OUTPUT="$(mktemp -t canbench_output.txt.XXXX)"
 NOISE_THRESHOLD_ARG="${NOISE_THRESHOLD:+--noise-threshold ${NOISE_THRESHOLD}}"
 PATTERN_ARG="${CANBENCH_PATTERN:+${CANBENCH_PATTERN}}"
 
+# make paths absolute before we change directory
+REPO_RESULTS_PATH="$(realpath "${CANBENCH_RESULTS_PATH}")"
+WASM_PATH="$(realpath "$WASM_PATH")"
+CANBENCH_BIN="$(realpath "$CANBENCH_BIN")"
+POCKET_IC_BIN="$(realpath "$POCKET_IC_BIN")"
+
+cd "$(mktemp -d)" # create a new temp dir because we're about to generate some data (canbench.yml & actual results)
 # Generates a canbench.yml dynamically to be used by canbench.
-CANBENCH_YML="${RUNFILES}/canbench.yml"
+CANBENCH_YML="$PWD/canbench.yml"
 
 echo "wasm_path:" >${CANBENCH_YML}
 echo "  ${WASM_PATH}" >>${CANBENCH_YML}
@@ -64,7 +68,7 @@ elif [ "$1" = "--update" ]; then
     # Since we cannot specify an empty results file for the first time, we need to copy the default
     # results file to the desired location.
     if [ ! -s ${REPO_RESULTS_PATH} ]; then
-        cp "${RUNFILES}/canbench_results.yml" "${REPO_RESULTS_PATH}"
+        cp "$PWD/canbench_results.yml" "${REPO_RESULTS_PATH}"
     fi
 elif [ "$1" = "--test" ]; then
     # Runs the benchmark test that fails if the diffs are new or above the threshold.
