@@ -17,8 +17,8 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        MAX_NEURON_PAGE_SIZE, NeuronMetrics, NeuronStore, approve_genesis_kyc,
-        metrics::NeuronSubsetMetrics, prune_some_following,
+        MAX_NEURON_PAGE_SIZE, NeuronMetrics, NeuronSlotReservation, NeuronStore,
+        approve_genesis_kyc, metrics::NeuronSubsetMetrics, prune_some_following,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -1499,7 +1499,9 @@ impl Governance {
         // New neurons are not allowed when the heap is too large.
         self.check_heap_can_grow()?;
 
-        if self.neuron_store.len() + 1 > MAX_NUMBER_OF_NEURONS {
+        let effective_count =
+            self.neuron_store.len() + self.neuron_store.neuron_slot_reservation_count();
+        if effective_count + 1 > MAX_NUMBER_OF_NEURONS {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot add neuron. Max number of neurons reached.",
@@ -1531,6 +1533,45 @@ impl Governance {
         }
         self.neuron_store.remove_neuron(&neuron_id);
 
+        Ok(())
+    }
+
+    /// Add a neuron using a pre-acquired slot reservation. The reservation guarantees that the
+    /// neuron limit was checked at reservation time, so the limit check is skipped here. The
+    /// reservation is consumed (dropped at the end of this function), which decrements the
+    /// reservation counter — balanced by the neuron now existing in the store.
+    pub(crate) fn add_neuron_with_reservation(
+        &mut self,
+        neuron_id: u64,
+        neuron: Neuron,
+        _reservation: NeuronSlotReservation,
+    ) -> Result<(), GovernanceError> {
+        if neuron_id == 0 {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot add neuron with ID zero".to_string(),
+            ));
+        }
+        let neuron_real_id = neuron.id().id;
+        if neuron_real_id != neuron_id {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "The neuron's ID {neuron_real_id} does not match the provided ID {neuron_id}"
+                ),
+            ));
+        }
+
+        self.check_heap_can_grow()?;
+
+        if self.neuron_store.contains(NeuronId { id: neuron_id }) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!("Cannot add neuron. There is already a neuron with id: {neuron_id:?}"),
+            ));
+        }
+
+        self.neuron_store.add_neuron(neuron)?;
         Ok(())
     }
 
@@ -5882,6 +5923,14 @@ impl Governance {
             1,
         )?;
 
+        // Reserve a neuron slot to ensure the limit is checked consistently with any concurrent
+        // `create_neuron` reservations. Unlike `create_neuron`, we still create an empty neuron
+        // before the async call because the deterministic subaccount needs to be "claimed" to
+        // prevent a concurrent second call from also attempting to claim the same subaccount.
+        let neuron_slot_reservation = self
+            .neuron_store
+            .try_reserve_neuron_slot(MAX_NUMBER_OF_NEURONS)?;
+
         let nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
         let now = self.env.now();
         let neuron = NeuronBuilder::new(
@@ -5898,8 +5947,7 @@ impl Governance {
         .with_kyc_verified(true)
         .build();
 
-        // This also verifies that there are not too many neurons already.
-        self.add_neuron(nid.id, neuron.clone())?;
+        self.add_neuron_with_reservation(nid.id, neuron.clone(), neuron_slot_reservation)?;
 
         let _neuron_lock = self.lock_neuron_for_command(
             nid.id,
