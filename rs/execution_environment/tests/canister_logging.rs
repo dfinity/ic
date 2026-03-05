@@ -13,6 +13,7 @@ use ic_management_canister_types_private::{
     FetchCanisterLogsResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
@@ -1999,6 +2000,20 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
     assert_eq!(response.canister_log_records.len(), 0);
 }
 
+fn update_settings_duration_sum(env: &StateMachine) -> f64 {
+    fetch_histogram_vec_stats(
+        env.metrics_registry(),
+        "execution_subnet_message_duration_seconds",
+    )
+    .get(&labels(&[
+        ("method_name", "ic00_update_settings"),
+        ("outcome", "finished"),
+        ("status", "success"),
+        ("speed", "fast"),
+    ]))
+    .map_or(0.0, |s| s.sum)
+}
+
 /*
 TODO: remove debug code
 
@@ -2079,8 +2094,8 @@ fn test_canister_resize_down_preserves_logs() {
         return;
     }
     let log_memory_limit = 2 * MIB;
-    let log_records_per_call = 1_000;
-    const LOG_MESSAGE_LEN: usize = 100;
+    let log_records_per_call = 100;
+    const LOG_MESSAGE_LEN: usize = 0;
 
     // Create canister and install wasm.
     let env = setup_env();
@@ -2104,19 +2119,30 @@ fn test_canister_resize_down_preserves_logs() {
     );
 
     // Fill all log memory store.
-    let calls = log_memory_limit as usize / (log_records_per_call * LOG_MESSAGE_LEN);
+    let calls = 1 + log_memory_limit as usize
+        / (log_records_per_call * LogMemoryStore::estimate_record_size(LOG_MESSAGE_LEN));
     for _ in 0..calls {
         let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
     }
     let logs_before = fetch_log_records(&env, controller, canister_id);
 
+    // Snapshot metrics BEFORE the resize.
+    let sum_before = update_settings_duration_sum(&env);
+
     // Resize log memory store.
+    let start = std::time::Instant::now();
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
             .with_log_memory_limit(log_memory_limit - 1)
             .build(),
     );
+    println!("ABC update_settings duration: {:?}", start.elapsed());
+
+    // Snapshot metrics AFTER the resize.
+    let sum_after = update_settings_duration_sum(&env);
+    let resize_duration_seconds = sum_after - sum_before;
+    println!("ABC Resize update_settings duration: {resize_duration_seconds:.6}s");
 
     // After resizing.
     let logs_after = fetch_log_records(&env, controller, canister_id);

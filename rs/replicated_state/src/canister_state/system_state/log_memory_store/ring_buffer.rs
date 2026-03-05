@@ -116,7 +116,10 @@ impl RingBuffer {
     pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
         let mut index_table = self.io.load_index_table();
         let mut header = self.io.load_header();
+        let mut i = 0;
+        let mut total_size = 0;
         for r in records {
+            i += 1;
             let record = LogRecord::from(r);
 
             // Check that records are added in order, otherwise it breaks the index.
@@ -135,7 +138,7 @@ impl RingBuffer {
                 debug_assert!(false, "Log record size exceeds ring buffer capacity");
                 return;
             }
-            //self.make_free_space(added_size);
+            total_size += added_size.get();
             self.evict_for_size(&mut header, added_size);
 
             // Save the record at the tail position.
@@ -154,6 +157,7 @@ impl RingBuffer {
         // Write header and index ONCE at the end.
         self.io.save_header(&header);
         self.io.save_index_table(&index_table);
+        println!("ABC Appended {} records, total size: {}", i, total_size);
     }
 
     /// Evicts oldest records from the front until `added_size` fits.
