@@ -10,7 +10,7 @@ use std::process::Command;
 use std::time::Duration;
 
 #[derive(Template)]
-#[template(source = include_str!("../../templates/ic.json5.template"), escape = "none")]
+#[template(path = "ic.json5.template", escape = "none")]
 pub struct IcConfigTemplate {
     pub ipv6_address: String,
     pub ipv6_prefix: String,
