@@ -2036,6 +2036,11 @@ crate.annotation(
     patches = ["@@//bazel:cc_rs.patch"],
 )
 crate.annotation(
+    crate = "askama_derive",
+    patch_args = ["-p2"],
+    patches = ["@@//bazel:askama.patch"],
+)
+crate.annotation(
     build_script_data = [
         "@@+_repo_rules+openssl//:gen_dir",
     ],
