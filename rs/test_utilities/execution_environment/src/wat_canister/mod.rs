@@ -23,7 +23,6 @@ const _: () = assert!(MEMORY_OFFSET_START < WAIT_SCRATCHPAD_START);
 
 /// The maximum 1-page bounds of WebAssembly memory (64 KiB).
 
-
 #[derive(Clone)]
 enum FnCall {
     StableGrow(i32),
@@ -143,7 +142,9 @@ impl WatFunc {
         match self.method {
             Method::Start => format!(r#"start $start){INDENT}(func $start"#),
             Method::Init => r#"func $init (export "canister_init")"#.to_string(),
-            Method::PreUpgrade => r#"func $pre_upgrade (export "canister_pre_upgrade")"#.to_string(),
+            Method::PreUpgrade => {
+                r#"func $pre_upgrade (export "canister_pre_upgrade")"#.to_string()
+            }
             Method::PostUpgrade => {
                 r#"func $post_upgrade (export "canister_post_upgrade")"#.to_string()
             }
@@ -443,18 +444,18 @@ impl<'a> RenderState<'a> {
 
                     self.instructions.push(format!("(local.set $loop_counter_{id} (i32.const {count}))"));
                     self.instructions.push(format!("(loop $loop_label_{id}"));
-                    
+
                     let inner_indent = format!("{}    ", indent);
                     self.instructions.push(format!("{inner_indent}(if (i32.gt_u (local.get $loop_counter_{id}) (i32.const 0))"));
                     self.instructions.push(format!("{inner_indent}    (then"));
-                    
+
                     // Render inner code logic
                     self.process_calls(inner_calls, &format!("{inner_indent}        "));
-                    
+
                     // Step control block
                     self.instructions.push(format!("{inner_indent}        (local.set $loop_counter_{id} (i32.sub (local.get $loop_counter_{id}) (i32.const 1)))"));
                     self.instructions.push(format!("{inner_indent}        (br $loop_label_{id})"));
-                    
+
                     // Close block layout
                     self.instructions.push(format!("{inner_indent}    )"));
                     self.instructions.push(format!("{inner_indent})"));
