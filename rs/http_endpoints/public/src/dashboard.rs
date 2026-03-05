@@ -17,7 +17,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{Height, ReplicaVersion};
 
 #[derive(Template)]
-#[template(path = "dashboard.html", escape = "html")]
+#[template(source = include_str!("../templates/dashboard.html"), escape = "html")]
 struct Dashboard<'a> {
     subnet_type: ic_registry_subnet_type::SubnetType,
     http_config: &'a ic_config::http_handler::Config,
