@@ -37,7 +37,6 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::nns::vote_and_execute_proposal;
 use ic_system_test_driver::util::block_on;
@@ -75,8 +74,6 @@ const CHATTING_CANISTERS_ON_THIRD_SUBNET_COUNT: usize = 3;
 const FIRST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 3;
 const LAST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 8;
 
-const PROMETHEUS_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -92,11 +89,6 @@ fn main() -> Result<()> {
 /// 3. one Verified Application subnet which will send xnet messages to canisters on the Application
 ///    subnet.
 fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .with_scrape_interval(PROMETHEUS_SCRAPE_INTERVAL)
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     InternetComputer::new()
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)
@@ -115,12 +107,18 @@ fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    let _ = env.sync_with_prometheus();
-
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
 fn subnet_splitting_test(env: TestEnv) {
+    let test_params = prepare_canisters(&env);
+    info!(
+        env.logger(),
+        "Sleeping for 10 seconds before splitting the subnet \
+        so the canisters have some time to chit chat"
+    );
+    std::thread::sleep(Duration::from_secs(10));
+
     if !ic_consensus_features::SUBNET_SPLITTING_V2_ENABLED {
         info!(
             env.logger(),
@@ -129,14 +127,6 @@ fn subnet_splitting_test(env: TestEnv) {
 
         return;
     }
-
-    let test_params = prepare_canisters(&env);
-    info!(
-        env.logger(),
-        "Sleeping for 10 seconds before splitting the subnet \
-        so the canisters have some time to chit chat"
-    );
-    std::thread::sleep(Duration::from_secs(10));
 
     block_on(run_subnet_splitting_test(env.clone(), &test_params));
 }
@@ -926,6 +916,4 @@ async fn propose_to_split_subnet(
     assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
 
     topology.block_for_newer_registry_version().await.unwrap();
-    // This will tell prometheus to use the correct "subnet_id" labels for the migrated nodes.
-    let _ = env.sync_with_prometheus();
 }

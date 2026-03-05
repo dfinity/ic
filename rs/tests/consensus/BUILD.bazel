@@ -245,8 +245,8 @@ system_test_nns(
 
 system_test_nns(
     name = "subnet_splitting_v2_test",
+    enable_metrics = True,
     env = {
-        "MESSAGE_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/message:message.wasm.gz)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     tags = [
@@ -254,7 +254,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_splitting",
     ],
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | XNET_TEST_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/canister_client",
         "//rs/consensus/features",
