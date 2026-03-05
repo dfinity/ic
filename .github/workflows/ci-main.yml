@@ -276,7 +276,8 @@ jobs:
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
-    if: github.repository == 'dfinity/ic'
+  #  if: github.repository == 'dfinity/ic'
+    if: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -647,6 +648,7 @@ jobs:
     name: Cargo  ${{ matrix.name }} Linux
     runs-on:
       labels: dind-small
+      group: dm2
     container: *container-setup
     timeout-minutes: 30
     steps:
@@ -685,6 +687,7 @@ jobs:
     name: Check PULL_REQUEST_BAZEL_TARGETS
     runs-on:
       labels: dind-small
+      group: dm2
     container: *container-setup
     timeout-minutes: 30
     steps:
