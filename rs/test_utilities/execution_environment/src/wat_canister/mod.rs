@@ -286,7 +286,7 @@ impl WatCanisterBuilder {
             }
         }
 
-        let functions_block = rendered_functions.join("\n            ");
+        let functions_block = rendered_functions.join(INDENT);
 
         let mut data_entries: Vec<_> = self.memory.into_iter().collect();
         data_entries.sort_by_key(|&(_, offset)| offset);
