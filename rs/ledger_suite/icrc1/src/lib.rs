@@ -257,6 +257,30 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Operation<Tok
                     expires_at: value.expires_at,
                     fee: value.fee,
                 }),
+                "152mint" => Ok(Operation::AuthorizedMint {
+                    to: value
+                        .to
+                        .ok_or("`to` field required for `152mint` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `152mint` operation")?,
+                    caller: value
+                        .caller
+                        .ok_or("`caller` required for `152mint` operation")?,
+                    reason: value.reason,
+                }),
+                "152burn" => Ok(Operation::AuthorizedBurn {
+                    from: value
+                        .from
+                        .ok_or("`from` field required for `152burn` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `152burn` operation")?,
+                    caller: value
+                        .caller
+                        .ok_or("`caller` required for `152burn` operation")?,
+                    reason: value.reason,
+                }),
                 unknown_op => Err(format!("Unknown operation name {unknown_op}")),
             }
         } else {
@@ -277,7 +301,9 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => Some("mint".to_string()),
                 Transfer { .. } => Some("xfer".to_string()),
                 Approve { .. } => Some("approve".to_string()),
-                FeeCollector { .. } | AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
+                FeeCollector { .. } => None,
+                AuthorizedMint { .. } => Some("152mint".to_string()),
+                AuthorizedBurn { .. } => Some("152burn".to_string()),
             },
             from: match &t.operation {
                 Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
