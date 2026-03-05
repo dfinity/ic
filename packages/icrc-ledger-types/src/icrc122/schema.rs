@@ -75,7 +75,6 @@ fn mint_block_predicate() -> impl Fn(Cow<Value>) -> Result<(), ValuePredicateFai
 mod tests {
     use super::*;
     use candid::Nat;
-    use std::collections::BTreeMap;
 
     /// Minimal valid account: an array with one blob (principal bytes).
     fn account(owner: &[u8]) -> Value {
