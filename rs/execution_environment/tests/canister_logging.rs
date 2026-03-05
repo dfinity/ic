@@ -2016,19 +2016,12 @@ fn test_canister_resize_up_preserves_logs() {
         return;
     }
     let log_memory_limit = 2 * MIB;
+    let log_records_per_call = 1_000;
+    const LOG_MESSAGE_LEN: usize = 100;
+
+    // Create canister and install wasm.
     let env = setup_env();
     let controller = PrincipalId::new_anonymous();
-    let log_message_len = 100;
-    let log_message = vec![b'a'; log_message_len];
-    let log_records_per_call = 1000;
-    let update_calls =
-        (log_memory_limit as usize / (log_records_per_call * log_message_len)) as usize;
-    let wasm = wat_canister()
-        .update(
-            "generate_logs",
-            wat_fn().repeat(log_records_per_call, wat_fn().debug_print(&log_message)),
-        )
-        .build_wasm();
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
@@ -2036,11 +2029,20 @@ fn test_canister_resize_up_preserves_logs() {
             .with_log_memory_limit(log_memory_limit - 1) // Initial log memory limit is smaller.
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
-        wasm,
+        wat_canister()
+            .update(
+                "generate_logs",
+                wat_fn().repeat(
+                    log_records_per_call,
+                    wat_fn().debug_print(&[b'a'; LOG_MESSAGE_LEN]),
+                ),
+            )
+            .build_wasm(),
     );
 
-    // Populate logs before resizing.
-    for _ in 0..update_calls {
+    // Fill all log memory store.
+    let calls = log_memory_limit as usize / (log_records_per_call * LOG_MESSAGE_LEN);
+    for _ in 0..calls {
         let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
     }
     let logs_before = fetch_log_records(&env, controller, canister_id);
@@ -2077,19 +2079,12 @@ fn test_canister_resize_down_preserves_logs() {
         return;
     }
     let log_memory_limit = 2 * MIB;
+    let log_records_per_call = 1_000;
+    const LOG_MESSAGE_LEN: usize = 100;
+
+    // Create canister and install wasm.
     let env = setup_env();
     let controller = PrincipalId::new_anonymous();
-    let log_message_len = 100;
-    let log_message = vec![b'a'; log_message_len];
-    let log_records_per_call = 1000;
-    let update_calls =
-        (log_memory_limit as usize / (log_records_per_call * log_message_len)) as usize;
-    let wasm = wat_canister()
-        .update(
-            "generate_logs",
-            wat_fn().repeat(log_records_per_call, wat_fn().debug_print(&log_message)),
-        )
-        .build_wasm();
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
@@ -2097,11 +2092,20 @@ fn test_canister_resize_down_preserves_logs() {
             .with_log_memory_limit(log_memory_limit) // Initial log memory limit is larger.
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
-        wasm,
+        wat_canister()
+            .update(
+                "generate_logs",
+                wat_fn().repeat(
+                    log_records_per_call,
+                    wat_fn().debug_print(&[b'a'; LOG_MESSAGE_LEN]),
+                ),
+            )
+            .build_wasm(),
     );
 
-    // Populate logs before resizing.
-    for _ in 0..update_calls {
+    // Fill all log memory store.
+    let calls = log_memory_limit as usize / (log_records_per_call * LOG_MESSAGE_LEN);
+    for _ in 0..calls {
         let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
     }
     let logs_before = fetch_log_records(&env, controller, canister_id);
