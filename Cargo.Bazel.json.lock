@@ -1,5 +1,5 @@
 {
-  "checksum": "13d2b1c70a0c1f3b715dd466f6cf4fc09eb0e93a705e0ad951d8887e0a7cc0b2",
+  "checksum": "391fc9cfebff5d0f119457bb6b2e187e464d0c443839e8808beccd6916e0d749",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11426,9 +11426,12 @@
       "version": "0.4.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/canbench/0.4.0/download",
-          "sha256": "83f64957491f613da3541e93a0228fa95bf75e9e4eaaccc1c8848975d98757ec"
+        "Git": {
+          "remote": "https://github.com/dfinity/canbench",
+          "commitish": {
+            "Rev": "9ca29369085edc7567aa87ceb57d4b21e037b66e"
+          },
+          "strip_prefix": "canbench-bin"
         }
       },
       "targets": [
@@ -11549,9 +11552,12 @@
       "version": "0.4.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs/0.4.0/download",
-          "sha256": "0dfe0fee0135b3face2ff259fddc28fff3c28e7acd84ae7746e25972f11230f9"
+        "Git": {
+          "remote": "https://github.com/dfinity/canbench",
+          "commitish": {
+            "Rev": "9ca29369085edc7567aa87ceb57d4b21e037b66e"
+          },
+          "strip_prefix": "canbench-rs"
         }
       },
       "targets": [
@@ -11613,9 +11619,12 @@
       "version": "0.4.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs-macros/0.4.0/download",
-          "sha256": "237e2e5d914039918eee4bdf141e976ff34cf4130c6760808a047c081710e0a8"
+        "Git": {
+          "remote": "https://github.com/dfinity/canbench",
+          "commitish": {
+            "Rev": "9ca29369085edc7567aa87ceb57d4b21e037b66e"
+          },
+          "strip_prefix": "canbench-rs-macros"
         }
       },
       "targets": [

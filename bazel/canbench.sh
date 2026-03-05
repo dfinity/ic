@@ -23,16 +23,11 @@ set -eEuo pipefail
 CANBENCH_OUTPUT="$(mktemp -t canbench_output.txt.XXXX)"
 NOISE_THRESHOLD_ARG="${NOISE_THRESHOLD:+--noise-threshold ${NOISE_THRESHOLD}}"
 PATTERN_ARG="${CANBENCH_PATTERN:+${CANBENCH_PATTERN}}"
+REPO_RESULTS_PATH="$CANBENCH_RESULTS_PATH"
 
-# make paths absolute before we change directory
-REPO_RESULTS_PATH="$(realpath "${CANBENCH_RESULTS_PATH}")"
-WASM_PATH="$(realpath "$WASM_PATH")"
-CANBENCH_BIN="$(realpath "$CANBENCH_BIN")"
-POCKET_IC_BIN="$(realpath "$POCKET_IC_BIN")"
-
-cd "$(mktemp -d)" # create a new temp dir because we're about to generate some data (canbench.yml & actual results)
 # Generates a canbench.yml dynamically to be used by canbench.
-CANBENCH_YML="$PWD/canbench.yml"
+CANBENCH_YML="$(mktemp -d)/canbench.yml"
+export CANBENCH_CFG_FILE="$CANBENCH_YML"
 
 echo "wasm_path:" >${CANBENCH_YML}
 echo "  ${WASM_PATH}" >>${CANBENCH_YML}
