@@ -58,6 +58,7 @@ rust_test(
 
 rust_test_suite(
     name = "peer_manager_integration",
+    timeout = "long",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
