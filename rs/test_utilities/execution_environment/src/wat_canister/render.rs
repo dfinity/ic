@@ -72,6 +72,10 @@ impl<'a> RenderState<'a> {
                         "(call $ic0_trap (i32.const {off}) (i32.const {len}))"
                     ));
                 }
+                FnCall::Unreachable => self.instructions.push("(unreachable)".to_string()),
+                FnCall::DivByZero => self
+                    .instructions
+                    .push("(i32.div_s (i32.const 1) (i32.const 0))".to_string()),
                 FnCall::Wait(instructions) => self
                     .instructions
                     .push(format!("(call $_wait (i64.const {instructions}))")),

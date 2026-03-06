@@ -27,6 +27,8 @@ pub(crate) enum FnCall {
     GlobalTimerSet(i64),
     DebugPrint(Vec<u8>),
     Trap(Vec<u8>),
+    Unreachable,
+    DivByZero,
     Wait(i64),
     Loop(u32, Vec<FnCall>),
 }
@@ -87,6 +89,21 @@ impl WatFnCode {
     /// Call the `ic0.trap` function.
     pub fn trap(self) -> Self {
         self.trap_with_blob(&[])
+    }
+
+    /// Add a native WebAssembly `(unreachable)` trap.
+    pub fn unreachable(mut self) -> Self {
+        self.calls.push(FnCall::Unreachable);
+        self
+    }
+
+    /// Add a native WebAssembly integer division by zero trap.
+    ///
+    /// This generates `(i32.div_s (i32.const 1) (i32.const 0))` which triggers
+    /// a trap during execution.
+    pub fn div_by_zero(mut self) -> Self {
+        self.calls.push(FnCall::DivByZero);
+        self
     }
 
     /// Wait for a given number of instructions.

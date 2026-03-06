@@ -69,6 +69,24 @@ fn test_instruction_emission() {
 }
 
 #[test]
+fn test_native_traps() {
+    let wat = wat_canister()
+        .update("test_native_traps", wat_fn().unreachable().div_by_zero())
+        .build();
+
+    wat::parse_str(&wat).unwrap();
+
+    assert_contains!(
+        wat,
+        r#"
+            (func $test_native_traps (export "canister_update test_native_traps")
+                (unreachable)
+                (i32.div_s (i32.const 1) (i32.const 0))
+            )"#
+    );
+}
+
+#[test]
 #[should_panic(expected = "Method 'Start' with the name 'start' already exists")]
 fn test_wat_func_unique_start() {
     wat_canister().start(wat_fn()).start(wat_fn());
