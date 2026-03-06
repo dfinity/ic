@@ -11,6 +11,27 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-02-27: Proposal 140597
+
+http://dashboard.internetcomputer.org/proposal/140597
+
+## Added
+
+* A `create_neuron` method to create neurons through staking ICPs using the ICRC2 standard.
+
+## Changed
+
+* Lowered the maximum page size of list_neurons to 50. The vast majority (> 95%)
+  have no more than 50 neurons, so for them, this has no noticeable impact.
+
+## Fixed
+
+* The Bitcoin and Dogecoin Watchdog canisters are now considered "protocol"
+  canisters; thus, proposals to upgrade these canisters now fall into the
+  "Protocol Canister Management" topic, instead of the "Application Canister
+  Management" topic.
+
+
 # 2026-02-20: Proposal 140509
 
 http://dashboard.internetcomputer.org/proposal/140509
