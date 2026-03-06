@@ -634,6 +634,8 @@ impl SnsInitPayload {
     fn index_ng_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Option<IndexArg> {
         Some(IndexArg::Init(InitArg {
             ledger_id: Principal::from(sns_canister_ids.ledger),
+            #[allow(deprecated)]
+            retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: None,
             max_retrieve_blocks_from_ledger_interval_seconds: None,
         }))

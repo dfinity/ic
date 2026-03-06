@@ -319,12 +319,19 @@ fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
 fn init(index_arg: Option<IndexArg>) {
     let InitArg {
         ledger_id,
+        retrieve_blocks_from_ledger_interval_seconds,
         min_retrieve_blocks_from_ledger_interval_seconds,
         max_retrieve_blocks_from_ledger_interval_seconds,
     } = match index_arg {
         Some(IndexArg::Init(arg)) => arg,
         _ => trap("Index initialization must take in input an InitArg argument"),
     };
+
+    if retrieve_blocks_from_ledger_interval_seconds.is_some() {
+        trap(
+            "The retrieve_blocks_from_ledger_interval_seconds field is deprecated and cannot be used. Please use min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds instead.",
+        );
+    }
 
     let min_retrieve_blocks_from_ledger_interval =
         min_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
@@ -387,9 +394,16 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
 
             let UpgradeArg {
                 ledger_id,
+                retrieve_blocks_from_ledger_interval_seconds,
                 min_retrieve_blocks_from_ledger_interval_seconds,
                 max_retrieve_blocks_from_ledger_interval_seconds,
             } = upgrade;
+
+            if retrieve_blocks_from_ledger_interval_seconds.is_some() {
+                trap(
+                    "The retrieve_blocks_from_ledger_interval_seconds field is deprecated and cannot be used. Please use min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds instead.",
+                );
+            }
 
             let min_retrieve_blocks_from_ledger_interval =
                 min_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);

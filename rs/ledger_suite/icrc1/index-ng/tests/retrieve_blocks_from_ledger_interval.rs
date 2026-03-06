@@ -24,6 +24,7 @@ const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_00
 const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[3_u8; 29]);
 
 struct TimerIntervals {
+    legacy_interval: Option<u64>,
     min_interval_seconds: Option<u64>,
     max_interval_seconds: Option<u64>,
 }
@@ -46,6 +47,8 @@ fn install_and_upgrade(
     );
     let args = IndexArg::Init(ic_icrc1_index_ng::InitArg {
         ledger_id: Principal::from(ledger_id),
+        #[allow(deprecated)]
+        retrieve_blocks_from_ledger_interval_seconds: install_intervals.legacy_interval,
         min_retrieve_blocks_from_ledger_interval_seconds: install_intervals.min_interval_seconds,
         max_retrieve_blocks_from_ledger_interval_seconds: install_intervals.max_interval_seconds,
     });
@@ -60,6 +63,8 @@ fn install_and_upgrade(
 
     let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
         ledger_id: None,
+        #[allow(deprecated)]
+        retrieve_blocks_from_ledger_interval_seconds: upgrade_intervals.legacy_interval,
         min_retrieve_blocks_from_ledger_interval_seconds: upgrade_intervals.min_interval_seconds,
         max_retrieve_blocks_from_ledger_interval_seconds: upgrade_intervals.max_interval_seconds,
     });
@@ -85,10 +90,12 @@ fn should_install_and_upgrade_with_large_interval_value() {
         assert_eq!(
             install_and_upgrade(
                 &TimerIntervals {
+                    legacy_interval: None,
                     min_interval_seconds: None,
                     max_interval_seconds: *install_interval,
                 },
                 &TimerIntervals {
+                    legacy_interval: None,
                     min_interval_seconds: None,
                     max_interval_seconds: *upgrade_interval,
                 }
@@ -122,6 +129,7 @@ fn should_install_and_upgrade_with_valid_values() {
                     "init and upgrade configs must be valid",
                     |(i_min, i_max, u_min, u_max)| {
                         let init = TimerIntervals {
+                            legacy_interval: None,
                             min_interval_seconds: *i_min,
                             max_interval_seconds: *i_max,
                         };
@@ -139,6 +147,7 @@ fn should_install_and_upgrade_with_valid_values() {
                         let upgrade_default_max =
                             i_max.unwrap_or(MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS);
                         let upgrade = TimerIntervals {
+                            legacy_interval: None,
                             min_interval_seconds: *u_min,
                             max_interval_seconds: *u_max,
                         };
@@ -150,10 +159,12 @@ fn should_install_and_upgrade_with_valid_values() {
                 assert_eq!(
                     install_and_upgrade(
                         &TimerIntervals {
+                            legacy_interval: None,
                             min_interval_seconds: i_min,
                             max_interval_seconds: i_max,
                         },
                         &TimerIntervals {
+                            legacy_interval: None,
                             min_interval_seconds: u_min,
                             max_interval_seconds: u_max,
                         },
@@ -173,12 +184,20 @@ fn should_fail_to_install_with_invalid_values() {
     let invalid_values = [
         // Min interval greater than max interval
         TimerIntervals {
+            legacy_interval: None,
             min_interval_seconds: Some(MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS + 1),
             max_interval_seconds: None,
         },
         // Min interval equal to zero
         TimerIntervals {
+            legacy_interval: None,
             min_interval_seconds: Some(0),
+            max_interval_seconds: None,
+        },
+        // Legacy interval specified
+        TimerIntervals {
+            legacy_interval: Some(5),
+            min_interval_seconds: None,
             max_interval_seconds: None,
         },
     ];
@@ -199,6 +218,8 @@ fn should_fail_to_install_with_invalid_values() {
     for intervals in &invalid_values {
         let args = IndexArg::Init(InitArg {
             ledger_id: Principal::from(ledger_id),
+            #[allow(deprecated)]
+            retrieve_blocks_from_ledger_interval_seconds: intervals.legacy_interval,
             min_retrieve_blocks_from_ledger_interval_seconds: intervals.min_interval_seconds,
             max_retrieve_blocks_from_ledger_interval_seconds: intervals.max_interval_seconds,
         });
@@ -215,6 +236,8 @@ fn should_fail_to_install_with_invalid_values() {
 
     let args = IndexArg::Init(InitArg {
         ledger_id: Principal::from(ledger_id),
+        #[allow(deprecated)]
+        retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
     });
@@ -232,6 +255,8 @@ fn should_fail_to_install_with_invalid_values() {
     for intervals in &invalid_values {
         let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
             ledger_id: None,
+            #[allow(deprecated)]
+            retrieve_blocks_from_ledger_interval_seconds: intervals.legacy_interval,
             min_retrieve_blocks_from_ledger_interval_seconds: intervals.min_interval_seconds,
             max_retrieve_blocks_from_ledger_interval_seconds: intervals.max_interval_seconds,
         });
@@ -334,6 +359,8 @@ fn should_consume_expected_amount_of_cycles() {
         env,
         InitArg {
             ledger_id: Principal::from(ledger_id),
+            #[allow(deprecated)]
+            retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: Some(1),
             max_retrieve_blocks_from_ledger_interval_seconds: Some(1),
         },
@@ -345,6 +372,8 @@ fn should_consume_expected_amount_of_cycles() {
     // Reinstall the index with default min and max intervals.
     let reinstall_arg = IndexArg::Init(InitArg {
         ledger_id: Principal::from(ledger_id),
+        #[allow(deprecated)]
+        retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
     });

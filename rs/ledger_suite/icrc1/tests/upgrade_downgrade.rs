@@ -68,6 +68,8 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
 
     let index_upgrade_arg = IndexArg::Upgrade(IndexUpgradeArg {
         ledger_id: None,
+        #[allow(deprecated)]
+        retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
     });

@@ -16,6 +16,10 @@ pub enum IndexArg {
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct InitArg {
     pub ledger_id: Principal,
+    #[deprecated(
+        note = "This field is deprecated and will be removed in a future version. Please use min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds instead."
+    )]
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
     pub min_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
     pub max_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
@@ -23,6 +27,10 @@ pub struct InitArg {
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct UpgradeArg {
     pub ledger_id: Option<Principal>,
+    #[deprecated(
+        note = "This field is deprecated and will be removed in a future version. Please use min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds instead."
+    )]
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
     pub min_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
     pub max_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }

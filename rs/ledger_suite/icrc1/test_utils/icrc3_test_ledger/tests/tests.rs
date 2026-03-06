@@ -639,6 +639,8 @@ fn test_archiving() {
     let test_blocks_with_index = || {
         let index_init_arg = IndexArg::Init(InitArg {
             ledger_id: Principal::from(ledger_id),
+            #[allow(deprecated)]
+            retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: None,
             max_retrieve_blocks_from_ledger_interval_seconds: None,
         });
@@ -698,6 +700,8 @@ fn test_archiving_all_blocks() {
 
     let index_init_arg = IndexArg::Init(InitArg {
         ledger_id: Principal::from(ledger_id),
+        #[allow(deprecated)]
+        retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
     });

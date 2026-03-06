@@ -1634,6 +1634,8 @@ impl PocketIcSubnets {
             // Install the cycles ledger index.
             let cycles_ledger_index_init_arg = CyclesLedgerIndexInitArg {
                 ledger_id: CYCLES_LEDGER_CANISTER_ID.into(),
+                #[allow(deprecated)]
+                retrieve_blocks_from_ledger_interval_seconds: None,
                 min_retrieve_blocks_from_ledger_interval_seconds: None,
                 max_retrieve_blocks_from_ledger_interval_seconds: None,
             };

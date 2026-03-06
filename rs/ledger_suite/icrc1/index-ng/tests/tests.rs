@@ -84,6 +84,8 @@ fn upgrade_ledger(
 fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
     IndexInitArg {
         ledger_id: Principal::from(ledger_id),
+        #[allow(deprecated)]
+        retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
     }
@@ -1782,6 +1784,8 @@ mod metrics {
     fn encode_init_args(ledger_id: Principal) -> Option<IndexArg> {
         Some(IndexArg::Init(InitArg {
             ledger_id,
+            #[allow(deprecated)]
+            retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: None,
             max_retrieve_blocks_from_ledger_interval_seconds: None,
         }))
