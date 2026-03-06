@@ -23,24 +23,25 @@
 //! chain operations (like `debug_print`, `trap`, or `stable_grow`). The builder
 //! emits a specialized `wat` string, which is then compiled for testing.
 //!
-//! ## Memory & Limitations:
+//! ## Memory & Limitations
+//!
 //! The canister operates on a single page of memory (64KiB).
 //!
-//! - Static Allocations: String literals (debug_print, trap) are
+//! - Static Allocations: String literals (`debug_print`, `trap`) are
 //!   automatically allocated starting from offset 1,000.
-//! - Instruction Burning (wait): The wait(instructions) method simulates
-//!   CPU cycles by executing memory.fill, which clobbers the memory
-//!   range [65,000, 65,100]. This is currently safe as memory is not read
-//!   back, but should be avoided if adding memory-reading logic.
-//! - Manual Operations: stable_read(dst, ...) can technically overlap with
-//!   the reserved scratchpad. This is currently tolerated to allow tests
-//!   to probe the IC's trap boundaries.
+//! - Instruction Burning (`wait`): The `wait(instructions)` method simulates
+//!   CPU cycles by executing `memory.fill`, which clobbers the memory range
+//!   [65,000, 65,100]. This is currently safe as memory is not read back, but
+//!   should be avoided if adding memory-reading logic.
+//! - Manual Operations: `stable_read(dst, ...)` can technically overlap with
+//!   the reserved scratchpad. This is currently tolerated to allow tests to
+//!   probe the IC's trap boundaries.
 //!
 //! ## When to Avoid
 //!
-//! Generating raw Wasm without a stack or standard library is verbose.
-//! Use the Universal Canister for complex functional logic or multi-message
-//! callback maps.
+//! Generating raw Wasm without a stack or standard library is verbose. Use the
+//! Universal Canister for complex functional logic or multi-message callback
+//! maps.
 
 pub mod builder;
 pub mod fn_builder;
