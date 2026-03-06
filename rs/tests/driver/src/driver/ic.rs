@@ -811,6 +811,14 @@ pub struct ResolvedVmResources {
 }
 
 impl VmResources {
+    pub const fn const_default() -> Self {
+        VmResources {
+            vcpus: None,
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes: None,
+        }
+    }
+
     pub fn layer(mut self, layer: &VmResources) -> Self {
         self.vcpus = self.vcpus.or(layer.vcpus);
         self.memory_kibibytes = self.memory_kibibytes.or(layer.memory_kibibytes);

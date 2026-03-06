@@ -69,7 +69,7 @@ pub struct Config {
     subnet_to_subnet_rate: usize,
     canisters_per_subnet: usize,
     canister_to_subnet_rate: usize,
-    vm_resources: Option<VmResources>,
+    vm_resources: VmResources,
 }
 
 impl Config {
@@ -120,12 +120,12 @@ impl Config {
             subnet_to_subnet_rate,
             canisters_per_subnet,
             canister_to_subnet_rate,
-            vm_resources: None,
+            vm_resources: VmResources::default(),
         }
     }
 
     pub fn with_vm_resources(mut self, resources: VmResources) -> Self {
-        self.vm_resources = Some(resources);
+        self.vm_resources = resources;
         self
     }
 
@@ -167,11 +167,9 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
-    let mut ic =
-        InternetComputer::new().with_required_host_features(vec![HostFeature::Performance]);
-    if let Some(resources) = config.vm_resources {
-        ic = ic.with_default_vm_resources(resources);
-    }
+    let ic = InternetComputer::new()
+        .with_required_host_features(vec![HostFeature::Performance])
+        .with_default_vm_resources(config.vm_resources);
     (0..config.subnets)
         .fold(ic, |ic, _idx| {
             ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))

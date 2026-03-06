@@ -45,7 +45,7 @@ use tokio::task::JoinSet;
 pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
     vcpus: Some(NrOfVCPUs::new(20)), // 16 GuestOS CPU + 4 HostOS
     memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
-    boot_image_minimal_size_gibibytes: None,
+    ..VmResources::const_default()
 };
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
