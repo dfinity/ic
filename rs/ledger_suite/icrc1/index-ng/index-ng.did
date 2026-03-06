@@ -2,8 +2,10 @@ type Tokens = nat;
 
 type InitArg = record {
   ledger_id : principal;
-  // The old, now unsupported parameter to set a fixed interval in seconds in which to retrieve blocks from the ledger.
-  // If set, the index will trap during initialization.
+  // The legacy parameter to set a fixed interval in seconds in which to retrieve blocks from the ledger.
+  // If set, the index will set both `min_retrieve_blocks_from_ledger_interval_seconds` and
+  // `max_retrieve_blocks_from_ledger_interval_seconds` to the value of `retrieve_blocks_from_ledger_interval_seconds`.
+  // If either the min or max interval parameters are also set, the index will trap during initialization.
   retrieve_blocks_from_ledger_interval_seconds : opt nat64;
   // The minimum and maximum intervals in seconds in which to retrieve blocks from the ledger.
   // When a request to the ledger returns an empty response, the interval is increased (up to the maximum).
@@ -16,8 +18,10 @@ type InitArg = record {
 
 type UpgradeArg = record {
   ledger_id : opt principal;
-  // The old, now unsupported parameter to set a fixed interval in seconds in which to retrieve blocks from the ledger.
-  // If set, the index will trap during the upgrade.
+  // The legacy parameter to set a fixed interval in seconds in which to retrieve blocks from the ledger.
+  // If set, the index will set both `min_retrieve_blocks_from_ledger_interval_seconds` and
+  // `max_retrieve_blocks_from_ledger_interval_seconds` to the value of `retrieve_blocks_from_ledger_interval_seconds`.
+  // If either the min or max interval parameters are also set, the index will trap during post upgrade.
   retrieve_blocks_from_ledger_interval_seconds : opt nat64;
   // The minimum and maximum intervals in seconds in which to retrieve blocks from the ledger.
   // When a request to the ledger returns an empty response, the interval is increased (up to the maximum).

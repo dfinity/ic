@@ -327,16 +327,12 @@ fn init(index_arg: Option<IndexArg>) {
         _ => trap("Index initialization must take in input an InitArg argument"),
     };
 
-    if retrieve_blocks_from_ledger_interval_seconds.is_some() {
-        trap(
-            "The retrieve_blocks_from_ledger_interval_seconds field is deprecated and cannot be used. Please use min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds instead.",
+    let (min_retrieve_blocks_from_ledger_interval, max_retrieve_blocks_from_ledger_interval) =
+        parse_timer_configuration_options(
+            retrieve_blocks_from_ledger_interval_seconds,
+            min_retrieve_blocks_from_ledger_interval_seconds,
+            max_retrieve_blocks_from_ledger_interval_seconds,
         );
-    }
-
-    let min_retrieve_blocks_from_ledger_interval =
-        min_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
-    let max_retrieve_blocks_from_ledger_interval =
-        max_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
 
     // validate timer configuration options
     with_state(|state| {
@@ -399,16 +395,14 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
                 max_retrieve_blocks_from_ledger_interval_seconds,
             } = upgrade;
 
-            if retrieve_blocks_from_ledger_interval_seconds.is_some() {
-                trap(
-                    "The retrieve_blocks_from_ledger_interval_seconds field is deprecated and cannot be used. Please use min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds instead.",
-                );
-            }
-
-            let min_retrieve_blocks_from_ledger_interval =
-                min_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
-            let max_retrieve_blocks_from_ledger_interval =
-                max_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
+            let (
+                min_retrieve_blocks_from_ledger_interval,
+                max_retrieve_blocks_from_ledger_interval,
+            ) = parse_timer_configuration_options(
+                retrieve_blocks_from_ledger_interval_seconds,
+                min_retrieve_blocks_from_ledger_interval_seconds,
+                max_retrieve_blocks_from_ledger_interval_seconds,
+            );
 
             // validate timer configuration options
             with_state(|state| {
@@ -457,6 +451,39 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
 
     // set the first build_index to be called after post_upgrade
     set_build_index_timer(with_state(|state| state.last_wait_time));
+}
+
+fn parse_timer_configuration_options(
+    retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+    min_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+    max_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+) -> (Option<Duration>, Option<Duration>) {
+    match (
+        retrieve_blocks_from_ledger_interval_seconds,
+        min_retrieve_blocks_from_ledger_interval_seconds,
+        max_retrieve_blocks_from_ledger_interval_seconds,
+    ) {
+        (Some(_), Some(_), _) | (Some(_), _, Some(_)) => trap(
+            "The retrieve_blocks_from_ledger_interval_seconds field cannot be set together with the min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds fields.",
+        ),
+        (Some(retrieve_blocks_from_ledger_interval_seconds), None, None) => (
+            // Maintain the legacy behavior if the deprecated field is set, i.e., set both the min and max interval to the same value.
+            Some(Duration::from_secs(
+                retrieve_blocks_from_ledger_interval_seconds,
+            )),
+            Some(Duration::from_secs(
+                retrieve_blocks_from_ledger_interval_seconds,
+            )),
+        ),
+        (
+            None,
+            min_retrieve_blocks_from_ledger_interval_seconds,
+            max_retrieve_blocks_from_ledger_interval_seconds,
+        ) => (
+            min_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs),
+            max_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs),
+        ),
+    }
 }
 
 fn validate_timer_configuration_options(

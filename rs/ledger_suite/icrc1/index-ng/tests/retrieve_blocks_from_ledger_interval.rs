@@ -194,11 +194,21 @@ fn should_fail_to_install_with_invalid_values() {
             min_interval_seconds: Some(0),
             max_interval_seconds: None,
         },
-        // Legacy interval specified
+        // Legacy interval specified together with one, the other, or both of the new interval fields.
+        TimerIntervals {
+            legacy_interval: Some(5),
+            min_interval_seconds: Some(1),
+            max_interval_seconds: None,
+        },
         TimerIntervals {
             legacy_interval: Some(5),
             min_interval_seconds: None,
-            max_interval_seconds: None,
+            max_interval_seconds: Some(10),
+        },
+        TimerIntervals {
+            legacy_interval: Some(5),
+            min_interval_seconds: Some(1),
+            max_interval_seconds: Some(10),
         },
     ];
 

@@ -15,6 +15,7 @@ mod common;
 
 const INITIAL_BALANCE: u64 = 1_000_000_000_000;
 const TRANSFER_AMOUNT: u64 = 1_000_000;
+const ONE_SECOND: Duration = Duration::from_secs(1);
 
 /// Parse the `index_last_wait_time` metric (in nanoseconds) from the
 /// Prometheus metrics endpoint exposed by the index canister and
@@ -107,14 +108,13 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     // The index was installed with the default interval of 1 s.
     // The ledger has one block (the mint from the initial balance).
     // Advance 1 s and tick to let the first timer fire and sync.
-    advance(&env, Duration::from_secs(1), 1);
+    advance(&env, ONE_SECOND, 1);
 
     // The timer found 1 block (the mint) and halved: 1s / 2 = 0.5s,
     // clamped to the minimum of 1 s.
     let wait_time = get_last_wait_time(&env, index_id);
     assert_eq!(
-        wait_time,
-        Duration::from_secs(1),
+        wait_time, ONE_SECOND,
         "After initial sync the timer should be at the minimum of 1 s, got {:?}",
         wait_time
     );
@@ -128,7 +128,7 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     //   1 + 2 + 4 + 8 + 10 = 25 s.
     // After the fire at 10 s, compute_wait_time(0) doubles to 20 s,
     // which is clamped to the maximum of 10 s.
-    advance(&env, Duration::from_secs(1), 30);
+    advance(&env, ONE_SECOND, 30);
 
     let wait_time = get_last_wait_time(&env, index_id);
     assert_eq!(
@@ -146,13 +146,12 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     // Starting from 10 s, it takes 10 + 5 + 2 = 17 s to reach 1 s.
     for _ in 0..20 {
         send_tx(&env, ledger_id, a1, a2);
-        advance(&env, Duration::from_secs(1), 1);
+        advance(&env, ONE_SECOND, 1);
     }
 
     let wait_time = get_last_wait_time(&env, index_id);
     assert_eq!(
-        wait_time,
-        Duration::from_secs(1),
+        wait_time, ONE_SECOND,
         "After continuous transaction activity the timer should speed back up to 1 s, got {:?}",
         wait_time
     );
@@ -173,7 +172,7 @@ fn should_adapt_timer_interval_to_ledger_activity() {
     let stabilization_rounds = 20u64;
     for _ in 0..stabilization_rounds {
         send_tx(&env, ledger_id, a1, a2);
-        advance(&env, Duration::from_secs(1), tx_interval_secs);
+        advance(&env, ONE_SECOND, tx_interval_secs);
     }
 
     // Collect the wait times over several more rounds to verify
@@ -185,7 +184,7 @@ fn should_adapt_timer_interval_to_ledger_activity() {
         // Advance one second at a time and sample after every tick so
         // we capture both the post-sync and post-idle wait times.
         for _ in 0..tx_interval_secs {
-            advance(&env, Duration::from_secs(1), 1);
+            advance(&env, ONE_SECOND, 1);
             observed_wait_times.insert(get_last_wait_time(&env, index_id));
         }
     }
@@ -197,5 +196,87 @@ fn should_adapt_timer_interval_to_ledger_activity() {
         "With transactions every {} s the timer should oscillate between 2 s and 4 s, \
          but observed: {:?}",
         tx_interval_secs, observed_wait_times
+    );
+}
+
+#[test]
+fn should_maintain_legacy_behavior_with_min_interval_equal_to_max() {
+    const INDEX_INTERVAL: Duration = Duration::from_secs(10);
+
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_subnet_size(28)
+        .build();
+
+    let a1 = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: None,
+    };
+    let a2 = Account {
+        owner: PrincipalId::new_user_test_id(2).0,
+        subaccount: None,
+    };
+
+    let ledger_id = install_ledger(
+        &env,
+        vec![(a1, INITIAL_BALANCE)],
+        default_archive_options(),
+        None,
+        minter_identity().sender().unwrap(),
+    );
+
+    let index_id = install_index_ng(
+        &env,
+        InitArg {
+            ledger_id: Principal::from(ledger_id),
+            #[allow(deprecated)]
+            retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: Some(10),
+            max_retrieve_blocks_from_ledger_interval_seconds: Some(10),
+        },
+    );
+
+    advance(&env, ONE_SECOND, 10);
+
+    let wait_time = get_last_wait_time(&env, index_id);
+    assert_eq!(
+        wait_time, INDEX_INTERVAL,
+        "After initial sync the timer should be fixed at 10 s, got {:?}",
+        wait_time
+    );
+
+    advance(&env, ONE_SECOND, 30);
+
+    let wait_time = get_last_wait_time(&env, index_id);
+    assert_eq!(
+        wait_time, INDEX_INTERVAL,
+        "After prolonged idle the timer should stay at 10 s, got {:?}",
+        wait_time
+    );
+
+    for _ in 0..20 {
+        send_tx(&env, ledger_id, a1, a2);
+        advance(&env, ONE_SECOND, 1);
+    }
+
+    let wait_time = get_last_wait_time(&env, index_id);
+    assert_eq!(
+        wait_time, INDEX_INTERVAL,
+        "After continuous transaction activity the timer should stay at 10 s, got {:?}",
+        wait_time
+    );
+
+    let tx_interval_secs = 6u64;
+    let stabilization_rounds = 20u64;
+    for _ in 0..stabilization_rounds {
+        send_tx(&env, ledger_id, a1, a2);
+        advance(&env, ONE_SECOND, tx_interval_secs);
+    }
+
+    let wait_time = get_last_wait_time(&env, index_id);
+    assert_eq!(
+        wait_time, INDEX_INTERVAL,
+        "After continuous transaction activity the timer should stay at 10 s, got {:?}",
+        wait_time
     );
 }
