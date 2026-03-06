@@ -753,4 +753,77 @@ mod test {
             .is_ok()
         );
     }
+
+    #[test]
+    fn test_verify_paths_records_metrics() {
+        let metrics = test_metrics();
+        let state = fake_replicated_state();
+        let canister_id = canister_test_id(1);
+
+        verify_paths(
+            &metrics,
+            Version::V2,
+            &state,
+            &user_test_id(1),
+            &[
+                Path::from(Label::from("time")),
+                Path::new(vec![
+                    Label::from("canister"),
+                    canister_id.get().to_vec().into(),
+                    Label::from("module_hash"),
+                ]),
+                Path::new(vec![Label::from("api_boundary_nodes")]),
+                Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("public_key"),
+                ]),
+                Path::new(vec![
+                    Label::from("request_status"),
+                    [0; 32].into(),
+                    Label::from("status"),
+                ]),
+            ],
+            &CanisterIdSet::all(),
+            canister_id.get(),
+            NNS_SUBNET_ID,
+        )
+        .unwrap();
+
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["canister", "time"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["canister", "canister_info"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["canister", "api_boundary_nodes"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["canister", "subnet_public_key"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["canister", "request_status"])
+                .get(),
+            1
+        );
+    }
 }

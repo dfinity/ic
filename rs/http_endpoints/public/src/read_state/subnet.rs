@@ -462,4 +462,66 @@ mod test {
             .is_ok()
         );
     }
+
+    #[test]
+    fn test_verify_paths_records_metrics() {
+        let metrics = test_metrics();
+
+        verify_paths(
+            &metrics,
+            Version::V2,
+            &[
+                Path::from(Label::from("time")),
+                Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("public_key"),
+                ]),
+                Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("node"),
+                    NNS_SUBNET_ID.get().to_vec().into(),
+                    Label::from("public_key"),
+                ]),
+                Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ]),
+            ],
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .unwrap();
+
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "time"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "subnet_public_key"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "subnet_node_public_key"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "subnet_canister_ranges"])
+                .get(),
+            1
+        );
+    }
 }
