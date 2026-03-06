@@ -702,7 +702,34 @@ fn create_setupos_config_image(
 
         (config.vcpus.get(), memory_gibibytes)
     } else {
-        (config.vcpus.get() / 2, config.memory_kibibytes.get() / 2 / 1024 / 1024)
+        let memory_gibibytes = config.memory_kibibytes.get() / 1024 / 1024;
+
+        // Save some resources for HostOS
+        let vcpus = config.vcpus
+            .get()
+            .checked_sub(4)
+            .expect("HostOS needs at least 4 VCPUs, please allocate more. (The remaining are given to the nested GuestOS.)");
+        let memory_gibibytes = memory_gibibytes
+            .checked_sub(8)
+            .expect("HostOS needs at least 8 GiB memory, please allocate more. (The remaining is given to the nested GuestOS.)");
+
+        if vcpus % 4 != 0 {
+            panic!("The requested VCPUs must be divisible by 4.");
+        }
+
+        if vcpus == 0 {
+            panic!(
+                "The requested VCPUs for a nested node must be > 4. 4 VCPUs are reserved for HostOS, the remaining are given to GuestOS."
+            );
+        }
+
+        if memory_gibibytes == 0 {
+            panic!(
+                "The requested memory for a nested node must be > 8 GiB. 8 GiB is reserved for HostOS, the remaining is given to GuestOS."
+            );
+        }
+
+        (vcpus, memory_gibibytes)
     };
     setupos_image_config::create_setupos_config(
         &config_dir,

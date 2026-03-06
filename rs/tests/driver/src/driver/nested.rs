@@ -47,6 +47,9 @@ impl NestedNodes {
         NestedNodes::new_with_resources(names, VmResources::default())
     }
 
+    /// Allow specifying resource overrides to use for the nested VM.
+    ///
+    /// NOTE: The number of VCPUs must be divisible by 4.
     pub fn new_with_resources(
         names: impl IntoIterator<Item = impl Into<String>>,
         vm_resources: VmResources,
