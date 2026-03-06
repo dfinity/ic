@@ -20,3 +20,10 @@ pub enum GetError {
     InvalidHash { reason: String },
     NotFound,
 }
+
+#[derive(CandidType, serde::Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct BlobMetadata {
+    pub uploader: candid::Principal,
+    pub inserted_at_ns: u64,
+    pub size: u64,
+}

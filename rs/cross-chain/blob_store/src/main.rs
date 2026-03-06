@@ -1,4 +1,4 @@
-use blob_store_lib::api::{GetError, InsertError, InsertRequest};
+use blob_store_lib::api::{BlobMetadata, GetError, InsertError, InsertRequest};
 
 #[ic_cdk::init]
 fn init() {}
@@ -9,6 +9,11 @@ fn post_upgrade() {}
 #[ic_cdk::query]
 fn get(hash: String) -> Result<Vec<u8>, GetError> {
     blob_store_lib::query::get(&hash)
+}
+
+#[ic_cdk::query]
+fn get_metadata(hash: String) -> Result<BlobMetadata, GetError> {
+    blob_store_lib::query::get_metadata(&hash)
 }
 
 #[ic_cdk::update]

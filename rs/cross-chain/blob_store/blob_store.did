@@ -22,9 +22,22 @@ type InsertError = variant {
 
 type InsertRequest = record { data : blob; hash : HexHash };
 
+// Metadata recorded when a blob is inserted.
+//   - uploader: the principal that inserted the blob.
+//   - inserted_at_ns: canister time (nanoseconds since Unix epoch) at insertion.
+//   - size: size of the blob data in bytes.
+type BlobMetadata = record {
+    uploader : principal;
+    inserted_at_ns : nat64;
+    size : nat64;
+};
+
 service : () -> {
     // Retrieves a blob by its hex-encoded SHA-256 hash. Can be called by anyone.
     get : (text) -> (variant { Ok : blob; Err : GetError }) query;
+
+    // Retrieves blob metadata by its hex-encoded SHA-256 hash. Can be called by anyone.
+    get_metadata : (text) -> (variant { Ok : BlobMetadata; Err : GetError }) query;
 
     // Stores a blob. Only canister controllers are authorized to call this method.
     // The caller must provide the expected SHA-256 hash of the data.
