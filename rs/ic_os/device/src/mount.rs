@@ -6,7 +6,7 @@ use gpt::GptDisk;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
-use sys_mount::{FilesystemType, Mount, Unmount, UnmountFlags};
+use sys_mount::{FilesystemType, Mount, MountFlags, Unmount, UnmountFlags};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -88,6 +88,7 @@ impl FileSystem {
 #[derive(Copy, Clone)]
 pub struct MountOptions {
     pub file_system: FileSystem,
+    pub read_only: bool,
 }
 
 /// Represents a mounted partition with access to its filesystem.
@@ -187,10 +188,13 @@ impl PartitionProvider for UdevPartitionProvider {
         );
 
         let tempdir = TempDir::new()?;
+        let mut builder =
+            Mount::builder().fstype(FilesystemType::Manual(options.file_system.as_str()));
+        if options.read_only {
+            builder = builder.flags(MountFlags::RDONLY);
+        }
         Ok(Box::new(TempDeviceMount {
-            mount: Mount::builder()
-                .fstype(FilesystemType::Manual(options.file_system.as_str()))
-                .mount(device_path, &tempdir)?,
+            mount: builder.mount(device_path, &tempdir)?,
             _loop_device: None,
             _tempdir: tempdir,
         }))
@@ -252,14 +256,17 @@ impl Mounter for LoopDeviceMounter {
 
         // Sometimes the mount can fail with EIO when udev is not ready yet
         let mount = retry_if_io_error(nix::Error::EIO, || {
-            Mount::builder()
-                .fstype(FilesystemType::Manual(options.file_system.as_str()))
-                .mount(
-                    loop_device
-                        .path()
-                        .ok_or_else(|| std::io::Error::other("Loop device has no path"))?,
-                    mount_point,
-                )
+            let mut builder =
+                Mount::builder().fstype(FilesystemType::Manual(options.file_system.as_str()));
+            if options.read_only {
+                builder = builder.flags(MountFlags::RDONLY);
+            }
+            builder.mount(
+                loop_device
+                    .path()
+                    .ok_or_else(|| std::io::Error::other("Loop device has no path"))?,
+                mount_point,
+            )
         })
         .context("Failed to create mount")?;
 
@@ -451,6 +458,7 @@ mod tests {
                 0,
                 MountOptions {
                     file_system: FileSystem::Ext4,
+                    read_only: true,
                 },
             )
             .unwrap();
