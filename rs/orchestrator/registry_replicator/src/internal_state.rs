@@ -345,7 +345,7 @@ impl InternalState {
         }
     }
 
-    fn get_api_bn_node_ids(&self, version: RegistryVersion) -> Result<Vec<NodeId>, String> {
+    fn get_api_boundary_node_ids(&self, version: RegistryVersion) -> Result<Vec<NodeId>, String> {
         match self.registry_client.get_api_boundary_node_ids(version) {
             Ok(ids) => Ok(ids),
             Err(e) => Err(format!(
@@ -411,7 +411,7 @@ impl InternalState {
                 NodeRewardType::Type4 => {
                     // For type4 nodes, we contact API BNs instead of NNS nodes, since NNS nodes would
                     // not accept our connections due to firewall rules.
-                    self.get_api_bn_node_ids(version)?
+                    self.get_api_boundary_node_ids(version)?
                 }
             },
         };
@@ -703,11 +703,11 @@ mod test {
         registry_client.update_to_latest_version();
 
         if let Some(endpoint) = api_bn_endpoint {
-            let api_bn_node_id = NODE_2;
+            let api_bn_id = NODE_2;
             setup_api_bn_in_registry(
                 &local_store,
                 registry_client.get_latest_version(),
-                api_bn_node_id,
+                api_bn_id,
                 endpoint,
             );
         }
@@ -807,7 +807,7 @@ mod test {
     fn setup_api_bn_in_registry(
         local_store: &LocalStoreImpl,
         from_version: RegistryVersion,
-        api_bn_node_id: NodeId,
+        api_bn_id: NodeId,
         http_endpoint: ConnectionEndpoint,
     ) {
         let mut version = from_version;
@@ -816,7 +816,7 @@ mod test {
             .store(
                 version,
                 vec![KeyMutation {
-                    key: make_api_boundary_node_record_key(api_bn_node_id),
+                    key: make_api_boundary_node_record_key(api_bn_id),
                     value: Some(
                         ApiBoundaryNodeRecord {
                             ..Default::default()
@@ -831,7 +831,7 @@ mod test {
             .store(
                 version,
                 vec![KeyMutation {
-                    key: make_node_record_key(api_bn_node_id),
+                    key: make_node_record_key(api_bn_id),
                     value: Some(
                         NodeRecord {
                             http: Some(http_endpoint.clone()),
