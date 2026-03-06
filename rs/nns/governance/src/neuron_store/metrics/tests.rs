@@ -44,7 +44,7 @@ fn test_compute_metrics() {
             .with_maturity_e8s_equivalent(450_988_012)
             .with_neuron_type(Some(NeuronType::Ect as i32))
             .with_maturity_disbursements_in_progress(vec![MaturityDisbursement {
-                amount_e8s: 100_000_000,
+                amount_e8s: E8,
                 finalize_disbursement_timestamp_seconds: 1,
                 ..Default::default()
             }])
@@ -89,12 +89,12 @@ fn test_compute_metrics() {
             .with_cached_neuron_stake_e8s(6_087_000_000)
             .with_maturity_disbursements_in_progress(vec![
                 MaturityDisbursement {
-                    amount_e8s: 250_000_000,
+                    amount_e8s: 2 * E8,
                     finalize_disbursement_timestamp_seconds: 2,
                     ..Default::default()
                 },
                 MaturityDisbursement {
-                    amount_e8s: 150_000_000,
+                    amount_e8s: 2 * E8,
                     finalize_disbursement_timestamp_seconds: 3,
                     ..Default::default()
                 },
@@ -313,8 +313,8 @@ fn test_compute_metrics() {
         not_dissolving_neurons_e8s_buckets_seed: hashmap! { 0 => 100000000.0 },
         not_dissolving_neurons_e8s_buckets_ect: hashmap! { 2 => 234000000.0 },
         spawning_neurons_count: 1,
-        // Neuron 2 has 100_000_000 and neuron 5 has 250_000_000 + 150_000_000 = 400_000_000
-        total_maturity_disbursements_in_progress_e8s_equivalent: 500_000_000,
+        // Neuron 2 has 1 * E8 and neuron 5 has 2 * E8 + 2 * E8 = 4 * E8
+        total_maturity_disbursements_in_progress_e8s_equivalent: 5 * E8,
         // Some garbage values, because this test was written before this feature.
         non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(),
         public_neuron_subset_metrics: NeuronSubsetMetrics::default(),
