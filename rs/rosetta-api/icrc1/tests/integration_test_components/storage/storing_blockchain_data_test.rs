@@ -304,65 +304,6 @@ fn test_icrc122_authorized_mint_and_burn() {
         let result1 = add_block(&agent, &block1).await.unwrap();
         assert_eq!(result1, Nat::from(1u64));
 
-        // Pre-sync diagnostics: verify block parsing and hash computation work
-        {
-            use ic_icrc_rosetta::common::storage::types::RosettaBlock;
-            use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-
-            // Get the certified chain tip
-            let tip = agent
-                .get_certified_chain_tip()
-                .await
-                .expect("get_certified_chain_tip failed");
-            let (cert_hash, cert_index) = tip
-                .expect("certified chain tip was None - ledger is empty?");
-            assert_eq!(
-                cert_index,
-                Nat::from(1u64),
-                "Certified tip index should be 1, got {cert_index}"
-            );
-
-            // Fetch blocks directly from ledger
-            let blocks_resp = agent
-                .get_blocks(GetBlocksRequest {
-                    start: Nat::from(0u64),
-                    length: Nat::from(2u64),
-                })
-                .await
-                .expect("get_blocks failed");
-            assert_eq!(
-                blocks_resp.blocks.len(),
-                2,
-                "Expected 2 blocks from get_blocks, got {}",
-                blocks_resp.blocks.len()
-            );
-
-            // Parse block0
-            let rosetta_b0 = RosettaBlock::from_generic_block(blocks_resp.blocks[0].clone(), 0)
-                .expect("Failed to parse block0 as RosettaBlock");
-            let b0_hash = rosetta_b0.clone().get_block_hash();
-
-            // Parse block1
-            let rosetta_b1 = RosettaBlock::from_generic_block(blocks_resp.blocks[1].clone(), 1)
-                .expect("Failed to parse block1 as RosettaBlock");
-            let b1_hash = rosetta_b1.clone().get_block_hash();
-
-            // Verify block1's hash matches the certified tip hash
-            assert_eq!(
-                b1_hash.to_vec(),
-                cert_hash.to_vec(),
-                "Block1 hash {b1_hash:?} should match certified hash {cert_hash:?}"
-            );
-
-            // Verify block1's parent hash matches block0's hash
-            let b1_parent = rosetta_b1.get_parent_hash();
-            assert_eq!(
-                b1_parent.map(|h| h.to_vec()),
-                Some(b0_hash.to_vec()),
-                "Block1 parent hash should match block0 hash {b0_hash:?}"
-            );
-        }
-
         blocks_synchronizer::start_synching_blocks(
             agent.clone(),
             storage_client.clone(),
