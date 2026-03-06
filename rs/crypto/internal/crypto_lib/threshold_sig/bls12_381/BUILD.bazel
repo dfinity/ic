@@ -64,9 +64,20 @@ rust_test(
 
 rust_test_suite(
     name = "internal_threshold_sig_bls12_381_integration",
-    srcs = glob(["tests/**/*.rs"]),
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = ["tests/honest_dealer_exhaustive.rs"],
+    ),
     compile_data = glob(["tests/data/*"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":bls12_381"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "honest_dealer_exhaustive",
+    srcs = ["tests/honest_dealer_exhaustive.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["long"],
     deps = [":bls12_381"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
