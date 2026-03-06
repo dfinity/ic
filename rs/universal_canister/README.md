@@ -3,7 +3,7 @@ Universal Canister
 
 Overview
 --------
-The Universal Canister (UC) is a pre-compiled WebAssembly canister used for integration and system tests across the Internet Computer. It acts as an interpreter that executes custom instruction sequences encoded within test message payloads.
+The Universal Canister (UC) is a pre-compiled WebAssembly canister used for unit, integration, and system tests across the Internet Computer. It acts as an interpreter that executes custom instruction sequences encoded within test message payloads.
 
 Purpose
 -------
