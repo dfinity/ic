@@ -1089,7 +1089,7 @@ mod snapshot_visibility {
         fn not_allowed_error(caller: &PrincipalId) -> Result<(), UserError> {
             Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!("Caller {caller} is not allowed to access canister logs"),
+                format!("Caller {caller} is not allowed to list canister snapshots"),
             ))
         }
 

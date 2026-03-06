@@ -1,5 +1,8 @@
 use crate::as_round_instructions;
-use crate::execution::common::{validate_controller, validate_controller_or_subnet_admin, validate_snapshot_visibility, validate_subnet_admin};
+use crate::execution::common::{
+    validate_controller, validate_controller_or_subnet_admin, validate_snapshot_visibility,
+    validate_subnet_admin,
+};
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
@@ -226,7 +229,6 @@ impl CanisterManager {
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::LoadCanisterSnapshot)
-            | Ok(Ic00Method::ListCanisterSnapshots)
             | Ok(Ic00Method::DeleteCanisterSnapshot)
             | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
             | Ok(Ic00Method::ReadCanisterSnapshotData)
@@ -247,6 +249,23 @@ impl CanisterManager {
                                 ),
                             )),
                         }
+                    },
+                    None => Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Failed to decode payload for ic00 method: {method_name}"),
+                    )),
+                }
+            },
+
+            Ok(Ic00Method::ListCanisterSnapshots) => {
+                match effective_canister_id {
+                    Some(canister_id) => {
+                        let canister_state = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            format!("Canister {canister_id} not found"),
+                        ))?;
+                        validate_snapshot_visibility(canister_state, &sender.get(), "list canister snapshots")?;
+                        Ok(())
                     },
                     None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
