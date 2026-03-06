@@ -5,6 +5,7 @@ use super::{
 use crate::{
     HttpError, ReplicaHealthStatus,
     common::{Cbor, WithTimeout},
+    metrics::HttpHandlerMetrics,
 };
 
 use axum::{
@@ -46,6 +47,7 @@ pub enum Version {
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
+    metrics: HttpHandlerMetrics,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     nns_subnet_id: SubnetId,
@@ -54,6 +56,7 @@ pub(crate) struct SubnetReadStateService {
 
 pub struct SubnetReadStateServiceBuilder {
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
+    metrics: HttpHandlerMetrics,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     nns_subnet_id: SubnetId,
@@ -71,6 +74,7 @@ impl SubnetReadStateService {
 
 impl SubnetReadStateServiceBuilder {
     pub fn builder(
+        metrics: HttpHandlerMetrics,
         nns_delegation_reader: NNSDelegationReader,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         nns_subnet_id: SubnetId,
@@ -78,6 +82,7 @@ impl SubnetReadStateServiceBuilder {
     ) -> Self {
         Self {
             health_status: None,
+            metrics,
             nns_delegation_reader,
             state_reader,
             nns_subnet_id,
@@ -98,6 +103,7 @@ impl SubnetReadStateServiceBuilder {
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
+            metrics: self.metrics,
             nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
             nns_subnet_id: self.nns_subnet_id,
@@ -119,6 +125,7 @@ pub(crate) async fn read_state_subnet(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(SubnetReadStateService {
         health_status,
+        metrics,
         nns_delegation_reader,
         state_reader,
         nns_subnet_id,
@@ -153,6 +160,7 @@ pub(crate) async fn read_state_subnet(
 
         // Verify authorization for requested paths.
         if let Err(HttpError { status, message }) = verify_paths(
+            &metrics,
             version,
             &read_state.paths,
             effective_canister_id.into(),
@@ -187,11 +195,14 @@ pub(crate) async fn read_state_subnet(
 }
 
 fn verify_paths(
+    metrics: &HttpHandlerMetrics,
     version: Version,
     paths: &[Path],
     effective_principal_id: PrincipalId,
     nns_subnet_id: SubnetId,
 ) -> Result<(), HttpError> {
+    const ENDPOINT: &str = "subnet";
+
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
         .iter()
@@ -200,29 +211,96 @@ fn verify_paths(
 
     for path in paths {
         match path.as_slice() {
-            [b"time"] => {}
-            [b"api_boundary_nodes"] => {}
+            [b"time"] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "time"])
+                    .inc();
+            }
+            [b"api_boundary_nodes"] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "api_boundary_nodes"])
+                    .inc();
+            }
             [b"api_boundary_nodes", _node_id]
             | [
                 b"api_boundary_nodes",
                 _node_id,
                 b"domain" | b"ipv4_address" | b"ipv6_address",
-            ] => {}
-            [b"subnet"] => {}
-            [b"subnet", _subnet_id] | [b"subnet", _subnet_id, b"public_key" | b"node"] => {}
+            ] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "api_boundary_nodes"])
+                    .inc();
+            }
+            [b"subnet"] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "subnet"])
+                    .inc();
+            }
+            [b"subnet", _subnet_id] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "subnet"])
+                    .inc();
+            }
+            [b"subnet", _subnet_id, b"public_key"] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "subnet_public_key"])
+                    .inc();
+            }
+            [b"subnet", _subnet_id, b"node"] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "subnet_node"])
+                    .inc();
+            }
             // `/subnet/<subnet_id>/canister_ranges` is always allowed on the `/api/v2` endpoint
-            [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {}
+            [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "subnet_canister_ranges"])
+                    .inc();
+            }
             // `/subnet/<subnet_id>/canister_ranges` is allowed on the `/api/v3` endpoint
             // only when `subnet_id == nns_subnet_id`.
             [b"subnet", subnet_id, b"canister_ranges"]
                 if version == Version::V3
-                    && parse_principal_id(subnet_id)? == nns_subnet_id.get() => {}
-            [b"subnet", _subnet_id, b"node", _node_id]
-            | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
-            [b"canister_ranges", _subnet_id] => {}
+                    && parse_principal_id(subnet_id)? == nns_subnet_id.get() =>
+            {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "subnet_canister_ranges"])
+                    .inc();
+            }
+            [b"subnet", _subnet_id, b"node", _node_id] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "subnet_node"])
+                    .inc();
+            }
+            [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "subnet_node_public_key"])
+                    .inc();
+            }
+            [b"canister_ranges", _subnet_id] => {
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "canister_ranges"])
+                    .inc();
+            }
             [b"subnet", subnet_id, b"metrics"] => {
                 let principal_id = parse_principal_id(subnet_id)?;
                 verify_principal_ids(&principal_id, &effective_principal_id)?;
+                metrics
+                    .read_state_path_type_total
+                    .with_label_values(&[ENDPOINT, "subnet_metrics"])
+                    .inc();
             }
             _ => {
                 // All other paths are unsupported.
@@ -241,6 +319,7 @@ fn verify_paths(
 mod test {
     use super::*;
     use ic_crypto_tree_hash::{Label, Path};
+    use ic_metrics::MetricsRegistry;
     use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, canister_test_id, subnet_test_id};
     use rstest::rstest;
     use serde_bytes::ByteBuf;
@@ -248,10 +327,16 @@ mod test {
     const NNS_SUBNET_ID: SubnetId = SUBNET_0;
     const APP_SUBNET_ID: SubnetId = SUBNET_1;
 
+    fn test_metrics() -> HttpHandlerMetrics {
+        HttpHandlerMetrics::new(&MetricsRegistry::new())
+    }
+
     #[rstest]
     fn test_verify_path(#[values(Version::V2, Version::V3)] version: Version) {
+        let metrics = test_metrics();
         assert_eq!(
             verify_paths(
+                &metrics,
                 version,
                 &[Path::from(Label::from("time"))],
                 APP_SUBNET_ID.get(),
@@ -261,6 +346,7 @@ mod test {
         );
         assert_eq!(
             verify_paths(
+                &metrics,
                 version,
                 &[Path::from(Label::from("subnet"))],
                 APP_SUBNET_ID.get(),
@@ -271,6 +357,7 @@ mod test {
 
         assert_eq!(
             verify_paths(
+                &metrics,
                 version,
                 &[
                     Path::new(vec![
@@ -295,6 +382,7 @@ mod test {
         );
 
         let err = verify_paths(
+            &metrics,
             version,
             &[
                 Path::new(vec![
@@ -315,6 +403,7 @@ mod test {
         assert_eq!(err.status, StatusCode::NOT_FOUND);
 
         let err = verify_paths(
+            &metrics,
             version,
             &[
                 Path::new(vec![
@@ -335,6 +424,7 @@ mod test {
         assert_eq!(err.status, StatusCode::NOT_FOUND);
 
         let err = verify_paths(
+            &metrics,
             version,
             &[Path::new(vec![Label::from("canister_ranges")])],
             APP_SUBNET_ID.get(),
@@ -347,7 +437,9 @@ mod test {
     #[test]
     fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint_except_for_the_nns_subnet()
     {
+        let metrics = test_metrics();
         let err = verify_paths(
+            &metrics,
             Version::V3,
             &[Path::new(vec![
                 Label::from("subnet"),
@@ -362,6 +454,7 @@ mod test {
 
         assert!(
             verify_paths(
+                &metrics,
                 Version::V3,
                 &[Path::new(vec![
                     Label::from("subnet"),
@@ -377,8 +470,10 @@ mod test {
 
     #[test]
     fn deprecated_canister_ranges_path_is_allowed_on_the_v2_endpoint() {
+        let metrics = test_metrics();
         assert!(
             verify_paths(
+                &metrics,
                 Version::V2,
                 &[Path::new(vec![
                     Label::from("subnet"),
@@ -393,6 +488,7 @@ mod test {
 
         assert!(
             verify_paths(
+                &metrics,
                 Version::V2,
                 &[Path::new(vec![
                     Label::from("subnet"),
@@ -403,6 +499,68 @@ mod test {
                 NNS_SUBNET_ID,
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn test_verify_paths_records_metrics() {
+        let metrics = test_metrics();
+
+        verify_paths(
+            &metrics,
+            Version::V2,
+            &[
+                Path::from(Label::from("time")),
+                Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("public_key"),
+                ]),
+                Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("node"),
+                    NNS_SUBNET_ID.get().to_vec().into(),
+                    Label::from("public_key"),
+                ]),
+                Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ]),
+            ],
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .unwrap();
+
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "time"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "subnet_public_key"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "subnet_node_public_key"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "subnet_canister_ranges"])
+                .get(),
+            1
         );
     }
 }
