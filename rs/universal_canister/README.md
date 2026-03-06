@@ -3,11 +3,11 @@ Universal Canister
 
 Overview
 --------
-The Universal Canister (UC) is a pre-compiled WebAssembly canister used for integration and system tests across the Internet Computer. It acts as an interpreter that executes custom instruction sequences encoded within test message payloads.
+The Universal Canister (UC) is a pre-compiled WebAssembly canister used for unit, integration, and system tests across the Internet Computer. It acts as an interpreter that executes custom instruction sequences encoded within test message payloads.
 
 Purpose
 -------
-Writing custom WebAssembly or Rust canisters for every test case is verbose and hard to maintain. The UC provides a single, flexible canister to execute arbitrary sequences of IC system API calls. By encoding instructions (like `call`, `reply`, or `stable_read`) into simple payloads, tests can simulate complex behaviors and cross-canister interactions dynamically.
+Writing custom canisters (e.g., in WAT or Rust) for every test case is verbose and hard to maintain. The UC provides a single, flexible canister to execute sequences of IC system API calls. By encoding instructions (like `call`, `reply`, or `stable_read`) into test message payloads, tests can simulate complex behaviors and cross-canister interactions dynamically.
 
 Architecture
 ------------
