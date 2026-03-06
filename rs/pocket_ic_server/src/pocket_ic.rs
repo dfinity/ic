@@ -4728,8 +4728,10 @@ impl Operation for CanisterReadStateRequest {
                 });
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
+                let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let svc = CanisterReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
+                    metrics,
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
@@ -4807,7 +4809,9 @@ impl Operation for SubnetReadStateRequest {
                     .expect(
                         "The NNS subnet should already exist if we are already executing requests",
                     );
+                let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let svc = SubnetReadStateServiceBuilder::builder(
+                    metrics,
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
                     nns_subnet_id,
