@@ -60,10 +60,11 @@ use ic_logger::replica_logger::test_logger;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    InstallCodeArgs, MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
-    ReadCanisterSnapshotMetadataResponse, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse,
+    InstallCodeArgs, ListCanisterSnapshotArgs, ListCanisterSnapshotResponse, MasterPublicKeyId,
+    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -3944,6 +3945,35 @@ impl StateMachine {
             WasmResult::Reply(data) => ReadCanisterSnapshotDataResponse::decode(&data),
             WasmResult::Reject(reason) => {
                 panic!("read_canister_snapshot_data call rejected: {reason}")
+            }
+        })?
+    }
+
+    /// Create a canister snapshot.
+    pub fn list_canister_snapshot(
+        &self,
+        args: ListCanisterSnapshotArgs,
+    ) -> Result<ListCanisterSnapshotResponse, UserError> {
+        let sender = self.get_controller(&args.get_canister_id());
+        self.list_canister_snapshot_as(args, sender)
+    }
+
+    /// Create a canister snapshot.
+    pub fn list_canister_snapshot_as(
+        &self,
+        args: ListCanisterSnapshotArgs,
+        sender: PrincipalId,
+    ) -> Result<ListCanisterSnapshotResponse, UserError> {
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ListCanisterSnapshots,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => ListCanisterSnapshotResponse::decode(&data),
+            WasmResult::Reject(reason) => {
+                panic!("take_canister_snapshot call rejected: {reason}")
             }
         })?
     }
