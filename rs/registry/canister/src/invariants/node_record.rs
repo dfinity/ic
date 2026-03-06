@@ -61,7 +61,9 @@ fn check_chip_ids_are_unique(
             return Err(InvariantCheckError {
                 msg: format!(
                     "chip_id {} is assigned to multiple nodes: {} and {}",
-                    hex::encode(chip_id), prev_node_id, node_id,
+                    hex::encode(chip_id),
+                    prev_node_id,
+                    node_id,
                 ),
                 source: None,
             });
