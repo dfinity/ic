@@ -145,7 +145,7 @@ pub fn setup(env: TestEnv) {
                 .with_default_vm_resources(VmResources {
                     vcpus: Some(NrOfVCPUs::new(1)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(8_389_000)),
-                    boot_image_minimal_size_gibibytes: None,
+                    ..VmResources::default()
                 })
                 .add_nodes(1),
         );

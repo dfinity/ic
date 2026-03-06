@@ -93,17 +93,17 @@ fn setup(env: TestEnv, config: Config) {
         "at least 4 nodes are required for state sync"
     );
     InternetComputer::new()
+        .with_default_vm_resources(VmResources {
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(
+                (24 + config.canister_size_gib * config.num_canisters as u64) * 1024 * 1024,
+            )),
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
+                100 + 2 * config.canister_size_gib * config.num_canisters as u64,
+            )),
+            ..VmResources::default()
+        })
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
-                    vcpus: None,
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(
-                        (24 + config.canister_size_gib * config.num_canisters as u64) * 1024 * 1024,
-                    )),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
-                        100 + 2 * config.canister_size_gib * config.num_canisters as u64,
-                    )),
-                })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_unit_delay(Duration::from_millis(200))
                 .with_initial_notary_delay(Duration::from_millis(200))

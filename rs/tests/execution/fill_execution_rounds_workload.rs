@@ -112,17 +112,16 @@ pub fn setup(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
         "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
     );
 
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-    };
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .with_jaeger_addr(SocketAddr::new(IpAddr::V6(jaeger_ipv6), 4317))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
+                .with_default_vm_resources(VmResources {
+                    vcpus: Some(NrOfVCPUs::new(16)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+                })
                 .with_initial_notary_delay(initial_notary_delay)
                 .add_nodes(subnet_size),
         )

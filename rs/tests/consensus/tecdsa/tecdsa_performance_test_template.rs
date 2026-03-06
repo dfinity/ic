@@ -196,26 +196,23 @@ pub fn setup(env: TestEnv) {
     let key_ids = make_key_ids();
     info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
 
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(64)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-    };
-
     InternetComputer::new()
+        .with_default_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(64)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_required_host_features(vec![
                     HostFeature::Performance,
                     HostFeature::Supermicro,
                 ])
-                .with_default_vm_resources(vm_resources)
                 .add_nodes(1),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
-                .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs: key_ids
