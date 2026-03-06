@@ -9,15 +9,24 @@ use std::path::Path;
 
 /// Derives a key for the given `Key` variant using the SEV firmware.
 /// The key is in base64 format (useful e.g., if the key must be entered manually).
+///
+/// `tcb_version` specifies the TCB version (as a raw `u64`) to use for key derivation.
+/// When 0, the firmware uses the current platform TCB version.
+/// When non-zero, the firmware derives the key using the specified TCB version
+/// (which must be ≤ the current platform TCB version).
 pub fn derive_key_from_sev_measurement(
     sev_firmware: &mut dyn SevGuestFirmware,
     key: Key,
+    tcb_version: u64,
 ) -> Result<String> {
     let mut field_select = GuestFieldSelect::default();
     field_select.set_measurement(true);
 
     let derived_key = sev_firmware
-        .get_derived_key(Some(1), DerivedKey::new(false, field_select, 0, 0, 0, None))
+        .get_derived_key(
+            Some(1),
+            DerivedKey::new(false, field_select, 0, 0, tcb_version, None),
+        )
         .context("Failed to get derived key from SEV firmware")?;
 
     let mut output = vec![0; 32];
@@ -64,7 +73,8 @@ mod tests {
                 &mut mock_sev_guest_firmware,
                 Key::DiskEncryptionKey {
                     device_path: Path::new("/dev/vda8")
-                }
+                },
+                0,
             )
             .unwrap(),
             // This value does not have any particular meaning, but it should not change
@@ -87,6 +97,7 @@ mod tests {
                     Key::DiskEncryptionKey {
                         device_path: Path::new(&format!("/dev/vda{i}")),
                     },
+                    0,
                 )
                 .unwrap()
             })

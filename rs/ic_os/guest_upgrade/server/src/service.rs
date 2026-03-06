@@ -151,6 +151,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
                     Key::DiskEncryptionKey {
                         device_path: Path::new(STORE_DEVICE),
                     },
+                    0,
                 )
                 .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?
                 .into_bytes(),

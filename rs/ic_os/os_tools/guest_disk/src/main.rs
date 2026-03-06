@@ -6,7 +6,7 @@ use clap::Parser;
 use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
-use guest_disk::sev::SevDiskEncryption;
+use guest_disk::sev::{GUESTOS_VERSION_FILE, SevDiskEncryption};
 use guest_disk::{DEFAULT_PREVIOUS_SEV_KEY_PATH, DiskEncryption, Partition, crypt_name};
 use nix::unistd::getuid;
 use sev_guest::firmware::SevGuestFirmware;
@@ -41,6 +41,11 @@ fn main() -> Result<()> {
     let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
         .context("Failed to read GuestOS config")?;
 
+    let guestos_version = std::fs::read_to_string(GUESTOS_VERSION_FILE)
+        .context("Failed to read GuestOS version")?
+        .trim()
+        .to_string();
+
     run(
         args,
         &guestos_config,
@@ -52,6 +57,7 @@ fn main() -> Result<()> {
         },
         Path::new(DEFAULT_PREVIOUS_SEV_KEY_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
+        &guestos_version,
     )
 }
 
@@ -64,6 +70,7 @@ fn run(
     sev_firmware_factory: impl Fn() -> Result<Box<dyn SevGuestFirmware>>,
     previous_key_path: &Path,
     generated_key_path: &Path,
+    guestos_version: &str,
 ) -> Result<()> {
     libcryptsetup_rs::set_log_callback::<()>(Some(cryptsetup_log), None);
 
@@ -72,6 +79,7 @@ fn run(
             sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
             guest_vm_type: guestos_config.guest_vm_type,
             previous_key_path,
+            guestos_version: guestos_version.to_string(),
         })
     } else {
         Box::new(GeneratedKeyDiskEncryption {

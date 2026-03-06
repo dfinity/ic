@@ -7,6 +7,7 @@ use rand::SeedableRng;
 use rsa::RsaPrivateKey;
 use sev::certs::snp::ecdsa::Signature as AttestationReportSignature;
 use sev::firmware::guest::AttestationReport;
+use sev::firmware::host::TcbVersion;
 use sev::parser::Encoder;
 use sha2::Sha384;
 use std::str::FromStr;
@@ -50,6 +51,11 @@ impl AttestationReportBuilder {
 
     pub fn with_chip_id(mut self, chip_id: [u8; 64]) -> AttestationReportBuilder {
         self.attestation_report.chip_id.copy_from_slice(&chip_id);
+        self
+    }
+
+    pub fn with_reported_tcb(mut self, reported_tcb: TcbVersion) -> Self {
+        self.attestation_report.reported_tcb = reported_tcb;
         self
     }
 

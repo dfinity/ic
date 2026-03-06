@@ -17,7 +17,7 @@ pub struct GeneratedKeyDiskEncryption<'a> {
 impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
     fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
         let disk_encryption_key = self.generate_or_read_key()?;
-        activate_crypt_device(
+        let (_crypt_device, _keyslot) = activate_crypt_device(
             device_path,
             crypt_name,
             &disk_encryption_key,
@@ -29,8 +29,9 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
     }
 
     fn format(&mut self, device_path: &Path, _partition: Partition) -> Result<()> {
-        format_crypt_device(device_path, &self.generate_or_read_key()?)
-            .context("Failed to format crypt device")?;
+        let (_crypt_device, _keyslot) =
+            format_crypt_device(device_path, &self.generate_or_read_key()?)
+                .context("Failed to format crypt device")?;
 
         Ok(())
     }
