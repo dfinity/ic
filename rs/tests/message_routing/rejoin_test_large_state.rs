@@ -95,10 +95,10 @@ fn setup(env: TestEnv, config: Config) {
     InternetComputer::new()
         .with_default_vm_resources(VmResources {
             memory_kibibytes: Some(AmountOfMemoryKiB::new(
-                (24 + config.canister_size_gib * config.num_canisters as u64) * 1024 * 1024,
+                (24 + config.canister_size_gib as i32 * config.num_canisters as i32) * 1024 * 1024,
             )),
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
-                100 + 2 * config.canister_size_gib * config.num_canisters as u64,
+                100 + 2 * config.canister_size_gib as i32 * config.num_canisters as i32,
             )),
             ..VmResources::default()
         })

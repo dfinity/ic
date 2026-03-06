@@ -60,7 +60,7 @@ fn setup(env: TestEnv) {
     InternetComputer::new()
         .with_default_vm_resources(VmResources {
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
-                30 + 2 * NUM_CANISTERS as u64 * CANISTER_SIZE_GIB,
+                30 + 2 * NUM_CANISTERS as i32 * CANISTER_SIZE_GIB as i32,
             )),
             ..VmResources::default()
         })

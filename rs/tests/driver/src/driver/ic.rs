@@ -804,9 +804,9 @@ impl Default for Subnet {
     }
 }
 
-pub type NrOfVCPUs = AmountOf<VCPUs, u64>;
-pub type AmountOfMemoryKiB = AmountOf<MemoryKiB, u64>;
-pub type ImageSizeGiB = AmountOf<SizeGiB, u64>;
+pub type NrOfVCPUs = AmountOf<VCPUs, i32>;
+pub type AmountOfMemoryKiB = AmountOf<MemoryKiB, i32>;
+pub type ImageSizeGiB = AmountOf<SizeGiB, i32>;
 
 pub enum VCPUs {}
 pub enum MemoryKiB {}

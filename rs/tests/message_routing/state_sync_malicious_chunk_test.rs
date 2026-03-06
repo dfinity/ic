@@ -141,10 +141,10 @@ fn setup(env: TestEnv, config: Config) {
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(VmResources {
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(
-                        (24 + 2 * NUM_CANISTERS as u64) * 1024 * 1024,
+                        (24 + 2 * NUM_CANISTERS as i32) * 1024 * 1024,
                     )),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
-                        100 + 2 * NUM_CANISTERS as u64,
+                        100 + 2 * NUM_CANISTERS as i32,
                     )),
                     ..VmResources::default()
                 })
