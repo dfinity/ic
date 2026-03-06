@@ -25,7 +25,11 @@ type InsertError = variant {
     InvalidTag : record { reason : text };
 };
 
-type InsertRequest = record { data : blob; hash : HexHash; tags : opt vec Tag };
+type InsertRequest = record {
+    data : blob;
+    hash : HexHash;
+    tags : opt vec Tag
+};
 
 // Metadata recorded when a blob is inserted.
 //   - uploader: the principal that inserted the blob.
