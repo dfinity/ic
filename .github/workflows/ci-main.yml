@@ -372,6 +372,20 @@ jobs:
             ./bazel-bin/publish/binaries/pocket-ic.gz \
             ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
 
+      - name: Build pocket-ic-server x86_64-darwin
+        if: ${{ matrix.os == 'darwin' }}
+        run: |
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            build \
+            //publish/binaries:pocket-ic.gz --platforms=//:macos-intel
+
+          mkdir -p build
+          cp \
+            ./bazel-bin/publish/binaries/pocket-ic.gz \
+            ./build/pocket-ic-server-x86_64-darwin.gz
+
       # Ensures that local development works on arm64-darwin.
       - name: Build the entire codebase on darwin
         if: ${{ matrix.os == 'darwin' }}
@@ -403,6 +417,13 @@ jobs:
             --test_tag_filters="test_all_platforms,test_all_platforms_slow" \
             --build_tests_only \
             "${bazel_test_targets[@]}"
+
+      - name: Upload pocket-ic-server x86_64-darwin
+        if: ${{ matrix.os == 'darwin' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-ic-server-x86_64-darwin.gz
+          path: ./build/pocket-ic-server-x86_64-darwin.gz
 
       - name: Upload pocket-ic-server
         uses: actions/upload-artifact@v4
