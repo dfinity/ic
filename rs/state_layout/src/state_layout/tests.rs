@@ -447,7 +447,7 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
             .unwrap();
 
             // Write a few dummy files to each checkpoint directory.
-            for i in 0..5 {
+            for i in 0..50 {
                 let file_path = scratchpad_layout.raw_path().join(i.to_string());
                 File::create(file_path).unwrap();
             }
