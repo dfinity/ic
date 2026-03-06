@@ -7,7 +7,7 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:canisters.bzl", "wasm_rust_binary_rule")
 
-def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = [], env = {}, **kwargs):
+def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = [], env = {}, timeout = None, **kwargs):
     """ Run a Rust benchmark using canbench.
 
     This creates 2 executable rules: :${name} for running the benchmark and :${name}_update for
@@ -19,6 +19,7 @@ def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = 
         opt: The optimization level to use for the rust_binary compilation.
         data: Additional data resources passthrough.
         env: Additional environment variables passthrough.
+        timeout: The timeout for the test rule. If None, the default Bazel timeout is used.
         **kwargs: Additional arguments to pass to rust_binary.
         noise_threshold: The noise threshold to use for the benchmark. If None, the default value from
             canbench is used.
@@ -88,4 +89,5 @@ def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = 
         data = data,
         env = env,
         args = ["--test"],
+        timeout = timeout,
     )
