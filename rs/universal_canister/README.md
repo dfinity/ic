@@ -23,7 +23,7 @@ Because the UC is a static, pre-compiled WebAssembly module that operates by int
 
 Specifically:
 - **`start` function**: The UC cannot test the WebAssembly `(start)` function. This executes during module instantiation and does not have access to message arguments.
-- **`canister_init` and `canister_post_upgrade`**: These hooks can only be tested if instructions are passed as the explicit initialization or upgrade argument. They cannot access instructions "pre-set" via a previous update call because `init` starts with a fresh heap and `post_upgrade` runs after the previous heap has been wiped. 
+- **`canister_init` and `canister_post_upgrade`**: These hooks can only be tested if instructions are passed as the explicit initialization or upgrade argument. This is because the UC's mechanism for "pre-setting" instructions (used for `heartbeat` or `pre_upgrade`) relies on storing them in a global heap variable. Since `init` starts with a fresh heap and `post_upgrade` executes after the previous heap has been wiped, they cannot retrieve any instructions that were pre-set in the old instance.
 - **`canister_pre_upgrade`**: The UC can test this hook by saving instructions to the heap in a prior update call, as `pre_upgrade` executes while the old heap is still active.
 
-For testing native `start` behavior, complex initialization traps, or structural Wasm properties, use the [WAT Canister](../test_utilities/execution_environment/src/wat_canister).
+For testing the `start` function, or for verifying behavior (such as logging or traps) during the `init` and `post_upgrade` lifecycle hooks, use the [WAT Canister](../test_utilities/execution_environment/src/wat_canister).
