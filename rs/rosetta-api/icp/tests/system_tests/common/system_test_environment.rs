@@ -88,27 +88,43 @@ impl RosettaTestingEnvironment {
                     ledger_canister_id: LEDGER_CANISTER_ID.into(),
                 };
                 match arg_with_caller.arg {
-                    LedgerEndpointArg::ApproveArg(approve_arg) => caller_agent
+                    LedgerEndpointArg::ApproveArg(ref approve_arg) => caller_agent
                         .approve(approve_arg.clone())
                         .await
-                        .unwrap()
-                        .unwrap()
+                        .unwrap_or_else(|e| {
+                            panic!("approve agent call failed: {e:?}, arg: {approve_arg:?}")
+                        })
+                        .unwrap_or_else(|e| {
+                            panic!("approve rejected by ledger: {e:?}, arg: {approve_arg:?}")
+                        })
                         .0
                         .to_u64()
                         .unwrap(),
-                    LedgerEndpointArg::TransferArg(transfer_arg) => caller_agent
+                    LedgerEndpointArg::TransferArg(ref transfer_arg) => caller_agent
                         .transfer(transfer_arg.clone())
                         .await
-                        .unwrap()
-                        .unwrap()
+                        .unwrap_or_else(|e| {
+                            panic!("transfer agent call failed: {e:?}, arg: {transfer_arg:?}")
+                        })
+                        .unwrap_or_else(|e| {
+                            panic!("transfer rejected by ledger: {e:?}, arg: {transfer_arg:?}")
+                        })
                         .0
                         .to_u64()
                         .unwrap(),
-                    LedgerEndpointArg::TransferFromArg(transfer_from_arg) => caller_agent
+                    LedgerEndpointArg::TransferFromArg(ref transfer_from_arg) => caller_agent
                         .transfer_from(transfer_from_arg.clone())
                         .await
-                        .unwrap()
-                        .unwrap()
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "transfer_from agent call failed: {e:?}, arg: {transfer_from_arg:?}"
+                            )
+                        })
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "transfer_from rejected by ledger: {e:?}, arg: {transfer_from_arg:?}"
+                            )
+                        })
                         .0
                         .to_u64()
                         .unwrap(),
@@ -120,8 +136,9 @@ impl RosettaTestingEnvironment {
                 LedgerEndpointArg::TransferArg(transfer_args) => transfer_args,
                 _ => panic!("Expected TransferArg"),
             };
-            let mut args_builder =
-                RosettaTransferArgs::builder(transfer_args.to, transfer_args.amount);
+            let transfer_to = transfer_args.to;
+            let transfer_amount = transfer_args.amount.to_string();
+            let mut args_builder = RosettaTransferArgs::builder(transfer_to, transfer_args.amount);
             if let Some(from_subaccount) = transfer_args.from_subaccount {
                 args_builder = args_builder.with_from_subaccount(from_subaccount);
             }
@@ -139,7 +156,12 @@ impl RosettaTestingEnvironment {
                     &arg_with_caller.caller,
                 )
                 .await
-                .unwrap();
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "Rosetta transfer failed: {e:?}, to: {}, amount: {}",
+                        transfer_to, transfer_amount,
+                    )
+                });
         }
     }
 

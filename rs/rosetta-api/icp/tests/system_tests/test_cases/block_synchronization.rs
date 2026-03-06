@@ -16,6 +16,8 @@ use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use proptest::strategy::Strategy;
 use proptest::test_runner::Config as TestRunnerConfig;
+use proptest::test_runner::RngAlgorithm;
+use proptest::test_runner::TestRng;
 use proptest::test_runner::TestRunner;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -28,13 +30,37 @@ lazy_static! {
     pub static ref MINTING_IDENTITY: Arc<BasicIdentity> = Arc::new(minter_identity());
 }
 
-#[test]
-fn test_block_synchronization() {
-    let mut runner = TestRunner::new(TestRunnerConfig {
+/// Creates a `TestRunner` with a logged seed for reproducibility.
+///
+/// Set `PROPTEST_SEED` to a hex-encoded 16-byte seed to reproduce a specific run.
+fn new_test_runner(test_name: &str) -> TestRunner {
+    let config = TestRunnerConfig {
         max_shrink_iters: 0,
         cases: *NUM_TEST_CASES,
         ..Default::default()
-    });
+    };
+    let seed: [u8; 16] = match std::env::var("PROPTEST_SEED") {
+        Ok(hex) => {
+            let bytes = hex::decode(&hex).expect("PROPTEST_SEED must be valid hex");
+            bytes
+                .try_into()
+                .expect("PROPTEST_SEED must be 32 hex chars (16 bytes)")
+        }
+        Err(_) => rand::random(),
+    };
+    eprintln!(
+        "proptest seed for {}: {} (set PROPTEST_SEED={} to reproduce)",
+        test_name,
+        hex::encode(seed),
+        hex::encode(seed),
+    );
+    let rng = TestRng::from_seed(RngAlgorithm::XorShift, &seed);
+    TestRunner::new_with_rng(config, rng)
+}
+
+#[test]
+fn test_block_synchronization() {
+    let mut runner = new_test_runner("test_block_synchronization");
 
     runner
         .run(
@@ -78,11 +104,7 @@ fn test_block_synchronization() {
 
 #[test]
 fn test_ledger_upgrade_synchronization() {
-    let mut runner = TestRunner::new(TestRunnerConfig {
-        max_shrink_iters: 0,
-        cases: *NUM_TEST_CASES,
-        ..Default::default()
-    });
+    let mut runner = new_test_runner("test_ledger_upgrade_synchronization");
 
     runner
         .run(
@@ -220,11 +242,7 @@ fn test_ledger_upgrade_synchronization() {
 
 #[test]
 fn test_load_from_storage() {
-    let mut runner = TestRunner::new(TestRunnerConfig {
-        max_shrink_iters: 0,
-        cases: *NUM_TEST_CASES,
-        ..Default::default()
-    });
+    let mut runner = new_test_runner("test_load_from_storage");
 
     runner
         .run(

@@ -73,21 +73,33 @@ pub async fn wait_for_rosetta_to_sync_up_to_block(
     network_identifier: NetworkIdentifier,
     block_index: u64,
 ) -> Option<u64> {
-    for _ in 0..MAX_ROSETTA_SYNC_ATTEMPTS {
+    let mut last_seen_block: Option<u64> = None;
+    for attempt in 0..MAX_ROSETTA_SYNC_ATTEMPTS {
         let response = rosetta_client
             .network_status(network_identifier.clone())
             .await;
         if let Ok(status) = response {
             let last_block = status.current_block_identifier.index;
+            last_seen_block = Some(last_block);
             if last_block >= block_index {
                 return Some(last_block);
             }
         } else {
-            eprintln!("Failed to get network status: {response:?}");
+            eprintln!(
+                "wait_for_rosetta_to_sync_up_to_block: attempt {}/{}, \
+                 target block {}, failed to get network status: {response:?}",
+                attempt + 1,
+                MAX_ROSETTA_SYNC_ATTEMPTS,
+                block_index,
+            );
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    panic!("Failed to sync with the ledger");
+    panic!(
+        "Rosetta failed to sync to block {} after {} attempts (~{}s). \
+         Last synced block: {:?}",
+        block_index, MAX_ROSETTA_SYNC_ATTEMPTS, MAX_ROSETTA_SYNC_ATTEMPTS, last_seen_block,
+    );
 }
 
 pub async fn assert_rosetta_blockchain_is_valid(
