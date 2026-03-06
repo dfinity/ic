@@ -7,6 +7,7 @@ mod struct_io;
 
 use crate::canister_state::system_state::log_memory_store::{
     header::Header,
+    log_record::LogRecord,
     memory::MemorySize,
     ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
 };
@@ -154,11 +155,17 @@ impl LogMemoryStore {
     /// This method enforces a minimum safe capacity and performs no operation if the
     /// effective capacity has not changed.
     pub fn resize(&mut self, limit: usize, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
-        self.resize_impl(limit, || PageMap::new(fd_factory))
+        println!("\nABC size before: {}", self.byte_capacity());
+        let start = std::time::Instant::now();
+        self.resize_impl(limit, || PageMap::new(fd_factory));
+        println!("ABC size after: {}", self.byte_capacity());
+        println!("ABC Resize duration: {:?}", start.elapsed());
     }
 
-    #[cfg(test)]
-    fn resize_for_testing(&mut self, limit: usize) {
+    /// Resizes the ring buffer to the specified limit, preserving existing records.
+    ///
+    /// This method is used for testing purposes and does not use file descriptors.
+    pub fn resize_for_testing(&mut self, limit: usize) {
         self.resize_impl(limit, PageMap::new_for_testing)
     }
 
@@ -202,7 +209,11 @@ impl LogMemoryStore {
         self.bytes_used() == 0
     }
 
-    fn bytes_used(&self) -> usize {
+    /// Returns the number of bytes used by the ring buffer.
+    ///
+    /// This is the actual number of bytes used by the ring buffer, not the
+    /// allocated capacity.
+    pub fn bytes_used(&self) -> usize {
         self.get_header()
             .map(|h| h.data_size.get() as usize)
             .unwrap_or(0)
@@ -256,6 +267,22 @@ impl LogMemoryStore {
     /// Clears the delta_log sizes.
     pub fn clear_delta_log_sizes(&mut self) {
         self.delta_log_sizes.clear();
+    }
+
+    /// Calculates the total memory footprint of canister log records
+    /// when encoded and stored within the `LogMemoryStore`.
+    ///
+    /// `CanisterLog` and `LogMemoryStore` use different structures for storing
+    /// log records, so we need to calculate the storage size for each type separately.
+    pub fn estimate_storage_size(log: &CanisterLog) -> usize {
+        log.records()
+            .iter()
+            .map(|r| LogRecord::estimate_bytes_len(r.content.len()))
+            .sum()
+    }
+
+    pub fn estimate_record_size(content_size: usize) -> usize {
+        LogRecord::estimate_bytes_len(content_size)
     }
 }
 

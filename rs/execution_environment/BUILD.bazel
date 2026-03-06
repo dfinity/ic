@@ -417,6 +417,7 @@ rust_ic_bench(
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
+        "//rs/test_utilities/execution_environment",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
