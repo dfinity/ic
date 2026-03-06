@@ -740,13 +740,22 @@ impl SigningAccount {
     }
 }
 
-fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount> {
-    let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
+fn basic_identity_and_account_strategy(
+    include_subaccount: bool,
+) -> impl Strategy<Value = SigningAccount> {
     let identity_strategy = basic_identity_strategy();
-    (bytes_strategy, identity_strategy).prop_map(|(bytes, identity)| SigningAccount {
-        identity,
-        subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
-    })
+    (
+        prop::option::of(prop::collection::vec(0..=255u8, 32)),
+        identity_strategy,
+    )
+        .prop_map(move |(bytes, identity)| SigningAccount {
+            identity,
+            subaccount: if include_subaccount {
+                bytes.map(|x| x.as_slice().try_into().unwrap())
+            } else {
+                None
+            },
+        })
 }
 
 #[derive(EnumCount, PartialEq, Clone)]
@@ -758,18 +767,26 @@ pub enum TransactionTypes {
     TransferFrom,
 }
 
+pub struct TransactionStrategyOptions {
+    pub excluded_transaction_types: Vec<TransactionTypes>,
+    pub include_subaccounts: bool,
+}
+
 pub fn valid_transactions_strategy(
     minter_identity: Arc<BasicIdentity>,
     default_fee: u64,
     length: usize,
     now: SystemTime,
 ) -> impl Strategy<Value = Vec<ArgWithCaller>> {
-    valid_transactions_strategy_with_excluded_transaction_types(
+    valid_transactions_strategy_with_options(
         minter_identity,
         default_fee,
         length,
         now,
-        vec![],
+        TransactionStrategyOptions {
+            excluded_transaction_types: vec![],
+            include_subaccounts: true,
+        },
     )
 }
 
@@ -780,13 +797,18 @@ pub fn valid_transactions_strategy(
 /// TODO: replace amount generation with something that makes sense,
 ///       e.g. exponential distribution
 /// TODO: allow to pass the account distribution
-pub fn valid_transactions_strategy_with_excluded_transaction_types(
+pub fn valid_transactions_strategy_with_options(
     minter_identity: Arc<BasicIdentity>,
     default_fee: u64,
     length: usize,
     now: SystemTime,
-    excluded_transaction_types: Vec<TransactionTypes>,
+    options: TransactionStrategyOptions,
 ) -> impl Strategy<Value = Vec<ArgWithCaller>> {
+    let TransactionStrategyOptions {
+        excluded_transaction_types,
+        include_subaccounts,
+    } = options;
+
     /// Generates a strategy for producing valid `mint` operations.
     ///
     /// The generated mint operations will:
@@ -799,10 +821,11 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         minter_identity: Arc<BasicIdentity>,
         now: SystemTime,
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
+        include_subaccounts: bool,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
         (
-            basic_identity_and_account_strategy(),
+            basic_identity_and_account_strategy(include_subaccounts),
             amount_strategy(),
             valid_created_at_time_strategy(now),
             arb_memo(),
@@ -924,13 +947,14 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         now: SystemTime,
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
+        include_subaccounts: bool,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
         account_balance.prop_flat_map(move |(from, balance)| {
             let tx_hash_set = tx_hash_set_pointer.clone();
             let account_to_basic_identity = account_to_basic_identity_pointer.clone();
             (
-                basic_identity_and_account_strategy(),
+                basic_identity_and_account_strategy(include_subaccounts),
                 0..=(balance - default_fee),
                 valid_created_at_time_strategy(now),
                 arb_memo(),
@@ -995,6 +1019,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
         allowance_map_pointer: Arc<BTreeMap<(Account, Account), Tokens>>,
+        include_subaccounts: bool,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
         account_balance.prop_flat_map(move |(from, _balance)| {
@@ -1002,7 +1027,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
             let account_to_basic_identity = account_to_basic_identity_pointer.clone();
             let allowance_map = allowance_map_pointer.clone();
             (
-                basic_identity_and_account_strategy(),
+                basic_identity_and_account_strategy(include_subaccounts),
                 amount_strategy(),
                 valid_created_at_time_strategy(now),
                 arb_memo(),
@@ -1092,6 +1117,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
         allowance_map_pointer: Arc<BTreeMap<(Account, Account), Tokens>>,
         current_balances_pointer: Arc<HashMap<Account, u64>>,
+        include_subaccounts: bool,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
 
@@ -1170,7 +1196,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                                 let fee_amount = default_fee;
 
                                 (
-                                    basic_identity_and_account_strategy(), // to account
+                                    basic_identity_and_account_strategy(include_subaccounts), // to account
                                     valid_created_at_time_strategy(now),
                                     arb_memo(),
                                     prop::option::of(Just(fee_amount)),
@@ -1242,6 +1268,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         additional_length: usize,
         now: SystemTime,
         excluded_transaction_types: Vec<TransactionTypes>,
+        include_subaccounts: bool,
     ) -> BoxedStrategy<TransactionsAndBalances> {
         if additional_length == 0 {
             return Just(state).boxed();
@@ -1254,8 +1281,13 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         let tx_hashes_pointer = Arc::new(state.txs.clone());
         let account_to_basic_identity_pointer = Arc::new(state.principal_to_basic_identity.clone());
         let allowance_map_pointer = Arc::new(state.allowances.clone());
-        let mint_strategy =
-            mint_strategy(minter_identity.clone(), now, tx_hashes_pointer.clone()).boxed();
+        let mint_strategy = mint_strategy(
+            minter_identity.clone(),
+            now,
+            tx_hashes_pointer.clone(),
+            include_subaccounts,
+        )
+        .boxed();
         let arb_tx = if balances.is_empty() {
             mint_strategy
         } else {
@@ -1268,6 +1300,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                 tx_hashes_pointer.clone(),
                 account_to_basic_identity_pointer.clone(),
                 allowance_map_pointer.clone(),
+                include_subaccounts,
             )
             .boxed();
             let burn_strategy = burn_strategy(
@@ -1286,6 +1319,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                 now,
                 tx_hashes_pointer.clone(),
                 account_to_basic_identity_pointer.clone(),
+                include_subaccounts,
             )
             .boxed();
             let mut options = vec![];
@@ -1315,6 +1349,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                         account_to_basic_identity_pointer.clone(),
                         allowance_map_pointer.clone(),
                         Arc::new(state.balances.clone()),
+                        include_subaccounts,
                     )
                     .boxed();
                     options.push((100, transfer_from_strategy));
@@ -1334,6 +1369,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                     additional_length - 1,
                     now,
                     excluded_transaction_types.clone(),
+                    include_subaccounts,
                 )
             })
             .boxed()
@@ -1352,6 +1388,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         length,
         now,
         excluded_transaction_types,
+        include_subaccounts,
     )
     .prop_map(|res| res.transactions.clone())
 }

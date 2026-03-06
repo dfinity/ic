@@ -8,7 +8,10 @@ use candid::Principal;
 use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
 use ic_icp_rosetta_runner::RosettaOptions;
-use ic_icrc1_test_utils::{DEFAULT_TRANSFER_FEE, minter_identity, valid_transactions_strategy};
+use ic_icrc1_test_utils::{
+    DEFAULT_TRANSFER_FEE, TransactionStrategyOptions, minter_identity, valid_transactions_strategy,
+    valid_transactions_strategy_with_options,
+};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::LedgerCanisterPayload;
 use icp_ledger::LedgerCanisterUpgradePayload;
@@ -64,11 +67,19 @@ fn test_block_synchronization() {
 
     runner
         .run(
-            &(valid_transactions_strategy(
+            &(valid_transactions_strategy_with_options(
                 (*MINTING_IDENTITY).clone(),
                 DEFAULT_TRANSFER_FEE,
                 *MAX_NUM_GENERATED_BLOCKS,
                 SystemTime::now(),
+                TransactionStrategyOptions {
+                    excluded_transaction_types: vec![],
+                    // To work with ICP Rosetta, we strip any subaccount information, which leads
+                    // to issue with approvals for two different subaccounts for the same principal
+                    // overwriting each other. We therefore need to generate transactions without
+                    // subaccounts for this test to work properly.
+                    include_subaccounts: false,
+                },
             )
             .no_shrink()),
             |args_with_caller| {
@@ -108,11 +119,19 @@ fn test_ledger_upgrade_synchronization() {
 
     runner
         .run(
-            &(valid_transactions_strategy(
+            &(valid_transactions_strategy_with_options(
                 (*MINTING_IDENTITY).clone(),
                 DEFAULT_TRANSFER_FEE,
                 *MAX_NUM_GENERATED_BLOCKS * 2,
                 SystemTime::now(),
+                TransactionStrategyOptions {
+                    excluded_transaction_types: vec![],
+                    // To work with ICP Rosetta, we strip any subaccount information, which leads
+                    // to issue with approvals for two different subaccounts for the same principal
+                    // overwriting each other. We therefore need to generate transactions without
+                    // subaccounts for this test to work properly.
+                    include_subaccounts: false,
+                },
             )
             .no_shrink()),
             |args_with_caller| {
@@ -246,11 +265,19 @@ fn test_load_from_storage() {
 
     runner
         .run(
-            &(valid_transactions_strategy(
+            &(valid_transactions_strategy_with_options(
                 (*MINTING_IDENTITY).clone(),
                 DEFAULT_TRANSFER_FEE,
                 *MAX_NUM_GENERATED_BLOCKS * 2,
                 SystemTime::now(),
+                TransactionStrategyOptions {
+                    excluded_transaction_types: vec![],
+                    // To work with ICP Rosetta, we strip any subaccount information, which leads
+                    // to issue with approvals for two different subaccounts for the same principal
+                    // overwriting each other. We therefore need to generate transactions without
+                    // subaccounts for this test to work properly.
+                    include_subaccounts: false,
+                },
             )
             .no_shrink()),
             |args_with_caller| {

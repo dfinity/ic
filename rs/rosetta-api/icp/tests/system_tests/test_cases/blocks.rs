@@ -5,7 +5,10 @@ use crate::common::utils::test_identity;
 use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
-use ic_icrc1_test_utils::{DEFAULT_TRANSFER_FEE, minter_identity, valid_transactions_strategy};
+use ic_icrc1_test_utils::{
+    DEFAULT_TRANSFER_FEE, TransactionStrategyOptions, minter_identity, valid_transactions_strategy,
+    valid_transactions_strategy_with_options,
+};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
 use ic_rosetta_api::MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST;
@@ -152,11 +155,15 @@ fn test_fetching_block_ranges() {
 
     runner
         .run(
-            &(valid_transactions_strategy(
+            &(valid_transactions_strategy_with_options(
                 (*MINTING_IDENTITY).clone(),
                 DEFAULT_TRANSFER_FEE,
                 *MAX_NUM_GENERATED_BLOCKS,
                 SystemTime::now(),
+                TransactionStrategyOptions {
+                    excluded_transaction_types: vec![],
+                    include_subaccounts: false,
+                },
             )
             .no_shrink(),),
             |(args_with_caller,)| {
