@@ -9,7 +9,7 @@ use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
 use ic_icp_rosetta_runner::RosettaOptions;
 use ic_icrc1_test_utils::{
-    DEFAULT_TRANSFER_FEE, TransactionStrategyOptions, minter_identity, valid_transactions_strategy,
+    DEFAULT_TRANSFER_FEE, TransactionStrategyOptions, minter_identity,
     valid_transactions_strategy_with_options,
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
