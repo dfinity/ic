@@ -183,12 +183,12 @@ impl CanisterManager {
             // Canister creation via ingress is only allowed by subnet admins.
             Ok(Ic00Method::CreateCanister) => {
                 let subnet_admins = state.get_own_subnet_admins();
-                // In case the subnet admins list is empty, return the same error as
-                // before introducing the notion of subnet admins to maintain backward compatibility.
-                if subnet_admins.is_empty() {
-                  Err(UserError::new(ErrorCode::CanisterRejectedMessage, format!("Only canisters can call ic00 method {method_name}")))
-                } else {
+                if let Some(subnet_admins) = subnet_admins {
                   validate_subnet_admin(&subnet_admins, sender.get_ref()).map_err(|err| err.into())
+                } else {
+                  // In case the subnet admins are not set, return the same error as
+                  // before introducing the notion of subnet admins to maintain backward compatibility.
+                  Err(UserError::new(ErrorCode::CanisterRejectedMessage, format!("Only canisters can call ic00 method {method_name}")))
                 }
             }
 
@@ -207,7 +207,7 @@ impl CanisterManager {
                             format!("Canister {canister_id} not found"),
                         ))?;
                         let subnet_admins = state.get_own_subnet_admins();
-                        validate_controller_or_subnet_admin(canister, &subnet_admins, sender.get_ref()).map_err(|err| err.into())
+                        validate_controller_or_subnet_admin(canister, subnet_admins, sender.get_ref()).map_err(|err| err.into())
                     },
                     None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
@@ -753,30 +753,28 @@ impl CanisterManager {
         canister_creation_error: &IntCounter,
     ) -> (Result<CanisterId, UserError>, Cycles) {
         let sender = origin.origin();
-        let subnet_admins = state.get_own_subnet_admins();
-        match validate_subnet_admin(&subnet_admins, &sender) {
-            // subnet admins can always create canisters
+        match self.sender_subnet_is_nns_or_self(state, &sender) {
+            // canisters on NNS or the same subnet can always create canisters
             Ok(()) => (),
-            Err(subnet_admin_err) => match self.sender_subnet_is_nns_or_self(state, &sender) {
-                // canisters on NNS or the same subnet can always create canisters
-                Ok(()) => (),
-                Err(sender_subnet_err) => {
-                    if subnet_admins.is_empty() {
-                        // if there are no subnet admins, then the sender must be a canister
-                        // and the canister creation message should not have been routed
-                        // all the way to here unless the sender subnet is buggy/malicious
-                        canister_creation_error.inc();
-                        error!(
-                            self.log,
-                            "[EXC-BUG] Misrouted canister creation request from sender {}", sender
-                        );
-                        return (Err(sender_subnet_err), cycles);
-                    } else {
-                        return (Err(subnet_admin_err.into()), cycles);
+            Err(sender_subnet_err) => {
+                let subnet_admins = state.get_own_subnet_admins();
+                if let Some(subnet_admins) = subnet_admins {
+                    if let Err(err) = validate_subnet_admin(&subnet_admins, &sender) {
+                        return (Err(err.into()), cycles);
                     }
+                } else {
+                    // if subnet admins are not set, then the sender must be a canister
+                    // and the canister creation message should not have been routed
+                    // all the way to here unless the sender subnet is buggy/malicious
+                    canister_creation_error.inc();
+                    error!(
+                        self.log,
+                        "[EXC-BUG] Misrouted canister creation request from sender {}", sender
+                    );
+                    return (Err(sender_subnet_err), cycles);
                 }
-            },
-        }
+            }
+        };
 
         let fee = self
             .cycles_account_manager
@@ -1004,7 +1002,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         canister_not_found_error: &IntCounter,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
         let time = state.time();
@@ -1068,7 +1066,7 @@ impl CanisterManager {
         canister_id: CanisterId,
         mut stop_context: StopCanisterContext,
         state: &mut ReplicatedState,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> StopCanisterResult {
         let canister = match state.canister_state(&canister_id) {
             None => {
@@ -1115,7 +1113,7 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &mut CanisterState,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<Vec<StopCanisterContext>, CanisterManagerError> {
         validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
 
@@ -1133,7 +1131,7 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         ready_for_migration: bool,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
@@ -1272,7 +1270,7 @@ impl CanisterManager {
         canister_id_to_delete: CanisterId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<(), CanisterManagerError> {
         if let Ok(canister_id) = CanisterId::try_from(sender)
             && canister_id == canister_id_to_delete
