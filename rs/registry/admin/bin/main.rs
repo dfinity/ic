@@ -1736,7 +1736,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
             .membership
             .iter()
             .map(|id| {
-                let principal_id = PrincipalId::from_str(&id).expect("Failed to parse PrincipalID");
+                let principal_id = PrincipalId::from_str(id).expect("Failed to parse PrincipalID");
                 NodeId::from(principal_id)
             })
             .collect()
@@ -1746,7 +1746,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
         registry_canister: &RegistryCanister,
         subnet: &SubnetDescriptor,
     ) -> SubnetRecord {
-        let subnet_id = subnet.get_id(&registry_canister).await;
+        let subnet_id = subnet.get_id(registry_canister).await;
 
         // Query the SubnetRecord
         let subnet_record_key = make_subnet_record_key(subnet_id);
