@@ -2695,7 +2695,6 @@ impl ExecutionEnvironment {
             origin,
             &resource_saturation,
             &self.metrics.long_execution_already_in_progress,
-            &self.metrics.snapshot_exists_without_associated_canister,
         );
 
         let result = match result {
@@ -2724,7 +2723,7 @@ impl ExecutionEnvironment {
 
         let result = self
             .canister_manager
-            .list_canister_snapshot(sender, canister, state)
+            .list_canister_snapshot(sender, canister)
             .map_err(UserError::from)?;
 
         Ok(Encode!(&result).unwrap())
@@ -2875,7 +2874,6 @@ impl ExecutionEnvironment {
             sender,
             snapshot_id,
             canister,
-            state,
             round_limits,
         ) {
             Ok((response, instructions)) => (Ok(Encode!(&response).unwrap()), instructions),

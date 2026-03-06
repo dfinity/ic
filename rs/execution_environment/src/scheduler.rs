@@ -898,6 +898,9 @@ impl SchedulerImpl {
                 canister.system_state.clear_canister_history();
                 // Burn the remaining balance of the canister.
                 canister.system_state.burn_remaining_balance_for_uninstall();
+                canister
+                    .canister_snapshots
+                    .delete_snapshots(canister.canister_id());
 
                 info!(
                     self.log,
@@ -906,12 +909,6 @@ impl SchedulerImpl {
                 );
                 self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
-        }
-
-        // Delete any snapshots associated with the canister
-        // that ran out of cycles.
-        for canister_id in uninstalled_canisters {
-            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.

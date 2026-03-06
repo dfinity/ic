@@ -42,7 +42,6 @@ use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
-    canister_snapshots::CanisterSnapshots,
 };
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -206,7 +205,6 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             CanisterQueues::default(),
             RefundPool::default(),
             RawQueryStats::default(),
-            CanisterSnapshots::default(),
         )),
     )
 }

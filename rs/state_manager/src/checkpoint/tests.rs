@@ -404,6 +404,7 @@ fn can_recover_a_stopping_canister() {
             ),
             execution_state: None,
             scheduler_state: Default::default(),
+            canister_snapshots: CanisterSnapshots::default(),
         };
 
         let stop_context = StopCanisterContext::Ingress {
@@ -462,6 +463,7 @@ fn can_recover_a_stopped_canister() {
             ),
             execution_state: None,
             scheduler_state: Default::default(),
+            canister_snapshots: CanisterSnapshots::default(),
         };
 
         let own_subnet_type = SubnetType::Application;
@@ -505,6 +507,7 @@ fn can_recover_a_running_canister() {
             ),
             execution_state: None,
             scheduler_state: Default::default(),
+            canister_snapshots: CanisterSnapshots::default(),
         };
 
         let own_subnet_type = SubnetType::Application;

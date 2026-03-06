@@ -3,7 +3,10 @@ use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_execution_environment::RoundSchedule;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterState, ReplicatedState, SchedulerState, SystemState};
+use ic_replicated_state::{
+    CanisterState, ReplicatedState, SchedulerState, SystemState,
+    canister_state::canister_snapshots::CanisterSnapshots,
+};
 use ic_types::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use std::collections::BTreeMap;
@@ -22,9 +25,15 @@ fn main() {
             Cycles::from_parts(1, 2),
             NumSeconds::from(100_000),
         );
+        let canister_snapshots = CanisterSnapshots::default();
         canisters.insert(
             canister_test_id(i),
-            Arc::new(CanisterState::new(system_state, None, scheduler_state)),
+            Arc::new(CanisterState::new(
+                system_state,
+                None,
+                scheduler_state,
+                canister_snapshots,
+            )),
         );
 
         if i % 10 == 0 {

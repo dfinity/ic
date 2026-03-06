@@ -1374,6 +1374,8 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .list_snapshots(canister_id)
             .len(),
@@ -1411,6 +1413,8 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .list_snapshots(canister_id)
             .len(),
@@ -1450,6 +1454,8 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .list_snapshots(canister_id)
             .len(),
@@ -1481,6 +1487,8 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .list_snapshots(canister_id)
             .len(),
@@ -1525,6 +1533,8 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .list_snapshots(canister_id)
             .len(),
@@ -1582,6 +1592,8 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .list_snapshots(canister_id)
             .len(),

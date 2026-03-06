@@ -11,7 +11,7 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState,
-    canister_snapshots::CanisterSnapshotError,
+    canister_state::canister_snapshots::CanisterSnapshotError,
     canister_state::system_state::wasm_chunk_store::{WasmChunkStore, chunk_size},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };

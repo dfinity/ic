@@ -12,7 +12,8 @@ use ic_metrics::buckets::{
 };
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumInstructions, Time,
+    Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes,
+    NumInstructions, Time,
 };
 use prometheus::{Gauge, GaugeVec, Histogram, HistogramVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
@@ -326,6 +327,9 @@ impl ReplicatedStateMetrics {
         let mut total_canister_balance = Cycles::zero();
         let mut total_canister_reserved_balance = Cycles::zero();
 
+        let mut total_canister_snapshots_memory_taken = NumBytes::new(0);
+        let mut total_canister_snapshots_count = 0;
+
         let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
         state.canisters_iter().for_each(|canister| {
             match canister.system_state.get_status() {
@@ -405,6 +409,9 @@ impl ReplicatedStateMetrics {
                     canisters_with_old_open_call_contexts += 1;
                 }
             }
+
+            total_canister_snapshots_memory_taken += canister.canister_snapshots.memory_taken();
+            total_canister_snapshots_count += canister.canister_snapshots.count();
         });
 
         self.old_open_call_contexts
@@ -512,9 +519,9 @@ impl ReplicatedStateMetrics {
             .set(total_canister_reserved_balance.get() as f64);
 
         self.canister_snapshots_memory_usage
-            .set(state.canister_snapshots.memory_taken().get() as i64);
+            .set(total_canister_snapshots_memory_taken.get() as i64);
         self.num_canister_snapshots
-            .set(state.canister_snapshots.count() as i64);
+            .set(total_canister_snapshots_count as i64);
 
         // TODO: Consider only doing this every Nth round.
         for canister in state.canisters_iter() {
