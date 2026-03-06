@@ -80,6 +80,7 @@ def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = 
         env = env,
         args = ["--debug"],
     )
+
     sh_test(
         name = name + "_test",
         srcs = [
