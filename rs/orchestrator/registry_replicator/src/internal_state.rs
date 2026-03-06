@@ -370,13 +370,31 @@ impl InternalState {
         }
     }
 
-    // Returns a list of URLs that should be used to connect to the NNS.
+    // Returns a list of URLs that should be used to contact the NNS. In case we are not a cloud
+    // engine node (not "type4"), these are the URLs of the NNS nodes. In case we are, these are
+    // URLS of API BNs since NNS nodes would not accept our connections due to firewall rules.
     fn get_node_api_urls(
         &self,
         nns_subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> Result<Vec<Url>, String> {
-        let node_ids = self.get_node_ids_to_contact(nns_subnet_id, version)?;
+        let node_ids = match self.node_id {
+            None => self.get_nns_node_ids(nns_subnet_id, version)?,
+            Some(node_id) => match self.get_node_reward_type(node_id, version)? {
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1 => self.get_nns_node_ids(nns_subnet_id, version)?,
+                NodeRewardType::Type4 => {
+                    // For type4 nodes, we contact API BNs instead of NNS nodes, since NNS nodes would
+                    // not accept our connections due to firewall rules.
+                    self.get_api_bn_node_ids(version)?
+                }
+            },
+        };
 
         let mut urls: Vec<Url> = node_ids
             .iter()
@@ -406,36 +424,6 @@ impl InternalState {
             .collect();
         urls.sort();
         Ok(urls)
-    }
-
-    // Returns a list of node IDs that should be used to connect to the NNS. In case we are not a
-    // cloud engine node (not "type4"), these are the node IDs of the NNS nodes. In case we are,
-    // these are node IDs of API BNs since NNS nodes would not accept our connections due to
-    // firewall rules.
-    fn get_node_ids_to_contact(
-        &self,
-        nns_subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> Result<Vec<NodeId>, String> {
-        let Some(node_id) = self.node_id else {
-            // If we do not know our node ID, we contact the NNS nodes directly
-            return self.get_nns_node_ids(nns_subnet_id, version);
-        };
-
-        match self.get_node_reward_type(node_id, version)? {
-            NodeRewardType::Unspecified
-            | NodeRewardType::Type0
-            | NodeRewardType::Type1
-            | NodeRewardType::Type2
-            | NodeRewardType::Type3
-            | NodeRewardType::Type3dot1
-            | NodeRewardType::Type1dot1 => self.get_nns_node_ids(nns_subnet_id, version),
-            NodeRewardType::Type4 => {
-                // For type4 nodes, we contact API BNs instead of NNS nodes, since NNS nodes would
-                // not accept our connections due to firewall rules.
-                self.get_api_bn_node_ids(version)
-            }
-        }
     }
 
     fn https_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
