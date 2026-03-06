@@ -4,7 +4,7 @@ use crate::{
         GovernanceError, KnownNeuron, KnownNeuronData, SelfDescribingValue, Topic,
         governance_error::ErrorType,
     },
-    proposals::self_describing::{SelfDescribingProstEnum, ValueBuilder},
+    proposals::self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
 };
 
 use ic_nervous_system_common_validation::validate_url;
@@ -174,6 +174,12 @@ impl KnownNeuron {
 
         Ok(())
     }
+}
+
+impl DocumentedAction for KnownNeuron {
+    const NAME: &'static str = "Register Known Neuron";
+    const DESCRIPTION: &'static str = "Register an existing neuron as a \"known neuron,\" \
+        giving it a name and an optional description, and adding it to the list of known neurons.";
 }
 
 impl From<KnownNeuron> for SelfDescribingValue {

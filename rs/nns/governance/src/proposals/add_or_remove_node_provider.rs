@@ -3,6 +3,7 @@ use crate::pb::v1::{
     add_or_remove_node_provider::Change, governance_error::ErrorType,
 };
 
+use super::self_describing::DocumentedAction;
 use ic_base_types::PrincipalId;
 use ic_nns_governance_derive_self_describing::SelfDescribing;
 use icp_ledger::{AccountIdentifier, protobuf::AccountIdentifier as AccountIdentifierPb};
@@ -70,6 +71,13 @@ impl TryFrom<AddOrRemoveNodeProvider> for ValidAddOrRemoveNodeProvider {
             )),
         }
     }
+}
+
+impl DocumentedAction for ValidAddOrRemoveNodeProvider {
+    const NAME: &'static str = "Add or Remove Node Provider";
+    const DESCRIPTION: &'static str = "Assign (or revoke) an identity to a node provider, \
+        associating key information regarding the legal person associated that should provide a \
+        way to uniquely identify it.";
 }
 
 impl From<ValidAccountIdentifier> for SelfDescribingValue {

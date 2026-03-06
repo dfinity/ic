@@ -1,6 +1,6 @@
 use crate::pb::v1::{
-    Account, ApproveGenesisKyc, Empty, Motion, SelfDescribingValue, SelfDescribingValueArray,
-    SelfDescribingValueMap,
+    Account, ApproveGenesisKyc, Empty, Motion, NetworkEconomics, SelfDescribingValue,
+    SelfDescribingValueArray, SelfDescribingValueMap,
     self_describing_value::Value::{self, Array, Blob, Map, Text},
 };
 
@@ -13,6 +13,37 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
 use std::{collections::HashMap, marker::PhantomData};
 
+use super::SelfDescribingProposalAction;
+
+/// Metadata for a proposal action type. Each action type declares its human-readable name and
+/// description as associated constants. Combined with `From<A> for SelfDescribingValue`, this
+/// enables a blanket conversion to `SelfDescribingProposalAction`.
+pub trait DocumentedAction {
+    const NAME: &'static str;
+    const DESCRIPTION: &'static str;
+}
+
+impl<ActionType> From<ActionType> for SelfDescribingProposalAction
+where
+    ActionType: DocumentedAction,
+    SelfDescribingValue: From<ActionType>,
+{
+    fn from(action: ActionType) -> Self {
+        Self {
+            type_name: ActionType::NAME.to_string(),
+            type_description: ActionType::DESCRIPTION.to_string(),
+            value: Some(SelfDescribingValue::from(action)),
+        }
+    }
+}
+
+impl DocumentedAction for Motion {
+    const NAME: &'static str = "Motion";
+    const DESCRIPTION: &'static str = "Propose a text that can be adopted or rejected. \
+        No code is executed when a motion is adopted. An adopted motion should guide the future \
+        strategy of the Internet Computer ecosystem.";
+}
+
 impl From<Motion> for SelfDescribingValue {
     fn from(value: Motion) -> Self {
         ValueBuilder::new()
@@ -21,12 +52,32 @@ impl From<Motion> for SelfDescribingValue {
     }
 }
 
+impl DocumentedAction for ApproveGenesisKyc {
+    const NAME: &'static str = "Approve Genesis KYC";
+    const DESCRIPTION: &'static str = "Set GenesisKYC=true for batches of principals.\n\n\
+        When new neurons are created at Genesis, they have GenesisKYC=false. This restricts what \
+        actions they can perform. Specifically, they cannot spawn new neurons, and once their \
+        dissolve delays are zero, they cannot be disbursed and their balances unlocked to new \
+        accounts.\n\n\
+        (Special note: The Genesis event disburses all ICP in the form of neurons, \
+        whose principals must be KYCed. Consequently, all neurons created after Genesis have \
+        GenesisKYC=true set automatically since they must have been derived from balances that \
+        have already been KYCed.)";
+}
+
 impl From<ApproveGenesisKyc> for SelfDescribingValue {
     fn from(value: ApproveGenesisKyc) -> Self {
         ValueBuilder::new()
             .add_field("principals", value.principals)
             .build()
     }
+}
+
+impl DocumentedAction for NetworkEconomics {
+    const NAME: &'static str = "Manage Network Economics";
+    const DESCRIPTION: &'static str = "Update the network economics parameters that control \
+        various costs, rewards, and thresholds in the Network Nervous System, including proposal \
+        costs, neuron staking requirements, transaction fees, and voting power economics.";
 }
 
 /// A builder for `SelfDescribingValue` objects.

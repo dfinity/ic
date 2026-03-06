@@ -1,6 +1,7 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
     pb::v1::{FulfillSubnetRentalRequest, GovernanceError, governance_error::ErrorType},
+    proposals::self_describing::DocumentedAction,
 };
 
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
@@ -94,6 +95,14 @@ impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
             replica_version_id,
         })
     }
+}
+
+impl DocumentedAction for ValidFulfillSubnetRentalRequest {
+    const NAME: &'static str = "Subnet Rental Agreement";
+    const DESCRIPTION: &'static str = "Create a rented subnet with a subnet rental \
+        agreement, based on a previously executed Subnet Rental Request proposal. The resulting \
+        subnet allows only the user of the rental agreement to create canisters, and canisters \
+        are not charged cycles for computation and storage.";
 }
 
 impl ValidFulfillSubnetRentalRequest {

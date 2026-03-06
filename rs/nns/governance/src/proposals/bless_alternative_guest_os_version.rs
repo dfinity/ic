@@ -1,8 +1,9 @@
 use super::*;
 
 use crate::{
-    are_bless_alternative_guest_os_version_proposals_enabled, pb::v1::SelfDescribingValue,
-    proposals::self_describing::ValueBuilder,
+    are_bless_alternative_guest_os_version_proposals_enabled,
+    pb::v1::SelfDescribingValue,
+    proposals::self_describing::{DocumentedAction, ValueBuilder},
 };
 
 use ic_protobuf::registry::replica_version::v1::{
@@ -152,6 +153,14 @@ fn validate_base_guest_launch_measurements(
     }
 
     defects
+}
+
+impl DocumentedAction for BlessAlternativeGuestOsVersion {
+    const NAME: &'static str = "Bless Alternative GuestOS Version";
+    const DESCRIPTION: &'static str = "Bless an alternative GuestOS version that can be \
+        used to recover the specified set of replicas that are in a non-functional state. This \
+        is a last resort recovery mechanism to be used when the replica cannot be upgraded \
+        through the regular mechanisms.";
 }
 
 // The following impls are for external crate types from ic_protobuf that cannot use

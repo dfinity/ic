@@ -3,7 +3,7 @@ use crate::{
     pb::v1::{
         DeregisterKnownNeuron, GovernanceError, SelfDescribingValue, governance_error::ErrorType,
     },
-    proposals::self_describing::ValueBuilder,
+    proposals::self_describing::{DocumentedAction, ValueBuilder},
 };
 
 impl DeregisterKnownNeuron {
@@ -51,6 +51,12 @@ impl DeregisterKnownNeuron {
 
         Ok(())
     }
+}
+
+impl DocumentedAction for DeregisterKnownNeuron {
+    const NAME: &'static str = "Deregister Known Neuron";
+    const DESCRIPTION: &'static str = "Deregister an existing neuron as a \"known neuron\" \
+        and remove it from the list of known neurons.";
 }
 
 impl From<DeregisterKnownNeuron> for SelfDescribingValue {

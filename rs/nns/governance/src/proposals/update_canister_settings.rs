@@ -6,7 +6,7 @@ use crate::{
     proposals::{
         call_canister::CallCanister,
         invalid_proposal_error,
-        self_describing::{SelfDescribingProstEnum, ValueBuilder},
+        self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
         topic_to_manage_canister,
     },
 };
@@ -134,6 +134,11 @@ impl CallCanister for UpdateCanisterSettings {
                 .map_err(|err| invalid_proposal_error(&format!("Failed to encode payload: {err}")))
         }
     }
+}
+
+impl DocumentedAction for UpdateCanisterSettings {
+    const NAME: &'static str = "Update Canister Settings";
+    const DESCRIPTION: &'static str = "Update the settings of an NNS-controlled canister.";
 }
 
 impl From<UpdateCanisterSettings> for SelfDescribingValue {

@@ -1,4 +1,4 @@
-use crate::pb::v1::CreateServiceNervousSystem;
+use crate::{pb::v1::CreateServiceNervousSystem, proposals::self_describing::DocumentedAction};
 
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 
@@ -24,4 +24,9 @@ impl CreateServiceNervousSystem {
             swap_approved_timestamp_seconds,
         )
     }
+}
+
+impl DocumentedAction for CreateServiceNervousSystem {
+    const NAME: &'static str = "Create Service Nervous System (SNS)";
+    const DESCRIPTION: &'static str = "Create a new Service Nervous System (SNS).";
 }

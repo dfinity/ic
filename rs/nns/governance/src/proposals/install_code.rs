@@ -5,7 +5,7 @@ use crate::{
     proposals::{
         call_canister::CallCanister,
         invalid_proposal_error,
-        self_describing::{SelfDescribingProstEnum, ValueBuilder},
+        self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
         topic_to_manage_canister,
     },
 };
@@ -164,6 +164,12 @@ impl CallCanister for InstallCode {
             self.payload_to_upgrade_non_root()
         }
     }
+}
+
+impl DocumentedAction for InstallCode {
+    const NAME: &'static str = "Install Code";
+    const DESCRIPTION: &'static str = "Install, reinstall or upgrade code of a canister \
+        controlled by the NNS.";
 }
 
 impl From<InstallCode> for SelfDescribingValue {
