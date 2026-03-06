@@ -80,11 +80,6 @@ def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = 
         env = env,
         args = ["--debug"],
     )
-
-    test_kwargs = {}
-    if timeout:
-        test_kwargs["timeout"] = timeout
-
     sh_test(
         name = name + "_test",
         srcs = [
@@ -93,5 +88,5 @@ def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = 
         data = data,
         env = env,
         args = ["--test"],
-        **test_kwargs
+        timeout = timeout,
     )
