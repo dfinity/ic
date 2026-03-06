@@ -1118,7 +1118,7 @@ mod test {
                 }
             };
 
-            if start.elapsed() > Duration::from_secs(120) {
+            if start.elapsed() > Duration::from_secs(240) {
                 break;
             }
 

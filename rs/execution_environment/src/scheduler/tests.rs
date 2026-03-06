@@ -2805,8 +2805,8 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.canister_age.get_sample_sum() as i64, 0);
     assert_eq!(metrics.round_preparation_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
-    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
-    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
+    // Once for `apply_scheduling_strategy()`, once for `finish_round()`.
+    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 2);
     assert_ge!(metrics.round_inner_iteration_prep.get_sample_count(), 1);
     assert_ge!(metrics.round_inner_iteration_exe.get_sample_count(), 1);
     assert_ge!(metrics.round_inner_iteration_fin.get_sample_count(), 1);
