@@ -1124,13 +1124,13 @@ def last(args):
     # We need to create links to the cluster-specific BuildBuddy service.
     # To get the cluster-specific BuildBuddy URL we need to resolve the redirect via the BuildBuddy redirect service.
     # Since this I/O takes time we parallelize to speed it up by an order of magnitude.
-    def direct_url_to_buildbuddy(invocation_id):
+    def direct_url_to_buildbuddy(invocation_id, target):
         url = f"https://dash.idx.dfinity.network/invocation/{invocation_id}"
         redirect = get_redirect_location(url)
-        return f"{redirect}?target={args.test_target}" if redirect else url
+        return f"{redirect}?target={target}" if redirect else url
 
     with ThreadPoolExecutor() as executor:
-        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["build_id"]))
+        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["build_id"], df["label"]))
 
     df["buildbuddy"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
 
