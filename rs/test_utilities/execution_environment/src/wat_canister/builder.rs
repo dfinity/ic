@@ -171,8 +171,7 @@ impl WatCanisterBuilder {
             // Piece together the exact Text block.
             let locals: String = (0..top_level_locals)
                 .map(|i| format!("{INDENT}{STEP}(local $loop_counter_{i} i32)"))
-                .collect::<Vec<_>>()
-                .join("");
+                .collect::<String>();
 
             let body = state.instructions.join(&format!("{INDENT}{STEP}"));
 

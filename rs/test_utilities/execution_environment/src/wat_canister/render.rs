@@ -107,12 +107,13 @@ impl<'a> RenderState<'a> {
 /// as `\hh` where `h` is a hex character. Rust's `.escape_ascii()` creates
 /// `\xhh` which causes strict `wat` parsers to panic at construction.
 pub(crate) fn format_wasm_string(data: &[u8]) -> String {
+    use std::fmt::Write;
+
     let mut s = String::with_capacity(data.len() * 3);
     for &b in data {
         if b.is_ascii_graphic() && b != b'\\' && b != b'"' || b == b' ' {
             s.push(b as char);
         } else {
-            use std::fmt::Write;
             let _ = write!(&mut s, "\\{:02x}", b);
         }
     }
