@@ -235,7 +235,6 @@ crate.spec(
     package = "cached",
     version = "^0.49",
 )
-
 crate.spec(
     package = "canbench",
     version = "^0.4.1",
