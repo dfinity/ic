@@ -9,11 +9,8 @@ use ic_protobuf::{
     types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto},
 };
 use ic_registry_client_helpers::{
-    api_boundary_node::ApiBoundaryNodeRegistry,
-    crypto::CryptoRegistry,
-    node::NodeRegistry,
-    routing_table::RoutingTableRegistry,
-    subnet::{SubnetRegistry, SubnetTransportRegistry},
+    api_boundary_node::ApiBoundaryNodeRegistry, crypto::CryptoRegistry, node::NodeRegistry,
+    routing_table::RoutingTableRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
     CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY, make_canister_ranges_key,
@@ -329,68 +326,61 @@ impl InternalState {
         }
     }
 
-    // Returns a list of URLs that can be used to connect to the NNS. In case we are not a cloud
-    // engine node (not "type4"), these are direct URLs to the NNS nodes. In case we are, these are
-    // URLs of API BNs since NNS nodes would not accept our connections due to firewall rules.
+    fn get_nns_node_ids(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> Result<Vec<NodeId>, String> {
+        match self
+            .registry_client
+            .get_node_ids_on_subnet(subnet_id, version)
+        {
+            Ok(Some(ids)) => Ok(ids),
+            Ok(None) => Err(format!(
+                "Subnet record for subnet {subnet_id} not found at version {version}"
+            )),
+            Err(e) => Err(format!(
+                "Error when retrieving node ids on subnet {subnet_id} at version {version}: {e:?}"
+            )),
+        }
+    }
+
+    fn get_api_bn_node_ids(&self, version: RegistryVersion) -> Result<Vec<NodeId>, String> {
+        match self.registry_client.get_api_boundary_node_ids(version) {
+            Ok(ids) => Ok(ids),
+            Err(e) => Err(format!(
+                "Error when retrieving API BN node ids at version {version}: {e:?}"
+            )),
+        }
+    }
+
+    fn get_node_reward_type(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> Result<NodeRewardType, String> {
+        match self.registry_client.get_node_record(node_id, version) {
+            Ok(Some(record)) => Ok(record.node_reward_type()),
+            Ok(None) => Err(format!(
+                "Node record for node id {node_id} not found at version {version}",
+            )),
+            Err(e) => Err(format!(
+                "Error when retrieving node record for node id {node_id} at version {version}: {e:?}",
+            )),
+        }
+    }
+
+    // Returns a list of URLs that should be used to connect to the NNS.
     fn get_node_api_urls(
         &self,
         nns_subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> Result<Vec<Url>, String> {
-        let node_reward_type = match self.registry_client.get_node_record(self.node_id, version) {
-            Ok(Some(node_record)) => node_record.node_reward_type(),
-            Ok(None) => {
-                return Err(format!(
-                    "Node record for node id {:?} not found at version {version}",
-                    self.node_id
-                ));
-            }
-            Err(e) => {
-                return Err(format!(
-                    "Error when retrieving node record for node id {:?} at version {version}: {e:?}",
-                    self.node_id, e
-                ));
-            }
-        };
-
-        let node_ids = match node_reward_type {
-            NodeRewardType::Unspecified
-            | NodeRewardType::Type0
-            | NodeRewardType::Type1
-            | NodeRewardType::Type2
-            | NodeRewardType::Type3
-            | NodeRewardType::Type3dot1
-            | NodeRewardType::Type1dot1 => match self
-                .registry_client
-                .get_node_ids_on_subnet(nns_subnet_id, version)
-            {
-                Ok(Some(ids)) => ids,
-                Ok(None) => {
-                    return Err(format!(
-                        "Subnet record for NNS subnet id {nns_subnet_id} not found at version {version}"
-                    ));
-                }
-                Err(e) => {
-                    return Err(format!(
-                        "Error when retrieving node ids on NNS subnet {nns_subnet_id} at version {version}: {e:?}"
-                    ));
-                }
-            },
-            NodeRewardType::Type4 => {
-                match self.registry_client.get_api_boundary_node_ids(version) {
-                    Ok(ids) => ids,
-                    Err(e) => {
-                        return Err(format!(
-                            "Error when retrieving API BN node ids at version {version}: {e:?}"
-                        ));
-                    }
-                }
-            }
-        };
+        let node_ids = self.get_node_ids_to_contact(nns_subnet_id, version)?;
 
         let mut urls: Vec<Url> = node_ids
             .iter()
-            .filter_map(|(id)| {
+            .filter_map(|id| {
                 let record = match self
                     .registry_client
                     .get_node_record(*id, version) {
@@ -398,26 +388,54 @@ impl InternalState {
                         Ok(None) => {
                             warn!(
                                 self.logger,
-                                "Node record for node id {:?} not found at version {version}",
-                                id
+                                "Node record for node id {id} not found at version {version}",
                             );
                             return None;
                         }
                         Err(e) => {
                             warn!(
                                 self.logger,
-                                "Error when retrieving node record for node id {:?} at version {version}: {e:?}",
-                                id, e
+                                "Error when retrieving node record for node id {id} at version {version}: {e:?}",
                             );
                             return None;
                         }
                     };
 
-                self.https_endpoint_to_url(record.http?)
+                self.https_endpoint_to_url(&record.http?)
             })
             .collect();
         urls.sort();
         Ok(urls)
+    }
+
+    // Returns a list of node IDs that should be used to connect to the NNS. In case we are not a
+    // cloud engine node (not "type4"), these are the node IDs of the NNS nodes. In case we are,
+    // these are node IDs of API BNs since NNS nodes would not accept our connections due to
+    // firewall rules.
+    fn get_node_ids_to_contact(
+        &self,
+        nns_subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> Result<Vec<NodeId>, String> {
+        let Some(node_id) = self.node_id else {
+            // If we do not know our node ID, we contact the NNS nodes directly
+            return self.get_nns_node_ids(nns_subnet_id, version);
+        };
+
+        match self.get_node_reward_type(node_id, version)? {
+            NodeRewardType::Unspecified
+            | NodeRewardType::Type0
+            | NodeRewardType::Type1
+            | NodeRewardType::Type2
+            | NodeRewardType::Type3
+            | NodeRewardType::Type3dot1
+            | NodeRewardType::Type1dot1 => self.get_nns_node_ids(nns_subnet_id, version),
+            NodeRewardType::Type4 => {
+                // For type4 nodes, we contact API BNs instead of NNS nodes, since NNS nodes would
+                // not accept our connections due to firewall rules.
+                self.get_api_bn_node_ids(version)
+            }
+        }
     }
 
     fn https_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
