@@ -1,5 +1,5 @@
 {
-  "checksum": "391fc9cfebff5d0f119457bb6b2e187e464d0c443839e8808beccd6916e0d749",
+  "checksum": "19be5629df3979f3dfe5dc5d5b58e81bda63afd1ad16c5d78b2e45b9a53c98af",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11421,17 +11421,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench 0.4.0": {
+    "canbench 0.4.1": {
       "name": "canbench",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canbench",
-          "commitish": {
-            "Rev": "9ca29369085edc7567aa87ceb57d4b21e037b66e"
-          },
-          "strip_prefix": "canbench-bin"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench/0.4.1/download",
+          "sha256": "a4ba3299ff41729601c562b5b67b1a88e6c599abab73d9bd51a72c8f9ad502eb"
         }
       },
       "targets": [
@@ -11468,7 +11465,7 @@
         "deps": {
           "common": [
             {
-              "id": "canbench-rs 0.4.0",
+              "id": "canbench-rs 0.4.1",
               "target": "canbench_rs"
             },
             {
@@ -11539,7 +11536,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11547,17 +11544,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs 0.4.0": {
+    "canbench-rs 0.4.1": {
       "name": "canbench-rs",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canbench",
-          "commitish": {
-            "Rev": "9ca29369085edc7567aa87ceb57d4b21e037b66e"
-          },
-          "strip_prefix": "canbench-rs"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs/0.4.1/download",
+          "sha256": "3d959bc8d6e4738bcfed6682d46ef105db17e5fe81d4c30e8b49b03b9badd2c8"
         }
       },
       "targets": [
@@ -11600,13 +11594,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "canbench-rs-macros 0.4.0",
+              "id": "canbench-rs-macros 0.4.1",
               "target": "canbench_rs_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11614,17 +11608,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs-macros 0.4.0": {
+    "canbench-rs-macros 0.4.1": {
       "name": "canbench-rs-macros",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canbench",
-          "commitish": {
-            "Rev": "9ca29369085edc7567aa87ceb57d4b21e037b66e"
-          },
-          "strip_prefix": "canbench-rs-macros"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.4.1/download",
+          "sha256": "3198f118892181c4f4d30cfb423511a11b9d7e8d7efb94aa58777db78da27bd8"
         }
       },
       "targets": [
@@ -11664,7 +11655,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -21374,11 +21365,11 @@
               "target": "cached"
             },
             {
-              "id": "canbench 0.4.0",
+              "id": "canbench 0.4.1",
               "target": "canbench"
             },
             {
-              "id": "canbench-rs 0.4.0",
+              "id": "canbench-rs 0.4.1",
               "target": "canbench_rs"
             },
             {
@@ -97471,7 +97462,7 @@
     }
   },
   "binary_crates": [
-    "canbench 0.4.0",
+    "canbench 0.4.1",
     "ic-wasm 0.8.4",
     "metrics-proxy 0.1.0"
   ],
@@ -97805,8 +97796,8 @@
     "byteorder 1.5.0",
     "bytes 1.11.1",
     "cached 0.49.2",
-    "canbench 0.4.0",
-    "canbench-rs 0.4.0",
+    "canbench 0.4.1",
+    "canbench-rs 0.4.1",
     "candid 0.10.22",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
