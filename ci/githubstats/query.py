@@ -1411,7 +1411,8 @@ logs
         type=str,
         nargs="?",
         default=None,
-        help="Return runs of the bazel target where its label matches the given SQL LIKE pattern",
+        help="""Return runs of bazel targets matching the given SQL LIKE pattern.
+If omitted retuns all bazel test runs in the specified period.""",
     )
     last_runs_parser.set_defaults(func=last)
 
