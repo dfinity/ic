@@ -4258,6 +4258,10 @@ impl ListCanisterSnapshotArgs {
 
 impl Payload<'_> for ListCanisterSnapshotArgs {}
 
+pub type ListCanisterSnapshotResponse = Vec<CanisterSnapshotResponse>;
+
+impl Payload<'_> for ListCanisterSnapshotResponse {}
+
 /// An enum representing the possible values of a global variable.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, EnumIter, CandidType)]
 pub enum Global {

@@ -1,6 +1,7 @@
 use crate::as_round_instructions;
 use crate::execution::common::{
-    validate_controller, validate_controller_or_subnet_admin, validate_subnet_admin,
+    validate_controller, validate_controller_or_subnet_admin, validate_snapshot_visibility,
+    validate_subnet_admin,
 };
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
@@ -228,7 +229,6 @@ impl CanisterManager {
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::LoadCanisterSnapshot)
-            | Ok(Ic00Method::ListCanisterSnapshots)
             | Ok(Ic00Method::DeleteCanisterSnapshot)
             | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
             | Ok(Ic00Method::ReadCanisterSnapshotData)
@@ -249,6 +249,23 @@ impl CanisterManager {
                                 ),
                             )),
                         }
+                    },
+                    None => Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Failed to decode payload for ic00 method: {method_name}"),
+                    )),
+                }
+            },
+
+            Ok(Ic00Method::ListCanisterSnapshots) => {
+                match effective_canister_id {
+                    Some(canister_id) => {
+                        let canister_state = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            format!("Canister {canister_id} not found"),
+                        ))?;
+                        validate_snapshot_visibility(canister_state, &sender.get(), "list canister snapshots")?;
+                        Ok(())
                     },
                     None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
@@ -2568,15 +2585,15 @@ impl CanisterManager {
     /// Returns the canister snapshots list, or
     /// an error if it failed to retrieve the information.
     ///
-    /// Retrieving the canister snapshots list can only be initiated by the controllers.
+    /// Retrieving the canister snapshots list can only be initiated a principal
+    /// allowed by the canister snapshot visibility settings.
     pub(crate) fn list_canister_snapshot(
         &self,
         sender: PrincipalId,
         canister: &CanisterState,
         state: &ReplicatedState,
-    ) -> Result<Vec<CanisterSnapshotResponse>, CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+    ) -> Result<Vec<CanisterSnapshotResponse>, UserError> {
+        validate_snapshot_visibility(canister, &sender, "list canister snapshots")?;
 
         let mut responses = vec![];
         for (snapshot_id, snapshot) in state
