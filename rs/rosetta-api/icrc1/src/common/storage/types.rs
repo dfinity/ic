@@ -1257,4 +1257,238 @@ mod tests {
             (any::<u128>(), any::<u128>()).prop_map(|(lo, hi)| U256::from_words(lo, hi));
         test_block_from_ledger_block(arb_amount);
     }
+
+    // Helper to build an ICRC3Value block for authorized mint/burn (like BlockBuilder does)
+    fn make_authorized_mint_block(
+        block_id: u64,
+        timestamp: u64,
+        to_owner: &[u8],
+        amount: u64,
+        caller: &[u8],
+        reason: Option<&str>,
+        parent_hash: Option<Vec<u8>>,
+    ) -> Value {
+        use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+        use std::collections::BTreeMap;
+
+        let mut tx_map = BTreeMap::new();
+        tx_map.insert("op".to_string(), ICRC3Value::Text("152mint".to_string()));
+        tx_map.insert(
+            "to".to_string(),
+            ICRC3Value::Array(vec![ICRC3Value::Blob(ByteBuf::from(to_owner))]),
+        );
+        tx_map.insert("amt".to_string(), ICRC3Value::Nat(Nat::from(amount)));
+        tx_map.insert(
+            "caller".to_string(),
+            ICRC3Value::Blob(ByteBuf::from(caller)),
+        );
+        if let Some(r) = reason {
+            tx_map.insert("reason".to_string(), ICRC3Value::Text(r.to_string()));
+        }
+
+        let mut block_map = BTreeMap::new();
+        block_map.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(timestamp)));
+        block_map.insert("tx".to_string(), ICRC3Value::Map(tx_map));
+        block_map.insert("btype".to_string(), ICRC3Value::Text("122mint".to_string()));
+        if block_id > 0 {
+            let ph = parent_hash.unwrap_or_else(|| vec![0u8; 32]);
+            block_map.insert("phash".to_string(), ICRC3Value::Blob(ByteBuf::from(ph)));
+        }
+
+        Value::from(ICRC3Value::Map(block_map))
+    }
+
+    fn make_authorized_burn_block(
+        block_id: u64,
+        timestamp: u64,
+        from_owner: &[u8],
+        amount: u64,
+        caller: &[u8],
+        parent_hash: Option<Vec<u8>>,
+    ) -> Value {
+        use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+        use std::collections::BTreeMap;
+
+        let mut tx_map = BTreeMap::new();
+        tx_map.insert("op".to_string(), ICRC3Value::Text("152burn".to_string()));
+        tx_map.insert(
+            "from".to_string(),
+            ICRC3Value::Array(vec![ICRC3Value::Blob(ByteBuf::from(from_owner))]),
+        );
+        tx_map.insert("amt".to_string(), ICRC3Value::Nat(Nat::from(amount)));
+        tx_map.insert(
+            "caller".to_string(),
+            ICRC3Value::Blob(ByteBuf::from(caller)),
+        );
+
+        let mut block_map = BTreeMap::new();
+        block_map.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(timestamp)));
+        block_map.insert("tx".to_string(), ICRC3Value::Map(tx_map));
+        block_map.insert("btype".to_string(), ICRC3Value::Text("122burn".to_string()));
+        if block_id > 0 {
+            let ph = parent_hash.unwrap_or_else(|| vec![0u8; 32]);
+            block_map.insert("phash".to_string(), ICRC3Value::Blob(ByteBuf::from(ph)));
+        }
+
+        Value::from(ICRC3Value::Map(block_map))
+    }
+
+    #[test]
+    fn test_authorized_mint_block_round_trip() {
+        let account_owner = Principal::from_slice(&[1u8; 29]);
+        let caller = Principal::from_slice(&[2u8; 29]);
+
+        let block0 = make_authorized_mint_block(
+            0,
+            1000,
+            account_owner.as_slice(),
+            1000,
+            caller.as_slice(),
+            Some("initial supply"),
+            None,
+        );
+
+        // Parse into IcrcBlock
+        let icrc_block = IcrcBlock::try_from(block0.clone()).expect("should parse 122mint block");
+
+        // Verify fields
+        assert_eq!(icrc_block.timestamp, 1000);
+        assert_eq!(icrc_block.btype, Some("122mint".to_string()));
+        assert!(icrc_block.parent_hash.is_none());
+
+        match &icrc_block.transaction.operation {
+            IcrcOperation::AuthorizedMint {
+                to,
+                amount,
+                caller: c,
+                reason,
+            } => {
+                assert_eq!(to.owner, account_owner);
+                assert_eq!(amount, &Nat::from(1000u64));
+                assert_eq!(c.as_slice(), caller.as_slice());
+                assert_eq!(reason.as_deref(), Some("initial supply"));
+            }
+            other => panic!("expected AuthorizedMint, got {:?}", other),
+        }
+
+        // Verify round-trip hash
+        let round_trip_value = Value::from(icrc_block.clone());
+        assert_eq!(
+            block0.clone().hash(),
+            round_trip_value.clone().hash(),
+            "Hash mismatch: original={block0:?} round_trip={round_trip_value:?}"
+        );
+    }
+
+    #[test]
+    fn test_authorized_burn_block_round_trip() {
+        let account_owner = Principal::from_slice(&[1u8; 29]);
+        let caller = Principal::from_slice(&[2u8; 29]);
+
+        // First build a mint block to get its hash for parent_hash of burn block
+        let block0 = make_authorized_mint_block(
+            0,
+            1000,
+            account_owner.as_slice(),
+            1000,
+            caller.as_slice(),
+            None,
+            None,
+        );
+        let block0_hash = block0.clone().hash().to_vec();
+
+        let block1 = make_authorized_burn_block(
+            1,
+            2000,
+            account_owner.as_slice(),
+            200,
+            caller.as_slice(),
+            Some(block0_hash.clone()),
+        );
+
+        // Parse into IcrcBlock
+        let icrc_block1 = IcrcBlock::try_from(block1.clone()).expect("should parse 122burn block");
+
+        // Verify fields
+        assert_eq!(icrc_block1.timestamp, 2000);
+        assert_eq!(icrc_block1.btype, Some("122burn".to_string()));
+        assert_eq!(
+            icrc_block1.parent_hash,
+            Some(block0_hash.as_slice().try_into().unwrap())
+        );
+
+        match &icrc_block1.transaction.operation {
+            IcrcOperation::AuthorizedBurn {
+                from,
+                amount,
+                caller: c,
+                reason,
+            } => {
+                assert_eq!(from.owner, account_owner);
+                assert_eq!(amount, &Nat::from(200u64));
+                assert_eq!(c.as_slice(), caller.as_slice());
+                assert!(reason.is_none());
+            }
+            other => panic!("expected AuthorizedBurn, got {:?}", other),
+        }
+
+        // Verify round-trip hash
+        let round_trip_value = Value::from(icrc_block1.clone());
+        assert_eq!(
+            block1.clone().hash(),
+            round_trip_value.clone().hash(),
+            "Hash mismatch: original={block1:?} round_trip={round_trip_value:?}"
+        );
+    }
+
+    #[test]
+    fn test_authorized_block_chain_validation() {
+        use crate::ledger_blocks_synchronization::blocks_synchronizer::blocks_verifier;
+
+        let account_owner = Principal::from_slice(&[1u8; 29]);
+        let caller = Principal::from_slice(&[2u8; 29]);
+
+        let block0 = make_authorized_mint_block(
+            0,
+            1000,
+            account_owner.as_slice(),
+            1000,
+            caller.as_slice(),
+            None,
+            None,
+        );
+        let block0_hash = block0.clone().hash().to_vec();
+
+        let block1 = make_authorized_burn_block(
+            1,
+            2000,
+            account_owner.as_slice(),
+            200,
+            caller.as_slice(),
+            Some(block0_hash.clone()),
+        );
+        let block1_hash = block1.clone().hash();
+
+        let rb0 = RosettaBlock::from_generic_block(block0, 0).expect("rb0 parse");
+        let rb1 = RosettaBlock::from_generic_block(block1, 1).expect("rb1 parse");
+
+        let leading_block_hash = ByteBuf::from(block1_hash);
+
+        // Verify rb0.hash == block0_hash
+        assert_eq!(
+            rb0.clone().get_block_hash().as_slice(),
+            block0_hash.as_slice(),
+            "rb0 hash should match block0_hash"
+        );
+
+        // Verify rb1.parent_hash == rb0.hash
+        assert_eq!(
+            rb1.get_parent_hash().map(|h| h.to_vec()),
+            Some(rb0.clone().get_block_hash().to_vec()),
+            "rb1 parent_hash should match rb0 block_hash"
+        );
+
+        let result = blocks_verifier::is_valid_blockchain(&[rb0, rb1], &leading_block_hash);
+        assert!(result.is_ok(), "blockchain should be valid: {:?}", result);
+    }
 }
