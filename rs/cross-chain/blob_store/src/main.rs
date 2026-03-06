@@ -18,8 +18,13 @@ fn get_metadata(hash: String) -> Result<BlobMetadata, GetError> {
 
 #[ic_cdk::update]
 fn insert(request: InsertRequest) -> Result<String, InsertError> {
-    blob_store_lib::update::insert(ic_cdk::api::msg_caller(), &request.hash, request.data)
-        .map(|hash| hash.to_string())
+    blob_store_lib::update::insert(
+        ic_cdk::api::msg_caller(),
+        &request.hash,
+        request.data,
+        request.tags.unwrap_or_default(),
+    )
+    .map(|hash| hash.to_string())
 }
 
 fn main() {}

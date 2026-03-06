@@ -3,8 +3,8 @@ use candid::{Decode, Encode, Principal};
 use pocket_ic::PocketIc;
 
 mod insert {
-    use crate::{Setup, sha256_hex};
-    use blob_store_lib::api::InsertError;
+    use crate::{Setup, assert_eq_ignoring_timestamp, sha256_hex};
+    use blob_store_lib::api::{BlobMetadata, InsertError};
     use candid::Principal;
 
     #[test]
@@ -24,6 +24,7 @@ mod insert {
         assert_eq!(metadata.uploader, Setup::CONTROLLER);
         assert_eq!(metadata.size, data.len() as u64);
         assert!(metadata.inserted_at_ns > 0);
+        assert!(metadata.tags.is_empty());
 
         let result = blob_store.insert(Setup::CONTROLLER, &hash, data);
         assert_eq!(result, Err(InsertError::AlreadyExists));
@@ -55,6 +56,30 @@ mod insert {
             Err(InsertError::InvalidHash { .. })
         ));
     }
+
+    #[test]
+    fn should_insert_with_tags() {
+        let setup = Setup::default();
+        let blob_store = setup.blob_store();
+        let data = b"tagged-blob".to_vec();
+        let size = data.len() as u64;
+        let hash = sha256_hex(&data);
+        let tags = vec!["beta".to_string(), "alpha".to_string()];
+        let result = blob_store.insert_with_tags(Setup::CONTROLLER, &hash, data, Some(tags));
+        assert_eq!(result, Ok(hash.clone()));
+
+        let metadata = blob_store.get_metadata(Setup::CONTROLLER, &hash).unwrap();
+
+        assert_eq_ignoring_timestamp(
+            &metadata,
+            &BlobMetadata {
+                uploader: Setup::CONTROLLER,
+                size,
+                tags: vec!["alpha".to_string(), "beta".to_string()],
+                inserted_at_ns: 0,
+            },
+        );
+    }
 }
 
 mod get {
@@ -84,6 +109,7 @@ mod get {
                     uploader: Setup::CONTROLLER,
                     size: data.len() as u64,
                     inserted_at_ns: 0,
+                    tags: Default::default(),
                 },
             );
 
@@ -205,9 +231,20 @@ impl<'a> BlobStoreCanister<'a> {
         hash: &str,
         data: Vec<u8>,
     ) -> Result<String, InsertError> {
+        self.insert_with_tags(sender, hash, data, None)
+    }
+
+    pub fn insert_with_tags(
+        &self,
+        sender: Principal,
+        hash: &str,
+        data: Vec<u8>,
+        tags: Option<Vec<String>>,
+    ) -> Result<String, InsertError> {
         let request = InsertRequest {
             hash: hash.to_string(),
             data,
+            tags,
         };
         let result = self
             .env
@@ -247,15 +284,18 @@ fn assert_eq_ignoring_timestamp(expected: &BlobMetadata, actual: &BlobMetadata) 
     let BlobMetadata {
         uploader: expected_uploader,
         size: expected_size,
+        tags: expected_tags,
         inserted_at_ns: _,
     } = expected;
     let BlobMetadata {
         uploader: actual_uploader,
         size: actual_size,
+        tags: actual_tags,
         inserted_at_ns: _,
     } = actual;
     assert_eq!(expected_uploader, actual_uploader);
     assert_eq!(expected_size, actual_size);
+    assert_eq!(expected_tags, actual_tags);
 }
 
 fn sha256_hex(data: &[u8]) -> String {
