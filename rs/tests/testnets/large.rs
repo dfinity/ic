@@ -43,7 +43,7 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::{
@@ -70,14 +70,14 @@ fn main() -> Result<()> {
 
 pub fn setup(env: TestEnv) {
     // set up IC overriding the default resources to be more powerful
-    let vm_resources = VmResources {
+    let vm_resource_overrides = VmResourceOverrides {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
-        .with_default_vm_resources(vm_resources);
+        .with_resource_overrides(vm_resource_overrides);
     ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
     for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));

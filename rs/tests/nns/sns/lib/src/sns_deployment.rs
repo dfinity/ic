@@ -54,7 +54,9 @@ use ic_system_test_driver::{
 };
 
 use ic_system_test_driver::driver::{
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{
+        AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
+    },
     test_env::TestEnvAttribute,
 };
 
@@ -316,7 +318,7 @@ pub fn setup(
 /// two application subnets).
 fn setup_ic(env: &TestEnv) {
     InternetComputer::new()
-        .with_default_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(UVM_NUM_CPUS),
             memory_kibibytes: Some(UVM_MEMORY_SIZE),
             boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),

@@ -18,7 +18,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
@@ -48,10 +48,10 @@ const IDLE_DURATION: Duration = Duration::from_secs(10 * 60);
 
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
-        .with_default_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(8)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(4195000)), // 4GiB
-            ..VmResources::default()
+            ..VmResourceOverrides::default()
         })
         .add_subnet(
             Subnet::new(SubnetType::System)

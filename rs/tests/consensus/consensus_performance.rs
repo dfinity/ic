@@ -66,7 +66,9 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::get_ic_build_version;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{
+        AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
+    },
     prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
@@ -116,7 +118,7 @@ fn setup(env: TestEnv) {
 
     ic_builder
         .with_required_host_features(vec![HostFeature::Performance])
-        .with_default_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(64)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),

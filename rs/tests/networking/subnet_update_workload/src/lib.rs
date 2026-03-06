@@ -25,7 +25,7 @@ use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
-        ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
@@ -67,10 +67,10 @@ pub fn setup(
     InternetComputer::new()
         .with_required_host_features(required_host_features)
         .add_fast_single_node_subnet(SubnetType::System)
-        .with_default_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(16)),
             boot_image_minimal_size_gibibytes,
-            ..VmResources::default()
+            ..VmResourceOverrides::default()
         })
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_app_subnet))
         .with_api_boundary_nodes(1)

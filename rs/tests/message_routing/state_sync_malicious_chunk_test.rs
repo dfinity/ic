@@ -22,7 +22,7 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -139,14 +139,14 @@ fn setup(env: TestEnv, config: Config) {
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(
                         (24 + 2 * NUM_CANISTERS as i32) * 1024 * 1024,
                     )),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
                         100 + 2 * NUM_CANISTERS as i32,
                     )),
-                    ..VmResources::default()
+                    ..VmResourceOverrides::default()
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LARGE))
                 .add_nodes(config.nodes_count - config.allowed_failures)

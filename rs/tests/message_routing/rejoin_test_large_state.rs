@@ -24,7 +24,7 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -93,14 +93,14 @@ fn setup(env: TestEnv, config: Config) {
         "at least 4 nodes are required for state sync"
     );
     InternetComputer::new()
-        .with_default_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             memory_kibibytes: Some(AmountOfMemoryKiB::new(
                 (24 + config.canister_size_gib as i32 * config.num_canisters as i32) * 1024 * 1024,
             )),
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
                 100 + 2 * config.canister_size_gib as i32 * config.num_canisters as i32,
             )),
-            ..VmResources::default()
+            ..VmResourceOverrides::default()
         })
         .add_subnet(
             Subnet::new(SubnetType::System)

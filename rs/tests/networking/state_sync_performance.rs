@@ -22,7 +22,7 @@ use ic_system_test_driver::{
     driver::{
         farm::HostFeature,
         group::SystemTestGroup,
-        ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources},
+        ic::{ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides},
         simulate_network::{FixedNetworkSimulation, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
@@ -58,11 +58,11 @@ pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
-        .with_default_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
                 30 + 2 * NUM_CANISTERS as i32 * CANISTER_SIZE_GIB as i32,
             )),
-            ..VmResources::default()
+            ..VmResourceOverrides::default()
         })
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(

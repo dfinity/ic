@@ -26,7 +26,7 @@ use ic_recovery::{
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
-        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
+        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResourceOverrides},
         nested::{HasNestedVms, NestedNodes, NestedVm},
         test_env::TestEnv,
         test_env_api::*,
@@ -42,10 +42,10 @@ use rand::seq::SliceRandom;
 use slog::{Logger, info};
 use tokio::task::JoinSet;
 
-pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
+pub const NNS_RECOVERY_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
     vcpus: Some(NrOfVCPUs::new(20)), // 16 GuestOS CPU + 4 HostOS
     memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
-    ..VmResources::const_default()
+    ..VmResourceOverrides::const_default()
 };
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
@@ -68,7 +68,7 @@ pub struct SetupConfig {
     pub impersonate_upstreams: bool,
     pub subnet_size: usize,
     pub dkg_interval: u64,
-    pub nested_nodes_vm_resources: VmResources,
+    pub nested_nodes_vm_resource_overrides: VmResourceOverrides,
 }
 
 #[derive(Debug)]
@@ -180,9 +180,12 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    NestedNodes::new_with_resources(&host_vm_names, cfg.nested_nodes_vm_resources)
-        .setup_and_start(&env)
-        .unwrap();
+    NestedNodes::new_with_resource_overrides(
+        &host_vm_names,
+        cfg.nested_nodes_vm_resource_overrides,
+    )
+    .setup_and_start(&env)
+    .unwrap();
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
