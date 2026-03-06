@@ -386,7 +386,7 @@ impl fmt::Debug for ArgWithCaller {
                 "account_to_basic_identity",
                 &self.principal_to_basic_identity,
             )
-            .field("arg", &self.principal_to_basic_identity)
+            .field("arg", &self.arg)
             .field("caller", &self.caller.sender().unwrap())
             .finish_non_exhaustive()
     }
