@@ -112,16 +112,6 @@ fn test_memory_allocation_limit_overflow() {
 }
 
 #[test]
-#[should_panic(expected = "overlaps with reserved wait() scratchpad")]
-fn test_stable_read_collision_with_wait_scratchpad() {
-    // WAIT_SCRATCHPAD_START is 65000.
-    // StableRead destination 64990 (size 20) overlaps with wait() scratchpad.
-    wat_canister()
-        .update("test", wat_fn().stable_read(64990, 0, 20))
-        .build();
-}
-
-#[test]
 #[should_panic(expected = "Method 'PreUpgrade' with the name 'pre_upgrade' already exists")]
 fn test_wat_func_unique_pre_upgrade() {
     wat_canister().pre_upgrade(wat_fn()).pre_upgrade(wat_fn());

@@ -52,17 +52,9 @@ impl<'a> RenderState<'a> {
                 FnCall::StableGrow(new_pages) => self.instructions.push(format!(
                     "(drop (call $ic0_stable_grow (i32.const {new_pages})))"
                 )),
-                FnCall::StableRead(dst, offset, size) => {
-                    if *dst + *size > WAIT_SCRATCHPAD_START {
-                        panic!(
-                            "StableRead destination {} (size {}) overlaps with reserved wait() scratchpad (starts at {}).",
-                            dst, size, WAIT_SCRATCHPAD_START
-                        );
-                    }
-                    self.instructions.push(format!(
-                        "(call $ic0_stable_read (i32.const {dst}) (i32.const {offset}) (i32.const {size}))"
-                    ))
-                }
+                FnCall::StableRead(dst, offset, size) => self.instructions.push(format!(
+                    "(call $ic0_stable_read (i32.const {dst}) (i32.const {offset}) (i32.const {size}))"
+                )),
                 FnCall::GlobalTimerSet(timestamp) => self.instructions.push(format!(
                     "(drop (call $ic0_global_timer_set (i64.const {timestamp})))"
                 )),

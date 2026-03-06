@@ -9,9 +9,14 @@ pub(crate) const MEMORY_OFFSET_START: i32 = 1_000;
 /// We assert that the user allocations (`MEMORY_OFFSET_START`) start early,
 /// and the `_wait` scratchpad is parked at the extreme end of the memory page.
 ///
-/// **CAUTION**: Any manual memory operations (like `stable_read` into a custom `dst`)
-/// must avoid the range `[WAIT_SCRATCHPAD_START, WAIT_SCRATCHPAD_START + 100]`
-/// to prevent data corruption during `wait()` calls.
+/// **NOTE**: Manual memory operations (like `stable_read` into a custom `dst`)
+/// can technically overlap with the range `[WAIT_SCRATCHPAD_START, WAIT_SCRATCHPAD_START + 100]`.
+/// This is currently "safe" because the WAT canister only uses memory for
+/// `debug_print` and `trap`, both of which are write-only operations.
+///
+/// **WARNING**: If you add any instruction that READS from memory and acts
+/// on its content, you must ensure it does not collision with this `wait()`
+/// scratchpad.
 #[allow(clippy::assertions_on_constants)]
 const _: () = assert!(MEMORY_OFFSET_START < WAIT_SCRATCHPAD_START);
 
@@ -51,8 +56,9 @@ impl WatFnCode {
 
     /// Call the `ic0.stable_read` function.
     ///
-    /// **WARNING**: Ensure `dst` does not overlap with the `_wait` scratchpad
-    /// (starting at `65,000`) if your test uses `wait()` loops.
+    /// **NOTE**: The destination `dst` can technically overlap with the `wait()`
+    /// scratchpad (starts at `65,000`). This is currently acceptable since
+    /// memory is not read back.
     pub fn stable_read(mut self, dst: i32, offset: i32, size: i32) -> Self {
         self.calls.push(FnCall::StableRead(dst, offset, size));
         self
@@ -88,9 +94,11 @@ impl WatFnCode {
     /// **WARNING**: This instruction simulates CPU cycles by executing `memory.fill` operations
     /// internally to burn instructions.
     ///
-    /// It reserves and will completely clobber the WebAssembly memory addresses
-    /// from `65,000` to `65,100`. If you use `stable_read` or other manual memory
-    /// operations, ensure they do not target this reserved scratchpad region.
+    /// It reserves and will clobber the WebAssembly memory addresses
+    /// from `65,000` to `65,100`. This clobbering is currently harmless as
+    /// the WAT canister defines a write-only memory model (only `debug_print`
+    /// and `trap` are supported for now), but should be handled with care if
+    /// adding memory-reading instructions.
     pub fn wait(mut self, instructions: i64) -> Self {
         self.calls.push(FnCall::Wait(instructions));
         self
