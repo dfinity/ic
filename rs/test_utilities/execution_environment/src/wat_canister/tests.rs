@@ -1,5 +1,20 @@
 use super::*;
 
+macro_rules! assert_contains {
+    ($wat:expr, $expected:expr) => {
+        let wat_val = &$wat;
+        let expected_val = &$expected;
+        if !wat_val.contains(expected_val) {
+            panic!(
+                "The generated WAT did not contain the expected layout.\n\n\
+                 EXPECTED TO CONTAIN:\n{}\n\n\
+                 ACTUAL WAT GENERATED:\n{}",
+                expected_val, wat_val
+            );
+        }
+    };
+}
+
 #[test]
 fn test_empty_canister_builds() {
     let wat = wat_canister().build();
@@ -12,7 +27,7 @@ fn test_single_method_export() {
     let wat = wat_canister().update("foo", wat_fn()).build();
 
     wat::parse_str(&wat).unwrap();
-    assert!(wat.contains(r#"(export "canister_update foo")"#));
+    assert_contains!(wat, r#"(export "canister_update foo")"#);
 }
 
 #[test]
@@ -34,11 +49,12 @@ fn test_instruction_emission() {
     wat::parse_str(&wat).unwrap();
 
     // Check that memory definitions are injected
-    assert!(wat.contains(r#"(data (i32.const 1000) "hi")"#));
-    assert!(wat.contains(r#"(data (i32.const 1002) "error")"#));
+    assert_contains!(wat, r#"(data (i32.const 1000) "hi")"#);
+    assert_contains!(wat, r#"(data (i32.const 1002) "error")"#);
 
     // Check that calls are present in the function in the expected order
-    assert!(wat.contains(
+    assert_contains!(
+        wat,
         r#"
             (func $test_instructions (export "canister_update test_instructions")
                 (drop (call $ic0_stable_grow (i32.const 1)))
@@ -49,7 +65,7 @@ fn test_instruction_emission() {
                 (call $ic0_trap (i32.const 1007) (i32.const 0))
                 (call $_wait (i64.const 10000))
             )"#
-    ));
+    );
 }
 
 #[test]
@@ -67,14 +83,15 @@ fn test_start_method_emits_valid_wasm_and_correct_format() {
     let wasm_module = wat::parse_str(&wat).unwrap();
     assert!(!wasm_module.is_empty());
 
-    assert!(wat.contains(
+    assert_contains!(
+        wat,
         r#"
             (func $start
                 (call $ic0_debug_print (i32.const 1000) (i32.const 10))
             )
             
             (start $start)"#
-    ));
+    );
 }
 
 #[test]
@@ -213,29 +230,33 @@ fn test_comprehensive_integration() {
 
     // Basic heuristic checks to ensure exported functions are present in order.
     // We check a subset of the exported functions to verify sequence and naming.
-    assert!(wat.contains(
+    assert_contains!(
+        wat,
         r#"
             (func $init (export "canister_init")
                 (call $ic0_debug_print (i32.const 1005) (i32.const 4))
                 (drop (call $ic0_global_timer_set (i64.const 1)))
             )
             (func $pre_upgrade (export "canister_pre_upgrade")"#
-    ));
-    assert!(wat.contains(
+    );
+    assert_contains!(
+        wat,
         r#"
             (func $test_1 (export "canister_update test_1")
                 (call $ic0_debug_print (i32.const 1068) (i32.const 2))"#
-    ));
-    assert!(wat.contains(
+    );
+    assert_contains!(
+        wat,
         r#"
             (func $test_2 (export "canister_query test_2")
                 (call $ic0_debug_print (i32.const 1073) (i32.const 4))"#
-    ));
-    assert!(wat.contains(
+    );
+    assert_contains!(
+        wat,
         r#"
             (func $test_3 (export "canister_composite_query test_3")
                 (call $ic0_trap (i32.const 1082) (i32.const 15))"#
-    ));
+    );
 }
 
 #[test]
@@ -254,12 +275,13 @@ fn test_loop_calls_scaling() {
     assert!(!wasm_module.is_empty());
 
     // Verify native loop constructs and iteration count
-    assert!(wat.contains(
+    assert_contains!(
+        wat,
         r#"
                 (local $loop_counter_0 i32)
                 (local.set $loop_counter_0 (i32.const 200000))
                 (loop $loop_label_0"#
-    ));
+    );
 }
 
 #[test]
@@ -275,13 +297,14 @@ fn test_loop_calls_nested() {
 
     // Verify it correctly allocated two distinct loop locals at the top boundary
     // and loops are appropriately scoped and ordered.
-    assert!(wat.contains(
+    assert_contains!(
+        wat,
         r#"
                 (local $loop_counter_0 i32)
                 (local $loop_counter_1 i32)
                 (local.set $loop_counter_0 (i32.const 10))
                 (loop $loop_label_0"#
-    ));
+    );
 }
 
 #[test]
@@ -299,19 +322,21 @@ fn test_loop_calls_sequential() {
 
     // Verify it sequentially allocated two distinct loop locals at the top block
     // and correctly ordered the looping bodies sequentially.
-    assert!(wat.contains(
+    assert_contains!(
+        wat,
         r#"
                 (local $loop_counter_0 i32)
                 (local $loop_counter_1 i32)
                 (local.set $loop_counter_0 (i32.const 5))
                 (loop $loop_label_0"#
-    ));
+    );
 
-    assert!(wat.contains(
+    assert_contains!(
+        wat,
         r#"
                 (local.set $loop_counter_1 (i32.const 10))
                 (loop $loop_label_1"#
-    ));
+    );
 }
 
 #[test]
