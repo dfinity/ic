@@ -2,14 +2,16 @@ use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::{
     registry::{
-        node::v1::ConnectionEndpoint,
+        node::v1::{ConnectionEndpoint, NodeRewardType},
         routing_table::v1::RoutingTable as PbRoutingTable,
         subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
     },
     types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto},
 };
 use ic_registry_client_helpers::{
+    api_boundary_node::ApiBoundaryNodeRegistry,
     crypto::CryptoRegistry,
+    node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
@@ -327,35 +329,91 @@ impl InternalState {
         }
     }
 
+    // Returns a list of URLs that can be used to connect to the NNS. In case we are not a cloud
+    // engine node (not "type4"), these are direct URLs to the NNS nodes. In case we are, these are
+    // URLs of API BNs since NNS nodes would not accept our connections due to firewall rules.
     fn get_node_api_urls(
         &self,
-        subnet_id: SubnetId,
+        nns_subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> Result<Vec<Url>, String> {
-        let t_infos = match self
-            .registry_client
-            .get_subnet_node_records(subnet_id, version)
-        {
-            Ok(Some(v)) => v,
+        let node_reward_type = match self.registry_client.get_node_record(self.node_id, version) {
+            Ok(Some(node_record)) => node_record.node_reward_type(),
             Ok(None) => {
                 return Err(format!(
-                    "Missing or incomplete transport infos for subnet {subnet_id} at version {version}."
+                    "Node record for node id {:?} not found at version {version}",
+                    self.node_id
                 ));
             }
             Err(e) => {
                 return Err(format!(
-                    "Error retrieving transport infos for subnet {subnet_id} at version {version}: {e:?}."
+                    "Error when retrieving node record for node id {:?} at version {version}: {e:?}",
+                    self.node_id, e
                 ));
             }
         };
 
-        let mut urls: Vec<Url> = t_infos
+        let node_ids = match node_reward_type {
+            NodeRewardType::Unspecified
+            | NodeRewardType::Type0
+            | NodeRewardType::Type1
+            | NodeRewardType::Type2
+            | NodeRewardType::Type3
+            | NodeRewardType::Type3dot1
+            | NodeRewardType::Type1dot1 => match self
+                .registry_client
+                .get_node_ids_on_subnet(nns_subnet_id, version)
+            {
+                Ok(Some(ids)) => ids,
+                Ok(None) => {
+                    return Err(format!(
+                        "Subnet record for NNS subnet id {nns_subnet_id} not found at version {version}"
+                    ));
+                }
+                Err(e) => {
+                    return Err(format!(
+                        "Error when retrieving node ids on NNS subnet {nns_subnet_id} at version {version}: {e:?}"
+                    ));
+                }
+            },
+            NodeRewardType::Type4 => {
+                match self.registry_client.get_api_boundary_node_ids(version) {
+                    Ok(ids) => ids,
+                    Err(e) => {
+                        return Err(format!(
+                            "Error when retrieving API BN node ids at version {version}: {e:?}"
+                        ));
+                    }
+                }
+            }
+        };
+
+        let mut urls: Vec<Url> = node_ids
             .iter()
-            .filter_map(|(_nid, n_record)| {
-                n_record
-                    .http
-                    .as_ref()
-                    .and_then(|h| self.https_endpoint_to_url(h))
+            .filter_map(|(id)| {
+                let record = match self
+                    .registry_client
+                    .get_node_record(*id, version) {
+                        Ok(Some(record)) => record,
+                        Ok(None) => {
+                            warn!(
+                                self.logger,
+                                "Node record for node id {:?} not found at version {version}",
+                                id
+                            );
+                            return None;
+                        }
+                        Err(e) => {
+                            warn!(
+                                self.logger,
+                                "Error when retrieving node record for node id {:?} at version {version}: {e:?}",
+                                id, e
+                            );
+                            return None;
+                        }
+                    };
+
+                self.https_endpoint_to_url(record.http?)
             })
             .collect();
         urls.sort();
