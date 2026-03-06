@@ -14,7 +14,7 @@ use std::collections::HashSet;
 const MAX_SUBNET_ADMINS: usize = 10;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct EmptyRecord;
+pub struct EmptyRecord {}
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum OperationType {
@@ -300,7 +300,7 @@ mod tests {
 
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
-            operation_type: Some(OperationType::Clear(EmptyRecord)),
+            operation_type: Some(OperationType::Clear(EmptyRecord {})),
         };
 
         registry.do_update_subnet_admins(payload);
