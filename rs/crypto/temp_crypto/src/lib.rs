@@ -1137,6 +1137,7 @@ impl EcdsaSubnetConfig {
                 }),
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                recalled_replica_version_ids: vec![],
             },
         }
     }
