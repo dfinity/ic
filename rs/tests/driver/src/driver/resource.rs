@@ -95,15 +95,25 @@ impl ResourceRequest {
 /// We assume that there is only one possible VM configuration available.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct VmSpec {
-    pub name: String,
-    pub vcpus: NrOfVCPUs,
-    pub memory_kibibytes: AmountOfMemoryKiB,
-    pub boot_image: BootImage,
-    pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
-    pub has_ipv4: bool,
-    pub vm_allocation: Option<VmAllocationStrategy>,
-    pub required_host_features: Vec<HostFeature>,
-    pub alternate_template: Option<VmType>,
+    name: String,
+    vcpus: NrOfVCPUs,
+    memory_kibibytes: AmountOfMemoryKiB,
+    boot_image: BootImage,
+    boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
+    has_ipv4: bool,
+    vm_allocation: Option<VmAllocationStrategy>,
+    required_host_features: Vec<HostFeature>,
+    alternate_template: Option<VmType>,
+}
+
+impl VmSpec {
+    pub fn vcpus(&self) -> NrOfVCPUs {
+        self.vcpus
+    }
+
+    pub fn memory_kibibytes(&self) -> AmountOfMemoryKiB {
+        self.memory_kibibytes
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Serialize, Deserialize)]
