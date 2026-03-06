@@ -23,6 +23,10 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
     ops::Bound,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 pub mod metrics;
@@ -70,6 +74,9 @@ pub enum NeuronStoreError {
     },
     TotalPotentialVotingPowerOverflow,
     TotalDecidingVotingPowerOverflow,
+    NeuronLimitReached {
+        max_neurons: usize,
+    },
 }
 
 impl NeuronStoreError {
@@ -178,6 +185,12 @@ impl Display for NeuronStoreError {
             NeuronStoreError::TotalDecidingVotingPowerOverflow => {
                 write!(f, "Total deciding voting power overflow")
             }
+            NeuronStoreError::NeuronLimitReached { max_neurons } => {
+                write!(
+                    f,
+                    "Cannot add neuron. Max number of neurons ({max_neurons}) reached."
+                )
+            }
         }
     }
 }
@@ -198,6 +211,7 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::InvalidOperation { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalPotentialVotingPowerOverflow => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalDecidingVotingPowerOverflow => ErrorType::PreconditionFailed,
+            NeuronStoreError::NeuronLimitReached { .. } => ErrorType::PreconditionFailed,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
@@ -222,6 +236,22 @@ pub struct NeuronsFundNeuron {
     pub hotkeys: Vec<PrincipalId>,
 }
 
+/// A reservation for a neuron slot, guaranteeing that the neuron limit has been checked and a spot
+/// has been accounted for. When dropped, the reservation is automatically released.
+///
+/// This uses `Arc<AtomicUsize>` so that the reservation can be dropped independently of
+/// `NeuronStore` — no borrow on `NeuronStore` is needed for cleanup.
+#[derive(Debug)]
+pub struct NeuronSlotReservation {
+    counter: Arc<AtomicUsize>,
+}
+
+impl Drop for NeuronSlotReservation {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 /// This struct stores and provides access to all neurons within NNS Governance, which can live
 /// in either heap memory or stable memory.
 #[cfg_attr(test, derive(Clone, Debug))]
@@ -229,6 +259,13 @@ pub struct NeuronStore {
     // In non-test builds, Box would suffice. However, in test, the containing struct (to wit,
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
     clock: Box<dyn PracticalClock>,
+
+    /// Maximum number of neurons allowed. Set by Governance from `MAX_NUMBER_OF_NEURONS`.
+    max_neurons: usize,
+
+    /// Count of reserved-but-not-yet-created neuron slots. Used to enforce the neuron limit
+    /// across async boundaries without creating placeholder neurons.
+    neuron_slot_reservations: Arc<AtomicUsize>,
 }
 
 impl NeuronStore {
@@ -239,6 +276,8 @@ impl NeuronStore {
         // Initializes a neuron store with no neurons.
         let mut neuron_store = Self {
             clock: Box::new(IcClock::new()),
+            max_neurons: usize::MAX,
+            neuron_slot_reservations: Arc::new(AtomicUsize::new(0)),
         };
 
         // Adds the neurons one by one into neuron store.
@@ -260,6 +299,8 @@ impl NeuronStore {
     pub fn new_restored() -> Self {
         Self {
             clock: Box::new(IcClock::new()),
+            max_neurons: usize::MAX,
+            neuron_slot_reservations: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -299,6 +340,32 @@ impl NeuronStore {
                 neuron_id,
             );
         }
+    }
+
+    pub fn set_max_neurons(&mut self, max_neurons: usize) {
+        self.max_neurons = max_neurons;
+    }
+
+    /// Reserve a neuron slot, ensuring the neuron limit will not be exceeded. The reservation is
+    /// released automatically when dropped (e.g. if the async ledger call fails). Takes `&self`
+    /// because it only mutates the interior `Arc<AtomicUsize>`, avoiding borrow conflicts across
+    /// async boundaries.
+    pub fn try_reserve_neuron_slot(&self) -> Result<NeuronSlotReservation, NeuronStoreError> {
+        let effective_count = self.len() + self.neuron_slot_reservations.load(Ordering::Relaxed);
+        if effective_count >= self.max_neurons {
+            return Err(NeuronStoreError::NeuronLimitReached {
+                max_neurons: self.max_neurons,
+            });
+        }
+        self.neuron_slot_reservations
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(NeuronSlotReservation {
+            counter: Arc::clone(&self.neuron_slot_reservations),
+        })
+    }
+
+    pub fn neuron_slot_reservation_count(&self) -> usize {
+        self.neuron_slot_reservations.load(Ordering::Relaxed)
     }
 
     /// Returns if store contains a Neuron by id

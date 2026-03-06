@@ -83,18 +83,17 @@ impl Governance {
             ));
         }
 
-        // We borrow the `governance` mutably here to reserve the neuron limit, generate the neuron
-        // ID and subaccount. Usually, after some mutations happen, if any of the operations fail,
-        // we need to consider rolling back the mutations. However, here the neuron limit
-        // reservation has a `Drop` implementation for rollback, and the `randomness` mutation is
-        // not so critical and we can simply let the mutation persist.
-        let (neuron_limit_reservation, neuron_subaccount, neuron_id) =
+        // Reserve the rate limit, neuron slot, and generate the neuron ID and subaccount. All
+        // reservations have `Drop` implementations for automatic rollback, and the `randomness`
+        // mutation is not critical and can persist even if later steps fail.
+        let (neuron_limit_reservation, neuron_slot_reservation, neuron_subaccount, neuron_id) =
             governance.with_borrow_mut(|governance| {
                 let neuron_limit_reservation = governance.rate_limiter.try_reserve(
                     governance.env.now_system_time(),
                     NEURON_RATE_LIMITER_KEY.to_string(),
                     1,
                 )?;
+                let neuron_slot_reservation = governance.neuron_store.try_reserve_neuron_slot()?;
                 let neuron_subaccount =
                     governance.randomness.random_byte_array().map_err(|_| {
                         GovernanceError::new_with_message(
@@ -120,7 +119,12 @@ impl Governance {
                 let neuron_id = governance
                     .neuron_store
                     .new_neuron_id(&mut *governance.randomness)?;
-                Ok::<_, GovernanceError>((neuron_limit_reservation, neuron_subaccount, neuron_id))
+                Ok::<_, GovernanceError>((
+                    neuron_limit_reservation,
+                    neuron_slot_reservation,
+                    neuron_subaccount,
+                    neuron_id,
+                ))
             })?;
 
         let (
@@ -179,8 +183,9 @@ impl Governance {
             .unwrap_or(default_followees);
         let auto_stake_maturity = auto_stake_maturity.unwrap_or(false);
 
-        // Get ready to pull the ICP for the neuron. This records information that would be
-        // needed in case of recovery.
+        // Record the in-flight command for crash recovery. The neuron doesn't exist yet, but
+        // the lock prevents concurrent operations on the same neuron_id and records recovery
+        // information.
         let _neuron_lock = Governance::acquire_neuron_async_lock(
             governance,
             neuron_id,
@@ -202,8 +207,29 @@ impl Governance {
             }),
         )?;
 
-        // Step 1: Add new neuron with 0 stake. We do this before the transfer to ensure that a
-        // neuron can be created.
+        // Step 1: Transfer ICP from the caller to the neuron subaccount. The neuron slot
+        // reservation guarantees a spot under the neuron limit — no placeholder neuron is needed.
+        let block_height = ledger
+            .icrc2_transfer_from(
+                source_account,
+                neuron_account,
+                amount_e8s,
+                transaction_fees_e8s,
+                now_seconds,
+            )
+            .await
+            .map_err(|transfer_error| {
+                // Both reservations (rate limit and neuron slot) are dropped automatically.
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Failed to transfer funds for create_neuron: {transfer_error}"),
+                )
+            })?;
+
+        // Step 2: Create the neuron with the correct stake and commit the rate limit reservation.
+        // We assume the balance is exactly `amount_e8s` because of (1) the semantics of
+        // `icrc2_transfer_from`, (2) the unique subaccount, and (3) the neuron lock preventing
+        // concurrent operations.
         let neuron = NeuronBuilder::new(
             neuron_id,
             neuron_subaccount,
@@ -212,61 +238,23 @@ impl Governance {
             now_seconds,
         )
         .with_followees(followees)
+        .with_cached_neuron_stake_e8s(amount_e8s)
         .with_kyc_verified(true)
         .with_auto_stake_maturity(auto_stake_maturity)
         .build();
-        governance.with_borrow_mut(|g| g.add_neuron(neuron.id().id, neuron.clone()))?;
 
-        // Step 2: Get the ICP tokens.
-        let transfer_result = ledger
-            .icrc2_transfer_from(
-                source_account,
-                neuron_account,
-                amount_e8s,
-                transaction_fees_e8s,
-                now_seconds,
-            )
-            .await;
-        // If the transfer fails, we need to remove the neuron from the store and return an error.
-        match transfer_result {
-            Ok(_block_height) => {
-                // We continue here, assuming the balance is exactly `amount_e8s`. This assumption
-                // comes from (1) the semantics of the `icrc2_transfer_from` method, (2) the fact
-                // that no 2 neurons can share the same subaccount, and (3) the neuron lock
-                // associated with the neuron is held during the creation of the neuron, so that no
-                // concurrent operation can modify the neuron, and hence do anything with the stake.
-            }
-            Err(transfer_error) => {
-                // Roll back adding the neuron.
-                if let Err(remove_error) = governance
-                    .with_borrow_mut(|governance| governance.remove_neuron(neuron.clone()))
-                {
-                    // We eat the error here because it's not the one we want to return to the
-                    // caller. This should be impossible unless we have a bug in the implementation
-                    // of the neuron store or the neuron lock mechanism, since the neuron was just
-                    // added while the lock was held.
-                    println!(
-                        "{LOG_PREFIX}Warning: Failed to remove neuron after failing to transfer funds: {remove_error}"
-                    );
-                }
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("Failed to transfer funds for create_neuron: {transfer_error}"),
-                ));
-            }
-        }
-
-        // Step 3: Modify the neuron stake and commit the rate limit reservation.
+        let neuron_id_for_return = neuron.id();
         governance.with_borrow_mut(|governance| {
             governance
-                .with_neuron_mut(&neuron.id(), |neuron| {
-                    neuron.cached_neuron_stake_e8s = amount_e8s
-                })
-                .unwrap_or_else(|_| {
+                .add_neuron_with_reservation(
+                    neuron_id_for_return.id,
+                    neuron,
+                    neuron_slot_reservation,
+                )
+                .unwrap_or_else(|err| {
                     panic!(
-                        "Neuron {:?} not found near the end of create_neuron, after successful \
-                        icrc2_transfer_from (block height: {transfer_result:?}).",
-                        neuron_id
+                        "Failed to add neuron {neuron_id:?} after successful \
+                        icrc2_transfer_from (block height: {block_height:?}): {err}"
                     )
                 });
 
@@ -283,7 +271,7 @@ impl Governance {
         });
 
         Ok(CreatedNeuron {
-            neuron_id: Some(neuron.id()),
+            neuron_id: Some(neuron_id_for_return),
         })
     }
 }
