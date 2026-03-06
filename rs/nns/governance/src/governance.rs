@@ -1256,7 +1256,11 @@ impl Governance {
     ) -> Self {
         Self {
             heap_data: HeapGovernanceData::default(),
-            neuron_store: NeuronStore::new(BTreeMap::new()),
+            neuron_store: {
+                let mut store = NeuronStore::new(BTreeMap::new());
+                store.set_max_neurons(MAX_NUMBER_OF_NEURONS);
+                store
+            },
             env,
             ledger,
             cmc,
@@ -1282,7 +1286,11 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new(neurons),
+            neuron_store: {
+                let mut store = NeuronStore::new(neurons);
+                store.set_max_neurons(MAX_NUMBER_OF_NEURONS);
+                store
+            },
             env,
             ledger,
             cmc,
@@ -1313,7 +1321,11 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new_restored(),
+            neuron_store: {
+                let mut store = NeuronStore::new_restored();
+                store.set_max_neurons(MAX_NUMBER_OF_NEURONS);
+                store
+            },
             env,
             ledger,
             cmc,
@@ -5927,9 +5939,7 @@ impl Governance {
         // `create_neuron` reservations. Unlike `create_neuron`, we still create an empty neuron
         // before the async call because the deterministic subaccount needs to be "claimed" to
         // prevent a concurrent second call from also attempting to claim the same subaccount.
-        let neuron_slot_reservation = self
-            .neuron_store
-            .try_reserve_neuron_slot(MAX_NUMBER_OF_NEURONS)?;
+        let neuron_slot_reservation = self.neuron_store.try_reserve_neuron_slot()?;
 
         let nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
         let now = self.env.now();

@@ -260,6 +260,9 @@ pub struct NeuronStore {
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
     clock: Box<dyn PracticalClock>,
 
+    /// Maximum number of neurons allowed. Set by Governance from `MAX_NUMBER_OF_NEURONS`.
+    max_neurons: usize,
+
     /// Count of reserved-but-not-yet-created neuron slots. Used to enforce the neuron limit
     /// across async boundaries without creating placeholder neurons.
     neuron_slot_reservations: Arc<AtomicUsize>,
@@ -273,6 +276,7 @@ impl NeuronStore {
         // Initializes a neuron store with no neurons.
         let mut neuron_store = Self {
             clock: Box::new(IcClock::new()),
+            max_neurons: usize::MAX,
             neuron_slot_reservations: Arc::new(AtomicUsize::new(0)),
         };
 
@@ -295,6 +299,7 @@ impl NeuronStore {
     pub fn new_restored() -> Self {
         Self {
             clock: Box::new(IcClock::new()),
+            max_neurons: usize::MAX,
             neuron_slot_reservations: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -337,17 +342,20 @@ impl NeuronStore {
         }
     }
 
+    pub fn set_max_neurons(&mut self, max_neurons: usize) {
+        self.max_neurons = max_neurons;
+    }
+
     /// Reserve a neuron slot, ensuring the neuron limit will not be exceeded. The reservation is
     /// released automatically when dropped (e.g. if the async ledger call fails). Takes `&self`
-    /// because it only mutates the interior `Rc<Cell<usize>>`, avoiding borrow conflicts across
+    /// because it only mutates the interior `Arc<AtomicUsize>`, avoiding borrow conflicts across
     /// async boundaries.
-    pub fn try_reserve_neuron_slot(
-        &self,
-        max_neurons: usize,
-    ) -> Result<NeuronSlotReservation, NeuronStoreError> {
+    pub fn try_reserve_neuron_slot(&self) -> Result<NeuronSlotReservation, NeuronStoreError> {
         let effective_count = self.len() + self.neuron_slot_reservations.load(Ordering::Relaxed);
-        if effective_count >= max_neurons {
-            return Err(NeuronStoreError::NeuronLimitReached { max_neurons });
+        if effective_count >= self.max_neurons {
+            return Err(NeuronStoreError::NeuronLimitReached {
+                max_neurons: self.max_neurons,
+            });
         }
         self.neuron_slot_reservations
             .fetch_add(1, Ordering::Relaxed);

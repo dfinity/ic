@@ -1,7 +1,6 @@
 use crate::{
     governance::{
         Governance, INITIAL_NEURON_DISSOLVE_DELAY, LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS,
-        MAX_NUMBER_OF_NEURONS,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
@@ -94,9 +93,7 @@ impl Governance {
                     NEURON_RATE_LIMITER_KEY.to_string(),
                     1,
                 )?;
-                let neuron_slot_reservation = governance
-                    .neuron_store
-                    .try_reserve_neuron_slot(MAX_NUMBER_OF_NEURONS)?;
+                let neuron_slot_reservation = governance.neuron_store.try_reserve_neuron_slot()?;
                 let neuron_subaccount =
                     governance.randomness.random_byte_array().map_err(|_| {
                         GovernanceError::new_with_message(
