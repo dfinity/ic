@@ -14,7 +14,6 @@ use ic_ledger_suite_in_memory_ledger::{AllowancesRecentlyPurged, verify_ledger_s
 use ic_ledger_suite_state_machine_helpers::{AllowanceProvider, send_approval, send_transfer_from};
 use ic_ledger_suite_state_machine_tests::MINTER;
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
-use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests_constants::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
     INT_META_VALUE, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
@@ -79,6 +78,14 @@ fn ledger_mainnet_wasm() -> Vec<u8> {
     mainnet_wasm
 }
 
+fn ledger_mainnet_v5_wasm() -> Vec<u8> {
+    #[cfg(not(feature = "u256-tokens"))]
+    let mainnet_wasm = ledger_mainnet_v5_u64_wasm();
+    #[cfg(feature = "u256-tokens")]
+    let mainnet_wasm = ledger_mainnet_v5_u256_wasm();
+    mainnet_wasm
+}
+
 fn ledger_mainnet_v3_wasm() -> Vec<u8> {
     #[cfg(not(feature = "u256-tokens"))]
     let mainnet_wasm = ledger_mainnet_v3_u64_wasm();
@@ -102,6 +109,11 @@ fn ledger_mainnet_u64_wasm() -> Vec<u8> {
 }
 
 #[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_v5_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V5_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
+#[cfg(not(feature = "u256-tokens"))]
 fn ledger_mainnet_v3_u64_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH").unwrap()).unwrap()
 }
@@ -115,6 +127,11 @@ fn ledger_mainnet_v1_u64_wasm() -> Vec<u8> {
 fn ledger_mainnet_u256_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
         .unwrap()
+}
+
+#[cfg(feature = "u256-tokens")]
+fn ledger_mainnet_v5_u256_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_V5_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -348,24 +365,6 @@ fn check_fee_collector() {
     ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector(
         ledger_wasm(),
         encode_init_args,
-    );
-}
-
-#[test]
-fn check_fee_collector_blocks() {
-    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_blocks(
-        ledger_wasm(),
-        encode_init_args,
-        BlockRetrieval::Legacy,
-    );
-}
-
-#[test]
-fn check_fee_collector_icrc3_blocks() {
-    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_blocks(
-        ledger_wasm(),
-        encode_init_args,
-        BlockRetrieval::Icrc3,
     );
 }
 
@@ -668,7 +667,7 @@ fn test_block_transformation() {
 
 #[test]
 fn icrc1_test_upgrade_serialization_from_mainnet() {
-    icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), false);
+    icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), true);
 }
 
 fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_prev_version: bool) {
@@ -696,7 +695,7 @@ fn icrc1_test_downgrade_from_incompatible_version() {
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
         encode_init_args,
-        true,
+        false,
     );
 }
 
@@ -758,6 +757,74 @@ fn test_cycles_for_archive_creation_default_spawns_archive() {
         ledger_wasm(),
         encode_init_args,
     );
+}
+
+#[test]
+fn test_fee_collector_107_access_denied() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_access_denied(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_fee_collector_107_minting_account() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_minting_account(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_fee_collector_107_anonymous() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_anonymous(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_fee_collector_107_smoke() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_smoke(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_fee_collector_107_with_proptest() {
+    let minter = Arc::new(minter_identity());
+    let builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
+        .with_minting_account(minter.sender().unwrap())
+        .with_transfer_fee(FEE);
+    let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_with_proptest::<
+        Tokens,
+    >(ledger_wasm(), init_args, minter);
+}
+
+#[test]
+fn test_fee_collector_107_upgrade() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_upgrade(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_fee_collector_107_init() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_init(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_fee_collector_107_upgrade_legacy() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_upgrade_legacy::<
+        LedgerArgument,
+        Tokens,
+    >(ledger_mainnet_v5_wasm(), ledger_wasm(), encode_init_args);
 }
 
 mod metrics {

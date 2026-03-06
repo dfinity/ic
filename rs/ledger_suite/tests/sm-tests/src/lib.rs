@@ -41,7 +41,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc::metadata_key::MetadataKey;
-use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -61,6 +61,7 @@ use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc107;
 use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
+use icrc_ledger_types::icrc107::set_fee_collector::{SetFeeCollectorArgs, SetFeeCollectorError};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
@@ -4429,6 +4430,42 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     // have been successfully spawned.
     let archives = list_archives(&env, canister_id);
     assert_eq!(archives.len(), 1);
+}
+
+fn set_fc_107(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    caller: PrincipalId,
+    fee_collector: Option<Account>,
+) -> Result<Nat, SetFeeCollectorError> {
+    let now = system_time_to_nanos(env.time());
+    let fc107_args = SetFeeCollectorArgs {
+        fee_collector,
+        created_at_time: now,
+    };
+    Decode!(
+        &env.execute_ingress_as(
+            caller,
+            canister_id,
+            "icrc107_set_fee_collector",
+            Encode!(&fc107_args).unwrap(),
+        ).unwrap().bytes(), Result<Nat, SetFeeCollectorError>
+    )
+    .expect("failed to decode set fee collector result")
+}
+
+pub fn set_fc_107_by_controller(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    fee_collector: Option<Account>,
+) {
+    let controllers = env
+        .get_controllers(canister_id)
+        .expect("ledger should have a controller");
+    assert_eq!(controllers.len(), 1);
+    let controller = controllers[0];
+    let result = set_fc_107(env, canister_id, controller, fee_collector);
+    assert!(result.is_ok());
 }
 
 pub mod metadata {
