@@ -38,7 +38,7 @@
 //!     // feature is or disabled without having to have separate
 //!     // feature = "test" builds, like so:
 //!
-//!     // #[test]
+//!     #[test]
 //!     fn test_foo_enabled() {
 //!         let _restore_foo_on_drop = temporarily_enable_foo();
 //!
@@ -47,7 +47,7 @@
 //!         assert_eq!(result, 42);
 //!     }
 //!
-//!     // #[test]
+//!     #[test]
 //!     fn test_foo_disabled() {
 //!         let _restore_foo_on_drop = temporarily_disable_foo();
 //!
