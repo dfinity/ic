@@ -1,7 +1,5 @@
 use crate::as_round_instructions;
-use crate::execution::common::{
-    validate_controller, validate_controller_or_subnet_admin, validate_subnet_admin,
-};
+use crate::execution::common::{validate_controller, validate_controller_or_subnet_admin, validate_snapshot_visibility, validate_subnet_admin};
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
@@ -2568,15 +2566,15 @@ impl CanisterManager {
     /// Returns the canister snapshots list, or
     /// an error if it failed to retrieve the information.
     ///
-    /// Retrieving the canister snapshots list can only be initiated by the controllers.
+    /// Retrieving the canister snapshots list can only be initiated a principal
+    /// allowed by the canister snapshot visibility settings.
     pub(crate) fn list_canister_snapshot(
         &self,
         sender: PrincipalId,
         canister: &CanisterState,
         state: &ReplicatedState,
-    ) -> Result<Vec<CanisterSnapshotResponse>, CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+    ) -> Result<Vec<CanisterSnapshotResponse>, UserError> {
+        validate_snapshot_visibility(canister, &sender, "list canister snapshots")?;
 
         let mut responses = vec![];
         for (snapshot_id, snapshot) in state

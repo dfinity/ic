@@ -355,6 +355,22 @@ pub(crate) fn validate_controller(
     Ok(())
 }
 
+pub(crate) fn validate_snapshot_visibility(
+    canister: &CanisterState,
+    caller: &PrincipalId,
+    err_msg: &str,
+) -> Result<(), UserError> {
+    if !crate::canister_settings::VisibilitySettings::from(canister.snapshot_visibility())
+        .has_access(caller, canister.controllers())
+    {
+        return Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!("Caller {caller} is not allowed to {err_msg}"),
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_subnet_admin(
     subnet_admins: &BTreeSet<PrincipalId>,
     sender: &PrincipalId,
