@@ -433,13 +433,16 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
         let _maybe_first_key_value = account_data.first_key_value();
     });
 
-    // set the first build_index to be called after post_upgrade
-    set_build_index_timer(with_state(|state| {
-        state.last_wait_time.clamp(
+    // clamp the last wait time to be within the min and max interval.
+    mutate_state(|state| {
+        state.last_wait_time = state.last_wait_time.clamp(
             state.min_retrieve_blocks_from_ledger_interval(),
             state.max_retrieve_blocks_from_ledger_interval(),
-        )
-    }));
+        );
+    });
+
+    // set the first build_index to be called after post_upgrade
+    set_build_index_timer(with_state(|state| state.last_wait_time));
 }
 
 fn validate_timer_configuration_options(
