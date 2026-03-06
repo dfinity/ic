@@ -1335,7 +1335,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(1_250);
 
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
@@ -1455,7 +1455,7 @@ fn dts_response_concurrent_cycles_change_fails() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(1_250);
 
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
@@ -1598,7 +1598,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(1_250);
 
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),

@@ -1363,7 +1363,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(12_700_000),
+        Cycles::new(31_750_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
@@ -1470,7 +1470,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(12_700_000),
+        Cycles::new(31_750_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,

@@ -114,7 +114,7 @@ fn reserved_cycles_stable_memory_grow_to_full_capacity() {
 
     // The total amount of reserved cycles to claim the full subnet memory capacity.
     const NUM_CANISTERS: usize = 5; // we need multiple canisters since the stable memory of a single canister cannot fill the subnet
-    const EXPECTED_RESERVED_CYCLES: u128 = 24_954 * T;
+    const EXPECTED_RESERVED_CYCLES: u128 = 62_386 * T;
     reserved_cycles_memory_grow_to_full_capacity(
         stable_grow,
         NUM_CANISTERS,
@@ -153,7 +153,7 @@ fn reserved_cycles_memory_allocation_grow_to_full_capacity() {
     // The total amount of reserved cycles to claim the full subnet memory capacity
     // while reserving a lot of memory at once.
     const NUM_CANISTERS: usize = 1; // a single canister can fill the subnet with its memory allocation
-    const EXPECTED_RESERVED_CYCLES: u128 = 35_135 * T;
+    const EXPECTED_RESERVED_CYCLES: u128 = 87_839 * T;
     reserved_cycles_memory_grow_to_full_capacity(
         ic00_grow,
         NUM_CANISTERS,

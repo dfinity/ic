@@ -298,7 +298,7 @@ fn ic0_grow_handles_overflow() {
 #[test]
 fn ic0_grow_can_reach_max_number_of_pages() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -395,7 +395,7 @@ fn ic0_stable64_grow_beyond_max_pages_returns_neg_one() {
 #[test]
 fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -431,7 +431,7 @@ fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -460,7 +460,7 @@ fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_read_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -492,7 +492,7 @@ fn ic0_stable_read_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_write_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -524,7 +524,7 @@ fn ic0_stable_write_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_grow_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -762,7 +762,7 @@ fn ic0_stable_write_traps_if_heap_is_out_of_bounds() {
 #[test]
 fn ic0_stable_write_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .with_default_wasm_memory_limit(0)
         .build();
     let wat = r#"
@@ -809,7 +809,7 @@ fn ic0_stable_read_does_not_trap_if_in_bounds() {
 #[test]
 fn ic0_stable_read_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .with_default_wasm_memory_limit(0)
         .build();
     let wat = r#"
@@ -994,7 +994,7 @@ fn ic0_stable64_read_does_not_trap_if_in_bounds() {
 #[test]
 fn ic0_stable64_read_and_write_work() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7450,7 +7450,7 @@ fn charge_for_dirty_pages() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7469,7 +7469,7 @@ fn stable_grow_checks_freezing_threshold_in_update() {
 #[test]
 fn stable64_grow_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7488,7 +7488,7 @@ fn stable64_grow_checks_freezing_threshold_in_update() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7513,7 +7513,7 @@ fn memory_grow_checks_freezing_threshold_in_update() {
 #[test]
 fn stable_grow_does_not_check_freezing_threshold_in_query() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7526,7 +7526,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_query() {
 #[test]
 fn stable64_grow_does_not_check_freezing_threshold_in_query() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7539,7 +7539,7 @@ fn stable64_grow_does_not_check_freezing_threshold_in_query() {
 #[test]
 fn memory_grow_does_not_check_freezing_threshold_in_query() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7558,7 +7558,7 @@ fn memory_grow_does_not_check_freezing_threshold_in_query() {
 #[test]
 fn stable_grow_does_not_check_freezing_threshold_in_reply() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -7583,7 +7583,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_reply() {
 #[test]
 fn stable_grow_does_not_check_freezing_threshold_in_reject() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -7608,7 +7608,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_reject() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_pre_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7641,7 +7641,7 @@ fn stable_grow_checks_freezing_threshold_in_pre_upgrade() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_post_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7674,7 +7674,7 @@ fn stable_grow_checks_freezing_threshold_in_post_upgrade() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_start() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let empty_wat = "(module)";
     let wat = r#"
@@ -7704,7 +7704,7 @@ fn stable_grow_checks_freezing_threshold_in_start() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_init() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7732,7 +7732,7 @@ fn stable_grow_checks_freezing_threshold_in_init() {
 #[test]
 fn memory_grow_does_not_check_freezing_threshold_in_pre_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7753,7 +7753,7 @@ fn memory_grow_does_not_check_freezing_threshold_in_pre_upgrade() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_post_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7785,7 +7785,7 @@ fn memory_grow_checks_freezing_threshold_in_post_upgrade() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_start() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let empty_wat = "(module)";
     let wat = r#"
@@ -7814,7 +7814,7 @@ fn memory_grow_checks_freezing_threshold_in_start() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_init() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7841,7 +7841,7 @@ fn memory_grow_checks_freezing_threshold_in_init() {
 #[test]
 fn call_perform_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_500_000_000))
@@ -7865,7 +7865,7 @@ fn call_perform_checks_freezing_threshold_in_update() {
 #[test]
 fn call_perform_does_not_check_freezing_threshold_in_reply() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -7899,7 +7899,7 @@ fn call_perform_does_not_check_freezing_threshold_in_reply() {
 #[test]
 fn call_perform_does_not_check_freezing_threshold_in_reject() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_000_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -7975,7 +7975,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
 
 #[test]
 fn set_reserved_cycles_limit_below_existing_fails() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(50_000_000_000_000);
     const CAPACITY: u64 = 1_000_000_000;
     const THRESHOLD: u64 = 500_000_000;
 
