@@ -1,4 +1,4 @@
-use blob_store_lib::api::{GetError, InsertError, InsertRequest};
+use blob_store_lib::api::{BlobMetadata, GetError, InsertError, InsertRequest};
 use candid::{Decode, Encode, Principal};
 use pocket_ic::PocketIc;
 
@@ -17,6 +17,13 @@ mod insert {
 
         let result = blob_store.insert(Setup::CONTROLLER, &hash, data.clone());
         assert_eq!(result, Ok(hash.clone()));
+
+        let metadata = blob_store
+            .get_metadata(Setup::CONTROLLER, &hash)
+            .expect("metadata should exist after insert");
+        assert_eq!(metadata.uploader, Setup::CONTROLLER);
+        assert_eq!(metadata.size, data.len() as u64);
+        assert!(metadata.inserted_at_ns > 0);
 
         let result = blob_store.insert(Setup::CONTROLLER, &hash, data);
         assert_eq!(result, Err(InsertError::AlreadyExists));
@@ -51,9 +58,9 @@ mod insert {
 }
 
 mod get {
-    use crate::{Setup, sha256_hex};
+    use crate::{Setup, assert_eq_ignoring_timestamp, sha256_hex};
     use assert_matches::assert_matches;
-    use blob_store_lib::api::GetError;
+    use blob_store_lib::api::{BlobMetadata, GetError};
     use candid::Principal;
 
     #[test]
@@ -69,13 +76,32 @@ mod get {
 
         for principal in [Principal::anonymous(), Setup::CONTROLLER] {
             assert_eq!(blob_store.get(principal, &hash), Ok(data.clone()));
+            assert_eq_ignoring_timestamp(
+                &blob_store
+                    .get_metadata(principal, &hash)
+                    .expect("metadata should exist"),
+                &BlobMetadata {
+                    uploader: Setup::CONTROLLER,
+                    size: data.len() as u64,
+                    inserted_at_ns: 0,
+                },
+            );
 
             assert_eq!(
                 blob_store.get(principal, &sha256_hex(b"not-stored")),
                 Err(GetError::NotFound)
             );
+            assert_eq!(
+                blob_store.get_metadata(principal, &sha256_hex(b"not-stored")),
+                Err(GetError::NotFound)
+            );
+
             assert_matches!(
                 blob_store.get(principal, "not-a-hex-hash"),
+                Err(GetError::InvalidHash { .. })
+            );
+            assert_matches!(
+                blob_store.get_metadata(principal, "not-a-hex-hash"),
                 Err(GetError::InvalidHash { .. })
             );
         }
@@ -101,10 +127,17 @@ mod upgrade {
             blob_store.get(Principal::anonymous(), &hash),
             Ok(data.clone())
         );
+        let metadata = blob_store
+            .get_metadata(Principal::anonymous(), &hash)
+            .expect("metadata should exist before upgrade");
 
         setup.upgrade();
 
         assert_eq!(blob_store.get(Principal::anonymous(), &hash), Ok(data));
+        assert_eq!(
+            blob_store.get_metadata(Principal::anonymous(), &hash),
+            Ok(metadata)
+        );
     }
 }
 
@@ -192,9 +225,37 @@ impl<'a> BlobStoreCanister<'a> {
         let result = self
             .env
             .query_call(self.canister_id, sender, "get", Encode!(&hash).unwrap())
-            .expect("update call failed");
+            .expect("query call failed");
         Decode!(&result, Result<Vec<u8>, GetError>).unwrap()
     }
+
+    pub fn get_metadata(&self, sender: Principal, hash: &str) -> Result<BlobMetadata, GetError> {
+        let result = self
+            .env
+            .query_call(
+                self.canister_id,
+                sender,
+                "get_metadata",
+                Encode!(&hash).unwrap(),
+            )
+            .expect("query call failed");
+        Decode!(&result, Result<BlobMetadata, GetError>).unwrap()
+    }
+}
+
+fn assert_eq_ignoring_timestamp(expected: &BlobMetadata, actual: &BlobMetadata) {
+    let BlobMetadata {
+        uploader: expected_uploader,
+        size: expected_size,
+        inserted_at_ns: _,
+    } = expected;
+    let BlobMetadata {
+        uploader: actual_uploader,
+        size: actual_size,
+        inserted_at_ns: _,
+    } = actual;
+    assert_eq!(expected_uploader, actual_uploader);
+    assert_eq!(expected_size, actual_size);
 }
 
 fn sha256_hex(data: &[u8]) -> String {
