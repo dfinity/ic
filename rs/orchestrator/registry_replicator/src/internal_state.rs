@@ -939,7 +939,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_type4_node_go_through_api_bn() {
+    async fn test_type4_node_goes_through_api_bn() {
         with_test_replica_logger(|logger| async {
             let config_url = Url::parse("https://fallback:1234").unwrap();
             let nns_endpoint = ConnectionEndpoint {
@@ -974,7 +974,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_no_node_id_go_directly_to_nns_nodes() {
+    async fn test_no_node_id_goes_directly_to_nns_node() {
         with_test_replica_logger(|logger| async {
             let config_url = Url::parse("https://fallback:1234").unwrap();
             let nns_endpoint = ConnectionEndpoint {
