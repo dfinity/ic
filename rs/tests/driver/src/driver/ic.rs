@@ -129,12 +129,12 @@ impl InternetComputer {
     /// The nodes inherit the VM resources of the IC.
     pub fn with_unassigned_nodes(mut self, no_of_nodes: usize) -> Self {
         for _ in 0..no_of_nodes {
-            self.unassigned_nodes.push(Node::new_with_settings(
-                self.default_vm_resources,
-                self.vm_allocation.clone(),
-                BootImage::GroupDefault,
-                self.required_host_features.clone(),
-            ));
+            self.unassigned_nodes.push(
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone()),
+            );
         }
         self
     }
@@ -150,13 +150,11 @@ impl InternetComputer {
     pub fn with_api_boundary_nodes(mut self, no_of_nodes: usize) -> Self {
         for idx in 0..no_of_nodes {
             self.api_boundary_nodes.push(
-                Node::new_with_settings(
-                    self.default_vm_resources,
-                    self.vm_allocation.clone(),
-                    BootImage::GroupDefault,
-                    self.required_host_features.clone(),
-                )
-                .with_domain(format!("apibn-{idx}.ic.net")),
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone())
+                    .with_domain(format!("apibn-{idx}.ic.net")),
             );
         }
         self
@@ -171,13 +169,11 @@ impl InternetComputer {
     /// Add a single unassigned node with the given IPv4 configuration
     pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: IPv4Config) -> Self {
         self.unassigned_nodes.push(
-            Node::new_with_settings(
-                self.default_vm_resources,
-                self.vm_allocation.clone(),
-                BootImage::GroupDefault,
-                self.required_host_features.clone(),
-            )
-            .with_ipv4_config(ipv4_config),
+            Node::new()
+                .with_vm_allocation(self.vm_allocation.clone())
+                .with_boot_image(BootImage::GroupDefault)
+                .with_required_host_features(self.required_host_features.clone())
+                .with_ipv4_config(ipv4_config),
         );
         self
     }
@@ -623,12 +619,12 @@ impl Subnet {
             let vm_allocation = subnet.vm_allocation.clone();
             let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
-            subnet.add_node(Node::new_with_settings(
-                default_vm_resources,
-                vm_allocation,
-                boot_image,
-                required_host_features,
-            ))
+            subnet.add_node(
+                Node::new()
+                    .with_vm_allocation(vm_allocation)
+                    .with_boot_image(boot_image)
+                    .with_required_host_features(required_host_features),
+            )
         })
     }
 
@@ -649,12 +645,12 @@ impl Subnet {
         let boot_image = self.boot_image.clone();
         required_host_features.extend_from_slice(&self.required_host_features);
 
-        self.add_node(Node::new_with_settings(
-            default_vm_resources,
-            vm_allocation,
-            boot_image,
-            required_host_features,
-        ))
+        self.add_node(
+            Node::new()
+                .with_vm_allocation(vm_allocation)
+                .with_boot_image(boot_image)
+                .with_required_host_features(required_host_features),
+        )
     }
 
     pub fn with_max_ingress_bytes_per_block(mut self, limit: u64) -> Self {
@@ -734,13 +730,11 @@ impl Subnet {
             let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
             subnet.add_node(
-                Node::new_with_settings(
-                    default_vm_resources,
-                    vm_allocation,
-                    boot_image,
-                    required_host_features,
-                )
-                .with_malicious_behavior(malicious_behavior.clone()),
+                Node::new()
+                    .with_vm_allocation(vm_allocation)
+                    .with_boot_image(boot_image)
+                    .with_required_host_features(required_host_features)
+                    .with_malicious_behavior(malicious_behavior.clone()),
             )
         })
     }
@@ -751,13 +745,11 @@ impl Subnet {
         let boot_image = self.boot_image.clone();
         let required_host_features = self.required_host_features.clone();
         self.add_node(
-            Node::new_with_settings(
-                default_vm_resources,
-                vm_allocation,
-                boot_image,
-                required_host_features,
-            )
-            .with_ipv4_config(ipv4_config),
+            Node::new()
+                .with_vm_allocation(vm_allocation)
+                .with_boot_image(boot_image)
+                .with_required_host_features(required_host_features)
+                .with_ipv4_config(ipv4_config),
         )
     }
 
@@ -853,25 +845,31 @@ impl Node {
         Default::default()
     }
 
-    pub fn new_with_settings(
-        vm_resources: VmResources,
-        vm_allocation: Option<VmAllocationStrategy>,
-        boot_image: BootImage,
-        required_host_features: Vec<HostFeature>,
-    ) -> Self {
-        let mut node = Node::new();
-        node.vm_resources = vm_resources;
-        node.vm_allocation = vm_allocation;
-        node.boot_image = boot_image;
-        node.required_host_features = required_host_features;
-        node
-    }
-
     pub fn id(&self) -> NodeId {
         self.secret_key_store
             .clone()
             .expect("no secret key store")
             .node_id
+    }
+
+    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
+        self.vm_resources = default_vm_resources;
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: Option<VmAllocationStrategy>) -> Self {
+        self.vm_allocation = vm_allocation;
+        self
+    }
+
+    pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {
+        self.boot_image = boot_image;
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
+        self
     }
 
     pub fn with_malicious_behavior(mut self, malicious_behavior: MaliciousBehavior) -> Self {
