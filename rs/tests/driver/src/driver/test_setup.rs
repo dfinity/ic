@@ -10,7 +10,7 @@ pub struct GroupSetup {
     /// For now, the group timeout strictly translates to the corresponding group
     /// TTL.
     pub group_timeout: Option<Duration>,
-    pub default_vm_resources: Option<VmResources>,
+    pub default_vm_resources: VmResources,
 }
 
 impl GroupSetup {
