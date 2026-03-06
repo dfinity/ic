@@ -1,31 +1,27 @@
 WAT Canister
 ============
 
-What it is
-----------
+Overview
+--------
+The WAT Canister (`wat_canister`) is a test utility that dynamically generates WebAssembly Text format (`wat`) strings and compiles them into fresh WebAssembly modules on the fly. 
 
-The WAT Canister (`wat_canister`) is a test utility that dynamically generates WebAssembly Text format (`wat`) strings and compiles them into fresh, custom WebAssembly modules on the fly for each test. 
+Purpose
+-------
+Certain hypervisor behaviors depend strictly on the structural layout of the WebAssembly module, such as memory overlaps, instantiation limits, infinite loop unrolling traps, and the initialization `start` function.
 
-Problem it solves
------------------
+Because the [Universal Canister](../../../../universal_canister) uses a static, pre-compiled WebAssembly binary, it cannot simulate these properties. The WAT canister provides a unified Rust API to build specialized WebAssembly modules from scratch, allowing tests to assert exactly how the hypervisor parses and initializes strict Wasm constructs.
 
-Some behaviors of the Internet Computer execution environment and hypervisor depend strictly on the structural layout of the WebAssembly module itself. These include module instantiation limits, Wasm memory overlaps, infinite loop unrolling traps, and initialization execution states (like the WebAssembly `start` function).
+Architecture
+------------
+Tests use the `WatCanisterBuilder` API to define exported functions (like `update` or `start`) and chain operations (like `debug_print`, `trap`, or `stable_grow`) via `WatFnCode`. The builder emits a highly specialized WebAssembly Text (`wat`) string, which is then compiled into raw Wasm bytes for execution testing.
 
-Because the `universal_canister` uses a static, pre-compiled WebAssembly binary, it cannot simulate or test these structural properties natively. The WAT canister solves this by providing a unified Rust builder API to construct specialized WebAssembly modules from scratch. This allows tests to assert exactly how the hypervisor parses, compiles, and initializes strict Wasm constructs.
+Limitations
+-----------
+Because the WAT canister generates raw WebAssembly without a native stack, Wasm standard library, or dynamic memory management, building complex logic is highly verbose.
 
-High-level implementation
--------------------------
-
-The module provides a `WatCanisterBuilder` API. Tests define exported functions (like `update`, `start`, or `init`) and chain operations (like `debug_print`, `trap`, or `stable_grow`) using `WatFnCode`. Behind the scenes, the builder emits a highly specialized WebAssembly Text (`wat`) string with exact loop bounds and memory offsets, which is then parsed and compiled into raw Wasm bytes for execution testing.
-
-Limitations & Alternatives
---------------------------
-
-Because the WAT canister generates raw WebAssembly without a native stack, Wasm standard library, or dynamic memory management runtime, building multi-stage logic is highly verbose and difficult to reason about.
-
-Specifically, you should avoid the WAT canister for:
-- Testing complex functional logic or arbitrary byte permutations.
+Avoid the WAT canister for:
+- Testing complex functional logic or arbitrary byte operations.
 - Simulating multi-message cross-canister callback maps.
-- Testing cycle management and system API data that don't depend strictly on WebAssembly module packaging structure.
+- Testing system APIs that don't depend strictly on WebAssembly packaging structure.
 
-For testing functional behavior, sequences of system API calls, and complex multi-canister interactions via message payloads, use the [Universal Canister](../../../../universal_canister) instead.
+For testing functional behavior and complex cross-canister interactions via message payloads, use the [Universal Canister](../../../../universal_canister) instead.

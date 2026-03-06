@@ -1,33 +1,29 @@
 Universal Canister
 ==================
 
-What it is
-----------
+Overview
+--------
+The Universal Canister (UC) is a pre-compiled WebAssembly canister used for integration and system tests across the Internet Computer. It acts as an interpreter that executes custom instruction sequences encoded within test message payloads.
 
-The Universal Canister (UC) is a pre-compiled WebAssembly canister used for a multitude of integration and system tests across the Internet Computer. It acts as an interpreter that executes a custom bytecode encoded within test message payloads.
+Purpose
+-------
+Writing custom WebAssembly or Rust canisters for every test case is verbose and hard to maintain. The UC provides a flexible canister to execute arbitrary sequences of IC system API calls dynamically. By encoding instructions (like `call`, `reply`, or `stable_read`) into simple payloads, tests can succinctly simulate complex canister behaviors and cross-canister interactions.
 
-Problem it solves
------------------
+Architecture
+------------
+The UC is a Rust application compiled into a static WebAssembly binary. When receiving an `update` or `query` message, it extracts instruction bytes from the payload and evaluates them using an internal stack.
 
-Writing custom WebAssembly or Rust canisters for every single test case is verbose and hard to maintain. The Universal Canister solves this by providing a single, flexible canister that can execute arbitrary sequences of IC system API calls dynamically. By encoding instructions (like `push`, `reply`, `call`, or API calls like `stable_read`) into an update or query payload, tests can simulate complex canister behaviors and cross-canister interactions succinctly from the outside.
+The implementation is in `/impl`, while the library used by tests to build instruction payloads is in `/lib`.
 
-High-level implementation
--------------------------
+*Note: The UC implementation temporarily uses its own `Cargo.lock` and is excluded from the top-level workspace build.*
 
-The UC is a standard Rust application compiled into a static WebAssembly binary. When a test sends an `update` or `query` message, the canister extracts the custom instruction bytes from the message payload, pushes or pops values using an internal stack, and executes the simulated workflow.
+Limitations
+-----------
+Because the UC is a static, pre-compiled WebAssembly module, it cannot test structural WebAssembly properties. 
 
-The implementation of the universal canister is in `/impl`, while the library that tests use to build the instruction payloads and interface with the universal canister is in `/lib`.
+You cannot use the UC to test:
+- WebAssembly module boundaries (e.g., missing exports or overlapping memory).
+- Hypervisor traps during module instantiation.
+- Initialization structures like `(start)`, or explicit `init`/`pre_upgrade` hooks executing before the payload is processed.
 
-Note that the universal canister's implementation is temporarily using its `Cargo.lock` file and is excluded from being built in the top-level workspace. In the future, it will be integrated into the top-level workspace and its `Cargo.lock` will be merged.
-
-Limitations & Alternatives
---------------------------
-
-Because the Universal Canister is a static, pre-compiled WebAssembly module that interprets payloads at runtime, it cannot be used to test structural WebAssembly behaviors. 
-
-Specifically, you cannot use the Universal Canister to:
-- Test WebAssembly module boundaries (e.g., missing exports or overlapping memory).
-- Test hypervisor traps that occur during module instantiation or initialization.
-- Test initialization structures like `(start)` or explicit `init`/`pre_upgrade` hooks that execute before the message payload is processed.
-
-For testing these structural WebAssembly properties, hypervisor limits, and module initialization states, use the [WAT Canister](../test_utilities/execution_environment/src/wat_canister) instead.
+For testing these structural Wasm properties and module initialization states, use the [WAT Canister](../test_utilities/execution_environment/src/wat_canister).
