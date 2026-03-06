@@ -284,6 +284,7 @@ rust_canbench(
     srcs = ["src/main.rs"],
     compile_data = [":ckbtc_minter.did"],
     data = ["mainnet_events.mem.gz"],
+    timeout = "long",
     env = {
         "CANBENCH_STABLE_MEMORY_FILE": "$(location mainnet_events.mem.gz)",
         # the following hex arg was produced by command:
