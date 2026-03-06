@@ -44,7 +44,7 @@ fn main() -> Result<()> {
                     subnet_size: LARGE_SUBNET_SIZE,
                     dkg_interval: LARGE_DKG_INTERVAL,
                     nested_nodes_vm_resources: VmResources {
-                        vcpus: Some(NrOfVCPUs::new(64)),
+                        vcpus: Some(NrOfVCPUs::new(36)), // 32 GuestOS CPU + 4 HostOS
                         ..NNS_RECOVERY_VM_RESOURCES
                     },
                 },

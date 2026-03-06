@@ -24,7 +24,7 @@ use url::Url;
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
 
-pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(32);
+pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
 pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
 
 /// A declaration of resources needed to instantiate a InternetComputer.
