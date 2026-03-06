@@ -54,7 +54,9 @@ use ic_system_test_driver::{
 };
 
 use ic_system_test_driver::driver::{
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{
+        AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
+    },
     test_env::TestEnvAttribute,
 };
 
@@ -270,17 +272,12 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
 ///
 /// The NNS will be initialized with only the "test" neurons.
 /// (See [`ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder::with_test_neurons`].)
-pub fn setup_with_oc_parameters(
-    env: TestEnv,
-    sale_participants: Vec<SaleParticipant>,
-    fast_test_setup: bool,
-) {
+pub fn setup_with_oc_parameters(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
     setup(
         &env,
         sale_participants,
         vec![], // no neurons
         openchat_create_service_nervous_system_proposal(),
-        fast_test_setup,
     );
 }
 
@@ -290,9 +287,8 @@ pub fn setup(
     sale_participants: Vec<SaleParticipant>,
     nf_neurons: Vec<NnsNfNeuron>,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
-    fast_test_setup: bool,
 ) {
-    setup_ic(env, fast_test_setup);
+    setup_ic(env);
 
     install_nns(env, sale_participants, nf_neurons.clone());
 
@@ -318,10 +314,15 @@ pub fn setup(
     block_on(dapp_canister.check_exclusively_owned_by_sns_root(env));
 }
 
-/// Sets up and starts the IC, and creates two subnets (one system subnet and
-/// one application subnet).
-fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
-    let mut ic = InternetComputer::new()
+/// Sets up and starts the IC, and creates three subnets (one system subnet and
+/// two application subnets).
+fn setup_ic(env: &TestEnv) {
+    InternetComputer::new()
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(UVM_NUM_CPUS),
+            memory_kibibytes: Some(UVM_MEMORY_SIZE),
+            boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),
+        })
         // NNS
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -339,24 +340,17 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(SUBNET_SIZE),
-        );
-    if !fast_test_setup {
-        ic = ic.with_default_vm_resources(VmResources {
-            vcpus: Some(UVM_NUM_CPUS),
-            memory_kibibytes: Some(UVM_MEMORY_SIZE),
-            boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),
-        });
-    }
-    ic.setup_and_start(env)
+        )
+        .setup_and_start(env)
         .expect("failed to setup IC under test");
 }
 
 /// Sets up an SNS using "openchat-ish" parameters.
 pub fn sns_setup(env: TestEnv) {
-    setup_with_oc_parameters(env, vec![], false);
+    setup_with_oc_parameters(env, vec![]);
 }
 pub fn sns_setup_fast(env: TestEnv) {
-    setup_with_oc_parameters(env, vec![], true);
+    setup_with_oc_parameters(env, vec![]);
 }
 
 /// Setup an IC instance with SNS, pre-generating the participants' identities at random.
@@ -367,15 +361,15 @@ pub fn sns_setup_fast(env: TestEnv) {
 /// let participants = Vec::<SaleParticipant>::read_attribute(&env);
 /// ```
 pub fn sns_setup_with_many_sale_participants(env: TestEnv) {
-    sns_setup_with_many_sale_participants_impl(env, false)
+    sns_setup_with_many_sale_participants_impl(env)
 }
 
 /// Same as `sns_setup_with_many_sale_participants`, but intended for security testing in regular CI pipelines.
 pub fn sns_setup_with_many_sale_participants_fast(env: TestEnv) {
-    sns_setup_with_many_sale_participants_impl(env, true)
+    sns_setup_with_many_sale_participants_impl(env)
 }
 
-fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: bool) {
+fn sns_setup_with_many_sale_participants_impl(env: TestEnv) {
     let participants: Vec<SaleParticipant> = (1..NUM_SNS_SALE_PARTICIPANTS + 1)
         .map(|x| {
             let name = format!("user_{x}");
@@ -393,7 +387,7 @@ fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: boo
     .write_attribute(&env);
 
     // Run the actual setup
-    setup_with_oc_parameters(env, participants, fast_test_setup);
+    setup_with_oc_parameters(env, participants);
 }
 
 /// Setup an IC instance with SNS, pre-generating the participants' identities at random.
@@ -424,7 +418,7 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
     .write_attribute(&env);
 
     // Run the actual setup
-    setup_with_oc_parameters(env, participants, false);
+    setup_with_oc_parameters(env, participants);
 }
 
 /// Call the `refresh_buyer_tokens` function of the SNS swap canister for all pre-generated participants (this actually initiates participation).

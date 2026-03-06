@@ -33,7 +33,7 @@ use std::time::Duration;
 #[derive(Clone, Debug, Default)]
 pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
-    pub default_vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub subnets: Vec<Subnet>,
@@ -66,14 +66,11 @@ impl InternetComputer {
         Self::default()
     }
 
-    /// Set the VM resources (like number of virtual CPUs and memory) of all
-    /// implicitly constructed subnets and nodes (like unassigned nodes
-    /// added via `with_unassigned_nodes`).
-    ///
-    /// Setting the VM resources for explicitly constructed subnets
-    /// has to be done on the subnet itself.
-    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
-        self.default_vm_resources = default_vm_resources;
+    /// Set the VM resource overrides (like number of virtual CPUs and memory)
+    /// at the IC level. More specific overrides have more priority.
+    /// Node > Subnet > IC > Group > Default
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -96,11 +93,8 @@ impl InternetComputer {
     ///
     /// The subnet is able to execute calls faster because the block time
     /// on the node is reduced.
-    ///
-    /// The subnet inherits the VM resources of the IC.
     pub fn add_fast_single_node_subnet(mut self, subnet_type: SubnetType) -> Self {
         let mut subnet = Subnet::fast_single_node(subnet_type);
-        subnet.default_vm_resources = self.default_vm_resources;
         subnet.vm_allocation.clone_from(&self.vm_allocation);
         subnet
             .required_host_features
@@ -125,16 +119,14 @@ impl InternetComputer {
     }
 
     /// Add the given number of unassigned nodes to the IC.
-    ///
-    /// The nodes inherit the VM resources of the IC.
     pub fn with_unassigned_nodes(mut self, no_of_nodes: usize) -> Self {
         for _ in 0..no_of_nodes {
-            self.unassigned_nodes.push(Node::new_with_settings(
-                self.default_vm_resources,
-                self.vm_allocation.clone(),
-                BootImage::GroupDefault,
-                self.required_host_features.clone(),
-            ));
+            self.unassigned_nodes.push(
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone()),
+            );
         }
         self
     }
@@ -150,13 +142,11 @@ impl InternetComputer {
     pub fn with_api_boundary_nodes(mut self, no_of_nodes: usize) -> Self {
         for idx in 0..no_of_nodes {
             self.api_boundary_nodes.push(
-                Node::new_with_settings(
-                    self.default_vm_resources,
-                    self.vm_allocation.clone(),
-                    BootImage::GroupDefault,
-                    self.required_host_features.clone(),
-                )
-                .with_domain(format!("apibn-{idx}.ic.net")),
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone())
+                    .with_domain(format!("apibn-{idx}.ic.net")),
             );
         }
         self
@@ -171,13 +161,11 @@ impl InternetComputer {
     /// Add a single unassigned node with the given IPv4 configuration
     pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: IPv4Config) -> Self {
         self.unassigned_nodes.push(
-            Node::new_with_settings(
-                self.default_vm_resources,
-                self.vm_allocation.clone(),
-                BootImage::GroupDefault,
-                self.required_host_features.clone(),
-            )
-            .with_ipv4_config(ipv4_config),
+            Node::new()
+                .with_vm_allocation(self.vm_allocation.clone())
+                .with_boot_image(BootImage::GroupDefault)
+                .with_required_host_features(self.required_host_features.clone())
+                .with_ipv4_config(ipv4_config),
         );
         self
     }
@@ -251,7 +239,6 @@ impl InternetComputer {
                 .chain(self.required_host_features.iter())
                 .cloned()
                 .collect();
-            node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
         }
 
         let tempdir = tempfile::tempdir()?;
@@ -469,7 +456,7 @@ impl InternetComputer {
 /// A builder for the initial configuration of a subnetwork.
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct Subnet {
-    pub default_vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub boot_image: BootImage,
     pub required_host_features: Vec<HostFeature>,
@@ -503,7 +490,7 @@ pub struct Subnet {
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
         Self {
-            default_vm_resources: Default::default(),
+            vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             boot_image: Default::default(),
             required_host_features: vec![],
@@ -531,13 +518,11 @@ impl Subnet {
         }
     }
 
-    /// Set the VM resources (like number of virtual CPUs and memory) of all
-    /// implicitly constructed nodes.
-    ///
-    /// Setting the VM resources for explicitly constructed nodes
-    /// has to be via `Node::new_with_vm_resources`.
-    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
-        self.default_vm_resources = default_vm_resources;
+    /// Set the VM resource overrides (like number of virtual CPUs and memory)
+    /// at the subnet level. More specific overrides have more priority.
+    /// Node > Subnet > IC > Group > Default
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -615,20 +600,17 @@ impl Subnet {
     }
 
     /// Add the given number of nodes to the subnet.
-    ///
-    /// The nodes will inherit the VM resources of the subnet.
     pub fn add_nodes(self, no_of_nodes: usize) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
-            let default_vm_resources = subnet.default_vm_resources;
             let vm_allocation = subnet.vm_allocation.clone();
             let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
-            subnet.add_node(Node::new_with_settings(
-                default_vm_resources,
-                vm_allocation,
-                boot_image,
-                required_host_features,
-            ))
+            subnet.add_node(
+                Node::new()
+                    .with_vm_allocation(vm_allocation)
+                    .with_boot_image(boot_image)
+                    .with_required_host_features(required_host_features),
+            )
         })
     }
 
@@ -639,22 +621,21 @@ impl Subnet {
 
     /// Add the given number of nodes to the subnet.
     ///
-    /// The nodes will inherit the VM resources of the subnet and extend required host features with the given ones.
+    /// The nodes will extend required host features with the given ones.
     pub fn add_node_with_required_host_features(
         self,
         mut required_host_features: Vec<HostFeature>,
     ) -> Self {
-        let default_vm_resources = self.default_vm_resources;
         let vm_allocation = self.vm_allocation.clone();
         let boot_image = self.boot_image.clone();
         required_host_features.extend_from_slice(&self.required_host_features);
 
-        self.add_node(Node::new_with_settings(
-            default_vm_resources,
-            vm_allocation,
-            boot_image,
-            required_host_features,
-        ))
+        self.add_node(
+            Node::new()
+                .with_vm_allocation(vm_allocation)
+                .with_boot_image(boot_image)
+                .with_required_host_features(required_host_features),
+        )
     }
 
     pub fn with_max_ingress_bytes_per_block(mut self, limit: u64) -> Self {
@@ -729,35 +710,29 @@ impl Subnet {
         malicious_behavior: MaliciousBehavior,
     ) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
-            let default_vm_resources = subnet.default_vm_resources;
             let vm_allocation = subnet.vm_allocation.clone();
             let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
             subnet.add_node(
-                Node::new_with_settings(
-                    default_vm_resources,
-                    vm_allocation,
-                    boot_image,
-                    required_host_features,
-                )
-                .with_malicious_behavior(malicious_behavior.clone()),
+                Node::new()
+                    .with_vm_allocation(vm_allocation)
+                    .with_boot_image(boot_image)
+                    .with_required_host_features(required_host_features)
+                    .with_malicious_behavior(malicious_behavior.clone()),
             )
         })
     }
 
     pub fn add_node_with_ipv4(self, ipv4_config: IPv4Config) -> Self {
-        let default_vm_resources = self.default_vm_resources;
         let vm_allocation = self.vm_allocation.clone();
         let boot_image = self.boot_image.clone();
         let required_host_features = self.required_host_features.clone();
         self.add_node(
-            Node::new_with_settings(
-                default_vm_resources,
-                vm_allocation,
-                boot_image,
-                required_host_features,
-            )
-            .with_ipv4_config(ipv4_config),
+            Node::new()
+                .with_vm_allocation(vm_allocation)
+                .with_boot_image(boot_image)
+                .with_required_host_features(required_host_features)
+                .with_ipv4_config(ipv4_config),
         )
     }
 
@@ -775,7 +750,7 @@ impl Subnet {
 impl Default for Subnet {
     fn default() -> Self {
         Self {
-            default_vm_resources: Default::default(),
+            vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             boot_image: BootImage::GroupDefault,
             required_host_features: vec![],
@@ -804,31 +779,63 @@ impl Default for Subnet {
     }
 }
 
-pub type NrOfVCPUs = AmountOf<VCPUs, u64>;
-pub type AmountOfMemoryKiB = AmountOf<MemoryKiB, u64>;
-pub type ImageSizeGiB = AmountOf<SizeGiB, u64>;
+pub type NrOfVCPUs = AmountOf<VCPUs, i32>;
+pub type AmountOfMemoryKiB = AmountOf<MemoryKiB, i32>;
+pub type ImageSizeGiB = AmountOf<SizeGiB, i32>;
 
 pub enum VCPUs {}
 pub enum MemoryKiB {}
 pub enum SizeGiB {}
 
-/// Resources that the VM will use like number of virtual CPUs and memory.
+/// Resource overrides that will be layered to create VmResources.
+///
+/// NOTE: Values should not be used from here directly (it is still possible to
+/// allow for easy construction), they should be first assembled into a
+/// VmResources and pulled from there.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
-pub struct VmResources {
+pub struct VmResourceOverrides {
     pub vcpus: Option<NrOfVCPUs>,
     pub memory_kibibytes: Option<AmountOfMemoryKiB>,
     pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 }
 
-impl VmResources {
-    /// Applies Option::or to all individual fields `self` and `other`.
-    pub fn or(&self, other: &VmResources) -> Self {
-        Self {
-            vcpus: self.vcpus.or(other.vcpus),
-            memory_kibibytes: self.memory_kibibytes.or(other.memory_kibibytes),
+/// Resources that the VM will use like number of virtual CPUs and memory.
+///
+/// NOTE: This should not be constructed directly (it is still possible to
+/// allow for easy deconstruction), it should be assembled from a set of
+/// VmResourceOverrides.
+pub struct VmResources {
+    pub vcpus: NrOfVCPUs,
+    pub memory_kibibytes: AmountOfMemoryKiB,
+    pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
+}
+
+impl VmResourceOverrides {
+    pub const fn const_default() -> Self {
+        VmResourceOverrides {
+            vcpus: None,
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes: None,
+        }
+    }
+
+    pub fn layer(mut self, layer: &VmResourceOverrides) -> Self {
+        self.vcpus = self.vcpus.or(layer.vcpus);
+        self.memory_kibibytes = self.memory_kibibytes.or(layer.memory_kibibytes);
+        self.boot_image_minimal_size_gibibytes = self
+            .boot_image_minimal_size_gibibytes
+            .or(layer.boot_image_minimal_size_gibibytes);
+
+        self
+    }
+
+    pub fn base(self, base: &VmResources) -> VmResources {
+        VmResources {
+            vcpus: self.vcpus.unwrap_or(base.vcpus),
+            memory_kibibytes: self.memory_kibibytes.unwrap_or(base.memory_kibibytes),
             boot_image_minimal_size_gibibytes: self
                 .boot_image_minimal_size_gibibytes
-                .or(other.boot_image_minimal_size_gibibytes),
+                .or(base.boot_image_minimal_size_gibibytes),
         }
     }
 }
@@ -836,7 +843,7 @@ impl VmResources {
 /// A builder for the initial configuration of a node.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize)]
 pub struct Node {
-    pub vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub secret_key_store: Option<NodeSecretKeyStore>,
@@ -853,25 +860,34 @@ impl Node {
         Default::default()
     }
 
-    pub fn new_with_settings(
-        vm_resources: VmResources,
-        vm_allocation: Option<VmAllocationStrategy>,
-        boot_image: BootImage,
-        required_host_features: Vec<HostFeature>,
-    ) -> Self {
-        let mut node = Node::new();
-        node.vm_resources = vm_resources;
-        node.vm_allocation = vm_allocation;
-        node.boot_image = boot_image;
-        node.required_host_features = required_host_features;
-        node
-    }
-
     pub fn id(&self) -> NodeId {
         self.secret_key_store
             .clone()
             .expect("no secret key store")
             .node_id
+    }
+
+    /// Set the VM resource overrides (like number of virtual CPUs and memory)
+    /// at the node level. More specific overrides have more priority.
+    /// Node > Subnet > IC > Group > Default
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: Option<VmAllocationStrategy>) -> Self {
+        self.vm_allocation = vm_allocation;
+        self
+    }
+
+    pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {
+        self.boot_image = boot_image;
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
+        self
     }
 
     pub fn with_malicious_behavior(mut self, malicious_behavior: MaliciousBehavior) -> Self {

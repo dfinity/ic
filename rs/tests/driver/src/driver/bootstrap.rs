@@ -692,16 +692,41 @@ fn create_setupos_config_image(
         .filter(|s| !s.trim().is_empty())
         .map(PathBuf::from);
 
-    const DEFAULT_BARE_METAL_VCPUS: u64 = 64;
-    const DEFAULT_BARE_METAL_MEMORY_GIB: u64 = 470;
-
     let bare_metal = nested_vm.get_vm()?.bare_metal;
     let config = nested_vm.get_nested_vm_config()?;
     let (nr_of_cpus, memory) = if bare_metal {
-        (DEFAULT_BARE_METAL_VCPUS, DEFAULT_BARE_METAL_MEMORY_GIB)
+        let memory_gibibytes = config.memory_kibibytes.get() / 1024 / 1024;
+
+        (config.vcpus.get(), memory_gibibytes)
     } else {
-        let vm_spec = nested_vm.get_vm_spec()?;
-        (vm_spec.v_cpus / 2, vm_spec.memory_ki_b / 2 / 1024 / 1024)
+        let memory_gibibytes = config.memory_kibibytes.get() / 1024 / 1024;
+
+        // Save some resources for HostOS
+        let vcpus = config.vcpus
+            .get()
+            .checked_sub(4)
+            .expect("HostOS needs at least 4 VCPUs, please allocate more. (The remaining are given to the nested GuestOS.)");
+        let memory_gibibytes = memory_gibibytes
+            .checked_sub(8)
+            .expect("HostOS needs at least 8 GiB memory, please allocate more. (The remaining is given to the nested GuestOS.)");
+
+        if vcpus % 4 != 0 {
+            panic!("The requested VCPUs must be divisible by 4.");
+        }
+
+        if vcpus == 0 {
+            panic!(
+                "The requested VCPUs for a nested node must be > 4. 4 VCPUs are reserved for HostOS, the remaining are given to GuestOS."
+            );
+        }
+
+        if memory_gibibytes == 0 {
+            panic!(
+                "The requested memory for a nested node must be > 8 GiB. 8 GiB is reserved for HostOS, the remaining is given to GuestOS."
+            );
+        }
+
+        (vcpus, memory_gibibytes)
     };
     setupos_image_config::create_setupos_config(
         &config_dir,

@@ -1,5 +1,4 @@
-use crate::driver::farm::VmSpec;
-use crate::driver::ic::VmResources;
+use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResourceOverrides};
 use crate::driver::port_allocator::AddrType;
 use crate::driver::resource::{AllocatedVm, BootImage};
 use crate::driver::test_env::TestEnv;
@@ -31,10 +30,12 @@ use url::Url;
 
 pub const NESTED_VMS_DIR: &str = "nested_vms";
 pub const NESTED_VM_PATH: &str = "vm.json";
-pub const NESTED_VM_SPEC_PATH: &str = "vm_spec.json";
 pub const NESTED_CONFIG_IMAGE_PATH: &str = "config.img.zst";
 pub const NESTED_NETWORK_PATH: &str = "ips.json";
 pub const NESTED_VM_CONFIG: &str = "nested_vm_config.json";
+
+const DEFAULT_BARE_METAL_VCPUS: NrOfVCPUs = NrOfVCPUs::new(64);
+const DEFAULT_BARE_METAL_MEMORY_KIB: AmountOfMemoryKiB = AmountOfMemoryKiB::new(470 * 1024 * 1024);
 
 #[derive(Default)]
 pub struct NestedNodes {
@@ -43,17 +44,20 @@ pub struct NestedNodes {
 
 impl NestedNodes {
     pub fn new(names: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        NestedNodes::new_with_resources(names, VmResources::default())
+        NestedNodes::new_with_resource_overrides(names, VmResourceOverrides::default())
     }
 
-    pub fn new_with_resources(
+    /// Allow specifying resource overrides to use for the nested VM.
+    ///
+    /// NOTE: The number of VCPUs must be divisible by 4.
+    pub fn new_with_resource_overrides(
         names: impl IntoIterator<Item = impl Into<String>>,
-        vm_resources: VmResources,
+        vm_resource_overrides: VmResourceOverrides,
     ) -> Self {
         NestedNodes {
             nodes: names
                 .into_iter()
-                .map(|v| NestedNode::new_farm(v.into(), vm_resources))
+                .map(|v| NestedNode::new_farm(v.into(), vm_resource_overrides))
                 .collect(),
         }
     }
@@ -96,17 +100,14 @@ impl NestedNodes {
             let res_group = allocate_resources(&farm, &res_request, env)?;
 
             for (node, vm_spec) in self.nodes.iter().zip(&res_request.vm_configs) {
-                let vm_spec = VmSpec {
-                    v_cpus: vm_spec.vcpus.get(),
-                    memory_ki_b: vm_spec.memory_kibibytes.get(),
-                };
                 env.write_nested_vm(
                     &node.name,
-                    Some(&vm_spec),
                     &res_group.vms[&node.name],
                     &NestedVmConfig {
                         // TEE not supported in virtual nodes
                         enable_trusted_execution_environment: false,
+                        vcpus: vm_spec.vcpus(),
+                        memory_kibibytes: vm_spec.memory_kibibytes(),
                     },
                 )?;
             }
@@ -123,10 +124,11 @@ impl NestedNodes {
             let vm = allocated_vm_for_bare_metal_instance(&bare_metal_nodes[0], &group_name)?;
             env.write_nested_vm(
                 &bare_metal_nodes[0].name,
-                None,
                 &vm,
                 &NestedVmConfig {
                     enable_trusted_execution_environment,
+                    vcpus: DEFAULT_BARE_METAL_VCPUS,
+                    memory_kibibytes: DEFAULT_BARE_METAL_MEMORY_KIB,
                 },
             )?;
         }
@@ -162,7 +164,7 @@ fn allocated_vm_for_bare_metal_instance(
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum NestedNodeSpec {
-    Vm(VmResources),
+    Vm(VmResourceOverrides),
     BareMetal {
         host_address: Ipv6Addr,
         mgmt_mac: MacAddr6,
@@ -178,11 +180,11 @@ pub struct NestedNode {
 }
 
 impl NestedNode {
-    pub fn new_farm(name: String, vm_resources: VmResources) -> Self {
+    pub fn new_farm(name: String, vm_resource_overrides: VmResourceOverrides) -> Self {
         NestedNode {
             name,
             boot_image: BootImage::default(),
-            node_spec: NestedNodeSpec::Vm(vm_resources),
+            node_spec: NestedNodeSpec::Vm(vm_resource_overrides),
         }
     }
 
@@ -224,6 +226,8 @@ pub struct NestedVm {
 #[derive(Deserialize, Serialize)]
 pub struct NestedVmConfig {
     pub enable_trusted_execution_environment: bool,
+    pub vcpus: NrOfVCPUs,
+    pub memory_kibibytes: AmountOfMemoryKiB,
 }
 
 impl NestedVm {
@@ -233,14 +237,6 @@ impl NestedVm {
             .collect();
 
         self.env.read_json_object(vm_path)
-    }
-
-    pub fn get_vm_spec(&self) -> Result<VmSpec> {
-        let resources_path: PathBuf = [NESTED_VMS_DIR, &self.name, NESTED_VM_SPEC_PATH]
-            .iter()
-            .collect();
-
-        self.env.read_json_object(resources_path)
     }
 
     pub fn get_setupos_config_image_path(&self) -> Result<PathBuf> {
@@ -300,7 +296,6 @@ pub trait HasNestedVms {
     fn write_nested_vm(
         &self,
         name: &str,
-        vm_spec: Option<&VmSpec>,
         vm: &AllocatedVm,
         nested_vm_config: &NestedVmConfig,
     ) -> Result<()>;
@@ -344,7 +339,6 @@ impl HasNestedVms for TestEnv {
     fn write_nested_vm(
         &self,
         name: &str,
-        vm_spec: Option<&VmSpec>,
         vm: &AllocatedVm,
         nested_vm_config: &NestedVmConfig,
     ) -> Result<()> {
@@ -386,9 +380,6 @@ impl HasNestedVms for TestEnv {
 
         let vm_path: PathBuf = [NESTED_VMS_DIR, name].iter().collect();
         self.write_json_object(vm_path.join(NESTED_VM_PATH), &mapped_vm)?;
-        if let Some(vm_spec) = vm_spec {
-            self.write_json_object(vm_path.join(NESTED_VM_SPEC_PATH), vm_spec)?;
-        }
         self.write_json_object(vm_path.join(NESTED_NETWORK_PATH), &nested_network)?;
         self.write_json_object(vm_path.join(NESTED_VM_CONFIG), &nested_vm_config)?;
 

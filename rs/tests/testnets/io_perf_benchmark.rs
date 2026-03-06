@@ -52,7 +52,7 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+    AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
 };
 use ic_system_test_driver::driver::ic_gateway_vm::IcGatewayVm;
 use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
@@ -239,10 +239,10 @@ pub fn setup(env: TestEnv, config: Config) {
 
     // `HostFeature::IoPerformance` is required for the application subnet to use the performance hosts even if hosts are specified.
     let mut subnet = Subnet::new(SubnetType::Application)
-        .with_default_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(64)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
-            ..VmResources::default()
+            ..VmResourceOverrides::default()
         })
         .with_required_host_features(vec![HostFeature::IoPerformance]);
 

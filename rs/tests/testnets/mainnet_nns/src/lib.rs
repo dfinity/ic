@@ -8,7 +8,9 @@ use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use ic_system_test_driver::driver::ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources};
+use ic_system_test_driver::driver::ic::{
+    ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
+};
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
 };
@@ -32,7 +34,7 @@ use crate::proposals::NEURON_CONTROLLER;
 use crate::proposals::NEURON_SECRET_KEY_PEM;
 use crate::proposals::ProposalWithMainnetState;
 
-pub const MAINNET_NODE_VM_RESOURCES: VmResources = VmResources {
+pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
     vcpus: None,
     memory_kibibytes: None,
     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
@@ -683,7 +685,7 @@ fn setup_ic(env: TestEnv) {
             .unwrap();
 
     InternetComputer::new()
-        .with_default_vm_resources(MAINNET_NODE_VM_RESOURCES)
+        .with_resource_overrides(MAINNET_NODE_VM_RESOURCE_OVERRIDES)
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)
