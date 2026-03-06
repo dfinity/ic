@@ -716,3 +716,61 @@ fn test_get_blocks_by_index_range_returns_ascending_order() {
     assert_eq!(retrieved[0].index, 0);
     assert_eq!(retrieved[1].index, 1);
 }
+
+#[test]
+fn test_authorized_mint_and_burn_balance_update() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_authorized_balance.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    crate::common::storage::schema::create_tables(&connection)?;
+
+    let principal = vec![1u8, 2, 3, 4];
+    let caller_principal = vec![9u8, 8, 7, 6];
+    let to_account = Account {
+        owner: Principal::from_slice(&principal),
+        subaccount: None,
+    };
+    let caller = serde_bytes::ByteBuf::from(caller_principal);
+
+    // Block 0: AuthorizedMint of 1000 to to_account
+    let mut block0 = create_test_rosetta_block(0, 1000, &principal, 0);
+    block0.block.transaction.operation = IcrcOperation::AuthorizedMint {
+        to: to_account,
+        amount: Nat::from(1_000u64),
+        caller: caller.clone(),
+        reason: Some("initial supply".to_string()),
+    };
+
+    // Block 1: AuthorizedBurn of 200 from to_account
+    let from_account = Account {
+        owner: Principal::from_slice(&principal),
+        subaccount: None,
+    };
+    let mut block1 = create_test_rosetta_block(1, 2000, &principal, 0);
+    block1.block.transaction.operation = IcrcOperation::AuthorizedBurn {
+        from: from_account,
+        amount: Nat::from(200u64),
+        caller,
+        reason: None,
+    };
+
+    store_blocks(&mut connection, vec![block0, block1])?;
+    update_account_balances(&mut connection, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?;
+
+    let balance = get_account_balance_at_highest_block_idx(
+        &connection,
+        &Account {
+            owner: Principal::from_slice(&principal),
+            subaccount: None,
+        },
+    )?;
+
+    assert_eq!(
+        balance,
+        Some(Nat::from(800u64)),
+        "Expected balance of 800 (mint 1000 - burn 200) but got {:?}",
+        balance
+    );
+
+    Ok(())
+}
