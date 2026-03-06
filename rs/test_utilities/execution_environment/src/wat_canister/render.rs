@@ -140,7 +140,7 @@ mod tests {
         assert_eq!(format_wasm_string(&[0x00, 0x0A, 0x0D]), "\\00\\0a\\0d");
 
         // High-bit byte (non-ASCII)
-        assert_eq!(format_wasm_string(&[0xCO, 0xFF, 0xFE]), "\\ff\\fe");
+        assert_eq!(format_wasm_string(&[0xC0, 0xFF, 0xFE]), "\\c0\\ff\\fe");
 
         // Mixed content
         assert_eq!(
