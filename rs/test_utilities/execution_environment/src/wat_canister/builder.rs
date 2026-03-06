@@ -36,7 +36,7 @@ impl WatFunc {
     /// Emit the declaration prefix for this Wasm function.
     pub(crate) fn export_declaration(&self) -> String {
         match self.method {
-            Method::Start => format!(r#"start $start){INDENT}(func $start"#),
+            Method::Start => r#"func $start"#.to_string(),
             Method::Init => r#"func $init (export "canister_init")"#.to_string(),
             Method::PreUpgrade => {
                 r#"func $pre_upgrade (export "canister_pre_upgrade")"#.to_string()
@@ -152,6 +152,8 @@ impl WatCanisterBuilder {
         // Drain the ASTs to compute rendering
         let funcs: Vec<WatFunc> = self.functions.drain(..).collect();
 
+        let has_start = funcs.iter().any(|f| f.method == Method::Start);
+
         for func in funcs {
             let declaration = func.export_declaration();
 
@@ -184,6 +186,12 @@ impl WatCanisterBuilder {
         }
 
         let functions_block = rendered_functions.join(INDENT);
+
+        let start_block = if has_start {
+            format!("{INDENT}(start $start)")
+        } else {
+            String::new()
+        };
 
         let mut data_entries: Vec<_> = self.memory.into_iter().collect();
         data_entries.sort_by_key(|&(_, offset)| offset);
@@ -229,6 +237,7 @@ impl WatCanisterBuilder {
                 )
             )
             {functions_block}
+            {start_block}
 
             ;; Define memory
             (memory $memory 1)

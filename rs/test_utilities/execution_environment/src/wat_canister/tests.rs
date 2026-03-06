@@ -59,6 +59,25 @@ fn test_wat_func_unique_start() {
 }
 
 #[test]
+fn test_start_method_emits_valid_wasm_and_correct_format() {
+    let wat = wat_canister()
+        .start(wat_fn().debug_print(b"start body"))
+        .build();
+
+    let wasm_module = wat::parse_str(&wat).unwrap();
+    assert!(!wasm_module.is_empty());
+
+    assert!(wat.contains(
+        r#"
+            (func $start
+                (call $ic0_debug_print (i32.const 1000) (i32.const 10))
+            )
+            
+            (start $start)"#
+    ));
+}
+
+#[test]
 #[should_panic(expected = "Method 'Init' with the name 'init' already exists")]
 fn test_wat_func_unique_init() {
     wat_canister().init(wat_fn()).init(wat_fn());
