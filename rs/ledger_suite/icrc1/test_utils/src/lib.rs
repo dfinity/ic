@@ -219,13 +219,16 @@ pub fn transaction_strategy<Tokens: TokensType>(
         let random_time = start + random_duration; // calculate the random time
         random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
     }));
-    (operation_strategy, arb_memo(false), created_at_time_strategy).prop_map(
-        |(operation, memo, created_at_time)| Transaction {
+    (
+        operation_strategy,
+        arb_memo(false),
+        created_at_time_strategy,
+    )
+        .prop_map(|(operation, memo, created_at_time)| Transaction {
             operation,
             created_at_time,
             memo,
-        },
-    )
+        })
 }
 
 pub fn blocks_strategy<Tokens: TokensType>(
@@ -351,13 +354,15 @@ pub fn valid_blockchain_with_gaps_strategy<Tokens: TokensType>(
 }
 
 pub fn transfer_arg(sender: Account) -> impl Strategy<Value = TransferArg> {
-    (any::<u16>(), arb_memo(false), account_strategy()).prop_map(move |(amount, memo, to)| TransferArg {
-        from_subaccount: sender.subaccount,
-        to,
-        amount: candid::Nat::from(amount),
-        created_at_time: None,
-        fee: None,
-        memo,
+    (any::<u16>(), arb_memo(false), account_strategy()).prop_map(move |(amount, memo, to)| {
+        TransferArg {
+            from_subaccount: sender.subaccount,
+            to,
+            amount: candid::Nat::from(amount),
+            created_at_time: None,
+            fee: None,
+            memo,
+        }
     })
 }
 
