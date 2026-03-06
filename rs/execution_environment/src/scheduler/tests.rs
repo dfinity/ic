@@ -6711,22 +6711,22 @@ fn frozen_canisters_are_fully_executed() {
     for (i, canister) in canisters.iter().enumerate() {
         if (i as u64) < (canisters_per_core - 1) * 2 {
             assert_eq!(
-                canister_priority(&canister).last_full_execution_round,
+                canister_priority(canister).last_full_execution_round,
                 1.into(),
                 "Canister {i} should have been fully executed",
             );
             assert!(
-                canister_priority(&canister).accumulated_priority.get() < 0,
+                canister_priority(canister).accumulated_priority.get() < 0,
                 "Canister {i} should have been charged"
             );
         } else {
             assert_eq!(
-                canister_priority(&canister).last_full_execution_round,
+                canister_priority(canister).last_full_execution_round,
                 0.into(),
                 "Canister {i} should not have been executed",
             );
             assert!(
-                canister_priority(&canister).accumulated_priority.get() > 0,
+                canister_priority(canister).accumulated_priority.get() > 0,
                 "Canister {i} should not have been charged"
             );
         }
