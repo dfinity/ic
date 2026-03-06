@@ -1491,123 +1491,117 @@ impl Scheduler for SchedulerImpl {
         }
 
         // Finalization.
+        let mut final_state;
         {
             let _timer = self.metrics.round_finalization_duration.start_timer();
 
-            let mut final_state;
-            {
-                // TODO(DSM-103): Consider only covering actually scheduled canisters.
-                for canister in state.canisters_iter_mut() {
-                    let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
-                    self.metrics
-                        .canister_heap_delta_debits
-                        .observe(heap_delta_debit as f64);
-                    if heap_delta_debit > 0 {
-                        let canister = Arc::make_mut(canister);
-                        canister.scheduler_state.heap_delta_debit =
-                            match self.rate_limiting_of_heap_delta {
-                                FlagStatus::Enabled => NumBytes::from(
-                                    heap_delta_debit
-                                        .saturating_sub(self.config.heap_delta_rate_limit.get()),
-                                ),
-                                FlagStatus::Disabled => NumBytes::from(0),
-                            };
-                    }
-
-                    let install_code_debit = canister.scheduler_state.install_code_debit.get();
-                    self.metrics
-                        .canister_install_code_debits
-                        .observe(install_code_debit as f64);
-                    if install_code_debit > 0 {
-                        let canister = Arc::make_mut(canister);
-                        canister.scheduler_state.install_code_debit =
-                            match self.rate_limiting_of_instructions {
-                                FlagStatus::Enabled => NumInstructions::from(
-                                    install_code_debit
-                                        .saturating_sub(self.config.install_code_rate_limit.get()),
-                                ),
-                                FlagStatus::Disabled => NumInstructions::from(0),
-                            };
-                    }
-
-                    let new_log = &canister.system_state.log_memory_store;
-                    let old_log = &canister.system_state.canister_log;
-                    let delta_log_sizes = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                        new_log.delta_log_sizes()
-                    } else {
-                        old_log.delta_log_sizes()
-                    };
-                    if new_log.has_delta_log_sizes() || old_log.has_delta_log_sizes() {
-                        // Only clone state if delta log sizes are not empty.
-                        let canister = Arc::make_mut(canister);
-                        let new_log = &mut canister.system_state.log_memory_store;
-                        let old_log = &mut canister.system_state.canister_log;
-                        // IMPORTANT: Ensure `clear_delta_log_sizes()` is called
-                        // so the delta log sizes are empty at the end of the round.
-                        // This guarantees states remain consistent before and after a checkpoint.
-                        new_log.clear_delta_log_sizes();
-                        old_log.clear_delta_log_sizes();
-                    }
-                    for size in delta_log_sizes {
-                        self.metrics
-                            .canister_log_delta_memory_usage
-                            .observe(size as f64);
-                    }
-
-                    // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
-                    // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
+            // TODO(DSM-103): Consider only covering actually scheduled canisters.
+            for canister in state.canisters_iter_mut() {
+                let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
+                self.metrics
+                    .canister_heap_delta_debits
+                    .observe(heap_delta_debit as f64);
+                if heap_delta_debit > 0 {
+                    let canister = Arc::make_mut(canister);
+                    canister.scheduler_state.heap_delta_debit =
+                        match self.rate_limiting_of_heap_delta {
+                            FlagStatus::Enabled => NumBytes::from(
+                                heap_delta_debit
+                                    .saturating_sub(self.config.heap_delta_rate_limit.get()),
+                            ),
+                            FlagStatus::Disabled => NumBytes::from(0),
+                        };
                 }
+
+                let install_code_debit = canister.scheduler_state.install_code_debit.get();
+                self.metrics
+                    .canister_install_code_debits
+                    .observe(install_code_debit as f64);
+                if install_code_debit > 0 {
+                    let canister = Arc::make_mut(canister);
+                    canister.scheduler_state.install_code_debit =
+                        match self.rate_limiting_of_instructions {
+                            FlagStatus::Enabled => NumInstructions::from(
+                                install_code_debit
+                                    .saturating_sub(self.config.install_code_rate_limit.get()),
+                            ),
+                            FlagStatus::Disabled => NumInstructions::from(0),
+                        };
+                }
+
+                let new_log = &canister.system_state.log_memory_store;
+                let old_log = &canister.system_state.canister_log;
+                let delta_log_sizes = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                    new_log.delta_log_sizes()
+                } else {
+                    old_log.delta_log_sizes()
+                };
+                if new_log.has_delta_log_sizes() || old_log.has_delta_log_sizes() {
+                    // Only clone state if delta log sizes are not empty.
+                    let canister = Arc::make_mut(canister);
+                    let new_log = &mut canister.system_state.log_memory_store;
+                    let old_log = &mut canister.system_state.canister_log;
+                    // IMPORTANT: Ensure `clear_delta_log_sizes()` is called
+                    // so the delta log sizes are empty at the end of the round.
+                    // This guarantees states remain consistent before and after a checkpoint.
+                    new_log.clear_delta_log_sizes();
+                    old_log.clear_delta_log_sizes();
+                }
+                for size in delta_log_sizes {
+                    self.metrics
+                        .canister_log_delta_memory_usage
+                        .observe(size as f64);
+                }
+
                 // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
-                // cycles_out_sum += total_canister_balance;
-
-                // TODO(EXC-1124): Re-enable the check below once it's fixed.
-                //
-                // Check that amount of cycles at the beginning of the round (balances and cycles from input messages) is bigger or equal
-                // than the amount of cycles at the end of the round (balances and cycles from output messages).
-                // if cycles_in_sum < cycles_out_sum {
-                //     warn!(
-                //         round_log,
-                //         "At Round {} @ time {}, the resulted state after execution does not hold the in-out cycles invariant: cycles at beginning of round {} were fewer than cycles at end of round {}",
-                //         current_round,
-                //         state.time(),
-                //         cycles_in_sum,
-                //         cycles_out_sum,
-                //     );
-                // }
-
-                // Check if the invariants are still valid after the execution for active canisters.
-                self.check_canister_invariants(
-                    &round_log,
-                    &current_round,
-                    &state,
-                    round_schedule.round_scheduled_canisters(),
-                );
-
-                // NOTE: The logic for deleting canisters assumes that transitioning
-                // canisters from `Stopping` to `Stopped` happens at the end of the round
-                // as is currently the case. If this logic is moved elsewhere (e.g. at the
-                // beginning of the round), then canister deletion logic should be revised.
-                {
-                    let _timer = self.metrics.round_finalization_stop_canisters.start_timer();
-                    final_state = self.exec_env.process_stopping_canisters(state);
-                }
-                {
-                    let _timer = self.metrics.round_finalization_ingress.start_timer();
-                    final_state.prune_ingress_history();
-                }
-                {
-                    let _timer = self.metrics.round_finalization_charge.start_timer();
-                    self.charge_canisters_for_resource_allocation_and_usage(
-                        &mut final_state,
-                        registry_settings.subnet_size,
-                    );
-                }
+                // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
             }
+            // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+            // cycles_out_sum += total_canister_balance;
 
+            // TODO(EXC-1124): Re-enable the check below once it's fixed.
+            //
+            // Check that amount of cycles at the beginning of the round (balances and cycles from input messages) is bigger or equal
+            // than the amount of cycles at the end of the round (balances and cycles from output messages).
+            // if cycles_in_sum < cycles_out_sum {
+            //     warn!(
+            //         round_log,
+            //         "At Round {} @ time {}, the resulted state after execution does not hold the in-out cycles invariant: cycles at beginning of round {} were fewer than cycles at end of round {}",
+            //         current_round,
+            //         state.time(),
+            //         cycles_in_sum,
+            //         cycles_out_sum,
+            //     );
+            // }
+
+            // Check if the invariants are still valid after the execution for active canisters.
+            self.check_canister_invariants(
+                &round_log,
+                &current_round,
+                &state,
+                round_schedule.round_scheduled_canisters(),
+            );
+
+            // NOTE: The logic for deleting canisters assumes that transitioning
+            // canisters from `Stopping` to `Stopped` happens at the end of the round
+            // as is currently the case. If this logic is moved elsewhere (e.g. at the
+            // beginning of the round), then canister deletion logic should be revised.
             {
-                let _timer = self.metrics.round_scheduling_duration.start_timer();
-                round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
+                let _timer = self.metrics.round_finalization_stop_canisters.start_timer();
+                final_state = self.exec_env.process_stopping_canisters(state);
             }
+            {
+                let _timer = self.metrics.round_finalization_ingress.start_timer();
+                final_state.prune_ingress_history();
+            }
+            {
+                let _timer = self.metrics.round_finalization_charge.start_timer();
+                self.charge_canisters_for_resource_allocation_and_usage(
+                    &mut final_state,
+                    registry_settings.subnet_size,
+                );
+            }
+
             self.finish_round(
                 &mut final_state,
                 current_round,
@@ -1621,8 +1615,15 @@ impl Scheduler for SchedulerImpl {
                 .update_transactions_total += root_measurement_scope.messages().get();
             final_state.metadata.subnet_metrics.num_canisters =
                 final_state.canister_states().len() as u64;
-            final_state
         }
+
+        // Update canister priorities.
+        {
+            let _timer = self.metrics.round_scheduling_duration.start_timer();
+            round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
+        }
+
+        final_state
     }
 
     fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
