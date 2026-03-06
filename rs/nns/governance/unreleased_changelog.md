@@ -17,4 +17,8 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* Dissolved neurons can no longer stake maturity. Previously, the operation was
+  accepted but immediately reversed by the periodic `UnstakeMaturityOfDissolvedNeuron`
+  task.
+
 ## Security
