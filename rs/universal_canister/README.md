@@ -7,7 +7,7 @@ The Universal Canister (UC) is a pre-compiled WebAssembly canister used for inte
 
 Purpose
 -------
-Writing custom WebAssembly or Rust canisters for every test case is verbose and hard to maintain. The UC provides a flexible canister to execute arbitrary sequences of IC system API calls dynamically. By encoding instructions (like `call`, `reply`, or `stable_read`) into simple payloads, tests can succinctly simulate complex canister behaviors and cross-canister interactions.
+Writing custom WebAssembly or Rust canisters for every test case is verbose and hard to maintain. The UC provides a single, flexible canister to execute arbitrary sequences of IC system API calls. By encoding instructions (like `call`, `reply`, or `stable_read`) into simple payloads, tests can simulate complex behaviors and cross-canister interactions dynamically.
 
 Architecture
 ------------
@@ -19,11 +19,11 @@ The implementation is in `/impl`, while the library used by tests to build instr
 
 Limitations
 -----------
-Because the UC is a static, pre-compiled WebAssembly module, it cannot test structural WebAssembly properties. 
+Because the UC is a static, pre-compiled WebAssembly module that operates by interpreting payloads passed into exported methods, it has strict limitations when testing initialization and upgrade hooks.
 
-You cannot use the UC to test:
-- WebAssembly module boundaries (e.g., missing exports or overlapping memory).
-- Hypervisor traps during module instantiation.
-- Initialization structures like `(start)`, or explicit `init`/`pre_upgrade` hooks executing before the payload is processed.
+Specifically:
+- **`start` function**: The UC cannot test the WebAssembly `(start)` function. This executes during module instantiation and does not have access to message arguments.
+- **`canister_init` and `canister_post_upgrade`**: These hooks can only be tested if instructions are passed as the explicit initialization or upgrade argument. They cannot access instructions "pre-set" via a previous update call because `init` starts with a fresh heap and `post_upgrade` runs after the previous heap has been wiped. 
+- **`canister_pre_upgrade`**: The UC can test this hook by saving instructions to the heap in a prior update call, as `pre_upgrade` executes while the old heap is still active.
 
-For testing these structural Wasm properties and module initialization states, use the [WAT Canister](../test_utilities/execution_environment/src/wat_canister).
+For testing native `start` behavior, complex initialization traps, or structural Wasm properties, use the [WAT Canister](../test_utilities/execution_environment/src/wat_canister).

@@ -49,12 +49,20 @@ impl<'a> RenderState<'a> {
     pub(crate) fn process_calls(&mut self, calls: &[FnCall], indent: &str) {
         for call in calls {
             match call {
-                FnCall::StableGrow(new_pages) => self
-                    .instructions
-                    .push(format!("(drop (call $ic0_stable_grow (i32.const {new_pages})))")),
-                FnCall::StableRead(dst, offset, size) => self.instructions.push(format!(
-                    "(call $ic0_stable_read (i32.const {dst}) (i32.const {offset}) (i32.const {size}))"
+                FnCall::StableGrow(new_pages) => self.instructions.push(format!(
+                    "(drop (call $ic0_stable_grow (i32.const {new_pages})))"
                 )),
+                FnCall::StableRead(dst, offset, size) => {
+                    if *dst + *size > WAIT_SCRATCHPAD_START {
+                        panic!(
+                            "StableRead destination {} (size {}) overlaps with reserved wait() scratchpad (starts at {}).",
+                            dst, size, WAIT_SCRATCHPAD_START
+                        );
+                    }
+                    self.instructions.push(format!(
+                        "(call $ic0_stable_read (i32.const {dst}) (i32.const {offset}) (i32.const {size}))"
+                    ))
+                }
                 FnCall::GlobalTimerSet(timestamp) => self.instructions.push(format!(
                     "(drop (call $ic0_global_timer_set (i64.const {timestamp})))"
                 )),
@@ -79,11 +87,15 @@ impl<'a> RenderState<'a> {
                     let id = self.next_loop_id;
                     self.next_loop_id += 1;
 
-                    self.instructions.push(format!("(local.set $loop_counter_{id} (i32.const {count}))"));
+                    self.instructions.push(format!(
+                        "(local.set $loop_counter_{id} (i32.const {count}))"
+                    ));
                     self.instructions.push(format!("(loop $loop_label_{id}"));
 
                     let inner_indent = format!("{}    ", indent);
-                    self.instructions.push(format!("{inner_indent}(if (i32.gt_u (local.get $loop_counter_{id}) (i32.const 0))"));
+                    self.instructions.push(format!(
+                        "{inner_indent}(if (i32.gt_u (local.get $loop_counter_{id}) (i32.const 0))"
+                    ));
                     self.instructions.push(format!("{inner_indent}    (then"));
 
                     // Render inner code logic
@@ -91,7 +103,8 @@ impl<'a> RenderState<'a> {
 
                     // Step control block
                     self.instructions.push(format!("{inner_indent}        (local.set $loop_counter_{id} (i32.sub (local.get $loop_counter_{id}) (i32.const 1)))"));
-                    self.instructions.push(format!("{inner_indent}        (br $loop_label_{id})"));
+                    self.instructions
+                        .push(format!("{inner_indent}        (br $loop_label_{id})"));
 
                     // Close block layout
                     self.instructions.push(format!("{inner_indent}    )"));
