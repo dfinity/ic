@@ -628,6 +628,8 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
+    stop_noisy_canister(&state_machine);
+
     LedgerSuiteConfig::new_with_params(
         (
             CK_BTC_LEDGER_CANISTER_ID,
@@ -769,7 +771,14 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
-    // Stop noisy canister.
+    stop_noisy_canister(&state_machine);
+
+    for canister_config in canister_configs {
+        canister_config.perform_upgrade_downgrade_testing(&state_machine);
+    }
+}
+
+fn stop_noisy_canister(state_machine: &StateMachine) {
     let canister_id = CanisterId::unchecked_from_principal(
         PrincipalId::from_str("72ch2-fiaaa-aaaar-qbsvq-cai").unwrap(),
     );
@@ -786,10 +795,6 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
                 });
             println!("Stopped canister {canister_id}");
         }
-    }
-
-    for canister_config in canister_configs {
-        canister_config.perform_upgrade_downgrade_testing(&state_machine);
     }
 }
 

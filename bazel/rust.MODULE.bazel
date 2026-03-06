@@ -235,12 +235,21 @@ crate.spec(
     package = "cached",
     version = "^0.49",
 )
+
+# canbench patch to avoid littering PWD when running benchmarks
+# https://github.com/dfinity/canbench/pull/166
+canbench_rev = "9ca29369085edc7567aa87ceb57d4b21e037b66e"
+
 crate.spec(
+    git = "https://github.com/dfinity/canbench",
     package = "canbench",
+    rev = canbench_rev,
     version = "^0.4.0",
 )
 crate.spec(
+    git = "https://github.com/dfinity/canbench",
     package = "canbench-rs",
+    rev = canbench_rev,
     version = "^0.4.0",
 )
 crate.spec(
@@ -453,7 +462,7 @@ crate.spec(
 )
 crate.spec(
     package = "evm_rpc_client",
-    version = "^0.3.0",
+    version = "^0.4.0",
 )
 crate.spec(
     package = "evm_rpc_types",
@@ -634,7 +643,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-canister-runtime",
-    version = "^0.1.0",
+    version = "^0.2.0",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
@@ -1646,7 +1655,7 @@ crate.spec(
 )
 crate.spec(
     package = "thiserror",
-    version = "^2.0.3",
+    version = "^2.0.18",
 )
 crate.spec(
     package = "thousands",

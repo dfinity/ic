@@ -2141,6 +2141,15 @@ fn delete_canister_consumed_cycles_observed() {
     let initial_cycles = Cycles::new(5_000_000_000_000);
     let canister_id = test.create_canister(initial_cycles);
 
+    // Reserve some cycles as if the canister performed some
+    // large memory allocation.
+    // If the canister gets deleted all of the remaining cycles
+    // in its main as well as reserved balance would be lost.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .reserve_cycles(initial_cycles / 2u64)
+        .unwrap();
+
     // Stop and delete the canister.
     test.stop_canister(canister_id);
     test.process_stopping_canisters();

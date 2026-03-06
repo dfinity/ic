@@ -520,10 +520,7 @@ impl CkEthSetup {
         );
     }
 
-    pub fn tick_until_minter_canister_status(
-        &self,
-        expected_canister_status: CanisterStatusType,
-    ) -> CanisterStatusType {
+    pub fn tick_until_minter_canister_status(&self, expected_canister_status: CanisterStatusType) {
         const MAX_TICKS: u64 = 10;
         let mut status = self.minter_status();
         for _ in 0..MAX_TICKS {
@@ -532,7 +529,7 @@ impl CkEthSetup {
             }
             status = self.minter_status();
         }
-        status
+        assert_eq!(status, expected_canister_status);
     }
 
     pub fn stop_minter(&self) {

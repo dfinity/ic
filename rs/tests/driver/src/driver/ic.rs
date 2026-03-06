@@ -657,6 +657,11 @@ impl Subnet {
         ))
     }
 
+    pub fn with_max_ingress_bytes_per_block(mut self, limit: u64) -> Self {
+        self.max_ingress_bytes_per_block = Some(limit);
+        self
+    }
+
     pub fn with_max_ingress_message_size(mut self, limit: u64) -> Self {
         self.max_ingress_bytes_per_message = Some(limit);
         self
