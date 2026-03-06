@@ -162,7 +162,8 @@ fn test_fetching_block_ranges() {
                 SystemTime::now(),
                 TransactionStrategyOptions {
                     excluded_transaction_types: vec![],
-                    include_subaccounts: false,
+                    require_created_at_time: true,
+                    require_memo: true,
                 },
             )
             .no_shrink(),),

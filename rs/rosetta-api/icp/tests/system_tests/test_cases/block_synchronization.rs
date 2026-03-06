@@ -74,11 +74,10 @@ fn test_block_synchronization() {
                 SystemTime::now(),
                 TransactionStrategyOptions {
                     excluded_transaction_types: vec![],
-                    // To work with ICP Rosetta, we strip any subaccount information, which leads
-                    // to issue with approvals for two different subaccounts for the same principal
-                    // overwriting each other. We therefore need to generate transactions without
-                    // subaccounts for this test to work properly.
-                    include_subaccounts: false,
+                    // ICP Rosetta requires created_at_time and memo to be set for
+                    // deterministic dedup keys, enabling safe retries on timeout.
+                    require_created_at_time: true,
+                    require_memo: true,
                 },
             )
             .no_shrink()),
@@ -126,11 +125,10 @@ fn test_ledger_upgrade_synchronization() {
                 SystemTime::now(),
                 TransactionStrategyOptions {
                     excluded_transaction_types: vec![],
-                    // To work with ICP Rosetta, we strip any subaccount information, which leads
-                    // to issue with approvals for two different subaccounts for the same principal
-                    // overwriting each other. We therefore need to generate transactions without
-                    // subaccounts for this test to work properly.
-                    include_subaccounts: false,
+                    // ICP Rosetta requires created_at_time and memo to be set for
+                    // deterministic dedup keys, enabling safe retries on timeout.
+                    require_created_at_time: true,
+                    require_memo: true,
                 },
             )
             .no_shrink()),
@@ -272,11 +270,10 @@ fn test_load_from_storage() {
                 SystemTime::now(),
                 TransactionStrategyOptions {
                     excluded_transaction_types: vec![],
-                    // To work with ICP Rosetta, we strip any subaccount information, which leads
-                    // to issue with approvals for two different subaccounts for the same principal
-                    // overwriting each other. We therefore need to generate transactions without
-                    // subaccounts for this test to work properly.
-                    include_subaccounts: false,
+                    // ICP Rosetta requires created_at_time and memo to be set for
+                    // deterministic dedup keys, enabling safe retries on timeout.
+                    require_created_at_time: true,
+                    require_memo: true,
                 },
             )
             .no_shrink()),

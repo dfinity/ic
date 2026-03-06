@@ -46,7 +46,8 @@ fn test_icp_transfer() {
                         TransactionTypes::TransferFrom,
                         TransactionTypes::Approve
                     ],
-                    include_subaccounts: true
+                    require_created_at_time: true,
+                    require_memo: true
                 },
             ),)
                 .no_shrink(),

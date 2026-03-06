@@ -1552,6 +1552,7 @@ impl RosettaClient {
     }
 }
 
+#[derive(Clone)]
 pub struct RosettaTransferArgs {
     pub from_subaccount: Option<[u8; 32]>,
     pub to: Account,

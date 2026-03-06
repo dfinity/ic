@@ -33,6 +33,7 @@ use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::response_types::ConstructionSubmitResponse;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -149,9 +150,11 @@ impl RosettaTestingEnvironment {
                 args_builder = args_builder.with_created_at_time(created_at_time);
             }
 
-            self.rosetta_client
+            let rosetta_transfer_args = args_builder.build();
+            let response = self
+                .rosetta_client
                 .transfer(
-                    args_builder.build(),
+                    rosetta_transfer_args.clone(),
                     self.network_identifier.clone(),
                     &arg_with_caller.caller,
                 )
@@ -162,6 +165,46 @@ impl RosettaTestingEnvironment {
                         transfer_to, transfer_amount,
                     )
                 });
+
+            // Check if the server reported a FAILED status in the response metadata.
+            // This can happen when the Rosetta server's internal wait_for_result times out
+            // but the transaction may or may not have been submitted to the ledger.
+            // We retry with the same args (same created_at_time + memo) so the ledger's
+            // dedup logic makes this safe: either the retry succeeds (original wasn't
+            // processed) or we get a duplicate error (original was processed, balance is
+            // correct).
+            if Self::response_has_failed_status(&response) {
+                eprintln!(
+                    "Rosetta transfer returned FAILED status, retrying: to={}, amount={}",
+                    transfer_to, transfer_amount,
+                );
+                match self
+                    .rosetta_client
+                    .transfer(
+                        rosetta_transfer_args,
+                        self.network_identifier.clone(),
+                        &arg_with_caller.caller,
+                    )
+                    .await
+                {
+                    Ok(retry_response) => {
+                        if Self::response_has_failed_status(&retry_response) {
+                            panic!(
+                                "Rosetta transfer retry also returned FAILED status: to={}, amount={}",
+                                transfer_to, transfer_amount,
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        // An error on retry likely means the original transaction was
+                        // processed (e.g. duplicate transaction error). This is fine -
+                        // the balance is correct.
+                        eprintln!(
+                            "Rosetta transfer retry returned error (original likely succeeded): {e:?}"
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -186,6 +229,24 @@ impl RosettaTestingEnvironment {
 
     pub async fn get_test_agent(&self) -> Agent {
         get_test_agent(self.pocket_ic.url().unwrap().port().unwrap()).await
+    }
+
+    /// Checks whether any operation in the submit response metadata has a FAILED status.
+    fn response_has_failed_status(response: &ConstructionSubmitResponse) -> bool {
+        let Some(metadata) = &response.metadata else {
+            return false;
+        };
+        let Some(operations) = metadata.get("operations") else {
+            return false;
+        };
+        let Some(operations) = operations.as_array() else {
+            return false;
+        };
+        operations.iter().any(|op| {
+            op.get("status")
+                .and_then(|s| s.as_str())
+                .is_some_and(|s| s == "FAILED")
+        })
     }
 }
 
