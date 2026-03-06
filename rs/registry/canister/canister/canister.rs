@@ -67,7 +67,7 @@ use registry_canister::{
         },
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
-        do_update_subnet_admins::{UpdateSubnetAdminsPayload, UpdateSubnetAdminsResult},
+        do_update_subnet_admins::UpdateSubnetAdminsPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
         firewall::{
             AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
@@ -1250,10 +1250,9 @@ fn update_subnet_admins() {
 }
 
 #[candid_method(update, rename = "update_subnet_admins")]
-fn update_subnet_admins_(payload: UpdateSubnetAdminsPayload) -> UpdateSubnetAdminsResult {
-    let result = registry_mut().do_update_subnet_admins(payload);
+fn update_subnet_admins_(payload: UpdateSubnetAdminsPayload) {
+    registry_mut().do_update_subnet_admins(payload);
     recertify_registry();
-    result
 }
 
 fn recertify_registry() {
