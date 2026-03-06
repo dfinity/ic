@@ -1898,7 +1898,8 @@ fn flexible_build_caps_at_max_responses() {
 
         assert_eq!(parsed.flexible_responses.len(), 1);
         let flexible_responses_len = parsed.flexible_responses[0].responses.len();
-        assert!(flexible_responses_len <= 2 && flexible_responses_len >= 1);
+        assert!(flexible_responses_len <= 2);
+        assert!(flexible_responses_len >= 1);
     });
 }
 
