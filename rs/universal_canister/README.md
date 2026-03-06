@@ -11,15 +11,18 @@ Writing custom canisters (e.g., in WAT or Rust) for every test case is verbose a
 
 Architecture
 ------------
-The UC is a Rust application compiled into a static WebAssembly binary. When receiving an `update` or `query` message, it extracts instruction bytes from the payload and evaluates them using an internal stack.
+The UC is a canister that implements a custom instruction interpreter. 
+It executes arbitrary sequences of IC System API calls by evaluating instructions received via the **payload** of standard `update` call.
 
-The implementation is in `/impl`, while the library used by tests to build instruction payloads is in `/lib`.
+The implementation is split into:
+- `/impl`: The source code for the WebAssembly module that performs the evaluation.
+- `/lib`: A Rust library that provides a DSL (starting with `wasm()`) to programmatically "script" the canister's behavior by constructing these instruction payloads.
 
 *Note: The UC implementation temporarily uses its own `Cargo.lock` and is excluded from the top-level workspace build.*
 
 Limitations
 -----------
-Because the UC is a static, pre-compiled WebAssembly module that operates by interpreting payloads passed into exported methods, it has strict limitations when testing initialization and upgrade hooks.
+Because the UC is a generic canister that interprets payloads passed into its exported methods, it has strict limitations when testing initialization and upgrade hooks.
 
 Specifically:
 - **`start` function**: The UC cannot test the WebAssembly `(start)` function. This executes during module instantiation and does not have access to message arguments.
