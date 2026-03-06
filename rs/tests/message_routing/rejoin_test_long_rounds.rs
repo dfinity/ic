@@ -22,7 +22,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -81,7 +81,7 @@ impl Config {
 
 fn setup(env: TestEnv, config: Config) {
     // VM resources are as for the "large" testnet.
-    let vm_resources = VmResources {
+    let vm_resource_overrides = VmResourceOverrides {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
@@ -90,7 +90,7 @@ fn setup(env: TestEnv, config: Config) {
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
+                .with_resource_overrides(vm_resource_overrides)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(config.nodes_count),
         )

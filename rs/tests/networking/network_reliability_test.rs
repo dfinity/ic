@@ -25,7 +25,7 @@ use ic_system_test_driver::{
     driver::{
         constants::DEVICE_NAME,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
@@ -92,10 +92,10 @@ const OVERALL_TIMEOUT: Duration = Duration::from_secs(350 * 60);
 
 pub fn setup(env: TestEnv, config: Config) {
     InternetComputer::new()
-        .with_default_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(8)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
-            ..VmResources::default()
+            ..VmResourceOverrides::default()
         })
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(config.nodes_system_subnet))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_app_subnet))

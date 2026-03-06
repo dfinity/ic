@@ -1,6 +1,6 @@
 use crate::driver::test_env::HasIcPrepDir;
 use crate::driver::{
-    constants::GROUP_SETUP_DIR, context::GroupContext, farm::HostFeature, ic::VmResources,
+    constants::GROUP_SETUP_DIR, context::GroupContext, farm::HostFeature, ic::VmResourceOverrides,
     prometheus_vm::PrometheusVm, test_env::TestEnv,
 };
 use slog::{debug, info};
@@ -41,7 +41,7 @@ pub(crate) fn metrics_setup_task(group_ctx: GroupContext) {
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
         .unwrap_or_default();
 
-    let vm_resources: VmResources = std::env::var("PROMETHEUS_VM_RESOURCES")
+    let vm_resource_overrides: VmResourceOverrides = std::env::var("PROMETHEUS_VM_RESOURCES")
         .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
         .unwrap_or_default();
@@ -56,7 +56,7 @@ pub(crate) fn metrics_setup_task(group_ctx: GroupContext) {
 
     PrometheusVm::default()
         .with_required_host_features(host_features)
-        .with_vm_resources(vm_resources)
+        .with_resource_overrides(vm_resource_overrides)
         .with_scrape_interval(prometheus_scrape_interval)
         .start(&env)
         .expect("failed to start prometheus VM");

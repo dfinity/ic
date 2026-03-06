@@ -17,7 +17,7 @@ use slog::{Logger, debug, info, warn};
 use crate::driver::{
     constants::SSH_USERNAME,
     farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResourceOverrides},
     ic_gateway_vm::HasIcGatewayVm,
     ic_gateway_vm::Playnet,
     log_events,
@@ -133,7 +133,7 @@ impl PrometheusVm {
                         .expect("should not fail!"),
                     sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
                 })
-                .with_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
@@ -148,8 +148,10 @@ impl PrometheusVm {
         self
     }
 
-    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
-        self.universal_vm = self.universal_vm.with_vm_resources(vm_resources);
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_resource_overrides(vm_resource_overrides);
         self
     }
 

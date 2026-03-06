@@ -5,9 +5,9 @@ use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use crate::driver::farm::VMCreateResponse;
 use crate::driver::farm::{CreateVmRequest, HostFeature};
 use crate::driver::farm::{Farm, VmType};
-use crate::driver::ic::ResolvedVmResources;
+use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
+use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResourceOverrides};
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
@@ -24,7 +24,7 @@ use url::Url;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
-const DEFAULT_VM_RESOURCES: ResolvedVmResources = ResolvedVmResources {
+const DEFAULT_VM_RESOURCES: VmResources = VmResources {
     vcpus: DEFAULT_VCPUS_PER_VM,
     memory_kibibytes: DEFAULT_MEMORY_KIB_PER_VM,
     boot_image_minimal_size_gibibytes: None,
@@ -32,7 +32,7 @@ const DEFAULT_VM_RESOURCES: ResolvedVmResources = ResolvedVmResources {
 
 pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
 pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
-const DEFAULT_NESTED_VM_RESOURCES: ResolvedVmResources = ResolvedVmResources {
+const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
     vcpus: HOSTOS_VCPUS_PER_VM,
     memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
     boot_image_minimal_size_gibibytes: None,
@@ -176,11 +176,11 @@ pub fn get_resource_request(
 
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
     let group_setup = GroupSetup::read_attribute(test_env);
-    let group_resource_overrides = group_setup.default_vm_resources;
-    let ic_resource_overrides = config.default_vm_resources;
+    let group_resource_overrides = group_setup.vm_resource_overrides;
+    let ic_resource_overrides = config.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
     for s in &config.subnets {
-        let subnet_resource_overrides = Some(s.default_vm_resources);
+        let subnet_resource_overrides = Some(s.vm_resource_overrides);
         for n in &s.nodes {
             res_req.add_vm_request(vm_spec_from_node(
                 n,
@@ -226,7 +226,7 @@ pub fn get_resource_request_for_nested_nodes(
         empty_disk_img_sha256,
     );
     let group_setup = GroupSetup::read_attribute(test_env);
-    let group_resource_overrides = group_setup.default_vm_resources;
+    let group_resource_overrides = group_setup.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
     for node in nodes {
         res_req.add_vm_request(vm_spec_from_nested_node(node, group_resource_overrides)?);
@@ -261,8 +261,8 @@ pub fn get_resource_request_for_universal_vm(
     res_req.group_name = group_name.to_string();
 
     let resolved_vm_resources = universal_vm
-        .vm_resources
-        .layer(&group_setup.default_vm_resources)
+        .vm_resource_overrides
+        .layer(&group_setup.vm_resource_overrides)
         .base(&DEFAULT_VM_RESOURCES);
 
     res_req.add_vm_request(VmSpec {
@@ -352,17 +352,17 @@ pub fn allocate_resources(
 
 fn vm_spec_from_node(
     n: &Node,
-    subnet_default_vm_resources: Option<VmResources>,
-    ic_default_vm_resources: VmResources,
-    group_default_vm_resources: VmResources,
+    subnet_vm_resource_overrides: Option<VmResourceOverrides>,
+    ic_vm_resource_overrides: VmResourceOverrides,
+    group_vm_resource_overrides: VmResourceOverrides,
 ) -> VmSpec {
-    let mut vm_resources = n.vm_resources;
-    if let Some(subnet_default_vm_resources) = subnet_default_vm_resources {
-        vm_resources = vm_resources.layer(&subnet_default_vm_resources);
+    let mut vm_resources = n.vm_resource_overrides;
+    if let Some(subnet_vm_resource_overrides) = subnet_vm_resource_overrides {
+        vm_resources = vm_resources.layer(&subnet_vm_resource_overrides);
     }
     let resolved_vm_resources = vm_resources
-        .layer(&ic_default_vm_resources)
-        .layer(&group_default_vm_resources)
+        .layer(&ic_vm_resource_overrides)
+        .layer(&group_vm_resource_overrides)
         .base(&DEFAULT_VM_RESOURCES);
 
     VmSpec {
@@ -384,17 +384,17 @@ fn vm_spec_from_node(
 /// GuestOS VM.
 fn vm_spec_from_nested_node(
     node: &NestedNode,
-    group_default_vm_resources: VmResources,
+    group_vm_resource_overrides: VmResourceOverrides,
 ) -> anyhow::Result<VmSpec> {
-    let node_vm_resources = match &node.node_spec {
-        NestedNodeSpec::Vm(vm_resources) => vm_resources,
+    let node_vm_resource_overrides = match &node.node_spec {
+        NestedNodeSpec::Vm(overrides) => overrides,
         NestedNodeSpec::BareMetal { .. } => {
             bail!("Bare metal nodes are not supported by get_resource_request_for_nested_nodes")
         }
     };
 
-    let resolved_vm_resources = node_vm_resources
-        .layer(&group_default_vm_resources)
+    let resolved_vm_resources = node_vm_resource_overrides
+        .layer(&group_vm_resource_overrides)
         .base(&DEFAULT_NESTED_VM_RESOURCES);
 
     Ok(VmSpec {

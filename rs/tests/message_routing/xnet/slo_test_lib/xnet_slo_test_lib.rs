@@ -29,7 +29,7 @@ use dfn_candid::candid;
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResources};
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResourceOverrides};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
@@ -69,7 +69,7 @@ pub struct Config {
     subnet_to_subnet_rate: usize,
     canisters_per_subnet: usize,
     canister_to_subnet_rate: usize,
-    vm_resources: VmResources,
+    vm_resource_overrides: VmResourceOverrides,
 }
 
 impl Config {
@@ -120,12 +120,12 @@ impl Config {
             subnet_to_subnet_rate,
             canisters_per_subnet,
             canister_to_subnet_rate,
-            vm_resources: VmResources::default(),
+            vm_resource_overrides: VmResourceOverrides::default(),
         }
     }
 
-    pub fn with_vm_resources(mut self, resources: VmResources) -> Self {
-        self.vm_resources = resources;
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -169,7 +169,7 @@ impl Config {
 fn setup(env: TestEnv, config: Config) {
     let ic = InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
-        .with_default_vm_resources(config.vm_resources);
+        .with_resource_overrides(config.vm_resource_overrides);
     (0..config.subnets)
         .fold(ic, |ic, _idx| {
             ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))

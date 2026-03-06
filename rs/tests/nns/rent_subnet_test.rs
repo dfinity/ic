@@ -46,7 +46,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
@@ -142,10 +142,10 @@ pub fn setup(env: TestEnv) {
     for _ in 0..32 {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(1)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(8_389_000)),
-                    ..VmResources::default()
+                    ..VmResourceOverrides::default()
                 })
                 .add_nodes(1),
         );

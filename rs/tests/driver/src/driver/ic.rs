@@ -33,7 +33,7 @@ use std::time::Duration;
 #[derive(Clone, Debug, Default)]
 pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
-    pub default_vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub subnets: Vec<Subnet>,
@@ -69,8 +69,8 @@ impl InternetComputer {
     /// Set the VM resource overrides (like number of virtual CPUs and memory)
     /// at the IC level. More specific overrides have more priority.
     /// Node > Subnet > IC > Group > Default
-    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
-        self.default_vm_resources = default_vm_resources;
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -456,7 +456,7 @@ impl InternetComputer {
 /// A builder for the initial configuration of a subnetwork.
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct Subnet {
-    pub default_vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub boot_image: BootImage,
     pub required_host_features: Vec<HostFeature>,
@@ -490,7 +490,7 @@ pub struct Subnet {
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
         Self {
-            default_vm_resources: Default::default(),
+            vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             boot_image: Default::default(),
             required_host_features: vec![],
@@ -521,8 +521,8 @@ impl Subnet {
     /// Set the VM resource overrides (like number of virtual CPUs and memory)
     /// at the subnet level. More specific overrides have more priority.
     /// Node > Subnet > IC > Group > Default
-    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
-        self.default_vm_resources = default_vm_resources;
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -750,7 +750,7 @@ impl Subnet {
 impl Default for Subnet {
     fn default() -> Self {
         Self {
-            default_vm_resources: Default::default(),
+            vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             boot_image: BootImage::GroupDefault,
             required_host_features: vec![],
@@ -787,13 +787,13 @@ pub enum VCPUs {}
 pub enum MemoryKiB {}
 pub enum SizeGiB {}
 
-/// Resource overrides that will be layered to create a ResolvedVmResources.
+/// Resource overrides that will be layered to create VmResources.
 ///
 /// NOTE: Values should not be used from here directly (it is still possible to
 /// allow for easy construction), they should be first assembled into a
-/// ResolvedVmResources and pulled from there.
+/// VmResources and pulled from there.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
-pub struct VmResources {
+pub struct VmResourceOverrides {
     pub vcpus: Option<NrOfVCPUs>,
     pub memory_kibibytes: Option<AmountOfMemoryKiB>,
     pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
@@ -803,23 +803,23 @@ pub struct VmResources {
 ///
 /// NOTE: This should not be constructed directly (it is still possible to
 /// allow for easy deconstruction), it should be assembled from a set of
-/// VmResources.
-pub struct ResolvedVmResources {
+/// VmResourceOverrides.
+pub struct VmResources {
     pub vcpus: NrOfVCPUs,
     pub memory_kibibytes: AmountOfMemoryKiB,
     pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 }
 
-impl VmResources {
+impl VmResourceOverrides {
     pub const fn const_default() -> Self {
-        VmResources {
+        VmResourceOverrides {
             vcpus: None,
             memory_kibibytes: None,
             boot_image_minimal_size_gibibytes: None,
         }
     }
 
-    pub fn layer(mut self, layer: &VmResources) -> Self {
+    pub fn layer(mut self, layer: &VmResourceOverrides) -> Self {
         self.vcpus = self.vcpus.or(layer.vcpus);
         self.memory_kibibytes = self.memory_kibibytes.or(layer.memory_kibibytes);
         self.boot_image_minimal_size_gibibytes = self
@@ -829,8 +829,8 @@ impl VmResources {
         self
     }
 
-    pub fn base(self, base: &ResolvedVmResources) -> ResolvedVmResources {
-        ResolvedVmResources {
+    pub fn base(self, base: &VmResources) -> VmResources {
+        VmResources {
             vcpus: self.vcpus.unwrap_or(base.vcpus),
             memory_kibibytes: self.memory_kibibytes.unwrap_or(base.memory_kibibytes),
             boot_image_minimal_size_gibibytes: self
@@ -843,7 +843,7 @@ impl VmResources {
 /// A builder for the initial configuration of a node.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize)]
 pub struct Node {
-    pub vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub secret_key_store: Option<NodeSecretKeyStore>,
@@ -870,8 +870,8 @@ impl Node {
     /// Set the VM resource overrides (like number of virtual CPUs and memory)
     /// at the node level. More specific overrides have more priority.
     /// Node > Subnet > IC > Group > Default
-    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
-        self.vm_resources = default_vm_resources;
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 

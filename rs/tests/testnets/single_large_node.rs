@@ -39,7 +39,7 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
 };
 use ic_system_test_driver::driver::test_env::TestEnv;
 
@@ -54,7 +54,7 @@ pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(64)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),

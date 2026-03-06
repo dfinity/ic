@@ -1,4 +1,4 @@
-use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources};
+use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResourceOverrides};
 use crate::driver::port_allocator::AddrType;
 use crate::driver::resource::{AllocatedVm, BootImage};
 use crate::driver::test_env::TestEnv;
@@ -44,20 +44,20 @@ pub struct NestedNodes {
 
 impl NestedNodes {
     pub fn new(names: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        NestedNodes::new_with_resources(names, VmResources::default())
+        NestedNodes::new_with_resource_overrides(names, VmResourceOverrides::default())
     }
 
     /// Allow specifying resource overrides to use for the nested VM.
     ///
     /// NOTE: The number of VCPUs must be divisible by 4.
-    pub fn new_with_resources(
+    pub fn new_with_resource_overrides(
         names: impl IntoIterator<Item = impl Into<String>>,
-        vm_resources: VmResources,
+        vm_resource_overrides: VmResourceOverrides,
     ) -> Self {
         NestedNodes {
             nodes: names
                 .into_iter()
-                .map(|v| NestedNode::new_farm(v.into(), vm_resources))
+                .map(|v| NestedNode::new_farm(v.into(), vm_resource_overrides))
                 .collect(),
         }
     }
@@ -164,7 +164,7 @@ fn allocated_vm_for_bare_metal_instance(
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum NestedNodeSpec {
-    Vm(VmResources),
+    Vm(VmResourceOverrides),
     BareMetal {
         host_address: Ipv6Addr,
         mgmt_mac: MacAddr6,
@@ -180,11 +180,11 @@ pub struct NestedNode {
 }
 
 impl NestedNode {
-    pub fn new_farm(name: String, vm_resources: VmResources) -> Self {
+    pub fn new_farm(name: String, vm_resource_overrides: VmResourceOverrides) -> Self {
         NestedNode {
             name,
             boot_image: BootImage::default(),
-            node_spec: NestedNodeSpec::Vm(vm_resources),
+            node_spec: NestedNodeSpec::Vm(vm_resource_overrides),
         }
     }
 
