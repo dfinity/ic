@@ -370,6 +370,26 @@ impl InternalState {
         }
     }
 
+    fn get_node_connection_endpoint(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> Result<ConnectionEndpoint, String> {
+        match self.registry_client.get_node_record(node_id, version) {
+            Ok(Some(record)) => Ok(record.http.ok_or_else(|| {
+                format!(
+                    "Node record for node id {node_id} does not have an http endpoint at version {version}"
+                )
+            })?),
+            Ok(None) => Err(format!(
+                "Node record for node id {node_id} not found at version {version}",
+            )),
+            Err(e) => Err(format!(
+                "Error when retrieving node record for node id {node_id} at version {version}: {e:?}",
+            )),
+        }
+    }
+
     // Returns a list of URLs that should be used to contact the NNS. In case we are not a cloud
     // engine node (not "type4"), these are the URLs of the NNS nodes. In case we are, these are
     // URLS of API BNs since NNS nodes would not accept our connections due to firewall rules.
@@ -398,58 +418,39 @@ impl InternalState {
 
         let mut urls: Vec<Url> = node_ids
             .iter()
-            .filter_map(|id| {
-                let record = match self
-                    .registry_client
-                    .get_node_record(*id, version) {
-                        Ok(Some(record)) => record,
-                        Ok(None) => {
-                            warn!(
-                                self.logger,
-                                "Node record for node id {id} not found at version {version}",
-                            );
-                            return None;
-                        }
-                        Err(e) => {
-                            warn!(
-                                self.logger,
-                                "Error when retrieving node record for node id {id} at version {version}: {e:?}",
-                            );
-                            return None;
-                        }
-                    };
+            .filter_map(|node_id| {
+                let http = self
+                    .get_node_connection_endpoint(*node_id, version)
+                    .inspect_err(|e| warn!(self.logger, "{}", e))
+                    .ok()?;
 
-                self.https_endpoint_to_url(&record.http?)
+                https_endpoint_to_url(&http)
+                    .inspect_err(|e| warn!(self.logger, "{}", e))
+                    .ok()
             })
             .collect();
         urls.sort();
         Ok(urls)
     }
+}
 
-    fn https_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
-        let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
-            Ok(v) => {
-                if v.is_ipv6() {
-                    format!("[{v}]")
-                } else {
-                    v.to_string()
-                }
-            }
-            Err(_) => {
-                // assume hostname
-                http.ip_addr.clone()
-            }
-        };
-
-        let url = format!("https://{}:{}/", host_str, http.port);
-        match Url::parse(&url) {
-            Ok(v) => Some(v),
-            Err(e) => {
-                warn!(self.logger, "Invalid url: {}: {:?}", url, e);
-                None
+fn https_endpoint_to_url(http: &ConnectionEndpoint) -> Result<Url, String> {
+    let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
+        Ok(v) => {
+            if v.is_ipv6() {
+                format!("[{v}]")
+            } else {
+                v.to_string()
             }
         }
-    }
+        Err(_) => {
+            // assume hostname
+            http.ip_addr.clone()
+        }
+    };
+
+    let url = format!("https://{}:{}/", host_str, http.port);
+    Url::parse(&url).map_err(|e| format!("Invalid HTTPS endpoint: {url}: {e:?}"))
 }
 
 pub struct SuccessfulPoll {
@@ -915,10 +916,8 @@ mod test {
             );
 
             // Will first try to fetch from data found inside the registry
-            let nns_url = internal_state.https_endpoint_to_url(&nns_endpoint).unwrap();
-            let api_bn_url = internal_state
-                .https_endpoint_to_url(&api_bn_endpoint)
-                .unwrap();
+            let nns_url = https_endpoint_to_url(&nns_endpoint).unwrap();
+            let api_bn_url = https_endpoint_to_url(&api_bn_endpoint).unwrap();
             for _ in 0..MAX_CONSECUTIVE_FAILURES {
                 assert_poll_contacts_expected_endpoint(
                     &mut internal_state,
@@ -962,10 +961,8 @@ mod test {
                 Some(NodeRewardType::Type4),
             );
 
-            let nns_url = internal_state.https_endpoint_to_url(&nns_endpoint).unwrap();
-            let api_bn_url = internal_state
-                .https_endpoint_to_url(&api_bn_endpoint)
-                .unwrap();
+            let nns_url = https_endpoint_to_url(&nns_endpoint).unwrap();
+            let api_bn_url = https_endpoint_to_url(&api_bn_endpoint).unwrap();
             assert_poll_contacts_expected_endpoint(
                 &mut internal_state,
                 &api_bn_url,
@@ -999,10 +996,8 @@ mod test {
                 None,
             );
 
-            let nns_url = internal_state.https_endpoint_to_url(&nns_endpoint).unwrap();
-            let api_bn_url = internal_state
-                .https_endpoint_to_url(&api_bn_endpoint)
-                .unwrap();
+            let nns_url = https_endpoint_to_url(&nns_endpoint).unwrap();
+            let api_bn_url = https_endpoint_to_url(&api_bn_endpoint).unwrap();
             assert_poll_contacts_expected_endpoint(
                 &mut internal_state,
                 &nns_url,
