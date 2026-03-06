@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use strum_macros::EnumIter;
 
 #[cfg(test)]
 mod tests;
@@ -114,7 +113,7 @@ impl Default for WatFnCode {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug, EnumIter)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum Method {
     Start,
     Init,
