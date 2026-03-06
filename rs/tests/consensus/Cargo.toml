@@ -11,15 +11,24 @@ anyhow = { workspace = true }
 assert_matches = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 futures = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-canister-client = { path = "../../canister_client" }
+ic-consensus-features = { path = "../../consensus/features" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-cup-explorer = { path = "../../cup_explorer" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../../recovery" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
@@ -46,6 +55,7 @@ ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+xnet-test = { path = "../../rust_canisters/xnet_test" }
 
 [[bin]]
 name = "ic-systest-consensus-performance"
@@ -106,6 +116,10 @@ path = "catch_up_loop_prevention_test.rs"
 [[bin]]
 name = "ic-systest-subnet-splitting"
 path = "subnet_splitting_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-splitting-v2"
+path = "subnet_splitting_v2_test.rs"
 
 [features]
 upload_perf_systest_results = []
