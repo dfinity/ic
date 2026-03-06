@@ -9,11 +9,11 @@
 //! difficult to cover with the Universal Canister (UC). The UC is a static
 //! binary that interprets payloads, making it unsuitable for:
 //!
-//! - **Naked initialization**: Testing the Wasm `(start)` function, which runs
+//! - The `start` function: Testing the Wasm `(start)` function, which runs
 //!   before any message arguments are available.
-//! - **Structural boundaries**: Testing traps or logs that occur natively
-//!   during `canister_init` or `canister_post_upgrade`.
-//! - **Upgrade persistence**: Testing behavior across heap wipes. Since the UC
+//! - Hook behavior: Testing traps or logs that occur natively during
+//!   `canister_init` or `canister_post_upgrade`.
+//! - Upgrade persistence: Testing behavior across heap wipes. Since the UC
 //!   relies on the heap to store instructions, it cannot carry them from
 //!   `pre_upgrade` to `post_upgrade`.
 //!
