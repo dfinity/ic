@@ -119,3 +119,33 @@ pub(crate) fn format_wasm_string(data: &[u8]) -> String {
     }
     s
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_wasm_string() {
+        assert_eq!(format_wasm_string(b"hello"), "hello");
+        assert_eq!(format_wasm_string(b"hi there"), "hi there");
+
+        // Escaping boundaries
+        assert_eq!(format_wasm_string(b"\"quotes\""), "\\22quotes\\22");
+        assert_eq!(
+            format_wasm_string(b"\\backslashes\\"),
+            "\\5cbackslashes\\5c"
+        );
+
+        // Non-printable control characters
+        assert_eq!(format_wasm_string(&[0x00, 0x0A, 0x0D]), "\\00\\0a\\0d");
+
+        // High-bit byte (non-ASCII)
+        assert_eq!(format_wasm_string(&[0xCO, 0xFF, 0xFE]), "\\ff\\fe");
+
+        // Mixed content
+        assert_eq!(
+            format_wasm_string(b"hello \n world \x01!"),
+            "hello \\0a world \\01!"
+        );
+    }
+}
