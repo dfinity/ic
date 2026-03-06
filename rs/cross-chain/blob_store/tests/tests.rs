@@ -18,13 +18,16 @@ mod insert {
         let result = blob_store.insert(Setup::CONTROLLER, &hash, data.clone());
         assert_eq!(result, Ok(hash.clone()));
 
-        let metadata = blob_store
-            .get_metadata(Setup::CONTROLLER, &hash)
-            .expect("metadata should exist after insert");
-        assert_eq!(metadata.uploader, Setup::CONTROLLER);
-        assert_eq!(metadata.size, data.len() as u64);
-        assert!(metadata.inserted_at_ns > 0);
-        assert!(metadata.tags.is_empty());
+        let metadata = blob_store.get_metadata(Setup::CONTROLLER, &hash).unwrap();
+        assert_eq_ignoring_timestamp(
+            &metadata,
+            &BlobMetadata {
+                uploader: Setup::CONTROLLER,
+                size: data.len() as u64,
+                inserted_at_ns: 0,
+                tags: vec![],
+            },
+        );
 
         let result = blob_store.insert(Setup::CONTROLLER, &hash, data);
         assert_eq!(result, Err(InsertError::AlreadyExists));
