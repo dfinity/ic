@@ -591,6 +591,7 @@ pub struct ManageDappCanisterSettings {
     pub log_visibility: Option<i32>,
     pub wasm_memory_limit: Option<u64>,
     pub wasm_memory_threshold: Option<u64>,
+    pub snapshot_visibility: Option<i32>,
 }
 /// Unlike `Governance.Version`, this message has optional fields and is the recommended one
 /// to use in APIs that can evolve. For example, the SNS Governance could eventually support

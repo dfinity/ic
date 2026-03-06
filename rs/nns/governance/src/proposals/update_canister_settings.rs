@@ -1,7 +1,7 @@
 use crate::{
     pb::v1::{
         GovernanceError, SelfDescribingValue, Topic, UpdateCanisterSettings,
-        update_canister_settings::{CanisterSettings, LogVisibility},
+        update_canister_settings::{CanisterSettings, LogVisibility, SnapshotVisibility},
     },
     proposals::{
         call_canister::CallCanister,
@@ -17,6 +17,7 @@ use candid::{Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::update_settings::{
     CanisterSettings as RootCanisterSettings, LogVisibility as RootLogVisibility,
+    SnapshotVisibility as RootSnapshotVisibility,
 };
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root_interface::UpdateCanisterSettingsRequest;
@@ -56,6 +57,19 @@ impl UpdateCanisterSettings {
         }
     }
 
+    fn valid_snapshot_visibility(
+        snapshot_visibility_i32: i32,
+    ) -> Result<RootSnapshotVisibility, GovernanceError> {
+        let snapshot_visibility = SnapshotVisibility::try_from(snapshot_visibility_i32);
+        match snapshot_visibility {
+            Ok(SnapshotVisibility::Controllers) => Ok(RootSnapshotVisibility::Controllers),
+            Ok(SnapshotVisibility::Public) => Ok(RootSnapshotVisibility::Public),
+            Ok(SnapshotVisibility::Unspecified) | Err(_) => Err(invalid_proposal_error(&format!(
+                "Invalid snapshot visibility {snapshot_visibility_i32}"
+            ))),
+        }
+    }
+
     fn valid_canister_settings(&self) -> Result<RootCanisterSettings, GovernanceError> {
         let settings = self
             .settings
@@ -67,6 +81,7 @@ impl UpdateCanisterSettings {
             && settings.memory_allocation.is_none()
             && settings.freezing_threshold.is_none()
             && settings.log_visibility.is_none()
+            && settings.snapshot_visibility.is_none()
             && settings.wasm_memory_limit.is_none()
             && settings.wasm_memory_threshold.is_none()
         {
@@ -88,6 +103,12 @@ impl UpdateCanisterSettings {
             Some(log_visibility) => Some(Self::valid_log_visibility(log_visibility)?),
             None => None,
         };
+        let snapshot_visibility = match settings.snapshot_visibility {
+            Some(snapshot_visibility) => {
+                Some(Self::valid_snapshot_visibility(snapshot_visibility)?)
+            }
+            None => None,
+        };
         // Reserved cycles limit is not supported yet.
         let reserved_cycles_limit = None;
         Ok(RootCanisterSettings {
@@ -97,6 +118,7 @@ impl UpdateCanisterSettings {
             freezing_threshold,
             wasm_memory_limit,
             log_visibility,
+            snapshot_visibility,
             reserved_cycles_limit,
             wasm_memory_threshold,
         })
@@ -160,6 +182,7 @@ impl From<CanisterSettings> for SelfDescribingValue {
             log_visibility,
             wasm_memory_limit,
             wasm_memory_threshold,
+            snapshot_visibility,
         } = settings;
 
         // Flatten the nested `controllers` field. More specifically, get rid of the intermediate
@@ -169,6 +192,8 @@ impl From<CanisterSettings> for SelfDescribingValue {
         let controllers = controllers.map(|controllers| controllers.controllers);
 
         let log_visibility = log_visibility.map(SelfDescribingProstEnum::<LogVisibility>::new);
+        let snapshot_visibility =
+            snapshot_visibility.map(SelfDescribingProstEnum::<SnapshotVisibility>::new);
 
         ValueBuilder::new()
             .add_field("controllers", controllers)
@@ -178,6 +203,7 @@ impl From<CanisterSettings> for SelfDescribingValue {
             .add_field("wasm_memory_limit", wasm_memory_limit)
             .add_field("wasm_memory_threshold", wasm_memory_threshold)
             .add_field("log_visibility", log_visibility)
+            .add_field("snapshot_visibility", snapshot_visibility)
             .build()
     }
 }
@@ -287,6 +313,7 @@ mod tests {
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             }),
         };
 
@@ -317,6 +344,7 @@ mod tests {
                     compute_allocation: Some(Nat::from(10u64)),
                     freezing_threshold: Some(Nat::from(100u64)),
                     log_visibility: Some(RootLogVisibility::Public),
+                    snapshot_visibility: Some(RootSnapshotVisibility::Public),
                     reserved_cycles_limit: None,
                     wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
                 }
@@ -339,6 +367,7 @@ mod tests {
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             }),
         };
 
@@ -367,6 +396,7 @@ mod tests {
                 compute_allocation: Some(Nat::from(10u64)),
                 freezing_threshold: Some(Nat::from(100u64)),
                 log_visibility: Some(RootLogVisibility::Public),
+                snapshot_visibility: Some(RootSnapshotVisibility::Public),
                 reserved_cycles_limit: None,
                 wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
             }
@@ -412,6 +442,7 @@ mod tests {
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             }),
         };
 
@@ -433,6 +464,7 @@ mod tests {
                     "compute_allocation".to_string() => SelfDescribingValue::from(10_u64),
                     "freezing_threshold".to_string() => SelfDescribingValue::from(100_u64),
                     "log_visibility".to_string() => SelfDescribingValue::from("Public"),
+                    "snapshot_visibility".to_string() => SelfDescribingValue::from("Public"),
                 }),
             })
         );
@@ -463,6 +495,7 @@ mod tests {
                     "wasm_memory_limit".to_string() => SelfDescribingValue::Null,
                     "wasm_memory_threshold".to_string() => SelfDescribingValue::Null,
                     "log_visibility".to_string() => SelfDescribingValue::Null,
+                    "snapshot_visibility".to_string() => SelfDescribingValue::Null,
                 }),
             })
         );

@@ -28,7 +28,7 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
-    LogVisibilityV2,
+    LogVisibilityV2, SnapshotVisibility,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
@@ -482,6 +482,9 @@ pub struct SystemState {
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
 
+    /// Snapshot visibility of the canister.
+    pub snapshot_visibility: SnapshotVisibility,
+
     /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
@@ -675,6 +678,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
+            snapshot_visibility: Default::default(),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
@@ -711,6 +715,7 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
+        snapshot_visibility: SnapshotVisibility,
         canister_log: CanisterLog,
         log_memory_store_data: Option<PageMap>,
         wasm_memory_limit: Option<NumBytes>,
@@ -745,6 +750,7 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
+            snapshot_visibility,
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 LOG_MEMORY_STORE_FEATURE,
@@ -2442,6 +2448,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
+            snapshot_visibility: Default::default(),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.

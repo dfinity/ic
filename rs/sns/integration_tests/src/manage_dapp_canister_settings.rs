@@ -11,7 +11,7 @@ use ic_nns_test_utils::state_test_helpers::{
 };
 use ic_sns_governance::pb::v1::{
     LogVisibility, ManageDappCanisterSettings, NervousSystemParameters, NeuronPermissionList,
-    NeuronPermissionType, Proposal, proposal::Action,
+    NeuronPermissionType, Proposal, SnapshotVisibility, proposal::Action,
 };
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
@@ -121,6 +121,7 @@ fn test_manage_dapp_canister_settings_successful() {
                 freezing_threshold: Some(0),
                 reserved_cycles_limit: Some(0),
                 log_visibility: Some(LogVisibility::Controllers as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Controllers as i32),
                 wasm_memory_limit: Some(2_000_000_000),
                 wasm_memory_threshold: Some(0),
             },
