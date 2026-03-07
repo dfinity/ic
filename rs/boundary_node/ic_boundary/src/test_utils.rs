@@ -339,6 +339,7 @@ pub fn setup_test_router(
         &cli,
         &metrics_registry,
         enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
+        None,
         salt,
         proxy_router,
     );

@@ -51,6 +51,9 @@ pub struct RequestContext {
 
     // Filled in when the inner request is HTTP
     pub http_request: Option<HttpRequest>,
+
+    // Filled in for read_state requests
+    pub paths: Option<Vec<Vec<Vec<u8>>>>,
 }
 
 impl RequestContext {

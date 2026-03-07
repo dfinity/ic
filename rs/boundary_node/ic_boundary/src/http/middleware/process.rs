@@ -34,6 +34,7 @@ struct ICRequestContent {
     nonce: Option<Blob>,
     ingress_expiry: Option<u64>,
     arg: Option<Blob>,
+    paths: Option<Vec<Vec<Blob>>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -118,6 +119,11 @@ pub async fn preprocess_request(
         arg: arg.map(|x| x.0),
         nonce: content.nonce.map(|x| x.0),
         http_request,
+        paths: content.paths.map(|p| {
+            p.into_iter()
+                .map(|v| v.into_iter().map(|b| b.0).collect())
+                .collect()
+        }),
     };
 
     let ctx = Arc::new(ctx);
@@ -258,6 +264,7 @@ mod tests {
             nonce: None,
             ingress_expiry: None,
             arg: None,
+            paths: None,
         };
         let envelope = ICRequestEnvelope { content };
 
@@ -278,6 +285,7 @@ mod tests {
             nonce: None,
             ingress_expiry: None,
             arg: None,
+            paths: None,
         };
         let envelope = ICRequestEnvelope { content };
 
@@ -300,6 +308,7 @@ mod tests {
             nonce: None,
             ingress_expiry: None,
             arg: None,
+            paths: None,
         };
         let envelope = ICRequestEnvelope { content };
 
@@ -318,6 +327,7 @@ mod tests {
             nonce: None,
             ingress_expiry: None,
             arg: None,
+            paths: None,
         };
         let envelope = ICRequestEnvelope { content };
 
