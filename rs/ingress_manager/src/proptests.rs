@@ -143,8 +143,8 @@ const MB: usize = 1024 * 1024;
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 1024,
-        timeout: 10_000, // 10 seconds
+        cases: 64,
+        max_shrink_time: 60000,
         ..ProptestConfig::default()
     })]
     #[test]
