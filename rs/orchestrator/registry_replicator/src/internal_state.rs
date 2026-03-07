@@ -2,16 +2,15 @@ use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::{
     registry::{
-        node::v1::ConnectionEndpoint,
+        node::v1::{ConnectionEndpoint, NodeRewardType},
         routing_table::v1::RoutingTable as PbRoutingTable,
         subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
     },
     types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto},
 };
 use ic_registry_client_helpers::{
-    crypto::CryptoRegistry,
-    routing_table::RoutingTableRegistry,
-    subnet::{SubnetRegistry, SubnetTransportRegistry},
+    api_boundary_node::ApiBoundaryNodeRegistry, crypto::CryptoRegistry, node::NodeRegistry,
+    routing_table::RoutingTableRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
     CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY, make_canister_ranges_key,
@@ -327,65 +326,131 @@ impl InternalState {
         }
     }
 
-    fn get_node_api_urls(
+    fn get_nns_node_ids(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> Result<Vec<Url>, String> {
-        let t_infos = match self
+    ) -> Result<Vec<NodeId>, String> {
+        match self
             .registry_client
-            .get_subnet_node_records(subnet_id, version)
+            .get_node_ids_on_subnet(subnet_id, version)
         {
-            Ok(Some(v)) => v,
-            Ok(None) => {
-                return Err(format!(
-                    "Missing or incomplete transport infos for subnet {subnet_id} at version {version}."
-                ));
-            }
-            Err(e) => {
-                return Err(format!(
-                    "Error retrieving transport infos for subnet {subnet_id} at version {version}: {e:?}."
-                ));
-            }
+            Ok(Some(ids)) => Ok(ids),
+            Ok(None) => Err(format!(
+                "Subnet record for subnet {subnet_id} not found at version {version}"
+            )),
+            Err(e) => Err(format!(
+                "Error when retrieving node ids on subnet {subnet_id} at version {version}: {e:?}"
+            )),
+        }
+    }
+
+    fn get_api_boundary_node_ids(&self, version: RegistryVersion) -> Result<Vec<NodeId>, String> {
+        match self.registry_client.get_api_boundary_node_ids(version) {
+            Ok(ids) => Ok(ids),
+            Err(e) => Err(format!(
+                "Error when retrieving API BN node ids at version {version}: {e:?}"
+            )),
+        }
+    }
+
+    fn get_node_reward_type(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> Result<NodeRewardType, String> {
+        match self.registry_client.get_node_record(node_id, version) {
+            Ok(Some(record)) => Ok(record.node_reward_type()),
+            Ok(None) => Err(format!(
+                "Node record for node id {node_id} not found at version {version}",
+            )),
+            Err(e) => Err(format!(
+                "Error when retrieving node record for node id {node_id} at version {version}: {e:?}",
+            )),
+        }
+    }
+
+    fn get_node_connection_endpoint(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> Result<ConnectionEndpoint, String> {
+        match self.registry_client.get_node_record(node_id, version) {
+            Ok(Some(record)) => Ok(record.http.ok_or_else(|| {
+                format!(
+                    "Node record for node id {node_id} does not have an http endpoint at version {version}"
+                )
+            })?),
+            Ok(None) => Err(format!(
+                "Node record for node id {node_id} not found at version {version}",
+            )),
+            Err(e) => Err(format!(
+                "Error when retrieving node record for node id {node_id} at version {version}: {e:?}",
+            )),
+        }
+    }
+
+    // Returns a list of URLs that should be used to contact the NNS. In case we are not a cloud
+    // engine node (not "type4"), these are the URLs of the NNS nodes. In case we are, these are
+    // URLS of API BNs since NNS nodes would not accept our connections due to firewall rules.
+    fn get_node_api_urls(
+        &self,
+        nns_subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> Result<Vec<Url>, String> {
+        let node_ids = match self.node_id {
+            None => self.get_nns_node_ids(nns_subnet_id, version)?,
+            Some(node_id) => match self.get_node_reward_type(node_id, version)? {
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1 => self.get_nns_node_ids(nns_subnet_id, version)?,
+                NodeRewardType::Type4 => {
+                    // For type4 nodes, we contact API BNs instead of NNS nodes, since NNS nodes would
+                    // not accept our connections due to firewall rules.
+                    self.get_api_boundary_node_ids(version)?
+                }
+            },
         };
 
-        let mut urls: Vec<Url> = t_infos
+        let mut urls: Vec<Url> = node_ids
             .iter()
-            .filter_map(|(_nid, n_record)| {
-                n_record
-                    .http
-                    .as_ref()
-                    .and_then(|h| self.https_endpoint_to_url(h))
+            .filter_map(|node_id| {
+                let http = self
+                    .get_node_connection_endpoint(*node_id, version)
+                    .inspect_err(|e| warn!(self.logger, "{}", e))
+                    .ok()?;
+
+                https_endpoint_to_url(&http)
+                    .inspect_err(|e| warn!(self.logger, "{}", e))
+                    .ok()
             })
             .collect();
         urls.sort();
         Ok(urls)
     }
+}
 
-    fn https_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
-        let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
-            Ok(v) => {
-                if v.is_ipv6() {
-                    format!("[{v}]")
-                } else {
-                    v.to_string()
-                }
-            }
-            Err(_) => {
-                // assume hostname
-                http.ip_addr.clone()
-            }
-        };
-
-        let url = format!("https://{}:{}/", host_str, http.port);
-        match Url::parse(&url) {
-            Ok(v) => Some(v),
-            Err(e) => {
-                warn!(self.logger, "Invalid url: {}: {:?}", url, e);
-                None
+fn https_endpoint_to_url(http: &ConnectionEndpoint) -> Result<Url, String> {
+    let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
+        Ok(v) => {
+            if v.is_ipv6() {
+                format!("[{v}]")
+            } else {
+                v.to_string()
             }
         }
-    }
+        Err(_) => {
+            // assume hostname
+            http.ip_addr.clone()
+        }
+    };
+
+    let url = format!("https://{}:{}/", host_str, http.port);
+    Url::parse(&url).map_err(|e| format!("Invalid HTTPS endpoint: {url}: {e:?}"))
 }
 
 pub struct SuccessfulPoll {
@@ -551,19 +616,21 @@ mod test {
     use super::*;
     use ic_certification_test_utils::{CertificateBuilder, CertificateData::*};
     use ic_crypto_tree_hash::Digest;
+    use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_protobuf::registry::crypto::v1::PublicKey as PbPublicKey;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_client_helpers::node::NodeRecord;
     use ic_registry_keys::{
-        ROOT_SUBNET_ID_KEY, make_canister_ranges_key, make_crypto_threshold_signing_pubkey_key,
-        make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
+        ROOT_SUBNET_ID_KEY, make_api_boundary_node_record_key, make_canister_ranges_key,
+        make_crypto_threshold_signing_pubkey_key, make_node_record_key,
+        make_subnet_list_record_key, make_subnet_record_key,
     };
     use ic_registry_local_store::{LocalStoreImpl, LocalStoreWriter};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{CanisterId, SubnetId};
-    use ic_types_test_utils::ids::{NODE_1, SUBNET_1, SUBNET_2, SUBNET_3};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, SUBNET_3};
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
     use std::sync::Arc;
@@ -608,6 +675,339 @@ mod test {
         }
     }
 
+    fn create_internal_state_for_tests(
+        logger: ReplicaLogger,
+        config_nns_urls: Vec<Url>,
+        nns_endpoint: Option<ConnectionEndpoint>,
+        api_bn_endpoint: Option<ConnectionEndpoint>,
+        node_reward_type: Option<NodeRewardType>,
+    ) -> InternalState {
+        let tempdir = TempDir::new().unwrap();
+        // TODO: maybe use keep()
+        let local_store = Arc::new(LocalStoreImpl::new(tempdir.path()));
+        let registry_client = Arc::new(FakeRegistryClient::new(local_store.clone()));
+
+        let config_nns_pub_key = create_threshold_sig_public_key(0);
+
+        if let Some(endpoint) = nns_endpoint {
+            let nns_subnet_id = SUBNET_1;
+            let nns_node_id = NODE_1;
+            setup_nns_subnet_in_registry(
+                &local_store,
+                registry_client.get_latest_version(),
+                nns_subnet_id,
+                nns_node_id,
+                endpoint,
+            );
+        }
+        registry_client.update_to_latest_version();
+
+        if let Some(endpoint) = api_bn_endpoint {
+            let api_bn_id = NODE_2;
+            setup_api_bn_in_registry(
+                &local_store,
+                registry_client.get_latest_version(),
+                api_bn_id,
+                endpoint,
+            );
+        }
+        registry_client.update_to_latest_version();
+
+        let own_node_id = if let Some(node_reward_type) = node_reward_type {
+            let own_node_id = NODE_3;
+            setup_node_reward_type_in_registry(
+                &local_store,
+                registry_client.get_latest_version(),
+                own_node_id,
+                node_reward_type,
+            );
+            Some(own_node_id)
+        } else {
+            None
+        };
+        registry_client.update_to_latest_version();
+
+        InternalState::new(
+            logger,
+            own_node_id,
+            Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
+            Arc::clone(&local_store) as Arc<dyn LocalStore>,
+            config_nns_urls.clone(),
+            Some(config_nns_pub_key),
+            TEST_POLL_DELAY,
+        )
+    }
+
+    // Initialize root subnet, public key and node record in the registry
+    fn setup_nns_subnet_in_registry(
+        local_store: &LocalStoreImpl,
+        from_version: RegistryVersion,
+        nns_subnet_id: SubnetId,
+        nns_node_id: NodeId,
+        http_endpoint: ConnectionEndpoint,
+    ) {
+        let mut version = from_version;
+        version += 1.into();
+        local_store
+            .store(
+                version,
+                vec![KeyMutation {
+                    key: ROOT_SUBNET_ID_KEY.to_string(),
+                    value: Some(ic_types::subnet_id_into_protobuf(nns_subnet_id).encode_to_vec()),
+                }],
+            )
+            .expect("Failed to set root subnet ID");
+        version += 1.into();
+        local_store
+            .store(
+                version,
+                vec![KeyMutation {
+                    key: make_crypto_threshold_signing_pubkey_key(nns_subnet_id),
+                    value: Some(
+                        PbPublicKey::from(create_threshold_sig_public_key(1)).encode_to_vec(),
+                    ),
+                }],
+            )
+            .expect("Failed to set subnet public key");
+        version += 1.into();
+        local_store
+            .store(
+                version,
+                vec![KeyMutation {
+                    key: make_node_record_key(nns_node_id),
+                    value: Some(
+                        NodeRecord {
+                            http: Some(http_endpoint.clone()),
+                            ..Default::default()
+                        }
+                        .encode_to_vec(),
+                    ),
+                }],
+            )
+            .expect("Failed to set node record");
+        version += 1.into();
+        local_store
+            .store(
+                version,
+                vec![KeyMutation {
+                    key: make_subnet_record_key(nns_subnet_id),
+                    value: Some(
+                        SubnetRecord {
+                            membership: vec![nns_node_id.get().to_vec()],
+                            ..Default::default()
+                        }
+                        .encode_to_vec(),
+                    ),
+                }],
+            )
+            .expect("Failed to set subnet record");
+    }
+
+    // Initialize API BN record and node record in the registry
+    fn setup_api_bn_in_registry(
+        local_store: &LocalStoreImpl,
+        from_version: RegistryVersion,
+        api_bn_id: NodeId,
+        http_endpoint: ConnectionEndpoint,
+    ) {
+        let mut version = from_version;
+        version += 1.into();
+        local_store
+            .store(
+                version,
+                vec![KeyMutation {
+                    key: make_api_boundary_node_record_key(api_bn_id),
+                    value: Some(
+                        ApiBoundaryNodeRecord {
+                            ..Default::default()
+                        }
+                        .encode_to_vec(),
+                    ),
+                }],
+            )
+            .expect("Failed to set API BN record");
+        version += 1.into();
+        local_store
+            .store(
+                version,
+                vec![KeyMutation {
+                    key: make_node_record_key(api_bn_id),
+                    value: Some(
+                        NodeRecord {
+                            http: Some(http_endpoint.clone()),
+                            ..Default::default()
+                        }
+                        .encode_to_vec(),
+                    ),
+                }],
+            )
+            .expect("Failed to set node record");
+    }
+
+    fn setup_node_reward_type_in_registry(
+        local_store: &LocalStoreImpl,
+        from_version: RegistryVersion,
+        node_id: NodeId,
+        node_reward_type: NodeRewardType,
+    ) {
+        let mut version = from_version;
+        version += 1.into();
+        local_store
+            .store(
+                version,
+                vec![KeyMutation {
+                    key: make_node_record_key(node_id),
+                    value: Some(
+                        NodeRecord {
+                            node_reward_type: Some(node_reward_type as i32),
+                            ..Default::default()
+                        }
+                        .encode_to_vec(),
+                    ),
+                }],
+            )
+            .expect("Failed to set node reward type");
+    }
+
+    async fn assert_poll_contacts_expected_endpoint(
+        internal_state: &mut InternalState,
+        expected_url: &Url,
+        unexpected_urls: &[&Url],
+    ) {
+        let result = internal_state.poll().await;
+        assert!(result.is_err_and(|err| {
+            // Full error message looks like:
+            //
+            // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
+            // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
+            // failed for
+            // {expected_url}/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
+            // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
+            // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
+            // unreachable\\\" }))\")"
+            err.contains("Error when trying to fetch updates from NNS:")
+                && err.contains(expected_url.as_str())
+                && unexpected_urls.iter().all(|u| !err.contains(u.as_str()))
+        }));
+    }
+
+    #[tokio::test]
+    async fn test_uses_fallback_after_consecutive_failures() {
+        with_test_replica_logger(|logger| async {
+            let config_url = Url::parse("https://fallback:1234").unwrap();
+            // The node endpoint is invalid on purpose to trigger failures.
+            // The expected behavior is to try the fallback URLs after MAX_CONSECUTIVE_FAILURES.
+            let nns_endpoint = ConnectionEndpoint {
+                ip_addr: "2001:db8::1".to_string(),
+                port: 8080,
+            };
+            // Even though there is an API BN, the node is of type1 and it should not contact it
+            let api_bn_endpoint = ConnectionEndpoint {
+                ip_addr: "2001:db8::2".to_string(),
+                port: 443,
+            };
+
+            let mut internal_state = create_internal_state_for_tests(
+                logger,
+                vec![config_url.clone()],
+                Some(nns_endpoint.clone()),
+                Some(api_bn_endpoint.clone()),
+                Some(NodeRewardType::Type1),
+            );
+
+            // Will first try to fetch from data found inside the registry
+            let nns_url = https_endpoint_to_url(&nns_endpoint).unwrap();
+            let api_bn_url = https_endpoint_to_url(&api_bn_endpoint).unwrap();
+            for _ in 0..MAX_CONSECUTIVE_FAILURES {
+                assert_poll_contacts_expected_endpoint(
+                    &mut internal_state,
+                    &nns_url,
+                    &[&api_bn_url, &config_url],
+                )
+                .await;
+            }
+
+            // Will then try to fetch from the fallback URLs
+            assert_poll_contacts_expected_endpoint(
+                &mut internal_state,
+                &config_url,
+                &[&nns_url, &api_bn_url],
+            )
+            .await;
+        })
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_type4_node_goes_through_api_bn() {
+        with_test_replica_logger(|logger| async {
+            let config_url = Url::parse("https://fallback:1234").unwrap();
+            let nns_endpoint = ConnectionEndpoint {
+                ip_addr: "2001:db8::1".to_string(),
+                port: 8080,
+            };
+            // The expected behavior is to use the API boundary node when the current node is of
+            // type4.
+            let api_bn_endpoint = ConnectionEndpoint {
+                ip_addr: "2001:db8::2".to_string(),
+                port: 443,
+            };
+
+            let mut internal_state = create_internal_state_for_tests(
+                logger,
+                vec![config_url.clone()],
+                Some(nns_endpoint.clone()),
+                Some(api_bn_endpoint.clone()),
+                Some(NodeRewardType::Type4),
+            );
+
+            let nns_url = https_endpoint_to_url(&nns_endpoint).unwrap();
+            let api_bn_url = https_endpoint_to_url(&api_bn_endpoint).unwrap();
+            assert_poll_contacts_expected_endpoint(
+                &mut internal_state,
+                &api_bn_url,
+                &[&nns_url, &config_url],
+            )
+            .await;
+        })
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_no_node_id_goes_directly_to_nns_node() {
+        with_test_replica_logger(|logger| async {
+            let config_url = Url::parse("https://fallback:1234").unwrap();
+            let nns_endpoint = ConnectionEndpoint {
+                ip_addr: "2001:db8::1".to_string(),
+                port: 8080,
+            };
+            // Even though there is an API BN, the replicator does not know its node ID and it
+            // should not contact it.
+            let api_bn_endpoint = ConnectionEndpoint {
+                ip_addr: "2001:db8::2".to_string(),
+                port: 443,
+            };
+
+            let mut internal_state = create_internal_state_for_tests(
+                logger,
+                vec![config_url.clone()],
+                Some(nns_endpoint.clone()),
+                Some(api_bn_endpoint.clone()),
+                None,
+            );
+
+            let nns_url = https_endpoint_to_url(&nns_endpoint).unwrap();
+            let api_bn_url = https_endpoint_to_url(&api_bn_endpoint).unwrap();
+            assert_poll_contacts_expected_endpoint(
+                &mut internal_state,
+                &nns_url,
+                &[&api_bn_url, &config_url],
+            )
+            .await;
+        })
+        .await
+    }
+
     fn setup_fake_registry_client(
         old_nns_subnet_id: SubnetId,
         shards: BTreeMap<String, BTreeMap<CanisterIdRange, SubnetId>>,
@@ -643,128 +1043,6 @@ mod test {
         client.update_to_latest_version();
 
         client
-    }
-
-    #[tokio::test]
-    async fn test_uses_fallback_after_consecutive_failures() {
-        with_test_replica_logger(|logger| async {
-            let tempdir = TempDir::new().unwrap();
-            let local_store = Arc::new(LocalStoreImpl::new(tempdir.path()));
-            let registry_client = Arc::new(FakeRegistryClient::new(local_store.clone()));
-
-            let config_nns_urls = vec![Url::parse("https://fallback:1234").unwrap()];
-            let config_nns_pub_key = create_threshold_sig_public_key(0);
-
-            // Initialize root subnet, public key and node record in the registry
-            // The node endpoint is invalid on purpose to trigger failures.
-            // The expected behavior is to try the fallback URLs after MAX_CONSECUTIVE_FAILURES.
-            let http_endpoint = ConnectionEndpoint {
-                ip_addr: "2001:db8::1".to_string(),
-                port: 8080,
-            };
-            local_store
-                .store(
-                    RegistryVersion::from(1),
-                    vec![KeyMutation {
-                        key: ROOT_SUBNET_ID_KEY.to_string(),
-                        value: Some(ic_types::subnet_id_into_protobuf(SUBNET_1).encode_to_vec()),
-                    }],
-                )
-                .expect("Failed to set root subnet ID");
-            local_store
-                .store(
-                    RegistryVersion::from(2),
-                    vec![KeyMutation {
-                        key: make_crypto_threshold_signing_pubkey_key(SUBNET_1),
-                        value: Some(
-                            PbPublicKey::from(create_threshold_sig_public_key(1)).encode_to_vec(),
-                        ),
-                    }],
-                )
-                .expect("Failed to set subnet public key");
-            local_store
-                .store(
-                    RegistryVersion::from(3),
-                    vec![KeyMutation {
-                        key: make_node_record_key(NODE_1),
-                        value: Some(
-                            NodeRecord {
-                                http: Some(http_endpoint.clone()),
-                                ..Default::default()
-                            }
-                            .encode_to_vec(),
-                        ),
-                    }],
-                )
-                .expect("Failed to set node record");
-            local_store
-                .store(
-                    RegistryVersion::from(4),
-                    vec![KeyMutation {
-                        key: make_subnet_record_key(SUBNET_1),
-                        value: Some(
-                            SubnetRecord {
-                                membership: vec![NODE_1.get().to_vec()],
-                                ..Default::default()
-                            }
-                            .encode_to_vec(),
-                        ),
-                    }],
-                )
-                .expect("Failed to set subnet record");
-            registry_client.reload();
-
-            let mut internal_state = InternalState::new(
-                logger,
-                None,
-                Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
-                Arc::clone(&local_store) as Arc<dyn LocalStore>,
-                config_nns_urls.clone(),
-                Some(config_nns_pub_key),
-                TEST_POLL_DELAY,
-            );
-
-            // Will first try to fetch from data found inside the registry
-            let node_api_url = internal_state
-                .https_endpoint_to_url(&http_endpoint)
-                .unwrap();
-            let fallback_url = &config_nns_urls[0];
-            for _ in 0..MAX_CONSECUTIVE_FAILURES {
-                let result = internal_state.poll().await;
-                assert!(result.is_err_and(|err| {
-                    // Full error message looks like:
-                    //
-                    // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
-                    // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
-                    // failed for
-                    // https://[2001:db8::1]:8080/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
-                    // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
-                    // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
-                    // unreachable\\\" }))\")"
-                    err.contains("Error when trying to fetch updates from NNS:")
-                        && err.contains(node_api_url.as_str())
-                        && !err.contains(fallback_url.as_str())
-                }));
-            }
-
-            // Will then try to fetch from the fallback URLs
-            let result = internal_state.poll().await;
-            assert!(result.is_err_and(|err| {
-                // Full error message looks like:
-                //
-                // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
-                // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
-                // failed for
-                // https://fallback:1234/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
-                // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
-                // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
-                // unreachable\\\" }))\")"
-                err.contains("Error when trying to fetch updates from NNS:")
-                    && err.contains(fallback_url.as_str())
-                    && !err.contains(node_api_url.as_str())
-            }));
-        })
-        .await
     }
 
     #[test]
