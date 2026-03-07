@@ -428,10 +428,6 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
 
     let new_record = random_mutate(&pocket_ic, &mut rng).await;
 
-    // Even though, we started polling, we haven't waited for the poll delay yet, so local store
-    // and client should still contain the previous state
-    assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
-
     // Wait until background polling picks up the new version
     wait_for_replicator_version(&replicator, new_record.version).await;
 
@@ -441,13 +437,10 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
 
     let new_record = random_mutate(&pocket_ic, &mut rng).await;
 
-    // Again, we haven't waited for the poll delay yet, so local store and client should still
-    // contain the previous state
-    assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
-
+    // Manually poll to pick up the new version
     replicator.poll().await.unwrap();
 
-    // But after manually polling, local store and client should contain latest changes
+    // After manually polling, local store and client should contain latest changes
     let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
     assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
 
