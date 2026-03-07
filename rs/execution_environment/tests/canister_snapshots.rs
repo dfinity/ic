@@ -898,7 +898,7 @@ fn load_canister_snapshot_works_on_another_canister() {
     let initial_cycles = 10 * T;
     let canister_id_1 = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             initial_cycles.into(),
@@ -907,7 +907,7 @@ fn load_canister_snapshot_works_on_another_canister() {
 
     let canister_id_2 = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             initial_cycles.into(),
