@@ -7,7 +7,7 @@ use crate::invariants::common::{
     InvariantCheckError, RegistrySnapshot, get_subnet_ids_from_snapshot,
 };
 
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType};
 use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_node_record_key, make_subnet_record_key};
@@ -21,6 +21,7 @@ use prost::Message;
 ///    * There is at least one system subnet
 ///    * Each subnet in the registry occurs in the subnet list and vice versa
 ///    * Only application subnets can be rented and therefore have a "free" cycles cost schedule
+///    * Only rented subnets can have subnet admins set to a non-empty list
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -105,6 +106,8 @@ pub(crate) fn check_subnet_invariants(
                 source: None,
             });
         }
+
+        check_subnet_admins_invariant(&subnet_record, subnet_id)?;
     }
 
     // There is at least one system subnet. Note that we disable this invariant for benchmarks, as
@@ -128,6 +131,34 @@ pub(crate) fn check_subnet_invariants(
     //    );
     //}
 
+    Ok(())
+}
+
+// Checks that only rented subnets can have admins. (Here, it is taken that
+// rented subnets are of type application and on a free schedule.)
+//
+fn check_subnet_admins_invariant(
+    subnet_record: &SubnetRecord,
+    subnet_id: SubnetId,
+) -> Result<(), InvariantCheckError> {
+    // Only rented subnets can have admins.
+    //
+    // Here, it is taken that rented subnets are of type application and on a
+    // free schedule. This is not very reliable and could be improved in the
+    // future (e.g. by adding a new subnet type).
+    let is_application_subnet = subnet_record.subnet_type == i32::from(SubnetType::Application);
+    let is_on_free_cost_schedule =
+        subnet_record.canister_cycles_cost_schedule == i32::from(CanisterCyclesCostSchedule::Free);
+    let is_rented = is_on_free_cost_schedule && is_application_subnet;
+    let ok = subnet_record.subnet_admins.is_empty() || is_rented;
+    if !ok {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id:} is not a rented subnet but has a non-empty subnet admins list"
+            ),
+            source: None,
+        });
+    }
     Ok(())
 }
 
