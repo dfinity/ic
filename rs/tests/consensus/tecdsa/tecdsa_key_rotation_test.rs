@@ -54,7 +54,7 @@ fn test(test_env: TestEnv) {
             &log,
         )
         .await;
-        // Stash size should be 5 before the roation
+        // Stash size should be 5 before the rotation
         await_pre_signature_stash_size(&app_subnet, 5, key_ids.as_slice(), &log);
         // Turn off pre-signature creation to verify that the stash is purged correctly
         set_pre_signature_stash_size(
@@ -120,7 +120,16 @@ fn test(test_env: TestEnv) {
                 || async {
                     match metrics.fetch::<u64>().await {
                         Ok(val) => {
-                            let created = val[&metric_with_label][0];
+                            let created = val
+                                .get(&metric_with_label)
+                                .and_then(|v| v.first().copied())
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Metric sample for key {} not present yet (metric: {})",
+                                        key_id,
+                                        metric_with_label
+                                    )
+                                })?;
                             if created > initial {
                                 Ok(created)
                             } else {
@@ -157,7 +166,7 @@ fn test(test_env: TestEnv) {
             );
         }
 
-        // Stash size should be 0 after the roation
+        // Stash size should be 0 after the rotation
         await_pre_signature_stash_size(&app_subnet, 0, key_ids.as_slice(), &log);
 
         // Ensure that public keys are the same after the rotation
