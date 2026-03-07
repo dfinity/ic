@@ -50,6 +50,7 @@ impl Default for IngressMessageVerifier<ConstantRootOfTrustProvider> {
     /// #                 sender: Blob(vec![0x04]),
     /// #                 nonce: None,
     /// #                 ingress_expiry,
+    /// #                 sender_info: None,
     /// #             },
     /// #         },
     /// #         sender_pubkey: None,
@@ -115,6 +116,7 @@ impl IngressMessageVerifier<ConstantRootOfTrustProvider> {
     /// #                 sender: Blob(vec![0x04]),
     /// #                 nonce: None,
     /// #                 ingress_expiry,
+    /// #                 sender_info: None,
     /// #             },
     /// #         },
     /// #         sender_pubkey: None,
@@ -202,6 +204,9 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         }
         ic_validator::RequestValidationError::NonceTooBig { num_bytes, maximum } => {
             RequestValidationError::NonceTooBigError { num_bytes, maximum }
+        }
+        ic_validator::RequestValidationError::InvalidSenderInfo => {
+            RequestValidationError::InvalidSenderInfo
         }
     }
 }

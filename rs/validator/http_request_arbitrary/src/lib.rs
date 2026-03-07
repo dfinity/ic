@@ -15,6 +15,7 @@ pub struct AnonymousContent {
     pub arg: Blob,
     pub ingress_expiry: u64,
     pub nonce: Option<Blob>,
+    pub sender_info: Option<bool>,
 }
 
 impl AnonymousContent {
@@ -33,6 +34,7 @@ impl<'a> Arbitrary<'a> for AnonymousContent {
             arg: arbitrary_blob(u)?,
             ingress_expiry: u64::arbitrary(u)?,
             nonce: arbitrary_option_blob(u)?,
+            sender_info: arbitrary_option_bool(u)?,
         })
     }
 }
@@ -48,6 +50,7 @@ impl From<AnonymousContent> for HttpCallContent {
                 sender,
                 ingress_expiry: content.ingress_expiry,
                 nonce: content.nonce,
+                sender_info: content.sender_info,
             },
         }
     }
@@ -116,6 +119,14 @@ fn arbitrary_variable_length_vector<'a, T: Arbitrary<'a>>(
 fn arbitrary_option_blob<'a>(u: &mut Unstructured<'a>) -> Result<Option<Blob>> {
     Ok(if <bool as Arbitrary<'a>>::arbitrary(u)? {
         Some(arbitrary_blob(u)?)
+    } else {
+        None
+    })
+}
+
+fn arbitrary_option_bool<'a>(u: &mut Unstructured<'a>) -> Result<Option<bool>> {
+    Ok(if <bool as Arbitrary<'a>>::arbitrary(u)? {
+        Some(true)
     } else {
         None
     })

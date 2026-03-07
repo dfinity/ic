@@ -63,6 +63,7 @@ pub enum RequestValidationError {
     TooManyPathsError { length: usize, maximum: usize },
     PathTooLongError { length: usize, maximum: usize },
     NonceTooBigError { num_bytes: usize, maximum: usize },
+    InvalidSenderInfo,
 }
 
 impl Display for RequestValidationError {
@@ -107,6 +108,9 @@ impl Display for RequestValidationError {
                 f,
                 "Nonce in request is too big: got {length} bytes, but at most {maximum} are allowed"
             ),
+            RequestValidationError::InvalidSenderInfo => {
+                write!(f, "Sender info is not allowed to be false")
+            }
         }
     }
 }

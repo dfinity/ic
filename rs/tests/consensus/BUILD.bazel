@@ -404,6 +404,25 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "message_canister_test",
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/registry/subnet_type",
+        "//rs/test_utilities/identity",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:rand",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
     name = "adding_nodes_to_subnet_test",
     tags = [
         "long_test",  # since it takes longer than 5 minutes.

@@ -252,6 +252,7 @@ async fn test_request_with_no_signature_and_no_pubkey<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -297,6 +298,7 @@ async fn test_request_with_correct_signature_and_incorrect_pubkey<T: Identity + 
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -344,6 +346,7 @@ async fn test_request_with_incorrect_signature_and_correct_pubkey<T: Identity + 
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -391,6 +394,7 @@ async fn test_request_with_incorrect_sender<T: Identity + 'static>(
             sender: Blob(wrong_identity.sender().unwrap().as_slice().to_vec()), // wrong sender
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -435,6 +439,7 @@ async fn test_request_with_expired_ingress<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: 0,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -483,6 +488,7 @@ async fn test_request_with_delegation<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 

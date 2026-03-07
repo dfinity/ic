@@ -446,6 +446,7 @@ mod tests {
             sender: Blob(vec![0; 29]),
             ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
             nonce: None,
+            sender_info: None,
         };
         let content = HttpCallContent::Call { update };
         let envelope = HttpRequestEnvelope::<HttpCallContent> {

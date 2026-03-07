@@ -547,6 +547,7 @@ mod validate_ingress_expiry {
                     sender: Blob(vec![0x04]),
                     nonce: None,
                     ingress_expiry,
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,

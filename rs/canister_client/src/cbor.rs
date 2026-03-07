@@ -88,6 +88,7 @@ pub fn prepare_update<S: ToString>(
             nonce: Some(Blob(nonce)),
             sender: sender_field,
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            sender_info: Some(true),
         },
     };
 
@@ -260,6 +261,7 @@ mod tests {
                     .into_vec(),
                 ),
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         let sender = Sender::from_keypair(&keypair);
@@ -304,6 +306,7 @@ mod tests {
                 nonce: None,
                 sender: Blob(sender_id.get().into_vec()),
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         let sender =
@@ -343,6 +346,7 @@ mod tests {
                 nonce: None,
                 sender: Blob(UserId::from(PrincipalId::new_anonymous()).get().into_vec()),
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         let (submit, id) = sign_submit(content.clone(), &Sender::Anonymous).unwrap();
