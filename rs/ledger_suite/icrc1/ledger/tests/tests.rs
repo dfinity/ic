@@ -645,6 +645,70 @@ fn test_upgrade_from_mainnet_ledger_version() {
 }
 
 #[test]
+fn test_icrc152_mint_by_controller() {
+    ic_ledger_suite_state_machine_tests::icrc122_icrc152::test_icrc152_mint_by_controller(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_burn_by_controller() {
+    ic_ledger_suite_state_machine_tests::icrc122_icrc152::test_icrc152_burn_by_controller(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_unauthorized() {
+    ic_ledger_suite_state_machine_tests::icrc122_icrc152::test_icrc152_unauthorized(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_feature_flag_disabled() {
+    ic_ledger_suite_state_machine_tests::icrc122_icrc152::test_icrc152_feature_flag_disabled(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_insufficient_balance() {
+    ic_ledger_suite_state_machine_tests::icrc122_icrc152::test_icrc152_insufficient_balance(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_deduplication() {
+    ic_ledger_suite_state_machine_tests::icrc122_icrc152::test_icrc152_deduplication(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_supported_block_types() {
+    ic_ledger_suite_state_machine_tests::icrc122_icrc152::test_icrc152_supported_block_types(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_supported_standards() {
+    ic_ledger_suite_state_machine_tests::icrc122_icrc152::test_icrc152_supported_standards(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_icrc1_test_suite() {
     ic_ledger_suite_state_machine_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
 }
@@ -869,7 +933,10 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
             max_transactions_per_response: None,
         },
         max_memo_length: None,
-        feature_flags: Some(FeatureFlags { icrc2: false }),
+        feature_flags: Some(FeatureFlags {
+            icrc2: false,
+            icrc152: false
+        }),
         index_principal: None,
     }))
     .unwrap();
@@ -1904,7 +1971,10 @@ mod verify_written_blocks {
                     max_transactions_per_response: None,
                 },
                 max_memo_length: None,
-                feature_flags: Some(FeatureFlags { icrc2: true }),
+                feature_flags: Some(FeatureFlags {
+                    icrc2: true,
+                    icrc152: false,
+                }),
                 index_principal: None,
             });
 

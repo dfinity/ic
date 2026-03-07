@@ -92,7 +92,8 @@ type MetadataValue = variant {
 };
 
 type FeatureFlags = record {
-  icrc2 : bool
+  icrc2 : bool;
+  icrc152 : bool
 };
 
 // The initialization parameters of the Ledger
@@ -548,6 +549,35 @@ type GetIndexPrincipalError = variant {
   }
 };
 
+type Icrc152MintArgs = record {
+  to : Account;
+  amount : nat;
+  created_at_time : opt nat64;
+  reason : opt text
+};
+
+type Icrc152MintError = variant {
+  Unauthorized : text;
+  InvalidAccount : text;
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type Icrc152BurnArgs = record {
+  from : Account;
+  amount : nat;
+  created_at_time : opt nat64;
+  reason : opt text
+};
+
+type Icrc152BurnError = variant {
+  Unauthorized : text;
+  InvalidAccount : text;
+  InsufficientBalance : record { balance : nat };
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
 service : (ledger_arg : LedgerArg) -> {
   archives : () -> (vec ArchiveInfo) query;
   get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
@@ -580,6 +610,9 @@ service : (ledger_arg : LedgerArg) -> {
   icrc103_get_allowances : (GetAllowancesArgs) -> (icrc103_get_allowances_response) query;
 
   icrc106_get_index_principal : () -> (GetIndexPrincipalResult) query;
+
+  icrc152_mint : (Icrc152MintArgs) -> (variant { Ok : nat; Err : Icrc152MintError });
+  icrc152_burn : (Icrc152BurnArgs) -> (variant { Ok : nat; Err : Icrc152BurnError });
 
   is_ledger_ready : () -> (bool) query
 }

@@ -915,7 +915,10 @@ fn icrc1_ledger_init_arg(
         0x0f, 0xee,
     ];
     const MAX_MEMO_LENGTH: u16 = 80;
-    const ICRC2_FEATURE: LedgerFeatureFlags = LedgerFeatureFlags { icrc2: true };
+    const ICRC2_FEATURE: LedgerFeatureFlags = LedgerFeatureFlags {
+        icrc2: true,
+        icrc152: false,
+    };
 
     LedgerInitArgs {
         minting_account: LedgerAccount::from(minter_id),

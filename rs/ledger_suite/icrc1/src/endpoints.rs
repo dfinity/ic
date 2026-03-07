@@ -248,6 +248,16 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     mthd,
                 });
             }
+            // AuthorizedMint and AuthorizedBurn are ICRC-152 operations exposed via
+            // icrc3_get_blocks (ICRC-3). The legacy get_transactions endpoint does not
+            // have a representation for them, so we set the kind and leave all typed
+            // fields as None.
+            Operation::AuthorizedMint { .. } => {
+                tx.kind = "122mint".to_string();
+            }
+            Operation::AuthorizedBurn { .. } => {
+                tx.kind = "122burn".to_string();
+            }
         }
 
         tx

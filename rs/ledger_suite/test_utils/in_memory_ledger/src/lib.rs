@@ -541,6 +541,12 @@ where
                 Operation::FeeCollector { .. } => {
                     panic!("FeeCollector107 not implemented")
                 }
+                Operation::AuthorizedMint { to, amount, .. } => {
+                    self.process_mint(to, amount);
+                }
+                Operation::AuthorizedBurn { from, amount, .. } => {
+                    self.process_burn(from, &None::<Account>, amount, index);
+                }
             }
         }
         self.post_process_ledger_blocks(blocks);

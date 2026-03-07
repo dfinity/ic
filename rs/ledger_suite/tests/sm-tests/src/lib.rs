@@ -74,6 +74,7 @@ use std::{
 
 mod allowances;
 pub mod fee_collector;
+pub mod icrc122_icrc152;
 pub mod icrc_106;
 pub mod metrics;
 
@@ -379,7 +380,10 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
-        feature_flags: Some(FeatureFlags { icrc2: true }),
+        feature_flags: Some(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        }),
         index_principal: None,
     }
 }
@@ -3256,7 +3260,10 @@ where
     );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
-        feature_flags: Some(FeatureFlags { icrc2: true }),
+        feature_flags: Some(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        }),
         ..UpgradeArgs::default()
     }));
 
