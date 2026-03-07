@@ -150,10 +150,7 @@ mod tests {
 
     use crate::{http::RequestType, routes::RequestContext};
 
-    fn make_request(
-        subnet_id: SubnetId,
-        paths: Vec<Vec<Vec<u8>>>,
-    ) -> Request<Body> {
+    fn make_request(subnet_id: SubnetId, paths: Vec<Vec<Vec<u8>>>) -> Request<Body> {
         let ctx = Arc::new(RequestContext {
             request_type: RequestType::ReadStateSubnetV2,
             paths: Some(paths),
@@ -183,12 +180,13 @@ mod tests {
             &registry,
         ));
 
-        let mut app = Router::new()
-            .route("/", post(dummy_handler))
-            .layer(middleware::from_fn_with_state(
-                state.clone(),
-                subnet_read_state_cache_middleware,
-            ));
+        let mut app =
+            Router::new()
+                .route("/", post(dummy_handler))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    subnet_read_state_cache_middleware,
+                ));
 
         let subnet = test_subnet_id(1);
         let paths = vec![vec![b"time".to_vec()]];
@@ -227,12 +225,13 @@ mod tests {
             &registry,
         ));
 
-        let mut app = Router::new()
-            .route("/", post(dummy_handler))
-            .layer(middleware::from_fn_with_state(
-                state.clone(),
-                subnet_read_state_cache_middleware,
-            ));
+        let mut app =
+            Router::new()
+                .route("/", post(dummy_handler))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    subnet_read_state_cache_middleware,
+                ));
 
         let subnet = test_subnet_id(1);
 
@@ -257,12 +256,13 @@ mod tests {
             &registry,
         ));
 
-        let mut app = Router::new()
-            .route("/", post(dummy_handler))
-            .layer(middleware::from_fn_with_state(
-                state.clone(),
-                subnet_read_state_cache_middleware,
-            ));
+        let mut app =
+            Router::new()
+                .route("/", post(dummy_handler))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    subnet_read_state_cache_middleware,
+                ));
 
         let paths = vec![vec![b"time".to_vec()]];
 
@@ -287,28 +287,23 @@ mod tests {
             &registry,
         ));
 
-        let mut app = Router::new()
-            .route("/", post(dummy_handler))
-            .layer(middleware::from_fn_with_state(
-                state.clone(),
-                subnet_read_state_cache_middleware,
-            ));
+        let mut app =
+            Router::new()
+                .route("/", post(dummy_handler))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    subnet_read_state_cache_middleware,
+                ));
 
         let subnet = test_subnet_id(1);
 
         // Paths in order [A, B]
-        let req = make_request(
-            subnet,
-            vec![vec![b"a".to_vec()], vec![b"b".to_vec()]],
-        );
+        let req = make_request(subnet, vec![vec![b"a".to_vec()], vec![b"b".to_vec()]]);
         app.call(req).await.unwrap();
         assert_eq!(state.misses.get(), 1);
 
         // Same paths in order [B, A]: should be a cache hit due to sorting
-        let req = make_request(
-            subnet,
-            vec![vec![b"b".to_vec()], vec![b"a".to_vec()]],
-        );
+        let req = make_request(subnet, vec![vec![b"b".to_vec()], vec![b"a".to_vec()]]);
         app.call(req).await.unwrap();
         assert_eq!(state.hits.get(), 1);
     }
@@ -322,12 +317,13 @@ mod tests {
             &registry,
         ));
 
-        let mut app = Router::new()
-            .route("/", post(dummy_handler))
-            .layer(middleware::from_fn_with_state(
-                state.clone(),
-                subnet_read_state_cache_middleware,
-            ));
+        let mut app =
+            Router::new()
+                .route("/", post(dummy_handler))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    subnet_read_state_cache_middleware,
+                ));
 
         // Request with no paths in context
         let ctx = Arc::new(RequestContext {
@@ -355,12 +351,13 @@ mod tests {
             &registry,
         ));
 
-        let mut app = Router::new()
-            .route("/", post(dummy_handler))
-            .layer(middleware::from_fn_with_state(
-                state.clone(),
-                subnet_read_state_cache_middleware,
-            ));
+        let mut app =
+            Router::new()
+                .route("/", post(dummy_handler))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    subnet_read_state_cache_middleware,
+                ));
 
         let subnet = test_subnet_id(1);
         let paths = vec![vec![b"time".to_vec()]];

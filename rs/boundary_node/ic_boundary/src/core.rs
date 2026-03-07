@@ -1012,10 +1012,10 @@ pub fn setup_router(
         })))
         .layer(middleware_retry.clone());
 
-    let middleware_subnet_read_state_cache =
-        option_layer(subnet_read_state_cache_state.map(|x| {
-            middleware::from_fn_with_state(x, subnet_read_state_cache_middleware)
-        }));
+    let middleware_subnet_read_state_cache = option_layer(
+        subnet_read_state_cache_state
+            .map(|x| middleware::from_fn_with_state(x, subnet_read_state_cache_middleware)),
+    );
 
     let service_subnet_read = ServiceBuilder::new()
         .layer(middleware::from_fn(validate::validate_request))
