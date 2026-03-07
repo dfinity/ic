@@ -70,8 +70,32 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
-    /// The payload contains flexible responses, which are not yet supported
-    FlexibleResponsesNotEmpty,
+    /// The callback_id in a flexible response group does not match a response or proof within it.
+    FlexibleCallbackIdMismatch {
+        callback_id: CallbackId,
+        mismatched_id: CallbackId,
+    },
+    /// The number of responses in a flexible group is outside the [min, max] range.
+    FlexibleResponseCountOutOfRange {
+        callback_id: CallbackId,
+        count: usize,
+        min_responses: u32,
+        max_responses: u32,
+    },
+    /// A flexible response group has duplicate signers.
+    FlexibleDuplicateSigner {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
+    /// A signer in a flexible response group is not part of the flexible committee.
+    FlexibleSignerNotInCommittee {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
+    /// The payload is not in its designated section.
+    /// For example, a non-flexible response is not in the responses section
+    /// or a flexible response is not in the flexible_responses section.
+    InvalidPayloadSection(CallbackId),
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
 }
