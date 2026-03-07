@@ -1,8 +1,8 @@
 use ic_interfaces::{
     batch_payload::PastPayload,
+    chain_key::{ChainKeyPayloadValidationFailure, InvalidChainKeyPayloadReason},
     consensus::{InvalidPayloadReason, PayloadValidationError, PayloadValidationFailure},
     validation::ValidationError,
-    vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
 use ic_logger::{ReplicaLogger, error};
 use ic_protobuf::types::v1 as pb;
@@ -13,23 +13,25 @@ use ic_types::{
 use std::collections::{BTreeMap, HashSet};
 
 pub(super) fn validation_failed_err(
-    err: VetKdPayloadValidationFailure,
+    err: ChainKeyPayloadValidationFailure,
 ) -> Result<(), PayloadValidationError> {
     Err(validation_failed(err))
 }
 
 pub(super) fn invalid_artifact_err(
-    reason: InvalidVetKdPayloadReason,
+    reason: InvalidChainKeyPayloadReason,
 ) -> Result<(), PayloadValidationError> {
     Err(invalid_artifact(reason))
 }
 
-pub(super) fn validation_failed(err: VetKdPayloadValidationFailure) -> PayloadValidationError {
-    ValidationError::ValidationFailed(PayloadValidationFailure::VetKdPayloadValidationFailed(err))
+pub(super) fn validation_failed(err: ChainKeyPayloadValidationFailure) -> PayloadValidationError {
+    ValidationError::ValidationFailed(PayloadValidationFailure::ChainKeyPayloadValidationFailed(
+        err,
+    ))
 }
 
-pub(super) fn invalid_artifact(reason: InvalidVetKdPayloadReason) -> PayloadValidationError {
-    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(reason))
+pub(super) fn invalid_artifact(reason: InvalidChainKeyPayloadReason) -> PayloadValidationError {
+    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(reason))
 }
 
 pub(super) fn group_shares_by_callback_id<Shares: Iterator<Item = VetKdKeyShare>>(

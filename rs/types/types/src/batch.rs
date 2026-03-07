@@ -2,10 +2,10 @@
 //! Consensus and Message Routing.
 
 mod canister_http;
+mod chain_key;
 mod execution_environment;
 mod ingress;
 mod self_validating;
-mod vetkd;
 mod xnet;
 
 pub use self::{
@@ -13,16 +13,16 @@ pub use self::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
+    chain_key::{
+        ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, bytes_to_chain_key_payload,
+        chain_key_payload_to_bytes,
+    },
     execution_environment::{
         CanisterCyclesCostSchedule, CanisterQueryStats, LocalQueryStats, QueryStats,
         QueryStatsPayload, RawQueryStats, TotalQueryStats,
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
-    vetkd::{
-        VetKdAgreement, VetKdErrorCode, VetKdPayload, bytes_to_vetkd_payload,
-        vetkd_payload_to_bytes,
-    },
     xnet::XNetPayload,
 };
 use crate::{
@@ -170,7 +170,7 @@ pub struct BatchPayload {
     pub self_validating: SelfValidatingPayload,
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
-    pub vetkd: Vec<u8>,
+    pub chain_key: Vec<u8>,
 }
 
 /// Batch properties collected form the last DKG summary block.
@@ -230,7 +230,7 @@ impl BatchPayload {
             self_validating,
             canister_http,
             query_stats,
-            vetkd,
+            chain_key,
         } = &self;
 
         ingress.is_empty()
@@ -238,7 +238,7 @@ impl BatchPayload {
             && self_validating.is_empty()
             && canister_http.is_empty()
             && query_stats.is_empty()
-            && vetkd.is_empty()
+            && chain_key.is_empty()
     }
 }
 
@@ -359,7 +359,7 @@ mod tests {
             self_validating,
             canister_http,
             query_stats,
-            vetkd,
+            chain_key,
         } = BatchPayload::default();
 
         assert_eq!(ingress.total_ids_size_estimate(), NumBytes::new(0));
@@ -367,7 +367,7 @@ mod tests {
         assert_eq!(self_validating.count_bytes(), 0);
         assert_eq!(canister_http.len(), 0);
         assert_eq!(query_stats.len(), 0);
-        assert_eq!(vetkd.len(), 0);
+        assert_eq!(chain_key.len(), 0);
     }
 
     /// This is a quick test to check the invariant, that the [`Default`] implementation
@@ -383,7 +383,7 @@ mod tests {
             self_validating,
             canister_http,
             query_stats,
-            vetkd,
+            chain_key,
         } = &payload;
 
         assert!(ingress.is_empty());
@@ -391,7 +391,7 @@ mod tests {
         assert!(self_validating.is_empty());
         assert!(canister_http.is_empty());
         assert!(query_stats.is_empty());
-        assert!(vetkd.is_empty());
+        assert!(chain_key.is_empty());
     }
 
     #[test]

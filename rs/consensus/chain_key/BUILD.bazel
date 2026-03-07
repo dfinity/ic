@@ -41,12 +41,12 @@ DEV_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "vetkd",
+    name = "chain_key",
     srcs = glob(["src/**/*.rs"]),
     crate_features = select({
         "//conditions:default": [],
     }),
-    crate_name = "ic_consensus_vetkd",
+    crate_name = "ic_consensus_chain_key",
     proc_macro_deps = [
         # Keep sorted.
     ],
@@ -55,12 +55,12 @@ rust_library(
 )
 
 rust_doc(
-    name = "consensus_vetkd_doc",
-    crate = ":vetkd",
+    name = "consensus_chain_key_doc",
+    crate = ":chain_key",
 )
 
 rust_test(
-    name = "consensus_vetkd_test",
-    crate = ":vetkd",
+    name = "consensus_chain_key_test",
+    crate = ":chain_key",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

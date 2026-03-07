@@ -1,11 +1,11 @@
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    Height, batch::VetKdAgreement, crypto::vetkd::VetKdKeyVerificationError, messages::CallbackId,
-    registry::RegistryClientError, state_manager::StateManagerError,
+    Height, batch::ChainKeyAgreement, crypto::vetkd::VetKdKeyVerificationError,
+    messages::CallbackId, registry::RegistryClientError, state_manager::StateManagerError,
 };
 
 #[derive(Debug)]
-pub enum InvalidVetKdPayloadReason {
+pub enum InvalidChainKeyPayloadReason {
     /// The feature is not enabled
     Disabled,
     /// The payload could not be deserialized
@@ -19,8 +19,8 @@ pub enum InvalidVetKdPayloadReason {
     /// The payload proposes the wrong type of agreement for a request context. For instance, the
     /// payload rejected a request that should have been accepted or vice versa.
     MismatchedAgreement {
-        expected: Option<VetKdAgreement>,
-        received: Option<VetKdAgreement>,
+        expected: Option<ChainKeyAgreement>,
+        received: Option<ChainKeyAgreement>,
     },
     /// A success response couldn't be decoded
     DecodingError(String),
@@ -29,7 +29,7 @@ pub enum InvalidVetKdPayloadReason {
 }
 
 #[derive(Debug)]
-pub enum VetKdPayloadValidationFailure {
+pub enum ChainKeyPayloadValidationFailure {
     /// The state was not available for a height
     StateUnavailable(StateManagerError),
     /// The DKG summary was not available for a height
@@ -38,4 +38,6 @@ pub enum VetKdPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     /// Crypto failed to determine the validity of the key
     VetKdKeyVerificationError(VetKdKeyVerificationError),
+    /// Crypto failed to verify a signature
+    SignatureVerificationError(String),
 }
