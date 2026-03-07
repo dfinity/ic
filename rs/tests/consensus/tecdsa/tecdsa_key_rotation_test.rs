@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use canister_test::Canister;
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -54,7 +54,7 @@ fn test(test_env: TestEnv) {
             &log,
         )
         .await;
-        // Stash size should be 5 before the roation
+        // Stash size should be 5 before the rotation
         await_pre_signature_stash_size(&app_subnet, 5, key_ids.as_slice(), &log);
         // Turn off pre-signature creation to verify that the stash is purged correctly
         set_pre_signature_stash_size(
@@ -78,43 +78,95 @@ fn test(test_env: TestEnv) {
             pub_keys.insert(key_id, public_key);
         }
 
+        // Capture current transcript counts so we can detect NEW rotations
+        // that happen after max_parallel_pre_signatures was set to 0.
+        // Without this, the check can be satisfied by rotations that happened
+        // before the config change, causing the stash to never reach 0.
+        let mut initial_counts = BTreeMap::new();
         for key_id in &key_ids {
-            let mut count = 0;
-            let mut created = 0;
             let metric_with_label =
                 format!("{MASTER_KEY_TRANSCRIPTS_CREATED}{{key_id=\"{key_id}\"}}");
             let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
-            loop {
-                match metrics.fetch::<u64>().await {
-                    Ok(val) => {
-                        created = val[&metric_with_label][0];
-                        if created > 1 {
-                            info!(
-                                log,
-                                "Observed key transcript for key {} being reshared {} times",
-                                key_id,
-                                created
-                            );
-                            break;
-                        }
-                    }
-                    Err(err) => {
-                        info!(log, "Could not connect to metrics yet {:?}", err);
-                    }
+            let initial = ic_system_test_driver::retry_with_msg_async!(
+                format!("Fetching initial transcript count for key {key_id}"),
+                &log,
+                Duration::from_secs(200),
+                Duration::from_secs(1),
+                || async {
+                    let val = metrics.fetch::<u64>().await?;
+                    val.get(&metric_with_label)
+                        .and_then(|counts| counts.first().copied())
+                        .ok_or_else(|| anyhow::anyhow!("No sample yet for key {}", key_id))
                 }
-                count += 1;
-                // Break after 200 tries
-                if count > 200 {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            }
-            if created <= 1 {
-                panic!("Failed to observe key transcript being reshared more than once");
-            }
+            )
+            .await
+            .expect("Failed to obtain initial transcript count");
+            initial_counts.insert(key_id, initial);
         }
 
-        // Stash size should be 0 after the roation
+        for key_id in &key_ids {
+            let metric_with_label =
+                format!("{MASTER_KEY_TRANSCRIPTS_CREATED}{{key_id=\"{key_id}\"}}");
+            let initial = initial_counts[key_id];
+            let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
+            let created = ic_system_test_driver::retry_with_msg_async!(
+                format!(
+                    "Waiting for key transcript rotation for key {key_id} \
+                     (initial count: {initial})"
+                ),
+                &log,
+                Duration::from_secs(200),
+                Duration::from_secs(1),
+                || async {
+                    match metrics.fetch::<u64>().await {
+                        Ok(val) => {
+                            let created = val
+                                .get(&metric_with_label)
+                                .and_then(|v| v.first().copied())
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Metric sample for key {} not present yet (metric: {})",
+                                        key_id,
+                                        metric_with_label
+                                    )
+                                })?;
+                            if created > initial {
+                                Ok(created)
+                            } else {
+                                bail!(
+                                    "Key transcript for key {} not yet reshared \
+                                     (initial: {}, current: {})",
+                                    key_id,
+                                    initial,
+                                    created
+                                )
+                            }
+                        }
+                        Err(err) => {
+                            bail!("Could not connect to metrics yet {:?}", err);
+                        }
+                    }
+                }
+            )
+            .await
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to observe key transcript for key {} being reshared \
+                     (initial: {}): {:?}",
+                    key_id, initial, e
+                )
+            });
+            info!(
+                log,
+                "Observed key transcript for key {} being reshared {} times \
+                 (initial count: {})",
+                key_id,
+                created,
+                initial
+            );
+        }
+
+        // Stash size should be 0 after the rotation
         await_pre_signature_stash_size(&app_subnet, 0, key_ids.as_slice(), &log);
 
         // Ensure that public keys are the same after the rotation
