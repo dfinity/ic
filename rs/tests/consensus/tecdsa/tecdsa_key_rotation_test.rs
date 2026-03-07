@@ -82,7 +82,7 @@ fn test(test_env: TestEnv) {
         // that happen after max_parallel_pre_signatures was set to 0.
         // Without this, the check can be satisfied by rotations that happened
         // before the config change, causing the stash to never reach 0.
-        let mut initial_counts: BTreeMap<String, u64> = BTreeMap::new();
+        let mut initial_counts = BTreeMap::new();
         for key_id in &key_ids {
             let metric_with_label =
                 format!("{MASTER_KEY_TRANSCRIPTS_CREATED}{{key_id=\"{key_id}\"}}");
@@ -101,13 +101,13 @@ fn test(test_env: TestEnv) {
             )
             .await
             .expect("Failed to obtain initial transcript count");
-            initial_counts.insert(metric_with_label, initial);
+            initial_counts.insert(key_id, initial);
         }
 
         for key_id in &key_ids {
             let metric_with_label =
                 format!("{MASTER_KEY_TRANSCRIPTS_CREATED}{{key_id=\"{key_id}\"}}");
-            let initial = initial_counts[&metric_with_label];
+            let initial = initial_counts[key_id];
             let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
             let created = ic_system_test_driver::retry_with_msg_async!(
                 format!(
