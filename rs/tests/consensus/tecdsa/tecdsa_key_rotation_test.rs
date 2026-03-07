@@ -24,6 +24,34 @@ use slog::info;
 
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
 
+/// Fetches the minimum `consensus_master_key_transcripts_created` metric value
+/// across all nodes in the subnet for the given key, retrying until all nodes
+/// report the metric or the timeout expires.
+async fn fetch_min_transcript_count(
+    metrics: &MetricsFetcher,
+    key_id: &impl std::fmt::Display,
+    metric_with_label: &str,
+    node_count: usize,
+) -> Result<u64> {
+    let val = metrics.fetch::<u64>().await?;
+    let counts = val.get(metric_with_label).ok_or_else(|| {
+        anyhow::anyhow!("Metric {} not found for key {}", metric_with_label, key_id)
+    })?;
+    if counts.len() != node_count {
+        bail!(
+            "Metric {} reported by {} out of {} nodes",
+            metric_with_label,
+            counts.len(),
+            node_count
+        );
+    }
+    counts
+        .iter()
+        .copied()
+        .min()
+        .ok_or_else(|| anyhow::anyhow!("No sample yet for key {}", key_id))
+}
+
 /// Tests whether chain key transcripts are correctly reshared when crypto keys are rotated
 /// using the test settings below:
 /// - DKG interval is set to 19, which roughly takes 20 or so seconds.
@@ -84,27 +112,17 @@ fn test(test_env: TestEnv) {
                 Duration::from_secs(60),
                 Duration::from_secs(1),
                 || async {
-                    let val = metrics.fetch::<u64>().await?;
-                    let counts = val
-                        .get(&metric_with_label)
-                        .ok_or_else(|| anyhow::anyhow!("Metric {} not found", metric_with_label))?;
-                    if counts.len() != node_count {
-                        bail!(
-                            "Metric {} reported by {} out of {} nodes",
-                            metric_with_label,
-                            counts.len(),
-                            node_count
-                        );
-                    }
-                    counts
-                        .iter()
-                        .copied()
-                        .min()
-                        .ok_or_else(|| anyhow::anyhow!("No sample yet for key {}", key_id))
+                    fetch_min_transcript_count(&metrics, key_id, &metric_with_label, node_count)
+                        .await
                 }
             )
             .await
-            .expect("Failed to obtain initial transcript count");
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to obtain initial transcript count for key {}: {e}",
+                    key_id
+                )
+            });
             initial_counts.insert(key_id, initial);
         }
 
@@ -132,41 +150,23 @@ fn test(test_env: TestEnv) {
                 Duration::from_secs(200),
                 Duration::from_secs(1),
                 || async {
-                    match metrics.fetch::<u64>().await {
-                        Ok(val) => {
-                            let counts = val.get(&metric_with_label).ok_or_else(|| {
-                                anyhow::anyhow!(
-                                    "Metric {} not found for key {}",
-                                    metric_with_label,
-                                    key_id
-                                )
-                            })?;
-                            if counts.len() != node_count {
-                                bail!(
-                                    "Metric {} reported by {} out of {} nodes",
-                                    metric_with_label,
-                                    counts.len(),
-                                    node_count
-                                );
-                            }
-                            let created = counts.iter().copied().min().ok_or_else(|| {
-                                anyhow::anyhow!("Metric sample for key {} not present yet", key_id)
-                            })?;
-                            if created > initial {
-                                Ok(created)
-                            } else {
-                                bail!(
-                                    "Key transcript for key {} not yet reshared \
-                                     (initial: {}, current min: {})",
-                                    key_id,
-                                    initial,
-                                    created
-                                )
-                            }
-                        }
-                        Err(err) => {
-                            bail!("Could not connect to metrics yet {:?}", err);
-                        }
+                    let created = fetch_min_transcript_count(
+                        &metrics,
+                        key_id,
+                        &metric_with_label,
+                        node_count,
+                    )
+                    .await?;
+                    if created > initial {
+                        Ok(created)
+                    } else {
+                        bail!(
+                            "Key transcript for key {} not yet reshared \
+                             (initial: {}, current min: {})",
+                            key_id,
+                            initial,
+                            created
+                        )
                     }
                 }
             )
