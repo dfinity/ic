@@ -5,11 +5,11 @@ use crate::common::utils::test_identity;
 use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
-use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_test_utils::{
     DEFAULT_TRANSFER_FEE, TransactionTypes, minter_identity,
-    valid_transactions_strategy_with_excluded_transaction_types,
+    valid_transactions_strategy_with_options,
 };
+use ic_icrc1_test_utils::{LedgerEndpointArg, TransactionStrategyOptions};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use proptest::strategy::Strategy;
@@ -36,12 +36,19 @@ fn test_icp_transfer() {
 
     runner
         .run(
-            &(valid_transactions_strategy_with_excluded_transaction_types(
+            &(valid_transactions_strategy_with_options(
                 MINTING_IDENTITY.clone(),
                 DEFAULT_TRANSFER_FEE,
                 *MAX_NUM_GENERATED_BLOCKS,
                 SystemTime::now(),
-                vec![TransactionTypes::TransferFrom, TransactionTypes::Approve],
+                TransactionStrategyOptions{
+                    excluded_transaction_types: vec![
+                        TransactionTypes::TransferFrom,
+                        TransactionTypes::Approve
+                    ],
+                    require_created_at_time: true,
+                    require_memo: true
+                },
             ),)
                 .no_shrink(),
             |(args_with_caller,)| {

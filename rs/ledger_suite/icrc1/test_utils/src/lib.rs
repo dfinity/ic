@@ -83,8 +83,13 @@ pub fn arb_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
     any::<u64>().prop_map(|v| token_amount(v))
 }
 
-fn arb_memo() -> impl Strategy<Value = Option<Memo>> {
-    prop::option::of(prop::collection::vec(0..=255u8, 32).prop_map(|x| Memo(ByteBuf::from(x))))
+fn arb_memo(require_memo: bool) -> impl Strategy<Value = Option<Memo>> {
+    let memo_strategy = prop::collection::vec(0..=255u8, 32).prop_map(|x| Memo(ByteBuf::from(x)));
+    if require_memo {
+        memo_strategy.prop_map(Some).boxed()
+    } else {
+        prop::option::of(memo_strategy).boxed()
+    }
 }
 
 fn operation_strategy<Tokens: TokensType>(
@@ -175,14 +180,22 @@ fn operation_strategy<Tokens: TokensType>(
     })
 }
 
-fn valid_created_at_time_strategy(now: SystemTime) -> impl Strategy<Value = Option<u64>> {
+fn valid_created_at_time_strategy(
+    now: SystemTime,
+    require_created_at_time: bool,
+) -> impl Strategy<Value = Option<u64>> {
     let day_in_sec = 24 * 60 * 60 - 60 * 5;
-    prop::option::of((0..=day_in_sec).prop_map(move |duration| {
+    let time_strategy = (0..=day_in_sec).prop_map(move |duration| {
         let start = now - Duration::from_secs(day_in_sec);
         // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
         let random_time = start + Duration::from_secs(duration); // calculate the random time
         random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
-    }))
+    });
+    if require_created_at_time {
+        time_strategy.prop_map(Some).boxed()
+    } else {
+        prop::option::of(time_strategy).boxed()
+    }
 }
 
 fn valid_expires_at_strategy(now: SystemTime) -> impl Strategy<Value = Option<u64>> {
@@ -206,13 +219,16 @@ pub fn transaction_strategy<Tokens: TokensType>(
         let random_time = start + random_duration; // calculate the random time
         random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
     }));
-    (operation_strategy, arb_memo(), created_at_time_strategy).prop_map(
-        |(operation, memo, created_at_time)| Transaction {
+    (
+        operation_strategy,
+        arb_memo(false),
+        created_at_time_strategy,
+    )
+        .prop_map(|(operation, memo, created_at_time)| Transaction {
             operation,
             created_at_time,
             memo,
-        },
-    )
+        })
 }
 
 pub fn blocks_strategy<Tokens: TokensType>(
@@ -338,13 +354,15 @@ pub fn valid_blockchain_with_gaps_strategy<Tokens: TokensType>(
 }
 
 pub fn transfer_arg(sender: Account) -> impl Strategy<Value = TransferArg> {
-    (any::<u16>(), arb_memo(), account_strategy()).prop_map(move |(amount, memo, to)| TransferArg {
-        from_subaccount: sender.subaccount,
-        to,
-        amount: candid::Nat::from(amount),
-        created_at_time: None,
-        fee: None,
-        memo,
+    (any::<u16>(), arb_memo(false), account_strategy()).prop_map(move |(amount, memo, to)| {
+        TransferArg {
+            from_subaccount: sender.subaccount,
+            to,
+            amount: candid::Nat::from(amount),
+            created_at_time: None,
+            fee: None,
+            memo,
+        }
     })
 }
 
@@ -386,7 +404,7 @@ impl fmt::Debug for ArgWithCaller {
                 "account_to_basic_identity",
                 &self.principal_to_basic_identity,
             )
-            .field("arg", &self.principal_to_basic_identity)
+            .field("arg", &self.arg)
             .field("caller", &self.caller.sender().unwrap())
             .finish_non_exhaustive()
     }
@@ -741,12 +759,15 @@ impl SigningAccount {
 }
 
 fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount> {
-    let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
     let identity_strategy = basic_identity_strategy();
-    (bytes_strategy, identity_strategy).prop_map(|(bytes, identity)| SigningAccount {
-        identity,
-        subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
-    })
+    (
+        prop::option::of(prop::collection::vec(0..=255u8, 32)),
+        identity_strategy,
+    )
+        .prop_map(|(bytes, identity)| SigningAccount {
+            identity,
+            subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
+        })
 }
 
 #[derive(EnumCount, PartialEq, Clone)]
@@ -758,18 +779,28 @@ pub enum TransactionTypes {
     TransferFrom,
 }
 
+pub struct TransactionStrategyOptions {
+    pub excluded_transaction_types: Vec<TransactionTypes>,
+    pub require_created_at_time: bool,
+    pub require_memo: bool,
+}
+
 pub fn valid_transactions_strategy(
     minter_identity: Arc<BasicIdentity>,
     default_fee: u64,
     length: usize,
     now: SystemTime,
 ) -> impl Strategy<Value = Vec<ArgWithCaller>> {
-    valid_transactions_strategy_with_excluded_transaction_types(
+    valid_transactions_strategy_with_options(
         minter_identity,
         default_fee,
         length,
         now,
-        vec![],
+        TransactionStrategyOptions {
+            excluded_transaction_types: vec![],
+            require_created_at_time: false,
+            require_memo: false,
+        },
     )
 }
 
@@ -780,13 +811,19 @@ pub fn valid_transactions_strategy(
 /// TODO: replace amount generation with something that makes sense,
 ///       e.g. exponential distribution
 /// TODO: allow to pass the account distribution
-pub fn valid_transactions_strategy_with_excluded_transaction_types(
+pub fn valid_transactions_strategy_with_options(
     minter_identity: Arc<BasicIdentity>,
     default_fee: u64,
     length: usize,
     now: SystemTime,
-    excluded_transaction_types: Vec<TransactionTypes>,
+    options: TransactionStrategyOptions,
 ) -> impl Strategy<Value = Vec<ArgWithCaller>> {
+    let TransactionStrategyOptions {
+        excluded_transaction_types,
+        require_created_at_time,
+        require_memo,
+    } = options;
+
     /// Generates a strategy for producing valid `mint` operations.
     ///
     /// The generated mint operations will:
@@ -799,13 +836,15 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         minter_identity: Arc<BasicIdentity>,
         now: SystemTime,
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
+        require_created_at_time: bool,
+        require_memo: bool,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
         (
             basic_identity_and_account_strategy(),
             amount_strategy(),
-            valid_created_at_time_strategy(now),
-            arb_memo(),
+            valid_created_at_time_strategy(now, require_created_at_time),
+            arb_memo(require_memo),
         )
             .prop_filter_map(
                 "The minting account is set as to account or tx is a duplicate",
@@ -860,6 +899,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         now: SystemTime,
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
+        require_created_at_time: bool,
+        require_memo: bool,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
         account_balance.prop_flat_map(move |(from, balance)| {
@@ -867,8 +908,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
             let account_to_basic_identity = account_to_basic_identity_pointer.clone();
             (
                 default_fee..=balance,
-                valid_created_at_time_strategy(now),
-                arb_memo(),
+                valid_created_at_time_strategy(now, require_created_at_time),
+                arb_memo(require_memo),
             )
                 .prop_filter_map(
                     "Tx hash already exists",
@@ -924,6 +965,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         now: SystemTime,
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
+        require_created_at_time: bool,
+        require_memo: bool,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
         account_balance.prop_flat_map(move |(from, balance)| {
@@ -932,8 +975,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
             (
                 basic_identity_and_account_strategy(),
                 0..=(balance - default_fee),
-                valid_created_at_time_strategy(now),
-                arb_memo(),
+                valid_created_at_time_strategy(now, require_created_at_time),
+                arb_memo(require_memo),
                 prop::option::of(Just(default_fee)),
             )
                 .prop_filter_map(
@@ -995,6 +1038,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         tx_hash_set_pointer: Arc<HashSet<Transaction<Tokens>>>,
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
         allowance_map_pointer: Arc<BTreeMap<(Account, Account), Tokens>>,
+        require_created_at_time: bool,
+        require_memo: bool,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
         account_balance.prop_flat_map(move |(from, _balance)| {
@@ -1004,8 +1049,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
             (
                 basic_identity_and_account_strategy(),
                 amount_strategy(),
-                valid_created_at_time_strategy(now),
-                arb_memo(),
+                valid_created_at_time_strategy(now, require_created_at_time),
+                arb_memo(require_memo),
                 prop::option::of(Just(default_fee)),
                 valid_expires_at_strategy(now),
                 proptest::bool::ANY,
@@ -1092,6 +1137,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         account_to_basic_identity_pointer: Arc<HashMap<Principal, Arc<BasicIdentity>>>,
         allowance_map_pointer: Arc<BTreeMap<(Account, Account), Tokens>>,
         current_balances_pointer: Arc<HashMap<Account, u64>>,
+        require_created_at_time: bool,
+        require_memo: bool,
     ) -> impl Strategy<Value = ArgWithCaller> {
         let minter: Account = minter_identity.sender().unwrap().into();
 
@@ -1171,8 +1218,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
 
                                 (
                                     basic_identity_and_account_strategy(), // to account
-                                    valid_created_at_time_strategy(now),
-                                    arb_memo(),
+                                    valid_created_at_time_strategy(now, require_created_at_time),
+                                    arb_memo(require_memo),
                                     prop::option::of(Just(fee_amount)),
                                 )
                                     .prop_filter_map(
@@ -1242,6 +1289,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         additional_length: usize,
         now: SystemTime,
         excluded_transaction_types: Vec<TransactionTypes>,
+        require_created_at_time: bool,
+        require_memo: bool,
     ) -> BoxedStrategy<TransactionsAndBalances> {
         if additional_length == 0 {
             return Just(state).boxed();
@@ -1254,8 +1303,14 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         let tx_hashes_pointer = Arc::new(state.txs.clone());
         let account_to_basic_identity_pointer = Arc::new(state.principal_to_basic_identity.clone());
         let allowance_map_pointer = Arc::new(state.allowances.clone());
-        let mint_strategy =
-            mint_strategy(minter_identity.clone(), now, tx_hashes_pointer.clone()).boxed();
+        let mint_strategy = mint_strategy(
+            minter_identity.clone(),
+            now,
+            tx_hashes_pointer.clone(),
+            require_created_at_time,
+            require_memo,
+        )
+        .boxed();
         let arb_tx = if balances.is_empty() {
             mint_strategy
         } else {
@@ -1268,6 +1323,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                 tx_hashes_pointer.clone(),
                 account_to_basic_identity_pointer.clone(),
                 allowance_map_pointer.clone(),
+                require_created_at_time,
+                require_memo,
             )
             .boxed();
             let burn_strategy = burn_strategy(
@@ -1277,6 +1334,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                 now,
                 tx_hashes_pointer.clone(),
                 account_to_basic_identity_pointer.clone(),
+                require_created_at_time,
+                require_memo,
             )
             .boxed();
             let transfer_strategy = transfer_strategy(
@@ -1286,6 +1345,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                 now,
                 tx_hashes_pointer.clone(),
                 account_to_basic_identity_pointer.clone(),
+                require_created_at_time,
+                require_memo,
             )
             .boxed();
             let mut options = vec![];
@@ -1315,6 +1376,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                         account_to_basic_identity_pointer.clone(),
                         allowance_map_pointer.clone(),
                         Arc::new(state.balances.clone()),
+                        require_created_at_time,
+                        require_memo,
                     )
                     .boxed();
                     options.push((100, transfer_from_strategy));
@@ -1334,6 +1397,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                     additional_length - 1,
                     now,
                     excluded_transaction_types.clone(),
+                    require_created_at_time,
+                    require_memo,
                 )
             })
             .boxed()
@@ -1352,6 +1417,8 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
         length,
         now,
         excluded_transaction_types,
+        require_created_at_time,
+        require_memo,
     )
     .prop_map(|res| res.transactions.clone())
 }
@@ -1536,7 +1603,7 @@ pub fn currency_strategy() -> impl Strategy<Value = Currency> {
 }
 
 pub fn construction_payloads_request_metadata() -> impl Strategy<Value = ObjectMap> {
-    let memo_strategy = arb_memo();
+    let memo_strategy = arb_memo(false);
     let now = SystemTime::now();
     // We select the last and next 48 hours as an interval in which the ingress boundaries are set
     // They do not have to be valid
