@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-07: Proposal 140776
+
+http://dashboard.internetcomputer.org/proposal/140776
+
+## Changed
+
+Maintenance release. No new features or fixes.
+
+
 # 2026-02-27: Proposal 140597
 
 http://dashboard.internetcomputer.org/proposal/140597
