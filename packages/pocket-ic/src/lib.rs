@@ -359,6 +359,7 @@ impl PocketIcBuilder {
             SubnetKind::Fiduciary => config.fiduciary = Some(subnet_spec),
             SubnetKind::Bitcoin => config.bitcoin = Some(subnet_spec),
             SubnetKind::Application => config.application.push(subnet_spec),
+            SubnetKind::CloudEngine => config.cloud_engine.push(subnet_spec),
             SubnetKind::System => config.system.push(subnet_spec),
             SubnetKind::VerifiedApplication => config.verified_application.push(subnet_spec),
         };
