@@ -115,8 +115,10 @@ NEW_FEATURES_AND_FIXES=$(
         | filter_out_empty_markdown_sections
 )
 if [[ -z "${NEW_FEATURES_AND_FIXES}" ]]; then
-    print_red "💀 ${GOVERNANCE_TYPE} ${CANISTER_NAME}'s unreleased_changelog.md is EMPTY." >&2
-    exit 1
+    print_yellow "⚠️  ${GOVERNANCE_TYPE} ${CANISTER_NAME}'s unreleased_changelog.md is EMPTY. Proceeding with maintenance release entry." >&2
+    NEW_FEATURES_AND_FIXES="## Changed
+
+Maintenance release. No new features or fixes."
 fi
 NEW_ENTRY="# ${PROPOSED_ON}: Proposal ${PROPOSAL_ID}
 
