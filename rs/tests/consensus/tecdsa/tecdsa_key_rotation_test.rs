@@ -72,6 +72,7 @@ fn test(test_env: TestEnv) {
         // pre-signature creation so we can detect NEW rotations that happen
         // after the config change. Without this, the check can be satisfied
         // by rotations that happened before, causing the stash to never reach 0.
+        let node_count = app_subnet.nodes().count();
         let mut initial_counts = BTreeMap::new();
         for key_id in &key_ids {
             let metric_with_label =
@@ -84,8 +85,21 @@ fn test(test_env: TestEnv) {
                 Duration::from_secs(1),
                 || async {
                     let val = metrics.fetch::<u64>().await?;
-                    val.get(&metric_with_label)
-                        .and_then(|counts| counts.first().copied())
+                    let counts = val
+                        .get(&metric_with_label)
+                        .ok_or_else(|| anyhow::anyhow!("Metric {} not found", metric_with_label))?;
+                    if counts.len() != node_count {
+                        bail!(
+                            "Metric {} reported by {} out of {} nodes",
+                            metric_with_label,
+                            counts.len(),
+                            node_count
+                        );
+                    }
+                    counts
+                        .iter()
+                        .copied()
+                        .min()
                         .ok_or_else(|| anyhow::anyhow!("No sample yet for key {}", key_id))
                 }
             )
@@ -120,22 +134,30 @@ fn test(test_env: TestEnv) {
                 || async {
                     match metrics.fetch::<u64>().await {
                         Ok(val) => {
-                            let created = val
-                                .get(&metric_with_label)
-                                .and_then(|v| v.first().copied())
-                                .ok_or_else(|| {
-                                    anyhow::anyhow!(
-                                        "Metric sample for key {} not present yet (metric: {})",
-                                        key_id,
-                                        metric_with_label
-                                    )
-                                })?;
+                            let counts = val.get(&metric_with_label).ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "Metric {} not found for key {}",
+                                    metric_with_label,
+                                    key_id
+                                )
+                            })?;
+                            if counts.len() != node_count {
+                                bail!(
+                                    "Metric {} reported by {} out of {} nodes",
+                                    metric_with_label,
+                                    counts.len(),
+                                    node_count
+                                );
+                            }
+                            let created = counts.iter().copied().min().ok_or_else(|| {
+                                anyhow::anyhow!("Metric sample for key {} not present yet", key_id)
+                            })?;
                             if created > initial {
                                 Ok(created)
                             } else {
                                 bail!(
                                     "Key transcript for key {} not yet reshared \
-                                     (initial: {}, current: {})",
+                                     (initial: {}, current min: {})",
                                     key_id,
                                     initial,
                                     created
@@ -158,11 +180,11 @@ fn test(test_env: TestEnv) {
             });
             info!(
                 log,
-                "Observed key transcript for key {} being reshared {} times \
-                 (initial count: {})",
+                "Observed key transcript for key {} being reshared \
+                 (initial min: {}, current min: {})",
                 key_id,
-                created,
-                initial
+                initial,
+                created
             );
         }
 
