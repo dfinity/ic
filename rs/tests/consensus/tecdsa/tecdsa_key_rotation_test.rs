@@ -68,20 +68,10 @@ fn test(test_env: TestEnv) {
         )
         .await;
 
-        let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
-        // Get the public key first to make sure feature is working
-        let mut pub_keys = BTreeMap::new();
-        for key_id in &key_ids {
-            let public_key = get_public_key_with_logger(key_id, &msg_can, &log)
-                .await
-                .unwrap();
-            pub_keys.insert(key_id, public_key);
-        }
-
-        // Capture current transcript counts so we can detect NEW rotations
-        // that happen after max_parallel_pre_signatures was set to 0.
-        // Without this, the check can be satisfied by rotations that happened
-        // before the config change, causing the stash to never reach 0.
+        // Capture current transcript counts immediately after disabling
+        // pre-signature creation so we can detect NEW rotations that happen
+        // after the config change. Without this, the check can be satisfied
+        // by rotations that happened before, causing the stash to never reach 0.
         let mut initial_counts = BTreeMap::new();
         for key_id in &key_ids {
             let metric_with_label =
@@ -90,7 +80,7 @@ fn test(test_env: TestEnv) {
             let initial = ic_system_test_driver::retry_with_msg_async!(
                 format!("Fetching initial transcript count for key {key_id}"),
                 &log,
-                Duration::from_secs(200),
+                Duration::from_secs(60),
                 Duration::from_secs(1),
                 || async {
                     let val = metrics.fetch::<u64>().await?;
@@ -102,6 +92,16 @@ fn test(test_env: TestEnv) {
             .await
             .expect("Failed to obtain initial transcript count");
             initial_counts.insert(key_id, initial);
+        }
+
+        let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
+        // Get the public key first to make sure feature is working
+        let mut pub_keys = BTreeMap::new();
+        for key_id in &key_ids {
+            let public_key = get_public_key_with_logger(key_id, &msg_can, &log)
+                .await
+                .unwrap();
+            pub_keys.insert(key_id, public_key);
         }
 
         for key_id in &key_ids {
