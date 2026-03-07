@@ -51,4 +51,12 @@ After changing Rust code (`*.rs`) follow these steps in order:
    ```
    (Use a depth of 2 in `rdeps` because tests usually depend on source files indirectly through a `rust_library` for example).
 
+   Always run tests, even if they're system-tests, i.e. their label starts with `//rs/tests/`.
+
    Fix all test failures.
+
+# Creating a Pull Request
+
+When asked to create a PR, always create it in draft mode.
+
+After the PR has been created, request a review from Copilot.
