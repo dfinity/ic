@@ -109,7 +109,7 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     return explicit_targets_dict
 
 
-def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -> str:
+def diff_only_query(command: str, base: str, head: str | None, skip_long_tests: bool) -> str:
     """
     Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
     * To return all targets in case files matching ALL_TARGETS_BLOBS are modified.
@@ -117,7 +117,10 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
     * To exclude long_tests if requested.
     """
     modified_files = subprocess.run(
-        ["git", "diff", "--name-only", "--merge-base", base, head], check=True, capture_output=True, text=True
+        ["git", "diff", "--name-only", "--merge-base", base] + ([head] if head is not None else []),
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.splitlines()
 
     n = len(modified_files)
@@ -186,7 +189,7 @@ def targets(
     query = (
         ("//..." + (" except attr(tags, long_test, //...)" if skip_long_tests else ""))
         if base is None
-        else diff_only_query(command, base, "HEAD" if head is None else head, skip_long_tests)
+        else diff_only_query(command, base, head, skip_long_tests)
     )
 
     # Finally, exclude targets that have any of the excluded tags:
