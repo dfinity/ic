@@ -53,6 +53,9 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "Caching")]
     pub cache: Cache,
 
+    #[command(flatten, next_help_heading = "Subnet Read State Caching")]
+    pub subnet_read_state_cache: SubnetReadStateCache,
+
     #[command(flatten, next_help_heading = "Retries")]
     pub retry: Retry,
 
@@ -332,6 +335,18 @@ pub struct Cache {
     /// Whether to cache non-anonymous requests
     #[clap(env, long)]
     pub cache_non_anonymous: bool,
+}
+
+#[derive(Args)]
+pub struct SubnetReadStateCache {
+    /// TTL for cached subnet read_state responses.
+    /// Set to 0 to disable caching.
+    #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
+    pub subnet_read_state_cache_ttl: Duration,
+
+    /// Maximum number of cached subnet read_state entries
+    #[clap(env, long, default_value = "1000")]
+    pub subnet_read_state_cache_max_entries: u64,
 }
 
 #[derive(Args)]
