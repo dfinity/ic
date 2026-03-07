@@ -290,6 +290,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           invocation-names: eval
+          startup-options: --output_base=/var/tmp/bazel-output
           run: |
             bazel build \
               --config=stamped \
@@ -307,6 +308,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           invocation-names: build
+          startup-options: --output_base=/var/tmp/bazel-output
           run: |
             bazel test \
               --config=stamped \
