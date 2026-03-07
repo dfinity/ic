@@ -25,8 +25,9 @@ use slog::info;
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
 
 /// Fetches the minimum `consensus_master_key_transcripts_created` metric value
-/// across all nodes in the subnet for the given key, retrying until all nodes
-/// report the metric or the timeout expires.
+/// across all nodes in the subnet for the given key in a single attempt.
+/// Callers that need retries (e.g., until all nodes report the metric or a timeout
+/// expires) should wrap this helper in `retry_with_msg_async!`.
 async fn fetch_min_transcript_count(
     metrics: &MetricsFetcher,
     key_id: &impl std::fmt::Display,
