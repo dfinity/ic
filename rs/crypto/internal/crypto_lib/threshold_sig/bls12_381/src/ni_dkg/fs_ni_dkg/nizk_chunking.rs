@@ -10,6 +10,7 @@ use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use rayon::prelude::*;
 
 /// Domain separators for the zk proof of chunking
 const DOMAIN_PROOF_OF_CHUNKING_ORACLE: &str = "ic-zk-proof-of-chunking-chunking";
@@ -361,85 +362,94 @@ pub fn verify_chunking(
     let xpowers = Scalar::xpowers(&x, NUM_ZK_REPETITIONS);
     let g1 = &instance.g1_gen;
 
-    // TODO(CRP-2550) Verification of chunking proof could run in 3 threads
+    let (r1, (r2, r3)) = rayon::join(
+        || -> Result<(), ZkProofChunkingError> {
+            // Verify lhs == rhs where
+            // lhs = product [R_j ^ sum [e_ijk * x^k | k <- [1..l]] | j <- [1..m]] * dd_i
+            // rhs = g1 ^ z_r_i | i <- [1..n]]
+            let rhs = g1.batch_mul_vartime(&nizk.z_r);
 
-    // Thread 1
-    {
-        /*
-        Verify lhs == rhs where
-        lhs = product [R_j ^ sum [e_ijk * x^k | k <- [1..l]] | j <- [1..m]] * dd_i
-        rhs = g1 ^ z_r_i | i <- [1..n]]
-         */
+            let lhs = {
+                let lhs: Vec<_> = e
+                    .par_iter()
+                    .enumerate()
+                    .map(|(i, e_i)| {
+                        let e_ijk_polynomials: Vec<_> = e_i
+                            .iter()
+                            .map(|e_ij| Scalar::muln_usize_vartime(&xpowers, e_ij))
+                            .collect();
 
-        let rhs = g1.batch_mul_vartime(&nizk.z_r);
+                        let rj_e_ijk = G1Projective::muln_affine_vartime(
+                            &instance.randomizers_r,
+                            &e_ijk_polynomials,
+                        );
 
-        let lhs = {
-            let mut lhs = Vec::with_capacity(e.len());
-            // TODO(CRP-2550) this loop can run in parallel
-            for (i, e_i) in e.iter().enumerate() {
-                let e_ijk_polynomials: Vec<_> = e_i
-                    .iter()
-                    .map(|e_ij| Scalar::muln_usize_vartime(&xpowers, e_ij))
+                        rj_e_ijk + &nizk.dd[i + 1]
+                    })
                     .collect();
+                G1Projective::batch_normalize(&lhs)
+            };
 
-                let rj_e_ijk =
-                    G1Projective::muln_affine_vartime(&instance.randomizers_r, &e_ijk_polynomials);
-
-                lhs.push(rj_e_ijk + &nizk.dd[i + 1]);
+            if lhs != rhs {
+                return Err(ZkProofChunkingError::InvalidProof);
             }
-            G1Projective::batch_normalize(&lhs)
-        };
+            Ok(())
+        },
+        || {
+            rayon::join(
+                || -> Result<(), ZkProofChunkingError> {
+                    // Verify: product [bb_k ^ x^k | k <- [1..l]] * dd_0 == g1 ^ z_beta
+                    let lhs = G1Projective::muln_affine_vartime(&nizk.bb, &xpowers) + &nizk.dd[0];
 
-        if lhs != rhs {
-            return Err(ZkProofChunkingError::InvalidProof);
-        }
-    }
+                    let rhs = g1.mul_vartime(&nizk.z_beta);
+                    if lhs != rhs {
+                        return Err(ZkProofChunkingError::InvalidProof);
+                    }
+                    Ok(())
+                },
+                || -> Result<(), ZkProofChunkingError> {
+                    // Verify: product [product [chunk_ij ^ e_ijk | i <- [1..n], j <- [1..m]] ^ x^k
+                    // | k <- [1..l]] * product [cc_k ^ x^k | k <- [1..l]] * Y   = product
+                    // [y_i^z_ri | i <- [1..n]] * y0^z_beta * g_1 ^ sum [z_sk * x^k | k <- [1..l]]
 
-    // Thread 2
-    {
-        // Verify: product [bb_k ^ x^k | k <- [1..l]] * dd_0 == g1 ^ z_beta
-        let lhs = G1Projective::muln_affine_vartime(&nizk.bb, &xpowers) + &nizk.dd[0];
+                    let cij_to_eijks: Vec<G1Projective> = (0..NUM_ZK_REPETITIONS)
+                        .into_par_iter()
+                        .map(|k| {
+                            let c_ij_s: Vec<_> =
+                                instance.ciphertext_chunks.iter().flatten().collect();
+                            let e_ijk_s: Vec<_> = e
+                                .iter()
+                                .flatten()
+                                .map(|e_ij| Scalar::from_usize(e_ij[k]))
+                                .collect();
+                            if c_ij_s.len() != m * n || e_ijk_s.len() != m * n {
+                                return Err(ZkProofChunkingError::InvalidProof);
+                            }
 
-        let rhs = g1.mul_vartime(&nizk.z_beta);
-        if lhs != rhs {
-            return Err(ZkProofChunkingError::InvalidProof);
-        }
-    }
+                            Ok(G1Projective::muln_affine_vartime_ref(&c_ij_s, &e_ijk_s)
+                                + &nizk.cc[k])
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
 
-    // Thread 3
-    {
-        // Verify: product [product [chunk_ij ^ e_ijk | i <- [1..n], j <- [1..m]] ^ x^k
-        // | k <- [1..l]] * product [cc_k ^ x^k | k <- [1..l]] * Y   = product
-        // [y_i^z_ri | i <- [1..n]] * y0^z_beta * g_1 ^ sum [z_sk * x^k | k <- [1..l]]
+                    let lhs =
+                        G1Projective::muln_vartime(&cij_to_eijks[..], &xpowers[..]) + &nizk.yy;
 
-        // TODO(CRP-2550) this loop can run in parallel
-        let cij_to_eijks: Vec<G1Projective> = (0..NUM_ZK_REPETITIONS)
-            .map(|k| {
-                let c_ij_s: Vec<_> = instance.ciphertext_chunks.iter().flatten().collect();
-                let e_ijk_s: Vec<_> = e
-                    .iter()
-                    .flatten()
-                    .map(|e_ij| Scalar::from_usize(e_ij[k]))
-                    .collect();
-                if c_ij_s.len() != m * n || e_ijk_s.len() != m * n {
-                    return Err(ZkProofChunkingError::InvalidProof);
-                }
+                    let acc = Scalar::muln_vartime(&nizk.z_s, &xpowers);
 
-                Ok(G1Projective::muln_affine_vartime_ref(&c_ij_s, &e_ijk_s) + &nizk.cc[k])
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+                    let rhs = G1Projective::muln_affine_vartime(&instance.public_keys, &nizk.z_r)
+                        + G1Projective::mul2_affine_vartime(&nizk.y0, &nizk.z_beta, g1, &acc);
 
-        let lhs = G1Projective::muln_vartime(&cij_to_eijks[..], &xpowers[..]) + &nizk.yy;
-
-        let acc = Scalar::muln_vartime(&nizk.z_s, &xpowers);
-
-        let rhs = G1Projective::muln_affine_vartime(&instance.public_keys, &nizk.z_r)
-            + G1Projective::mul2_affine_vartime(&nizk.y0, &nizk.z_beta, g1, &acc);
-
-        if lhs != rhs {
-            return Err(ZkProofChunkingError::InvalidProof);
-        }
-    }
+                    if lhs != rhs {
+                        return Err(ZkProofChunkingError::InvalidProof);
+                    }
+                    Ok(())
+                },
+            )
+        },
+    );
+    r1?;
+    r2?;
+    r3?;
 
     Ok(())
 }
