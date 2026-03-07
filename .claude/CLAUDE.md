@@ -55,8 +55,10 @@ After changing Rust code (`*.rs`) follow these steps in order:
 
    Fix all test failures.
 
-# Creating a Pull Request
+# Pull Requests
 
 When asked to create a PR, always create it in draft mode.
 
 After the PR has been created, request a review from Copilot.
+
+When updating a PR prefer to push new commits to the PR branch instead of force-pushing over the existing commits.
