@@ -73,17 +73,20 @@ impl PocketIcHelper {
 
     async fn get_all_certified_records(&self) -> (Vec<RegistryRecord>, RegistryVersion, Time) {
         let mut last_err = None;
-        for _ in 0..5 {
+        for attempt in 0..5 {
             match self
                 .registry_canister
                 .get_certified_changes_since(0, &self.nns_pub_key)
                 .await
             {
                 Ok(result) => return result,
-                Err(e) => {
-                    last_err = Some(e);
-                    tokio::time::sleep(Duration::from_millis(500)).await;
+                Err(ic_registry_transport::Error::RegistryUnreachable(msg)) => {
+                    last_err = Some(ic_registry_transport::Error::RegistryUnreachable(msg));
+                    if attempt < 4 {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                    }
                 }
+                Err(e) => panic!("Failed to get certified records: {e:?}"),
             }
         }
         panic!(
@@ -292,10 +295,14 @@ const CONDITION_TIMEOUT: Duration = Duration::from_secs(30);
 
 async fn wait_for_replicator_version(replicator: &RegistryReplicator, version: RegistryVersion) {
     let start = tokio::time::Instant::now();
-    while replicator.get_registry_client().get_latest_version() < version {
+    loop {
+        let current_version = replicator.get_registry_client().get_latest_version();
+        if current_version >= version {
+            break;
+        }
         assert!(
             start.elapsed() < CONDITION_TIMEOUT,
-            "Timed out waiting for replicator to reach version {version}"
+            "Timed out waiting for replicator to reach version {version}, latest observed version: {current_version}"
         );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -413,9 +420,7 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
 
     // `start_polling` polls the registry canister in the background, so we wait until the
     // replicator has updated to the latest version
-    while replicator.get_registry_client().get_latest_version() < new_record.version {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    wait_for_replicator_version(&replicator, new_record.version).await;
 
     // Starting to poll should update local store and client to latest changes
     let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
@@ -570,9 +575,7 @@ async fn test_drop_stops_polling() {
 
     // `start_polling` polls the registry canister in the background, so we wait until the
     // replicator has updated to the latest version
-    while replicator.get_registry_client().get_latest_version() < new_record.version {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    wait_for_replicator_version(&replicator, new_record.version).await;
 
     // Ensure that replicator is up to date
     let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
