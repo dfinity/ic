@@ -6637,6 +6637,102 @@ fn charge_idle_canisters_for_full_execution_round() {
     }
 }
 
+/// Canisters with inputs but without enough cycles to execute them do get
+/// categorized as "fully executed" when their inputs are consumed, even though
+/// they didn't actually execute any message.
+#[test]
+fn frozen_canisters_are_fully_executed() {
+    let scheduler_cores = 2;
+    let canisters_per_core = 6;
+    let slice = 100;
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            max_instructions_per_round: (2 * slice).into(),
+            max_instructions_per_message: slice.into(),
+            max_instructions_per_slice: slice.into(),
+            max_instructions_per_install_code_slice: slice.into(),
+            // Charge for every message execution enough to execute all but one canister on
+            // each core. And to prevent a second iteration.
+            instruction_overhead_per_execution: (slice / (canisters_per_core - 1) + 1).into(),
+            instruction_overhead_per_canister: 0.into(),
+            instruction_overhead_per_canister_for_finalization: 0.into(),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // Bump the round number.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // `canisters_per_core` pairs (we have 2 cores) of low cycle balance canisters:
+    // one with an input, one with a heartbeat.
+    let mut canisters = vec![];
+    for _ in 0..canisters_per_core {
+        // Low balance canister with input. Lots of instructions, as they won't be
+        // executed anyway.
+        let frozen_canister_id = test.create_canister_with(
+            Cycles::new(1),
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            None,
+            None,
+            None,
+        );
+        test.send_ingress(frozen_canister_id, ingress(slice * 10));
+        canisters.push(frozen_canister_id);
+
+        // Low balance canister with heartbeat.
+        let heartbeat_canister_id = test.create_canister_with(
+            Cycles::new(1_000_000),
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            Some(SystemMethod::CanisterHeartbeat),
+            None,
+            None,
+        );
+        canisters.push(heartbeat_canister_id);
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.last_round(), 1.into());
+
+    // All but 2 canisters were "executed".
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .instructions_consumed_per_message
+            .get_sample_count(),
+        (canisters_per_core - 1) * 2
+    );
+
+    let canister_priority = |canister_id: &CanisterId| -> &ic_replicated_state::CanisterPriority {
+        test.state().canister_priority(canister_id)
+    };
+    for (i, canister) in canisters.iter().enumerate() {
+        if (i as u64) < (canisters_per_core - 1) * 2 {
+            assert_eq!(
+                canister_priority(canister).last_full_execution_round,
+                1.into(),
+                "Canister {i} should have been fully executed",
+            );
+            assert!(
+                canister_priority(canister).accumulated_priority.get() < 0,
+                "Canister {i} should have been charged"
+            );
+        } else {
+            assert_eq!(
+                canister_priority(canister).last_full_execution_round,
+                0.into(),
+                "Canister {i} should not have been executed",
+            );
+            assert!(
+                canister_priority(canister).accumulated_priority.get() > 0,
+                "Canister {i} should not have been charged"
+            );
+        }
+    }
+}
+
 fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
     let instructions_consumed_per_message = fetch_histogram_vec_buckets(
         metrics_registry,
