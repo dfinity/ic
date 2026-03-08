@@ -44,6 +44,7 @@ jobs:
           ref: ${{ inputs.commit-sha }}
           filters: |
             fuzzers:
+              - ".github/workflows/ci-main.yml"
               - "ci/container/TAG"
               - "bin/fuzzing/run-all-fuzzers.sh"
               - "**/BUILD.bazel"
