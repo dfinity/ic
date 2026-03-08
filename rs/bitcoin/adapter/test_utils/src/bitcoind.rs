@@ -450,9 +450,16 @@ impl<T: RpcClientType> Daemon<T> {
             }
         });
 
-        ready_rx
+        let ready_result = ready_rx
             .recv_timeout(Duration::from_secs(60))
-            .map_err(|_| DaemonStatus::Timeout)??;
+            .map_err(|_| DaemonStatus::Timeout)
+            .and_then(|inner| inner);
+        if let Err(status) = ready_result {
+            // Kill any still-running daemon to prevent resource leaks during retries.
+            let _ = process.kill();
+            let _ = process.wait();
+            return Err(status);
+        }
 
         let rpc_client = RpcClient::new(network, &rpc_url, auth.clone())
             .map_err(DaemonStatus::ClientError)?

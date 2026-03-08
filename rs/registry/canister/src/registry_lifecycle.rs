@@ -58,9 +58,7 @@ pub fn canister_post_upgrade(
 
     // ANYTHING BELOW THIS LINE SHOULD NOT MUTATE STATE
 
-    if registry_storage.pre_upgrade_version.is_some() {
-        let pre_upgrade_version = registry_storage.pre_upgrade_version.unwrap();
-
+    if let Some(pre_upgrade_version) = registry_storage.pre_upgrade_version {
         assert_eq!(
             pre_upgrade_version + mutation_batches_due_to_data_migrations,
             registry.latest_version(),

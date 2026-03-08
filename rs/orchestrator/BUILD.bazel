@@ -71,6 +71,7 @@ rust_library(
         "@crate_index//:prost",
         "@crate_index//:qrcode",
         "@crate_index//:rand",
+        "@crate_index//:rustls",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:serde_json",
@@ -108,11 +109,15 @@ rust_test(
         "testdata/nftables_boundary_node_system_subnet.conf.golden",
     ],
     crate = ":lib",
+    # Disable optimizations to speed up compilation otherwise it will take over 9 minutes on CI.
+    # It does not have an effect on the test runtime.
+    rustc_flags = ["-Copt-level=0"],
     deps = [
         # Keep sorted.
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/crypto_returning_ok",
+        "//rs/crypto/test_utils/keys",
         "//rs/crypto/test_utils/ni-dkg",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/test_utils/tls",

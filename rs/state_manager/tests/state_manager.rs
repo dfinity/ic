@@ -5940,6 +5940,7 @@ fn certified_read_can_exclude_canister_ranges() {
                         label(subnet_test_id(0).get_ref()) =>
                             SubTree(flatmap! {
                                 label("public_key") => Leaf(vec![0_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             }),
                         label(subnet_test_id(1).get_ref()) =>
                             SubTree(flatmap! {
@@ -5949,14 +5950,17 @@ fn certified_read_can_exclude_canister_ranges() {
                                     )
                                 ),
                                 label("public_key") => Leaf(vec![1_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             }),
                         label(subnet_test_id(2).get_ref()) =>
                             SubTree(flatmap! {
                                 label("public_key") => Leaf(vec![2_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             }),
                         label(subnet_test_id(3).get_ref()) =>
                             SubTree(flatmap! {
                                 label("public_key") => Leaf(vec![3_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             })
                     })
             })

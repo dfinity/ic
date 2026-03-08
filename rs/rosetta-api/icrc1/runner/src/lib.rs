@@ -320,73 +320,60 @@ pub async fn make_transaction_with_rosetta_client_binary(
         .arg(pem_file)
         .arg(arguments.operation_type);
 
-    if arguments.to_account.is_some() {
-        command = command
-            .arg("--to")
-            .arg(arguments.to_account.unwrap().to_string());
+    if let Some(to_account) = arguments.to_account {
+        command = command.arg("--to").arg(to_account.to_string());
     }
 
-    if arguments.spender_account.is_some() {
-        command = command
-            .arg("--spender")
-            .arg(arguments.spender_account.unwrap().to_string());
+    if let Some(spender_account) = arguments.spender_account {
+        command = command.arg("--spender").arg(spender_account.to_string());
     }
 
-    if arguments.from_account.is_some() {
-        command = command
-            .arg("--from")
-            .arg(arguments.from_account.unwrap().to_string());
+    if let Some(from_account) = arguments.from_account {
+        command = command.arg("--from").arg(from_account.to_string());
     }
 
-    if arguments.from_subaccount.is_some() {
+    if let Some(from_subaccount) = arguments.from_subaccount {
         command = command.arg("--from-subaccount").arg(format!(
             "{}",
-            String::from_utf8_lossy(arguments.from_subaccount.unwrap().as_slice())
+            String::from_utf8_lossy(from_subaccount.as_slice())
         ));
     }
 
-    if arguments.spender_subaccount.is_some() {
+    if let Some(spender_subaccount) = arguments.spender_subaccount {
         command = command.arg("--spender-subaccount").arg(format!(
             "{}",
-            String::from_utf8_lossy(arguments.spender_subaccount.unwrap().as_slice())
+            String::from_utf8_lossy(spender_subaccount.as_slice())
         ));
     }
 
-    if arguments.amount.is_some() {
-        command = command
-            .arg("--amount")
-            .arg(arguments.amount.unwrap().to_string());
+    if let Some(amount) = arguments.amount {
+        command = command.arg("--amount").arg(amount.to_string());
     }
 
-    if arguments.allowance.is_some() {
-        command = command
-            .arg("--allowance")
-            .arg(arguments.allowance.unwrap().to_string());
+    if let Some(allowance) = arguments.allowance {
+        command = command.arg("--allowance").arg(allowance.to_string());
     }
 
-    if arguments.expires_at.is_some() {
-        command = command
-            .arg("--expires-at")
-            .arg(arguments.expires_at.unwrap().to_string());
+    if let Some(expires_at) = arguments.expires_at {
+        command = command.arg("--expires-at").arg(expires_at.to_string());
     }
 
-    if arguments.expected_allowance.is_some() {
+    if let Some(expected_allowance) = arguments.expected_allowance {
         command = command
             .arg("--expected-allowance")
-            .arg(arguments.expected_allowance.unwrap().to_string());
+            .arg(expected_allowance.to_string());
     }
 
-    if arguments.memo.is_some() {
-        command = command.arg("--memo").arg(format!(
-            "{}",
-            String::from_utf8_lossy(arguments.memo.unwrap().as_slice())
-        ));
+    if let Some(memo) = arguments.memo {
+        command = command
+            .arg("--memo")
+            .arg(format!("{}", String::from_utf8_lossy(memo.as_slice())));
     }
 
-    if arguments.created_at_time.is_some() {
+    if let Some(created_at_time) = arguments.created_at_time {
         command = command
             .arg("--created_at_time")
-            .arg(arguments.created_at_time.unwrap().to_string());
+            .arg(created_at_time.to_string());
     }
 
     let child_process = command.output();
