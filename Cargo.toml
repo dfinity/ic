@@ -67,6 +67,7 @@ members = [
     "rs/consensus/utils",
     "rs/consensus/vetkd",
     "rs/criterion_time",
+    "rs/cross-chain/blob_store",
     "rs/cross-chain/proposal-cli",
     "rs/crypto",
     "rs/crypto/for_verification_only",

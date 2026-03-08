@@ -765,7 +765,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::CreateCanister) => {
                 let subnet_admins = state.get_own_subnet_admins();
-                if subnet_admins.is_empty()
+                if subnet_admins.is_none()
                     && let CanisterCall::Ingress(_) = msg
                 {
                     self.reject_unexpected_ingress(Ic00Method::CreateCanister)
@@ -823,7 +823,7 @@ impl ExecutionEnvironment {
                             &mut state,
                             round_limits,
                             &self.metrics.canister_not_found_error,
-                            &subnet_admins,
+                            subnet_admins,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into())
@@ -920,7 +920,7 @@ impl ExecutionEnvironment {
                         &state,
                         registry_settings.subnet_size,
                         ready_for_migration,
-                        &subnet_admins,
+                        subnet_admins,
                     )
                     .map(|res| (res, Some(args.get_canister_id())))
                 });
@@ -981,7 +981,7 @@ impl ExecutionEnvironment {
                         args.get_canister_id(),
                         *msg.sender(),
                         &mut state,
-                        &subnet_admins,
+                        subnet_admins,
                     )
                     .map(|res| (res, Some(args.get_canister_id())))
                 });
@@ -1000,7 +1000,7 @@ impl ExecutionEnvironment {
                 },
                 Ok(args) => {
                     let subnet_admins = state.get_own_subnet_admins();
-                    self.stop_canister(args.get_canister_id(), &msg, &mut state, &subnet_admins)
+                    self.stop_canister(args.get_canister_id(), &msg, &mut state, subnet_admins)
                 }
             },
 
@@ -1012,7 +1012,7 @@ impl ExecutionEnvironment {
                     let subnet_admins = state.get_own_subnet_admins();
                     let result = self
                         .canister_manager
-                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits, &subnet_admins)
+                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits, subnet_admins)
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into());
 
@@ -2355,7 +2355,7 @@ impl ExecutionEnvironment {
         canister_id: CanisterId,
         sender: PrincipalId,
         state: &mut ReplicatedState,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<Vec<u8>, UserError> {
         let canister = canister_make_mut(canister_id, state)?;
 
@@ -2419,7 +2419,7 @@ impl ExecutionEnvironment {
         state: &ReplicatedState,
         subnet_size: usize,
         ready_for_migration: bool,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister(canister_id, state)?;
@@ -2481,7 +2481,7 @@ impl ExecutionEnvironment {
         canister_id: CanisterId,
         msg: &CanisterCall,
         state: &mut ReplicatedState,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> ExecuteSubnetMessageResult {
         let call_id = state
             .metadata

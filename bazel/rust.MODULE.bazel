@@ -17,7 +17,7 @@ archive_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.90.0"],
+    versions = ["1.93.1"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -235,22 +235,13 @@ crate.spec(
     package = "cached",
     version = "^0.49",
 )
-
-# canbench patch to avoid littering PWD when running benchmarks
-# https://github.com/dfinity/canbench/pull/166
-canbench_rev = "9ca29369085edc7567aa87ceb57d4b21e037b66e"
-
 crate.spec(
-    git = "https://github.com/dfinity/canbench",
     package = "canbench",
-    rev = canbench_rev,
-    version = "^0.4.0",
+    version = "^0.4.1",
 )
 crate.spec(
-    git = "https://github.com/dfinity/canbench",
     package = "canbench-rs",
-    rev = canbench_rev,
-    version = "^0.4.0",
+    version = "^0.4.1",
 )
 crate.spec(
     package = "candid",

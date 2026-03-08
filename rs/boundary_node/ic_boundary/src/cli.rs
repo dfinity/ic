@@ -150,6 +150,11 @@ pub struct Health {
     #[clap(env, long, default_value = "4s", value_parser = parse_duration)]
     pub health_check_timeout: Duration,
 
+    /// How frequently to fetch the certified membership set (per-subnet) from the subnet's state tree.
+    /// This runs in a background task independent of the health update cycle.
+    #[clap(env, long, default_value = "10s", value_parser = parse_duration)]
+    pub health_membership_fetch_interval: Duration,
+
     /// Maximum block height lag for a replica to be included in the routing table
     #[clap(env, long, default_value = "50")]
     pub health_max_height_lag: u64,
