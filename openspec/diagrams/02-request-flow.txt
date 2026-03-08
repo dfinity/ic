@@ -1,0 +1,19 @@
+This diagram shows the end-to-end flow of a user request through the Internet Computer protocol stack, from initial HTTP request to certified response.
+
+Step 1 - User sends HTTPS request: A user or client application sends an HTTPS request (update call, query call, or read_state) to a Boundary Node. The boundary node resolves the target subnet from the canister ID using the routing table from the Registry.
+
+Step 2 - Boundary Node routes to Replica: The boundary node forwards the request to one of the replicas in the target subnet's HTTP Endpoint (public API). For query calls, the replica can respond directly from its local state. For update calls, the flow continues.
+
+Step 3 - Ingress Manager validates: The Ingress Manager validates the ingress message: checks the signature, verifies the sender's authentication, ensures the message hasn't expired, checks deduplication, and validates the target canister exists. Valid messages enter the ingress pool.
+
+Step 4 - Consensus creates block: The Block Maker proposes a new block containing ingress messages and XNet messages from the pool. Notarizers validate the block and produce a notarization (threshold signature). The Finalizer produces a finalization once conditions are met.
+
+Step 5 - Message Routing delivers: The finalized block's messages are delivered to the Message Routing layer. It demuxes messages to their target canisters, manages inter-canister call queues, and schedules cross-subnet stream messages.
+
+Step 6 - Execution runs canister: The Execution Environment processes messages. The Scheduler picks canisters to execute based on priority. The Wasm Embedder runs the canister code in a sandboxed process. The canister interacts with the IC through the System API (reading state, sending messages, managing cycles). For long computations, Deterministic Time Slicing pauses and resumes across rounds.
+
+Step 7 - State is checkpointed and certified: After execution, the State Manager updates the replicated state, creates a checkpoint, and computes a state hash. The Certification component produces a certified state tree (Merkle tree with threshold BLS signature). This certification proves the response is authentic.
+
+Step 8 - Response returned: The certified response travels back through the HTTP endpoint to the boundary node and finally to the user. The user can verify the response using the IC's public threshold key (the root of trust).
+
+Parallel path - Cross-subnet calls: If a canister calls another canister on a different subnet, the message is placed in the XNet stream. The P2P/XNet layer delivers it to the target subnet, where it enters that subnet's consensus and execution pipeline. The response follows the reverse path.

@@ -1,0 +1,79 @@
+This diagram is a comprehensive component map showing every major subsystem of the Internet Computer codebase (rs/ directory) and how they interconnect. It is organized by functional domain.
+
+NETWORKING DOMAIN (left side):
+- Boundary Node (ic-boundary): Edge HTTP gateway, rate limiting, salt sharing, TLS termination. Connects to HTTP Endpoints.
+- HTTP Endpoints: Public API (ic-http-endpoints-public) handles ingress/query/read_state. Metrics endpoint for monitoring. XNet endpoint for cross-subnet communication.
+- P2P Transport: QUIC-based peer-to-peer (ic-quic-transport). Artifact Manager coordinates dissemination. Consensus Manager, Peer Manager, and State Sync Manager handle specific artifact types.
+- XNet: Cross-subnet payload builder (ic-xnet-payload-builder) produces and consumes cross-subnet message streams.
+- HTTPS Outcalls: Adapter for external HTTP requests with consensus verification.
+- Canister Client: Internal client for canister-to-canister communication patterns.
+
+CONSENSUS DOMAIN (center-top):
+- Consensus Engine (ic-consensus): Block making, notarization, finalization, CUP creation.
+- Consensus DKG: Orchestrates distributed key generation for threshold signatures.
+- Consensus IDKG: Orchestrates interactive DKG for threshold ECDSA/Schnorr.
+- Consensus vetKD: Orchestrates verifiable encrypted threshold key derivation.
+- Consensus Certification: Produces certified state hashes.
+- Ingress Manager: Validates and pools ingress messages for block inclusion.
+- Artifact Pool: Persistent storage for consensus artifacts (blocks, notarizations, etc.).
+
+EXECUTION DOMAIN (center):
+- Execution Environment (ic-execution-environment): Core execution loop, round scheduling.
+- Scheduler: Selects canisters and allocates compute budgets per round.
+- Embedders (ic-embedders): Wasm compilation (wasmtime), instrumentation, and execution.
+- Canister Sandbox: Process-level isolation for Wasm execution (separate OS process per canister).
+- Cycles Account Manager: Tracks and charges cycles for computation, storage, and messages.
+- System API: The interface canisters use to interact with the IC (stable memory, messaging, time, randomness, etc.).
+- Message Routing (ic-messaging): Routes messages between canisters, manages call queues and cross-subnet streams.
+
+STATE MANAGEMENT DOMAIN (center-bottom):
+- State Manager (ic-state-manager): Coordinates checkpointing, certification, and state sync.
+- Replicated State: In-memory representation of canister states, system metadata, and message queues.
+- State Layout: On-disk organization of checkpoint files.
+- Canonical State: Deterministic serialization for state hashing and certification.
+- Certification: Merkle tree construction and threshold-signed state hashes.
+- Page Map: Copy-on-write memory pages for efficient canister heap management.
+- Manifest: Content-addressed chunk listing for state sync.
+- Checkpoint: Periodic state snapshots for crash recovery and state sync.
+
+CRYPTO DOMAIN (right side):
+- Crypto Component (ic-crypto): Unified interface for all cryptographic operations.
+- CSP (Crypto Service Provider): Manages the node's secret key store and performs crypto operations.
+- Threshold Signatures: BLS multi-signatures for consensus, ECDSA/Schnorr for cross-chain.
+- TLS: Node-to-node encrypted communication.
+- DKG: Distributed key generation protocol (non-interactive for BLS, interactive for ECDSA).
+- Key Management: Node key generation, validation, and rotation.
+- Hashing/PRNG: SHA-256, deterministic random number generation.
+
+GOVERNANCE DOMAIN (top-right):
+- NNS Governance: Proposal management, neuron staking, voting, rewards.
+- Registry Canister: System configuration (subnets, nodes, routing tables).
+- Cycles Minting Canister: ICP-to-cycles conversion.
+- ICP Ledger: Token transfers, staking operations.
+- SNS Governance: Per-dApp governance instances.
+- SNS Swap: Decentralized token sales.
+- SNS-WASM: SNS deployment and version management.
+- Nervous System Common: Shared governance utilities.
+
+LEDGER DOMAIN (bottom-right):
+- ICP Ledger: Native ICP token ledger.
+- ICRC-1 Ledger: Generic token standard implementation.
+- Archive Canisters: Historical transaction storage.
+- Index Canisters: Transaction lookups and balance queries.
+- Rosetta API: Standard blockchain API for exchanges.
+- Ledger Suite Orchestrator: Manages ERC-20 mirror token ledgers.
+
+INFRASTRUCTURE DOMAIN (bottom):
+- Replica: The main process combining all layers.
+- Orchestrator: Manages replica lifecycle, upgrades, firewall.
+- IC-OS: Operating system images (GuestOS, HostOS, SetupOS).
+- Config: Replica configuration loading and validation.
+- Monitoring: Metrics, logging, tracing, profiling.
+- Recovery: Subnet recovery and subnet splitting tools.
+
+TYPES AND INTERFACES (cross-cutting):
+- Core Types (ic-types, ic-base-types): Fundamental types used everywhere.
+- Interfaces (ic-interfaces): Trait definitions connecting subsystems.
+- Protobuf: Wire format serialization.
+
+Key interconnections: Consensus depends on Crypto for threshold signatures. Execution depends on State Management for reading/writing canister state. State Management depends on Crypto for certification. P2P depends on Crypto for TLS. All components depend on Types/Interfaces and Registry for configuration.

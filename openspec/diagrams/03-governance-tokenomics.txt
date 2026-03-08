@@ -1,0 +1,27 @@
+This diagram shows the governance and tokenomics ecosystem of the Internet Computer, centered on the Network Nervous System (NNS) and Service Nervous System (SNS).
+
+NNS (Network Nervous System) - Central Governance:
+The NNS is a set of canisters on the NNS subnet that governs the entire IC network. Its key components are:
+- NNS Governance Canister: Manages proposals and voting. ICP token holders stake tokens to create Neurons. Neurons vote on proposals (e.g., upgrade replicas, add nodes, change parameters). Neurons earn voting rewards proportional to staked ICP and voting participation. Neurons can follow other neurons for automatic voting (liquid democracy).
+- Registry Canister: Stores the authoritative system configuration. Proposals that pass trigger mutations to the registry (adding subnets, updating routing tables, upgrading replica versions).
+- Cycles Minting Canister (CMC): Converts ICP tokens to Cycles (the IC's compute currency). The conversion rate is set by an exchange rate canister. Cycles are burned when canisters execute computations.
+- ICP Ledger: The token ledger tracking ICP balances, transfers, and staking. Implements ICRC-1 token standard. Has an Archive canister for historical transactions and an Index canister for lookups.
+- Lifeline & Root Canisters: NNS handler canisters that manage canister upgrades and lifecycle.
+- Genesis Token Canister (GTC): Distributed initial ICP tokens to genesis participants.
+
+SNS (Service Nervous System) - dApp Governance:
+SNS allows individual decentralized applications to have their own governance. Key components:
+- SNS-WASM Canister: Stores and deploys SNS canister code. Orchestrates SNS creation.
+- SNS Governance: Like NNS governance but for a single dApp. Token holders create neurons, vote on proposals specific to that application.
+- SNS Swap: Decentralized token sale mechanism. Users contribute ICP to receive SNS tokens. The swap canister manages the lifecycle (open, committed, aborted).
+- SNS Root: Manages the SNS canisters' upgrade lifecycle.
+- SNS Ledger: Each SNS has its own ICRC-1 token ledger.
+
+Token Flow:
+ICP tokens flow: Users -> Staking (NNS Neurons) -> Voting Rewards -> Users. ICP -> CMC -> Cycles -> Burned by computation. ICP -> SNS Swap -> SNS Tokens -> SNS Neuron staking.
+
+Node Provider Rewards:
+Node providers who operate IC nodes receive ICP rewards computed by the Node Rewards canister based on node type, region, and performance.
+
+Neurons Fund:
+A special fund where NNS neurons can opt-in to automatically participate in SNS swaps, providing decentralized funding for new dApps.

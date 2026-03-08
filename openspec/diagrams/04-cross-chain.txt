@@ -1,0 +1,27 @@
+This diagram shows the Internet Computer's cross-chain integration architecture, enabling trustless bridges to Bitcoin, Ethereum, and Dogecoin blockchains.
+
+Bitcoin Integration (ckBTC):
+The IC has direct integration with the Bitcoin network at the protocol level.
+- BTC Adapter: Each replica runs a Bitcoin adapter process that connects to Bitcoin full nodes and relays blocks/transactions to the IC consensus layer.
+- BTC Checker: Validates Bitcoin transactions and UTXO state.
+- Threshold ECDSA (tECDSA): The IC's consensus layer can collectively sign Bitcoin transactions using threshold ECDSA signatures via the IDKG protocol, with keys distributed across subnet nodes. No single node holds a complete private key.
+- ckBTC Minter Canister: Manages the chain-key BTC token (ckBTC). Users send BTC to an IC-controlled address. The minter verifies the deposit and mints ckBTC (an ICRC-1 token on the IC). For withdrawals, the minter creates and signs a Bitcoin transaction using threshold ECDSA and broadcasts it.
+- Flow: User BTC -> Bitcoin Network -> BTC Adapter -> Consensus -> ckBTC Minter -> ckBTC Token (ICRC-1). Reverse for withdrawals.
+
+Ethereum Integration (ckETH):
+- HTTPS Outcalls: The IC makes HTTPS outcalls to Ethereum JSON-RPC endpoints to read Ethereum state (blocks, transactions, logs). Multiple replicas independently query and reach consensus on the result.
+- Threshold ECDSA: Same tECDSA capability signs Ethereum transactions.
+- ckETH Minter Canister: Manages chain-key ETH. Users deposit ETH to an IC-controlled Ethereum address. The minter monitors deposits via HTTPS outcalls and mints ckETH. For withdrawals, it signs and submits Ethereum transactions.
+- Ledger Suite Orchestrator: Manages multiple ERC-20 token ledgers (ckUSDC, ckUSDT, etc.), automatically deploying ledger/index/archive canisters for each supported token.
+- Flow: User ETH/ERC-20 -> Ethereum Network -> HTTPS Outcalls -> Consensus -> ckETH Minter -> ckETH/ckERC20 Tokens. Reverse for withdrawals.
+
+Dogecoin Integration (ckDOGE):
+- Similar architecture to Bitcoin integration but for the Dogecoin blockchain.
+- ckDOGE Minter: Manages chain-key DOGE tokens using the same threshold signing infrastructure.
+
+Cross-Chain Common Infrastructure:
+- Threshold Signatures (IDKG): The core cryptographic protocol enabling all cross-chain integrations. Keys are generated via interactive DKG and reshared when subnet membership changes.
+- Blob Store: Stores large binary data (e.g., canister Wasm modules) for cross-chain proposal workflows.
+- HTTPS Outcalls Adapter: A sidecar process on each replica that makes external HTTP requests, with consensus-level agreement on responses to maintain determinism.
+
+The key insight is that all cross-chain bridges are trustless: no single entity or bridge operator holds custody. The IC's distributed threshold cryptography means the blockchain network itself controls the keys.

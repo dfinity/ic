@@ -1,0 +1,17 @@
+The Internet Computer (IC) protocol is organized as a layered architecture running on replicated subnets. Each subnet is a set of nodes that independently run a full protocol stack. The layers, from bottom to top, are:
+
+Layer 1 - Infrastructure & IC-OS: The base operating system (GuestOS, HostOS, SetupOS) runs on bare-metal nodes. The Orchestrator manages the replica process lifecycle, handles upgrades, firewall rules, and SSH access. Nodes are enrolled via the Registry.
+
+Layer 2 - Peer-to-Peer Networking: Nodes within a subnet communicate via a QUIC-based P2P transport layer. This handles artifact dissemination (blocks, signatures, state sync chunks). Cross-subnet communication uses the XNet protocol over HTTP/2.
+
+Layer 3 - Consensus: A Byzantine Fault Tolerant (BFT) consensus protocol produces blocks. The process is: Block Making (proposing blocks) -> Notarization (threshold-signing block validity) -> Finalization (threshold-signing block selection) -> Catch-Up Packages (CUPs for joining nodes). Consensus also orchestrates DKG (Distributed Key Generation), threshold ECDSA/Schnorr signing (IDKG), and vetKD.
+
+Layer 4 - Message Routing: The messaging layer routes messages between canisters. Ingress messages from users enter through HTTP endpoints and are validated by the Ingress Manager. Inter-canister messages are routed via cross-subnet streams through the XNet protocol.
+
+Layer 5 - Execution Environment: WebAssembly canisters are executed deterministically. The Scheduler selects which canisters to run. The Embedder compiles and executes Wasm. Canisters interact with the system through a System API. Execution is metered by cycles (the IC's compute currency). Deterministic Time Slicing (DTS) allows long-running computations to span multiple rounds.
+
+Layer 6 - State Management: After each round, the State Manager checkpoints the replicated state. State is organized into a Merkle-tree structure for certification (threshold-signed hash trees). The Canonical State representation enables cross-subnet state verification. State sync allows nodes to catch up by downloading state chunks.
+
+Layer 7 - Boundary Nodes & HTTP Gateway: Boundary nodes sit at the network edge, routing user HTTPS requests to the correct subnet. They handle rate limiting, salt sharing for consistent routing, and TLS termination.
+
+Cross-cutting: The Crypto layer provides BLS threshold signatures, ECDSA/Schnorr threshold signatures, TLS, DKG, vetKD, and hashing/PRNG. The Registry (on the NNS subnet) stores all system configuration: subnet membership, node public keys, routing tables, and replica versions.

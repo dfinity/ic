@@ -1,0 +1,46 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Rust, Bazel, Protobuf, WebAssembly
+  Platform: Internet Computer (IC) - a decentralized cloud computing platform
+  Architecture: Distributed replicated state machine with BFT consensus
+
+  Major subsystems:
+  - Consensus: BFT block production, notarization, finalization, DKG
+  - Crypto: Threshold signatures, BLS, ECDSA, TLS, key management
+  - Execution: Wasm canister execution, cycles, scheduling, sandboxing
+  - Networking: P2P (QUIC), xnet messaging, HTTP endpoints, HTTPS outcalls
+  - State Management: Checkpointing, state sync, certification, artifact pools
+  - Governance: NNS (Network Nervous System), SNS, proposals, neurons, voting
+  - Ledger: ICP ledger, ICRC token standards, Rosetta API
+  - Registry: System configuration, subnet/node management
+  - Chain Integrations: Bitcoin (ckBTC), Ethereum (ckETH), Dogecoin
+  - Infrastructure: Orchestrator, replica, IC-OS, backup, recovery
+  - Boundary Node: HTTP gateway, routing, caching
+  - Types/Interfaces: Core types, trait definitions, protobuf schemas
+
+  Conventions:
+  - Rust 2021 edition
+  - Bazel build system
+  - Protobuf for serialization
+  - Property-based testing with proptest
+  - System tests for integration testing
+  - Deterministic execution guarantees
+
+rules:
+  proposal:
+    - Reference the specific rs/ module being specified
+    - Include links to relevant trait definitions in rs/interfaces/
+  specs:
+    - Use WHEN/THEN/AND scenario format for all requirements
+    - Requirements must be testable and verifiable
+    - Reference specific types from rs/types/ where applicable
+    - Cover both success and error paths
+    - Include determinism requirements where relevant
+  design:
+    - Document consensus protocol decisions
+    - Include security considerations for crypto operations
+    - Reference the IC specification where applicable
+  tasks:
+    - Map tasks to specific crate and module paths
+    - Include both unit test and integration test tasks
