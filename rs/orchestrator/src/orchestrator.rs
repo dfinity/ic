@@ -228,6 +228,7 @@ impl Orchestrator {
             Arc::clone(&metrics),
             node_id,
             Arc::clone(&crypto) as _,
+            Arc::clone(&crypto) as _,
         );
 
         let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
