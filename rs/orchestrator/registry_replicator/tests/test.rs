@@ -80,8 +80,11 @@ impl PocketIcHelper {
                 .await
             {
                 Ok(result) => return result,
-                Err(ic_registry_transport::Error::RegistryUnreachable(msg)) => {
-                    last_err = Some(ic_registry_transport::Error::RegistryUnreachable(msg));
+                Err(
+                    e @ ic_registry_transport::Error::RegistryUnreachable(_)
+                    | e @ ic_registry_transport::Error::UnknownError(_),
+                ) => {
+                    last_err = Some(e);
                     if attempt < 4 {
                         tokio::time::sleep(Duration::from_millis(500)).await;
                     }
