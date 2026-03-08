@@ -16,7 +16,7 @@ use candid::Principal;
 use futures::future::try_join_all;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, cert_state_makes_progress_with_retries, store_message, store_message_with_retries,
+    can_read_msg, cert_state_makes_progress_with_retries, store_message_with_retries,
 };
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
@@ -155,7 +155,7 @@ pub fn upgrade(
 
     let msg = &format!("hello before upgrade to {upgrade_version}");
     info!(logger, "Storing message: '{}'", msg);
-    let can_id = store_message(
+    let can_id = store_message_with_retries(
         &healthy_node.get_public_url(),
         healthy_node.effective_canister_id(),
         msg,
