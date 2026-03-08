@@ -1346,7 +1346,13 @@ mod tests {
                         .times(1)
                         .return_const(rotate_idkg_dealing_encryption_keys_result);
                 }
-                
+                if let Some(sign_basic_result) = self.sign_basic_result {
+                    key_handler
+                        .expect_sign_basic()
+                        .times(1)
+                        .return_const(sign_basic_result);
+                }
+
                 let node_config = Config::new(temp_dir.keep());
                 let tls_config = mock_tls_config_called_times(self.expect_tls_config_call_times);
 

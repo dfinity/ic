@@ -207,7 +207,7 @@ pub fn get_best_interface_ipv6_address() -> Result<Ipv6Addr> {
     let mut delay = Duration::from_secs(1);
 
     for attempt in 0..MAX_RETRIES {
-        match get_router_advertisement_ipv6_address_helper(&interface) {
+        match get_best_interface_ipv6_address_helper(&interface) {
             Ok(ipv6_addr) => {
                 return Ok(ipv6_addr);
             }
@@ -228,7 +228,7 @@ pub fn get_best_interface_ipv6_address() -> Result<Ipv6Addr> {
     anyhow::bail!("Cannot determine an IPv6 address, aborting");
 }
 
-fn get_router_advertisement_ipv6_address_helper(interface: &str) -> Result<Ipv6Addr> {
+fn get_best_interface_ipv6_address_helper(interface: &str) -> Result<Ipv6Addr> {
     let ifaces = get_if_addrs().context("Failed to get network interfaces")?;
     let ipv6_addr = ifaces
         .iter()
