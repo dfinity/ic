@@ -1163,6 +1163,21 @@ impl Player {
             return Ok(());
         }
 
+        if last_cup.height() > self.state_manager.latest_state_height() {
+            // The CUP references a height that hasn't been reached yet (e.g. the downloaded
+            // checkpoint is from an earlier DKG interval than the CUP in the consensus pool).
+            // We cannot verify the state hash until batches up to the CUP height have been
+            // delivered. The state hash will be verified later via `redeliver_certifications`.
+            info!(
+                self.log,
+                "The CUP height {} is strictly above the latest state height {}. \
+                Skipping state hash comparison as the state has not been produced yet.",
+                last_cup.height(),
+                self.state_manager.latest_state_height()
+            );
+            return Ok(());
+        }
+
         // Verify state hash against the state hash in the CUP
         if self
             .get_state_hash(last_cup.height())
