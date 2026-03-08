@@ -433,8 +433,7 @@ mod tests {
 
         let result = generate_networkd_config_contents(network_info, interface_name, false);
 
-        let expected_output =
-            "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nIPv6AcceptRA=true\n";
+        let expected_output = "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nIPv6AcceptRA=true\nDHCP=yes\n";
         assert_eq!(result, expected_output);
     }
 }
