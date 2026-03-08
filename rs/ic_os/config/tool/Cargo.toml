@@ -8,6 +8,7 @@ anyhow = { workspace = true }
 askama = { workspace = true }
 base64 = { workspace = true }
 clap = { workspace = true }
+ipnet = { workspace = true }
 macaddr = { workspace = true }
 utils = { path = "../../utils" }
 url = { workspace = true }

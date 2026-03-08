@@ -9,7 +9,7 @@
     // Configuration of transport parameters and node identity
     // =======================================================
     transport: {
-        node_ip: "{{ ipv6_address }}",
+        node_ip: "::",
         listening_port: 4100,
     },
 
@@ -118,7 +118,7 @@
     // Configuration of the HTTP endpoint.
     // ====================================
     http_handler: {
-        listen_addr: "[{{ ipv6_address }}]:8080",
+        listen_addr: "[::]:8080",
     },
 
     // ====================================
@@ -159,7 +159,7 @@
         // - "log"  — periodically write prometheus metrics to the application log
         // - { http: <port> } — expose prometheus metrics on the specified port
         // - { file: <path> } — dump prometheus metrics to the specified file on shutdown
-        exporter: { http: "[{{ ipv6_address }}]:9090", },
+        exporter: { http: "[::]:9090", },
     },
 
     // ===================================
@@ -178,7 +178,7 @@
     // Configuration for Message Routing.
     // ==================================
     message_routing: {
-        xnet_ip_addr: "{{ ipv6_address }}",
+        xnet_ip_addr: "::",
         xnet_port: 2497,
     },
 

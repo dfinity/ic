@@ -191,8 +191,6 @@ impl Orchestrator {
             }
         }
 
-        // Filesystem API to local registry copy
-        let registry_local_store = registry_replicator.get_local_store();
         // Caches local registry by regularly polling local store
         let registry_client = registry_replicator.get_registry_client();
         // Wrapper to `RegistryClient`
@@ -230,7 +228,6 @@ impl Orchestrator {
             Arc::clone(&metrics),
             node_id,
             Arc::clone(&crypto) as _,
-            registry_local_store.clone(),
         );
 
         let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));

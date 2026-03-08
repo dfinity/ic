@@ -5,8 +5,8 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
 
+use config_tool::guestos::network::get_best_interface_name;
 use config_types::Ipv6Config;
-use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
 use utils::get_command_stdout;
 
 use network::systemd::IPV6_NAME_SERVER_NETWORKD_CONTENTS;
@@ -107,7 +107,7 @@ pub fn generate_networkd_config(
     let network_info: NetworkInfo = create_network_info(ipv6_config, ipv4_info)?;
     eprintln!("{network_info:#?}");
 
-    let network_interface_name = get_interface_name()?;
+    let network_interface_name = get_best_interface_name()?;
 
     let disable_dad = is_k8s_testnet()?;
 
@@ -246,36 +246,6 @@ fn generate_network_config_ipv4_contents(ipv4_info: Option<IpAddressInfo>) -> St
             )
         })
         .unwrap_or_default()
-}
-
-/// Picks the best interface from the list
-fn pick_best_interface(mut interfaces: Vec<String>) -> Option<String> {
-    interfaces.sort();
-
-    // Try to pick eth* interface first, then others.
-    // On Azure both eth* and en* are created, but we should use eth* one.
-    // In other environments we have only en* interfaces.
-    interfaces
-        .iter()
-        .find(|x| x.starts_with("eth"))
-        .or_else(|| interfaces.iter().find(|x| x.starts_with("en")))
-        .cloned()
-}
-
-pub fn get_interface_name() -> Result<String> {
-    // Get a list of all network interfaces in the system
-    let interfaces = get_interface_paths()
-        .into_iter()
-        .map(|x| get_valid_interface_name(&x))
-        .collect::<Result<Vec<_>>>()
-        .context("ERROR: Unable to extract interface name")?;
-    eprintln!("Found network interfaces: {interfaces:?}");
-
-    let valid_interface =
-        pick_best_interface(interfaces).context("ERROR: No valid network interfaces found")?;
-
-    eprintln!("Chosen interface name: {valid_interface:?}");
-    Ok(valid_interface)
 }
 
 // Turn off duplicate address detection for testnets running on k8s
@@ -466,38 +436,5 @@ mod tests {
         let expected_output =
             "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nIPv6AcceptRA=true\n";
         assert_eq!(result, expected_output);
-    }
-
-    #[test]
-    fn test_pick_best_interface() {
-        let interfaces = vec!["lo", "ens0", "eth1", "ens1", "eth0"]
-            .into_iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(pick_best_interface(interfaces), Some("eth0".to_string()));
-
-        let interfaces = vec!["lo", "eth0", "eth1", "ens0", "ens1"]
-            .into_iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(pick_best_interface(interfaces), Some("eth0".to_string()));
-
-        let interfaces = vec!["lo", "ens0"]
-            .into_iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(pick_best_interface(interfaces), Some("ens0".to_string()));
-
-        let interfaces = vec!["lo", "enp0"]
-            .into_iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(pick_best_interface(interfaces), Some("enp0".to_string()));
-
-        let interfaces = vec!["lo"]
-            .into_iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>();
-        assert!(pick_best_interface(interfaces).is_none());
     }
 }

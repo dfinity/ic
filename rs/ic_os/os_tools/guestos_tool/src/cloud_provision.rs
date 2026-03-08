@@ -5,11 +5,9 @@ use std::{
 };
 
 use anyhow::{Context, Error, Result, bail};
-use config_tool::guestos::cloud::CloudType;
+use config_tool::guestos::{cloud::CloudType, network::get_best_interface_name};
 use config_types::GuestOSConfig;
 use nix::{sys::signal::Signal::SIGTERM, unistd::Pid};
-
-use crate::generate_network_config::get_interface_name;
 
 /// Assigns IPv4 DHCP address to the interface and unassigns it when dropped
 #[derive(Debug)]
@@ -71,7 +69,7 @@ pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConf
     // Find the network interface to work on, it might not be initialized yet so give it a few tries
     let mut retries = 10;
     let intf = loop {
-        match get_interface_name() {
+        match get_best_interface_name() {
             Ok(v) => break v,
             Err(e) => {
                 println!("unable to choose interface: {e:#}");
