@@ -2585,7 +2585,7 @@ impl CanisterManager {
     /// Returns the canister snapshots list, or
     /// an error if it failed to retrieve the information.
     ///
-    /// Retrieving the canister snapshots list can only be initiated a principal
+    /// Retrieving the canister snapshots list can only be initiated by a principal
     /// allowed by the canister snapshot visibility settings.
     pub(crate) fn list_canister_snapshot(
         &self,

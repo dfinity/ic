@@ -3949,8 +3949,8 @@ impl StateMachine {
         })?
     }
 
-    /// Create a canister snapshot.
-    pub fn list_canister_snapshot(
+    /// List canister snapshots.
+    pub fn list_canister_snapshots(
         &self,
         args: ListCanisterSnapshotArgs,
     ) -> Result<ListCanisterSnapshotResponse, UserError> {
@@ -3958,8 +3958,8 @@ impl StateMachine {
         self.list_canister_snapshot_as(args, sender)
     }
 
-    /// Create a canister snapshot.
-    pub fn list_canister_snapshot_as(
+    /// List canister snapshots.
+    pub fn list_canister_snapshots_as(
         &self,
         args: ListCanisterSnapshotArgs,
         sender: PrincipalId,
@@ -3973,7 +3973,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => ListCanisterSnapshotResponse::decode(&data),
             WasmResult::Reject(reason) => {
-                panic!("take_canister_snapshot call rejected: {reason}")
+                panic!("list_canister_snapshots call rejected: {reason}")
             }
         })?
     }
