@@ -109,3 +109,23 @@ fn test_chip_id_uniqueness_duplicate_chip_ids() {
         err.msg
     );
 }
+
+#[test]
+fn test_chip_id_uniqueness_empty_chip_ids_are_ignored() {
+    let mut snapshot = RegistrySnapshot::new();
+
+    // Multiple nodes with `Some(vec![])` should not be flagged as duplicates;
+    // empty chip_ids are treated as absent (non-SEV nodes).
+    for i in 1..=3 {
+        snapshot.insert(
+            make_node_record_key(NodeId::from(PrincipalId::new_user_test_id(i))).into_bytes(),
+            NodeRecord {
+                chip_id: Some(vec![]),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+        );
+    }
+
+    check_node_record_invariants(&snapshot).unwrap();
+}

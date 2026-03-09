@@ -52,6 +52,9 @@ fn check_chip_ids_are_unique(
     let mut chip_id_to_node: HashMap<Vec<u8>, NodeId> = HashMap::new();
 
     for (node_id, node_record) in node_records {
+        // Skip nodes without a chip_id (non-SEV nodes), or with an empty one.
+        // Rejecting a malformed (empty) chip_id is not this check's job; here
+        // we only care about uniqueness among meaningful values.
         let chip_id = match node_record.chip_id {
             Some(ref id) if !id.is_empty() => id,
             _ => continue,
