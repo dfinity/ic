@@ -4,8 +4,8 @@
     "sha256": "5bf34cb029e437c4ccb990b1595876d4c869566d66b8b58059d0ee742891c219"
   },
   "bitcoin_testnet": {
-    "sha256": "b7829e6ae6100c789bb967bc9ba49c72d12c6bdf56a28c0188d688a22d75ef47",
-    "tag": "release/2026-02-18"
+    "sha256": "a0dfef8f5c52e628ce3a197277f0d5fc427f3b34f6f4deb771572855616c9749",
+    "tag": "release/2026-03-06"
   },
   "ck_btc_archive": {
     "rev": "512cf412f33d430b79f42330518166d14fc6884e",
@@ -80,8 +80,8 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "db10c84daeee7a539695a55e4cf1176207ffe22eec9df8a635cdcb7c4f917771",
-    "tag": "release-2026-02-17"
+    "sha256": "640fecd6d70a5c22dda0615b2c73390abfb4648014e39d8557fa92bb37752425",
+    "tag": "release-2026-03-06"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -96,8 +96,8 @@
     "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
   },
   "nns_dapp_test": {
-    "sha256": "d6cbeefa5463c95fd21ad247027476bee70dcc11a8739bc9294f642fceee5b1f",
-    "tag": "proposal-140496"
+    "sha256": "b8865ed42b03894ad5d1eafdc3b5e5a82441157239569b3fbaac76c0b2322cac",
+    "tag": "proposal-140767"
   },
   "node-rewards": {
     "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",

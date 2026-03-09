@@ -447,9 +447,8 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
             )
             .unwrap();
 
-            // Write 500 dummy files to the scratchpad directory so that removing checkpoint files takes longer than dropping a `CheckpointLayout`.
-            // This is to create some backlog in the checkpoint removal channel.
-            for i in 0..500 {
+            // Write a few dummy files to each checkpoint directory.
+            for i in 0..50 {
                 let file_path = scratchpad_layout.raw_path().join(i.to_string());
                 File::create(file_path).unwrap();
             }

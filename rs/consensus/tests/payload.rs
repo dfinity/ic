@@ -112,6 +112,7 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
         )));
         let idkg_pool = Arc::new(RwLock::new(idkg_pool::IDkgPoolImpl::new(
+            replica_config.node_id,
             pool_config.clone(),
             no_op_logger(),
             metrics_registry.clone(),
