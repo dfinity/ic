@@ -217,4 +217,10 @@ impl HttpHandlerMetrics {
             ),
         }
     }
+
+    pub fn observe_read_state_path(&self, endpoint_type: &str, path_type: &str) {
+        self.read_state_path_type_total
+            .with_label_values(&[endpoint_type, path_type])
+            .inc()
+    }
 }

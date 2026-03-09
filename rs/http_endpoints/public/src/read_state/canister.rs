@@ -287,12 +287,12 @@ fn verify_paths(
     for path in paths {
         match path.as_slice() {
             [b"time"] => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "time"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "time");
             }
             [b"canister", canister_id, b"controllers" | b"module_hash"] => {
                 let canister_id = parse_principal_id(canister_id)?;
                 verify_principal_ids(&canister_id, &effective_principal_id)?;
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "canister_info"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "canister_info");
             }
             [b"canister", canister_id, b"metadata", name] => {
                 let name = String::from_utf8(Vec::from(*name)).map_err(|err| HttpError {
@@ -310,10 +310,10 @@ fn verify_paths(
                     &name,
                     state,
                 )?;
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "canister_metadata"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "canister_metadata");
             }
             [b"api_boundary_nodes"] => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "api_boundary_nodes"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "api_boundary_nodes");
             }
             [b"api_boundary_nodes", _node_id]
             | [
@@ -321,23 +321,23 @@ fn verify_paths(
                 _node_id,
                 b"domain" | b"ipv4_address" | b"ipv6_address",
             ] => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "api_boundary_nodes"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "api_boundary_nodes");
             }
             [b"subnet"] => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "subnet"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "subnet");
             }
             [b"subnet", _subnet_id] => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "subnet"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "subnet");
             }
             [b"subnet", _subnet_id, b"public_key"] => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "subnet_public_key"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "subnet_public_key");
             }
             [b"subnet", _subnet_id, b"node"] => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "subnet_node"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "subnet_node");
             }
             // `/subnet/<subnet_id>/canister_ranges` is always allowed on the `/api/v2` endpoint
             [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "subnet_canister_ranges"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "subnet_canister_ranges");
             }
             // `/subnet/<subnet_id>/canister_ranges` is allowed on the `/api/v3` endpoint
             // only when `subnet_id == nns_subnet_id`.
@@ -345,13 +345,13 @@ fn verify_paths(
                 if version == Version::V3
                     && parse_principal_id(subnet_id)? == nns_subnet_id.get() =>
             {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "subnet_canister_ranges"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "subnet_canister_ranges");
             }
             [b"subnet", _subnet_id, b"node", _node_id] => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "subnet_node"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "subnet_node");
             }
             [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "subnet_node_public_key"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "subnet_node_public_key");
             }
             [b"request_status", request_id]
             | [
@@ -403,7 +403,7 @@ fn verify_paths(
                             .to_string(),
                     });
                 }
-                metrics.read_state_path_type_total.with_label_values(&[ENDPOINT, "request_status"]).inc();
+                metrics.observe_read_state_path(ENDPOINT, "request_status");
             }
             _ => {
                 // All other paths are unsupported.
