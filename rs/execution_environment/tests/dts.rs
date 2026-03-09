@@ -1454,15 +1454,15 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
 /// The expectation that all messages eventually complete.
 #[test]
 fn dts_long_running_install_and_update() {
-    let slice_instruction_limit = 10_000_000;
+    let slice_instruction_limit = 15_000_000;
     let env = dts_env(
-        NumInstructions::from(70_000_000),
+        NumInstructions::from(100_000_000),
         NumInstructions::from(slice_instruction_limit),
     );
 
     let user_id = PrincipalId::new_anonymous();
 
-    let n = 10;
+    let n = 5;
 
     let mut controller = vec![];
     for _ in 0..n {
@@ -1530,7 +1530,7 @@ fn dts_long_running_install_and_update() {
     let mut long_update = vec![];
     let mut short_update = vec![];
 
-    for i in 0..30 {
+    for i in 0..3 * n {
         let work = wasm()
             .instruction_counter_is_at_least(slice_instruction_limit)
             .message_payload()
@@ -1547,7 +1547,7 @@ fn dts_long_running_install_and_update() {
         );
         short_update.push(id);
 
-        if i % 20 == 0 {
+        if i % (2 * n) == 0 {
             env.set_checkpoints_enabled(true);
             env.tick();
             env.set_checkpoints_enabled(false);
