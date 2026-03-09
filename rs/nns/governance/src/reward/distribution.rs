@@ -412,7 +412,9 @@ mod test {
         for i in 6..=10 {
             let mut neuron = make_neuron(i, 1000, 1000);
             neuron.auto_stake_maturity = Some(true);
-            governance.add_neuron_without_reservation(i, neuron).unwrap();
+            governance
+                .add_neuron_without_reservation(i, neuron)
+                .unwrap();
         }
 
         let mut distribution = RewardsDistribution::new();
