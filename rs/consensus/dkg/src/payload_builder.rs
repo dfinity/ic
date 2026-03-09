@@ -1015,7 +1015,7 @@ fn build_target_id_callback_map(
                 .iter()
                 .map(|(&callback_id, context)| (context.target_id, (1, callback_id))),
         )
-        .collect::<BTreeMap<NiDkgTargetId, (usize, CallbackId)>>()
+        .collect()
 }
 
 fn add_callback_ids_to_transcript_results(
