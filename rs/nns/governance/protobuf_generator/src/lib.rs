@@ -155,6 +155,9 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "BlessAlternativeGuestOsVersion",
         "TakeCanisterSnapshot",
         "LoadCanisterSnapshot",
+        "NodeProvider",
+        "RewardNodeProvider",
+        "RewardNodeProviders",
     ];
     for type_name in self_describing_types {
         config.type_attribute(
