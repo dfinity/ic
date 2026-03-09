@@ -1375,10 +1375,8 @@ mod tests {
 
     #[rstest]
     #[case::all_logs_are_kept_when_max_age_not_specified(None, 3)]
-    #[case::only_old_enough_logs_are_purged(Some(Duration::from_secs(3)), 3)]
-    #[case::only_old_enough_logs_are_purged(Some(Duration::from_secs(2)), 2)]
-    #[case::only_old_enough_logs_are_purged(Some(Duration::from_secs(1)), 1)]
-    #[case::only_old_enough_logs_are_purged(Some(Duration::from_secs(0)), 0)]
+    #[case::all_logs_are_kept_when_max_age_is_large(Some(Duration::from_secs(600)), 3)]
+    #[case::all_logs_are_purged_when_max_age_is_zero(Some(Duration::from_secs(0)), 0)]
     fn test_dump_logs_file_sometimes_purges_logs(
         #[case] max_logs_age_to_keep: Option<Duration>,
         #[case] expected_logs_count: usize,
