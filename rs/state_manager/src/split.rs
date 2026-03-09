@@ -2,7 +2,7 @@
 use crate::{
     NUMBER_OF_CHECKPOINT_THREADS, StateManagerMetrics,
     checkpoint::{
-        flush_checkpoint_ops_and_page_maps, load_checkpoint, make_unvalidated_checkpoint,
+        load_checkpoint, make_unvalidated_checkpoint,
         validate_and_finalize_checkpoint_and_remove_unverified_marker,
     },
     tip::spawn_tip_thread,
@@ -175,7 +175,7 @@ fn read_checkpoint(
 /// Writes the given `ReplicatedState` into a new checkpoint under
 /// `state_layout`, based off of `old_cp`.
 fn write_checkpoint(
-    mut state: ReplicatedState,
+    state: ReplicatedState,
     state_layout: StateLayout,
     old_cp: &CheckpointLayout<ReadOnly>,
     thread_pool: &mut Pool,
