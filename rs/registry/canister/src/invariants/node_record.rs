@@ -27,8 +27,8 @@ fn check_ssh_key_limits(
         if node_record.ssh_node_state_write_access.len() > MAX_NUM_SSH_KEYS {
             return Err(InvariantCheckError {
                 msg: format!(
-                    "The `ssh_node_state_write_access` field of a `NodeReocrd` has too many elements. \
-                     {MAX_NUM_SSH_KEYS} is the maximum allowed; whereas, the `NodeRecord` with `chip_id`=\
+                    "The `ssh_node_state_write_access` field of a `NodeRecord` has too many elements. \
+                     {MAX_NUM_SSH_KEYS} is the maximum allowed; whereas, the `NodeRecord` with `http`=\
                      {} had {} elements \
                      in this field.",
                     node_record
