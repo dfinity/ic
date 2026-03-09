@@ -157,12 +157,35 @@ fn fetch_canister_logs_query(
     )
 }
 
-fn fetch_log_records_query(
+fn fetch_canister_logs_intercanister(
     env: &StateMachine,
-    sender: PrincipalId,
+    universal_canister: CanisterId,
     canister_id: CanisterId,
+    cycles: Cycles,
+) -> Result<WasmResult, UserError> {
+    env.execute_ingress(
+        universal_canister,
+        "update",
+        wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_id).encode())
+                    .on_reject(wasm().reject_message().reject()),
+                cycles,
+            )
+            .build(),
+    )
+}
+
+fn fetch_log_records_intercanister(
+    env: &StateMachine,
+    universal_canister: CanisterId,
+    canister_id: CanisterId,
+    cycles: Cycles,
 ) -> Vec<CanisterLogRecord> {
-    let reply = fetch_canister_logs_query(env, sender, canister_id);
+    let reply = fetch_canister_logs_intercanister(env, universal_canister, canister_id, cycles);
     FetchCanisterLogsResponse::decode(&get_reply(reply))
         .unwrap()
         .canister_log_records
@@ -2036,11 +2059,20 @@ fn test_canister_resize_up_preserves_logs() {
 
     // Create canister and install wasm.
     let env = setup_env();
-    let controller = PrincipalId::new_anonymous();
+    let main_controller = PrincipalId::new_anonymous();
+    let universal_canister = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let cycles = Cycles::new(20_813_000_000);
+
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
-            .with_controllers(vec![controller])
+            .with_controllers(vec![main_controller, universal_canister.get()])
             .with_log_memory_limit(log_memory_limit - 1) // Initial log memory limit is smaller.
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
@@ -2061,7 +2093,8 @@ fn test_canister_resize_up_preserves_logs() {
     for _ in 0..calls {
         let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
     }
-    let logs_before = fetch_log_records_query(&env, controller, canister_id);
+    let logs_before =
+        fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
 
     // Resize log memory store.
     let _ = env.update_settings(
@@ -2072,7 +2105,7 @@ fn test_canister_resize_up_preserves_logs() {
     );
 
     // After resizing.
-    let logs_after = fetch_log_records_query(&env, controller, canister_id);
+    let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
@@ -2100,11 +2133,20 @@ fn test_canister_resize_down_preserves_logs() {
 
     // Create canister and install wasm.
     let env = setup_env();
-    let controller = PrincipalId::new_anonymous();
+    let main_controller = PrincipalId::new_anonymous();
+    let universal_canister = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let cycles = Cycles::new(20_813_000_000);
+
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
-            .with_controllers(vec![controller])
+            .with_controllers(vec![main_controller, universal_canister.get()])
             .with_log_memory_limit(log_memory_limit) // Initial log memory limit is larger.
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
@@ -2125,7 +2167,8 @@ fn test_canister_resize_down_preserves_logs() {
     for _ in 0..calls {
         let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
     }
-    let logs_before = fetch_log_records_query(&env, controller, canister_id);
+    let logs_before =
+        fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
 
     // Snapshot metrics BEFORE the resize.
     let sum_before = update_settings_duration_sum(&env);
@@ -2146,7 +2189,7 @@ fn test_canister_resize_down_preserves_logs() {
     println!("ABC Resize update_settings duration: {resize_duration_seconds:.6}s");
 
     // After resizing.
-    let logs_after = fetch_log_records_query(&env, controller, canister_id);
+    let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
