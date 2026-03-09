@@ -94,7 +94,7 @@ pub fn test(env: TestEnv) {
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::Application)
         .collect::<Vec<_>>();
-    let _app_subnet = app_subnet.first().unwrap();
+    let app_subnet = app_subnet.first().unwrap();
     let engine_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::CloudEngine)
@@ -129,10 +129,10 @@ pub fn test(env: TestEnv) {
         let governance_canister =
             UniversalCanister::new(&nns_agent, nns_endpoint.effective_canister_id()).await;
 
+        // Deleting the engine should work:
         let arg = DeleteSubnetPayload {
             subnet_id: engine_subnet.subnet_id.get().into(),
         };
-
         let result_bytes = governance_canister
             .forward_to(
                 &REGISTRY_CANISTER_ID.get().0,
@@ -141,8 +141,24 @@ pub fn test(env: TestEnv) {
             )
             .await
             .unwrap();
-
         Decode!(&result_bytes, Result<(), String>).unwrap().unwrap();
+
+        // Deleting the app subnet should not work:
+        let arg = DeleteSubnetPayload {
+            subnet_id: app_subnet.subnet_id.get().into(),
+        };
+        let result_bytes = governance_canister
+            .forward_to(
+                &REGISTRY_CANISTER_ID.get().0,
+                "delete_subnet",
+                Encode!(&arg).unwrap(),
+            )
+            .await
+            .unwrap();
+        let err_str = Decode!(&result_bytes, Result<(), String>)
+            .unwrap()
+            .unwrap_err();
+        assert!(err_str.contains("Only CloudEngines and rental subnets may be deleted"));
 
         let new_topology_snapshot = topology_snapshot
             .block_for_min_registry_version(RegistryVersion::new(2))
