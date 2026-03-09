@@ -140,7 +140,7 @@ fn verify_delegation(
                             subnet_tree.lookup_path([range_key_path[0].as_bytes()])
                         {
                             let subnet_ranges: Vec<(Principal, Principal)> =
-                                serde_cbor::from_slice(&range_data)
+                                serde_cbor::from_slice(range_data)
                                     .map_err(|e| format!("invalid canister range: {e}"))?;
                             acc.extend(subnet_ranges);
                         }
@@ -156,7 +156,7 @@ fn verify_delegation(
                 match cert.tree.lookup_path(&old_canister_ranges_path) {
                     LookupResult::Found(old_range_data) => {
                         let canister_ranges: Vec<(Principal, Principal)> =
-                            serde_cbor::from_slice(&old_range_data)
+                            serde_cbor::from_slice(old_range_data)
                                 .map_err(|e| format!("invalid canister range: {e}"))?;
                         canister_ranges
                     }
