@@ -1375,10 +1375,7 @@ mod tests {
                     let mut dealing_content = dummy_idkg_dealing_for_tests();
                     dealing_content.transcript_id = tid;
                     change_set.push(IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                        SignedIDkgDealing {
-                            content: dealing_content,
-                            signature: BasicSignature::fake(node),
-                        },
+                        SignedIDkgDealing::fake(dealing_content, node),
                     )));
 
                     change_set.push(IDkgChangeAction::AddToValidated(
@@ -1391,29 +1388,29 @@ mod tests {
                     ));
 
                     change_set.push(IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
-                        SignedIDkgComplaint {
-                            content: IDkgComplaintContent {
+                        SignedIDkgComplaint::fake(
+                            IDkgComplaintContent {
                                 idkg_complaint: IDkgComplaint {
                                     transcript_id: tid,
                                     dealer_id: NODE_3,
                                     internal_complaint_raw: vec![i],
                                 },
                             },
-                            signature: BasicSignature::fake(node),
-                        },
+                            node,
+                        ),
                     )));
 
                     change_set.push(IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
-                        SignedIDkgOpening {
-                            content: IDkgOpeningContent {
+                        SignedIDkgOpening::fake(
+                            IDkgOpeningContent {
                                 idkg_opening: IDkgOpening {
                                     transcript_id: tid,
                                     dealer_id: NODE_3,
                                     internal_opening_raw: vec![i],
                                 },
                             },
-                            signature: BasicSignature::fake(node),
-                        },
+                            node,
+                        ),
                     )));
 
                     let request_id = |offset: u64| RequestId {
