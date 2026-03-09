@@ -82,7 +82,7 @@ jobs:
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
-          protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
+          protected_branches=("^master$" "^rc--" "^hotfix-" "^public-hotfix-" "^master-private$")
           for pattern in "${protected_branches[@]}"; do
               if [[ "$BRANCH_NAME" =~ $pattern ]]; then
                   is_protected_branch="true"
@@ -203,7 +203,7 @@ jobs:
               )
             if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
                 bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
-            elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
+            elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
                 bazel_args+=( --test_timeout_filters=short,moderate )
             else
                 bazel_args+=( --keep_going )
@@ -686,7 +686,8 @@ jobs:
           contains(github.event.pull_request.labels.*.name, 'CI_RUN_CARGO_JOBS') ||
           env.BRANCH_NAME == 'master' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-')
+          startsWith(env.BRANCH_NAME, 'hotfix-') ||
+          startsWith(env.BRANCH_NAME, 'public-hotfix-')
         shell: bash
         run: |
           set -eExuo pipefail
@@ -748,6 +749,7 @@ jobs:
           steps.filter.outputs.container-run == 'true' ||
           env.BRANCH_NAME == 'master' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-')
+          startsWith(env.BRANCH_NAME, 'hotfix-') ||
+          startsWith(env.BRANCH_NAME, 'public-hotfix-')
         run: |
           ./ci/container/container-run.sh ${{ matrix.command }}
