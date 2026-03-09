@@ -120,6 +120,7 @@ impl RingBuffer {
         }
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
+        let mut total_added_size = 0;
         for record in iter.map(LogRecord::from) {
             // Check that records are added in order, otherwise it breaks the index.
             if record.idx < h.next_idx {
@@ -137,6 +138,7 @@ impl RingBuffer {
                 debug_assert!(false, "Log record size exceeds ring buffer capacity");
                 return;
             }
+            total_added_size += added_size.get();
             self.evict_for_size(&mut h, added_size);
 
             // Save the record at the tail position.
@@ -155,6 +157,11 @@ impl RingBuffer {
         // Write header and index ONCE at the end.
         self.io.save_header(&h);
         self.io.save_index_table(&index_table);
+        println!(
+            "ABC LMS append total added size: {total_added_size} bytes_used: {} capacity: {}",
+            h.data_size.get(),
+            h.data_capacity.get()
+        );
     }
 
     /// Evicts oldest records from the front until `added_size` fits.

@@ -25,10 +25,11 @@ pub(crate) fn fetch_canister_logs(
     // Check if the sender has permission to access logs
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
 
-    let s = &canister.system_state;
+    let old_logs = &canister.system_state.canister_log;
+    let new_logs = &canister.system_state.log_memory_store;
     let canister_log_records = match log_memory_store_feature {
-        FlagStatus::Disabled => filter_records(&args, s.canister_log.records())?,
-        FlagStatus::Enabled => s.log_memory_store.records(args.filter),
+        FlagStatus::Disabled => filter_records(&args, old_logs.records())?,
+        FlagStatus::Enabled => new_logs.records(args.filter),
     };
 
     Ok(FetchCanisterLogsResponse {
