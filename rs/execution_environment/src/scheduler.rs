@@ -519,6 +519,7 @@ impl SchedulerImpl {
                 active_canisters,
                 executed_canisters,
                 canisters_with_completed_messages,
+                low_cycle_balance_canisters,
                 mut loop_ingress_execution_results,
                 heap_delta,
             ) = self.execute_canisters_in_inner_round(
@@ -556,6 +557,7 @@ impl SchedulerImpl {
                 &mut state,
                 &executed_canisters,
                 &canisters_with_completed_messages,
+                &low_cycle_balance_canisters,
             );
 
             round_limits.instructions -= as_round_instructions(
@@ -649,6 +651,7 @@ impl SchedulerImpl {
         Vec<Arc<CanisterState>>,
         BTreeSet<CanisterId>,
         BTreeSet<CanisterId>,
+        BTreeSet<CanisterId>,
         Vec<(MessageId, IngressStatus)>,
         NumBytes,
     ) {
@@ -662,8 +665,9 @@ impl SchedulerImpl {
                 canisters_by_thread.into_iter().flatten().collect(),
                 BTreeSet::new(),
                 BTreeSet::new(),
+                BTreeSet::new(),
                 vec![],
-                NumBytes::from(0),
+                NumBytes::new(0),
             );
         }
 
@@ -715,6 +719,7 @@ impl SchedulerImpl {
         let mut canisters = Vec::new();
         let mut executed_canisters = BTreeSet::new();
         let mut canisters_with_completed_messages = BTreeSet::new();
+        let mut low_cycle_balance_canisters = BTreeSet::new();
         let mut ingress_results = Vec::new();
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
         let mut heap_delta = NumBytes::from(0);
@@ -723,6 +728,7 @@ impl SchedulerImpl {
             canisters.append(&mut result.canisters);
             executed_canisters.extend(result.executed_canisters);
             canisters_with_completed_messages.extend(result.canisters_with_completed_messages);
+            low_cycle_balance_canisters.extend(result.low_cycle_balance_canisters);
             ingress_results.append(&mut result.ingress_results);
             let instructions_executed = as_num_instructions(
                 round_limits_per_thread.instructions - result.round_limits.instructions,
@@ -764,6 +770,7 @@ impl SchedulerImpl {
             canisters,
             executed_canisters,
             canisters_with_completed_messages,
+            low_cycle_balance_canisters,
             ingress_results,
             heap_delta,
         )
@@ -1641,7 +1648,7 @@ fn observe_instructions_consumed_per_message(
     }
 }
 
-/// This struct holds the result of a single execution thread.
+/// Holds the results of a single execution thread.
 #[derive(Default)]
 struct ExecutionThreadResult {
     canisters: Vec<Arc<CanisterState>>,
@@ -1650,6 +1657,9 @@ struct ExecutionThreadResult {
     /// Canisters that completed at least one message execution (advancing a long
     /// execution does not count).
     canisters_with_completed_messages: BTreeSet<CanisterId>,
+    /// Canisters that did not have enough cycles to be executed, but whose inputs
+    /// were all consumed regardless.
+    low_cycle_balance_canisters: BTreeSet<CanisterId>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
     slices_executed: NumSlices,
     messages_executed: NumMessages,
@@ -1687,6 +1697,7 @@ fn execute_canisters_on_thread(
     let mut canisters = vec![];
     let mut executed_canisters = BTreeSet::new();
     let mut canisters_with_completed_messages = BTreeSet::new();
+    let mut low_cycle_balance_canisters = BTreeSet::new();
     let mut ingress_results = vec![];
     let mut total_slices_executed = NumSlices::from(0);
     let mut total_messages_executed = NumMessages::from(0);
@@ -1768,6 +1779,10 @@ fn execute_canisters_on_thread(
                         executed_canisters.insert(new_canister.canister_id());
                         canisters_with_completed_messages.insert(new_canister.canister_id());
                         total_instructions_used += instructions;
+                    } else {
+                        // Canister did not have enough cycles to be executed. Message was consumed
+                        // regardless.
+                        low_cycle_balance_canisters.insert(new_canister.canister_id());
                     }
 
                     observe_instructions_consumed_per_message(
@@ -1836,6 +1851,7 @@ fn execute_canisters_on_thread(
         canisters,
         executed_canisters,
         canisters_with_completed_messages,
+        low_cycle_balance_canisters,
         ingress_results,
         slices_executed: total_slices_executed,
         messages_executed: total_messages_executed,

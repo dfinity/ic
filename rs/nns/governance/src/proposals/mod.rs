@@ -12,7 +12,6 @@ use crate::{
         add_or_remove_node_provider::ValidAddOrRemoveNodeProvider,
         execute_nns_function::ValidExecuteNnsFunction,
         fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest,
-        self_describing::LocallyDescribableProposalAction,
     },
 };
 use ic_base_types::CanisterId;
@@ -222,49 +221,53 @@ impl ValidProposalAction {
                 execute_nns_function.to_self_describing_action(env).await
             }
 
-            ValidProposalAction::Motion(motion) => Ok(motion.to_self_describing_action()),
-            ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc) => {
-                Ok(approve_genesis_kyc.to_self_describing_action())
+            ValidProposalAction::Motion(motion) => {
+                Ok(SelfDescribingProposalAction::from(motion.clone()))
             }
-            ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
-                Ok(add_or_remove_node_provider.to_self_describing_action())
-            }
-            ValidProposalAction::RegisterKnownNeuron(register_known_neuron) => {
-                Ok(register_known_neuron.to_self_describing_action())
-            }
+            ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc) => Ok(
+                SelfDescribingProposalAction::from(approve_genesis_kyc.clone()),
+            ),
+            ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => Ok(
+                SelfDescribingProposalAction::from(add_or_remove_node_provider.clone()),
+            ),
+            ValidProposalAction::RegisterKnownNeuron(register_known_neuron) => Ok(
+                SelfDescribingProposalAction::from(register_known_neuron.clone()),
+            ),
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
-                Ok(deregister_known_neuron.to_self_describing_action())
+                Ok(SelfDescribingProposalAction::from(*deregister_known_neuron))
             }
             ValidProposalAction::InstallCode(install_code) => {
-                Ok(install_code.to_self_describing_action())
+                Ok(SelfDescribingProposalAction::from(install_code.clone()))
             }
-            ValidProposalAction::StopOrStartCanister(stop_or_start_canister) => {
-                Ok(stop_or_start_canister.to_self_describing_action())
-            }
-            ValidProposalAction::UpdateCanisterSettings(update_canister_settings) => {
-                Ok(update_canister_settings.to_self_describing_action())
-            }
-            ValidProposalAction::ManageNeuron(manage_neuron) => {
-                Ok(manage_neuron.to_self_describing_action())
-            }
-            ValidProposalAction::ManageNetworkEconomics(manage_network_economics) => {
-                Ok(manage_network_economics.to_self_describing_action())
-            }
-            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
-                Ok(fulfill_subnet_rental_request.to_self_describing_action())
-            }
-            ValidProposalAction::CreateServiceNervousSystem(create_service_nervous_system) => {
-                Ok(create_service_nervous_system.to_self_describing_action())
-            }
+            ValidProposalAction::StopOrStartCanister(stop_or_start_canister) => Ok(
+                SelfDescribingProposalAction::from(stop_or_start_canister.clone()),
+            ),
+            ValidProposalAction::UpdateCanisterSettings(update_canister_settings) => Ok(
+                SelfDescribingProposalAction::from(update_canister_settings.clone()),
+            ),
+            ValidProposalAction::ManageNeuron(manage_neuron) => Ok(
+                SelfDescribingProposalAction::from(manage_neuron.as_ref().clone()),
+            ),
+            ValidProposalAction::ManageNetworkEconomics(manage_network_economics) => Ok(
+                SelfDescribingProposalAction::from(manage_network_economics.clone()),
+            ),
+            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
+                SelfDescribingProposalAction::from(fulfill_subnet_rental_request.clone()),
+            ),
+            ValidProposalAction::CreateServiceNervousSystem(create_service_nervous_system) => Ok(
+                SelfDescribingProposalAction::from(create_service_nervous_system.clone()),
+            ),
             ValidProposalAction::BlessAlternativeGuestOsVersion(
                 bless_alternative_guest_os_version,
-            ) => Ok(bless_alternative_guest_os_version.to_self_describing_action()),
-            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
-                Ok(take_canister_snapshot.to_self_describing_action())
-            }
-            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
-                Ok(load_canister_snapshot.to_self_describing_action())
-            }
+            ) => Ok(SelfDescribingProposalAction::from(
+                bless_alternative_guest_os_version.clone(),
+            )),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => Ok(
+                SelfDescribingProposalAction::from(take_canister_snapshot.clone()),
+            ),
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => Ok(
+                SelfDescribingProposalAction::from(load_canister_snapshot.clone()),
+            ),
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Self describing proposal actions are not supported for this proposal action yet.",

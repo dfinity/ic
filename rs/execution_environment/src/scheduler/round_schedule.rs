@@ -362,6 +362,7 @@ impl RoundSchedule {
         state: &mut ReplicatedState,
         executed_canisters: &BTreeSet<CanisterId>,
         canisters_with_completed_messages: &BTreeSet<CanisterId>,
+        low_cycle_balance_canisters: &BTreeSet<CanisterId>,
     ) {
         self.executed_canisters.extend(executed_canisters);
         self.canisters_with_completed_messages
@@ -372,7 +373,9 @@ impl RoundSchedule {
             state
                 .canister_priority_mut(*canister_id)
                 .long_execution_mode = LongExecutionMode::Opportunistic;
+        }
 
+        for canister_id in canisters_with_completed_messages.union(low_cycle_balance_canisters) {
             match state
                 .canister_state(canister_id)
                 .map(|canister| canister.next_execution())

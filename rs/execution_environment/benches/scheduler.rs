@@ -64,7 +64,12 @@ fn main() {
     group.bench_function("iteration", |bench| {
         bench.iter(|| {
             round_schedule.start_iteration(&mut state, true, &metrics, &log);
-            round_schedule.end_iteration(&mut state, &executed_canisters, &executed_canisters);
+            round_schedule.end_iteration(
+                &mut state,
+                &executed_canisters,
+                &executed_canisters,
+                &BTreeSet::new(),
+            );
         });
     });
 

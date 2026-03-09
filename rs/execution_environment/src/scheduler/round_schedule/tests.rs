@@ -245,11 +245,13 @@ impl RoundScheduleFixture {
         &mut self,
         executed_canisters: &BTreeSet<CanisterId>,
         canisters_with_completed_messages: &BTreeSet<CanisterId>,
+        low_cycle_balance_canisters: &BTreeSet<CanisterId>,
     ) {
         self.round_schedule.end_iteration(
             &mut self.state,
             executed_canisters,
             canisters_with_completed_messages,
+            low_cycle_balance_canisters,
         );
     }
 
@@ -604,12 +606,16 @@ fn end_iteration_accumulates_executed_and_completed() {
 
     let executed = btreeset! {canister_a, canister_b};
     let completed = btreeset! {canister_b};
-    fixture.end_iteration(&executed, &completed);
+    fixture.end_iteration(&executed, &completed, &btreeset! {canister_c});
 
     assert_eq!(fixture.executed_canisters(), &executed);
     assert_eq!(fixture.canisters_with_completed_messages(), &completed);
 
-    fixture.end_iteration(&btreeset! {canister_b, canister_c}, &btreeset! {canister_c});
+    fixture.end_iteration(
+        &btreeset! {canister_b, canister_c},
+        &btreeset! {canister_c},
+        &btreeset! {},
+    );
 
     assert_eq!(
         fixture.executed_canisters(),
@@ -633,7 +639,7 @@ fn end_iteration_resets_long_execution_mode_to_opportunistic() {
 
     let executed = btreeset! {canister_a, canister_b};
     let completed = btreeset! {canister_b};
-    fixture.end_iteration(&executed, &completed);
+    fixture.end_iteration(&executed, &completed, &btreeset! {});
 
     assert_eq!(
         fixture.canister_priority(&canister_a).long_execution_mode,
@@ -653,22 +659,23 @@ fn end_iteration_adds_idle_completed_to_fully_executed() {
     let new = fixture.canister_with_input();
     let long = fixture.canister_with_long_execution();
     let fully_executed = fixture.canister();
+    let low_cycle_balance = fixture.canister();
     let all = btreeset! {new, long, fully_executed};
     let none = btreeset! {};
 
     // All canisters executed, none completed an execution.
-    fixture.end_iteration(&all, &none);
+    fixture.end_iteration(&all, &none, &btreeset! {});
 
     // No canister got marked as fully executed (as none completed an execution).
     assert_eq!(fixture.fully_executed_canisters(), &btreeset! {});
 
     // All executed, all completed at least one execution.
-    fixture.end_iteration(&all, &all);
+    fixture.end_iteration(&all, &all, &btreeset! {low_cycle_balance});
 
-    // Only the canister with `next_execution() == None` is fully executed.
+    // Only the canisters with `next_execution() == None` were fully executed.
     assert_eq!(
         fixture.fully_executed_canisters(),
-        &btreeset! {fully_executed}
+        &btreeset! {fully_executed, low_cycle_balance}
     );
 }
 
@@ -685,7 +692,7 @@ fn finish_round_fully_executed_get_credit() {
     let new = fixture.canister_with_input();
 
     fixture.start_iteration(true);
-    fixture.end_iteration(&btreeset! {long, new}, &btreeset! {new});
+    fixture.end_iteration(&btreeset! {long, new}, &btreeset! {new}, &btreeset! {});
     assert_eq!(fixture.fully_executed_canisters(), &btreeset! {long, new});
 
     let current_round = ExecutionRound::new(1);
@@ -722,7 +729,7 @@ fn finish_round_scheduled_get_compute_allocation_and_metrics() {
 
     fixture.start_iteration(true);
     let all = btreeset! {canister_a, canister_b, canister_c};
-    fixture.end_iteration(&all, &all);
+    fixture.end_iteration(&all, &all, &btreeset! {});
     assert_eq!(
         fixture.fully_executed_canisters(),
         &btreeset! {canister_a, canister_b}
@@ -768,7 +775,7 @@ fn finish_round_free_allocation_zero_sum() {
 }
 
 /// finish_round drops an idle canister with zero accumulated priority from the
-/// subnet schedule when it has no inputs and !must_be_in_schedule().
+/// subnet schedule when it has no inputs or heap delta / install code debits.
 #[test]
 fn finish_round_idle_at_zero_dropped_from_schedule() {
     let mut fixture = RoundScheduleFixture::new();
@@ -779,7 +786,11 @@ fn finish_round_idle_at_zero_dropped_from_schedule() {
         .canister_state(&canister_id)
         .system_state
         .pop_input();
-    fixture.end_iteration(&btreeset! {canister_id}, &btreeset! {canister_id});
+    fixture.end_iteration(
+        &btreeset! {canister_id},
+        &btreeset! {canister_id},
+        &btreeset! {},
+    );
 
     assert!(fixture.fully_executed_canisters().contains(&canister_id));
     assert!(
