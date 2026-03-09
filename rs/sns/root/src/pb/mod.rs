@@ -13,19 +13,3 @@ impl TryFrom<v1::LogVisibility> for ic_nervous_system_clients::update_settings::
         }
     }
 }
-
-impl TryFrom<v1::SnapshotVisibility>
-    for ic_nervous_system_clients::update_settings::SnapshotVisibility
-{
-    type Error = String;
-
-    fn try_from(snapshot_visibility: v1::SnapshotVisibility) -> Result<Self, Self::Error> {
-        match snapshot_visibility {
-            v1::SnapshotVisibility::Unspecified => {
-                Err("Unspecified snapshot visibility".to_string())
-            }
-            v1::SnapshotVisibility::Controllers => Ok(Self::Controllers),
-            v1::SnapshotVisibility::Public => Ok(Self::Public),
-        }
-    }
-}

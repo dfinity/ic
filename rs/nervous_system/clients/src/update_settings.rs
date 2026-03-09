@@ -22,15 +22,6 @@ pub enum LogVisibility {
     Public,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
-pub enum SnapshotVisibility {
-    #[default]
-    #[serde(rename = "controllers")]
-    Controllers,
-    #[serde(rename = "public")]
-    Public,
-}
-
 /// The CanisterSettings struct as defined in the ic-interface-spec
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
@@ -41,7 +32,6 @@ pub struct CanisterSettings {
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibility>,
-    pub snapshot_visibility: Option<SnapshotVisibility>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
 }

@@ -547,16 +547,6 @@ enum LogVisibility {
   LOG_VISIBILITY_PUBLIC = 2;
 }
 
-enum SnapshotVisibility {
-  SNAPSHOT_VISIBILITY_UNSPECIFIED = 0;
-
-  // Snapshots are visible to the controllers of the dapp canister.
-  SNAPSHOT_VISIBILITY_CONTROLLERS = 1;
-
-  // Snapshots are visible to the public.
-  SNAPSHOT_VISIBILITY_PUBLIC = 2;
-}
-
 // A proposal to manage the settings of one or more dapp canisters.
 message ManageDappCanisterSettings {
   // The canister IDs of the dapp canisters to be modified.
@@ -572,7 +562,6 @@ message ManageDappCanisterSettings {
 
   optional uint64 wasm_memory_limit = 7;
   optional uint64 wasm_memory_threshold = 8;
-  optional SnapshotVisibility snapshot_visibility = 9;
 }
 
 // Unlike `Governance.Version`, this message has optional fields and is the recommended one

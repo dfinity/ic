@@ -27,7 +27,6 @@ type CanisterSettings = record {
   controllers : opt vec principal;
   reserved_cycles_limit : opt nat;
   log_visibility : opt LogVisibility;
-  snapshot_visibility : opt SnapshotVisibility;
   wasm_memory_limit : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
@@ -109,11 +108,6 @@ type DefiniteCanisterSettings = record {
 };
 
 type LogVisibility = variant {
-  controllers;
-  public;
-};
-
-type SnapshotVisibility = variant {
   controllers;
   public;
 };

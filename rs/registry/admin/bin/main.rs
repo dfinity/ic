@@ -48,7 +48,7 @@ use ic_nns_governance_api::{
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
-        governance_parameters::VotingRewardParameters,
+        governance_parameters::{CustomProposalCriticality, VotingRewardParameters},
         initial_token_distribution::{
             DeveloperDistribution, SwapDistribution, TreasuryDistribution,
             developer_distribution::NeuronDistribution,
@@ -64,7 +64,6 @@ use ic_nns_governance_api::{
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
-        SnapshotVisibility as GovernanceSnapshotVisibility,
     },
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
@@ -168,8 +167,8 @@ use std::{
 };
 use types::{
     LogVisibility, NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload,
-    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SnapshotVisibility,
-    SubnetDescriptor, SubnetRecord,
+    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetDescriptor,
+    SubnetRecord,
 };
 use update_subnet::ProposeToUpdateSubnetCmd;
 use url::Url;
@@ -1549,9 +1548,6 @@ struct ProposeToUpdateCanisterSettingsCmd {
     #[clap(long)]
     /// If set, it will update the canister's wasm memory threshold to this value.
     wasm_memory_threshold: Option<u64>,
-    #[clap(long)]
-    /// If set, it will update the canister's snapshot visibility to this value.
-    snapshot_visibility: Option<SnapshotVisibility>,
 }
 
 impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
@@ -1587,13 +1583,6 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
             Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
             None => None,
         };
-        let snapshot_visibility = match self.snapshot_visibility {
-            Some(SnapshotVisibility::Controllers) => {
-                Some(GovernanceSnapshotVisibility::Controllers as i32)
-            }
-            Some(SnapshotVisibility::Public) => Some(GovernanceSnapshotVisibility::Public as i32),
-            None => None,
-        };
 
         let update_settings = UpdateCanisterSettings {
             canister_id,
@@ -1605,7 +1594,6 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
                 wasm_memory_limit,
                 log_visibility,
                 wasm_memory_threshold,
-                snapshot_visibility,
             }),
         };
 
@@ -3297,6 +3285,13 @@ struct ProposeToCreateServiceNervousSystemCmd {
 
     #[clap(long, value_parser=parse_duration)]
     voting_reward_rate_transition_duration: nervous_system_pb::Duration,
+
+    // Custom Proposal Criticality
+    // ---------------------------
+    /// Native action IDs that should be treated as critical, requiring a higher
+    /// level of consensus to be executed. Can be specified multiple times.
+    #[clap(long)]
+    additional_critical_native_action_id: Vec<u64>,
 }
 
 impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSystem {
@@ -3354,6 +3349,9 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             initial_voting_reward_rate,
             final_voting_reward_rate,
             voting_reward_rate_transition_duration,
+
+            // Deconstruct to a more indicative name
+            additional_critical_native_action_id: additional_critical_native_action_ids,
 
             // Not used.
             proposer: _,
@@ -3543,8 +3541,15 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
                 voting_reward_parameters,
 
-                // TODO: Support additional critical native action IDs
-                custom_proposal_criticality: None,
+                custom_proposal_criticality: if additional_critical_native_action_ids.is_empty() {
+                    None
+                } else {
+                    Some(CustomProposalCriticality {
+                        additional_critical_native_action_ids: Some(
+                            additional_critical_native_action_ids,
+                        ),
+                    })
+                },
             })
         };
 

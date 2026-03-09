@@ -250,14 +250,6 @@ pub enum LogVisibility {
     Public,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumString, Serialize)]
-pub enum SnapshotVisibility {
-    #[strum(serialize = "controllers")]
-    Controllers,
-    #[strum(serialize = "public")]
-    Public,
-}
-
 /// Trait to extract the payload for each proposal type.
 /// This trait is async as building some payloads requires async calls.
 #[async_trait]
