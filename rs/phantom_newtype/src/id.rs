@@ -226,6 +226,12 @@ impl<Entity, Repr: Hash> Hash for Id<Entity, Repr> {
     }
 }
 
+impl<Entity, Repr: ic_stable_hash::StableHash> ic_stable_hash::StableHash for Id<Entity, Repr> {
+    fn stable_hash<H: Hasher>(&self, state: &mut H) {
+        self.0.stable_hash(state)
+    }
+}
+
 impl<Entity, Repr> From<Repr> for Id<Entity, Repr> {
     fn from(repr: Repr) -> Self {
         Self::new(repr)

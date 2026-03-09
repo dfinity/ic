@@ -1,3 +1,4 @@
+use ic_stable_hash_derive::StableHash;
 use ic_utils::byte_slice_fmt::truncate_and_format;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
@@ -9,7 +10,7 @@ use std::{fmt, ops::Deref};
 /// Use `serde_bytes` so that the `Vec<u8>` is deserialized as a sequence
 /// (array) of bytes, whereas we want an actual CBOR "byte array", e.g. a
 /// bytestring.
-#[derive(Clone, Eq, PartialEq, Hash, Default, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct Blob(#[serde(with = "serde_bytes")] pub Vec<u8>);
 

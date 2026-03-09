@@ -5,6 +5,7 @@ use crate::crypto::impl_display_using_debug;
 use crate::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_base_types::PrincipalId;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -34,7 +35,7 @@ impl fmt::Debug for VetKdArgs<'_> {
 }
 impl_display_using_debug!(VetKdArgs<'_>);
 
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct VetKdEncryptedKeyShareContent(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 impl std::fmt::Debug for VetKdEncryptedKeyShareContent {
@@ -52,7 +53,7 @@ impl SignedBytesWithoutDomainSeparator for VetKdEncryptedKeyShareContent {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct VetKdEncryptedKeyShare {
     pub encrypted_key_share: VetKdEncryptedKeyShareContent,
     /// Node's Ed25519 signature for optimized variant
@@ -70,7 +71,7 @@ impl std::fmt::Debug for VetKdEncryptedKeyShare {
 }
 impl_display_using_debug!(VetKdEncryptedKeyShare);
 
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct VetKdEncryptedKey {
     #[serde(with = "serde_bytes")]
     pub encrypted_key: Vec<u8>,
@@ -86,7 +87,7 @@ impl std::fmt::Debug for VetKdEncryptedKey {
 impl_display_using_debug!(VetKdEncryptedKey);
 
 /// Metadata used to derive keys for vetKD.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct VetKdDerivationContext {
     pub caller: PrincipalId,
     #[serde(with = "serde_bytes")]
@@ -103,7 +104,7 @@ impl std::fmt::Debug for VetKdDerivationContext {
 }
 impl_display_using_debug!(VetKdDerivationContext);
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash)]
 pub struct VetKdDerivationContextRef<'a> {
     pub caller: &'a PrincipalId,
     pub context: &'a Vec<u8>,

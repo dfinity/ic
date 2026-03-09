@@ -9,11 +9,12 @@ use ic_base_types::NumBytes;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom, fmt::Display};
 
 /// Payload that contains Ingress messages
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressPayload {
     /// Keep ingress messages in a serialized form, so individual

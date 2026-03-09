@@ -27,6 +27,7 @@ use crate::signature::{
     ThresholdSignatureShare,
 };
 use ic_crypto_sha2::{DomainSeparationContext, Sha256};
+use ic_stable_hash_derive::StableHash;
 use std::hash::Hash;
 
 pub(crate) mod domain_separator;
@@ -423,7 +424,7 @@ impl CryptoHashDomain for CryptoHashableTestDummy {
 /// Ideally, this struct would be annotated with `#[cfg(test)]` so that it is
 /// only available in test code, however, then it would not be visible outside
 /// of this crate where it is needed.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct CryptoHashableTestDummy(pub Vec<u8>);
 
 /// A cryptographically hashable type.

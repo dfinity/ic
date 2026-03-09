@@ -11,6 +11,7 @@ use ic_protobuf::{
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -175,6 +176,7 @@ impl IngressSets {
     Ord,
     PartialOrd,
     Hash,
+    StableHash,
     Debug,
     Deserialize,
     Serialize,

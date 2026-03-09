@@ -52,6 +52,16 @@ impl Hash for PrincipalId {
     }
 }
 
+impl ic_stable_hash::StableHash for PrincipalId {
+    fn stable_hash<H: Hasher>(&self, state: &mut H) {
+        let slice = self.0.as_slice();
+        ic_stable_hash::StableHash::stable_hash(&slice.len(), state);
+        let mut array = [0; Self::MAX_LENGTH_IN_BYTES];
+        array[..slice.len()].copy_from_slice(slice);
+        ic_stable_hash::StableHash::stable_hash(&array, state);
+    }
+}
+
 #[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[repr(transparent)]
 #[serde(transparent)]

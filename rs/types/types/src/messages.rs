@@ -29,6 +29,7 @@ use ic_management_canister_types_private::CanisterChangeOrigin;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
+use ic_stable_hash_derive::StableHash;
 pub use ingress_messages::{
     Ingress, ParseIngressError, SignedIngress, SignedIngressContent, extract_effective_canister_id,
 };
@@ -85,7 +86,7 @@ pub const MAX_RESPONSE_COUNT_BYTES: usize = size_of::<RequestOrResponse>()
     + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
 /// An end user's signature.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct UserSignature {
     /// The actual signature. End users should sign the `MessageId` computed
     /// from the message that they are signing.
@@ -251,7 +252,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
 /// Bytes representation of signed HTTP requests, using CBOR as a serialization
 /// format. Use `TryFrom` or `TryInto` to convert between `SignedRequestBytes`
 /// and other types, corresponding to serialization/deserialization.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SignedRequestBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
@@ -359,7 +360,7 @@ impl SubnetMessage {
 }
 
 /// A wrapper around a canister request and an ingress message.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub enum CanisterCall {
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
@@ -444,7 +445,7 @@ impl TryFrom<CanisterMessage> for CanisterCall {
 
 /// A canister task can be thought of as a special system message that the IC
 /// sends to the canister to execute its heartbeat or the global timer method.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, EnumIter)]
 pub enum CanisterTask {
     Heartbeat = 1,
     GlobalTimer = 2,
@@ -517,7 +518,7 @@ impl Display for CanisterMessageOrTask {
 
 /// A wrapper around canister calls and tasks that are executed in
 /// replicated mode.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub enum CanisterCallOrTask {
     Update(CanisterCall),
     Query(CanisterCall),

@@ -34,6 +34,7 @@ rust_library(
         "//rs/crypto/sha2",
         "//rs/phantom_newtype",
         "//rs/protobuf",
+        "//rs/types/stable_hash",
         "@crate_index//:byte-unit",
         "@crate_index//:bytes",
         "@crate_index//:candid",

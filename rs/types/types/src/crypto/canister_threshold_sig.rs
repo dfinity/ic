@@ -10,6 +10,7 @@ use core::fmt;
 use ic_base_types::NodeId;
 use ic_base_types::PrincipalId;
 use ic_crypto_internal_types::NodeIndex;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 
@@ -24,7 +25,7 @@ mod tests;
 /// The public key itself is stored as raw bytes.
 ///
 /// The chain key is included for BIP32-style key derivation.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct PublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
@@ -36,7 +37,7 @@ pub struct PublicKey {
 /// A master public key for canister threshold signatures.
 ///
 /// The public key itself is stored as raw bytes.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct MasterPublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
@@ -46,7 +47,7 @@ pub struct MasterPublicKey {
 /// A combined threshold ECDSA signature.
 ///
 /// The signature itself is stored as raw bytes.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct ThresholdEcdsaCombinedSignature {
     #[serde(with = "serde_bytes")]
     pub signature: Vec<u8>,
@@ -75,7 +76,7 @@ impl fmt::Debug for ThresholdEcdsaCombinedSignature {
 /// * a masked transcript for sharing of another random value `lambda`
 /// * a masked transcript for sharing the value `kappa * lambda`
 /// * a masked transcript for sharing the value `private_key * lambda`
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct EcdsaPreSignatureQuadruple {
     kappa_unmasked: IDkgTranscript,
     lambda_masked: IDkgTranscript,
@@ -289,7 +290,7 @@ impl EcdsaPreSignatureQuadruple {
 }
 
 /// All inputs required to generate a canister threshold signature.
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash)]
 pub struct ThresholdEcdsaSigInputs<'a> {
     caller: &'a PrincipalId,
     derivation_path: &'a [Vec<u8>],
@@ -475,7 +476,7 @@ impl<'a> ThresholdEcdsaSigInputs<'a> {
 }
 
 /// A single threshold ECDSA signature share.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct ThresholdEcdsaSigShare {
     #[serde(with = "serde_bytes")]
     pub sig_share_raw: Vec<u8>,
@@ -496,7 +497,7 @@ impl fmt::Debug for ThresholdEcdsaSigShare {
 /// A combined threshold Schnorr signature.
 ///
 /// The signature itself is stored as raw bytes.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct ThresholdSchnorrCombinedSignature {
     #[serde(with = "serde_bytes")]
     pub signature: Vec<u8>,
@@ -515,7 +516,7 @@ impl fmt::Debug for ThresholdSchnorrCombinedSignature {
 }
 
 /// All inputs required to generate a canister threshold signature.
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash)]
 pub struct ThresholdSchnorrSigInputs<'a> {
     caller: &'a PrincipalId,
     derivation_path: &'a [Vec<u8>],
@@ -713,7 +714,7 @@ impl<'a> ThresholdSchnorrSigInputs<'a> {
 ///
 /// Each signature, in addition to the transcript for the sharing of the private
 /// key, requires a presignature.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct SchnorrPreSignatureTranscript {
     blinder_unmasked: IDkgTranscript,
 }
@@ -777,7 +778,7 @@ impl SchnorrPreSignatureTranscript {
 }
 
 /// A single threshold Schnorr signature share.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub struct ThresholdSchnorrSigShare {
     #[serde(with = "serde_bytes")]
     pub sig_share_raw: Vec<u8>,

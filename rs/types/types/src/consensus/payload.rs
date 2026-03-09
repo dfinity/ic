@@ -12,6 +12,7 @@ use crate::{
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialOrd;
 use std::hash::Hash;
@@ -143,7 +144,9 @@ impl BlockPayload {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PayloadType {
     Summary,
@@ -167,7 +170,9 @@ impl std::fmt::Display for PayloadType {
 /// pointer so that it is cheap to clone.
 ///
 /// It serializes to both the crypto hash and value of a `BlockPayload`.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct Payload {
     payload_type: PayloadType,
     // It is not crucial that Arc used here is unique, because the data referenced remains

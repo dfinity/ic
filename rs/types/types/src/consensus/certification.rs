@@ -16,6 +16,7 @@ use ic_protobuf::{
     proxy::ProxyDecodeError,
     types::v1::{self as pb, certification_message::Msg},
 };
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -122,7 +123,9 @@ impl TryFrom<pb::CertificationMessage> for CertificationMessage {
 }
 
 /// CertificationMessageHash contains the hash of a CertificationMessage.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub enum CertificationMessageHash {
     /// Certification captures the hash of a full certification on behalf of a
     /// subnet
@@ -163,7 +166,9 @@ impl TryFrom<pb::CertificationMessageHash> for CertificationMessageHash {
 }
 
 /// CertificationContent holds the data signed by certification
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CertificationContent {
     /// The hash of the relevant parts of the replicated state
@@ -230,7 +235,7 @@ impl CountBytes for Certification {
 
 /// A certification share is the signature of a single replica on a
 /// CertificationContent
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct CertificationShare {
     /// the height that the CertificationContent belongs to
     pub height: Height,

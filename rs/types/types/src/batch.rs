@@ -41,6 +41,7 @@ use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
+use ic_stable_hash_derive::StableHash;
 use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
@@ -109,7 +110,7 @@ impl Batch {
 
 /// The context built by Consensus for deterministic processing. Captures all
 /// fields that have semantic meaning within the Chain Consensus protocol.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ValidationContext {
     /// The registry version to be associated with the payload.

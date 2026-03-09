@@ -1,13 +1,14 @@
 //! Types related to receivers for non-interactive DKG.
 use super::*;
 use crate::crypto::threshold_sig::ni_dkg::config::errors::NiDkgConfigValidationError;
+use ic_stable_hash_derive::StableHash;
 
 #[cfg(test)]
 mod tests;
 
 /// A set of receivers for non-interactive DKG. Satisfies invariants, see
 /// `NiDkgReceivers::new`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct NiDkgReceivers {
     receivers: BTreeSet<NodeId>,
     // The count equals receivers.len().

@@ -6,6 +6,7 @@ use dealers::NiDkgDealers;
 use errors::{NiDkgConfigValidationError, NiDkgThresholdZeroError};
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
+use ic_stable_hash_derive::StableHash;
 use receivers::NiDkgReceivers;
 use serde::{Deserialize, Serialize};
 use serde::{Deserializer, de::Error};
@@ -338,7 +339,7 @@ impl fmt::Display for NiDkgConfig {
 
 /// The minimum number of nodes required to generate a valid threshold
 /// signature.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct NiDkgThreshold {
     threshold: NumberOfNodes,
 }

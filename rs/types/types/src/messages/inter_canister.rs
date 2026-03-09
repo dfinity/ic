@@ -19,6 +19,7 @@ use ic_protobuf::{
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
+use ic_stable_hash_derive::StableHash;
 use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -56,7 +57,7 @@ pub enum CallContextIdTag {}
 /// Identifies an incoming call.
 pub type CallContextId = Id<CallContextIdTag, u64>;
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestMetadata {
     /// Indicates how many steps down the call tree a request is, starting at 0.
@@ -101,7 +102,7 @@ impl RequestMetadata {
 }
 
 /// Canister-to-canister request message.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Request {
     pub receiver: CanisterId,
@@ -552,7 +553,9 @@ impl Hash for Response {
 ///
 /// Refunds are ordered by amount (larger amounts first). Ties are broken by
 /// canister ID (smaller IDs first).
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
+#[derive(
+    Clone, Copy, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize, ValidateEq,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Refund {
     /// Whom this refund is to be delivered to.

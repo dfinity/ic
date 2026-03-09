@@ -4,6 +4,7 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::state::canister_state_bits::v1::CyclesAccount as pbCyclesAccount;
 use ic_protobuf::state::queues::v1::Cycles as PbCycles;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::iter::Sum;
@@ -25,6 +26,7 @@ use thousands::Separable;
     Ord,
     PartialOrd,
     Hash,
+    StableHash,
     Debug,
     Default,
     CandidType,

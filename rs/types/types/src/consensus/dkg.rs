@@ -17,6 +17,7 @@ use crate::{
     state_manager::StateManagerError,
 };
 use ic_protobuf::types::v1 as pb;
+use ic_stable_hash_derive::StableHash;
 use serde_with::serde_as;
 use std::collections::BTreeMap;
 
@@ -39,7 +40,9 @@ impl PbArtifact for Message {
 }
 
 /// Identifier of a DKG message.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct DkgMessageId {
     pub hash: CryptoHashOf<Message>,
     pub height: Height,

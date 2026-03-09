@@ -1,6 +1,7 @@
 //! Errors for non-interactive DKG.
 use crate::{NodeId, RegistryVersion};
 use ic_crypto_internal_types::encrypt::forward_secure as ifs;
+use ic_stable_hash_derive::StableHash;
 use std::fmt;
 
 pub mod create_dealing_error;
@@ -11,7 +12,7 @@ pub mod transcripts_to_retain_validation_error;
 pub mod verify_dealing_error;
 
 /// Occurs if a node ID that should be a dealer is not a dealer.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct NotADealerError {
     pub node_id: NodeId,
 }
@@ -28,7 +29,7 @@ impl fmt::Display for NotADealerError {
 
 /// Occurs if the forward-secure encryption public key cannot be found in the
 /// registry.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct FsEncryptionPublicKeyNotInRegistryError {
     pub registry_version: RegistryVersion,
     pub node_id: NodeId,
@@ -45,7 +46,7 @@ impl fmt::Display for FsEncryptionPublicKeyNotInRegistryError {
 }
 
 /// Occurs if the forward-secure encryption public key is malformed.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct MalformedFsEncryptionPublicKeyError {
     pub internal_error: String,
 }

@@ -1,11 +1,12 @@
 //! Errors related to verifying a dealing.
 use super::*;
+use ic_stable_hash_derive::StableHash;
 
 use crate::crypto::error::{InvalidArgumentError, MalformedPublicKeyError};
 use crate::registry::RegistryClientError;
 
 /// Occurs if verifying a dealing using `NiDkgAlgorithm::verify_dealing` fails.
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash)]
 pub enum DkgVerifyDealingError {
     NotADealer(NotADealerError),
     FsEncryptionPublicKeyNotInRegistry(FsEncryptionPublicKeyNotInRegistryError),

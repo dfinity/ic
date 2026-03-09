@@ -62,6 +62,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     state::system_metadata::v1 as pb_metadata,
 };
+use ic_stable_hash_derive::StableHash;
 use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
@@ -105,7 +106,7 @@ pub const MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE: usize = 48 * 1024;
 /// is used to uniquely identify the request and it's associated artifacts.
 pub type CanisterHttpRequestId = CallbackId;
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct Transform {
     pub method_name: String,
     #[serde(with = "serde_bytes")]
@@ -121,7 +122,7 @@ impl From<TransformContext> for Transform {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct CanisterHttpRequestContext {
     pub request: Request,
     pub url: String,
@@ -138,7 +139,7 @@ pub struct CanisterHttpRequestContext {
     pub refund_status: RefundStatus,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct RefundStatus {
     /// The amount of cycles that are available to be refunded for this request.
     /// The amount is calculated based to the payment of the request.
@@ -163,7 +164,7 @@ impl Default for RefundStatus {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub enum Replication {
     /// The request is fully replicated, i.e. all nodes will attempt the http request.
     FullyReplicated,
@@ -190,7 +191,7 @@ impl Replication {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize, FromRepr)]
 #[repr(u32)]
 pub enum PricingVersion {
     Legacy = PRICING_VERSION_LEGACY,
@@ -781,7 +782,7 @@ impl From<CanisterHttpRequestContextError> for UserError {
 
 /// Contains the information that the pool manager hands to the canister http
 /// client to make a request
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct CanisterHttpRequest {
     /// Timestamp indicating when this request will be considered timed out.
     pub timeout: Time,
@@ -868,7 +869,7 @@ impl CountBytes for CanisterHttpReject {
 }
 
 /// A header to be included in a [`CanisterHttpRequest`].
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct CanisterHttpHeader {
     pub name: String,
     pub value: String,
@@ -884,7 +885,7 @@ impl From<HttpHeader> for CanisterHttpHeader {
 }
 
 /// Specifies the HTTP method that is used in the [`CanisterHttpRequest`].
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, EnumIter, Serialize)]
 pub enum CanisterHttpMethod {
     GET = 1,
     POST = 2,
@@ -966,7 +967,7 @@ impl CountBytes for CanisterHttpResponseWithConsensus {
 ///
 /// This can be used as a proof that consensus can not be reached for this call
 /// as sufficiently many nodes have seen divergent content.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseDivergence {
     pub shares: Vec<CanisterHttpResponseShare>,
@@ -980,7 +981,9 @@ impl CountBytes for CanisterHttpResponseDivergence {
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,

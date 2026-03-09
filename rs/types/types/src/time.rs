@@ -9,6 +9,7 @@ mod tests;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT};
+use ic_stable_hash_derive::StableHash;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,7 @@ use thiserror::Error;
     Ord,
     PartialOrd,
     Hash,
+    StableHash,
     Debug,
     Deserialize,
     Serialize,
@@ -212,7 +214,7 @@ impl Time {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Error, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Error, Serialize)]
 pub enum TimeInstantiationError {
     #[error("Time cannot be instantiated as it would overflow: {0}")]
     Overflow(String),
@@ -321,7 +323,9 @@ pub fn expiry_time_from_now() -> Time {
 /// Only intended for storing and passing around low resolution timestamps.
 /// For any time arithmetic or pretty printing, convert to `Time` first. Like
 /// `Time`, does not implement the `Default` trait.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CoarseTime(u32);
 

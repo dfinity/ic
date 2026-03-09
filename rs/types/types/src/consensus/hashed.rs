@@ -54,6 +54,12 @@ impl<H: std::hash::Hash, V> std::hash::Hash for Hashed<H, V> {
     }
 }
 
+impl<H: ic_stable_hash::StableHash, V> ic_stable_hash::StableHash for Hashed<H, V> {
+    fn stable_hash<Hasher: std::hash::Hasher>(&self, state: &mut Hasher) {
+        self.hash.stable_hash(state);
+    }
+}
+
 impl<H: std::fmt::Debug, V> std::fmt::Debug for Hashed<H, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.hash.fmt(f)

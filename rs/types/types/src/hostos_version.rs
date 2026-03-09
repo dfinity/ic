@@ -1,10 +1,13 @@
 //! HostOsVersion can be converted to/from string representation.
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct HostosVersion {
     version_id: String,
 }

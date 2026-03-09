@@ -107,6 +107,7 @@ use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_snapshot_bits::v1 as pb_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
+use ic_stable_hash_derive::StableHash;
 use more_asserts::debug_assert_gt;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
@@ -235,7 +236,7 @@ pub type AccumulatedPriority = AmountOf<AccumulatedPriorityTag, i64>;
 /// equivalently a rational number A/100. Having an `ComputeAllocation` of A/100
 /// guarantees that the canister will get a full round at least A out of 100
 /// execution rounds.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct ComputeAllocation(u64);
 
 impl ComputeAllocation {
@@ -466,7 +467,9 @@ pub enum LongExecutionMode {
 /// Memory growth of the canister beyond the pre-allocated number of bytes
 /// happens dynamically and is subject to the available memory of the subnet.
 /// Charging happens based on the maximum of pre-allocated and actually used amount of memory.
-#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Debug, Default, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, PartialOrd, Hash, StableHash, Debug, Default, Deserialize, Serialize,
+)]
 pub struct MemoryAllocation(NumBytes);
 
 impl MemoryAllocation {

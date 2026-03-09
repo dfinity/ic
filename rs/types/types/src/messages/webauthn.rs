@@ -1,6 +1,7 @@
 use crate::{CountBytes, crypto::SignedBytesWithoutDomainSeparator, messages::Blob};
 use base64::URL_SAFE_NO_PAD;
 use ic_crypto_sha2::Sha256;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -16,7 +17,7 @@ struct ClientData {
 /// ClientDataJSON objects returned by the call to the authenticator. A
 /// WebAuthnSignature contains both the actual cryptographic signature
 /// and this auxiliary information.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct WebAuthnSignature {
     authenticator_data: Blob,
     client_data_json: Blob,

@@ -13,6 +13,7 @@ use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
@@ -126,7 +127,7 @@ impl From<&NiDkgTag> for pb::NiDkgTag {
 }
 
 /// The subnet for which the DKG generates keys.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTargetSubnet {
     /// `Local` means the subnet creates keys for itself.
@@ -146,7 +147,7 @@ pub enum NiDkgTargetSubnet {
 ///
 /// Please refer to the rustdoc of `NiDkgTargetSubnet::Remote` for an
 /// explanation of why this is needed.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NiDkgTargetId([u8; NiDkgTargetId::SIZE]);
 ic_crypto_internal_types::derive_serde!(NiDkgTargetId, NiDkgTargetId::SIZE);

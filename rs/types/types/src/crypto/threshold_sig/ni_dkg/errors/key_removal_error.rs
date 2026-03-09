@@ -5,11 +5,12 @@ use crate::crypto::threshold_sig::ni_dkg::errors::{
     FsEncryptionPublicKeyNotInRegistryError, MalformedFsEncryptionPublicKeyError,
 };
 use crate::registry::RegistryClientError;
+use ic_stable_hash_derive::StableHash;
 use std::fmt;
 use std::fmt::Formatter;
 
 /// Occurs if key removal using `NiDkgAlgorithm::retain_only_active_keys` fails.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub enum DkgKeyRemovalError {
     InputValidationError(TranscriptsToRetainValidationError),
     FsEncryptionPublicKeyNotInRegistry(FsEncryptionPublicKeyNotInRegistryError),

@@ -5,6 +5,7 @@ use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::ProxyDecodeError;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize, de::Deserializer, ser::Serializer};
 use std::{
     convert::{AsRef, TryFrom},
@@ -16,7 +17,7 @@ use std::{
 pub const EXPECTED_MESSAGE_ID_LENGTH: usize = 32;
 
 /// The ID used to uniquely identify a user's ingress message.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MessageId([u8; EXPECTED_MESSAGE_ID_LENGTH]);
 

@@ -513,6 +513,8 @@ members = [
     "rs/types/base_types/protobuf_generator",
     "rs/types/exhaustive_derive",
     "rs/types/management_canister_types",
+    "rs/types/stable_hash",
+    "rs/types/stable_hash_derive",
     "rs/types/types",
     "rs/types/types_test_utils",
     "rs/types/wasm_types",

@@ -287,6 +287,12 @@ impl<Unit, Repr: Hash> Hash for AmountOf<Unit, Repr> {
     }
 }
 
+impl<Unit, Repr: ic_stable_hash::StableHash> ic_stable_hash::StableHash for AmountOf<Unit, Repr> {
+    fn stable_hash<H: Hasher>(&self, state: &mut H) {
+        self.0.stable_hash(state)
+    }
+}
+
 impl<Unit, Repr> Add for AmountOf<Unit, Repr>
 where
     Repr: Add<Output = Repr>,

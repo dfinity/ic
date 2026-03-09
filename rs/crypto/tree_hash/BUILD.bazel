@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha2",
     "//rs/protobuf",
+    "//rs/types/stable_hash",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:thiserror",

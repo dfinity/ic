@@ -9,6 +9,7 @@ rust_library(
     crate_name = "ic_types",
     proc_macro_deps = [
         # Keep sorted.
+        "//rs/types/stable_hash_derive",
         "//rs/utils/validate_eq_derive",
         "@crate_index//:strum_macros",
     ],
@@ -26,6 +27,7 @@ rust_library(
         "//rs/crypto/sha2",
         "//rs/crypto/tree_hash",
         "//rs/limits",
+        "//rs/types/stable_hash",
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/types/base_types",

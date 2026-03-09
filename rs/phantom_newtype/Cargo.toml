@@ -9,6 +9,7 @@ version.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-heap-bytes = { path = "../../packages/ic-heap-bytes" }
+ic-stable-hash = { path = "../types/stable_hash" }
 num-traits = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }

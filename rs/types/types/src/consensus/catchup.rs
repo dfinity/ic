@@ -13,6 +13,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
+use ic_stable_hash_derive::StableHash;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, PartialOrd};
@@ -24,7 +25,9 @@ pub type CatchUpContent = CatchUpContentT<HashedBlock>;
 /// A generic struct shared between [`CatchUpContent`] and [`CatchUpShareContent`].
 /// Consists of objects all occurring at a specific height which we will refer to
 /// as the catch up height.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct CatchUpContentT<T> {
     /// Replica version that was running when this CUP was created.
     pub version: ReplicaVersion,
@@ -369,7 +372,7 @@ impl TryFrom<&pb::CatchUpPackage> for CatchUpPackageParam {
 
 /// [`CatchUpContentProtobufBytes`] holds bytes that represent a protobuf serialized
 /// catch-up package
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct CatchUpContentProtobufBytes(Vec<u8>);
 
 impl From<&pb::CatchUpPackage> for CatchUpContentProtobufBytes {

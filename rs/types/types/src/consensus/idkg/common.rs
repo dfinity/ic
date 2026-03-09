@@ -30,6 +30,7 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::{
@@ -59,7 +60,9 @@ pub type PseudoRandomId = [u8; 32];
 ///
 /// The height field represents at which block the RequestId is created.
 /// It is used for purging purpose.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestId {
     pub callback_id: CallbackId,
@@ -86,7 +89,9 @@ impl TryFrom<pb::RequestId> for RequestId {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSigId(pub u64);
 
@@ -96,7 +101,9 @@ impl PreSigId {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct TranscriptRef {
     /// The on chain location of the IDkgTranscript.
@@ -142,14 +149,14 @@ impl TryFrom<pb::TranscriptRef> for TranscriptRef {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct TranscriptCastError {
     pub transcript_id: IDkgTranscriptId,
     pub from_type: IDkgTranscriptType,
     pub expected_type: &'static str,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MaskedTranscript(TranscriptRef);
 
@@ -198,7 +205,7 @@ impl TryFrom<pb::MaskedTranscript> for MaskedTranscript {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTranscript(TranscriptRef);
 
@@ -286,7 +293,7 @@ impl TranscriptAttributes for IDkgTranscriptParamsRef {
 }
 
 /// Attributes of `IDkgTranscript`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptAttributes {
     receivers: BTreeSet<NodeId>,
@@ -353,7 +360,7 @@ impl TranscriptAttributes for IDkgTranscriptAttributes {
 
 /// Wrappers for the common types.
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomTranscriptParams(IDkgTranscriptParamsRef);
 impl RandomTranscriptParams {
@@ -402,7 +409,7 @@ impl TryFrom<pb::RandomTranscriptParams> for RandomTranscriptParams {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomUnmaskedTranscriptParams(IDkgTranscriptParamsRef);
 impl RandomUnmaskedTranscriptParams {
@@ -451,7 +458,7 @@ impl TryFrom<pb::RandomUnmaskedTranscriptParams> for RandomUnmaskedTranscriptPar
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ReshareOfMaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfMaskedParams {
@@ -500,7 +507,7 @@ impl TryFrom<pb::ReshareOfMaskedParams> for ReshareOfMaskedParams {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ReshareOfUnmaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfUnmaskedParams {
@@ -580,7 +587,7 @@ impl TryFrom<pb::ReshareOfUnmaskedParams> for ReshareOfUnmaskedParams {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTimesMaskedParams(IDkgTranscriptParamsRef);
 impl UnmaskedTimesMaskedParams {
@@ -686,7 +693,7 @@ pub trait IDkgBlockReader: Send + Sync {
 
 /// Counterpart of IDkgTranscriptParams that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgTranscriptOperationRef {
     Random,
@@ -840,7 +847,7 @@ impl TryFrom<pb::IDkgTranscriptOperationRef> for IDkgTranscriptOperationRef {
 
 /// Counterpart of IDkgTranscriptParams that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptParamsRef {
     pub transcript_id: IDkgTranscriptId,
@@ -1185,14 +1192,14 @@ impl ThresholdSigInputs<'_> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),
     Schnorr(ThresholdSchnorrCombinedSignature),
     VetKd(VetKdEncryptedKey),
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub enum SignatureScheme {
     Ecdsa,
     Schnorr,

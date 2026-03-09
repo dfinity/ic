@@ -1,8 +1,9 @@
 //! Errors related to transcripts that should be retained.
+use ic_stable_hash_derive::StableHash;
 use std::fmt;
 
 /// Occurs if creating `TranscriptsToRetain` using its constructor fails.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub enum TranscriptsToRetainValidationError {
     NoLowTranscripts,
     NoHighTranscripts,

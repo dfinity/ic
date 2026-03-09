@@ -19,6 +19,7 @@ use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
     proxy::{ProxyDecodeError, try_from_option_field},
 };
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialOrd;
 use std::convert::TryInto;
@@ -257,13 +258,15 @@ impl HasHeight for BlockMetadata {
 
 /// Rank is used to indicate the priority of a block maker, where 0 indicates
 /// the highest priority.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Rank(pub u64);
 
 /// Block is the type that is used to create blocks out of which we build a
 /// block chain
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Block {
     pub version: ReplicaVersion,
@@ -333,7 +336,7 @@ fn block_hash_to_string(hash: &CryptoHashOf<Block>) -> String {
 }
 
 /// BlockMetadata contains the version, height and hash of a block
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct BlockMetadata {
     version: ReplicaVersion,
@@ -419,7 +422,9 @@ impl AsRef<Block> for BlockProposal {
 }
 
 /// NotarizationContent holds the values that are signed in a notarization
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NotarizationContent {
     pub version: ReplicaVersion,
@@ -520,7 +525,9 @@ impl TryFrom<pb::NotarizationShare> for NotarizationShare {
 }
 
 /// FinalizationContent holds the values that are signed in a finalization
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct FinalizationContent {
     pub version: ReplicaVersion,
@@ -623,7 +630,9 @@ impl TryFrom<pb::FinalizationShare> for FinalizationShare {
 /// RandomBeaconContent holds the content that is signed in the random beacon,
 /// which is the previous random beacon, the height, and the replica version
 /// used to create the random beacon.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomBeaconContent {
     pub version: ReplicaVersion,
@@ -726,7 +735,9 @@ impl TryFrom<pb::RandomBeaconShare> for RandomBeaconShare {
 /// RandomTapeContent holds the content that is signed in the random tape,
 /// which is the height and the replica version used to create the random
 /// tape.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomTapeContent {
     pub version: ReplicaVersion,
@@ -816,7 +827,7 @@ impl TryFrom<pb::RandomTapeShare> for RandomTapeShare {
 }
 
 /// A proof that shows a block maker has produced equivocating blocks.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EquivocationProof {
     pub signer: NodeId,
@@ -1017,7 +1028,9 @@ impl_cm_conversion! {
 
 /// ConsensusMessageHash has the same variants as [ConsensusMessage], but
 /// contains only a hash instead of the full message in each variant.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub enum ConsensusMessageHash {
     RandomBeacon(CryptoHashOf<RandomBeacon>),
     Finalization(CryptoHashOf<Finalization>),

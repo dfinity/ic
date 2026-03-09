@@ -22,6 +22,12 @@ use std::{convert::TryFrom, fmt};
 )]
 pub struct CanisterId(PrincipalId);
 
+impl ic_stable_hash::StableHash for CanisterId {
+    fn stable_hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        ic_stable_hash::StableHash::stable_hash(&self.0, state);
+    }
+}
+
 /// Represents an error that can occur when constructing a [`CanisterId`] from a
 /// [`PrincipalId`].
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]

@@ -8,6 +8,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-heap-bytes",
+        "//rs/types/stable_hash",
         "@crate_index//:candid",
         "@crate_index//:num-traits",
         "@crate_index//:serde",

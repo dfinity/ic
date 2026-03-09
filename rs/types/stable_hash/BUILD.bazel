@@ -1,0 +1,15 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "stable_hash",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_stable_hash",
+    version = "0.1.0",
+)
+
+rust_test(
+    name = "stable_hash_test",
+    crate = ":stable_hash",
+)

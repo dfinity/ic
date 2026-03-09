@@ -14,6 +14,7 @@ use crate::{
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
@@ -53,7 +54,9 @@ pub enum UnvalidatedArtifactMutation<Artifact: IdentifiableArtifact> {
 
 /// Consensus message identifier carries both a message hash and a height,
 /// which is used by the consensus pool to help lookup.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct ConsensusMessageId {
     pub hash: ConsensusMessageHash,
     pub height: Height,
@@ -100,7 +103,7 @@ impl From<&ConsensusMessage> for ConsensusMessageId {
 // Ingress artifacts
 
 /// [`IngressMessageId`] includes expiry time in addition to [`MessageId`].
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressMessageId {
     expiry: Time,
@@ -166,7 +169,7 @@ impl TryFrom<pb::IngressMessageId> for IngressMessageId {
 
 /// Certification message identifier carries both message hash and a height,
 /// which is used by the certification pool to help lookup.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct CertificationMessageId {
     pub hash: CertificationMessageHash,
     pub height: Height,

@@ -1,10 +1,11 @@
 //! Errors related to transcript creation.
 use crate::crypto::error::{InvalidArgumentError, MalformedPublicKeyError};
 use core::fmt;
+use ic_stable_hash_derive::StableHash;
 
 /// Occurs if creating a transcript using `NiDkgAlgorithm::create_transcript`
 /// fails.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub enum DkgCreateTranscriptError {
     InsufficientDealings(InvalidArgumentError),
     MalformedResharingTranscriptInConfig(MalformedPublicKeyError),

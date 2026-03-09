@@ -13,6 +13,7 @@ use crate::{
 use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId, hash_of_map};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use ic_heap_bytes::DeterministicHeapBytes;
+use ic_stable_hash_derive::StableHash;
 use maplit::btreemap;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
@@ -91,7 +92,7 @@ pub(crate) fn representation_independent_hash_read_state(
 
 /// Describes the fields of a canister update call as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#http-call>`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct HttpCanisterUpdate {
     pub canister_id: Blob,
@@ -269,14 +270,14 @@ pub struct HttpRequestEnvelope<C> {
 }
 
 /// A strongly-typed version of [`HttpRequestEnvelope`].
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct HttpRequest<C> {
     content: C,
     auth: Authentication,
 }
 
 /// The authentication associated with an HTTP request.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub enum Authentication {
     Authenticated(UserSignature),
     Anonymous,
@@ -456,7 +457,7 @@ impl From<CanisterIdError> for HttpRequestError {
 
 /// Describes a delegation map as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct Delegation {
     pubkey: Blob,
@@ -531,7 +532,7 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
 
 /// Describes a delegation as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct SignedDelegation {
     delegation: Delegation,
@@ -560,7 +561,7 @@ impl SignedDelegation {
 }
 
 /// The different types of values supported in `RawHttpRequest`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub enum RawHttpRequestVal {
     Bytes(#[serde(with = "serde_bytes")] Vec<u8>),
     String(String),
@@ -713,7 +714,7 @@ pub struct Certificate {
     pub delegation: Option<CertificateDelegation>,
 }
 
-#[derive(Copy, Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Hash, StableHash)]
 pub enum CertificateDelegationFormat {
     /// Delegation with the canister ranges in the `/subnet/{subnet_id}/canister_ranges` path.
     Flat,
@@ -723,7 +724,7 @@ pub enum CertificateDelegationFormat {
     Pruned,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, StableHash)]
 pub struct CertificateDelegationMetadata {
     pub format: CertificateDelegationFormat,
 }

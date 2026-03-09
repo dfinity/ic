@@ -6,12 +6,15 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// BasicSignature captures basic signature on a value and the identity of the
 /// replica that signed it
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct BasicSignature<T> {
     pub signature: BasicSigOf<T>,
     pub signer: NodeId,
@@ -28,7 +31,9 @@ pub type BasicSigned<T> = Signed<T, BasicSignature<T>>;
 
 /// BasicSignatureBatch captures a collection of basic signatures on the same value and
 /// the identities of the replicas that signed it.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct BasicSignatureBatch<T> {
     pub signatures_map: BTreeMap<NodeId, BasicSigOf<T>>,
 }
@@ -43,7 +48,9 @@ pub struct ThresholdSignature<T> {
 
 /// ThresholdSignatureShare captures a share of a threshold signature on a value
 /// and the identity of the replica that signed
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct ThresholdSignatureShare<T> {
     pub signature: ThresholdSigShareOf<T>,
     pub signer: NodeId,
@@ -51,7 +58,9 @@ pub struct ThresholdSignatureShare<T> {
 
 /// MultiSignature captures a cryptographic multi-signature, which is one
 /// message signed by multiple signers
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct MultiSignature<T> {
     pub signature: CombinedMultiSigOf<T>,
     pub signers: Vec<NodeId>,
@@ -59,7 +68,9 @@ pub struct MultiSignature<T> {
 
 /// MultiSignatureShare is a signature from one replica. Multiple shares can be
 /// aggregated into a MultiSignature.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 pub struct MultiSignatureShare<T> {
     pub signature: IndividualMultiSigOf<T>,
     pub signer: NodeId,

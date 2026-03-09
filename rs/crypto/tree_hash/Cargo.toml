@@ -10,6 +10,7 @@ documentation.workspace = true
 ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../sha2" }
 ic-protobuf = { path = "../../protobuf" }
+ic-stable-hash = { path = "../../types/stable_hash" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 thiserror = { workspace = true }

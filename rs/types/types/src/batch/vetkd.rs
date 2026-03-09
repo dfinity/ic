@@ -8,6 +8,7 @@ use ic_protobuf::{
         vet_kd_agreement::Agreement as VetKdInternalAgreementProto,
     },
 };
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 use strum_macros::EnumCount;
@@ -17,7 +18,9 @@ use crate::{CountBytes, messages::CallbackId};
 use super::{iterator_to_bytes, slice_to_messages};
 
 /// Errors that may occur when handling a VetKd request.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, EnumCount)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize, EnumCount,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum VetKdErrorCode {
     TimedOut = 1,
@@ -25,7 +28,7 @@ pub enum VetKdErrorCode {
 }
 
 /// Consensus may either agree on a successful response, or reject the request.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, EnumCount)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize, EnumCount)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum VetKdAgreement {
     Success(Vec<u8>),
@@ -42,7 +45,7 @@ impl CountBytes for VetKdAgreement {
 }
 
 /// Payload that contains completed VetKey agreements.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct VetKdPayload {
     pub vetkd_agreements: BTreeMap<CallbackId, VetKdAgreement>,

@@ -13,6 +13,7 @@ use crate::crypto::SignedBytesWithoutDomainSeparator;
 use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
+use ic_stable_hash_derive::StableHash;
 use std::convert::TryFrom;
 
 /// The domain separator to be used when calculating the sender signature for a
@@ -229,7 +230,7 @@ fn domain_with_prepended_length(domain: &str) -> Vec<u8> {
 /// Ideally, this struct would be annotated with `#[cfg(test)]` so that it is
 /// only available in test code, however, then it would not be visible outside
 /// of this crate where it is needed.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct SignableMock {
     pub domain: Vec<u8>,
     pub signed_bytes_without_domain: Vec<u8>,

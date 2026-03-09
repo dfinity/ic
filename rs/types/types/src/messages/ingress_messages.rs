@@ -25,6 +25,7 @@ use ic_protobuf::{
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
+use ic_stable_hash_derive::StableHash;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use prost::bytes::Bytes;
@@ -36,7 +37,7 @@ use std::{
 };
 
 /// The contents of a signed ingress message.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct SignedIngressContent {
     sender: UserId,
     canister_id: CanisterId,
@@ -356,7 +357,7 @@ impl CountBytes for SignedIngress {
 ///
 /// Used internally by the InternetComputer. See related [`SignedIngress`] for
 /// the message as it was received from the `HttpHandler`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize, ValidateEq)]
 pub struct Ingress {
     pub source: UserId,
     pub receiver: CanisterId,

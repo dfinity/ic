@@ -5,10 +5,11 @@ use crate::crypto::threshold_sig::ni_dkg::errors::{
 };
 use crate::registry::RegistryClientError;
 use core::fmt;
+use ic_stable_hash_derive::StableHash;
 
 /// Occurs if loading a transcript using `NiDkgAlgorithm::load_transcript`
 /// fails.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub enum DkgLoadTranscriptError {
     FsEncryptionPublicKeyNotInRegistry(FsEncryptionPublicKeyNotInRegistryError),
     Registry(RegistryClientError),

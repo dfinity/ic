@@ -16,6 +16,8 @@ ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-stable-hash = { path = "../stable_hash" }
+ic-stable-hash-derive = { path = "../stable_hash_derive" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
 ic-limits = { path = "../../limits" }

@@ -11,6 +11,7 @@ use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Deserializer, Serialize, de::Error};
 use std::collections::{BTreeMap, BTreeSet, btree_map};
 use std::convert::TryFrom;
@@ -26,7 +27,9 @@ pub mod proto_conversions;
 mod tests;
 
 /// Globally unique identifier of an IDKG transcript.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptId {
     /// Identifier incremented by consensus.
@@ -241,8 +244,14 @@ impl Hash for IDkgReceivers {
     }
 }
 
+impl ic_stable_hash::StableHash for IDkgReceivers {
+    fn stable_hash<H: Hasher>(&self, state: &mut H) {
+        ic_stable_hash::StableHash::stable_hash(&self.iter().collect::<BTreeMap<_, _>>(), state);
+    }
+}
+
 /// A set of dealers for IDkg.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct IDkgDealers {
     dealers: BTreeSet<NodeId>,
 
@@ -307,7 +316,7 @@ impl IDkgDealers {
 
 /// Parameters used throughout the IDKG protocol.
 /// Note that the same parameters *must* be used throughout an execution of the IDKG protocol.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct IDkgTranscriptParams {
     transcript_id: IDkgTranscriptId,
     dealers: IDkgDealers,
@@ -580,7 +589,7 @@ impl_display_using_debug!(IDkgTranscriptParams);
 
 /// Initial params and dealings for a set of receivers assigned to a different subnet.
 /// Only dealings intended for resharing an unmasked transcript can be included in InitialIDkgDealings.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Serialize)]
 pub struct InitialIDkgDealings {
     params: IDkgTranscriptParams,
     dealings: Vec<SignedIDkgDealing>,
@@ -683,7 +692,7 @@ impl<'de> Deserialize<'de> for InitialIDkgDealings {
 ///
 /// When the transcript derives from earlier transcripts, these are included
 /// in this enum.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgMaskedTranscriptOrigin {
     Random,
@@ -694,7 +703,7 @@ pub enum IDkgMaskedTranscriptOrigin {
 ///
 /// The earlier transcripts used to derive this transcript are included in this
 /// enum.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgUnmaskedTranscriptOrigin {
     ReshareMasked(IDkgTranscriptId),
@@ -703,7 +712,7 @@ pub enum IDkgUnmaskedTranscriptOrigin {
 }
 
 /// Type and origin of an IDkg transcript.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgTranscriptType {
     /// Masked transcripts contain dealings based on Pedersen verifiable secret sharing which
@@ -727,7 +736,7 @@ pub enum IDkgTranscriptType {
 /// * [`Masked`][`IDkgTranscriptType::Masked`] if the commitment perfectly hides the shared value.
 /// * [`Unmasked`][`IDkgTranscriptType::Unmasked`] if the commitment is not perfectly hiding and
 ///   may reveal some information about the shared value.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
@@ -756,7 +765,7 @@ impl AsRef<IDkgReceivers> for IDkgTranscript {
 ///
 /// If earlier transcripts are used in the creation, these are included here.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 pub enum IDkgTranscriptOperation {
     /// Generates a new public/private key pair shared among the replicas.
     ///
@@ -1009,7 +1018,7 @@ impl Debug for IDkgTranscript {
 impl_display_using_debug!(IDkgTranscript);
 
 /// Dealing of an IDkg sharing.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgDealing {
     pub transcript_id: IDkgTranscriptId,
@@ -1096,7 +1105,7 @@ impl SignedBytesWithoutDomainSeparator for SignedIDkgDealing {
 }
 
 /// The individual signature share in support of a dealing
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub struct IDkgDealingSupport {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
@@ -1146,7 +1155,7 @@ impl BatchSignedIDkgDealing {
 /// Remark: it is essential that the [`BatchSignedIDkgDealing`]s in the collection are immutable
 /// to ensure that the value of [`BatchSignedIDkgDealing::dealer_id`] cannot be changed. Otherwise,
 /// the guarantee that all dealers are distinct could be broken.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Default)]
 pub struct BatchSignedIDkgDealings {
     dealings: BTreeMap<NodeId, BatchSignedIDkgDealing>,
 }
@@ -1219,7 +1228,7 @@ impl FromIterator<BatchSignedIDkgDealing> for BatchSignedIDkgDealings {
 }
 
 /// Complaint against an individual IDkg dealing in a transcript.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Deserialize, Serialize)]
 pub struct IDkgComplaint {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
@@ -1241,7 +1250,7 @@ impl Debug for IDkgComplaint {
 }
 
 /// Opening created in response to an IDkgComplaint.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, StableHash, Deserialize, Serialize)]
 pub struct IDkgOpening {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,

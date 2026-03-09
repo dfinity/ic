@@ -33,11 +33,12 @@ use ic_protobuf::{
     },
     types::v1::{self as pb},
 };
+use ic_stable_hash_derive::StableHash;
 use prost::{Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, hash::Hash};
 
-#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Hash, StableHash, Debug, Default)]
 pub struct QueryStats {
     pub num_calls: u32,
     pub num_instructions: u64, // Want u128, but not supported in protobuf
@@ -68,7 +69,7 @@ impl QueryStats {
 /// a problem if the client side is polling frequently enough and handles those overflows.
 ///
 /// Given the size of these values, overflows sould be rare, though.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Default)]
 pub struct TotalQueryStats {
     pub num_calls: u128,
     pub num_instructions: u128,
@@ -123,7 +124,7 @@ impl From<&TotalQueryStats> for TotalQueryStatsProto {
 ///
 /// [`LocalQueryStats`] are sent from execution to consensus for
 /// inclusion in blocks.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Default)]
 pub struct LocalQueryStats {
     pub epoch: QueryStatsEpoch,
     pub stats: Vec<CanisterQueryStats>,
@@ -135,7 +136,7 @@ pub struct LocalQueryStats {
 /// so that they can survive a restart of the node.
 /// Need to remember the epoch this is for as well as the NodeId of the
 /// node proposing the block.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Default)]
 pub struct RawQueryStats {
     pub highest_aggregated_epoch: Option<QueryStatsEpoch>,
     pub stats: BTreeMap<NodeId, BTreeMap<QueryStatsEpoch, BTreeMap<CanisterId, QueryStats>>>,
@@ -213,7 +214,7 @@ impl TryFrom<QueryStatsProto> for RawQueryStats {
 /// data of the block itself, we want to keep metadata specific to query stats
 /// as part of the query stats payload. This way, consensus stays nice and generic and
 /// the query stats part is self contained.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct QueryStatsPayload {
     pub epoch: QueryStatsEpoch,
     pub proposer: NodeId,
@@ -303,7 +304,7 @@ impl QueryStatsPayload {
 }
 
 /// A message about the statistics of a specific canister.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct CanisterQueryStats {
     pub canister_id: CanisterId,
     pub stats: QueryStats,

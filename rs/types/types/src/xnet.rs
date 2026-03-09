@@ -4,6 +4,7 @@ use crate::{consensus::certification::Certification, messages::StreamMessage};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::queues::v1 as pb_queues;
+use ic_stable_hash_derive::StableHash;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -17,7 +18,7 @@ pub struct StreamIndexTag;
 pub type StreamIndex = AmountOf<StreamIndexTag, u64>;
 
 /// A gap-free `StreamIndex`-ed queue for the messages and signals of a stream.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct StreamIndexedQueue<T> {
     begin: StreamIndex,
     queue: VecDeque<T>,
@@ -161,7 +162,7 @@ impl<T> Default for StreamIndexedQueue<T> {
 /// inducted message; but because most signals are `Accept`we represent that
 /// queue as a combination of `signals_end` (pointing just beyond the last
 /// signal) and a collection of `reject_signals`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct StreamHeader {
     begin: StreamIndex,
     end: StreamIndex,
@@ -180,7 +181,7 @@ pub struct StreamHeader {
 ///
 /// All reason are applicable to `Request`, whereas only `CanisterMigrating` is
 /// applicable to `Response`.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, StableHash, Debug, EnumIter)]
 pub enum RejectReason {
     /// Message enqueuing failed due to migrating canister. In contrast to
     /// `CanisterNotFound` this is mapped to `RejectCode::SysTransient`, i.e.
@@ -255,7 +256,7 @@ impl TryFrom<pb_queues::RejectReason> for RejectReason {
 }
 
 /// Reject signal for messages who failed to induct.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug)]
 pub struct RejectSignal {
     pub reason: RejectReason,
     pub index: StreamIndex,
@@ -268,7 +269,7 @@ impl RejectSignal {
 }
 
 /// Flags for `Stream`.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, StableHash, Debug, Default)]
 pub struct StreamFlags {
     /// Indicates that the subnet expects responses only in the reverse stream.
     pub deprecated_responses_only: bool,

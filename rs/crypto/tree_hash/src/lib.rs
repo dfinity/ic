@@ -161,6 +161,12 @@ impl Hash for Label {
     }
 }
 
+impl ic_stable_hash::StableHash for Label {
+    fn stable_hash<H: Hasher>(&self, state: &mut H) {
+        ic_stable_hash::StableHash::stable_hash(self.as_bytes(), state);
+    }
+}
+
 impl Label {
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
@@ -241,6 +247,12 @@ where
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Digest(pub [u8; Sha256::DIGEST_LEN]);
 ic_crypto_internal_types::derive_serde!(Digest, Sha256::DIGEST_LEN);
+
+impl ic_stable_hash::StableHash for Digest {
+    fn stable_hash<H: Hasher>(&self, state: &mut H) {
+        ic_stable_hash::StableHash::stable_hash(&self.0, state);
+    }
+}
 
 impl Digest {
     #[inline]
@@ -1126,6 +1138,34 @@ pub enum Witness {
     /// A marker for data (leaf or a subtree) to be explicitly provided
     /// by the caller for verification or for re-computation of a digest.
     Known(),
+}
+
+impl ic_stable_hash::StableHash for Witness {
+    fn stable_hash<H: Hasher>(&self, state: &mut H) {
+        // 4 variants: discriminant as i64 (matching isize on x86_64).
+        match self {
+            Witness::Fork {
+                left_tree,
+                right_tree,
+            } => {
+                ic_stable_hash::StableHash::stable_hash(&0i64, state);
+                ic_stable_hash::StableHash::stable_hash(left_tree, state);
+                ic_stable_hash::StableHash::stable_hash(right_tree, state);
+            }
+            Witness::Node { label, sub_witness } => {
+                ic_stable_hash::StableHash::stable_hash(&1i64, state);
+                ic_stable_hash::StableHash::stable_hash(label, state);
+                ic_stable_hash::StableHash::stable_hash(sub_witness, state);
+            }
+            Witness::Pruned { digest } => {
+                ic_stable_hash::StableHash::stable_hash(&2i64, state);
+                ic_stable_hash::StableHash::stable_hash(digest, state);
+            }
+            Witness::Known() => {
+                ic_stable_hash::StableHash::stable_hash(&3i64, state);
+            }
+        }
+    }
 }
 
 impl Witness {

@@ -1,12 +1,13 @@
 //! Types for working with the registry.
 
 use crate::RegistryVersion;
+use ic_stable_hash_derive::StableHash;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 
 /// Errors returned by the registry data provider.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Serialize)]
 pub enum RegistryDataProviderError {
     /// Timeout occurred when attempting to fetch updates from the registry
     /// canister.
@@ -30,7 +31,7 @@ impl fmt::Display for RegistryDataProviderError {
 }
 
 /// Errors returned by the registry client.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Error, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, StableHash, Debug, Deserialize, Error, Serialize)]
 pub enum RegistryClientError {
     #[error("the requested version is not available locally: {version}")]
     VersionNotAvailable { version: RegistryVersion },

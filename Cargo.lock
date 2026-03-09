@@ -6501,6 +6501,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-heap-bytes",
  "ic-protobuf",
+ "ic-stable-hash",
  "ic-test-utilities-compare-dirs",
  "phantom_newtype",
  "proptest",
@@ -9027,6 +9028,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash-test-utils",
  "ic-protobuf",
+ "ic-stable-hash",
  "maplit",
  "proptest",
  "prost 0.13.4",
@@ -14253,6 +14255,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-stable-hash"
+version = "0.9.0"
+
+[[package]]
+name = "ic-stable-hash-derive"
+version = "0.9.0"
+dependencies = [
+ "ic-stable-hash",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.110",
+]
+
+[[package]]
 name = "ic-stable-structures"
 version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15149,6 +15165,8 @@ dependencies = [
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-protobuf",
+ "ic-stable-hash",
+ "ic-stable-hash-derive",
  "ic-types-test-utils",
  "ic-utils 0.9.0",
  "ic-validate-eq",
@@ -19268,6 +19286,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-heap-bytes",
+ "ic-stable-hash",
  "num-traits",
  "serde",
  "serde_json",
