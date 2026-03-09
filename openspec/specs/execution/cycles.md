@@ -190,3 +190,164 @@ The Cycles Minting Canister can mint new cycles.
 - **WHEN** the Cycles Minting Canister calls `ic0.mint_cycles`
 - **THEN** new cycles are created and added to its balance
 - **AND** only the CMC (on the NNS subnet) is allowed to mint cycles
+
+### Requirement: Signature Operation Fees
+
+Threshold signature operations (ECDSA, Schnorr, VetKd) charge per-signature fees, scaled by subnet size.
+
+#### Scenario: ECDSA signature fee
+- **WHEN** a canister requests an ECDSA signature
+- **THEN** the canister is charged the `ecdsa_signature_fee` scaled by subnet size
+- **AND** if the canister has a `Free` cost schedule, the fee is zero
+
+#### Scenario: Schnorr signature fee
+- **WHEN** a canister requests a Schnorr signature
+- **THEN** the canister is charged the `schnorr_signature_fee` scaled by subnet size
+- **AND** if the canister has a `Free` cost schedule, the fee is zero
+
+#### Scenario: VetKd fee
+- **WHEN** a canister requests a VetKd key derivation
+- **THEN** the canister is charged the `vetkd_fee` scaled by subnet size
+- **AND** if the canister has a `Free` cost schedule, the fee is zero
+
+### Requirement: Canister Log Fetching Fees
+
+Fetching canister logs incurs a fee based on response size.
+
+#### Scenario: Fetch canister logs fee
+- **WHEN** canister logs are fetched with a given response size
+- **THEN** the fee is `(fetch_canister_logs_base_fee + fetch_canister_logs_per_byte_fee * response_size) * subnet_size`
+- **AND** if the canister has a `Free` cost schedule, the fee is zero
+
+#### Scenario: Maximum fetch canister logs fee
+- **WHEN** the maximum fetch canister logs fee is computed (e.g., for prepayment)
+- **THEN** the fee is calculated using `MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES` as the response size
+- **AND** this represents the worst-case cost of a log fetch operation
+
+### Requirement: HTTP Request Fee Variants
+
+Multiple HTTP outcall fee formulas exist to support different pricing models.
+
+#### Scenario: HTTP request fee (v1)
+- **WHEN** a canister makes an HTTP outcall using the v1 fee model
+- **THEN** the fee is `(http_request_linear_baseline_fee + http_request_quadratic_baseline_fee * subnet_size + http_request_per_byte_fee * request_size + http_response_per_byte_fee * response_size) * subnet_size`
+- **AND** if no response size limit is specified, `MAX_CANISTER_HTTP_RESPONSE_BYTES` is used as the default
+- **AND** if the canister has a `Free` cost schedule, the fee is zero
+
+#### Scenario: HTTP request fee v2 (with roundtrip time)
+- **WHEN** a canister makes an HTTP outcall using the v2 fee model
+- **THEN** the fee accounts for request size, raw response size, transformed response size, HTTP roundtrip time, and transform instructions
+- **AND** the formula is `(1_000_000 + 50 * request_size + 140_000 * n + 800 * n^2 + 50 * raw_response_size + 300 * roundtrip_time_ms + transform_instructions / 13 + (10 * n + 650) * transformed_response_size) * n` where `n = subnet_size`
+- **AND** if the canister has a `Free` cost schedule, the fee is zero
+
+#### Scenario: HTTP request fee beta (payload-based)
+- **WHEN** a canister makes an HTTP outcall using the beta fee model
+- **THEN** the fee is `(4_000_000 + 50_000 * subnet_size + 50 * request_size + 50 * max_response_size + 750 * payload_size + 30 * subnet_size * payload_size) * subnet_size`
+- **AND** if no response size limit is specified, `MAX_CANISTER_HTTP_RESPONSE_BYTES` is used as the default
+- **AND** if the canister has a `Free` cost schedule, the fee is zero
+
+### Requirement: Cycles Burn
+
+Canisters can explicitly burn cycles, subject to the freezing threshold.
+
+#### Scenario: Burn cycles respecting freezing threshold
+- **WHEN** a canister calls `ic0.cycles_burn128` to burn a specified amount
+- **THEN** the actual amount burned is `min(amount_to_burn, balance - freezing_threshold)`
+- **AND** if the balance is at or below the freezing threshold, zero cycles are burned
+- **AND** the burned cycles are deducted from the canister's balance and reported as consumed
+
+### Requirement: Canister Deletion Leftover Cycles
+
+When a canister is deleted, any remaining cycles (main balance and reserved balance) are recorded as leftover.
+
+#### Scenario: Compute leftover cycles on deletion
+- **WHEN** a canister is being deleted
+- **THEN** the leftover cycles are computed as `balance + reserved_balance`
+- **AND** the leftover is converted to `NominalCycles` for accounting purposes
+- **AND** these cycles are effectively destroyed (not transferred)
+
+### Requirement: Paused Execution Debit
+
+When a canister has a paused execution, ingress induction charges are deferred to avoid interfering with the in-progress execution.
+
+#### Scenario: Ingress charge deferred during paused execution
+- **WHEN** a canister has a paused execution or paused install_code and receives an ingress message
+- **THEN** the ingress induction cost is checked against `debited_balance - freezing_threshold` (not the actual balance)
+- **AND** if sufficient cycles exist, the cost is added to `postponed_charge_to_ingress_induction_cycles_debit`
+- **AND** the debit is settled when the paused execution completes
+
+#### Scenario: Insufficient debited balance during paused execution
+- **WHEN** a canister has a paused execution and its debited balance minus the freezing threshold is less than the ingress cost
+- **THEN** the ingress induction fails with `CanisterOutOfCycles`
+- **AND** the error reports the debited balance as the available amount
+
+### Requirement: Reserved Balance Draining
+
+For resource-related charges (memory, compute allocation, uninstall), the reserved balance is drained before the main balance.
+
+#### Scenario: Resource charges drain reserved balance first
+- **WHEN** a canister is charged for `Memory`, `ComputeAllocation`, or `Uninstall` use cases
+- **THEN** the effective balance for threshold comparison is `balance + reserved_balance`
+- **AND** the charge is first deducted from the reserved balance
+- **AND** only after the reserved balance is exhausted is the main balance used
+
+#### Scenario: Non-resource charges use main balance only
+- **WHEN** a canister is charged for non-resource use cases (e.g., `IngressInduction`, `Instructions`, `RequestAndResponseTransmission`, `ECDSAOutcalls`, `SchnorrOutcalls`, `VetKd`, `HTTPOutcalls`, `CanisterCreation`, `BurnedCycles`, `DroppedMessages`)
+- **THEN** only the main balance is considered for the charge
+- **AND** the reserved balance is not used and not included in threshold comparison
+
+### Requirement: Mint Cycles Validation
+
+The `mint_cycles` operation is restricted to the Cycles Minting Canister (CMC).
+
+#### Scenario: Mint cycles from non-CMC canister
+- **WHEN** a canister other than the Cycles Minting Canister calls `ic0.mint_cycles128`
+- **THEN** the operation fails with `CyclesAccountManagerError::ContractViolation`
+- **AND** the error message states that `ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister`
+
+#### Scenario: Mint cycles overflow saturation
+- **WHEN** the CMC mints cycles that would cause the balance to overflow `u128`
+- **THEN** the balance saturates at the maximum value
+- **AND** the returned amount equals the actual increase (which may be less than the requested mint amount)
+
+### Requirement: Wasm32 vs Wasm64 Execution Fees
+
+Different per-instruction fee rates apply depending on whether the canister runs in Wasm32 or Wasm64 mode.
+
+#### Scenario: Wasm32 execution cost
+- **WHEN** a canister running in `Wasm32` execution mode executes instructions
+- **THEN** the per-instruction cost uses the `ten_update_instructions_execution_fee` rate
+- **AND** the cost is `instructions * ten_update_instructions_execution_fee / 10`
+
+#### Scenario: Wasm64 execution cost
+- **WHEN** a canister running in `Wasm64` execution mode executes instructions
+- **THEN** the per-instruction cost uses the `ten_update_instructions_execution_fee_wasm64` rate
+- **AND** this rate may differ from the Wasm32 rate to reflect the different resource usage of 64-bit execution
+
+#### Scenario: Execution cost includes message execution fee
+- **WHEN** execution cost is computed for any Wasm mode
+- **THEN** the total cost is `scale_cost(update_message_execution_fee + instruction_cost, subnet_size, cost_schedule)`
+- **AND** the `update_message_execution_fee` is a fixed per-message component added to the per-instruction cost
+
+### Requirement: Message Memory Tracking
+
+Memory usage and message memory usage are tracked and billed separately to properly account for canister resources.
+
+#### Scenario: Idle burn rate includes message memory
+- **WHEN** the idle cycles burn rate is calculated for a canister
+- **THEN** three components are summed: heap/stable memory cost, message memory cost, and compute allocation cost
+- **AND** heap/stable memory cost is based on `memory_allocation` (if set) or actual `memory_usage`
+- **AND** message memory cost is based on the total message memory (`message_memory_usage.total()`) at the same per-byte rate as heap memory
+- **AND** compute allocation cost is based on the canister's `compute_allocation`
+
+#### Scenario: Freezing threshold accounts for message memory
+- **WHEN** the freezing threshold is evaluated for a canister
+- **THEN** the threshold is `idle_cycles_burned_rate * freeze_threshold_seconds / seconds_per_day`
+- **AND** the idle burn rate used in this calculation includes message memory costs
+- **AND** this ensures that canisters with large message queues have a proportionally higher freezing threshold
+
+#### Scenario: Resource allocation charging covers message memory
+- **WHEN** a canister is periodically charged for resource allocation and usage
+- **THEN** it is charged separately for each resource: memory, message memory, and compute allocation
+- **AND** each resource charge uses the `consume_with_threshold` method with a zero threshold (allowing charges down to zero balance)
+- **AND** resource charges drain the reserved balance before the main balance

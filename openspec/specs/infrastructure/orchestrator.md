@@ -280,3 +280,55 @@ The orchestrator exposes comprehensive metrics for monitoring its health and ope
 - **WHEN** the orchestrator starts or detects important state changes
 - **THEN** it sends notifications to the host via `UtilityCommand::notify_host`
 - **AND** periodic status messages include node ID, replica version, IPv4, and IPv6 addresses
+
+### Requirement: Upgrade Precondition - Registry Replicator Sync
+Before executing an upgrade on non-NNS subnets, the orchestrator must verify that the local registry replicator has caught up with all registry versions certified before the orchestrator's initialization. This ensures the node has an accurate view of recalled replica versions before proceeding.
+
+#### Scenario: Registry replicator has not caught up
+- **WHEN** an upgrade is pending for a node on a non-NNS subnet
+- **AND** `registry_replicator.has_replicated_all_versions_certified_before_init()` returns `false`
+- **AND** fewer than 30 minutes have elapsed since orchestrator initialization (`init_time.elapsed() < TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR`)
+- **THEN** the upgrade is delayed and an `UpgradeError` is returned
+- **AND** the `orchestrator_replica_version_upgrade_prevented_total` metric is incremented with the label `replicator_not_caught_up`
+
+#### Scenario: Registry replicator has caught up
+- **WHEN** an upgrade is pending for a node on a non-NNS subnet
+- **AND** `registry_replicator.has_replicated_all_versions_certified_before_init()` returns `true`
+- **THEN** the replicator sync check passes and the upgrade proceeds to the recalled version check
+
+#### Scenario: Registry replicator timeout after 30 minutes
+- **WHEN** an upgrade is pending for a node on a non-NNS subnet
+- **AND** `registry_replicator.has_replicated_all_versions_certified_before_init()` returns `false`
+- **AND** 30 minutes or more have elapsed since orchestrator initialization (`init_time.elapsed() >= TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR`, where `TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR` is `Duration::from_secs(1800)`)
+- **THEN** the replicator sync check is skipped as a safeguard against staying stuck indefinitely (e.g., if the NNS subnet is unreachable)
+- **AND** the upgrade proceeds to the recalled version check
+
+### Requirement: NNS Subnet Upgrade Exemption
+Nodes on the NNS (root) subnet are exempt from all upgrade precondition checks. Neither the registry replicator sync check nor the recalled version check is applied. This ensures that NNS subnet upgrades always proceed unconditionally.
+
+#### Scenario: Upgrade on NNS subnet skips all precondition checks
+- **WHEN** an upgrade is pending for a node on the NNS subnet (i.e., `subnet_id == registry.get_root_subnet_id(latest_registry_version)`)
+- **THEN** `ensure_upgrade_should_be_executed` returns `Ok(())` immediately
+- **AND** the registry replicator sync check is not evaluated
+- **AND** the recalled version check is not evaluated
+- **AND** the upgrade proceeds unconditionally
+
+### Requirement: Upgrade Check Timeout and Failure Metrics
+The `check_for_upgrade()` call is wrapped in a 15-minute timeout (`UPGRADE_TIMEOUT = Duration::from_secs(60 * 15)`). Both timeouts and errors increment the `failed_consecutive_upgrade_checks` metric. A successful check resets the metric to zero.
+
+#### Scenario: Upgrade check succeeds
+- **WHEN** `check_for_upgrade()` completes successfully within 15 minutes
+- **THEN** `failed_consecutive_upgrade_checks` is reset to zero via `reset()`
+- **AND** the returned `OrchestratorControlFlow` is processed normally
+
+#### Scenario: Upgrade check returns an error
+- **WHEN** `check_for_upgrade()` completes within 15 minutes but returns an `Err`
+- **THEN** a warning is logged: "Check for upgrade failed: {err}"
+- **AND** `failed_consecutive_upgrade_checks` is incremented by one via `inc()`
+
+#### Scenario: Upgrade check times out at 15 minutes
+- **WHEN** `check_for_upgrade()` does not complete within 15 minutes
+- **THEN** the call is cancelled via `tokio::time::timeout`
+- **AND** a warning is logged: "Check for upgrade timed out: {err}"
+- **AND** `failed_consecutive_upgrade_checks` is incremented by one via `inc()`
+- **AND** the check is retried after the next `CHECK_INTERVAL_SECS` sleep

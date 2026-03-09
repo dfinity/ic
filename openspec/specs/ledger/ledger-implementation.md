@@ -845,6 +845,74 @@ The new-generation ICRC-1 index canister syncs blocks from an ICRC-1 ledger (usi
 - **WHEN** the index-ng canister is compiled with the `get_blocks_disabled` feature
 - **THEN** the `get_blocks` endpoint is not exposed
 
+#### Scenario: Adaptive timer backoff on blocks found
+- **WHEN** the index builds and receives blocks from the ledger (i.e., `num_indexed > 0`)
+- **THEN** the polling wait time is halved (`last_wait_time / 2`)
+- **AND** the result is clamped to the configured minimum (`min_retrieve_blocks_from_ledger_interval`)
+- **AND** the next `build_index` timer is scheduled with the new wait time
+
+#### Scenario: Adaptive timer backoff on no blocks found
+- **WHEN** the index builds and receives zero blocks from the ledger (i.e., `num_indexed == 0`)
+- **THEN** the polling wait time is doubled (`last_wait_time * 2`, using saturating multiplication)
+- **AND** the result is clamped to the configured maximum (`max_retrieve_blocks_from_ledger_interval`)
+- **AND** the next `build_index` timer is scheduled with the new wait time
+
+#### Scenario: Default adaptive timer bounds
+- **GIVEN** no explicit timer interval configuration is provided at init or upgrade
+- **THEN** the minimum retrieve interval defaults to 1 second (`MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL = 1s`)
+- **AND** the maximum retrieve interval defaults to 10 seconds (`MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL = 10s`)
+- **AND** `last_wait_time` is initialized to the effective minimum interval
+
+#### Scenario: Timer configuration with new min/max parameters
+- **WHEN** the index-ng canister is initialized or upgraded with `min_retrieve_blocks_from_ledger_interval_seconds` and/or `max_retrieve_blocks_from_ledger_interval_seconds`
+- **THEN** those values override the defaults for the adaptive timer bounds
+- **AND** the effective minimum must be at least 1 second (traps otherwise)
+- **AND** the effective minimum must not exceed the effective maximum (traps otherwise)
+
+#### Scenario: Timer configuration with deprecated legacy parameter
+- **WHEN** the index-ng canister is initialized or upgraded with `retrieve_blocks_from_ledger_interval_seconds` set (and neither `min_retrieve_blocks_from_ledger_interval_seconds` nor `max_retrieve_blocks_from_ledger_interval_seconds` is set)
+- **THEN** both the minimum and maximum intervals are set to the value of the deprecated parameter (disabling adaptive backoff; fixed interval)
+- **AND** the same validation rules apply (minimum >= 1 second, min <= max)
+
+#### Scenario: Timer configuration rejects mixing legacy and new parameters
+- **WHEN** the index-ng canister is initialized or upgraded with `retrieve_blocks_from_ledger_interval_seconds` set **and** either `min_retrieve_blocks_from_ledger_interval_seconds` or `max_retrieve_blocks_from_ledger_interval_seconds` is also set
+- **THEN** the canister traps with an error indicating the legacy field cannot be combined with the new fields
+
+#### Scenario: Timer state is clamped on upgrade
+- **WHEN** the index-ng canister is upgraded and the persisted `last_wait_time` falls outside the new `[min, max]` interval range
+- **THEN** the `last_wait_time` is clamped to fit within the new bounds before the next timer is scheduled
+
+#### Scenario: ICRC-107 fee collector tracking via FeeCollector blocks
+- **WHEN** the index processes a block whose operation is `Operation::FeeCollector { fee_collector, .. }`
+- **THEN** it stores the fee collector account in `state.fee_collector_107` (as `Some(fee_collector)`)
+- **AND** subsequent blocks that credit fees use this `fee_collector_107` value as the fee recipient
+- **AND** `fee_collector_107` takes precedence over the legacy per-block `fee_collector` / `fee_collector_block_index` fields when determining where to credit fees
+
+#### Scenario: Fee collector resolution priority
+- **WHEN** `get_fee_collector()` is called to determine the current fee collector
+- **THEN** if `fee_collector_107` has been set (via an ICRC-107 FeeCollector block), its value is used (which may be `Some(account)` or `None` to indicate no fee collector)
+- **AND** if `fee_collector_107` has never been set, the legacy method is used: reading the `fee_collector` field from the last indexed block, or following its `fee_collector_block_index` pointer
+
+#### Scenario: GetBlocksMethod detection via ICRC-3 standard support
+- **WHEN** the index-ng canister needs to fetch blocks from the ledger and has not yet determined the method
+- **THEN** it calls `icrc1_supported_standards` on the ledger canister
+- **AND** if the ledger declares support for "ICRC-3", the index uses `ICRC3GetBlocks` (calling `icrc3_get_blocks`)
+- **AND** if the ledger does not declare "ICRC-3" support (or the call fails), the index falls back to `GetBlocks` (calling `get_blocks`)
+
+#### Scenario: GetBlocksMethod is cached
+- **WHEN** the `GetBlocksMethod` has been determined for a ledger
+- **THEN** it is cached in the canister's thread-local state and reused for subsequent `build_index` calls without re-querying the ledger's supported standards
+
+#### Scenario: Non-retriable sync error stops the timer
+- **WHEN** a `build_index` cycle encounters a non-retriable error (e.g., block decoding failure)
+- **THEN** the indexing timer is stopped and no further `build_index` calls are scheduled
+- **AND** the error is logged
+
+#### Scenario: Retriable sync error preserves the timer
+- **WHEN** a `build_index` cycle encounters a retriable error (e.g., network failure fetching blocks)
+- **THEN** the next `build_index` is scheduled using the current `last_wait_time` (without adjusting it)
+- **AND** the error is logged
+
 ---
 
 ### Requirement: Ledger Suite Orchestrator (`ledger-suite-orchestrator`)
