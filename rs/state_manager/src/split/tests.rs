@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     CheckpointMetrics, ManifestMetrics, NUMBER_OF_CHECKPOINT_THREADS, StateManagerMetrics,
     checkpoint::make_unvalidated_checkpoint,
-    flush_page_maps,
+    flush_checkpoint_ops_and_page_maps,
     manifest::RehashManifest,
     state_sync::types::{FileInfo, Manifest},
     tip::{flush_tip_channel, spawn_tip_thread},
@@ -411,7 +411,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         )
         .unwrap();
 
-    flush_page_maps(&mut state, HEIGHT, &tip_channel);
+    flush_checkpoint_ops_and_page_maps(&mut state, HEIGHT, &tip_channel);
 
     let mut thread_pool = thread_pool();
     let (state, cp_layout) = make_unvalidated_checkpoint(

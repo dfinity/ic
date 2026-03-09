@@ -11,7 +11,7 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
-    checkpoint::{PageMapType, flush_page_maps},
+    checkpoint::{PageMapType, flush_checkpoint_ops_and_page_maps},
     manifest::compute_bundled_manifest,
     state_sync::{
         chunkable::cache::StateSyncCache,
@@ -3342,7 +3342,7 @@ impl StateManager for StateManagerImpl {
                     .saturating_sub(height.get())
                     == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
             {
-                flush_page_maps(&mut state, height, &self.tip_channel);
+                flush_checkpoint_ops_and_page_maps(&mut state, height, &self.tip_channel);
             }
         }
 

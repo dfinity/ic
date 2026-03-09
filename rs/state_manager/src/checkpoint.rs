@@ -64,7 +64,7 @@ pub(crate) fn make_unvalidated_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["flush_page_map_deltas_preprocessing"])
             .start_timer();
-        flush_page_maps(&mut state, height, tip_channel);
+        flush_checkpoint_ops_and_page_maps(&mut state, height, tip_channel);
     }
     {
         let _timer = metrics
@@ -340,7 +340,7 @@ fn strip_page_map_deltas(
 
 /// Flushes to disk all the canister heap deltas accumulated in memory
 /// during execution from the last flush.
-pub(crate) fn flush_page_maps(
+pub(crate) fn flush_checkpoint_ops_and_page_maps(
     tip_state: &mut ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
@@ -414,7 +414,7 @@ pub(crate) fn flush_page_maps(
     }
 
     // Take all snapshot operations that happened since the last flush and clear the list stored in `tip_state`.
-    // This way each operation is executed exactly once, independent of how many times `flush_page_maps` is called.
+    // This way each operation is executed exactly once, independent of how many times `flush_checkpoint_ops_and_page_maps` is called.
     let unflushed_checkpoint_ops = tip_state.metadata.unflushed_checkpoint_ops.take();
 
     tip_channel
