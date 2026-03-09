@@ -7,8 +7,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use ic_canister_client::Sender;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::DeletedSubnetListRecord;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
@@ -19,13 +18,12 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
-    SubnetSnapshot, install_registry_canister_with_testnet_topology,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    install_registry_canister_with_testnet_topology,
 };
 use ic_system_test_driver::nns::get_subnet_list_from_registry;
-use ic_system_test_driver::nns::{self, get_software_version_from_snapshot};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url};
+use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
 use ic_types::{Height, RegistryVersion};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -96,7 +94,7 @@ pub fn test(env: TestEnv) {
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::Application)
         .collect::<Vec<_>>();
-    let app_subnet = app_subnet.first().unwrap();
+    let _app_subnet = app_subnet.first().unwrap();
     let engine_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::CloudEngine)
@@ -123,27 +121,28 @@ pub fn test(env: TestEnv) {
     );
 
     block_on(async move {
+        let nns_agent = assert_create_agent(nns_endpoint.get_public_url().as_str()).await;
         let original_subnets = get_subnet_list_from_registry(&client).await;
         info!(log, "original subnets: {:?}", original_subnets);
 
-        let nns = runtime_from_url(
-            nns_endpoint.get_public_url(),
-            nns_endpoint.effective_canister_id(),
-        );
-        let registry_canister = nns::get_registry_canister(&nns);
+        // install a universal canister with the governance canister's canister ID
+        let governance_canister =
+            UniversalCanister::new(&nns_agent, nns_endpoint.effective_canister_id()).await;
 
         let arg = DeleteSubnetPayload {
             subnet_id: engine_subnet.subnet_id.get().into(),
         };
-        let bytes = registry_canister
-            .update("delete_subnet")
-            .bytes_with_sender(
+
+        let result_bytes = governance_canister
+            .forward_to(
+                &REGISTRY_CANISTER_ID.get().0,
+                "delete_subnet",
                 Encode!(&arg).unwrap(),
-                &Sender::PrincipalId(GOVERNANCE_CANISTER_ID.get()),
             )
             .await
             .unwrap();
-        Decode!(&bytes, Result<(), String>).unwrap().unwrap();
+
+        Decode!(&result_bytes, Result<(), String>).unwrap().unwrap();
 
         let new_topology_snapshot = topology_snapshot
             .block_for_min_registry_version(RegistryVersion::new(2))
@@ -161,10 +160,12 @@ pub fn test(env: TestEnv) {
     });
 }
 
+#[allow(dead_code)]
 #[derive(CandidType)]
 struct GetSubnetForCanisterArgs {
     principal: Option<Principal>,
 }
+#[allow(dead_code)]
 #[derive(CandidType, Deserialize)]
 struct GetSubnetForCanisterResponse {
     subnet_id: Option<Principal>,
