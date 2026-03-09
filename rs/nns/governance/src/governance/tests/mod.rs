@@ -1176,7 +1176,9 @@ fn test_pre_and_post_upgrade_first_time() {
         },
     )
     .build();
-    governance.add_neuron(1, neuron).unwrap();
+    governance
+        .add_neuron_without_reservation(1, neuron)
+        .unwrap();
 
     // Simulate seeding the randomness in a running governance canister.
     governance.randomness.seed_rng([12; 32]);
@@ -1490,7 +1492,9 @@ fn test_update_neuron_errors_out_expectedly() {
     );
     let neuron = new_neuron(vec![1; 32]);
     let neuron_subaccount = neuron.subaccount();
-    governance.add_neuron(1, neuron).unwrap();
+    governance
+        .add_neuron_without_reservation(1, neuron)
+        .unwrap();
 
     assert_eq!(
         governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default(), false)),
@@ -1540,7 +1544,9 @@ fn test_compute_ballots_for_manage_neuron_proposal() {
         Box::new(MockRandomness::new()),
     );
 
-    governance.add_neuron(10, neuron_10).unwrap();
+    governance
+        .add_neuron_without_reservation(10, neuron_10)
+        .unwrap();
 
     let managed_id = manage_neuron::NeuronIdOrSubaccount::NeuronId(NeuronId { id: 10 });
     let ballots = governance
@@ -1586,13 +1592,13 @@ fn test_compute_ballots_for_standard_proposal() {
     );
 
     governance
-        .add_neuron(10, new_neuron_builder(10).build())
+        .add_neuron_without_reservation(10, new_neuron_builder(10).build())
         .unwrap();
     governance
-        .add_neuron(200, new_neuron_builder(200).build())
+        .add_neuron_without_reservation(200, new_neuron_builder(200).build())
         .unwrap();
     governance
-        .add_neuron(3_000, new_neuron_builder(3_000).build())
+        .add_neuron_without_reservation(3_000, new_neuron_builder(3_000).build())
         .unwrap();
 
     let deciding_vote = |g: &Governance, id, now| {

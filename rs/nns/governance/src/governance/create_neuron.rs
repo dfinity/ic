@@ -88,6 +88,7 @@ impl Governance {
         // mutation is not critical and can persist even if later steps fail.
         let (neuron_limit_reservation, neuron_slot_reservation, neuron_subaccount, neuron_id) =
             governance.with_borrow_mut(|governance| {
+                governance.check_heap_can_grow()?;
                 let neuron_limit_reservation = governance.rate_limiter.try_reserve(
                     governance.env.now_system_time(),
                     NEURON_RATE_LIMITER_KEY.to_string(),

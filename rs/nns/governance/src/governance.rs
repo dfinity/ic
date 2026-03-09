@@ -1467,16 +1467,33 @@ impl Governance {
         })?
     }
 
-    /// Add a neuron to the list of neurons.
-    ///
-    /// Fails under the following conditions:
-    /// - the maximum number of neurons has been reached, or
-    /// - the given `neuron_id` already exists in `self.neuron_store.neurons`, or
-    /// - the neuron's controller `PrincipalId` is not self-authenticating.
-    pub(crate) fn add_neuron(
+    /// Add a neuron to the store without a pre-acquired slot reservation. Checks the neuron
+    /// limit before adding.
+    pub(crate) fn add_neuron_without_reservation(
         &mut self,
         neuron_id: u64,
         neuron: Neuron,
+    ) -> Result<(), GovernanceError> {
+        self.add_neuron(neuron_id, neuron, None)
+    }
+
+    /// Add a neuron to the store using a pre-acquired slot reservation. The reservation
+    /// guarantees that the neuron limit was already checked, so the limit check is skipped.
+    /// The reservation is consumed (dropped) by this call.
+    pub(crate) fn add_neuron_with_reservation(
+        &mut self,
+        neuron_id: u64,
+        neuron: Neuron,
+        reservation: NeuronSlotReservation,
+    ) -> Result<(), GovernanceError> {
+        self.add_neuron(neuron_id, neuron, Some(reservation))
+    }
+
+    fn add_neuron(
+        &mut self,
+        neuron_id: u64,
+        neuron: Neuron,
+        _reservation: Option<NeuronSlotReservation>,
     ) -> Result<(), GovernanceError> {
         if neuron_id == 0 {
             return Err(GovernanceError::new_with_message(
@@ -1484,29 +1501,32 @@ impl Governance {
                 "Cannot add neuron with ID zero".to_string(),
             ));
         }
-        {
-            let neuron_real_id = neuron.id().id;
-            if neuron_real_id != neuron_id {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    format!(
-                        "The neuron's ID {neuron_real_id} does not match the provided ID {neuron_id}"
-                    ),
-                ));
-            }
+        let neuron_real_id = neuron.id().id;
+        if neuron_real_id != neuron_id {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "The neuron's ID {neuron_real_id} does not match the provided ID {neuron_id}"
+                ),
+            ));
         }
 
         // New neurons are not allowed when the heap is too large.
         self.check_heap_can_grow()?;
 
-        let effective_count =
-            self.neuron_store.len() + self.neuron_store.neuron_slot_reservation_count();
-        if effective_count + 1 > MAX_NUMBER_OF_NEURONS {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot add neuron. Max number of neurons reached.",
-            ));
+        // Skip the neuron limit check if a reservation was provided — the limit was already
+        // checked at reservation time.
+        if _reservation.is_none() {
+            let effective_count =
+                self.neuron_store.len() + self.neuron_store.neuron_slot_reservation_count();
+            if effective_count + 1 > MAX_NUMBER_OF_NEURONS {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot add neuron. Max number of neurons reached.",
+                ));
+            }
         }
+
         if self.neuron_store.contains(NeuronId { id: neuron_id }) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
@@ -1533,45 +1553,6 @@ impl Governance {
         }
         self.neuron_store.remove_neuron(&neuron_id);
 
-        Ok(())
-    }
-
-    /// Add a neuron using a pre-acquired slot reservation. The reservation guarantees that the
-    /// neuron limit was checked at reservation time, so the limit check is skipped here. The
-    /// reservation is consumed (dropped at the end of this function), which decrements the
-    /// reservation counter — balanced by the neuron now existing in the store.
-    pub(crate) fn add_neuron_with_reservation(
-        &mut self,
-        neuron_id: u64,
-        neuron: Neuron,
-        _reservation: NeuronSlotReservation,
-    ) -> Result<(), GovernanceError> {
-        if neuron_id == 0 {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot add neuron with ID zero".to_string(),
-            ));
-        }
-        let neuron_real_id = neuron.id().id;
-        if neuron_real_id != neuron_id {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "The neuron's ID {neuron_real_id} does not match the provided ID {neuron_id}"
-                ),
-            ));
-        }
-
-        self.check_heap_can_grow()?;
-
-        if self.neuron_store.contains(NeuronId { id: neuron_id }) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!("Cannot add neuron. There is already a neuron with id: {neuron_id:?}"),
-            ));
-        }
-
-        self.neuron_store.add_neuron(neuron)?;
         Ok(())
     }
 
@@ -2255,7 +2236,7 @@ impl Governance {
         // acquiring the lock. Indeed, in case there is already a pending
         // command, we return without state rollback. If we had already created
         // the embryo, it would not be garbage collected.
-        self.add_neuron(child_nid.id, child_neuron.clone())?;
+        self.add_neuron_without_reservation(child_nid.id, child_neuron.clone())?;
 
         // Do the transfer for the parent first, to avoid double spending.
         self.neuron_store.with_neuron_mut(id, |parent_neuron| {
@@ -2697,8 +2678,8 @@ impl Governance {
         .with_maturity_e8s_equivalent(maturity_to_spawn)
         .build();
 
-        // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
-        self.add_neuron(child_nid.id, child_neuron)?;
+        // `add_neuron_without_reservation` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
+        self.add_neuron_without_reservation(child_nid.id, child_neuron)?;
 
         // Get the parent neuron again, but this time mutable references.
         self.with_neuron_mut(id, |parent_neuron| {
@@ -3006,7 +2987,7 @@ impl Governance {
         .with_kyc_verified(parent_neuron.kyc_verified)
         .build();
 
-        self.add_neuron(child_nid.id, child_neuron.clone())?;
+        self.add_neuron_without_reservation(child_nid.id, child_neuron.clone())?;
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
         let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
@@ -3844,7 +3825,7 @@ impl Governance {
                 .with_kyc_verified(true)
                 .build();
 
-                self.add_neuron(nid.id, neuron)
+                self.add_neuron_without_reservation(nid.id, neuron)
             }
             Some(RewardMode::RewardToAccount(reward_to_account)) => {
                 // We are not creating a neuron, just transferring funds.
@@ -5911,6 +5892,8 @@ impl Governance {
         controller: PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
+        self.check_heap_can_grow()?;
+
         let neuron_limit_reservation = self.rate_limiter.try_reserve(
             self.env.now_system_time(),
             NEURON_RATE_LIMITER_KEY.to_string(),
