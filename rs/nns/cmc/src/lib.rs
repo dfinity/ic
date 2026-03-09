@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-pub use ic_management_canister_types_private::CanisterSettingsArgs;
+pub use ic_management_canister_types::CanisterSettings as CanisterSettingsArgs;
 
 use candid::{CandidType, Nat};
 use ic_cdk::api::call::{CallResult, RejectionCode};

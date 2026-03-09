@@ -16,10 +16,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
-use ic_management_canister_types_private::{
-    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    CreateCanisterArgs, IC_00, Method,
-};
+use ic_management_canister_types::{CanisterIdRecord, CanisterSettings, CreateCanisterArgs};
 use ic_nervous_system_common::{
     NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS, serve_metrics,
 };
@@ -2115,9 +2112,11 @@ async fn deposit_cycles(
     }
 
     let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
-        IC_00.get().0,
-        &Method::DepositCycles.to_string(),
-        (CanisterIdRecord::from(canister_id),),
+        candid::Principal::management_canister(),
+        "deposit_cycles",
+        (CanisterIdRecord {
+            canister_id: canister_id.get().0,
+        },),
         u128::from(cycles),
     )
     .await;
@@ -2246,20 +2245,19 @@ async fn do_create_canister(
     let canister_settings = settings
         .map(|mut settings| {
             if settings.controllers.is_none() {
-                settings.controllers = Some(BoundedVec::new(vec![controller_id]));
+                settings.controllers = Some(vec![controller_id.0]);
             }
             settings
         })
-        .unwrap_or_else(|| {
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![controller_id])
-                .build()
+        .unwrap_or_else(|| CanisterSettings {
+            controllers: Some(vec![controller_id.0]),
+            ..Default::default()
         });
 
     for subnet_id in subnets {
         let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment128(
             subnet_id.get().0,
-            &Method::CreateCanister.to_string(),
+            "create_canister",
             (CreateCanisterArgs {
                 settings: Some(canister_settings.clone()),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
@@ -2269,7 +2267,9 @@ async fn do_create_canister(
         .await;
 
         let canister_id = match result {
-            Ok(canister_id) => canister_id.0.get_canister_id(),
+            Ok(record) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from(record.0.canister_id))
+            }
             Err((code, msg)) => {
                 let err = format!(
                     "Creating canister in subnet {} failed with code {}: {}",
@@ -2334,7 +2334,7 @@ fn get_subnets_for(controller_id: &PrincipalId) -> Vec<SubnetId> {
 
 async fn get_rng() -> Result<StdRng, String> {
     let res: CallResult<(Vec<u8>,)> =
-        ic_cdk::call(IC_00.get().0, &Method::RawRand.to_string(), ()).await;
+        ic_cdk::call(candid::Principal::management_canister(), "raw_rand", ()).await;
 
     let bytes = res
         .map_err(|(code, msg)| {

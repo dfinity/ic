@@ -19,7 +19,6 @@ type CanisterSettings = record {
   wasm_memory_limit : opt nat;
   wasm_memory_threshold : opt nat;
   environment_variables : opt vec environment_variable;
-  log_memory_limit : opt nat;
 };
 type Subaccount = opt blob;
 type Memo = opt blob;
