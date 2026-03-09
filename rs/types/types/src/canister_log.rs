@@ -143,7 +143,7 @@ pub struct CanisterLog {
 impl CanisterLog {
     /// Creates a new log with the given next index, records and byte capacity.
     fn new_inner(next_idx: u64, records: Vec<CanisterLogRecord>, byte_capacity: usize) -> Self {
-        println!("ABC new_inner {}", byte_capacity);
+        //println!("ABC new_inner {}", byte_capacity);
         Self {
             next_idx,
             records: Records::from(records, byte_capacity),
@@ -156,19 +156,19 @@ impl CanisterLog {
     /// so it should be limited in size.
     /// TODO(DSM-11): remove this after migration is done.
     pub fn new_aggregate(next_idx: u64, records: Vec<CanisterLogRecord>) -> Self {
-        println!("ABC new_aggregate");
+        //println!("ABC new_aggregate");
         Self::new_inner(next_idx, records, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT)
     }
 
     /// Creates a default empty aggregate canister log.
     pub fn default_aggregate() -> Self {
-        println!("ABC default_aggregate");
+        //println!("ABC default_aggregate");
         Self::new_aggregate(0, vec![])
     }
 
     /// Creates a default empty delta canister log.
     pub fn default_delta() -> Self {
-        println!("ABC default_delta");
+        //println!("ABC default_delta");
         Self::new_inner(0, vec![], MAX_DELTA_LOG_MEMORY_LIMIT)
     }
 
