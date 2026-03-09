@@ -8,8 +8,11 @@ use ic_config::flag_status::FlagStatus;
 use ic_logger::{ReplicaLogger, error};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::{CanisterPriority, CanisterState, ReplicatedState};
-use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
+use ic_types::{
+    AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode, NumInstructions,
+};
 use more_asserts::debug_assert_gt;
+use num_traits::SaturatingSub;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -102,10 +105,11 @@ impl PartialOrd for CanisterRoundState {
 struct Config {
     /// Total number of scheduler cores.
     scheduler_cores: usize,
-    /// Heap delta threshold above which a canister is suspended for the round.
+    /// Heap delta debit threshold above which a canister is suspended for the round.
     heap_delta_rate_limit: NumBytes,
-    /// Whether heap delta rate limiting is enabled.
-    rate_limiting_of_heap_delta: FlagStatus,
+    /// Install code instruction debit threshold above which a canister is suspended
+    /// for the round.
+    install_code_rate_limit: NumInstructions,
 }
 
 /// Result of one iteration: the schedule for this iteration only.
@@ -198,11 +202,23 @@ impl RoundSchedule {
         scheduler_cores: usize,
         heap_delta_rate_limit: NumBytes,
         rate_limiting_of_heap_delta: FlagStatus,
+        install_code_rate_limit: NumInstructions,
+        rate_limiting_of_instructions: FlagStatus,
     ) -> Self {
         let config = Config {
             scheduler_cores,
-            heap_delta_rate_limit,
-            rate_limiting_of_heap_delta,
+            heap_delta_rate_limit: if rate_limiting_of_heap_delta == FlagStatus::Enabled {
+                heap_delta_rate_limit
+            } else {
+                // Disabled is the same as no rate limit.
+                NumBytes::new(u64::MAX)
+            },
+            install_code_rate_limit: if rate_limiting_of_instructions == FlagStatus::Enabled {
+                install_code_rate_limit
+            } else {
+                // Disabled is the same as no rate limit.
+                NumInstructions::new(u64::MAX)
+            },
         };
         Self {
             config,
@@ -236,10 +252,7 @@ impl RoundSchedule {
         let mut schedule: Vec<CanisterRoundState> = canister_states
             .iter()
             .filter_map(|(canister_id, canister)| {
-                if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
-                    && canister.scheduler_state.heap_delta_debit
-                        >= self.config.heap_delta_rate_limit
-                {
+                if canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit {
                     // Record and filter out rate limited canisters.
                     self.rate_limited_canisters.insert(*canister_id);
                     self.scheduled_canisters.insert(*canister_id);
@@ -457,9 +470,12 @@ impl RoundSchedule {
             subnet_schedule.remove(&canister_id);
         }
 
+        self.grant_heap_delta_and_install_code_credits(state, metrics);
+
         // Grant all canisters in the subnet schedule their compute allocation; and
         // calculate the subnet-wide free allocation (as the deviation from zero of the
         // sum of all canisters' accumulated priority).
+        let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         for (canister_id, canister_priority) in subnet_schedule.iter_mut() {
             let canister = canister_states.get_mut(canister_id).unwrap();
             canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
@@ -541,6 +557,43 @@ impl RoundSchedule {
         self.observe_round_metrics(state, current_round, metrics);
 
         // TODO(DSM-103): `debug_assert` that all active canisters are in the subnet schedule.
+    }
+
+    fn grant_heap_delta_and_install_code_credits(
+        &self,
+        state: &mut ReplicatedState,
+        metrics: &SchedulerMetrics,
+    ) {
+        let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
+        for (canister_id, _) in subnet_schedule.iter() {
+            let Some(canister) = canister_states.get_mut(canister_id) else {
+                continue;
+            };
+
+            let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
+            metrics
+                .canister_heap_delta_debits
+                .observe(heap_delta_debit as f64);
+            if heap_delta_debit > 0 {
+                let canister = Arc::make_mut(canister);
+                canister.scheduler_state.heap_delta_debit = canister
+                    .scheduler_state
+                    .heap_delta_debit
+                    .saturating_sub(&self.config.heap_delta_rate_limit);
+            }
+
+            let install_code_debit = canister.scheduler_state.install_code_debit.get();
+            metrics
+                .canister_install_code_debits
+                .observe(install_code_debit as f64);
+            if install_code_debit > 0 {
+                let canister = Arc::make_mut(canister);
+                canister.scheduler_state.install_code_debit = canister
+                    .scheduler_state
+                    .install_code_debit
+                    .saturating_sub(&self.config.install_code_rate_limit);
+            }
+        }
     }
 
     /// Exports round-level metrics derived from this schedule's accumulators.

@@ -212,6 +212,20 @@ impl RoundScheduleFixture {
         self.canister_state(&canister_id)
             .scheduler_state
             .heap_delta_debit = bytes;
+        if bytes.get() > 0 {
+            self.state.canister_priority_mut(canister_id);
+        }
+    }
+
+    /// Sets the install code instruction debit for an already-added canister (for
+    /// rate-limit tests). The canister must exist.
+    fn set_install_code_debit(&mut self, canister_id: CanisterId, instructions: NumInstructions) {
+        self.canister_state(&canister_id)
+            .scheduler_state
+            .install_code_debit = instructions;
+        if instructions.get() > 0 {
+            self.state.canister_priority_mut(canister_id);
+        }
     }
 
     fn scheduled_canisters(&self) -> &BTreeSet<CanisterId> {
@@ -266,6 +280,8 @@ struct RoundScheduleBuilder {
     cores: usize,
     heap_delta_rate_limit: NumBytes,
     rate_limiting_of_heap_delta: FlagStatus,
+    install_code_rate_limit: NumInstructions,
+    rate_limiting_of_instructions: FlagStatus,
 }
 
 #[allow(dead_code)]
@@ -275,6 +291,8 @@ impl RoundScheduleBuilder {
             cores: 4,
             heap_delta_rate_limit: NumBytes::new(u64::MAX / 2),
             rate_limiting_of_heap_delta: FlagStatus::Enabled,
+            install_code_rate_limit: NumInstructions::new(u64::MAX / 2),
+            rate_limiting_of_instructions: FlagStatus::Enabled,
         }
     }
 
@@ -298,6 +316,8 @@ impl RoundScheduleBuilder {
             self.cores,
             self.heap_delta_rate_limit,
             self.rate_limiting_of_heap_delta,
+            self.install_code_rate_limit,
+            self.rate_limiting_of_instructions,
         )
     }
 }
@@ -850,5 +870,54 @@ fn finish_round_apply_priority_credit() {
         priority.long_execution_mode,
         LongExecutionMode::Opportunistic,
         "long_execution_mode should be reset to default"
+    );
+}
+
+#[test]
+fn finish_round_grant_heap_delta_and_install_code_credits() {
+    let mut fixture = RoundScheduleFixture::new();
+    let canister_a = fixture.canister_with_input();
+    fixture.set_heap_delta_debit(canister_a, NumBytes::new(100));
+    let canister_b = fixture.canister();
+    fixture.set_install_code_debit(canister_b, NumInstructions::new(200));
+    fixture.start_iteration(true);
+
+    fixture.finish_round(ExecutionRound::new(1));
+
+    // `canister_a` is still in the subnet schedule (it has an input), but has no
+    // more heap delta debit.
+    assert!(fixture.has_canister_priority(&canister_a));
+    assert_eq!(
+        fixture
+            .canister_state(&canister_a)
+            .scheduler_state
+            .heap_delta_debit
+            .get(),
+        0
+    );
+    // We've observed a total of 100 bytes of heap delta debits.
+    assert_eq!(
+        fixture.metrics.canister_heap_delta_debits.get_sample_sum(),
+        100.0
+    );
+
+    // `canister_b` is no longer in the subnet schedule, it has no install code
+    // debit.
+    assert!(!fixture.has_canister_priority(&canister_b));
+    assert_eq!(
+        fixture
+            .canister_state(&canister_b)
+            .scheduler_state
+            .install_code_debit
+            .get(),
+        0
+    );
+    // We've observed a total of 200 instructions of install code debits.
+    assert_eq!(
+        fixture
+            .metrics
+            .canister_install_code_debits
+            .get_sample_sum(),
+        200.0
     );
 }

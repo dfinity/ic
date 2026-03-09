@@ -188,7 +188,7 @@ impl SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         round_limits: &mut RoundLimits,
-        long_running_canister_ids: &BTreeSet<CanisterId>,
+        long_running_canister_ids: &Vec<CanisterId>,
         measurement_scope: &MeasurementScope,
         subnet_size: usize,
     ) -> ReplicatedState {
@@ -1177,7 +1177,7 @@ impl Scheduler for SchedulerImpl {
 
         let round_log;
         let mut csprng;
-        let long_running_canister_ids: BTreeSet<_>;
+        let long_running_canister_ids: Vec<_>;
         let mut canister_ingress_latencies = CanisterIngressQueueLatencies::new(
             state.time(),
             self.metrics.canister_ingress_queue_latencies.clone(),
@@ -1426,6 +1426,8 @@ impl Scheduler for SchedulerImpl {
             self.config.scheduler_cores,
             self.config.heap_delta_rate_limit,
             self.rate_limiting_of_heap_delta,
+            self.config.install_code_rate_limit,
+            self.rate_limiting_of_instructions,
         );
         let mut state = self.inner_round(
             state,
@@ -1471,45 +1473,6 @@ impl Scheduler for SchedulerImpl {
         let mut final_state;
         {
             let _timer = self.metrics.round_finalization_duration.start_timer();
-
-            let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
-            for (canister_id, _) in subnet_schedule.iter() {
-                let Some(canister) = canister_states.get_mut(canister_id) else {
-                    continue;
-                };
-
-                let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
-                self.metrics
-                    .canister_heap_delta_debits
-                    .observe(heap_delta_debit as f64);
-                if heap_delta_debit > 0 {
-                    let canister = Arc::make_mut(canister);
-                    canister.scheduler_state.heap_delta_debit =
-                        match self.rate_limiting_of_heap_delta {
-                            FlagStatus::Enabled => NumBytes::from(
-                                heap_delta_debit
-                                    .saturating_sub(self.config.heap_delta_rate_limit.get()),
-                            ),
-                            FlagStatus::Disabled => NumBytes::from(0),
-                        };
-                }
-
-                let install_code_debit = canister.scheduler_state.install_code_debit.get();
-                self.metrics
-                    .canister_install_code_debits
-                    .observe(install_code_debit as f64);
-                if install_code_debit > 0 {
-                    let canister = Arc::make_mut(canister);
-                    canister.scheduler_state.install_code_debit =
-                        match self.rate_limiting_of_instructions {
-                            FlagStatus::Enabled => NumInstructions::from(
-                                install_code_debit
-                                    .saturating_sub(self.config.install_code_rate_limit.get()),
-                            ),
-                            FlagStatus::Disabled => NumInstructions::from(0),
-                        };
-                }
-            }
 
             for canister_id in round_schedule.scheduled_canisters() {
                 let Some(canister) = state.canister_state_mut_arc(canister_id) else {

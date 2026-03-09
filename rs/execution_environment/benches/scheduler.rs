@@ -10,7 +10,7 @@ use ic_replicated_state::{
     CanisterState, InputQueueType, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::{Cycles, ExecutionRound, NumBytes};
+use ic_types::{Cycles, ExecutionRound, NumBytes, NumInstructions};
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -49,10 +49,14 @@ fn main() {
     let scheduler_cores = 4;
     let heap_delta_rate_limit = NumBytes::from(1_000_000);
     let rate_limiting_of_heap_delta = FlagStatus::Enabled;
+    let install_code_rate_limit = NumInstructions::from(1_000_000);
+    let rate_limiting_of_instructions = FlagStatus::Enabled;
     let mut round_schedule = RoundSchedule::new(
         scheduler_cores,
         heap_delta_rate_limit,
         rate_limiting_of_heap_delta,
+        install_code_rate_limit,
+        rate_limiting_of_instructions,
     );
     let metrics_registry = MetricsRegistry::new();
     let metrics = SchedulerMetrics::new(&metrics_registry);
