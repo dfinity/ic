@@ -284,8 +284,8 @@ impl NodeRegistration {
             let mut addr =
                 get_best_interface_ipv6_address().context("unable to detect IPv6 address")?;
 
-            // If the address is link-local - then probably we're in a cloud environment - try to discover it
-            if addr.is_unicast_link_local() {
+            // If the address is link-local or ULA - then probably we're in a cloud environment - try to discover it
+            if addr.is_unicast_link_local() || addr.is_unique_local() {
                 addr = CloudType::discover()
                     .context("unable to discover cloud type")?
                     .obtain_public_ip()

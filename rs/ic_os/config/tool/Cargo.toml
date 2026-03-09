@@ -24,7 +24,7 @@ tempfile = { workspace = true }
 reqwest = { workspace = true }
 rust-ini = { workspace = true }
 fs_extra = { workspace = true }
-get_if_addrs = { workspace = true }
+getifs = { workspace = true }
 sev_guest = { path = "../../sev/guest" }
 strum = { workspace = true }
 securefmt = { workspace = true }

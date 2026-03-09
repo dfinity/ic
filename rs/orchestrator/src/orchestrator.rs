@@ -13,8 +13,11 @@ use crate::{
     ssh_access_manager::SshAccessManager,
     upgrade::{OrchestratorControlFlow, Upgrade},
 };
+use anyhow::Context;
 use backoff::ExponentialBackoffBuilder;
-use get_if_addrs::get_if_addrs;
+use config_tool::guestos::{
+    generate_ic_config::get_interface_addresses, network::get_best_interface_name,
+};
 use guest_upgrade_server::orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator;
 use ic_config::{
     Config,
@@ -33,7 +36,7 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     future::Future,
-    net::SocketAddr,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     thread,
@@ -151,16 +154,20 @@ impl Orchestrator {
             loop {
                 // Sleep early because IPv4 takes several minutes to configure
                 thread::sleep(Duration::from_secs(10 * 60));
-                let (ipv4, ipv6) = Self::get_ip_addresses();
+                let (ipv4, ipv6) = Self::get_ip_addresses().unwrap_or_default();
 
                 let message = indoc::formatdoc!(
                     r#"
                     Node-id: {node_id}
                     Replica version: {version}
-                    IPv6: {ipv6}
-                    IPv4: {ipv4}
+                    IPv6: {}
+                    IPv4: {}
 
-                "#
+                "#,
+                    ipv6.map(|x| x.to_string())
+                        .unwrap_or("none configured".into()),
+                    ipv4.map(|x| x.to_string())
+                        .unwrap_or("none configured".into())
                 );
 
                 UtilityCommand::notify_host(&message, 1);
@@ -673,30 +680,11 @@ impl Orchestrator {
         (metrics, metrics_endpoint)
     }
 
-    fn get_ip_addresses() -> (String, String) {
-        let ifaces = get_if_addrs().unwrap_or_default();
-
-        let ipv4 = ifaces
-            .iter()
-            .find_map(|iface| match iface.addr {
-                get_if_addrs::IfAddr::V4(ref addr) if !addr.ip.is_loopback() => {
-                    Some(addr.ip.to_string())
-                }
-                _ => None,
-            })
-            .unwrap_or_else(|| "none configured".to_string());
-
-        let ipv6 = ifaces
-            .iter()
-            .find_map(|iface| match iface.addr {
-                get_if_addrs::IfAddr::V6(ref addr) if !addr.ip.is_loopback() => {
-                    Some(addr.ip.to_string())
-                }
-                _ => None,
-            })
-            .unwrap_or_else(|| "none configured".to_string());
-
-        (ipv4, ipv6)
+    fn get_ip_addresses() -> anyhow::Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
+        let interface = get_best_interface_name().context("unable to get interface")?;
+        let (ipv4, ipv6) =
+            get_interface_addresses(&interface).context("unable to get addresses")?;
+        Ok((ipv4, ipv6))
     }
 }
 

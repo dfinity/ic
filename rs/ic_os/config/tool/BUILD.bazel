@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:clap",
     "@crate_index//:fs_extra",
-    "@crate_index//:get_if_addrs",
+    "@crate_index//:getifs",
     "@crate_index//:ipnet",
     "@crate_index//:macaddr",
     "@crate_index//:regex",

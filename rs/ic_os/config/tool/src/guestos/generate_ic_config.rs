@@ -1,11 +1,11 @@
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
 use config_types::{GuestOSConfig, Ipv6Config};
-use get_if_addrs::get_if_addrs;
+use getifs::IfNet;
 use ipnet::Ipv6Net;
 use serde_json;
 use std::fs::write;
-use std::net::Ipv6Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
@@ -77,7 +77,7 @@ fn generate_ipv6_prefix(ipv6_address: Ipv6Addr) -> String {
 fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
     match &guestos_config.network_settings.ipv6_config {
         Ipv6Config::Deterministic(_) => {
-            anyhow::bail!("GuestOS IPv6 configuration should not be 'Deterministic'.");
+            bail!("GuestOS IPv6 configuration should not be 'Deterministic'.");
         }
         Ipv6Config::Fixed(fixed_config) => {
             let ipv6_net = Ipv6Net::from_str(&fixed_config.address)
@@ -95,7 +95,7 @@ fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
             Ok((ipv6_address.to_string(), ipv6_prefix))
         }
         Ipv6Config::Unknown => {
-            anyhow::bail!("Unknown IPv6 configuration type.");
+            bail!("Unknown IPv6 configuration type.");
         }
     }
 }
@@ -207,44 +207,100 @@ pub fn get_best_interface_ipv6_address() -> Result<Ipv6Addr> {
     let mut delay = Duration::from_secs(1);
 
     for attempt in 0..MAX_RETRIES {
-        match get_best_interface_ipv6_address_helper(&interface) {
-            Ok(ipv6_addr) => {
+        match get_interface_addresses(&interface) {
+            Ok((_, Some(ipv6_addr))) => {
                 return Ok(ipv6_addr);
+            }
+
+            Ok((_, None)) => {
+                eprintln!(
+                    "No IPv6 addresses configured (retries left: {})",
+                    MAX_RETRIES - attempt,
+                );
             }
 
             Err(e) => {
                 eprintln!(
                     "Failed to get IPv6 address: {} (retries left: {})",
+                    e,
                     MAX_RETRIES - attempt,
-                    e
                 );
-
-                std::thread::sleep(delay);
-                delay *= 2;
             }
         }
+
+        std::thread::sleep(delay);
+        delay *= 2;
     }
 
-    anyhow::bail!("Cannot determine an IPv6 address, aborting");
+    bail!("Cannot determine an IPv6 address, aborting");
 }
 
-fn get_best_interface_ipv6_address_helper(interface: &str) -> Result<Ipv6Addr> {
-    let ifaces = get_if_addrs().context("Failed to get network interfaces")?;
-    let ipv6_addr = ifaces
-        .iter()
-        .find_map(|iface| {
-            if interface != iface.name {
-                return None;
-            }
+/// Gets the most appropriate IPv4/IPv6 addresses from the provided interface
+pub fn get_interface_addresses(interface: &str) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
+    // Get the interface
+    let interface = getifs::interfaces()
+        .context("failed to get network interfaces")?
+        .into_iter()
+        .find(|x| x.name() == interface)
+        .with_context(|| format!("interface {interface} not found"))?;
 
-            match &iface.addr {
-                get_if_addrs::IfAddr::V6(addr) => Some(addr.ip),
-                _ => None,
+    // Get all of its addresses
+    let addrs = interface
+        .addrs()
+        .context("unable to get interface addresses")?;
+
+    let addrs_v4 = addrs
+        .iter()
+        .filter_map(|x| {
+            if let IfNet::V4(v) = x {
+                Some(v.addr())
+            } else {
+                None
             }
         })
-        .context("No suitable network interface with IPv6 address found")?;
+        .collect();
 
-    Ok(ipv6_addr)
+    let addrs_v6 = addrs
+        .iter()
+        .filter_map(|x| {
+            if let IfNet::V6(v) = x {
+                Some(v.addr())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    Ok((
+        pick_best_ipv4_address(addrs_v4),
+        pick_best_ipv6_address(addrs_v6),
+    ))
+}
+
+/// Picks the most appropriate IPv4 address from a list.
+/// Prefers global over local/private/loopback/etc.
+fn pick_best_ipv4_address(mut addrs: Vec<Ipv4Addr>) -> Option<Ipv4Addr> {
+    // Sort addresses by locality (non-local first)
+    addrs.sort_by_key(|x| {
+        x.is_link_local()
+            || x.is_loopback()
+            || x.is_private()
+            || x.is_documentation()
+            || x.is_multicast()
+    });
+
+    // Pick first address
+    addrs.into_iter().next()
+}
+
+/// Picks the most appropriate IPv6 address from a list.
+/// Prefers global over local/multicast/etc.
+fn pick_best_ipv6_address(mut addrs: Vec<Ipv6Addr>) -> Option<Ipv6Addr> {
+    // Sort addresses by locality (non-local first)
+    addrs.sort_by_key(|x| x.is_unicast_link_local() || x.is_unique_local() || x.is_multicast());
+
+    // Pick first address
+    addrs.into_iter().next()
 }
 
 fn generate_tls_certificate(domain_name: &str) -> Result<()> {
@@ -274,7 +330,7 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
         .context("Failed to generate TLS certificate")?;
 
     if !status.success() {
-        anyhow::bail!("openssl command failed with status: {}", status);
+        bail!("openssl command failed with status: {}", status);
     }
 
     let status = Command::new("chown")
@@ -283,7 +339,7 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
         .context("Failed to set ownership of TLS files")?;
 
     if !status.success() {
-        anyhow::bail!("chown command failed with status: {}", status);
+        bail!("chown command failed with status: {}", status);
     }
 
     let status = Command::new("chmod")
@@ -382,5 +438,32 @@ mod tests {
             },
             ..GuestOSConfig::default()
         }
+    }
+
+    #[test]
+    fn test_pick_best_ipv6_address() {
+        // Pick 1st global addr over local ones
+        let addrs = vec![
+            Ipv6Addr::from_str("fe80::1").unwrap(),
+            Ipv6Addr::from_str("fc00::1").unwrap(),
+            Ipv6Addr::from_str("fd00::1").unwrap(),
+            Ipv6Addr::from_str("2a00:1450:400a:1009::65").unwrap(),
+            Ipv6Addr::from_str("2a00:1450:400a:1009::66").unwrap(),
+        ];
+        assert_eq!(
+            pick_best_ipv6_address(addrs),
+            Some(Ipv6Addr::from_str("2a00:1450:400a:1009::65").unwrap())
+        );
+
+        // Pick just 1st local addr
+        let addrs = vec![
+            Ipv6Addr::from_str("fe80::1").unwrap(),
+            Ipv6Addr::from_str("fc00::1").unwrap(),
+            Ipv6Addr::from_str("fd00::1").unwrap(),
+        ];
+        assert_eq!(
+            pick_best_ipv6_address(addrs),
+            Some(Ipv6Addr::from_str("fe80::1").unwrap())
+        );
     }
 }
