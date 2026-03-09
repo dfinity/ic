@@ -180,7 +180,7 @@ pub struct SubnetListRecord {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeletedSubnetListRecord {
-    /// A list of subnet ids of all deleted subnets.
+    /// A list of subnet IDs of all deleted subnets.
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub deleted_subnets: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }

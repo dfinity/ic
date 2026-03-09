@@ -176,7 +176,7 @@ message SubnetListRecord {
 }
 
 message DeletedSubnetListRecord {
-  // A list of subnet ids of all deleted subnets.
+  // A list of subnet IDs of all deleted subnets.
   repeated bytes deleted_subnets = 1;
 }
 
