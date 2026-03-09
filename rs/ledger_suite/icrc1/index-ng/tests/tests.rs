@@ -56,6 +56,50 @@ fn index_wasm() -> Vec<u8> {
     )
 }
 
+fn upgrade_ledger(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    fee_collector_account: Option<Account>,
+) {
+    let change_fee_collector =
+        Some(fee_collector_account.map_or(ChangeFeeCollector::Unset, ChangeFeeCollector::SetTo));
+    let args = LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
+        metadata: None,
+        token_name: None,
+        token_symbol: None,
+        transfer_fee: None,
+        change_fee_collector,
+        max_memo_length: None,
+        feature_flags: None,
+        change_archive_options: None,
+        index_principal: None,
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
+        .unwrap()
+}
+
+fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
+    IndexInitArg {
+        ledger_id: Principal::from(ledger_id),
+        #[allow(deprecated)]
+        retrieve_blocks_from_ledger_interval_seconds: None,
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
+    }
+}
+
+fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
+    let res = env
+        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
+        .expect("Failed to send icrc1_balance_of")
+        .bytes();
+    Decode!(&res, Nat)
+        .expect("Failed to decode icrc1_balance_of response")
+        .0
+        .to_u64()
+        .expect("Balance must be a u64!")
+}
+
 fn index_get_blocks(
     env: &StateMachine,
     index_id: CanisterId,
@@ -1263,7 +1307,10 @@ mod metrics {
     fn encode_init_args(ledger_id: Principal) -> Option<IndexArg> {
         Some(IndexArg::Init(InitArg {
             ledger_id,
+            #[allow(deprecated)]
             retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: None,
+            max_retrieve_blocks_from_ledger_interval_seconds: None,
         }))
     }
 }

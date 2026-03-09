@@ -95,6 +95,7 @@ rust_test(
         timeout = "long",
         srcs = [
             "tests/fee_collector.rs",
+            "tests/index_timer_backoff.rs",
             "tests/retrieve_blocks_from_ledger_interval.rs",
             "tests/tests.rs",
         ],

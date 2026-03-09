@@ -427,8 +427,10 @@ async fn test_cketh_deposit(
     minter: &CkEthMinterCanister<'_>,
     logger: &slog::Logger,
 ) {
+    // Use minter_address() which lazily fetches the ECDSA key if not yet available,
+    // unlike get_minter_info() which may return minter_address: None after reinstall.
+    let minter_address: Address = minter.minter_address().await.parse().unwrap();
     let minter_info = minter.get_minter_info().await;
-    let minter_address: Address = minter_info.minter_address.unwrap().parse().unwrap();
     // retrieve helper contract address from minter to ensure ABI does not change
     let eth_deposit_helper_contract_address: Address = minter_info
         .eth_helper_contract_address
@@ -545,8 +547,8 @@ async fn test_ckerc20_deposit(
     erc20_contract_address: &Address,
     logger: &slog::Logger,
 ) {
+    let minter_address: Address = minter.minter_address().await.parse().unwrap();
     let minter_info = minter.get_minter_info().await;
-    let minter_address: Address = minter_info.minter_address.unwrap().parse().unwrap();
     // retrieve helper contract address from minter to ensure ABI does not change
     let erc20_deposit_helper_contract_address: Address = minter_info
         .erc20_helper_contract_address
@@ -664,8 +666,8 @@ async fn test_deposit_with_subaccount(
     const ENCODED_SUBACCOUNT: &str =
         "0xff00000000000000000000000000000000000000000000000000000000000000";
 
+    let minter_address: Address = minter.minter_address().await.parse().unwrap();
     let minter_info = minter.get_minter_info().await;
-    let minter_address: Address = minter_info.minter_address.unwrap().parse().unwrap();
     // retrieve helper contract address from minter to ensure ABI does not change
     let deposit_with_subaccount_helper_contract_address: Address = minter_info
         .deposit_with_subaccount_helper_contract_address
@@ -857,8 +859,14 @@ fn send_smart_contract(
     let value = eth.unwrap_or("0");
     let sender_private_key = sender.private_key();
     let arg = args.join(" ");
-    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast send --json {contract_address} '{method}' {arg} --value {value} --private-key {sender_private_key} --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap().trim().to_string();
-    let parsed_output: serde_json::Value = serde_json::from_str(&json_output).unwrap();
+    let raw_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast send --json {contract_address} '{method}' {arg} --value {value} --private-key {sender_private_key} --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap();
+    // Parse only the first line: docker may append extra output after the JSON object.
+    let json_output = raw_output
+        .trim()
+        .lines()
+        .next()
+        .expect("no output from cast send");
+    let parsed_output: serde_json::Value = serde_json::from_str(json_output).unwrap();
     assert_eq!(parsed_output["status"].as_str().unwrap(), "0x1");
     parsed_output["transactionHash"]
         .as_str()

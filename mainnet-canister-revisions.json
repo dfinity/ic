@@ -4,8 +4,8 @@
     "sha256": "5bf34cb029e437c4ccb990b1595876d4c869566d66b8b58059d0ee742891c219"
   },
   "bitcoin_testnet": {
-    "sha256": "b7829e6ae6100c789bb967bc9ba49c72d12c6bdf56a28c0188d688a22d75ef47",
-    "tag": "release/2026-02-18"
+    "sha256": "a0dfef8f5c52e628ce3a197277f0d5fc427f3b34f6f4deb771572855616c9749",
+    "tag": "release/2026-03-06"
   },
   "ck_btc_archive": {
     "rev": "512cf412f33d430b79f42330518166d14fc6884e",
