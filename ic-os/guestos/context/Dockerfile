@@ -53,6 +53,7 @@ RUN apt-get clean && \
 COPY --chmod=644 etc/hosts /etc/hosts
 COPY --chmod=644 etc/hostname /etc/hostname
 COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
+COPY --chmod=755 opt/ic/bin/open_rootfs /opt/ic/bin/open_rootfs
 
 # Update POSIX permissions in /etc/
 # TODO: We overwrite all /etc files with 644 except for the specified.
@@ -194,6 +195,18 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin systemd-journal && \
     adduser admin vsock && \
     adduser admin sudo
+
+# The "recovery" user account. This is intended for subnet recovery operations,
+# and thus needs access to the same state as "admin".
+RUN adduser --system --disabled-password --home /var/lib/recovery --shell /bin/bash recovery && \
+    chown recovery:staff /var/lib/recovery && \
+    adduser recovery backup && \
+    adduser recovery nonconfidential && \
+    adduser recovery ic-consensus-pool && \
+    adduser recovery ic-registry-local-store && \
+    adduser recovery systemd-journal && \
+    adduser recovery vsock && \
+    adduser recovery sudo
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.

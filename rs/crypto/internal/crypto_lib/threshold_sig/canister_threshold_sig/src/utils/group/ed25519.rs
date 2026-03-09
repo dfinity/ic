@@ -1,4 +1,6 @@
-use curve25519_dalek::{edwards::CompressedEdwardsY, traits::MultiscalarMul};
+use curve25519_dalek::{
+    edwards::CompressedEdwardsY, traits::MultiscalarMul, traits::VartimeMultiscalarMul,
+};
 use group::{Group, GroupEncoding, ff::Field};
 use hex_literal::hex;
 use ic_crypto_sha2::Sha512;
@@ -43,13 +45,9 @@ fn hash_to_curve_ed25519(input: &[u8], dst: &[u8]) -> Point {
         const XMD_BYTES: usize = 2 * FIELD_BYTES;
         const WIDE_BYTES_OFFSET: usize = 2 * FieldElement::BYTES - FIELD_BYTES;
 
-        // Compile time assertion that XMD can output the requested bytes
-        const _: () = assert!(XMD_BYTES <= 8160, "XMD output is sufficient");
-
         // XMD only fails if the requested output is too long, but we already checked
         // at compile time that the output length is within range.
-        let u = ic_crypto_internal_seed::xmd::<Sha512>(input, dst, XMD_BYTES)
-            .expect("XMD unexpected failed");
+        let u = ic_crypto_internal_seed::xmd::<XMD_BYTES, Sha512>(input, dst);
 
         fn extended_u(u: &[u8]) -> [u8; 2 * FieldElement::BYTES] {
             let mut ext_u = [0u8; 2 * FieldElement::BYTES];
@@ -368,14 +366,34 @@ impl Point {
     ///
     /// Equivalent to p1*s1 + p2*s2
     #[inline]
-    pub fn lincomb(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
-        Self::new(curve25519_dalek::EdwardsPoint::multiscalar_mul(
+    pub fn lincomb_vartime(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
+        Self::new(curve25519_dalek::EdwardsPoint::vartime_multiscalar_mul(
             &[s1.s, s2.s],
             &[p1.p, p2.p],
         ))
     }
 
+    /// Perform multi-exponentiation
+    ///
+    /// Equivalent to p1*s1 + p2*s2 + p3*s3
+    #[inline]
+    pub fn lincomb3_vartime(
+        p1: &Point,
+        s1: &Scalar,
+        p2: &Point,
+        s2: &Scalar,
+        p3: &Point,
+        s3: &Scalar,
+    ) -> Self {
+        Self::new(curve25519_dalek::EdwardsPoint::vartime_multiscalar_mul(
+            &[s1.s, s2.s, s3.s],
+            &[p1.p, p2.p, p3.p],
+        ))
+    }
+
     pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {
+        // Note: not using variable time since this function is used when
+        // creating commitments or verifying a commitment opening
         let g = Self::generator();
         let h = Self::generator_h();
         Self::new(curve25519_dalek::EdwardsPoint::multiscalar_mul(

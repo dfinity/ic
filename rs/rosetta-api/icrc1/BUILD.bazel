@@ -85,7 +85,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.2.8"
+ROSETTA_VERSION = "1.2.9"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -112,6 +112,7 @@ rust_test(
     aliases = ALIASES,
     crate = ":ic-icrc-rosetta",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["long_test"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -179,7 +180,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
@@ -203,7 +203,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:4"],
     deps = DEV_DEPENDENCIES + DEPENDENCIES,

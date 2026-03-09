@@ -8,11 +8,14 @@ py_binary(
     data = glob(["*.sql"]) + ["//.github:CODEOWNERS"],
     env = {"CODEOWNERS_PATH": "$(rootpath //.github:CODEOWNERS)"},
     deps = [
+        "@buildbuddy_proto//:buildbuddy_py_proto",
         requirement("pandas"),
         requirement("psycopg"),
         requirement("requests"),
         requirement("codeowners"),
         requirement("tabulate"),
+        requirement("protobuf"),
+        requirement("dacite"),
     ],
 )
 

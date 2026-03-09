@@ -1,11 +1,6 @@
 //! Error type conversions imported from other parts of the codebase
 
-// TODO (CRP-817): Import tests for all the below.
-
-// From: ../crypto/src/sign/threshold_sig/ni_dkg/dealing/error_conversions.rs
-// TODO (CRP-817): Get the tests from there.
 mod create_dealing_error_conversions_v2 {
-    // TODO (CRP-818): Remove the v2 and merge.
     use crate::api::ni_dkg_errors::{CspDkgCreateDealingError, CspDkgCreateReshareDealingError};
     use ic_types::crypto::error::{InternalError, InvalidArgumentError};
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
@@ -31,7 +26,6 @@ mod create_dealing_error_conversions_v2 {
                     // Forward to the caller, since this is e.g. malformed data in the registry:
                     DkgCreateDealingError::MalformedFsEncryptionPublicKey(
                         MalformedFsEncryptionPublicKeyError {
-                            // TODO (CRP-576): implement `Display`?
                             internal_error: format!(
                                 "error for receiver index {receiver_index}: {error:?}"
                             ),
@@ -51,7 +45,6 @@ mod create_dealing_error_conversions_v2 {
                 CspDkgCreateReshareDealingError::InvalidThresholdError(error) => {
                     // This would be an IDKM implementation error, since the threshold invariants
                     // are checked upon config creation.
-                    // TODO (CRP-576): implement `Display`?
                     panic!("{panic_prefix}InvalidThresholdError: {error:?}");
                 }
                 CspDkgCreateReshareDealingError::MisnumberedReceiverError {
@@ -66,13 +59,11 @@ mod create_dealing_error_conversions_v2 {
                 }
                 CspDkgCreateReshareDealingError::SizeError(error) => {
                     // Will not happen in practice, so we panic:
-                    // TODO (CRP-576): implement `Display`?
                     panic!("{panic_prefix}SizeError: {error:?}");
                 }
                 CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError(error) => {
                     // This would be an implementation error, since we inserted a key that is
                     // malformed:
-                    // TODO (CRP-576): implement `Display`?
                     panic!("{panic_prefix}MalformedReshareSecretKeyError: {error:?}");
                 }
                 CspDkgCreateReshareDealingError::TransientInternalError(error) => {
@@ -117,7 +108,6 @@ mod verify_dealing_error_conversions {
                     // Forward to the caller, since this is e.g. malformed data in the registry:
                     DkgVerifyDealingError::MalformedFsEncryptionPublicKey(
                         MalformedFsEncryptionPublicKeyError {
-                            // TODO (CRP-576): implement `Display`?
                             internal_error: format!(
                                 "error for receiver index {receiver_index}: {error:?}"
                             ),
@@ -146,7 +136,6 @@ mod verify_dealing_error_conversions {
                 CspDkgVerifyReshareDealingError::InvalidThresholdError(error) => {
                     // This would be an IDKM implementation error, since the threshold invariants
                     // are checked upon config creation.
-                    // TODO (CRP-576): implement `Display`?
                     panic!("{panic_prefix}InvalidThresholdError: {error:?}");
                 }
                 CspDkgVerifyReshareDealingError::MisnumberedReceiverError {
@@ -161,7 +150,6 @@ mod verify_dealing_error_conversions {
                 }
                 CspDkgVerifyReshareDealingError::SizeError(error) => {
                     // Will not happen in practice, so we panic:
-                    // TODO (CRP-576): implement `Display`?
                     panic!("{panic_prefix}SizeError: {error:?}");
                 }
             }

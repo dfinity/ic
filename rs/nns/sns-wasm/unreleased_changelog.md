@@ -4,13 +4,16 @@ In general, upcoming/unreleased behavior changes are described here. For details
 on the process that this file is part of, see
 `rs/nervous_system/changelog_process.md`.
 
+
 # Next Upgrade Proposal
 
 ## Added
 
 ## Changed
 
-* Allow creating a service nervous system with up to 100 dapp canisters, instead of just 25.
+- Use the default values for `min_retrieve_blocks_from_ledger_interval_seconds` and
+  `max_retrieve_blocks_from_ledger_interval_seconds` for the SNS index-ng canister
+  polling interval when creating a new SNS (previously used the fixed value of 5s).
 
 ## Deprecated
 

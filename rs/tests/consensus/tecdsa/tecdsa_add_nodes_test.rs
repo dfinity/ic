@@ -52,7 +52,7 @@ use ic_system_test_driver::{
     systest,
     util::*,
 };
-use ic_types::{Height, consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE};
+use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
@@ -124,6 +124,7 @@ fn test(env: TestEnv) {
         block_on(async { MessageCanister::new(&agent, nns_node.effective_canister_id()).await });
     let nns = topology_snapshot.root_subnet();
     let mut public_keys = BTreeMap::new();
+    let mut initial_metric_sums = BTreeMap::new();
     for key_id in &key_ids {
         block_on(async {
             let public_key = get_public_key_with_logger(key_id, &msg_can, &log)
@@ -132,32 +133,34 @@ fn test(env: TestEnv) {
             public_keys.insert(key_id.clone(), public_key);
             if key_id.is_idkg_key() {
                 info!(log, "Asserting initial metric state of key {}", key_id);
-                // Initially, the sum of key creations should be equal to the number of nodes
-                assert_metric_sum(&nns, key_id, NODES_COUNT, &log).await;
+                // Initially, at least 2f+1 nodes should have observed the key creation
+                let f = (NODES_COUNT - 1) / 3;
+                let initial_min = (2 * f + 1) as u64;
+                let sum = await_metric_sum_at_least(&nns, key_id, initial_min, &log).await;
+                initial_metric_sums.insert(key_id.clone(), sum);
             }
         });
     }
-    if STORE_PRE_SIGNATURES_IN_STATE {
-        // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
-        await_pre_signature_stash_size(
-            &nns_subnet,
-            PRE_SIGNATURES_TO_CREATE_IN_ADVANCE as usize,
-            idkg_keys.as_slice(),
-            &log,
-        );
-        // Turn off pre-signature generation, so we can check that the stash is purged
-        // during the membership change
-        info!(log, "Disabling pre-signature generation");
-        block_on(set_pre_signature_stash_size(
-            &governance,
-            nns_subnet.subnet_id,
-            key_ids.as_slice(),
-            /* max_parallel_pre_signatures */ 0,
-            /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
-            /* key_rotation_period */ None,
-            &log,
-        ));
-    }
+    // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
+    await_pre_signature_stash_size(
+        &nns_subnet,
+        PRE_SIGNATURES_TO_CREATE_IN_ADVANCE as usize,
+        idkg_keys.as_slice(),
+        &log,
+    );
+    // Turn off pre-signature generation, so we can check that the stash is purged
+    // during the membership change
+    info!(log, "Disabling pre-signature generation");
+    block_on(set_pre_signature_stash_size(
+        &governance,
+        nns_subnet.subnet_id,
+        key_ids.as_slice(),
+        /* max_parallel_pre_signatures */ 0,
+        /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+        /* key_rotation_period */ None,
+        &log,
+    ));
+
     info!(
         log,
         "Sending a proposal for the nodes to join NNS subnet via the governance canister."
@@ -191,16 +194,20 @@ fn test(env: TestEnv) {
     info!(log, "Ensure active subnet membership has progressed.");
     await_subnet_earliest_topology_version(&nns, topology_snapshot.get_registry_version(), &log);
 
+    let new_subnet_size = NODES_COUNT + UNASSIGNED_NODES_COUNT;
+    let f = (new_subnet_size - 1) / 3;
+    let consensus_count = 2 * f + 1;
     for key_id in &key_ids {
         if !key_id.is_idkg_key() {
             continue;
         }
         info!(log, "Make sure key {} was rotated.", key_id);
-        // All nodes (old and new) should have increased their key rotation metric by one.
-        block_on(assert_metric_sum(
+        // At least 2f+1 nodes must have observed the key rotation and incremented their metric.
+        let initial_sum = initial_metric_sums[key_id];
+        block_on(await_metric_sum_at_least(
             &nns,
             key_id,
-            2 * NODES_COUNT + UNASSIGNED_NODES_COUNT,
+            initial_sum + consensus_count as u64,
             &log,
         ));
     }
@@ -216,20 +223,18 @@ fn test(env: TestEnv) {
         );
     }
 
-    if STORE_PRE_SIGNATURES_IN_STATE {
-        // The stash size should be 0 after the nodes are added
-        await_pre_signature_stash_size(&nns_subnet, 0, idkg_keys.as_slice(), &log);
-        // Re-enable pre-signature generation
-        block_on(set_pre_signature_stash_size(
-            &governance,
-            nns_subnet.subnet_id,
-            key_ids.as_slice(),
-            /* max_parallel_pre_signatures */ 10,
-            /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
-            /* key_rotation_period */ None,
-            &log,
-        ));
-    }
+    // The stash size should be 0 after the nodes are added
+    await_pre_signature_stash_size(&nns_subnet, 0, idkg_keys.as_slice(), &log);
+    // Re-enable pre-signature generation
+    block_on(set_pre_signature_stash_size(
+        &governance,
+        nns_subnet.subnet_id,
+        key_ids.as_slice(),
+        /* max_parallel_pre_signatures */ 10,
+        /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+        /* key_rotation_period */ None,
+        &log,
+    ));
 
     info!(log, "Run through signature test.");
     let msg_can = MessageCanister::from_canister_id(&agent, msg_can.canister_id());
@@ -242,12 +247,12 @@ fn test(env: TestEnv) {
     }
 }
 
-async fn assert_metric_sum(
+async fn await_metric_sum_at_least(
     subnet: &SubnetSnapshot,
     key_id: &MasterPublicKeyId,
-    expected_sum: usize,
+    expected_min_sum: u64,
     log: &Logger,
-) {
+) -> u64 {
     let mut count = 0;
     let metric_with_label = format!("{MASTER_KEY_TRANSCRIPTS_CREATED}{{key_id=\"{key_id}\"}}");
     let metrics = MetricsFetcher::new(subnet.nodes(), vec![metric_with_label.clone()]);
@@ -256,16 +261,22 @@ async fn assert_metric_sum(
             Ok(map) => {
                 let values = map[&metric_with_label].clone();
                 let sum: u64 = values.into_iter().sum();
-                if sum as usize == expected_sum {
+                if sum >= expected_min_sum {
                     info!(
                         log,
-                        "Found correct value of key rotation metric for {}", key_id
+                        "Key rotation metric sum for {} is {} >= {} as expected",
+                        key_id,
+                        sum,
+                        expected_min_sum,
                     );
-                    break;
+                    return sum;
                 } else {
                     info!(
                         log,
-                        "Sum of metrics for {} is {} != {}", key_id, sum, expected_sum
+                        "Key rotation metric sum for {} is {}, waiting for >= {}",
+                        key_id,
+                        sum,
+                        expected_min_sum,
                     );
                 }
             }

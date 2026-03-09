@@ -8036,7 +8036,7 @@ dependencies = [
 [[package]]
 name = "lmdb-rkv"
 version = "0.14.99"
-source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=4d952c8f1dca79de855af892b444d7112567b58d#4d952c8f1dca79de855af892b444d7112567b58d"
+source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=64eb770caa940f215190d86d61e4c132511be5e2#64eb770caa940f215190d86d61e4c132511be5e2"
 dependencies = [
  "bitflags 1.3.2",
  "byteorder",
@@ -8047,7 +8047,7 @@ dependencies = [
 [[package]]
 name = "lmdb-rkv-sys"
 version = "0.11.99"
-source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=4d952c8f1dca79de855af892b444d7112567b58d#4d952c8f1dca79de855af892b444d7112567b58d"
+source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=64eb770caa940f215190d86d61e4c132511be5e2#64eb770caa940f215190d86d61e4c132511be5e2"
 dependencies = [
  "cc",
  "libc",

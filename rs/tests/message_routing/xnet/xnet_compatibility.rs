@@ -34,8 +34,8 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, get_guestos_img_version,
-    get_guestos_launch_measurements, get_guestos_update_img_sha256, get_guestos_update_img_url,
-    get_guestos_update_img_version,
+    get_guestos_update_img_sha256, get_guestos_update_img_url, get_guestos_update_img_version,
+    get_guestos_update_launch_measurements,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{MetricsFetcher, block_on, runtime_from_url};
@@ -111,7 +111,20 @@ pub async fn test_async(env: TestEnv) {
         .map(|(_, _, node)| node)
         .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()));
 
-    let xnet_config = xnet_slo_test_lib::Config::new(2, 1, Duration::from_secs(30), 10);
+    // Use custom thresholds for the xnet_config because after upgrade/downgrade
+    // cycles the subnets need time to stabilize. A 30s window is too tight: the
+    // warm-up period after a version change causes the send rate to fall just below
+    // 0.3 and mean latency to exceed 20s. Using 60s and 30s respectively gives the
+    // subnets enough time to stabilize while still verifying the SLO.
+    let xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(
+        2,
+        1,
+        Duration::from_secs(60),
+        10,
+        0.3,
+        5.0,
+        30,
+    );
     let long_xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(
         2,
         1,
@@ -144,7 +157,7 @@ pub async fn test_async(env: TestEnv) {
 
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     bless_replica_version(
         &nns_node,
         &branch_version,

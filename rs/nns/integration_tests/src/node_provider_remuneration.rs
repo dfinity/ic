@@ -16,8 +16,9 @@ use ic_nns_constants::{
 use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
 use ic_nns_governance_api::{
     AddOrRemoveNodeProvider, DateRangeFilter, ExecuteNnsFunction, GovernanceError,
-    ListNodeProviderRewardsRequest, MakeProposalRequest, NetworkEconomics, NnsFunction,
-    NodeProvider, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
+    ListNodeProviderRewardsRequest, MakeProposalRequest, MonthlyNodeProviderRewards,
+    NetworkEconomics, NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProvider,
+    RewardNodeProviders,
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
@@ -268,12 +269,11 @@ fn test_list_node_provider_rewards() {
             wait_for_nrc_metrics_sync(&state_machine);
         }
 
-        // Tick to allow Gov. to perform rewards minting
-        state_machine.tick();
-        state_machine.tick();
-
-        let rewards = nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
-
+        // Wait until governance successfully mints rewards. This requires
+        // many ticks because the minting flow involves inter-canister calls
+        // to NRC, CMC, Ledger, and a self-call.
+        let previous_timestamp = minted_rewards.last().unwrap().timestamp;
+        let rewards = wait_for_rewards_minting(&state_machine, previous_timestamp);
         minted_rewards.push(rewards);
     }
 
@@ -506,6 +506,7 @@ fn test_automated_node_provider_remuneration() {
         NodeRewardType::Type1.to_string() => 2,
         NodeRewardType::Type3.to_string() => 2,
         NodeRewardType::Type3dot1.to_string() => 3,
+        NodeRewardType::Type4.to_string() => 2,
     };
     add_node_operator(
         &state_machine,
@@ -559,6 +560,18 @@ fn test_automated_node_provider_remuneration() {
             node_info_3.operator_id,
             15,
             NodeRewardType::Type3dot1,
+        ),
+        add_node(
+            &state_machine,
+            node_info_3.operator_id,
+            16,
+            NodeRewardType::Type4,
+        ),
+        add_node(
+            &state_machine,
+            node_info_3.operator_id,
+            17,
+            NodeRewardType::Type4,
         ),
     ];
     nodes
@@ -685,31 +698,29 @@ fn test_automated_node_provider_remuneration() {
     // Rewards Table:
     // EU: Type 1: 24,000 XDR/month, Type 3: 35,000 XDR/month
     // North America, Canada: Type 1: 68,000 XDR/month, Type 3: 11,000 XDR/month
-    // North America, US, CA: Type 1: 234,000 XDR/month, Type 3: 907,000 XDR/month, Type 3.1: 103,000 XDR/month
+    // North America, US, CA: Type 1: 234,000 XDR/month, Type 3: 907,000 XDR/month, Type 3.1: 103,000 XDR/month, Type 4: 150,000 XDR/month
 
     // This node provider owns more than 1 Type3* node
     // Average reward rate will be applied for Type3* nodes
     let reward_mode_3 = Some(RewardMode::RewardToAccount(RewardToAccount {
         to_account: Some(node_info_3.provider.reward_account.clone().unwrap()),
     }));
-    let average_type3_reward = (2.0 * 907_000.0 + 3.0 * 103_000.0) / 5.0;
-    let average_type3_reduced_rewards = (average_type3_reward
-        + 0.8 * average_type3_reward
-        + 0.8 * 0.8 * average_type3_reward
-        + 0.8 * 0.8 * 0.8 * average_type3_reward
-        + 0.8 * 0.8 * 0.8 * 0.8 * average_type3_reward)
+    let average_type3_reduced_rewards = (907_000.0
+        + 0.8 * 907_000.0
+        + 0.8 * 0.8 * 103_000.0
+        + 0.8 * 0.8 * 0.8 * 103_000.0
+        + 0.8 * 0.8 * 0.8 * 0.8 * 103_000.0)
         / 5.0;
 
+    // Type4 rewards: 2 nodes * 150,000 XDR/month (flat, no reduction)
+    let type4_rewards = 2.0 * 150_000.0;
+
     let expected_daily_rewards_xdrp_3 =
-        (((2.0 * 234_000.0) + (5.0 * average_type3_reduced_rewards)) / REWARDS_TABLE_DAYS) as u64;
+        (((2.0 * 234_000.0) + (5.0 * average_type3_reduced_rewards) + type4_rewards)
+            / REWARDS_TABLE_DAYS) as u64;
     let expected_rewards_e8s_3 =
         expected_daily_rewards_xdrp_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
             / 155_000;
-    if expected_reward_days_covered_1 == 30 {
-        assert_eq!(expected_rewards_e8s_3, 1205206451);
-    } else {
-        assert_eq!(expected_rewards_e8s_3, 1245380000);
-    }
     let expected_node_provider_reward_3 = RewardNodeProvider {
         node_provider: Some(node_info_3.provider.clone()),
         amount_e8s: expected_rewards_e8s_3,
@@ -858,34 +869,10 @@ fn test_automated_node_provider_remuneration() {
     ));
     wait_for_nrc_metrics_sync(&state_machine);
 
-    // Tick to allow Gov. to perform rewards minting
-    state_machine.tick();
-    state_machine.tick();
-
-    let mut rewards_were_triggered = false;
-    let mut np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
-    let mut seconds_advanced_test_2 = 0;
-    for _ in 0..10 {
-        seconds_advanced_test_2 += 60;
-        state_machine.advance_time(Duration::from_secs(60));
-        most_recent_rewards =
-            nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
-        np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
-        if np_rewards_from_automation_timestamp == np_rewards_from_proposal_timestamp {
-            continue;
-        }
-        rewards_were_triggered = true;
-    }
-
-    assert!(
-        rewards_were_triggered,
-        "Automated rewards were not triggered even though more than 1 month has passed."
-    );
-
-    assert_ne!(
-        np_rewards_from_automation_timestamp,
-        np_rewards_from_proposal_timestamp
-    );
+    // Wait until governance successfully mints automated rewards.
+    most_recent_rewards =
+        wait_for_rewards_minting(&state_machine, np_rewards_from_proposal_timestamp);
+    let np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
 
     let expected_automated_rewards_e8s_1 =
         expected_daily_rewards_xdrp_1 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_2
@@ -994,31 +981,12 @@ fn test_automated_node_provider_remuneration() {
 
     // Cover remaining seconds to complete the NODE_PROVIDER_REWARD_PERIOD_SECONDS
     tick_with_blockmaker_metrics(&state_machine, &node_metrics_daily);
-    state_machine.advance_time(Duration::from_secs(
-        spill_over_seconds - seconds_advanced_test_2,
-    ));
+    state_machine.advance_time(Duration::from_secs(spill_over_seconds));
     wait_for_nrc_metrics_sync(&state_machine);
 
-    // Tick to allow Gov. to perform rewards minting
-    state_machine.tick();
-    state_machine.tick();
-
-    let mut rewards_were_triggered = false;
-    for _ in 0..10 {
-        state_machine.advance_time(Duration::from_secs(60));
-        most_recent_rewards =
-            nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
-        np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
-        if np_rewards_from_automation_timestamp == np_rewards_from_proposal_timestamp {
-            continue;
-        }
-        rewards_were_triggered = true;
-    }
-
-    assert!(
-        rewards_were_triggered,
-        "Automated rewards were not triggered even though more than 1 month has passed."
-    );
+    // Wait until governance successfully mints automated rewards.
+    most_recent_rewards =
+        wait_for_rewards_minting(&state_machine, np_rewards_from_automation_timestamp);
 
     ic_cdk::println!(
         "expected_reward_days_covered_3: {}",
@@ -1071,6 +1039,32 @@ fn test_automated_node_provider_remuneration() {
             .rewards
             .contains(&expected_automated_node_provider_reward_3)
     );
+}
+
+/// Wait until governance successfully mints a new round of rewards.
+/// Keeps ticking the state machine until the most recent rewards timestamp changes,
+/// indicating that governance completed the full minting flow (including all
+/// inter-canister calls to NRC, CMC, and Ledger).
+/// Each iteration advances time by 1 second so that timer-based periodic tasks
+/// (if minting ever switches from heartbeat to timer) are also triggered.
+fn wait_for_rewards_minting(
+    state_machine: &StateMachine,
+    previous_timestamp: u64,
+) -> MonthlyNodeProviderRewards {
+    for i in 0..500 {
+        state_machine.advance_time(Duration::from_secs(1));
+        state_machine.tick();
+        if let Some(rewards) = nns_get_most_recent_monthly_node_provider_rewards(state_machine)
+            && rewards.timestamp != previous_timestamp
+        {
+            return rewards;
+        }
+        assert!(
+            i < 499,
+            "Governance failed to mint rewards within 500 ticks (previous_timestamp: {previous_timestamp})"
+        );
+    }
+    unreachable!()
 }
 
 fn calculate_expected_rewards_days(
@@ -1329,6 +1323,10 @@ fn add_node_rewards_table(state_machine: &StateMachine) {
                 },
                 "type3.1".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 103_000,
+                    reward_coefficient_percent: None,
+                },
+                "type4".to_string() => NodeRewardRate {
+                    xdr_permyriad_per_node_per_month: 150_000,
                     reward_coefficient_percent: None,
                 },
             }

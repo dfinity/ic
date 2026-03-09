@@ -33,7 +33,28 @@ type HttpResponse = record {
   headers : vec record { text; text };
   status_code : nat16
 };
-type InitArg = record { ledger_id : principal };
+
+type InitArg = record {
+  ledger_id : principal;
+  // The interval in seconds in which to retrieve blocks from the ledger. A lower value makes the index more
+  // responsive in showing new blocks, but increases the consumption of cycles of both the index and ledger canisters.
+  // A higher values means that it takes longer for new blocks to show up in the index.
+  retrieve_blocks_from_ledger_interval_seconds : opt nat64
+};
+
+type UpgradeArg = record {
+  ledger_id : opt principal;
+  // The interval in seconds in which to retrieve blocks from the ledger. A lower value makes the index more
+  // responsive in showing new blocks, but increases the consumption of cycles of both the index and ledger canisters.
+  // A higher values means that it takes longer for new blocks to show up in the index.
+  retrieve_blocks_from_ledger_interval_seconds : opt nat64
+};
+
+type IndexArg = variant {
+  Init : InitArg;
+  Upgrade : UpgradeArg
+};
+
 type Operation = variant {
   Approve : record {
     fee : Tokens;
@@ -68,7 +89,7 @@ type Transaction = record {
   timestamp : opt TimeStamp
 };
 type TransactionWithId = record { id : nat64; transaction : Transaction };
-service : (InitArg) -> {
+service : (index_arg : opt IndexArg) -> {
   get_account_identifier_balance : (text) -> (nat64) query;
   get_account_identifier_transactions : (
     GetAccountIdentifierTransactionsArgs

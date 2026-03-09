@@ -442,12 +442,10 @@ fn test_initiate_maturity_disbursement_too_many_disbursements() {
 fn test_initiate_maturity_disbursement_disbursement_too_small() {
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = create_neuron_builder()
-        .with_maturity_e8s_equivalent(10_500_000_000)
+        .with_maturity_e8s_equivalent(9_900_000_000)
         .build();
     neuron_store.add_neuron(neuron).unwrap();
 
-    // 1% of 10_500_000_000 is 105_000_000, with -5% maturity modulation, the worst case
-    // disbursement is 105_000_000 * 0.95 = 99_750_000 < 1e8.
     assert_eq!(
         initiate_maturity_disbursement(
             &mut neuron_store,
@@ -461,9 +459,8 @@ fn test_initiate_maturity_disbursement_disbursement_too_small() {
             NOW_SECONDS,
         ),
         Err(InitiateMaturityDisbursementError::DisbursementTooSmall {
-            disbursement_maturity_e8s: 105_000_000,
+            disbursement_maturity_e8s: 99_000_000,
             minimum_disbursement_e8s: 100_000_000,
-            worst_case_maturity_modulation_basis_points: -500,
         })
     );
 }

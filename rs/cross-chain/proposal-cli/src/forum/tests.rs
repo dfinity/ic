@@ -52,6 +52,38 @@ fn should_have_correct_content_when_creating_topic_for_single_proposals() {
     );
 }
 
+#[test]
+fn should_use_protocol_canister_mgmt_tag_when_canister_mapped_to_protocol() {
+    let topic = ForumTopic::for_upgrade_proposals(vec![bitcoin_canister_proposal()]).unwrap();
+
+    let request = CreateTopicRequest::from(topic);
+
+    assert_eq!(
+        request.tags,
+        vec!["Protocol-canister-management".to_string()],
+        "topic should use protocol canister management tag when canister is mapped to protocol in forum_topic_kind"
+    );
+}
+
+fn bitcoin_canister_proposal() -> ProposalInfo {
+    ProposalInfo {
+        proposal_id: 99,
+        payload: ProposalPayloadInfo {
+            canister_id: "ghsi2-tqaaa-aaaan-aaaca-cai".to_string(),
+            install_mode_name: "CANISTER_INSTALL_MODE_UPGRADE".to_string(),
+        },
+    }
+}
+
+#[test]
+#[should_panic(expected = "mixing application and protocol canister topics")]
+fn should_not_mix_protocol_and_application_canister_topics() {
+    let _ = ForumTopic::for_upgrade_proposals(vec![
+        bitcoin_canister_proposal(),
+        ckbtc_ledger_proposal(),
+    ]);
+}
+
 fn ckbtc_ledger_proposal() -> ProposalInfo {
     ProposalInfo {
         proposal_id: 137360,

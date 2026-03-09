@@ -393,7 +393,7 @@ impl ThresholdSignatureBuilder for TestThresholdSignatureBuilder {
         callback_id: CallbackId,
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
-        let height = context.matched_pre_signature.map(|(_, h)| h)?;
+        let height = context.height()?;
         self.signatures
             .get(&RequestId {
                 callback_id,

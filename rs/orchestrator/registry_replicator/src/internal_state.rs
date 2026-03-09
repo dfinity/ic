@@ -21,7 +21,8 @@ use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::{
-    CanisterId, NodeId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
+    CanisterId, NodeId, RegistryVersion, SubnetId, Time,
+    crypto::threshold_sig::ThresholdSigPublicKey,
 };
 use prost::Message;
 use std::{
@@ -93,20 +94,22 @@ impl InternalState {
 
     /// Requests latest version and certified changes from the
     /// [`RegistryCanister`], applies changes to [`LocalStore`] accordingly.
+    /// If the local store is up to date with the latest version of the registry canister, returns
+    /// the certified time of the response.
     /// Exits the process if this node appears on a subnet that is started as
     /// the new NNS after a version update.
-    pub(crate) async fn poll(&mut self) -> Result<(), String> {
+    pub(crate) async fn poll(&mut self) -> Result<Option<Time>, String> {
         // Note, this may not actually be the latest version, rather it is the latest
         // version that is locally available
-        let latest_version = self.registry_client.get_latest_version();
-        if latest_version != self.latest_version {
+        let latest_version_before_poll = self.registry_client.get_latest_version();
+        if latest_version_before_poll != self.latest_version {
             // latest version has changed (originally initialized with 0)
-            self.latest_version = latest_version;
-            self.start_new_nns_subnet(latest_version)
+            self.latest_version = latest_version_before_poll;
+            self.start_new_nns_subnet(latest_version_before_poll)
                 .expect("Start new NNS failed.");
             // update (initialize) *remote* registry canister client in case NNS has changed (or
             // this is the first call to poll())
-            if let Err(e) = self.update_registry_canister(latest_version) {
+            if let Err(e) = self.update_registry_canister(latest_version_before_poll) {
                 warn!(
                     self.logger,
                     "Could not update registry canister with new topology data: {:?}", e
@@ -150,19 +153,30 @@ impl InternalState {
             &registry_canister,
             &nns_pub_key,
             self.local_store.as_ref(),
-            latest_version,
+            latest_version_before_poll,
         )
         .await
         {
-            Ok(last_stored_version) => {
+            Ok(SuccessfulPoll {
+                last_stored_version,
+                last_available_version,
+                certified_time,
+            }) => {
                 self.failed_poll_count = 0;
-                if last_stored_version != latest_version {
+                if last_stored_version != latest_version_before_poll {
                     info!(
                         self.logger,
-                        "Stored registry versions up to: {}", last_stored_version
+                        "Stored registry versions up to: {}/{}",
+                        last_stored_version,
+                        last_available_version
                     );
                 }
-                Ok(())
+
+                if last_stored_version >= last_available_version {
+                    Ok(Some(certified_time))
+                } else {
+                    Ok(None)
+                }
             }
             Err(e) => {
                 self.failed_poll_count += 1;
@@ -341,14 +355,14 @@ impl InternalState {
                 n_record
                     .http
                     .as_ref()
-                    .and_then(|h| self.http_endpoint_to_url(h))
+                    .and_then(|h| self.https_endpoint_to_url(h))
             })
             .collect();
         urls.sort();
         Ok(urls)
     }
 
-    fn http_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
+    fn https_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
             Ok(v) => {
                 if v.is_ipv6() {
@@ -363,7 +377,7 @@ impl InternalState {
             }
         };
 
-        let url = format!("http://{}:{}/", host_str, http.port);
+        let url = format!("https://{}:{}/", host_str, http.port);
         match Url::parse(&url) {
             Ok(v) => Some(v),
             Err(e) => {
@@ -374,18 +388,25 @@ impl InternalState {
     }
 }
 
+pub struct SuccessfulPoll {
+    pub last_stored_version: RegistryVersion,
+    pub last_available_version: RegistryVersion,
+    pub certified_time: Time,
+}
+
 /// Poll the registry canister for certified changes since `from_version`, and
 /// write them to the local store.
-/// Returns the latest registry version written to the local store, or an error if
-/// fetching the changes failed.
+/// Returns the latest registry version written to the local store, the latest
+/// registry version available on the registry canister, and the time the changes
+/// were certified at, or an error if fetching the changes failed.
 /// Panics if writing to the local store fails.
 pub async fn write_certified_changes_to_local_store(
     registry_canister: &RegistryCanister,
     nns_pub_key: &ThresholdSigPublicKey,
     local_store: &dyn LocalStore,
     from_version: RegistryVersion,
-) -> Result<RegistryVersion, String> {
-    let (records, _, _) = registry_canister
+) -> Result<SuccessfulPoll, String> {
+    let (records, last_available_version, certified_time) = registry_canister
         .get_certified_changes_since(from_version.get(), nns_pub_key)
         .await
         .map_err(|e| e.to_string())?;
@@ -401,7 +422,7 @@ pub async fn write_certified_changes_to_local_store(
             });
     }
 
-    let last_version = changelog
+    let last_stored_version = changelog
         .last_key_value()
         .map(|(last_version, _)| *last_version)
         .unwrap_or(from_version); // If `changelog` is empty, i.e. no new changes.
@@ -412,9 +433,13 @@ pub async fn write_certified_changes_to_local_store(
             .unwrap_or_else(|_| panic!("Writing to the FS failed at version {registry_version}"));
     }
 
-    // If the local store did not panic in the loop above, then `last_version` is indeed the last
-    // version stored on disk.
-    Ok(last_version)
+    // If the local store did not panic in the loop above, then `last_stored_version` is indeed the
+    // last version stored on disk.
+    Ok(SuccessfulPoll {
+        last_stored_version,
+        last_available_version,
+        certified_time,
+    })
 }
 
 /// Standalone function for switch-over logic, for unit testing.
@@ -561,6 +586,7 @@ mod test {
             membership: vec![],
             max_ingress_bytes_per_message: 2048,
             max_ingress_messages_per_block: 1000,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
@@ -577,6 +603,8 @@ mod test {
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: 0,
+            subnet_admins: vec![],
+            recalled_replica_version_ids: vec![],
         }
     }
 
@@ -624,7 +652,7 @@ mod test {
             let local_store = Arc::new(LocalStoreImpl::new(tempdir.path()));
             let registry_client = Arc::new(FakeRegistryClient::new(local_store.clone()));
 
-            let config_nns_urls = vec![Url::parse("http://fallback:1234").unwrap()];
+            let config_nns_urls = vec![Url::parse("https://fallback:1234").unwrap()];
             let config_nns_pub_key = create_threshold_sig_public_key(0);
 
             // Initialize root subnet, public key and node record in the registry
@@ -697,7 +725,9 @@ mod test {
             );
 
             // Will first try to fetch from data found inside the registry
-            let node_api_url = internal_state.http_endpoint_to_url(&http_endpoint).unwrap();
+            let node_api_url = internal_state
+                .https_endpoint_to_url(&http_endpoint)
+                .unwrap();
             let fallback_url = &config_nns_urls[0];
             for _ in 0..MAX_CONSECUTIVE_FAILURES {
                 let result = internal_state.poll().await;
@@ -707,7 +737,7 @@ mod test {
                     // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
                     // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
                     // failed for
-                    // http://[2001:db8::1]:8080/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
+                    // https://[2001:db8::1]:8080/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
                     // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
                     // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
                     // unreachable\\\" }))\")"
@@ -725,7 +755,7 @@ mod test {
                 // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
                 // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
                 // failed for
-                // http://fallback:1234/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
+                // https://fallback:1234/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
                 // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
                 // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
                 // unreachable\\\" }))\")"

@@ -15,8 +15,8 @@ use ic_nns_test_utils::registry::{
 };
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{TEST_ID, get_value_or_panic, prepare_registry},
 };
@@ -44,7 +44,7 @@ const NO_ID: u64 = 990;
 
 #[test]
 fn remove_nodes_with_duplicate_endpoints_succeeds() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let node_operator = NodeOperatorRecord {
             node_allowance: 2,
             ..Default::default()
@@ -176,7 +176,7 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
 #[test]
 #[ignore]
 fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let node_operator = NodeOperatorRecord {
             node_allowance: 2,
             ..Default::default()
@@ -322,7 +322,7 @@ fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
 
 #[test]
 fn remove_nodes_removes_all_keys() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let node_operator = NodeOperatorRecord {
             node_allowance: 2,
             ..Default::default()
@@ -444,7 +444,7 @@ fn remove_nodes_removes_all_keys() {
 
 #[test]
 fn remove_nodes_fails_with_non_governance_caller() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let (init_mutation, _, nodes_to_remove, _) = prepare_registry(1, NUM_NODES.into());
         // Prepare the registry with a single node and make it callable by anyone
         let registry = set_up_registry_canister(
@@ -494,7 +494,7 @@ fn remove_nodes_fails_with_non_governance_caller() {
 
 #[test]
 fn nodes_cannot_be_removed_if_any_in_subnet() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let (mut init_mutation, subnet_id, mut nodes_to_remove, _) =
             prepare_registry(NUM_NODES.into(), 1);
 

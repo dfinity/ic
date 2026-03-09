@@ -163,7 +163,7 @@ fn convert_create_service_nervous_system(
     let dapp_canisters = dapp_canisters.clone();
     let initial_token_distribution = initial_token_distribution.clone().map(|x| x.into());
     let swap_parameters = swap_parameters.clone().map(|x| x.into());
-    let governance_parameters = governance_parameters.map(|x| x.into());
+    let governance_parameters = governance_parameters.clone().map(|x| x.into());
 
     let logo = if omit_large_fields {
         None
@@ -566,9 +566,9 @@ pub(crate) fn proposal_data_to_info(
 mod tests {
     use super::*;
 
-    use crate::{
-        pb::v1::{CreateServiceNervousSystem, create_service_nervous_system::LedgerParameters},
-        proposals::self_describing::LocallyDescribableProposalAction,
+    use crate::pb::v1::{
+        CreateServiceNervousSystem, SelfDescribingProposalAction,
+        create_service_nervous_system::LedgerParameters,
     };
 
     use ic_base_types::PrincipalId;
@@ -721,7 +721,11 @@ mod tests {
             }),
             ..Default::default()
         };
-        let self_describing_action = create_service_nervous_system.to_self_describing_action();
+        let self_describing_action = SelfDescribingProposalAction {
+            type_name: "Create Service Nervous System (SNS)".to_string(),
+            type_description: "Create a new Service Nervous System (SNS).".to_string(),
+            value: Some(pb::SelfDescribingValue::from(create_service_nervous_system)),
+        };
 
         // Sanity check that the self-describing value does have logos when we don't omit them.
         let self_describing_value_with_logos =

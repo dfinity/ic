@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIcBuilder::with_mainnet_nns_subnet_id` to specify that the NNS subnet should be created with the mainnet NNS subnet ID.
+- The parameter `hard_ttl` to `StartServerParams` to specify that the PocketIC server should perform a hard exit after the provided duration since its launch.
+  If the library starts the server implicitly, then a default value of 10 minutes is used.
+  To override that default value, use the function `start_server` passing a custom value of the hard TTL (passing `None` sets no hard TTL).
+
 
 
 ## 12.0.0 - 2026-01-23

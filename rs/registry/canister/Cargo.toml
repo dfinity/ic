@@ -11,11 +11,13 @@ name = "registry-canister"
 path = "canister/canister.rs"
 
 [dependencies]
+attestation = { path = "../../ic_os/sev/attestation" }
 build-info = { workspace = true }
 candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
+der = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
@@ -66,6 +68,7 @@ getrandom = { version = "0.2", features = ["custom"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }
+attestation_testing = { path = "../../ic_os/sev/attestation/testing" }
 candid_parser = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }

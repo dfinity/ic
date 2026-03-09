@@ -139,7 +139,7 @@ impl ShareAggregator {
             let shares = pool.get_catch_up_package_shares(height).map(|share| {
                 let block = pool
                     .get_block(&share.content.block, height)
-                    .unwrap_or_else(|err| panic!("Block not found for {share:?}, error: {err:?}"));
+                    .unwrap_or_else(|| panic!("Block not found for {share:?}"));
                 Signed {
                     content: CatchUpContent::from_share_content(share.content, block.into_inner()),
                     signature: share.signature,

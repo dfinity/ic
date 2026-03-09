@@ -247,15 +247,6 @@ fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
     }
 }
 
-// Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
-fn set_java_path() {
-    let current_path = std::env::var("PATH").expect("PATH is not set");
-    let bazel_java = std::env::var("JAVABASE")
-        .expect("JAVABASE is not set; have you added the bazel tools toolchain?");
-    // TODO: Audit that the environment access only happens in single-threaded code.
-    unsafe { std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin")) };
-}
-
 /// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`)
 /// TLA modules are read from $TLA_MODULES (space-separated list)
 /// NOTE: this assumes unique basenames amongst the modules
@@ -350,8 +341,6 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
 
     all_pairs.truncate(STATE_PAIR_COUNT_LIMIT);
 
-    set_java_path();
-
     let apalache = std::env::var("TLA_APALACHE_BIN")
         .expect("environment variable 'TLA_APALACHE_BIN' should point to the apalache binary");
     let apalache = PathBuf::from(apalache);
@@ -363,7 +352,8 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
     // A poor man's parallel_map; process up to MAX_THREADS state pairs in parallel. Use mpsc channels
     // to signal threads becoming available. Additionally, use the channels to signal any errors while
     // performing the Apalache checks.
-    const MAX_THREADS: usize = 20;
+    //
+    const MAX_THREADS: usize = 10;
     let mut running_threads = 0;
     let (thread_freed_tx, thread_freed_rx) = mpsc::channel::<bool>();
     for (i, (model_name, constants, pair)) in all_pairs.iter().enumerate() {

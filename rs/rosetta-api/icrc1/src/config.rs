@@ -267,12 +267,12 @@ impl ParsedConfig {
 
             let mut token_dec = format!("{}", args.ledger_id.unwrap(),);
 
-            if args.icrc1_symbol.is_some() {
-                token_dec.push_str(&format!(":s={}", args.icrc1_symbol.clone().unwrap()));
+            if let Some(icrc1_symbol) = &args.icrc1_symbol {
+                token_dec.push_str(&format!(":s={}", icrc1_symbol.clone()));
             }
 
-            if args.icrc1_decimals.is_some() {
-                token_dec.push_str(&format!(":d={}", args.icrc1_decimals.unwrap()));
+            if let Some(icrc1_decimals) = &args.icrc1_decimals {
+                token_dec.push_str(&format!(":d={}", icrc1_decimals));
             }
 
             input_tokens.push(token_dec);

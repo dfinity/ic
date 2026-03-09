@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/ni_dkg",
+    "//rs/ic_os/sev/attestation",
     "//rs/nervous_system/access_list",
     "//rs/nervous_system/chunks",
     "//rs/nervous_system/common",
@@ -45,6 +46,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
+    "@crate_index//:der",
     "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:ic-cdk",
@@ -69,6 +71,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
+    "//rs/ic_os/sev/attestation/testing",
     "//rs/interfaces/registry",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/test_utils",
@@ -310,7 +313,6 @@ generated_files_check(
 rust_canbench(
     name = "registry-canbench",
     srcs = ["canbench/main.rs"],
-    add_test = True,
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.

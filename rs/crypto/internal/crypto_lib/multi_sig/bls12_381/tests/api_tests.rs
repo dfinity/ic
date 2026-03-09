@@ -6,12 +6,12 @@ use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
 use ic_crypto_internal_multi_sig_bls12381::types::{
     CombinedSignatureBytes, IndividualSignatureBytes, PopBytes, PublicKeyBytes, SecretKeyBytes,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::curves::bls12_381::G2Bytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use proptest::prelude::*;
-use rand::{CryptoRng, Rng, SeedableRng};
-use rand_chacha::ChaCha20Rng;
+use rand::{CryptoRng, Rng};
 
 /// Generate a G1 point that is not in the prime-order subgroup (has torsion).
 /// Used to test that malformed inputs are properly rejected.
@@ -54,16 +54,16 @@ fn non_torsion_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Affine {
 /// Proptest strategy for generating key pairs using the public API
 fn key_pair_bytes() -> impl Strategy<Value = (SecretKeyBytes, PublicKeyBytes)> {
     any::<[u8; 32]>().prop_map(|seed| {
-        let mut rng = ChaCha20Rng::from_seed(seed);
-        multi_sig::keypair_from_rng(&mut rng)
+        let seed = Seed::from_bytes(&seed);
+        multi_sig::keypair_from_seed(seed)
     })
 }
 
 /// Proptest strategy for generating individual signatures using the public API
 fn individual_signature_bytes() -> impl Strategy<Value = IndividualSignatureBytes> {
     (any::<[u8; 32]>(), any::<[u8; 8]>()).prop_map(|(seed, message)| {
-        let mut rng = ChaCha20Rng::from_seed(seed);
-        let (secret_key, _public_key) = multi_sig::keypair_from_rng(&mut rng);
+        let seed = Seed::from_bytes(&seed);
+        let (secret_key, _public_key) = multi_sig::keypair_from_seed(seed);
         multi_sig::sign(&message, &secret_key)
     })
 }
@@ -71,8 +71,8 @@ fn individual_signature_bytes() -> impl Strategy<Value = IndividualSignatureByte
 /// Proptest strategy for generating PoPs using the public API
 fn pop_bytes() -> impl Strategy<Value = PopBytes> {
     any::<[u8; 32]>().prop_map(|seed| {
-        let mut rng = ChaCha20Rng::from_seed(seed);
-        let (secret_key, public_key) = multi_sig::keypair_from_rng(&mut rng);
+        let seed = Seed::from_bytes(&seed);
+        let (secret_key, public_key) = multi_sig::keypair_from_seed(seed);
         multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP")
     })
 }
@@ -201,7 +201,7 @@ proptest! {
 #[test]
 fn verify_individual_accepts_a_valid_signature() {
     let rng = &mut reproducible_rng();
-    let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let message = b"test message";
     let signature = multi_sig::sign(message, &secret_key);
     assert!(multi_sig::verify_individual(message, &signature, &public_key).is_ok());
@@ -210,7 +210,7 @@ fn verify_individual_accepts_a_valid_signature() {
 #[test]
 fn verify_pop_accepts_a_valid_pop() {
     let rng = &mut reproducible_rng();
-    let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
     assert!(multi_sig::verify_pop(&pop, &public_key).is_ok());
 }
@@ -218,7 +218,7 @@ fn verify_pop_accepts_a_valid_pop() {
 #[test]
 fn verify_pop_fails_on_public_key_bytes_with_unset_compressed_flag() {
     let rng = &mut reproducible_rng();
-    let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
     let mut public_key_bytes = public_key;
     public_key_bytes.0[G2Bytes::FLAG_BYTE_OFFSET] &= !G2Bytes::COMPRESSED_FLAG;
@@ -231,7 +231,7 @@ fn verify_pop_fails_on_public_key_bytes_with_unset_compressed_flag() {
 #[test]
 fn verify_pop_fails_on_public_key_bytes_not_on_curve() {
     let rng = &mut reproducible_rng();
-    let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
     let mut public_key_bytes = public_key;
     // Zero out the bytes, set the compression flag.
@@ -249,7 +249,7 @@ fn verify_pop_fails_on_public_key_bytes_not_on_curve() {
 #[test]
 fn verify_pop_fails_on_public_key_bytes_not_in_subgroup() {
     let rng = &mut reproducible_rng();
-    let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
     let mut public_key_bytes = public_key;
     // By manual rejection sampling, we found an x-coordinate with a
@@ -268,7 +268,7 @@ fn verify_pop_fails_on_public_key_bytes_not_in_subgroup() {
 #[test]
 fn verify_individual_signature_fails_with_wrong_message() {
     let rng = &mut reproducible_rng();
-    let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let message = b"correct message";
     let wrong_message = b"wrong message";
 
@@ -286,8 +286,8 @@ fn verify_individual_signature_fails_with_wrong_message() {
 #[test]
 fn verify_individual_signature_fails_with_wrong_public_key() {
     let rng = &mut reproducible_rng();
-    let (secret_key, _public_key) = multi_sig::keypair_from_rng(rng);
-    let (_other_secret_key, other_public_key) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, _public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
+    let (_other_secret_key, other_public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let message = b"test message";
 
     let signature = multi_sig::sign(message, &secret_key);
@@ -304,7 +304,9 @@ fn verify_individual_signature_fails_with_wrong_public_key() {
 #[test]
 fn verify_combined_signature_fails_with_wrong_message() {
     let rng = &mut reproducible_rng();
-    let keys: Vec<_> = (0..3).map(|_| multi_sig::keypair_from_rng(rng)).collect();
+    let keys: Vec<_> = (0..3)
+        .map(|_| multi_sig::keypair_from_seed(Seed::from_rng(rng)))
+        .collect();
     let message = b"correct message";
     let wrong_message = b"wrong message";
 
@@ -327,7 +329,9 @@ fn verify_combined_signature_fails_with_wrong_message() {
 #[test]
 fn verify_combined_signature_fails_with_missing_public_key() {
     let rng = &mut reproducible_rng();
-    let keys: Vec<_> = (0..3).map(|_| multi_sig::keypair_from_rng(rng)).collect();
+    let keys: Vec<_> = (0..3)
+        .map(|_| multi_sig::keypair_from_seed(Seed::from_rng(rng)))
+        .collect();
     let message = b"test message";
 
     let signatures: Vec<_> = keys
@@ -350,8 +354,10 @@ fn verify_combined_signature_fails_with_missing_public_key() {
 #[test]
 fn verify_combined_signature_fails_with_extra_public_key() {
     let rng = &mut reproducible_rng();
-    let keys: Vec<_> = (0..3).map(|_| multi_sig::keypair_from_rng(rng)).collect();
-    let (_, extra_public_key) = multi_sig::keypair_from_rng(rng);
+    let keys: Vec<_> = (0..3)
+        .map(|_| multi_sig::keypair_from_seed(Seed::from_rng(rng)))
+        .collect();
+    let (_, extra_public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let message = b"test message";
 
     let signatures: Vec<_> = keys
@@ -374,7 +380,9 @@ fn verify_combined_signature_fails_with_extra_public_key() {
 #[test]
 fn verify_combined_signature_accepts_with_reordered_public_keys() {
     let rng = &mut reproducible_rng();
-    let keys: Vec<_> = (0..3).map(|_| multi_sig::keypair_from_rng(rng)).collect();
+    let keys: Vec<_> = (0..3)
+        .map(|_| multi_sig::keypair_from_seed(Seed::from_rng(rng)))
+        .collect();
     let message = b"test message";
 
     let signatures: Vec<_> = keys
@@ -396,8 +404,8 @@ fn verify_combined_signature_accepts_with_reordered_public_keys() {
 #[test]
 fn verify_pop_fails_with_wrong_public_key() {
     let rng = &mut reproducible_rng();
-    let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
-    let (_, other_public_key) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
+    let (_, other_public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
 
     let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
 
@@ -413,7 +421,7 @@ fn verify_pop_fails_with_wrong_public_key() {
 #[test]
 fn verify_individual_fails_with_malformed_signature_bytes() {
     let rng = &mut reproducible_rng();
-    let (_, public_key) = multi_sig::keypair_from_rng(rng);
+    let (_, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let message = b"test message";
 
     // Create malformed signature bytes (point not in subgroup)
@@ -429,7 +437,7 @@ fn verify_individual_fails_with_malformed_signature_bytes() {
 #[test]
 fn verify_individual_fails_with_malformed_public_key_bytes() {
     let rng = &mut reproducible_rng();
-    let (secret_key, _public_key) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, _public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let message = b"test message";
 
     let signature = multi_sig::sign(message, &secret_key);
@@ -447,7 +455,9 @@ fn verify_individual_fails_with_malformed_public_key_bytes() {
 #[test]
 fn verify_combined_fails_with_malformed_signature_bytes() {
     let rng = &mut reproducible_rng();
-    let keys: Vec<_> = (0..2).map(|_| multi_sig::keypair_from_rng(rng)).collect();
+    let keys: Vec<_> = (0..2)
+        .map(|_| multi_sig::keypair_from_seed(Seed::from_rng(rng)))
+        .collect();
     let public_key_bytes: Vec<_> = keys.iter().map(|(_, pk)| *pk).collect();
     let message = b"test message";
 
@@ -464,7 +474,9 @@ fn verify_combined_fails_with_malformed_signature_bytes() {
 #[test]
 fn verify_combined_fails_with_malformed_public_key_bytes() {
     let rng = &mut reproducible_rng();
-    let keys: Vec<_> = (0..2).map(|_| multi_sig::keypair_from_rng(rng)).collect();
+    let keys: Vec<_> = (0..2)
+        .map(|_| multi_sig::keypair_from_seed(Seed::from_rng(rng)))
+        .collect();
     let message = b"test message";
 
     let signatures: Vec<_> = keys
@@ -489,7 +501,7 @@ fn verify_combined_fails_with_malformed_public_key_bytes() {
 #[test]
 fn combine_signature_fails_with_malformed_individual_signature_bytes() {
     let rng = &mut reproducible_rng();
-    let (secret_key, _) = multi_sig::keypair_from_rng(rng);
+    let (secret_key, _) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let message = b"test message";
 
     let valid_sig = multi_sig::sign(message, &secret_key);
@@ -509,7 +521,7 @@ fn combine_signature_fails_with_malformed_individual_signature_bytes() {
 #[test]
 fn verify_pop_fails_with_malformed_pop_bytes() {
     let rng = &mut reproducible_rng();
-    let (_, public_key) = multi_sig::keypair_from_rng(rng);
+    let (_, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
 
     // Create malformed PoP bytes (point not in subgroup)
     let malformed_pop = non_torsion_g1(rng);
@@ -544,7 +556,7 @@ fn verify_combined_with_empty_public_keys_verifies_identity() {
 #[test]
 fn verify_combined_identity_signature_fails_with_nonempty_public_keys() {
     let rng = &mut reproducible_rng();
-    let (_, public_key) = multi_sig::keypair_from_rng(rng);
+    let (_, public_key) = multi_sig::keypair_from_seed(Seed::from_rng(rng));
     let message = b"test message";
 
     // Identity signature (no signers)

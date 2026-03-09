@@ -134,8 +134,6 @@ XNET_TEST_CANISTER_RUNTIME_DEPS = {
     "XNET_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/xnet_test:xnet-test-canister",
 }
 
-STATESYNC_TEST_CANISTER_DATA = ["//rs/rust_canisters/statesync_test:statesync-test-canister"]
-
 UNIVERSAL_CANISTER_RUNTIME_DEPS = {
     "UNIVERSAL_CANISTER_WASM_PATH": "//rs/universal_canister/impl:universal_canister.wasm.gz",
 }
@@ -150,4 +148,10 @@ SIGNER_CANISTER_RUNTIME_DEPS = {
 
 IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = {
     "IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH": "//rs/tests:impersonate_upstreams_uvm_config_image",
+}
+
+CANISTER_SANDBOX_RUNTIME_DEPS = {
+    "SANDBOX_BINARY": "//rs/canister_sandbox:canister_sandbox",
+    "LAUNCHER_BINARY": "//rs/canister_sandbox:sandbox_launcher",
+    "COMPILER_BINARY": "//rs/canister_sandbox:compiler_sandbox",
 }

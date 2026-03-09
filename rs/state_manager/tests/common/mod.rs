@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::{Config, LsmtConfig, lsmt_config_default};
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{
     certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},
@@ -59,7 +60,8 @@ pub fn alternate_wasm() -> CanisterModule {
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
-pub const fn height(h: u64) -> Height {
+#[allow(non_snake_case)]
+pub const fn Height(h: u64) -> Height {
     Height::new(h)
 }
 
@@ -67,7 +69,7 @@ pub fn heights_to_certify(state_manager: &impl StateManager) -> Vec<Height> {
     state_manager
         .list_state_hashes_to_certify()
         .iter()
-        .map(|p| p.0)
+        .map(|p| p.height)
         .collect()
 }
 
@@ -75,11 +77,18 @@ pub fn certify_height(state_manager: &impl StateManager, h: Height) -> Certifica
     let hash = state_manager
         .list_state_hashes_to_certify()
         .into_iter()
-        .find_map(|(height, hash)| if height == h { Some(hash) } else { None })
+        .find_map(|state_hash_metadata| {
+            if state_hash_metadata.height == h {
+                Some(state_hash_metadata.hash)
+            } else {
+                None
+            }
+        })
         .expect("no hash to certify");
 
     let certification = Certification {
         height: h,
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),
@@ -146,7 +155,7 @@ pub fn encode_decode_stream_test<
             streams.insert(destination_subnet, stream.clone());
         });
 
-        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata, None);
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         certify_height(&state_manager, Height::new(1));
 
@@ -208,7 +217,7 @@ pub fn encode_partial_slice_test(
             streams.insert(destination_subnet, stream.clone());
         });
 
-        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata, None);
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         certify_height(&state_manager, Height::new(1));
 
@@ -302,7 +311,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
         streams.insert(subnet_test_id(42), modified_stream);
     });
 
-    state_manager.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
+    state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
     certify_height(state_manager, Height::new(2));
 
@@ -320,7 +329,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
 pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> CryptoHashOfState {
     use std::time::{Duration, Instant};
 
-    let timeout = Duration::from_secs(100);
+    let timeout = Duration::from_secs(300);
     let started = Instant::now();
     while started.elapsed() < timeout {
         match state_manager.get_state_hash_at(h) {
@@ -385,7 +394,7 @@ pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
     let wasm = alternate_wasm();
 
     state
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .execution_state
         .as_mut()

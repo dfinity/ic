@@ -1,0 +1,15 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = [
+    "//rs/consensus:__subpackages__",
+    "//rs/ingress_manager:__subpackages__",
+    "//rs/replica:__subpackages__",
+    "//rs/test_utilities:__subpackages__",
+])
+
+rust_library(
+    name = "features",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_consensus_features",
+    version = "0.9.0",
+)

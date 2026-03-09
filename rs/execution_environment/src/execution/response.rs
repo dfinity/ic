@@ -239,7 +239,7 @@ impl ResponseHelper {
                 error!(
                     round.log,
                     "[EXC-BUG] Canister {} has a deleted context that has not responded",
-                    self.canister.system_state.canister_id,
+                    self.canister.canister_id(),
                 );
                 // Since this branch doesn't call `early_finish()`, it needs to manually
                 // revert the subnet memory reservation.
@@ -265,7 +265,7 @@ impl ResponseHelper {
             error!(
                 round.log,
                 "[EXC-BUG] Canister {} is attempting to execute a response, but the execution state does not exist.",
-                self.canister.system_state.canister_id,
+                self.canister.canister_id(),
             );
             let result = Err(HypervisorError::WasmModuleNotFound);
             return Err(self.early_finish(result, original, round, round_limits));
@@ -308,9 +308,9 @@ impl ResponseHelper {
         // the callback have been checked in `execute_response()`.
         // Note that we cannot return an error here because the cleanup callback
         // cannot be invoked without a valid call context and a callback.
-        let (_, _, call_context, _) = common::get_call_context_and_callback(
+        let (call_context, _) = common::get_call_context(
             clean_canister,
-            &original.message,
+            &original.callback,
             round.log,
             round.counters.unexpected_response_error,
         )
@@ -385,7 +385,7 @@ impl ResponseHelper {
                 canister_id: self.canister.canister_id(),
                 available: old_balance,
                 requested,
-                threshold: original.freezing_threshold,
+                threshold: Cycles::zero(),
                 reveal_top_up,
             };
             info!(
@@ -547,12 +547,7 @@ impl ResponseHelper {
         let (action, call_context) = self
             .canister
             .system_state
-            .on_canister_result(
-                original.call_context_id,
-                Some(original.callback_id),
-                result,
-                instructions_used,
-            )
+            .on_canister_result(original.call_context_id, result, instructions_used)
             .unwrap();
         let response = action_to_response(
             &self.canister,
@@ -585,7 +580,7 @@ impl ResponseHelper {
             info!(
                 round.log,
                 "Canister {} received unaccepted {} cycles as refund from canister {}.",
-                self.canister.system_state.canister_id,
+                self.canister.canister_id(),
                 self.refund_for_sent_cycles,
                 self.response_sender,
             );
@@ -666,7 +661,7 @@ impl ResponseHelper {
 /// time slicing execution of a response.
 #[derive(Clone, Debug)]
 struct OriginalContext {
-    callback: Callback,
+    callback: Arc<Callback>,
     call_context_id: CallContextId,
     callback_id: CallbackId,
     call_origin: CallOrigin,
@@ -676,7 +671,6 @@ struct OriginalContext {
     message_instruction_limit: NumInstructions,
     message: Arc<Response>,
     subnet_size: usize,
-    freezing_threshold: Cycles,
     canister_id: CanisterId,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
@@ -781,13 +775,19 @@ impl PausedExecution for PausedResponseExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message = CanisterMessage::Response(self.original.message);
+        let message = CanisterMessage::Response {
+            response: self.original.message,
+            callback: self.original.callback,
+        };
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
     }
 
     fn input(&self) -> CanisterMessageOrTask {
-        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
+        CanisterMessageOrTask::Message(CanisterMessage::Response {
+            response: self.original.message.clone(),
+            callback: self.original.callback.clone(),
+        })
     }
 }
 
@@ -881,13 +881,19 @@ impl PausedExecution for PausedCleanupExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message = CanisterMessage::Response(self.original.message);
+        let message = CanisterMessage::Response {
+            response: self.original.message,
+            callback: self.original.callback,
+        };
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
     }
 
     fn input(&self) -> CanisterMessageOrTask {
-        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
+        CanisterMessageOrTask::Message(CanisterMessage::Response {
+            response: self.original.message.clone(),
+            callback: self.original.callback.clone(),
+        })
     }
 }
 
@@ -900,6 +906,7 @@ impl PausedExecution for PausedCleanupExecution {
 pub fn execute_response(
     clean_canister: CanisterState,
     response: Arc<Response>,
+    callback: Arc<Callback>,
     time: Time,
     execution_parameters: ExecutionParameters,
     round: RoundContext,
@@ -909,42 +916,30 @@ pub fn execute_response(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let (callback, callback_id, call_context, call_context_id) =
-        match common::get_call_context_and_callback(
-            &clean_canister,
-            &response,
-            round.log,
-            round.counters.unexpected_response_error,
-        ) {
-            Some(r) => r,
-            None => {
-                // This case is unreachable because the call context and
-                // callback should always exist.
-                return ExecuteMessageResult::Finished {
-                    canister: clean_canister,
-                    instructions_used: NumInstructions::from(0),
-                    heap_delta: NumBytes::from(0),
-                    response: ExecutionResponse::Empty,
-                    call_duration: None,
-                };
-            }
-        };
-
-    let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-        clean_canister.system_state.freeze_threshold,
-        clean_canister.system_state.memory_allocation,
-        clean_canister.memory_usage(),
-        clean_canister.message_memory_usage(),
-        clean_canister.compute_allocation(),
-        subnet_size,
-        round.cost_schedule,
-        clean_canister.system_state.reserved_balance(),
-    );
+    let (call_context, call_context_id) = match common::get_call_context(
+        &clean_canister,
+        &callback,
+        round.log,
+        round.counters.unexpected_response_error,
+    ) {
+        Some(r) => r,
+        None => {
+            // This case is unreachable because the call context and
+            // callback should always exist.
+            return ExecuteMessageResult::Finished {
+                canister: clean_canister,
+                instructions_used: NumInstructions::from(0),
+                heap_delta: NumBytes::from(0),
+                response: ExecutionResponse::Empty,
+                call_duration: None,
+            };
+        }
+    };
 
     let original = OriginalContext {
         callback,
         call_context_id,
-        callback_id,
+        callback_id: response.originator_reply_callback,
         call_origin: call_context.call_origin().clone(),
         time,
         call_context_creation_time: call_context.time(),
@@ -952,7 +947,6 @@ pub fn execute_response(
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: Arc::clone(&response),
         subnet_size,
-        freezing_threshold,
         canister_id: clean_canister.canister_id(),
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,

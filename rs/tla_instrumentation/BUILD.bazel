@@ -32,11 +32,9 @@ rust_test(
     crate_root = "tla_instrumentation/tests/structs.rs",
     data = [
         ":tla_models",
-        "@bazel_tools//tools/jdk:current_java_runtime",
         "@tla_apalache//:bin/apalache-mc",
     ],
     env = {
-        "JAVABASE": "$(JAVABASE)",
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
         "TLA_MODULES": "$(locations :tla_models)",
     },
@@ -44,7 +42,6 @@ rust_test(
         ":proc_macros",
         "@crate_index//:async-trait",
     ],
-    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [
         ":local_key",
         ":tla_instrumentation",
@@ -98,11 +95,9 @@ rust_test(
     crate_root = "tla_instrumentation/tests/multiple_calls.rs",
     data = [
         ":tla_models",
-        "@bazel_tools//tools/jdk:current_java_runtime",
         "@tla_apalache//:bin/apalache-mc",
     ],
     env = {
-        "JAVABASE": "$(JAVABASE)",
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
         "TLA_MODULES": "$(locations :tla_models)",
     },
@@ -110,7 +105,6 @@ rust_test(
         ":proc_macros",
         "@crate_index//:async-trait",
     ],
-    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [
         ":local_key",
         ":tla_instrumentation",

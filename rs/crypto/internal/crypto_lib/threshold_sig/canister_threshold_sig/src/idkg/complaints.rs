@@ -206,7 +206,7 @@ impl IDkgComplaintInternal {
         receiver_index: NodeIndex,
         dealer_index: NodeIndex,
         public_key: &MEGaPublicKey,
-    ) -> CanisterThresholdResult<Vec<u8>> {
+    ) -> CanisterThresholdResult<[u8; 32]> {
         let mut ro = RandomOracle::new(DomainSep::ComplaintProofAssocData(alg));
 
         ro.add_bytestring("associated_data", associated_data)?;
@@ -214,7 +214,7 @@ impl IDkgComplaintInternal {
         ro.add_u32("dealer_index", dealer_index)?;
         ro.add_point("receiver_public_key", public_key.public_point())?;
 
-        ro.output_bytestring(32)
+        ro.output_32_bytes()
     }
 }
 

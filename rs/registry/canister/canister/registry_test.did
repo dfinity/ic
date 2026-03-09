@@ -37,13 +37,25 @@ type AddNodePayload = record {
   domain : opt text;
   public_ipv4_config : opt IPv4Config;
   xnet_endpoint : text;
-  chip_id : opt blob;
   committee_signing_pk : blob;
   node_signing_pk : blob;
   transport_tls_cert : blob;
   ni_dkg_dealing_encryption_pk : blob;
   p2p_flow_endpoints : vec text;
   node_reward_type : opt text;
+  node_registration_attestation : opt SevAttestationPackage;
+};
+
+type SevAttestationPackage = record {
+  attestation_report : opt blob;
+  certificate_chain : opt SevCertificateChain;
+  custom_data_debug_info : opt text;
+};
+
+type SevCertificateChain = record {
+  ark_pem : opt text;
+  ask_pem : opt text;
+  vcek_pem : opt text;
 };
 
 type AddNodesToSubnetPayload = record {
@@ -73,6 +85,7 @@ type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
   features : SubnetFeatures;
   max_ingress_bytes_per_message : nat64;
+  max_ingress_bytes_per_block: opt nat64;
   dkg_dealings_per_block : nat64;
   max_block_payload_size : nat64;
   start_as_nns : bool;
@@ -90,6 +103,8 @@ type CreateSubnetPayload = record {
   node_ids : vec principal;
 
   canister_cycles_cost_schedule: opt CanisterCyclesCostSchedule;
+
+  subnet_admins: opt vec principal;
 
   // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
   ingress_bytes_per_block_soft_cap : nat64;
@@ -340,7 +355,7 @@ type SubnetFeatures = record {
   sev_enabled : opt bool;
 };
 
-type SubnetType = variant { application; verified_application; system };
+type SubnetType = variant { application; verified_application; system; cloud_engine };
 
 type UpdateApiBoundaryNodesVersionPayload = record {
   version : text;
@@ -434,6 +449,7 @@ type UpdateSubnetPayload = record {
   pfn_evaluation_period_ms : opt nat32;
   subnet_id : principal;
   max_ingress_bytes_per_message : opt nat64;
+  max_ingress_bytes_per_block: opt nat64;
   dkg_dealings_per_block : opt nat64;
   max_block_payload_size : opt nat64;
   start_as_nns : opt bool;
@@ -489,6 +505,11 @@ type SetSubnetOperationalLevelPayload = record {
   // Similar to ssh_read_only_access, except that this targets one node at a
   // time, not all the nodes in the subnet.
   ssh_node_state_write_access : opt vec NodeSshAccess;
+
+  // Replica version IDs to recall for this subnet. If specified, these versions
+  // will replace the subnet's recalled_replica_version_ids list, preventing
+  // the subnet from upgrading to these versions.
+  recalled_replica_version_ids : opt vec text;
 };
 
 type NodeSshAccess = record {

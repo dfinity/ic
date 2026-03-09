@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 ic-certification-test-utils = { path = "../../../certification/test-utils" }
-ic-crypto-internal-basic-sig-iccsa = { path = "../../internal/crypto_lib/basic_sig/iccsa" }
-ic-crypto-internal-basic-sig-iccsa-test-utils = { path = "../../internal/crypto_lib/basic_sig/iccsa/test_utils" }
+ic-crypto-iccsa = { path = "../../iccsa" }
+ic-crypto-iccsa-test-utils = { path = "../../iccsa/test_utils" }
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }
 ic-crypto-test-utils = { path = ".." }
 ic-types = { path = "../../../types/types" }

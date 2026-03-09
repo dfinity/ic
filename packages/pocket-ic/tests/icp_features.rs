@@ -34,8 +34,6 @@ use std::collections::BTreeMap;
 use std::io::Read;
 use std::time::Duration;
 use tempfile::TempDir;
-#[cfg(windows)]
-use wslpath::windows_to_wsl;
 
 mod common;
 
@@ -173,6 +171,7 @@ fn nns_ui_requires_other_icp_features() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let icp_features = IcpFeatures {
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
@@ -192,6 +191,7 @@ fn test_ii_nns_ui() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
@@ -227,6 +227,7 @@ fn test_no_canister_http_without_auto_progress() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
@@ -628,8 +629,9 @@ fn test_cycles_ledger() {
                 .0;
         assert_eq!(balance, expected_balance);
 
-        // The cycles ledger index only syncs with the cycles ledger once per second.
-        pic.advance_time(Duration::from_secs(1));
+        // The cycles ledger index employs a backoff algorithm, and may, by default, only sync with
+        // the cycles ledger every 10 seconds if the ledger transaction rate is low.
+        pic.advance_time(Duration::from_secs(10));
         pic.tick();
 
         // Check balance via cycles ledger index.
@@ -1020,12 +1022,7 @@ fn read_registry() {
 )]
 fn with_all_icp_features_and_nns_state() {
     let state_dir = TempDir::new().unwrap();
-    #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();
-    #[cfg(windows)]
-    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let _pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
@@ -1036,12 +1033,7 @@ fn with_all_icp_features_and_nns_state() {
 #[tokio::test]
 async fn with_all_icp_features_and_nns_subnet_state() {
     let state_dir = TempDir::new().unwrap();
-    #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();
-    #[cfg(windows)]
-    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let (_, url) = start_server(StartServerParams::default()).await;
     let client = reqwest::Client::new();
@@ -1059,6 +1051,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         icp_features: Some(all_icp_features()),
         incomplete_state: None,
         initial_time: None,
+        mainnet_nns_subnet_id: None,
     };
     let response = client
         .post(url.join("instances").unwrap())

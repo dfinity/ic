@@ -70,3 +70,7 @@ path = "rpc_csp_vault_reconnection_test.rs"
 [[bin]]
 name = "ingress_verification_test"
 path = "ingress_verification_test.rs"
+
+[[bin]]
+name = "ic_crypto_csp_start_order_test"
+path = "ic_crypto_csp_start_order_test.rs"

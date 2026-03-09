@@ -27,7 +27,7 @@ use ic_limits::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{
@@ -62,6 +62,7 @@ struct TestCase {
     canisters_count: usize,
     ingress_pool_size: usize,
     ingress_message_size: usize,
+    payload_size_limit: u64,
 }
 
 /// Helper to run a single test with dependency setup.
@@ -89,8 +90,7 @@ where
         .expect_get_status_at_height()
         .returning(|_| Ok(Box::new(|_| IngressStatus::Unknown)));
     let subnet_id = subnet_test_id(0);
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let registry = setup_registry(subnet_id, runtime.handle().clone());
+    let registry = set_up_registry(subnet_id, test_case.payload_size_limit);
     let consensus_time = Arc::new(MockConsensusTime::new());
     let mut state_manager = MockStateManager::new();
     state_manager.expect_get_state_at().return_const(Ok(
@@ -142,9 +142,13 @@ where
 }
 
 /// Sets up a registry client.
-fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<dyn RegistryClient> {
+fn set_up_registry(
+    subnet_id: SubnetId,
+    max_ingress_bytes_per_block: u64,
+) -> Arc<dyn RegistryClient> {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-    let subnet_record = test_subnet_record();
+    let mut subnet_record = test_subnet_record();
+    subnet_record.max_ingress_bytes_per_block = max_ingress_bytes_per_block;
     registry_data_provider
         .add(
             &make_subnet_record_key(subnet_id),
@@ -152,11 +156,10 @@ fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<d
             Some(subnet_record),
         )
         .expect("Failed to add subnet record.");
-    let registry = Arc::new(RegistryClientImpl::new(
-        Arc::clone(&registry_data_provider) as Arc<_>,
-        None,
+    let registry = Arc::new(FakeRegistryClient::new(
+        Arc::clone(&registry_data_provider) as Arc<_>
     ));
-    runtime.block_on(async { registry.as_ref().fetch_and_start_polling().unwrap() });
+    registry.update_to_latest_version();
     registry
 }
 
@@ -217,7 +220,9 @@ fn get_ingress_payload(
         certified_height: Height::from(0),
     };
     let past_payload = HashSet::new();
-    manager.get_ingress_payload(&past_payload, &validation_context, byte_limit)
+    manager
+        .get_ingress_payload(&past_payload, &validation_context, byte_limit)
+        .payload
 }
 
 /// Validate payload
@@ -238,49 +243,65 @@ fn build_payload(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("get_ingress_payload");
     group.measurement_time(MEASUREMENT_TIME);
 
-    let test_cases = [
-        TestCase {
-            canisters_count: 100_000,
-            ingress_pool_size: 100 * MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
-            ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
-                as usize,
-        },
-        TestCase {
-            canisters_count: 1,
-            ingress_pool_size: 100 * MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
-            ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
-                as usize,
-        },
-        TestCase {
-            canisters_count: 1_000,
-            ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
-            ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
-                as usize,
-        },
-        TestCase {
-            canisters_count: 1,
-            ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
-            ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
-                as usize,
-        },
-        TestCase {
-            canisters_count: 1,
-            ingress_pool_size: 2,
-            ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
-        },
-        TestCase {
-            canisters_count: 1,
-            ingress_pool_size: 100,
-            ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
-        },
-    ];
+    let generate_test_cases = |payload_size_limit| {
+        vec![
+            TestCase {
+                canisters_count: 100_000,
+                ingress_pool_size: 100 * MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+                ingress_message_size: (payload_size_limit / MAX_INGRESS_MESSAGES_PER_BLOCK)
+                    as usize,
+                payload_size_limit,
+            },
+            TestCase {
+                canisters_count: 1,
+                ingress_pool_size: 100 * MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+                ingress_message_size: (payload_size_limit / MAX_INGRESS_MESSAGES_PER_BLOCK)
+                    as usize,
+                payload_size_limit,
+            },
+            TestCase {
+                canisters_count: 1_000,
+                ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+                ingress_message_size: (payload_size_limit / MAX_INGRESS_MESSAGES_PER_BLOCK)
+                    as usize,
+                payload_size_limit,
+            },
+            TestCase {
+                canisters_count: 1,
+                ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+                ingress_message_size: (payload_size_limit / MAX_INGRESS_MESSAGES_PER_BLOCK)
+                    as usize,
+                payload_size_limit,
+            },
+            TestCase {
+                canisters_count: 1,
+                ingress_pool_size: (payload_size_limit / MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET)
+                    as usize,
+                ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
+                payload_size_limit,
+            },
+            TestCase {
+                canisters_count: 1,
+                ingress_pool_size: 100,
+                ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
+                payload_size_limit,
+            },
+        ]
+    };
+
+    let test_cases = generate_test_cases(MAX_BLOCK_PAYLOAD_SIZE)
+        .into_iter()
+        .chain(generate_test_cases(8 * 1024 * 1024))
+        .chain(generate_test_cases(16 * 1024 * 1024))
+        .chain(generate_test_cases(32 * 1024 * 1024));
 
     for test_case in test_cases {
         set_up_dependencies_and_run_test(
             test_case,
             |manager: &mut IngressManager, current_time: Time| {
                 let name = format!(
-                    "canisters: {}, ingress pool size: {}, ingress message size: {}",
+                    "payload size limit: {}, canisters: {}, ingress pool size: {}, ingress message size: {}",
+                    test_case.payload_size_limit,
                     test_case.canisters_count,
                     test_case.ingress_pool_size,
                     test_case.ingress_message_size
@@ -291,7 +312,7 @@ fn build_payload(criterion: &mut Criterion) {
                         get_ingress_payload(
                             current_time,
                             manager,
-                            NumBytes::new(MAX_BLOCK_PAYLOAD_SIZE),
+                            NumBytes::new(test_case.payload_size_limit),
                         );
                     })
                 });
@@ -313,12 +334,14 @@ fn validate_payload(criterion: &mut Criterion) {
             ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
             ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
                 as usize,
+            payload_size_limit: MAX_BLOCK_PAYLOAD_SIZE,
         },
         TestCase {
             canisters_count: 1,
             ingress_pool_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET)
                 as usize,
             ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
+            payload_size_limit: MAX_BLOCK_PAYLOAD_SIZE,
         },
     ];
 

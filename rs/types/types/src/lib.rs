@@ -69,7 +69,7 @@ pub mod canister_http;
 pub mod canister_log;
 pub mod consensus;
 pub mod crypto;
-pub mod funds;
+pub mod cycles;
 pub mod hostos_version;
 pub mod ingress;
 pub mod malicious_behavior;
@@ -91,11 +91,11 @@ pub mod exhaustive;
 
 pub use crate::canister_log::{
     CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_DELTA_LOG_MEMORY_LIMIT, MIN_AGGREGATE_LOG_MEMORY_LIMIT,
+    MAX_DELTA_LOG_MEMORY_LIMIT,
 };
+pub use crate::cycles::Cycles;
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
-pub use funds::*;
 pub use ic_base_types::{
     CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,
     PrincipalIdBlobParseError, PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
@@ -107,6 +107,7 @@ use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_snapshot_bits::v1 as pb_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
+use more_asserts::debug_assert_gt;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -153,6 +154,10 @@ pub struct QueryStatsTag {}
 pub type QueryStatsEpoch = AmountOf<QueryStatsTag, u64>;
 
 pub fn epoch_from_height(height: Height, epoch_length: u64) -> QueryStatsEpoch {
+    debug_assert_gt!(epoch_length, 0, "epoch_length must not be zero");
+    if epoch_length == 0 {
+        return QueryStatsEpoch::from(0);
+    }
     QueryStatsEpoch::from(height.get() / epoch_length)
 }
 
@@ -235,7 +240,7 @@ pub struct ComputeAllocation(u64);
 
 impl ComputeAllocation {
     /// Returns the raw percent contained in this `ComputeAllocation`.
-    pub fn as_percent(self) -> u64 {
+    pub const fn as_percent(self) -> u64 {
         self.0
     }
 

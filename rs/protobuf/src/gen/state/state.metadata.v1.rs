@@ -33,6 +33,8 @@ pub struct SubnetTopology {
         tag = "7"
     )]
     pub canister_cycles_cost_schedule: i32,
+    #[prost(message, repeated, tag = "8")]
+    pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -216,6 +218,19 @@ pub struct CanisterHttpRequestContext {
     pub replication: ::core::option::Option<Replication>,
     #[prost(message, optional, tag = "12")]
     pub pricing_version: ::core::option::Option<PricingVersion>,
+    #[prost(message, optional, tag = "13")]
+    pub refund_status: ::core::option::Option<RefundStatus>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RefundStatus {
+    #[prost(message, optional, tag = "1")]
+    pub refundable_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "2")]
+    pub per_replica_allowance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "3")]
+    pub refunded_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "4")]
+    pub refunding_nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct PricingVersion {
@@ -234,7 +249,7 @@ pub mod pricing_version {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Replication {
-    #[prost(oneof = "replication::ReplicationType", tags = "1, 2")]
+    #[prost(oneof = "replication::ReplicationType", tags = "1, 2, 3")]
     pub replication_type: ::core::option::Option<replication::ReplicationType>,
 }
 /// Nested message and enum types in `Replication`.
@@ -245,7 +260,18 @@ pub mod replication {
         FullyReplicated(()),
         #[prost(message, tag = "2")]
         NonReplicated(super::super::super::super::types::v1::NodeId),
+        #[prost(message, tag = "3")]
+        Flexible(super::FlexibleReplication),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleReplication {
+    #[prost(message, repeated, tag = "1")]
+    pub committee: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+    #[prost(uint32, tag = "2")]
+    pub min_responses: u32,
+    #[prost(uint32, tag = "3")]
+    pub max_responses: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContextTree {
@@ -574,6 +600,8 @@ pub enum HttpMethod {
     Get = 1,
     Post = 2,
     Head = 3,
+    Put = 4,
+    Delete = 5,
 }
 impl HttpMethod {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -586,6 +614,8 @@ impl HttpMethod {
             Self::Get => "HTTP_METHOD_GET",
             Self::Post => "HTTP_METHOD_POST",
             Self::Head => "HTTP_METHOD_HEAD",
+            Self::Put => "HTTP_METHOD_PUT",
+            Self::Delete => "HTTP_METHOD_DELETE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -595,6 +625,8 @@ impl HttpMethod {
             "HTTP_METHOD_GET" => Some(Self::Get),
             "HTTP_METHOD_POST" => Some(Self::Post),
             "HTTP_METHOD_HEAD" => Some(Self::Head),
+            "HTTP_METHOD_PUT" => Some(Self::Put),
+            "HTTP_METHOD_DELETE" => Some(Self::Delete),
             _ => None,
         }
     }

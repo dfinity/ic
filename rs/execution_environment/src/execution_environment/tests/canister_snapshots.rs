@@ -1,3 +1,4 @@
+use crate::units::MIB;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Reserved};
 use ic_base_types::NumBytes;
@@ -343,7 +344,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
         canister_id,
         "update",
         wasm()
-            .memory_size_is_at_least(20 * 1024 * 1024) // 20 MiB
+            .memory_size_is_at_least(20 * MIB)
             .reply_data(&[42])
             .build(),
     )
@@ -581,7 +582,7 @@ fn canister_snapshot_reserves_cycles_difference() {
 #[test]
 fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_snapshot() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
-    const CAPACITY: u64 = 500 * 1024 * 1024; // 500 MiB
+    const CAPACITY: u64 = 500 * MIB;
     const THRESHOLD: u64 = CAPACITY / 2;
 
     let mut test = ExecutionTestBuilder::new()
@@ -608,7 +609,7 @@ fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_sn
             canister_id,
             "update",
             wasm()
-                .memory_size_is_at_least(100 * 1024 * 1024) // 100 MiB
+                .memory_size_is_at_least(100 * MIB)
                 .reply_data(&[42])
                 .build(),
         )
@@ -637,7 +638,7 @@ fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_sn
         canisters[0],
         "update",
         wasm()
-            .memory_size_is_at_least(120 * 1024 * 1024) // 120 MiB
+            .memory_size_is_at_least(120 * MIB)
             .reply_data(&[42])
             .build(),
     )
@@ -655,7 +656,7 @@ fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_sn
 fn take_canister_snapshot_does_not_reduce_subnet_available_memory_when_failing_to_create_snapshot()
 {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
-    const CAPACITY: u64 = 500 * 1024 * 1024; // 500 MiB
+    const CAPACITY: u64 = 500 * MIB;
     const THRESHOLD: u64 = CAPACITY / 2;
 
     let mut test = ExecutionTestBuilder::new()
@@ -1438,7 +1439,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
     assert_eq!(canister_version_before, 1u64);
 
     let canister_history = test
@@ -1492,7 +1493,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
     // Canister version should be bumped after loading a snapshot.
     assert_gt!(canister_version_after, canister_version_before);
     assert_eq!(canister_version_after, 2u64);
@@ -2952,14 +2953,7 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
     // DO NOT MODIFY WITHOUT READING DOC COMMENT!
     //
     let SchedulerState {
-        last_full_execution_round: _,
-        compute_allocation: _,
-        accumulated_priority: _,
-        priority_credit: _,
-        long_execution_mode: _,
         heap_delta_debit: _,
         install_code_debit: _,
-        time_of_last_allocation_charge: _,
-        total_query_stats: _,
     } = scheduler_state;
 }

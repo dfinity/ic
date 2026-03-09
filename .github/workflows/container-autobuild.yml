@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - '.github/workflows/container-autobuild.yml'
-      - '.bazelversion'
       - 'rust-toolchain.toml'
       - 'ci/container/**'
   push:
@@ -12,7 +11,6 @@ on:
       - 'dev-gh-*'
     paths:
       - '.github/workflows/container-autobuild.yml'
-      - '.bazelversion'
       - 'rust-toolchain.toml'
       - 'ci/container/**'
   workflow_dispatch:
@@ -27,10 +25,91 @@ permissions:
   pull-requests: write
 
 jobs:
-  ic-build-image:
-    name: Build Container Image
+  build-image-prep:
+    name: Build Image Prep
     runs-on: ubuntu-latest
+    outputs:
+      build_image: ${{ steps.set-output.outputs.build_image }}
+      image_tag: ${{ steps.set-output.outputs.image_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set Build Output
+        shell: bash
+        id: set-output
+        run: |
+          # Check if we've previously already built ic-build image
+          set -eExuo pipefail
+          image_tag="$(ci/container/get-image-tag.sh)"
+          if grep $image_tag ci/container/TAG; then
+            echo "build_image=false" >> "$GITHUB_OUTPUT"
+            echo "Update with this image already in this PR!"
+            echo "Modify ci/container/TAG with random string to trigger new build."
+          else
+            echo "build_image=true" >> "$GITHUB_OUTPUT"
+            echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+          fi
+
+  ic-build-image:
+    name: Build Container Image ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: [build-image-prep]
+    if: ${{ needs.build-image-prep.outputs.build_image == 'true' }}
     timeout-minutes: 60
+    strategy:
+      matrix:
+        include:
+          - image: ic-build
+            target: build
+          - image: ic-dev
+            target: dev
+    outputs:
+      ic-build-imageid: ${{ steps.set-output-imageid.outputs.ic-build-imageid }}
+      ic-dev-imageid: ${{ steps.set-output-imageid.outputs.ic-dev-imageid }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Container Image ${{ matrix.image }}
+        # this sets the output 'imageid' to the sha256 of the output image
+        uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
+        id: build
+        with:
+          context: .
+          file: ci/container/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ needs.build-image-prep.outputs.image_tag }}
+          target: ${{ matrix.target }}
+          build-args: |
+            CI_USER=1001
+      - name: Set output imageid
+        id: set-output-imageid
+        run: |
+          if [ "${{ matrix.image }}" == "ic-build" ]; then
+            echo "ic-build-imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.image }}" == "ic-dev" ]; then
+            echo "ic-dev-imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
+          else
+            echo "Unknown image: ${{ matrix.image }}"
+            exit 1
+          fi
+
+  update-image-references:
+    name: Update Image References in Repo
+    runs-on: ubuntu-latest
+    needs: [build-image-prep, ic-build-image]
+    if: ${{ needs.build-image-prep.outputs.build_image == 'true' }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -45,90 +124,70 @@ jobs:
           ref: ${{ github.head_ref }}
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Set Env Variables
-        shell: bash
-        id: cfg
-        run: |
-          # Set relevant outputs
-          set -eExuo pipefail
-          image_tag="$(ci/container/get-image-tag.sh)"
-          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
-
-      - name: Check Previous Builds
-        shell: bash
-        id: check
-        run: |
-          # Check if we've previously already built ic-build image
-          set -eExuo pipefail
-          if grep '${{ steps.cfg.outputs.image_tag }}' ci/container/TAG; then
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            echo "Update with this image already in this PR!"
-            echo "Modify ci/container/TAG with random string to trigger new build."
-          else
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
-        if: ${{ steps.check.outputs.build == 'true' }}
-
-      - name: Login to GHCR
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
-        if: ${{ steps.check.outputs.build == 'true' }}
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Container Image
-        # this sets the output 'imageid' to the sha256 of the output image
-        uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
-        if: ${{ steps.check.outputs.build == 'true' }}
-        id: build
-        with:
-          context: .
-          file: ci/container/Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ steps.cfg.outputs.image_tag }}
-          build-args: |
-            CI_USER=1001
-
       - name: Update Image References
         shell: bash
-        if: ${{ steps.check.outputs.build == 'true' }}
         run: |
           # Update container image references
           set -xeuo pipefail
 
-          IMG_NAME=${{ github.repository_owner }}/ic-build
-          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ steps.build.outputs.imageid }}"
 
-          echo '${{ steps.cfg.outputs.image_tag }}' > ci/container/TAG
+          IMAGE_PREFIX="ghcr.io/dfinity/"
+          IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
+          IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${{ needs.ic-build-image.outputs.ic-dev-imageid }}"
+
+          echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
           pushd .devcontainer
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
+          sed -i -E "s|${IMAGE_PREFIX}ic-dev(:\|@)[^\"]{5,}|$IMG_NAME_IC_DEV|g" -- *
           popd
           pushd .github
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- workflow*/*
+          sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           popd
 
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
           git add .
-          git commit -m 'Updating container image to ${{ steps.build.outputs.imageid }}' -m 'Image tag: ${{ steps.cfg.outputs.image_tag }}'
+          git commit \
+            -m 'Updating container images to tag: ${{ needs.build-image-prep.outputs.image_tag }}' \
+            -m 'ic-build: ${{ needs.ic-build-image.outputs.ic-build-imageid }}' \
+            -m 'ic-dev:   ${{ needs.ic-build-image.outputs.ic-dev-imageid }}'
           git push
 
       - name: Add PR Comment
         uses: actions/github-script@v7
-        if: ${{ steps.check.outputs.build == 'true' && github.event_name == 'pull_request' }}
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           script: |
             let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
-            message += 'New container image: `${{ steps.build.outputs.imageid }}`\n'
-            message += 'New container tag: `${{ steps.cfg.outputs.image_tag }}`'
+            message += 'New container images with tag: `${{ needs.build-image-prep.outputs.image_tag }}`\n'
+            message += 'ic-build: `${{ needs.ic-build-image.outputs.ic-build-imageid }}`\n'
+            message += 'ic-dev: `${{ needs.ic-build-image.outputs.ic-dev-imageid }}`\n'
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            // Find existing comment from this workflow
+            const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: message
-            })
+              issue_number: context.issue.number
+            });
+
+            const botComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('New container image:')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: message
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: message
+              });
+            }

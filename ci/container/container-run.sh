@@ -18,7 +18,13 @@ if [ -e /run/.containerenv ]; then
 fi
 
 if ! which podman >/dev/null 2>&1; then
-    eprintln "Podman missing...install it."
+    eprintln "Podman needs to be installed to run this script."
+    exit 1
+fi
+
+# Verify podman is reachable/responding
+if ! podman info >/dev/null 2>&1; then
+    eprintln "Podman found but not responding (daemon/service not running or not reachable)."
     exit 1
 fi
 
@@ -28,9 +34,8 @@ Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
     -r | --rebuild          Rebuild the container image
+    -i | --image <image>    ic-build or ic-dev (default: ic-dev)
     -h | --help             Print help
-    --container-cmd <cmd>   Specify container run command (e.g., 'podman', or 'sudo podman';
-                                otherwise will choose based on detected environment)
 
 If USHELL is not set, the default shell (/usr/bin/bash) will be started inside the container.
 To run a different shell or command, pass it as arguments, e.g.:
@@ -38,13 +43,12 @@ To run a different shell or command, pass it as arguments, e.g.:
     $0 /usr/bin/zsh
     $0 bash -l
 
-Script uses dfinity/ic-build image by default.
 EOF
 }
 
 REBUILD_IMAGE=false
+IMAGE_NAME="ic-dev"
 
-IMAGE="ghcr.io/dfinity/ic-build"
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
@@ -54,15 +58,15 @@ while test $# -gt $CTR; do
             REBUILD_IMAGE=true
             shift
             ;;
-        --container-cmd)
+        -i | --image)
             shift
             if [ $# -eq 0 ]; then
-                echo "Error: --container-cmd requires an argument" >&2
+                echo "Error: --image requires an argument" >&2
                 usage >&2
                 exit 1
             fi
-            # Split the argument into an array (supports "sudo podman")
-            read -ra CONTAINER_CMD <<<"$1"
+            IMAGE_NAME="$1"
+            shift
             ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
@@ -83,6 +87,22 @@ while test $# -gt $CTR; do
     esac
 done
 
+if [ $# -eq 0 ]; then
+    # if no command is specified, create an shell
+    if [ -z "${USHELL:-}" ] || [ "$USHELL" == "bash" ]; then
+        # bit of a hack: we source the completion by passing it as an rcfile.
+        # The completion itself requires `.bazelversion` to exist.
+        # We avoid generating the completion in the container _build_ so that
+        # the container itself does not depend on the bazel version.
+        cmd=("/usr/bin/bash" -c "exec bash --rcfile <(bazel completion bash)")
+    else
+        cmd=("$USHELL")
+    fi
+else
+    cmd=("$@")
+fi
+echo "Using ${cmd[*]} as run command."
+
 # Detect environment
 if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
     echo "Detected Devenv environment."
@@ -91,25 +111,24 @@ else
     DEVENV=false
 fi
 
-# If no container command specified, use based on environment
-if [ -z "${CONTAINER_CMD[*]:-}" ]; then
-    if [ "$DEVENV" = true ]; then
-        echo "Using hoststorage for podman root."
-        CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
-    else
-        CONTAINER_CMD=(sudo podman)
-    fi
+if [ "$DEVENV" = true ]; then
+    echo "Using hoststorage for podman root."
+    CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
+else
+    CONTAINER_CMD=(sudo podman)
 fi
+
+echo "Using container command: ${CONTAINER_CMD[*]}"
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
-IMAGE="$IMAGE:$IMAGE_TAG"
+IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
 
 if [ $REBUILD_IMAGE = true ]; then
-    "$REPO_ROOT"/ci/container/build-image.sh
+    "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
 elif ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
     if ! "${CONTAINER_CMD[@]}" pull $IMAGE; then
-        "$REPO_ROOT"/ci/container/build-image.sh
+        "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
     fi
 fi
 
@@ -123,11 +142,16 @@ USER=$(whoami)
 
 PODMAN_RUN_ARGS=(
     -w "$WORKDIR"
+    --rm              # remove container after it ran
+    --log-driver=none # by default podman logs all of stdout to the journal which is resource-consuming and wasteful
 
     -u "ubuntu:ubuntu"
     -e HOSTUSER="$USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
+    -e TERM
+    -e LANG=C.UTF-8
+    -e CARGO_TERM_COLOR
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1
     --entrypoint=
@@ -151,49 +175,40 @@ mkdir -p "${ZIG_CACHE}"
 ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
-MISC_TMP_DIR="/tmp/misc"
-mkdir -p "${MISC_TMP_DIR}"
-
-trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
-SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
-SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
-
-IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
-
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
 
 PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}",idmap="${IDMAP}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache",idmap="${IDMAP}"
-    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache",idmap="${IDMAP}"
-    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws",idmap="${IDMAP}"
-    --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
+    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
+    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
+    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"
+    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
+    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
+    --mount type=tmpfs,target="/tmp/containers"
 )
 
 if [ "$(id -u)" = "1000" ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
         )
     fi
 
     if [ -e "${HOME}/.bash_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
         )
 
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
         )
     fi
     if [ -e "${HOME}/.zsh_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
         )
     fi
 
@@ -205,10 +220,8 @@ if [ "$(id -u)" = "1000" ]; then
             sudo mkdir -p /hoststorage/cache/cargo
             sudo chown -R 1000:1000 /hoststorage/cache/cargo
         fi
-        # Pre-create target directory to avoid crun 64-bit inode issues
-        mkdir -p "${REPO_ROOT}/target"
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target",idmap="${IDMAP}"
+            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
         )
     fi
 fi
@@ -222,38 +235,27 @@ else
     eprintln "No ssh-agent to forward."
 fi
 
-# Create dynamic subuid/subgid files for the user to run nested containers
-echo "ubuntu:100000:65536" >$SUBUID_FILE
-chmod +r ${SUBUID_FILE}
-echo "ubuntu:100000:65536" >$SUBGID_FILE
-chmod +r ${SUBGID_FILE}
-PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid",idmap="${IDMAP}"
-    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid",idmap="${IDMAP}"
-)
-
-# Omit -t if not a tty.
-# Also shut up logging, because podman will by default log
-# every byte of standard output to the journal, and that
-# destroys the journal + wastes enormous amounts of CPU.
-# I witnessed journald and syslog peg 2 cores of my devenv
-# when running a simple cat /path/to/file.
+# if a user is attached, make it interactive and create tty
 if tty >/dev/null 2>&1; then
-    tty_arg=-t
-else
-    tty_arg=
+    PODMAN_RUN_ARGS+=(-i -t)
 fi
 
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
-OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
+PODMAN_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
 
-# option to pass in another shell if desired
-if [ $# -eq 0 ]; then
-    cmd=("${USHELL:-/usr/bin/bash}")
-else
-    cmd=("$@")
+if [ -f "$HOME/.container-run.conf" ]; then
+    # conf file with user's custom PODMAN_RUN_USR_ARGS
+    # This file is very handy but is a source of non-hermeticity, and issues
+    # related to it are hard to track down so we print a bold yellow message
+    # when it is in use.
+    tput -T xterm setaf 3
+    tput -T xterm bold
+    eprintln "Sourcing user's ~/.container-run.conf"
+    tput -T xterm sgr0
+    source "$HOME/.container-run.conf"
+    PODMAN_RUN_ARGS+=("${PODMAN_RUN_USR_ARGS[@]}")
 fi
 
 set -x
-exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
+exec "${CONTAINER_CMD[@]}" run "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"

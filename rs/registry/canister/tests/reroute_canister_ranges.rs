@@ -1,7 +1,7 @@
 use candid::Encode;
 use ic_nns_test_utils::{
     itest_helpers::{
-        local_test_on_nns_subnet, set_up_registry_canister, set_up_universal_canister,
+        set_up_registry_canister, set_up_universal_canister, state_machine_test_on_nns_subnet,
         try_call_via_universal_canister,
     },
     registry::{initial_routing_table_mutations, prepare_registry_with_two_node_sets},
@@ -23,7 +23,7 @@ use common::test_helpers::{check_error_message, check_subnet_for_canisters};
 
 #[test]
 fn test_reroute_canister_ranges() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let (subnet_1_mutation, subnet_id_1, subnet_id_2_option, _, _) =
                 prepare_registry_with_two_node_sets(

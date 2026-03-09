@@ -25,6 +25,7 @@ message DkgPayload {
 message DkgDataPayload {
   repeated DkgMessage dealings = 1;
   uint64 summary_height = 2;
+  repeated CallbackIdedNiDkgTranscript transcripts_for_remote_subnets = 3;
 }
 
 message Summary {

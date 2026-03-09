@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-01-23: Proposal 140097
+
+https://dashboard.internetcomputer.org/proposal/140097
+
+### Changed
+
+* Stop the target canister before taking or loading a snapshot.
+
+
 # 2026-01-16: Proposal 140013
 
 http://dashboard.internetcomputer.org/proposal/140013

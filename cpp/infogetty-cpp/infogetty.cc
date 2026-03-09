@@ -194,6 +194,9 @@ main(int argc, char** argv)
     // For other users (like root), use the login process
     if (opts.login_user == "limited-console") {
         // Use su to run the program as the limited-console user
+        //
+        // NOTE: If this invocation changes, update rs/tests/nested/nns_recovery/common.rs
+        // (simulate_node_provider_action) which tests the rbash recovery path.
         const char* cmdline[] = {
             "/bin/su",
             "-s", "/opt/ic/bin/limited-console",

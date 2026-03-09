@@ -5,6 +5,7 @@ use super::{
     routing::ResolveDestinationError,
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
@@ -226,7 +227,7 @@ impl SystemStateModifications {
             info!(
                 logger,
                 "Canister {} sent {} cycles to canister {}.",
-                system_state.canister_id,
+                system_state.canister_id(),
                 sent_cycles,
                 msg_receiver
             );
@@ -265,6 +266,7 @@ impl SystemStateModifications {
             | Ok(Ic00Method::DeleteCanister)
             | Ok(Ic00Method::RawRand)
             | Ok(Ic00Method::DepositCycles)
+            | Ok(Ic00Method::FlexibleHttpRequest)
             | Ok(Ic00Method::HttpRequest)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
@@ -333,8 +335,24 @@ impl SystemStateModifications {
         is_composite_query: bool,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
+        // Append delta logs.
+        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            let log_memory_store = &mut system_state.log_memory_store;
+            // TODO(DSM-11): cleanup population logic after migration is done.
+            // We need to copy existing canister_log to log_memory_store in order
+            // not to loose any log records until the migration is complete.
+            let old_total = &system_state.canister_log;
+            if log_memory_store.is_empty() && !old_total.is_empty() {
+                log_memory_store.append_delta_log(&mut old_total.clone());
+            }
+            log_memory_store.append_delta_log(&mut self.canister_log.clone());
+        }
+        system_state
+            .canister_log
+            .append_delta_log(&mut self.canister_log);
+
         // Verify total cycle change is not positive and update cycles balance.
-        self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
+        self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
 
         if let Some(hook_condition_check_result) =
@@ -356,7 +374,7 @@ impl SystemStateModifications {
         if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken
             && call_context_balance_taken != Cycles::zero()
         {
-            let own_canister_id = system_state.canister_id;
+            let own_canister_id = system_state.canister_id();
 
             let call_context = system_state
                 .withdraw_cycles(context_id, call_context_balance_taken)
@@ -397,10 +415,11 @@ impl SystemStateModifications {
         let mut callback_changes = BTreeMap::new();
         let nns_subnet_id = network_topology.nns_subnet_id;
         let subnet_ids: BTreeSet<PrincipalId> =
-            network_topology.subnets.keys().map(|s| s.get()).collect();
+            network_topology.subnets().keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
             if msg.receiver == IC_00 {
-                match Self::validate_sender_canister_version(&msg, system_state.canister_version) {
+                match Self::validate_sender_canister_version(&msg, system_state.canister_version())
+                {
                     Ok(()) => {
                         // This is a request to ic:00. Update the receiver to be the appropriate
                         // subnet and also update the corresponding callback.
@@ -409,7 +428,7 @@ impl SystemStateModifications {
                             msg.method_name.as_str(),
                             msg.method_payload.as_slice(),
                             own_subnet_id,
-                            system_state.canister_id,
+                            system_state.canister_id(),
                             is_composite_query,
                             logger,
                         )
@@ -443,7 +462,8 @@ impl SystemStateModifications {
                     }
                 }
             } else if subnet_ids.contains(&msg.receiver.get()) {
-                match Self::validate_sender_canister_version(&msg, system_state.canister_version) {
+                match Self::validate_sender_canister_version(&msg, system_state.canister_version())
+                {
                     Ok(()) => {
                         if own_subnet_id != nns_subnet_id {
                             // This is a management canister call providing the target subnet ID
@@ -513,14 +533,9 @@ impl SystemStateModifications {
             system_state.global_timer = new_global_timer;
         }
 
-        // Append delta log to the total canister log.
-        system_state
-            .canister_log
-            .append_delta_log(&mut self.canister_log);
-
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {
-            system_state.canister_version += 1;
+            system_state.bump_canister_version();
         }
 
         Ok(request_stats)
@@ -781,7 +796,7 @@ impl SandboxSafeSystemState {
         // slots across any queue to a subnet explicitly, the bitcoin canisters or
         // IC_00 itself.
         let mut ic00_aliases: BTreeSet<CanisterId> = network_topology
-            .subnets
+            .subnets()
             .keys()
             .map(|id| CanisterId::unchecked_from_principal(id.get()))
             .collect();
@@ -807,7 +822,7 @@ impl SandboxSafeSystemState {
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
 
         Self::new_internal(
-            system_state.canister_id,
+            system_state.canister_id(),
             CanisterStatusView::from_canister_status_type(system_state.status()),
             system_state.freeze_threshold,
             system_state.memory_allocation,
@@ -832,7 +847,7 @@ impl SandboxSafeSystemState {
             cost_schedule,
             dirty_page_overhead,
             system_state.global_timer,
-            system_state.canister_version,
+            system_state.canister_version(),
             system_state.controllers.clone(),
             request_metadata,
             caller,
@@ -1407,7 +1422,7 @@ impl SandboxSafeSystemState {
     pub fn get_root_key(&self) -> Vec<u8> {
         let root_subnet_id = self.network_topology.nns_subnet_id;
         self.network_topology
-            .subnets
+            .subnets()
             .get(&root_subnet_id)
             .map(|subnet_topology| subnet_topology.public_key.clone())
             .unwrap_or(IC_ROOT_KEY.to_vec())
@@ -1436,7 +1451,7 @@ impl SandboxSafeSystemState {
                     // unwraps: we got the subnet_id from the same collection
                     self.network_topology.get_subnet_size(subnet_id).unwrap(),
                     self.network_topology
-                        .subnets
+                        .subnets()
                         .get(subnet_id)
                         .unwrap()
                         .cost_schedule,

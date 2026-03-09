@@ -46,6 +46,7 @@ rust_library(
         "@crate_index//:lazy_static",
         "@crate_index//:libc",
         "@crate_index//:maplit",
+        "@crate_index//:more-asserts",
         "@crate_index//:nix",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
@@ -95,6 +96,24 @@ rust_bench(
         ":replicated_state",
         "//rs/criterion_time",
         "@crate_index//:criterion",
+    ],
+)
+
+rust_bench(
+    name = "log_memory_store_bench",
+    testonly = True,
+    srcs = [
+        "benches/log_memory_store.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        ":replicated_state",
+        "//rs/config",
+        "//rs/criterion_time",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:more-asserts",
     ],
 )
 

@@ -7,26 +7,28 @@ name = "guest_vm_runner"
 path = "src/main.rs"
 
 [dependencies]
+command_runner = { path = "../../command_runner" }
 config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
 deterministic_ips = { path = "../../networking/deterministic_ips" }
 ic_device = { path = "../../device" }
 grub = { path = "../../boot/grub" }
-ic-metrics-tool = { path = "../../metrics/metrics_tool" }
 sev_host = { path = "../../sev/host" }
 
 anyhow = { workspace = true }
+arc-swap = { workspace = true }
 askama = { workspace = true }
 clap = { workspace = true }
 devicemapper = { workspace = true }
 gpt = { workspace = true }
 macaddr = { workspace = true }
 memchr = { workspace = true }
+mockall = { workspace = true }
 nix = { workspace = true }
+prometheus = { workspace = true }
 regex = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
@@ -45,4 +47,3 @@ upgrade_device_mapper_test = []
 
 [dev-dependencies]
 goldenfile = { workspace = true }
-url = { workspace = true }

@@ -267,7 +267,7 @@ impl TryFrom<&pb::NiDkgTranscript> for NiDkgTranscript {
                     .committee
                     .iter()
                     .cloned()
-                    .map(|committee_member| crate::node_id_try_from_option(Some(committee_member)))
+                    .map(crate::node_id_try_from_protobuf)
                     .collect::<Result<BTreeSet<_>, _>>()?,
             )
             .map_err(|e| ProxyDecodeError::Other(format!("{e:?}")))?,

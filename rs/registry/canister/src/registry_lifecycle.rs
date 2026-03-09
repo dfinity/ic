@@ -58,9 +58,7 @@ pub fn canister_post_upgrade(
 
     // ANYTHING BELOW THIS LINE SHOULD NOT MUTATE STATE
 
-    if registry_storage.pre_upgrade_version.is_some() {
-        let pre_upgrade_version = registry_storage.pre_upgrade_version.unwrap();
-
+    if let Some(pre_upgrade_version) = registry_storage.pre_upgrade_version {
         assert_eq!(
             pre_upgrade_version + mutation_batches_due_to_data_migrations,
             registry.latest_version(),
@@ -191,8 +189,6 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
     mutations
 }
 
-// TODO(CRP-2973): Delete this after it has been released.
-// (Deletion need not take place right away.)
 fn fix_vetkd_pre_signatures_field(registry: &Registry) -> Vec<RegistryMutation> {
     let mut mutations = Vec::new();
 

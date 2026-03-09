@@ -1,7 +1,7 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, InternetIdentityInit,
-    NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig, SnsAggregatorConfig,
-    StaticCaptchaTrigger,
+    BitcoinCanisterArg, CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
+    DogecoinCanisterArg, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
+    OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -56,7 +56,7 @@ use ic_https_outcalls_service::HttpsOutcallResponse;
 use ic_https_outcalls_service::HttpsOutcallResult;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsService;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
-use ic_icp_index::InitArg as IcpIndexInitArg;
+use ic_icp_index::{IndexArg as IcpIndexArg, InitArg as IcpIndexInitArg};
 use ic_icrc1_index_ng::{IndexArg as CyclesLedgerIndexArg, InitArg as CyclesLedgerIndexInitArg};
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
@@ -115,6 +115,7 @@ use ic_types::{
     CanisterId, Cycles, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
     SubnetId,
     artifact::UnvalidatedArtifactMutation,
+    batch::CanisterCyclesCostSchedule,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
         CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
@@ -170,7 +171,11 @@ use tower::{service_fn, util::ServiceExt};
 #[template(path = "dashboard.html", escape = "html")]
 struct Dashboard<'a> {
     height: Height,
-    canisters: &'a Vec<(&'a ic_replicated_state::CanisterState, SubnetId)>,
+    canisters: &'a Vec<(
+        &'a ic_replicated_state::CanisterState,
+        &'a ic_replicated_state::CanisterPriority,
+        SubnetId,
+    )>,
 }
 
 const MAINNET_NNS_SUBNET_ID: &str =
@@ -308,6 +313,7 @@ struct RawTopologyInternal {
 struct SubnetConfigInternal {
     pub subnet_id: SubnetId,
     pub subnet_kind: SubnetKind,
+    pub subnet_admins: Option<Vec<PrincipalId>>,
     pub instruction_config: SubnetInstructionConfig,
     pub ranges: Vec<CanisterIdRange>,
     pub alloc_range: Option<CanisterIdRange>,
@@ -537,6 +543,58 @@ impl Subnets for SubnetsImpl {
     }
 }
 
+struct PocketIcStateDir {
+    state_dir: Option<PathBuf>,
+    wsl_native_state_dir: Option<TempDir>,
+}
+
+impl PocketIcStateDir {
+    fn new(state_dir: Option<PathBuf>) -> Result<Self, String> {
+        if wsl::is_wsl()
+            && let Some(state_dir) = state_dir
+        {
+            let temp_dir = TempDir::new()
+                .map_err(|e| format!("Failed to create WSL-native state directory: {e}"))?;
+            let temp_dir_path = temp_dir.path();
+
+            copy_dir(&state_dir, temp_dir_path)
+                .map_err(|e| format!("Failed to copy state to WSL-native state directory: {e}"))?;
+
+            Ok(Self {
+                state_dir: Some(state_dir),
+                wsl_native_state_dir: Some(temp_dir),
+            })
+        } else {
+            Ok(Self {
+                state_dir,
+                wsl_native_state_dir: None,
+            })
+        }
+    }
+
+    fn get(&self) -> Option<PathBuf> {
+        self.wsl_native_state_dir
+            .as_ref()
+            .map(|temp_dir| temp_dir.path().to_path_buf())
+            .or_else(|| self.state_dir.clone())
+    }
+}
+
+impl Drop for PocketIcStateDir {
+    fn drop(&mut self) {
+        if let Some(ref wsl_native_state_dir) = self.wsl_native_state_dir
+            && let Some(ref state_dir) = self.state_dir
+        {
+            // clear state directory first
+            remove_dir_contents(state_dir).expect("Failed to clear state directory");
+
+            // now copy back state from the WSL-native state directory
+            copy_dir(wsl_native_state_dir.path(), state_dir)
+                .expect("Failed to copy back state from WSL-native state directory");
+        }
+    }
+}
+
 struct PocketIcSubnets {
     subnet_configs: Vec<SubnetConfigInternal>,
     subnets: Arc<SubnetsImpl>,
@@ -546,7 +604,7 @@ struct PocketIcSubnets {
     btc_subnet: Option<Arc<Subnet>>,
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
-    state_dir: Option<PathBuf>,
+    state_dir: PocketIcStateDir,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
     icp_config: IcpConfig,
@@ -567,6 +625,7 @@ impl PocketIcSubnets {
         state_machine_state_dir: Box<dyn StateMachineStateDir>,
         runtime: Arc<Runtime>,
         subnet_kind: SubnetKind,
+        subnet_admins: Option<Vec<PrincipalId>>,
         subnet_seed: [u8; 32],
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -578,33 +637,28 @@ impl PocketIcSubnets {
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
+        let cost_schedule = match subnet_kind {
+            SubnetKind::CloudEngine => CanisterCyclesCostSchedule::Free,
+            SubnetKind::Application
+            | SubnetKind::Bitcoin
+            | SubnetKind::Fiduciary
+            | SubnetKind::II
+            | SubnetKind::NNS
+            | SubnetKind::SNS
+            | SubnetKind::System
+            | SubnetKind::VerifiedApplication => CanisterCyclesCostSchedule::Normal,
+        };
         let mut subnet_config = SubnetConfig::new(subnet_type);
         // using `let IcpConfig { }` with explicit field names
         // to force an update after adding a new field to `IcpConfig`
         let IcpConfig {
             beta_features,
-            canister_backtrace,
             function_name_length_limits,
             canister_execution_rate_limiting,
         } = icp_config;
         let mut hypervisor_config = match beta_features.clone().unwrap_or(IcpConfigFlag::Disabled) {
             IcpConfigFlag::Disabled => execution_environment::Config::default(),
             IcpConfigFlag::Enabled => crate::beta_features::hypervisor_config(),
-        };
-        match canister_backtrace {
-            None => (),
-            Some(IcpConfigFlag::Enabled) => {
-                hypervisor_config
-                    .embedders_config
-                    .feature_flags
-                    .canister_backtrace = FlagStatus::Enabled;
-            }
-            Some(IcpConfigFlag::Disabled) => {
-                hypervisor_config
-                    .embedders_config
-                    .feature_flags
-                    .canister_backtrace = FlagStatus::Disabled;
-            }
         };
         match function_name_length_limits {
             None | Some(IcpConfigFlag::Enabled) => (),
@@ -655,23 +709,28 @@ impl PocketIcSubnets {
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         let state_machine_config = StateMachineConfig::new(subnet_config, hypervisor_config);
-        StateMachineBuilder::new()
+        let mut builder = StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(state_machine_config))
             .with_subnet_seed(subnet_seed)
             .with_subnet_size(subnet_size.try_into().unwrap())
             .with_subnet_type(subnet_type)
+            .with_cost_schedule(cost_schedule)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
             .with_bitcoin_testnet_uds_path(bitcoin_adapter_uds_path)
             .with_dogecoin_testnet_uds_path(dogecoin_adapter_uds_path)
-            .create_at_registry_version(create_at_registry_version)
+            .create_at_registry_version(create_at_registry_version);
+        if let Some(subnet_admins) = subnet_admins {
+            builder = builder.with_subnet_admins(subnet_admins);
+        }
+        builder
     }
 
     fn new(
         runtime: Arc<Runtime>,
-        state_dir: Option<PathBuf>,
+        state_dir: PocketIcStateDir,
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -716,7 +775,7 @@ impl PocketIcSubnets {
     }
 
     fn persist_topology(&self, default_effective_canister_id: Principal) {
-        if let Some(ref state_dir) = self.state_dir {
+        if let Some(state_dir) = self.state_dir.get() {
             let raw_topology: RawTopologyInternal = RawTopologyInternal {
                 subnet_configs: self.subnet_configs.clone(),
                 default_effective_canister_id: default_effective_canister_id.into(),
@@ -772,6 +831,7 @@ impl PocketIcSubnets {
             subnet_id,
             subnet_state_dir,
             subnet_kind,
+            subnet_admins,
             instruction_config,
             expected_state_time,
         } = subnet_config_info;
@@ -779,7 +839,7 @@ impl PocketIcSubnets {
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 
         let state_machine_state_dir: Box<dyn StateMachineStateDir> =
-            if let Some(ref state_dir) = self.state_dir {
+            if let Some(state_dir) = self.state_dir.get() {
                 Box::new(state_dir.join(hex::encode(subnet_seed)))
             } else {
                 Box::new(TempDir::new().unwrap())
@@ -818,6 +878,7 @@ impl PocketIcSubnets {
             state_machine_state_dir,
             self.runtime.clone(),
             subnet_kind,
+            subnet_admins.clone(),
             subnet_seed,
             instruction_config.clone(),
             self.registry_data_provider.clone(),
@@ -976,6 +1037,7 @@ impl PocketIcSubnets {
         let subnet_config = SubnetConfigInternal {
             subnet_id,
             subnet_kind,
+            subnet_admins,
             instruction_config,
             ranges,
             alloc_range,
@@ -1427,16 +1489,30 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, LEDGER_INDEX_CANISTER_ID);
 
             // Install the ICP index.
-            let icp_index_init_arg = IcpIndexInitArg {
-                ledger_id: LEDGER_CANISTER_ID.get().0,
-            };
+            // Mainnet PocketIC embeds an older ICP Index WASM that expects the pre-DEFI-2617 init
+            // format (InitArg with ledger_id only). Head build uses the unified IndexArg::Init(InitArg) format.
+            // TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
+            let icp_index_init_payload: Vec<u8> =
+                if option_env!("POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS").unwrap_or("0") == "1" {
+                    let legacy_arg = IcpIndexInitArg {
+                        ledger_id: LEDGER_CANISTER_ID.get().0,
+                        retrieve_blocks_from_ledger_interval_seconds: None,
+                    };
+                    Encode!(&legacy_arg).unwrap()
+                } else {
+                    let arg = IcpIndexArg::Init(IcpIndexInitArg {
+                        ledger_id: LEDGER_CANISTER_ID.get().0,
+                        retrieve_blocks_from_ledger_interval_seconds: None,
+                    });
+                    Encode!(&arg).unwrap()
+                };
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
                     ICP_INDEX_CANISTER_WASM.to_vec(),
-                    Encode!(&icp_index_init_arg).unwrap(),
+                    icp_index_init_payload,
                 )
                 .unwrap();
         }
@@ -1558,7 +1634,10 @@ impl PocketIcSubnets {
             // Install the cycles ledger index.
             let cycles_ledger_index_init_arg = CyclesLedgerIndexInitArg {
                 ledger_id: CYCLES_LEDGER_CANISTER_ID.into(),
+                #[allow(deprecated)]
                 retrieve_blocks_from_ledger_interval_seconds: None,
+                min_retrieve_blocks_from_ledger_interval_seconds: None,
+                max_retrieve_blocks_from_ledger_interval_seconds: None,
             };
             let cycles_ledger_index_arg = CyclesLedgerIndexArg::Init(cycles_ledger_index_init_arg);
             ii_subnet
@@ -2029,6 +2108,7 @@ impl PocketIcSubnets {
                   auth_uri: "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
                   auth_scope: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
                   fedcm_uri: Some("".to_string()),
+                  email_verification: Some(OpenIdEmailVerification::Google),
                 }])
             } else {
                 None
@@ -2053,6 +2133,8 @@ impl PocketIcSubnets {
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
+                backend_canister_id: None,
+                backend_origin: None,
             });
             ii_subnet
                 .state_machine
@@ -2212,11 +2294,12 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, BITCOIN_TESTNET_CANISTER_ID);
 
             // Install the Bitcoin testnet canister.
-            let args = BitcoinInitConfig {
+            let init_config = BitcoinInitConfig {
                 network: Some(BitcoinNetwork::Regtest),
                 fees: Some(BitcoinFees::testnet()),
                 ..Default::default()
             };
+            let args = BitcoinCanisterArg::Init(init_config);
             btc_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -2285,11 +2368,12 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, DOGECOIN_CANISTER_ID);
 
             // Install the Dogecoin mainnet canister configured for the regtest network.
-            let args = DogecoinInitConfig {
+            let init_config = DogecoinInitConfig {
                 network: Some(DogecoinNetwork::Regtest),
                 fees: Some(DogecoinFees::mainnet()),
                 ..Default::default()
             };
+            let args = DogecoinCanisterArg::Init(init_config);
             btc_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -2465,8 +2549,8 @@ impl PocketIcSubnets {
 
     fn persist_registry_changes(&mut self) {
         // Update the registry file on disk.
-        if let Some(ref state_dir) = self.state_dir {
-            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
+        if let Some(state_dir) = self.state_dir.get() {
+            let registry_proto_path = state_dir.join("registry.proto");
             self.registry_data_provider
                 .write_to_file(registry_proto_path);
         }
@@ -2514,7 +2598,7 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        if self.subnets.state_dir.is_some() {
+        if self.subnets.state_dir.get().is_some() {
             let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
@@ -2571,6 +2655,12 @@ impl PocketIc {
             let subnet_seed = compute_subnet_seed(config.ranges.clone(), config.alloc_range);
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
+                subnet_admins: config.subnet_admins.as_ref().map(|subnet_admins| {
+                    subnet_admins
+                        .iter()
+                        .map(|subnet_admin| subnet_admin.0.into())
+                        .collect()
+                }),
                 subnet_seed,
                 canister_ranges,
                 instruction_config: config.instruction_config.clone(),
@@ -2599,6 +2689,7 @@ impl PocketIc {
         initial_time: Option<Time>,
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
+        mainnet_nns_subnet_id: bool,
     ) -> Result<Self, String> {
         if let Some(time) = initial_time {
             let systime: SystemTime = time.into();
@@ -2615,7 +2706,9 @@ impl PocketIc {
             .map(|time| time.into())
             .unwrap_or_else(|| default_timestamp(&icp_features));
 
-        let registry: Option<Vec<u8>> = if let Some(ref state_dir) = state_dir {
+        let state_dir = PocketIcStateDir::new(state_dir)?;
+
+        let registry: Option<Vec<u8>> = if let Some(state_dir) = state_dir.get() {
             let registry_file_path = state_dir.join("registry.proto");
             File::open(registry_file_path).ok().map(|file| {
                 let mut reader = BufReader::new(file);
@@ -2627,7 +2720,7 @@ impl PocketIc {
             None
         };
 
-        let topology: Option<RawTopologyInternal> = if let Some(ref state_dir) = state_dir {
+        let topology: Option<RawTopologyInternal> = if let Some(state_dir) = state_dir.get() {
             let topology_file_path = state_dir.join("topology.json");
             File::open(topology_file_path).ok().map(|file| {
                 let reader = BufReader::new(file);
@@ -2670,17 +2763,30 @@ impl PocketIc {
                         subnet_id: Some(config.subnet_id),
                         subnet_state_dir: None,
                         subnet_kind: config.subnet_kind,
+                        subnet_admins: config.subnet_admins.map(|subnet_admins| {
+                            subnet_admins
+                                .iter()
+                                .map(|subnet_admin| Principal::from(*subnet_admin).into())
+                                .collect()
+                        }),
                         instruction_config: config.instruction_config,
                         expected_state_time,
                     }
                 })
                 .collect()
         } else {
-            let fixed_range_subnets = subnet_configs.get_named();
+            let fixed_range_subnets: Vec<_> = subnet_configs
+                .get_named()
+                .into_iter()
+                .map(|(subnet_kind, subnet_state_dir, instruction_config)| {
+                    (subnet_kind, None, subnet_state_dir, instruction_config)
+                })
+                .collect();
             let flexible_subnets = {
                 let sys = subnet_configs.system.iter().map(|spec| {
                     (
                         SubnetKind::System,
+                        None,
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2688,6 +2794,15 @@ impl PocketIc {
                 let app = subnet_configs.application.iter().map(|spec| {
                     (
                         SubnetKind::Application,
+                        None,
+                        spec.get_state_path(),
+                        spec.get_instruction_config(),
+                    )
+                });
+                let cloud_engine = subnet_configs.cloud_engine.iter().map(|spec| {
+                    (
+                        SubnetKind::CloudEngine,
+                        spec.get_subnet_admins(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2695,11 +2810,12 @@ impl PocketIc {
                 let verified_app = subnet_configs.verified_application.iter().map(|spec| {
                     (
                         SubnetKind::VerifiedApplication,
+                        None,
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
                 });
-                sys.chain(app).chain(verified_app)
+                sys.chain(app).chain(cloud_engine).chain(verified_app)
             };
 
             let mut all_subnets: Vec<_> = fixed_range_subnets
@@ -2711,14 +2827,15 @@ impl PocketIc {
             // so that their canister ranges do not conflict with canister ranges
             // of fresh subnets (which are more flexible)
             all_subnets.sort_by(
-                |(_, a, _): &(_, Option<PathBuf>, _), (_, b, _): &(_, Option<PathBuf>, _)| {
+                |(_, _, a, _): &(_, _, Option<PathBuf>, _),
+                 (_, _, b, _): &(_, _, Option<PathBuf>, _)| {
                     a.is_none().cmp(&b.is_none())
                 },
             );
 
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
-            for (subnet_kind, subnet_state_dir, instruction_config) in all_subnets {
+            for (subnet_kind, subnet_admins, subnet_state_dir, instruction_config) in all_subnets {
                 let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
@@ -2771,7 +2888,7 @@ impl PocketIc {
                     let subnet_id = metadata.own_subnet_id;
                     let ranges: Vec<_> = metadata
                         .network_topology
-                        .routing_table
+                        .routing_table()
                         .ranges(subnet_id)
                         .iter()
                         .cloned()
@@ -2815,7 +2932,17 @@ impl PocketIc {
                         canister_allocation_range: alloc_range,
                     } = get_range_config(&mainnet_routing_table, subnet_kind, &mut range_gen)?;
 
-                    (ranges, alloc_range, None)
+                    let subnet_id = if matches!(subnet_kind, SubnetKind::NNS) {
+                        if mainnet_nns_subnet_id {
+                            Some(PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into())
+                        } else {
+                            None
+                        }
+                    } else {
+                        subnet_kind_subnet_id(subnet_kind)
+                    };
+
+                    (ranges, alloc_range, subnet_id)
                 };
 
                 subnet_config_info.push(SubnetConfigInfo {
@@ -2824,6 +2951,9 @@ impl PocketIc {
                     subnet_id,
                     subnet_state_dir,
                     subnet_kind,
+                    subnet_admins: subnet_admins.map(|subnet_admins| {
+                        subnet_admins.into_iter().map(PrincipalId::from).collect()
+                    }),
                     instruction_config,
                     expected_state_time: None,
                 });
@@ -2870,21 +3000,20 @@ impl PocketIc {
             subnet_configs.push(subnet_config_internal);
         }
 
-        let default_effective_canister_id = subnet_configs
-            .iter()
-            .find(|config| config.subnet_kind == SubnetKind::Application)
-            .unwrap_or_else(|| {
-                subnet_configs
-                    .iter()
-                    .find(|config| config.subnet_kind == SubnetKind::VerifiedApplication)
-                    .unwrap_or_else(|| {
-                        subnet_configs
-                            .iter()
-                            .find(|config| config.subnet_kind == SubnetKind::System)
-                            .unwrap_or_else(|| subnet_configs.first().unwrap())
-                    })
-            })
-            .default_effective_canister_id();
+        let default_effective_canister_id = [
+            SubnetKind::Application,
+            SubnetKind::CloudEngine,
+            SubnetKind::VerifiedApplication,
+            SubnetKind::System,
+        ]
+        .iter()
+        .find_map(|kind| {
+            subnet_configs
+                .iter()
+                .find(|config| config.subnet_kind == *kind)
+        })
+        .unwrap_or_else(|| subnet_configs.first().unwrap())
+        .default_effective_canister_id();
 
         subnets.persist_topology(default_effective_canister_id);
 
@@ -2941,6 +3070,7 @@ fn conv_type(inp: rest::SubnetKind) -> SubnetType {
     use rest::SubnetKind::*;
     match inp {
         Application | Fiduciary | SNS => SubnetType::Application,
+        CloudEngine => SubnetType::CloudEngine,
         Bitcoin | II | NNS | System => SubnetType::System,
         VerifiedApplication => SubnetType::VerifiedApplication,
     }
@@ -2950,6 +3080,7 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
     use rest::SubnetKind::*;
     match subnet {
         Application => 13,
+        CloudEngine => 13,
         VerifiedApplication => 13,
         Fiduciary => 34,
         SNS => 34,
@@ -2967,68 +3098,37 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     rest::CanisterIdRange { start, end }
 }
 
+fn subnet_kind_subnet_id(subnet_kind: SubnetKind) -> Option<SubnetId> {
+    use rest::SubnetKind::*;
+    match subnet_kind {
+        Application | CloudEngine | VerifiedApplication | System => None,
+        NNS => Some(PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into()),
+        II => Some(PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into()),
+        Bitcoin => Some(
+            PrincipalId::from_str(MAINNET_BITCOIN_SUBNET_ID)
+                .unwrap()
+                .into(),
+        ),
+        Fiduciary => Some(
+            PrincipalId::from_str(MAINNET_FIDUCIARY_SUBNET_ID)
+                .unwrap()
+                .into(),
+        ),
+        SNS => Some(PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into()),
+    }
+}
+
 fn subnet_kind_canister_ranges(
     mainnet_routing_table: &RoutingTable,
     subnet_kind: SubnetKind,
 ) -> Option<Vec<CanisterIdRange>> {
-    use rest::SubnetKind::*;
-    match subnet_kind {
-        Application | VerifiedApplication | System => None,
-        NNS => {
-            let nns_subnet_id = PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into();
-            Some(
-                mainnet_routing_table
-                    .ranges(nns_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        II => {
-            let ii_subnet_id = PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into();
-            Some(
-                mainnet_routing_table
-                    .ranges(ii_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        Bitcoin => {
-            let bitcoin_subnet_id = PrincipalId::from_str(MAINNET_BITCOIN_SUBNET_ID)
-                .unwrap()
-                .into();
-            Some(
-                mainnet_routing_table
-                    .ranges(bitcoin_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        Fiduciary => {
-            let fiduciary_subnet_id = PrincipalId::from_str(MAINNET_FIDUCIARY_SUBNET_ID)
-                .unwrap()
-                .into();
-            Some(
-                mainnet_routing_table
-                    .ranges(fiduciary_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        SNS => {
-            let sns_subnet_id = PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into();
-            Some(
-                mainnet_routing_table
-                    .ranges(sns_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-    }
+    subnet_kind_subnet_id(subnet_kind).map(|subnet_id| {
+        mainnet_routing_table
+            .ranges(subnet_id)
+            .iter()
+            .cloned()
+            .collect()
+    })
 }
 
 fn subnet_kind_from_canister_id(
@@ -3119,6 +3219,7 @@ struct SubnetConfigInfo {
     pub subnet_id: Option<SubnetId>,
     pub subnet_state_dir: Option<PathBuf>,
     pub subnet_kind: SubnetKind,
+    pub subnet_admins: Option<Vec<PrincipalId>>,
     pub instruction_config: SubnetInstructionConfig,
     pub expected_state_time: Option<SystemTime>,
 }
@@ -3228,6 +3329,8 @@ fn http_method_from(
         ic_types::canister_http::CanisterHttpMethod::GET => CanisterHttpMethod::GET,
         ic_types::canister_http::CanisterHttpMethod::POST => CanisterHttpMethod::POST,
         ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
+        ic_types::canister_http::CanisterHttpMethod::PUT => CanisterHttpMethod::PUT,
+        ic_types::canister_http::CanisterHttpMethod::DELETE => CanisterHttpMethod::DELETE,
     }
 }
 
@@ -4264,7 +4367,13 @@ impl Operation for DashboardRequest {
                 state
                     .get_ref()
                     .canisters_iter()
-                    .map(|c| (c, *subnet_id))
+                    .map(|canister| {
+                        (
+                            canister,
+                            state.get_ref().canister_priority(&canister.canister_id()),
+                            *subnet_id,
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .concat();
@@ -5160,9 +5269,10 @@ fn route(
                         SubnetConfigInfo {
                             ranges,
                             alloc_range: Some(canister_allocation_range),
-                            subnet_id: None,
+                            subnet_id: Some(subnet_id),
                             subnet_state_dir: None,
                             subnet_kind,
+                            subnet_admins: None,
                             instruction_config,
                             expected_state_time: None,
                         },
@@ -5251,6 +5361,19 @@ fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {
         .unwrap()
 }
 
+fn remove_dir_contents(dir: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            std::fs::remove_dir_all(entry.path())?;
+        } else {
+            std::fs::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5279,6 +5402,7 @@ mod tests {
                 None,
                 false,
                 None,
+                false,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -5299,6 +5423,7 @@ mod tests {
                 None,
                 false,
                 None,
+                false,
             )
             .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());

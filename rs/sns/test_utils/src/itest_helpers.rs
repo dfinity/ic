@@ -158,7 +158,10 @@ impl SnsTestsInitPayloadBuilder {
 
         let index_ng = Some(IndexArg::Init(InitArg {
             ledger_id: CanisterId::from_u64(0).into(),
+            #[allow(deprecated)]
             retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: None,
+            max_retrieve_blocks_from_ledger_interval_seconds: None,
         }));
 
         let mut governance = GovernanceCanisterInitPayloadBuilder::new();
@@ -1332,7 +1335,7 @@ pub async fn install_rust_canister_with_memory_allocation(
     );
 }
 
-/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_sns_subnet
 pub fn state_machine_test_on_sns_subnet<Fut, Out, F>(run: F) -> Out
 where
     Fut: Future<Output = Result<Out, String>>,

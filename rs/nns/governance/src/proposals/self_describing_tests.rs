@@ -11,14 +11,13 @@ use ic_nns_governance_derive_self_describing::SelfDescribing;
 use maplit::hashmap;
 
 #[track_caller]
-fn assert_proposal_action_self_describing_value_is(
-    action: impl LocallyDescribableProposalAction,
-    expected: SelfDescribingValue,
-) {
-    let SelfDescribingProposalAction { value, .. } = action.to_self_describing_action();
+fn assert_proposal_action_self_describing_value_is<T>(action: T, expected: SelfDescribingValue)
+where
+    SelfDescribingValuePb: From<T>,
+{
     // Use SelfDescribingValue for testing because: (1) it should only be used for API responses, and (2) it's
     // more straightforward to construct (while the protobuf type only exists for storage).
-    let value = SelfDescribingValue::from(value.unwrap());
+    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(action));
     assert_eq!(value, expected);
 }
 
@@ -262,6 +261,7 @@ fn test_create_service_nervous_system_to_self_describing() {
                         "seconds".to_string() => SelfDescribingValue::from(378025_u64),
                     }),
                 }),
+                "custom_proposal_criticality".to_string() => SelfDescribingValue::Null,
             }),
             "swap_parameters".to_string() => SelfDescribingValue::Map(hashmap! {
                 "minimum_participants".to_string() => SelfDescribingValue::from(50_u64),

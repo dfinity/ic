@@ -13,13 +13,15 @@ mod metrics;
 mod query_handler;
 mod scheduler;
 mod types;
+pub mod units;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
 use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
-    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse,
-    RoundInstructions, RoundLimits, as_num_instructions, as_round_instructions, execute_canister,
+    CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,
+    ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits, as_num_instructions,
+    as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};

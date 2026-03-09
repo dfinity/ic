@@ -455,7 +455,7 @@ fn slice_accurate_count_bytes(
 
         let packed_witness_bytes = slice.merkle_proof.len();
         let unpacked_witness_bytes = testing::witness_count_bytes(&unpacked);
-        assert_almost_equal(packed_witness_bytes, unpacked_witness_bytes, 5, 10);
+        assert_almost_equal(packed_witness_bytes, unpacked_witness_bytes, 3, 10);
 
         let packed_bytes =
             slice.payload.len() + slice.merkle_proof.len() + slice.certification.count_bytes();
@@ -780,7 +780,10 @@ fn pool(
     });
 }
 
-#[test_strategy::proptest]
+// This test creates two `StateManagerFixture`s per case (each spinning up a full
+// `StateManagerImpl` with disk I/O), so we reduce the number of cases to keep
+// the overall load within reasonable bounds.
+#[test_strategy::proptest(ProptestConfig::with_cases(50))]
 fn pool_append_same_slice(
     #[strategy(arb_stream_slice(
         1, // min_size

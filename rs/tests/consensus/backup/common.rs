@@ -64,7 +64,7 @@ use std::{
 };
 use std::{fs::File, time::Duration};
 
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
@@ -106,7 +106,7 @@ pub fn test(env: TestEnv) {
     // Bless target version
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
@@ -348,17 +348,26 @@ pub fn test(env: TestEnv) {
         some_checkpoint_dir(&backup_dir, &subnet_id).expect("Checkpoint doesn't exist");
 
     let canister_dir = checkpoint.join("canister_states").join(canister_id_hex);
-    let memory_artifact_path = fs::read_dir(canister_dir)
+    // Remove ALL vmemory_0 overlays to guarantee the state hash changes.
+    // A single arbitrary overlay might only delete outdated pages. If there is
+    // a merge in the next checkpoint interval, the deleted overlay might not affect
+    // the next checkpoint's hash. It would likely be sufficient to just delete the
+    // newest overlay, but that requires more assumptions on how LSMT works.
+    let memory_artifact_paths: Vec<PathBuf> = fs::read_dir(canister_dir)
         .expect("Should read canister dir")
         .flatten()
         .map(|entry| entry.path())
-        .find(|path| path.display().to_string().contains("vmemory_0"))
-        .expect("Should find file");
-
-    assert!(memory_artifact_path.exists());
-    info!(log, "Removing memory file: {:?}", memory_artifact_path);
-    fs::remove_file(&memory_artifact_path).unwrap();
-    assert!(!memory_artifact_path.exists());
+        .filter(|path| path.display().to_string().contains("vmemory_0"))
+        .collect();
+    assert!(
+        !memory_artifact_paths.is_empty(),
+        "Should find vmemory_0 files"
+    );
+    for path in &memory_artifact_paths {
+        info!(log, "Removing memory file: {:?}", path);
+        fs::remove_file(path).unwrap();
+        assert!(!path.exists());
+    }
 
     info!(log, "Start again the backup process in a separate thread");
     let mut command = Command::new(ic_backup_path);

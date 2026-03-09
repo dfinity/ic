@@ -62,6 +62,16 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "canister_http_flexible_test",
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/rust_canisters/canister_test",
+    ],
+)
+
+system_test_nns(
     name = "canister_http_stress_test",
     enable_metrics = True,
     tags = ["manual"],  # not meant to be run on CI
@@ -269,8 +279,8 @@ system_test_nns(
 
 system_test_nns(
     name = "firewall_max_connections_test",
-    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = [
+        "colocate",
         "long_test",
     ],
     deps = COMMON_DEPS + [
@@ -297,9 +307,9 @@ system_test_nns(
 
 system_test_nns(
     name = "http_endpoints_public_spec_test",
-    flaky = False,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
@@ -309,7 +319,6 @@ system_test_nns(
 system_test_nns(
     name = "network_large_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "system_test_large",
     ],
@@ -326,7 +335,6 @@ system_test_nns(
 system_test_nns(
     name = "network_reliability_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
         "system_test_large",
@@ -341,16 +349,15 @@ system_test_nns(
 
 system_test_nns(
     name = "p2p_performance_test",
-    data = [
-        "//rs/tests:jaeger_uvm_config_image",
-    ],
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
+    },
     deps = COMMON_DEPS + [
         "@crate_index//:ic-agent",
     ],
@@ -367,7 +374,6 @@ system_test_nns(
     },
     enable_head_nns_variant = False,
     enable_metrics = True,
-    flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
@@ -417,7 +423,6 @@ system_test_nns(
     },
     enable_head_nns_variant = False,
     enable_metrics = True,
-    flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",

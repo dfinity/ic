@@ -1,11 +1,7 @@
 use crate::{
-    pb::v1::{
-        GovernanceError, LoadCanisterSnapshot, SelfDescribingValue, Topic,
-        governance_error::ErrorType,
-    },
+    pb::v1::{GovernanceError, LoadCanisterSnapshot, Topic, governance_error::ErrorType},
     proposals::{
-        call_canister::CallCanister, self_describing::LocallyDescribableProposalAction,
-        topic_to_manage_canister,
+        call_canister::CallCanister, self_describing::DocumentedAction, topic_to_manage_canister,
     },
 };
 use candid::Encode;
@@ -97,15 +93,12 @@ fn defects_to_governance_error(defects: Vec<String>) -> GovernanceError {
     crate::proposals::invalid_proposal_error(&defects.join("; "))
 }
 
-impl LocallyDescribableProposalAction for LoadCanisterSnapshot {
-    const TYPE_NAME: &'static str = "Load Canister Snapshot";
-    const TYPE_DESCRIPTION: &'static str = "A proposal to load a previously taken snapshot of \
-        an NNS-controlled canister's state. The canister's state will be restored to the state \
-        captured in the snapshot.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
-        SelfDescribingValue::from(self.clone())
-    }
+impl DocumentedAction for LoadCanisterSnapshot {
+    const NAME: &'static str = "Load Canister Snapshot";
+    const DESCRIPTION: &'static str = "Load a snapshot created by a Take Canister Snapshot \
+        proposal into a canister controlled by the NNS. Loading a snapshot replaces the \
+        canister's current stable memory, heap memory, data, and Wasm module with what was saved \
+        in the snapshot, rolling the canister back to that earlier state.";
 }
 
 #[cfg(test)]

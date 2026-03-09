@@ -17,8 +17,8 @@ use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{
-    RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
-    ResponseWithRefundedCycles,
+    FlexibleRemoteHttpRequest, RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest,
+    RemoteHttpStressResponse, ResponseWithRefundedCycles,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -30,6 +30,21 @@ thread_local! {
 }
 
 const MAX_TRANSFORM_SIZE: usize = 2_000_000;
+
+#[update]
+async fn send_flexible_request(
+    request: FlexibleRemoteHttpRequest,
+) -> Result<Vec<u8>, (RejectionCode, String)> {
+    let FlexibleRemoteHttpRequest { request, cycles } = request;
+
+    ic_cdk::api::call::call_raw(
+        Principal::management_canister(),
+        "flexible_http_request",
+        &request.encode(),
+        cycles,
+    )
+    .await
+}
 
 #[update]
 async fn send_requests_in_parallel(
@@ -116,6 +131,7 @@ async fn send_request_with_refund_callback(
     let RemoteHttpRequest { request, cycles } = request;
     let request_url = request.url.clone();
     println!("send_request making IC call.");
+
     let result = match ic_cdk::api::call::call_raw(
         Principal::management_canister(),
         "http_request",

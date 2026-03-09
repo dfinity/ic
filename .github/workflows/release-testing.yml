@@ -32,9 +32,9 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:308ba70f44250bdc987039ff886678ebadc0385745e5ad2de9e544e4b410449d
+      image: ghcr.io/dfinity/ic-build@sha256:0a0cff0b12c7586c2f312c739176924edf0c9e71df92f382eba836913da9f1c6
       options: >-
-         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 180
     steps:
       - &checkout
@@ -42,6 +42,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
+      - uses: ./.github/actions/netrc
       - name: Run Bazel System Tests
         uses: ./.github/actions/bazel
         with:
@@ -96,6 +97,7 @@ jobs:
     timeout-minutes: 180
     steps:
       - *checkout
+      - uses: ./.github/actions/netrc
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel
         with:

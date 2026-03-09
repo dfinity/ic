@@ -53,11 +53,11 @@ impl AttestationReportBuilder {
         self
     }
 
-    pub fn build_unsigned(self) -> AttestationReport {
+    pub fn build_unsigned(&self) -> AttestationReport {
         self.attestation_report
     }
 
-    pub fn build_signed(self, signer: &FakeAttestationReportSigner) -> AttestationReport {
+    pub fn build_signed(&self, signer: &FakeAttestationReportSigner) -> AttestationReport {
         let mut attestation_report = self.attestation_report;
         signer
             .sign_report(&mut attestation_report)

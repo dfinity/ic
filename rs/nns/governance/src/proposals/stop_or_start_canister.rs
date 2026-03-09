@@ -6,9 +6,7 @@ use crate::{
     proposals::{
         call_canister::CallCanister,
         invalid_proposal_error,
-        self_describing::{
-            LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
-        },
+        self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
         topic_to_manage_canister,
     },
 };
@@ -97,20 +95,22 @@ impl CallCanister for StopOrStartCanister {
     }
 }
 
-impl LocallyDescribableProposalAction for StopOrStartCanister {
-    const TYPE_NAME: &'static str = "Stop or Start Canister";
-    const TYPE_DESCRIPTION: &'static str = "Stops or starts an NNS canister.";
+impl DocumentedAction for StopOrStartCanister {
+    const NAME: &'static str = "Stop or Start Canister";
+    const DESCRIPTION: &'static str = "Stop or start a canister controlled by the NNS.";
+}
 
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
-        let Self {
+impl From<StopOrStartCanister> for SelfDescribingValue {
+    fn from(value: StopOrStartCanister) -> Self {
+        let StopOrStartCanister {
             canister_id,
             action,
-        } = self;
+        } = value;
 
         let action = action.map(SelfDescribingProstEnum::<CanisterAction>::new);
 
         ValueBuilder::new()
-            .add_field("canister_id", *canister_id)
+            .add_field("canister_id", canister_id)
             .add_field("action", action)
             .build()
     }
@@ -120,9 +120,8 @@ impl LocallyDescribableProposalAction for StopOrStartCanister {
 mod tests {
     use super::*;
 
-    use crate::{
-        pb::v1::governance_error::ErrorType,
-        proposals::self_describing::LocallyDescribableProposalAction,
+    use crate::pb::v1::{
+        SelfDescribingValue as SelfDescribingValuePb, governance_error::ErrorType,
     };
 
     use candid::Decode;
@@ -309,8 +308,7 @@ mod tests {
             action: Some(CanisterAction::Stop as i32),
         };
 
-        let action = stop_or_start_canister.to_self_describing_action();
-        let value = SelfDescribingValue::from(action.value.unwrap());
+        let value = SelfDescribingValue::from(SelfDescribingValuePb::from(stop_or_start_canister));
 
         assert_eq!(
             value,
@@ -328,8 +326,7 @@ mod tests {
             action: Some(CanisterAction::Start as i32),
         };
 
-        let action = stop_or_start_canister.to_self_describing_action();
-        let value = SelfDescribingValue::from(action.value.unwrap());
+        let value = SelfDescribingValue::from(SelfDescribingValuePb::from(stop_or_start_canister));
 
         assert_eq!(
             value,

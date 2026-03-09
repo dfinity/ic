@@ -12,7 +12,6 @@ documentation.workspace = true
 candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true }
-ed25519-dalek = { workspace = true }
 fs_extra = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }

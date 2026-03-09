@@ -111,6 +111,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
         "5.25%",
         "--voting-reward-rate-transition-duration",
         "4383d", // 12 years (including leap days).
+        "--additional-critical-native-action-id",
+        "3",
+        "--additional-critical-native-action-id",
+        "5",
     ]);
 
     let result = CreateServiceNervousSystem::try_from(flags).unwrap();
@@ -214,6 +218,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
                     reward_rate_transition_duration: Some(nervous_system_pb::Duration {
                         seconds: Some(4383 * ONE_DAY_SECONDS),
                     }),
+                }),
+
+                custom_proposal_criticality: Some(CustomProposalCriticality {
+                    additional_critical_native_action_ids: Some(vec![3, 5]),
                 }),
             }),
 

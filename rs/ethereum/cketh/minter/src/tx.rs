@@ -662,7 +662,7 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
             .fee_history((5_u8, BlockTag::Latest))
             .with_reward_percentiles(vec![20])
             .with_cycles(MIN_ATTACHED_CYCLES)
-            .send()
+            .try_send()
             .await
             .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
                 Nat::from(fee_history.oldest_block.clone())

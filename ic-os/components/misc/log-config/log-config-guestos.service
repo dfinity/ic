@@ -5,7 +5,7 @@ Wants=bootstrap-ic-node.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/log-config.sh guestos
+ExecStart=/opt/ic/bin/config_tool dump-os-config --os-type GuestOS
 RemainAfterExit=true
 
 [Install]

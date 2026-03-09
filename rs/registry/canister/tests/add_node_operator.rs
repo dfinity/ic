@@ -6,8 +6,8 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nns_test_utils::registry::{get_value, invariant_compliant_mutation_as_atomic_req};
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::get_value_or_panic,
 };
@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 
 #[test]
 fn test_the_anonymous_user_cannot_add_a_node_operator() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry =
             set_up_registry_canister(&runtime, RegistryCanisterInitPayload::default()).await;
 
@@ -60,7 +60,7 @@ fn test_the_anonymous_user_cannot_add_a_node_operator() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_add_a_node_operator() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the proposals
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -110,7 +110,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_node_operator
 
 #[test]
 fn test_accepted_proposal_mutates_the_registry() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()

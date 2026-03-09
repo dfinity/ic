@@ -121,6 +121,9 @@ class Args:
     # Disable progress bars if True
     ci_mode: bool = flag(default=False)
 
+    # Start deployment and exit immediately without waiting for connectivity or ejecting media
+    skip_checks: bool = flag(default=False)
+
     # Run benchmarks if True
     benchmark: bool = flag(default=False)
 
@@ -461,6 +464,7 @@ def deploy_server(
     idrac_script_dir: Path,
     file_share_ssh_key: Optional[str] = None,
     check_hsm: bool = False,
+    skip_checks: bool = False,
 ):
     # Partially applied function for brevity
     run_func = functools.partial(run_script, idrac_script_dir, bmc_info)
@@ -510,6 +514,11 @@ def deploy_server(
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
 
+        if skip_checks:
+            log.info("*** Skip-checks mode: Deployment started, exiting without waiting for connectivity.")
+            log.info("*** Virtual media remains attached.")
+            return OperationResult(bmc_info, success=True)
+
         timeout_secs = 5
 
         def check_connectivity_func() -> bool:
@@ -544,7 +553,7 @@ def deploy_server(
         return OperationResult(bmc_info, success=False, error_msg=f"{e}")
 
     finally:
-        if network_image_attached:
+        if network_image_attached and not skip_checks:
             try:
                 log.info("Ejecting the attached image so the next machine can boot from it")
                 run_func(
@@ -561,8 +570,9 @@ def boot_image(
     idrac_script_dir: Path,
     file_share_ssh_key: Optional[str] = None,
     check_hsm: bool = False,
+    skip_checks: bool = False,
 ):
-    result = deploy_server(bmc_info, wait_time_mins, idrac_script_dir, file_share_ssh_key, check_hsm)
+    result = deploy_server(bmc_info, wait_time_mins, idrac_script_dir, file_share_ssh_key, check_hsm, skip_checks)
 
     log.info("Deployment summary:")
     log.info(result)
@@ -861,6 +871,7 @@ def main():
         idrac_script_dir=idrac_script_dir,
         file_share_ssh_key=args.file_share_ssh_key,
         check_hsm=args.hsm,
+        skip_checks=args.skip_checks,
     )
 
     if not success:

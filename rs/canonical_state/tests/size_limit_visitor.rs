@@ -8,6 +8,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, testing::ReplicatedStateTesting};
 use ic_test_utilities_state::arb_stream;
 use ic_test_utilities_types::ids::subnet_test_id;
+use ic_types::Height;
 use proptest::prelude::*;
 
 /// A fixture consisting of a `ReplicatedState` wrapping a single stream;
@@ -92,7 +93,7 @@ fn size_limit_proptest(#[strategy(arb_fixture(10))] fixture: Fixture) {
         size_limit,
         SubtreeVisitor::new(&subtree_pattern, MessageSpyVisitor::default()),
     );
-    let (actual_size, actual_begin, actual_end) = traverse(&state, visitor);
+    let (actual_size, actual_begin, actual_end) = traverse(&state, Height::new(0), visitor);
 
     if let (Some(actual_begin), Some(actual_end)) = (actual_begin, actual_end) {
         // Non-empty slice.
@@ -125,7 +126,7 @@ fn compute_message_sizes(state: &ReplicatedState, begin: u64, end: u64) -> usize
     // Traverse the stream once to collect its messages' total byte size.
     let pattern = make_slice_pattern(begin, end);
     let visitor = SubtreeVisitor::new(&pattern, MessageSpyVisitor::default());
-    let (size, tbegin, tend) = traverse(state, visitor);
+    let (size, tbegin, tend) = traverse(state, Height::new(0), visitor);
 
     // Sanity check MessageSpyVisitor.
     if let (Some(tbegin), Some(tend)) = (tbegin, tend) {

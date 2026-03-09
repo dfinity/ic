@@ -377,12 +377,13 @@ impl HasHash for BlockMetadata {
 /// A BlockProposal is a HashedBlock with BlockMetadata signed by the block maker.
 pub type BlockProposal = Signed<HashedBlock, BasicSignature<BlockMetadata>>;
 
-impl From<&BlockProposal> for pb::BlockProposal {
-    fn from(block_proposal: &BlockProposal) -> Self {
+impl From<BlockProposal> for pb::BlockProposal {
+    fn from(block_proposal: BlockProposal) -> Self {
+        let (hash, block) = block_proposal.content.decompose();
         Self {
-            hash: block_proposal.content.hash.clone().get().0,
-            value: Some((&block_proposal.content.value).into()),
-            signature: block_proposal.signature.signature.clone().get().0,
+            hash: hash.get().0,
+            value: Some((&block).into()),
+            signature: block_proposal.signature.signature.get().0,
             signer: Some(node_id_into_protobuf(block_proposal.signature.signer)),
         }
     }
@@ -446,18 +447,18 @@ impl SignedBytesWithoutDomainSeparator for NotarizationContent {
 /// A notarization is a multi-signature on a NotarizationContent
 pub type Notarization = Signed<NotarizationContent, MultiSignature<NotarizationContent>>;
 
-impl From<&Notarization> for pb::Notarization {
-    fn from(notarization: &Notarization) -> Self {
+impl From<Notarization> for pb::Notarization {
+    fn from(notarization: Notarization) -> Self {
         Self {
             version: notarization.content.version.to_string(),
             height: notarization.content.height.get(),
-            block: notarization.content.block.clone().get().0,
-            signature: notarization.signature.signature.clone().get().0,
+            block: notarization.content.block.get().0,
+            signature: notarization.signature.signature.get().0,
             signers: notarization
                 .signature
                 .signers
-                .iter()
-                .map(|node_id| (*node_id).get().into_vec())
+                .into_iter()
+                .map(|node_id| node_id.get().into_vec())
                 .collect(),
         }
     }
@@ -489,13 +490,13 @@ impl TryFrom<pb::Notarization> for Notarization {
 /// aggregated into a full notarization.
 pub type NotarizationShare = Signed<NotarizationContent, MultiSignatureShare<NotarizationContent>>;
 
-impl From<&NotarizationShare> for pb::NotarizationShare {
-    fn from(notarization: &NotarizationShare) -> Self {
+impl From<NotarizationShare> for pb::NotarizationShare {
+    fn from(notarization: NotarizationShare) -> Self {
         Self {
             version: notarization.content.version.to_string(),
             height: notarization.content.height.get(),
-            block: notarization.content.block.clone().get().0,
-            signature: notarization.signature.signature.clone().get().0,
+            block: notarization.content.block.get().0,
+            signature: notarization.signature.signature.get().0,
             signer: Some(node_id_into_protobuf(notarization.signature.signer)),
         }
     }
@@ -548,18 +549,18 @@ impl SignedBytesWithoutDomainSeparator for FinalizationContent {
 /// content (and the block chain it implies) is agreed upon.
 pub type Finalization = Signed<FinalizationContent, MultiSignature<FinalizationContent>>;
 
-impl From<&Finalization> for pb::Finalization {
-    fn from(finalization: &Finalization) -> Self {
+impl From<Finalization> for pb::Finalization {
+    fn from(finalization: Finalization) -> Self {
         Self {
             version: finalization.content.version.to_string(),
             height: finalization.content.height.get(),
-            block: finalization.content.block.clone().get().0,
-            signature: finalization.signature.signature.clone().get().0,
+            block: finalization.content.block.get().0,
+            signature: finalization.signature.signature.get().0,
             signers: finalization
                 .signature
                 .signers
-                .iter()
-                .map(|node_id| (*node_id).get().into_vec())
+                .into_iter()
+                .map(|node_id| node_id.get().into_vec())
                 .collect(),
         }
     }
@@ -591,13 +592,13 @@ impl TryFrom<pb::Finalization> for Finalization {
 /// aggregated into a full finalization.
 pub type FinalizationShare = Signed<FinalizationContent, MultiSignatureShare<FinalizationContent>>;
 
-impl From<&FinalizationShare> for pb::FinalizationShare {
-    fn from(finalization: &FinalizationShare) -> Self {
+impl From<FinalizationShare> for pb::FinalizationShare {
+    fn from(finalization: FinalizationShare) -> Self {
         Self {
             version: finalization.content.version.to_string(),
             height: finalization.content.height.get(),
-            block: finalization.content.block.clone().get().0,
-            signature: finalization.signature.signature.clone().get().0,
+            block: finalization.content.block.get().0,
+            signature: finalization.signature.signature.get().0,
             signer: Some(node_id_into_protobuf(finalization.signature.signer)),
         }
     }
@@ -657,14 +658,14 @@ impl SignedBytesWithoutDomainSeparator for RandomBeaconContent {
 /// notaries.
 pub type RandomBeacon = Signed<RandomBeaconContent, ThresholdSignature<RandomBeaconContent>>;
 
-impl From<&RandomBeacon> for pb::RandomBeacon {
-    fn from(random_beacon: &RandomBeacon) -> Self {
+impl From<RandomBeacon> for pb::RandomBeacon {
+    fn from(random_beacon: RandomBeacon) -> Self {
         Self {
             version: random_beacon.content.version.to_string(),
             height: random_beacon.content.height.get(),
-            parent: random_beacon.content.parent.clone().get().0,
-            signature: random_beacon.signature.signature.clone().get().0,
-            signer: Some(pb::NiDkgId::from(random_beacon.signature.signer.clone())),
+            parent: random_beacon.content.parent.get().0,
+            signature: random_beacon.signature.signature.get().0,
+            signer: Some(pb::NiDkgId::from(random_beacon.signature.signer)),
         }
     }
 }
@@ -693,13 +694,13 @@ impl TryFrom<pb::RandomBeacon> for RandomBeacon {
 pub type RandomBeaconShare =
     Signed<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>>;
 
-impl From<&RandomBeaconShare> for pb::RandomBeaconShare {
-    fn from(random_beacon: &RandomBeaconShare) -> Self {
+impl From<RandomBeaconShare> for pb::RandomBeaconShare {
+    fn from(random_beacon: RandomBeaconShare) -> Self {
         Self {
             version: random_beacon.content.version.to_string(),
             height: random_beacon.content.height.get(),
-            parent: random_beacon.content.parent.clone().get().0,
-            signature: random_beacon.signature.signature.clone().get().0,
+            parent: random_beacon.content.parent.get().0,
+            signature: random_beacon.signature.signature.get().0,
             signer: Some(node_id_into_protobuf(random_beacon.signature.signer)),
         }
     }
@@ -753,13 +754,13 @@ impl RandomTapeContent {
 /// by consensus.
 pub type RandomTape = Signed<RandomTapeContent, ThresholdSignature<RandomTapeContent>>;
 
-impl From<&RandomTape> for pb::RandomTape {
-    fn from(random_tape: &RandomTape) -> Self {
+impl From<RandomTape> for pb::RandomTape {
+    fn from(random_tape: RandomTape) -> Self {
         Self {
             version: random_tape.content.version.to_string(),
             height: random_tape.content.height.get(),
-            signature: random_tape.signature.signature.clone().get().0,
-            signer: Some(pb::NiDkgId::from(random_tape.signature.signer.clone())),
+            signature: random_tape.signature.signature.get().0,
+            signer: Some(pb::NiDkgId::from(random_tape.signature.signer)),
         }
     }
 }
@@ -786,12 +787,12 @@ impl TryFrom<pb::RandomTape> for RandomTape {
 /// aggregated into a RandomTape.
 pub type RandomTapeShare = Signed<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>>;
 
-impl From<&RandomTapeShare> for pb::RandomTapeShare {
-    fn from(tape_share: &RandomTapeShare) -> Self {
+impl From<RandomTapeShare> for pb::RandomTapeShare {
+    fn from(tape_share: RandomTapeShare) -> Self {
         Self {
             version: tape_share.content.version.to_string(),
             height: tape_share.content.height.get(),
-            signature: tape_share.signature.signature.clone().get().0,
+            signature: tape_share.signature.signature.get().0,
             signer: Some(node_id_into_protobuf(tape_share.signature.signer)),
         }
     }
@@ -868,17 +869,17 @@ impl EquivocationProof {
     }
 }
 
-impl From<&EquivocationProof> for pb::EquivocationProof {
-    fn from(proof: &EquivocationProof) -> Self {
+impl From<EquivocationProof> for pb::EquivocationProof {
+    fn from(proof: EquivocationProof) -> Self {
         Self {
             signer: Some(node_id_into_protobuf(proof.signer)),
             version: proof.version.to_string(),
             height: proof.height.get(),
             subnet_id: Some(subnet_id_into_protobuf(proof.subnet_id)),
-            hash1: proof.hash1.clone().get().0,
-            signature1: proof.signature1.clone().get().0,
-            hash2: proof.hash2.clone().get().0,
-            signature2: proof.signature2.clone().get().0,
+            hash1: proof.hash1.get().0,
+            signature1: proof.signature1.get().0,
+            hash2: proof.hash2.get().0,
+            signature2: proof.signature2.get().0,
         }
     }
 }
@@ -937,18 +938,18 @@ impl From<ConsensusMessage> for pb::ConsensusMessage {
     fn from(value: ConsensusMessage) -> Self {
         Self {
             msg: Some(match value {
-                ConsensusMessage::RandomBeacon(ref x) => Msg::RandomBeacon(x.into()),
-                ConsensusMessage::Finalization(ref x) => Msg::Finalization(x.into()),
-                ConsensusMessage::Notarization(ref x) => Msg::Notarization(x.into()),
-                ConsensusMessage::BlockProposal(ref x) => Msg::BlockProposal(x.into()),
-                ConsensusMessage::RandomBeaconShare(ref x) => Msg::RandomBeaconShare(x.into()),
-                ConsensusMessage::NotarizationShare(ref x) => Msg::NotarizationShare(x.into()),
-                ConsensusMessage::FinalizationShare(ref x) => Msg::FinalizationShare(x.into()),
-                ConsensusMessage::RandomTape(ref x) => Msg::RandomTape(x.into()),
-                ConsensusMessage::RandomTapeShare(ref x) => Msg::RandomTapeShare(x.into()),
-                ConsensusMessage::CatchUpPackage(ref x) => Msg::Cup(x.into()),
-                ConsensusMessage::CatchUpPackageShare(ref x) => Msg::CupShare(x.into()),
-                ConsensusMessage::EquivocationProof(ref x) => Msg::EquivocationProof(x.into()),
+                ConsensusMessage::RandomBeacon(x) => Msg::RandomBeacon(x.into()),
+                ConsensusMessage::Finalization(x) => Msg::Finalization(x.into()),
+                ConsensusMessage::Notarization(x) => Msg::Notarization(x.into()),
+                ConsensusMessage::BlockProposal(x) => Msg::BlockProposal(x.into()),
+                ConsensusMessage::RandomBeaconShare(x) => Msg::RandomBeaconShare(x.into()),
+                ConsensusMessage::NotarizationShare(x) => Msg::NotarizationShare(x.into()),
+                ConsensusMessage::FinalizationShare(x) => Msg::FinalizationShare(x.into()),
+                ConsensusMessage::RandomTape(x) => Msg::RandomTape(x.into()),
+                ConsensusMessage::RandomTapeShare(x) => Msg::RandomTapeShare(x.into()),
+                ConsensusMessage::CatchUpPackage(x) => Msg::Cup(x.into()),
+                ConsensusMessage::CatchUpPackageShare(x) => Msg::CupShare(x.into()),
+                ConsensusMessage::EquivocationProof(x) => Msg::EquivocationProof(x.into()),
             }),
         }
     }
@@ -1032,10 +1033,10 @@ pub enum ConsensusMessageHash {
     EquivocationProof(CryptoHashOf<EquivocationProof>),
 }
 
-impl From<&ConsensusMessageHash> for pb::ConsensusMessageHash {
-    fn from(value: &ConsensusMessageHash) -> Self {
+impl From<ConsensusMessageHash> for pb::ConsensusMessageHash {
+    fn from(value: ConsensusMessageHash) -> Self {
         use pb::consensus_message_hash::Kind;
-        let kind = match value.clone() {
+        let kind = match value {
             ConsensusMessageHash::RandomBeacon(x) => Kind::RandomBeacon(x.get().0),
             ConsensusMessageHash::Finalization(x) => Kind::Finalization(x.get().0),
             ConsensusMessageHash::Notarization(x) => Kind::Notarization(x.get().0),
@@ -1053,13 +1054,12 @@ impl From<&ConsensusMessageHash> for pb::ConsensusMessageHash {
     }
 }
 
-impl TryFrom<&pb::ConsensusMessageHash> for ConsensusMessageHash {
+impl TryFrom<pb::ConsensusMessageHash> for ConsensusMessageHash {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::ConsensusMessageHash) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ConsensusMessageHash) -> Result<Self, Self::Error> {
         use pb::consensus_message_hash::Kind;
         let kind = value
             .kind
-            .clone()
             .ok_or_else(|| ProxyDecodeError::MissingField("ConsensusMessageHash::kind"))?;
 
         Ok(match kind {
@@ -1387,20 +1387,12 @@ impl TryFrom<pb::Block> for Block {
                 // If after conversion, the summary block is intend to get a different
                 // height value (e.g. when a new CUP is created), then a call to
                 // idkg.update_refs(height) should be manually called.
-                let idkg = block
-                    .idkg_payload
-                    .as_ref()
-                    .map(|idkg| idkg.try_into())
-                    .transpose()?;
+                let idkg = block.idkg_payload.map(|idkg| idkg.try_into()).transpose()?;
 
                 BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
             DkgPayload::Data(dkg) => {
-                let idkg = block
-                    .idkg_payload
-                    .as_ref()
-                    .map(|idkg| idkg.try_into())
-                    .transpose()?;
+                let idkg = block.idkg_payload.map(|idkg| idkg.try_into()).transpose()?;
 
                 BlockPayload::Data(DataPayload { batch, dkg, idkg })
             }
