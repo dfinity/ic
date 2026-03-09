@@ -561,6 +561,32 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Withdraws and consumes the cost of executing the given number of
+    /// instructions in the management canister.
+    pub fn consume_cycles_for_management_canister_instructions(
+        &self,
+        sender: &PrincipalId,
+        canister: &mut CanisterState,
+        amount: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let memory_usage = canister.memory_usage();
+        let message_memory = canister.message_memory_usage();
+        let cycles = self.management_canister_cost(amount, subnet_size, cost_schedule);
+        let reveal_top_up = canister.controllers().contains(sender);
+        self.consume_cycles(
+            &mut canister.system_state,
+            memory_usage,
+            message_memory,
+            cycles,
+            subnet_size,
+            cost_schedule,
+            CyclesUseCase::Instructions,
+            reveal_top_up,
+        )
+    }
+
     /// Prepays the cost of executing a message with the given number of
     /// instructions. See the comment of `execution_cost()` for details
     /// about the execution cost.
@@ -1268,6 +1294,24 @@ impl CyclesAccountManager {
         self.scale_cost(
             self.config.update_message_execution_fee
                 + self.convert_instructions_to_cycles(num_instructions, execution_mode),
+            subnet_size,
+            cost_schedule,
+        )
+    }
+
+    /// Returns the cost of executing a management canister message with the given number of
+    /// instructions. The cost only consists of the fee that depends on the number of instructions.
+    /// In particular, there's no flat fee to account for sandboxed execution.
+    /// The management canister is executed as native replica code and thus Wasm64
+    /// does not bring any additional overhead.
+    pub fn management_canister_cost(
+        &self,
+        num_instructions: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        self.scale_cost(
+            self.convert_instructions_to_cycles(num_instructions, WasmExecutionMode::Wasm32),
             subnet_size,
             cost_schedule,
         )

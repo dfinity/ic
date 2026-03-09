@@ -18,8 +18,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionState, SchedulerState,
     canister_state::{
-        WASM_PAGE_SIZE_IN_BYTES,
-        execution_state::{WasmBinary, WasmExecutionMode},
+        WASM_PAGE_SIZE_IN_BYTES, execution_state::WasmBinary,
         system_state::wasm_chunk_store::CHUNK_SIZE,
     },
     metadata_state::UnflushedCheckpointOp,
@@ -41,8 +40,6 @@ use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
 use std::borrow::Borrow;
-
-const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
 fn take_canister_snapshot_decode_round_trip() {
@@ -1703,11 +1700,10 @@ fn take_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Take a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        WASM_EXECUTION_MODE,
     );
 
     // Take a snapshot for the canister.
@@ -1767,11 +1763,10 @@ fn load_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Load a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        WASM_EXECUTION_MODE,
     );
 
     // Load an existing snapshot will decrease the balance.

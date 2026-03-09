@@ -5406,11 +5406,10 @@ fn upload_chunk_charges_canister_cycles() {
         chunk: vec![42; 10],
     }
     .encode();
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(canister_id),
     );
     let _hash = test
         .subnet_message("upload_chunk", payload.clone())
@@ -5451,11 +5450,10 @@ fn upload_chunk_charges_if_failing() {
     let canister_id = test.create_canister(CYCLES);
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(canister_id),
     );
     // Verify we are in the expected restricted state (1022 KiB available).
     assert_eq!(

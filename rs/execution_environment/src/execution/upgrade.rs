@@ -863,7 +863,11 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        (self.original.message, self.original.call_id, Cycles::zero())
+        (
+            self.original.message,
+            self.original.call_id,
+            self.original.prepaid_execution_cycles,
+        )
     }
 }
 

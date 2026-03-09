@@ -363,7 +363,7 @@ where
         .memory_allocation()
         .allocated_bytes(final_memory_usage);
     let newly_allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
-    // Note. The cycles prepayment in `install_code` is refunded before cycles are reserved
+    // Note. The cycles prepayment in `install_code` and `load_canister_snapshot` is refunded before cycles are reserved
     // and freezing threshold checked and thus we can ignore it here.
     // The cycles prepayment for response callback execution is charged during setup
     // and thus we can also ignore it here.
@@ -1050,7 +1050,7 @@ fn test_memory_suite_take_snapshot_and_uninstall_code() {
 #[test]
 fn test_memory_suite_load_snapshot_growing_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
-        setup_universal_canister(test, canister_id);
+        setup_universal_canister_with_much_memory(test, canister_id);
         let take_canister_snapshot_args =
             TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
