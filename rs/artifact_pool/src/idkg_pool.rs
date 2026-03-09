@@ -1366,7 +1366,7 @@ mod tests {
                 // No artifacts in the pool yet
                 assert_eq!(idkg_pool.get_all_for_broadcast().count(), 0);
 
-                // For each artifact type, add two artifacts to the pool, 
+                // For each artifact type, add two artifacts to the pool,
                 // one for ourselves (NODE_1) and one for NODE_2.
                 let mut change_set = Vec::new();
                 for (i, node) in [(1u8, NODE_1), (2u8, NODE_2)] {
