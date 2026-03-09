@@ -473,7 +473,7 @@ mod tests {
         };
 
         let original_registry = registry.clone();
-        let resp = registry.migrate_node_operator_inner(
+        let result = registry.migrate_node_operator_inner(
             payload.clone(),
             PrincipalId::new_user_test_id(3),
             now_plus_13_hours(),
@@ -481,7 +481,7 @@ mod tests {
 
         assert_eq!(registry, original_registry);
         assert_eq!(
-            resp,
+            result,
             Err(MigrateError::MissingNodeOperator {
                 principal: payload.old_node_operator_id.unwrap(),
             })
@@ -531,14 +531,14 @@ mod tests {
         };
 
         let original_registry = registry.clone();
-        let resp = registry.migrate_node_operator_inner(
+        let result = registry.migrate_node_operator_inner(
             payload.clone(),
             old_node_provider_id,
             now_plus_13_hours(),
         );
         assert_eq!(registry, original_registry);
         assert_eq!(
-            resp,
+            result,
             Err(MigrateError::NodeProviderMismatch {
                 old: old_node_provider_id,
                 new: new_node_provider_id,
@@ -587,7 +587,7 @@ mod tests {
         };
 
         let original_registry = registry.clone();
-        let resp = registry.migrate_node_operator_inner(
+        let result = registry.migrate_node_operator_inner(
             payload.clone(),
             old_node_provider_id,
             now_plus_13_hours(),
@@ -595,7 +595,7 @@ mod tests {
         assert_eq!(registry, original_registry);
         // Even though the DCs also differ, the provider mismatch is checked first.
         assert_eq!(
-            resp,
+            result,
             Err(MigrateError::NodeProviderMismatch {
                 old: old_node_provider_id,
                 new: new_node_provider_id,
@@ -646,12 +646,12 @@ mod tests {
         };
 
         let original_registry = registry.clone();
-        let resp =
+        let result =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
         assert_eq!(registry, original_registry);
 
         assert_eq!(
-            resp,
+            result,
             Err(MigrateError::DataCenterMismatch { old: dc1, new: dc2 })
         );
     }
@@ -701,11 +701,11 @@ mod tests {
         assert_ne!(caller, node_provider_id);
 
         let original_registry = registry.clone();
-        let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+        let result = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
         assert_eq!(registry, original_registry);
 
         assert_eq!(
-            resp,
+            result,
             Err(MigrateError::NotAuthorized {
                 caller,
                 expected: node_provider_id,
@@ -902,24 +902,21 @@ mod tests {
         // Ensure that the nodes owned by the old operator show the new operator now
         let nodes = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
         assert_eq!(nodes.len(), 3, "{nodes:?}");
-        for node in nodes {
-            assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
+        for node in &nodes {
+            assert_eq!(
+                node.node_operator_id,
+                new_node_operator_id.to_vec(),
+                "node with http endpoint {:?} still points to old operator",
+                node.http.as_ref().map(|ep| &ep.ip_addr),
+            );
         }
 
         // Ensure that the extra nodes weren't touched
-        let nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
-        assert_eq!(nodes.len(), 5, "{nodes:?}");
-        for (new_node_record, extra_node_record) in nodes
-            .into_iter()
-            .sorted_by_key(|n| n.http.clone().unwrap().ip_addr)
-            .zip(
-                extra_node_records
-                    .into_iter()
-                    .sorted_by_key(|n| n.http.clone().unwrap().ip_addr),
-            )
-        {
-            assert_eq!(new_node_record, extra_node_record);
-        }
+        let mut nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
+        nodes.sort_by_key(|n| n.http.clone().unwrap().ip_addr);
+        let mut extra_node_records = extra_node_records;
+        extra_node_records.sort_by_key(|n| n.http.clone().unwrap().ip_addr);
+        assert_eq!(nodes, extra_node_records);
 
         // Validate number of mutations and their keys, values are checked above
         let changes = setup
@@ -1037,9 +1034,10 @@ mod tests {
             .registry
             .get_node_operator_or_panic(old_node_operator_id);
 
-        let new_records = setup.fetch_nodes_originally_for_node_operator(new_node_operator_id);
+        let new_node_records = setup.fetch_nodes_originally_for_node_operator(new_node_operator_id);
         let old_node_records = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
-        let extra_records = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
+        let extra_node_records =
+            setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
 
         // Step 2: Run the code under test.
         setup
@@ -1109,34 +1107,18 @@ mod tests {
         }
         // Ensure that the nodes owned by the new operator still are owned by the
         // same node operator
-        let nodes = setup.fetch_nodes_originally_for_node_operator(new_node_operator_id);
-        assert_eq!(nodes.len(), 4, "{nodes:?}");
-        for (new_node_record, old_node_record) in nodes
-            .into_iter()
-            .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr)
-            .zip(
-                new_records
-                    .into_iter()
-                    .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr),
-            )
-        {
-            assert_eq!(new_node_record, old_node_record);
-        }
+        let mut nodes = setup.fetch_nodes_originally_for_node_operator(new_node_operator_id);
+        nodes.sort_by_key(|n| n.xnet.clone().unwrap().ip_addr);
+        let mut new_node_records = new_node_records;
+        new_node_records.sort_by_key(|n| n.xnet.clone().unwrap().ip_addr);
+        assert_eq!(nodes, new_node_records);
 
         // Ensure that the extra nodes weren't touched
-        let nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
-        assert_eq!(nodes.len(), 5, "{nodes:?}");
-        for (new_node_record, old_node_record) in nodes
-            .into_iter()
-            .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr)
-            .zip(
-                extra_records
-                    .into_iter()
-                    .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr),
-            )
-        {
-            assert_eq!(new_node_record, old_node_record);
-        }
+        let mut nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
+        nodes.sort_by_key(|n| n.xnet.clone().unwrap().ip_addr);
+        let mut extra_node_records = extra_node_records;
+        extra_node_records.sort_by_key(|n| n.xnet.clone().unwrap().ip_addr);
+        assert_eq!(nodes, extra_node_records);
 
         // Validate number of mutations and their keys, values are checked above
         let changes = setup
@@ -1233,7 +1215,7 @@ mod tests {
         };
 
         let original_registry = registry.clone();
-        let resp = registry.migrate_node_operator_inner(
+        let result = registry.migrate_node_operator_inner(
             payload.clone(),
             node_provider_id,
             now_system_time(),
@@ -1241,16 +1223,17 @@ mod tests {
         assert_eq!(registry, original_registry);
 
         assert_eq!(
-            resp,
+            result,
             Err(MigrateError::OldOperatorRateLimit {
                 principal: old_node_operator_id,
             })
         );
 
-        let resp =
+        let result =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
 
-        assert_eq!(resp, Ok(()));
+        assert_eq!(result, Ok(()));
+        assert_ne!(registry, original_registry);
     }
 
     #[test]
@@ -1282,20 +1265,20 @@ mod tests {
         let past = now - Duration::from_secs(4 * 60 * 60);
 
         let original_registry = registry.clone();
-        let resp = registry.migrate_node_operator_inner(payload.clone(), node_provider_id, past);
+        let result = registry.migrate_node_operator_inner(payload.clone(), node_provider_id, past);
         assert_eq!(registry, original_registry);
 
         assert_eq!(
-            resp,
+            result,
             Err(MigrateError::OldOperatorRateLimit {
                 principal: old_node_operator_id,
             })
         );
 
-        let resp =
+        let result =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
 
-        assert_eq!(resp, Ok(()));
+        assert_eq!(result, Ok(()));
     }
 
     #[test]
@@ -1339,12 +1322,12 @@ mod tests {
                 new_node_operator_id: Some(destination_node_operator),
             };
 
-            let resp = setup.registry.migrate_node_operator_inner(
+            let result = setup.registry.migrate_node_operator_inner(
                 payload,
                 node_provider_id,
                 now_plus_13_hours(),
             );
-            assert_eq!(resp, Ok(()));
+            assert_eq!(result, Ok(()));
         }
 
         // Step 3: Verify results.
@@ -1364,13 +1347,13 @@ mod tests {
         //     old_node_operator_id: Some(destination_node_operator),
         //     new_node_operator_id: Some(too_soon_new_node_operator),
         // };
-        // let resp = setup
+        // let result = setup
         //     .registry
         //     .migrate_node_operator_inner(payload, caller, now_plus_13_hours());
         // let expected_err = Err(MigrateError::OldOperatorRateLimit {
         //     principal: destination_node_operator,
         // });
-        // assert_eq!(resp, expected_err);
+        // assert_eq!(result, expected_err);
         // ```
 
         // Validate that old node operators have been removed
@@ -1384,7 +1367,12 @@ mod tests {
 
             // Validate that all of the nodes have been moved to the new node operator
             for node in setup.fetch_nodes_originally_for_node_operator(*old_node_operator) {
-                assert_eq!(node.node_operator_id, destination_node_operator.to_vec());
+                assert_eq!(
+                    node.node_operator_id,
+                    destination_node_operator.to_vec(),
+                    "node with http endpoint {:?} still points to old operator {old_node_operator}",
+                    node.http.as_ref().map(|ep| &ep.ip_addr),
+                );
             }
         }
 
