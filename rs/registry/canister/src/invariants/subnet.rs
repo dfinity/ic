@@ -156,8 +156,9 @@ pub(crate) fn get_subnet_records_map(
     subnets
 }
 
+/// All nodes of a subnet must support SEV in order for SEV to be enabled on the subnet.
 fn check_sev_subnet_invariants(
-    subnet_id: SubnetId,
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
     subnet_members: HashSet<NodeId>,
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -169,10 +170,19 @@ fn check_sev_subnet_invariants(
                 .ok()
                 .flatten();
 
-            match node_record {
-                Some(record) if record.chip_id.is_none() => Some(node_id),
-                _ => None, // We don't care about missing node records here, as that is handled by the "subnet membership must contain registered nodes only" invariant
+            let Some(node_record) = node_record else {
+                // Missing nodes are ok, because that is checked earlier.
+                // (What we really care about here is that all (existing)
+                // nodes support SEV.)
+                return None;
+            };
+            if node_record.chip_id.is_some() {
+                // This node is SEV-enabled as it has a chip ID;
+                // no need to report it as non-compliant.
+                return None;
             }
+            // We have found a non-compliant node! Report it (to the caller)!
+            Some(node_id)
         })
         .collect();
 

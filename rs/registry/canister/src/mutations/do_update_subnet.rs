@@ -162,7 +162,7 @@ impl Registry {
         if attempting_to_disable {
             panic!(
                 "{LOG_PREFIX}Proposal attempts to disable SEV for Subnet '{subnet_id}', \
-                     but SEV cannot be turned off once enabled.",
+                but SEV cannot be turned off once enabled.",
             );
         }
     }
