@@ -1,7 +1,19 @@
 //! Node Operator Migration
 //!
-//! This module provides functionality for node providers to migrate node operator
-//! records from one principal to another within the same data center.
+//! This module allows a node provider to migrate a node operator from one principal
+//! to another within the same data center. The primary mutation is:
+//!
+//! - **Re-assign all nodes**: Every node record whose `node_operator_id` matches the
+//!   old principal is updated to point to the new principal.
+//!
+//! To maintain consistency, the following secondary mutations are also applied:
+//!
+//! - **Merge operator metadata into the new record**: The old operator's
+//!   `node_allowance`, `rewardable_nodes`, and `max_rewardable_nodes` counts are
+//!   added to the new operator's (creating the new operator record on the fly if it
+//!   does not already exist).
+//! - **Delete the old operator record**: Once everything has been transferred, the
+//!   old node operator record is removed from the registry.
 use std::{
     fmt::Display,
     time::{Duration, SystemTime},
@@ -394,32 +406,6 @@ mod tests {
         registry::Registry,
     };
 
-    fn invalid_payloads_with_expected_errors() -> Vec<(MigrateNodeOperatorPayload, MigrateError)> {
-        vec![
-            (
-                MigrateNodeOperatorPayload {
-                    new_node_operator_id: None,
-                    old_node_operator_id: None,
-                },
-                MigrateError::MissingInput,
-            ),
-            (
-                MigrateNodeOperatorPayload {
-                    new_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
-                    old_node_operator_id: None,
-                },
-                MigrateError::MissingInput,
-            ),
-            (
-                MigrateNodeOperatorPayload {
-                    new_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
-                    old_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
-                },
-                MigrateError::SamePrincipals,
-            ),
-        ]
-    }
-
     /// Returns a timestamp 13 hours in the future.
     ///
     /// Since test data is seeded at the current time, the rate limit check would
@@ -441,7 +427,31 @@ mod tests {
     fn invalid_payloads() {
         let mut registry = Registry::new();
 
-        for (payload, expected_err) in invalid_payloads_with_expected_errors() {
+        let cases = vec![
+            (
+                MigrateNodeOperatorPayload {
+                    new_node_operator_id: None,
+                    old_node_operator_id: None,
+                },
+                MigrateError::MissingInput,
+            ),
+            (
+                MigrateNodeOperatorPayload {
+                    new_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
+                    old_node_operator_id: None,
+                },
+                MigrateError::MissingInput,
+            ),
+            (
+                MigrateNodeOperatorPayload {
+                    new_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
+                    old_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
+                },
+                MigrateError::SamePrincipals,
+            ),
+        ];
+
+        for (payload, expected_err) in cases {
             let output = registry.migrate_node_operator_inner(
                 payload.clone(),
                 PrincipalId::new_user_test_id(1),
@@ -470,11 +480,12 @@ mod tests {
         );
 
         assert_eq!(registry, original_registry);
-
-        let expected_err = Err(MigrateError::MissingNodeOperator {
-            principal: payload.old_node_operator_id.unwrap(),
-        });
-        assert_eq!(resp, expected_err);
+        assert_eq!(
+            resp,
+            Err(MigrateError::MissingNodeOperator {
+                principal: payload.old_node_operator_id.unwrap(),
+            })
+        );
     }
 
     #[test]
@@ -525,13 +536,71 @@ mod tests {
             old_node_provider_id,
             now_plus_13_hours(),
         );
-        assert_eq!(original_registry, registry);
+        assert_eq!(registry, original_registry);
+        assert_eq!(
+            resp,
+            Err(MigrateError::NodeProviderMismatch {
+                old: old_node_provider_id,
+                new: new_node_provider_id,
+            })
+        );
+    }
 
-        let expected_err = Err(MigrateError::NodeProviderMismatch {
-            old: old_node_provider_id,
-            new: new_node_provider_id,
-        });
-        assert_eq!(resp, expected_err)
+    #[test]
+    fn node_provider_mismatch_different_dc() {
+        let mut registry = Registry::new();
+
+        let old_node_operator_id = PrincipalId::new_user_test_id(1);
+        let new_node_operator_id = PrincipalId::new_user_test_id(2);
+
+        let old_node_provider_id = PrincipalId::new_user_test_id(3);
+        let new_node_provider_id = PrincipalId::new_user_test_id(4);
+
+        let mutations = vec![
+            upsert(
+                make_node_operator_record_key(old_node_operator_id).as_bytes(),
+                NodeOperatorRecord {
+                    node_operator_principal_id: old_node_operator_id.to_vec(),
+                    node_provider_principal_id: old_node_provider_id.to_vec(),
+                    dc_id: "dc1".to_string(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+            upsert(
+                make_node_operator_record_key(new_node_operator_id).as_bytes(),
+                NodeOperatorRecord {
+                    node_operator_principal_id: new_node_operator_id.to_vec(),
+                    node_provider_principal_id: new_node_provider_id.to_vec(),
+                    dc_id: "dc2".to_string(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        ];
+
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = MigrateNodeOperatorPayload {
+            old_node_operator_id: Some(old_node_operator_id),
+            new_node_operator_id: Some(new_node_operator_id),
+        };
+
+        let original_registry = registry.clone();
+        let resp = registry.migrate_node_operator_inner(
+            payload.clone(),
+            old_node_provider_id,
+            now_plus_13_hours(),
+        );
+        assert_eq!(registry, original_registry);
+        // Even though the DCs also differ, the provider mismatch is checked first.
+        assert_eq!(
+            resp,
+            Err(MigrateError::NodeProviderMismatch {
+                old: old_node_provider_id,
+                new: new_node_provider_id,
+            })
+        );
     }
 
     #[test]
@@ -579,10 +648,12 @@ mod tests {
         let original_registry = registry.clone();
         let resp =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
-        assert_eq!(original_registry, registry);
+        assert_eq!(registry, original_registry);
 
-        let expected_err = Err(MigrateError::DataCenterMismatch { old: dc1, new: dc2 });
-        assert_eq!(resp, expected_err)
+        assert_eq!(
+            resp,
+            Err(MigrateError::DataCenterMismatch { old: dc1, new: dc2 })
+        );
     }
 
     #[test]
@@ -631,13 +702,15 @@ mod tests {
 
         let original_registry = registry.clone();
         let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
-        assert_eq!(original_registry, registry);
+        assert_eq!(registry, original_registry);
 
-        let expected_err = Err(MigrateError::NotAuthorized {
-            caller,
-            expected: node_provider_id,
-        });
-        assert_eq!(resp, expected_err)
+        assert_eq!(
+            resp,
+            Err(MigrateError::NotAuthorized {
+                caller,
+                expected: node_provider_id,
+            })
+        );
     }
 
     #[derive(Clone)]
@@ -1165,12 +1238,14 @@ mod tests {
             node_provider_id,
             now_system_time(),
         );
-        assert_eq!(original_registry, registry);
+        assert_eq!(registry, original_registry);
 
-        let expected_err = Err(MigrateError::OldOperatorRateLimit {
-            principal: old_node_operator_id,
-        });
-        assert_eq!(resp, expected_err);
+        assert_eq!(
+            resp,
+            Err(MigrateError::OldOperatorRateLimit {
+                principal: old_node_operator_id,
+            })
+        );
 
         let resp =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
@@ -1208,12 +1283,14 @@ mod tests {
 
         let original_registry = registry.clone();
         let resp = registry.migrate_node_operator_inner(payload.clone(), node_provider_id, past);
-        assert_eq!(original_registry, registry);
+        assert_eq!(registry, original_registry);
 
-        let expected_err = Err(MigrateError::OldOperatorRateLimit {
-            principal: old_node_operator_id,
-        });
-        assert_eq!(resp, expected_err);
+        assert_eq!(
+            resp,
+            Err(MigrateError::OldOperatorRateLimit {
+                principal: old_node_operator_id,
+            })
+        );
 
         let resp =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
