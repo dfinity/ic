@@ -1,17 +1,16 @@
 use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
 use config_types::{GuestOSConfig, Ipv6Config};
-use getifs::IfNet;
 use ipnet::Ipv6Net;
 use serde_json;
 use std::fs::write;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
 use std::time::Duration;
 
-use crate::guestos::network::get_best_interface_name;
+use crate::guestos::network::{get_best_interface_name, get_interface_addresses};
 
 #[derive(Template)]
 #[template(path = "ic.json5.template", escape = "none")]
@@ -235,74 +234,6 @@ pub fn get_best_interface_ipv6_address() -> Result<Ipv6Addr> {
     bail!("Cannot determine an IPv6 address, aborting");
 }
 
-/// Gets the most appropriate IPv4/IPv6 addresses from the provided interface
-pub fn get_interface_addresses(interface: &str) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
-    // Get the interface
-    let interface = getifs::interfaces()
-        .context("failed to get network interfaces")?
-        .into_iter()
-        .find(|x| x.name() == interface)
-        .with_context(|| format!("interface {interface} not found"))?;
-
-    // Get all of its addresses
-    let addrs = interface
-        .addrs()
-        .context("unable to get interface addresses")?;
-
-    let addrs_v4 = addrs
-        .iter()
-        .filter_map(|x| {
-            if let IfNet::V4(v) = x {
-                Some(v.addr())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let addrs_v6 = addrs
-        .iter()
-        .filter_map(|x| {
-            if let IfNet::V6(v) = x {
-                Some(v.addr())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    Ok((
-        pick_best_ipv4_address(addrs_v4),
-        pick_best_ipv6_address(addrs_v6),
-    ))
-}
-
-/// Picks the most appropriate IPv4 address from a list.
-/// Prefers global over local/private/loopback/etc.
-fn pick_best_ipv4_address(mut addrs: Vec<Ipv4Addr>) -> Option<Ipv4Addr> {
-    // Sort addresses by locality (non-local first)
-    addrs.sort_by_key(|x| {
-        x.is_link_local()
-            || x.is_loopback()
-            || x.is_private()
-            || x.is_documentation()
-            || x.is_multicast()
-    });
-
-    // Pick first address
-    addrs.into_iter().next()
-}
-
-/// Picks the most appropriate IPv6 address from a list.
-/// Prefers global over local/multicast/etc.
-fn pick_best_ipv6_address(mut addrs: Vec<Ipv6Addr>) -> Option<Ipv6Addr> {
-    // Sort addresses by locality (non-local first)
-    addrs.sort_by_key(|x| x.is_unicast_link_local() || x.is_unique_local() || x.is_multicast());
-
-    // Pick first address
-    addrs.into_iter().next()
-}
-
 fn generate_tls_certificate(domain_name: &str) -> Result<()> {
     let tls_key_path = "/var/lib/ic/data/ic-boundary-tls.key";
     let tls_cert_path = "/var/lib/ic/data/ic-boundary-tls.crt";
@@ -438,32 +369,5 @@ mod tests {
             },
             ..GuestOSConfig::default()
         }
-    }
-
-    #[test]
-    fn test_pick_best_ipv6_address() {
-        // Pick 1st global addr over local ones
-        let addrs = vec![
-            Ipv6Addr::from_str("fe80::1").unwrap(),
-            Ipv6Addr::from_str("fc00::1").unwrap(),
-            Ipv6Addr::from_str("fd00::1").unwrap(),
-            Ipv6Addr::from_str("2a00:1450:400a:1009::65").unwrap(),
-            Ipv6Addr::from_str("2a00:1450:400a:1009::66").unwrap(),
-        ];
-        assert_eq!(
-            pick_best_ipv6_address(addrs),
-            Some(Ipv6Addr::from_str("2a00:1450:400a:1009::65").unwrap())
-        );
-
-        // Pick just 1st local addr
-        let addrs = vec![
-            Ipv6Addr::from_str("fe80::1").unwrap(),
-            Ipv6Addr::from_str("fc00::1").unwrap(),
-            Ipv6Addr::from_str("fd00::1").unwrap(),
-        ];
-        assert_eq!(
-            pick_best_ipv6_address(addrs),
-            Some(Ipv6Addr::from_str("fe80::1").unwrap())
-        );
     }
 }

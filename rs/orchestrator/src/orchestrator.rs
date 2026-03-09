@@ -15,9 +15,7 @@ use crate::{
 };
 use anyhow::Context;
 use backoff::ExponentialBackoffBuilder;
-use config_tool::guestos::{
-    generate_ic_config::get_interface_addresses, network::get_best_interface_name,
-};
+use config_tool::guestos::network::{get_best_interface_name, get_interface_addresses};
 use guest_upgrade_server::orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator;
 use ic_config::{
     Config,
