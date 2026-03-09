@@ -65,7 +65,8 @@ jobs:
           - image: ic-dev
             target: dev
     outputs:
-      imageid: ${{ steps.set-imageid.outputs.imageid }} # both images share the same imageid
+      ic-build-imageid: ${{ steps.set-output-imageid.outputs.ic-build-imageid }}
+      ic-dev-imageid: ${{ steps.set-output-imageid.outputs.ic-dev-imageid }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -92,10 +93,17 @@ jobs:
           target: ${{ matrix.target }}
           build-args: |
             CI_USER=1001
-      - name: Set imageid output
-        id: set-imageid
-        if: matrix.image == 'ic-build'
-        run: echo "imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
+      - name: Set output imageid
+        id: set-output-imageid
+        run: |
+          if [ "${{ matrix.image }}" == "ic-build" ]; then
+            echo "ic-build-imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.image }}" == "ic-dev" ]; then
+            echo "ic-dev-imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
+          else
+            echo "Unknown image: ${{ matrix.image }}"
+            exit 1
+          fi
 
   update-image-references:
     name: Update Image References in Repo
@@ -122,21 +130,26 @@ jobs:
           # Update container image references
           set -xeuo pipefail
 
-          IMG_NAME=${{ github.repository_owner }}/ic-build
-          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ needs.ic-build-image.outputs.imageid }}"
+
+          IMAGE_PREFIX="ghcr.io/dfinity/"
+          IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
+          IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${{ needs.ic-build-image.outputs.ic-dev-imageid }}"
 
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
           pushd .devcontainer
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
+          sed -i -E "s|${IMAGE_PREFIX}ic-dev(:\|@)[^\"]{5,}|$IMG_NAME_IC_DEV|g" -- *
           popd
           pushd .github
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- workflow*/*
+          sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           popd
 
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
           git add .
-          git commit -m 'Updating container image to ${{ needs.ic-build-image.outputs.imageid }}' -m 'Image tag: ${{ needs.build-image-prep.outputs.image_tag }}'
+          git commit \
+            -m 'Updating container images to tag: ${{ needs.build-image-prep.outputs.image_tag }}' \
+            -m 'ic-build: ${{ needs.ic-build-image.outputs.ic-build-imageid }}' \
+            -m 'ic-dev:   ${{ needs.ic-build-image.outputs.ic-dev-imageid }}'
           git push
 
       - name: Add PR Comment
@@ -145,8 +158,9 @@ jobs:
         with:
           script: |
             let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
-            message += 'New container image: `${{ needs.ic-build-image.outputs.imageid }}`\n'
-            message += 'New container tag: `${{ needs.build-image-prep.outputs.image_tag }}`'
+            message += 'New container images with tag: `${{ needs.build-image-prep.outputs.image_tag }}`\n'
+            message += 'ic-build: `${{ needs.ic-build-image.outputs.ic-build-imageid }}`\n'
+            message += 'ic-dev: `${{ needs.ic-build-image.outputs.ic-dev-imageid }}`\n'
 
             // Find existing comment from this workflow
             const comments = await github.rest.issues.listComments({

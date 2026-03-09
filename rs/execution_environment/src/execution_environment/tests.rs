@@ -2857,6 +2857,7 @@ fn management_message_with_invalid_sender_is_not_accepted_with_subnet_admins() {
     let controller = user_test_id(2);
     let test_user = user_test_id(3);
     let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .with_subnet_admins(vec![subnet_admin.get()])
         .build();
     test.set_user_id(controller);
@@ -2878,6 +2879,7 @@ fn management_message_to_create_canister_with_subnet_admins() {
     let subnet_admin = user_test_id(1);
     let test_user = user_test_id(2);
     let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .with_subnet_admins(vec![subnet_admin.get()])
         .build();
 

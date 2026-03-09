@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-02-27: Proposal 140598
+
+http://dashboard.internetcomputer.org/proposal/140598
+
+## Changed
+
+- Set `retrieve_blocks_from_ledger_interval_seconds` to 5s for the SNS index-ng
+  canister when creating a new SNS (previously used the default of 1s).
+
+
 # 2026-02-10: Proposal 140315
 
 http://dashboard.internetcomputer.org/proposal/140315

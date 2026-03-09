@@ -2,13 +2,12 @@ use criterion::Criterion;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_execution_environment::RoundSchedule;
-use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, ReplicatedState, SchedulerState, SystemState,
+    CanisterState, SchedulerState, SystemState,
     canister_state::canister_snapshots::CanisterSnapshots,
 };
-use ic_types::Cycles;
-use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
+use ic_types::{AccumulatedPriority, Cycles};
+use ic_types_test_utils::ids::{canister_test_id, user_test_id};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -42,14 +41,13 @@ fn main() {
             ordered_new_execution_canister_ids.push(canister_id);
         }
     }
-    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-    state.put_canister_states(canisters);
 
     let scheduler_cores = 4;
     let long_execution_cores = 1;
     let round_schedule = RoundSchedule::new(
         scheduler_cores,
         long_execution_cores,
+        AccumulatedPriority::default(),
         ordered_new_execution_canister_ids,
         ordered_long_execution_canister_ids,
     );
@@ -61,9 +59,8 @@ fn main() {
     let rate_limiting_of_heap_delta = FlagStatus::Enabled;
     group.bench_function("filter_canisters", |bench| {
         bench.iter(|| {
-            let mut schedule = round_schedule.clone();
-            let _ = schedule.filter_canisters(
-                &mut state,
+            let _ = round_schedule.filter_canisters(
+                &canisters,
                 heap_delta_rate_limit,
                 rate_limiting_of_heap_delta,
             );
