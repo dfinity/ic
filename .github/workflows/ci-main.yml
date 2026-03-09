@@ -46,7 +46,7 @@ jobs:
             fuzzers:
               - ".github/workflows/ci-main.yml"
               - "ci/container/TAG"
-              - "bin/fuzzing/run-all-fuzzers.sh"
+              - "bin/fuzzing/*.sh"
               - "**/BUILD.bazel"
               - "**/*.bzl"
               - "**/*.rs"
