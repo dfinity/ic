@@ -30,6 +30,7 @@ fn setup(env: TestEnv) {
 }
 
 fn test(env: TestEnv) {
+    let log = env.logger();
     let node = env
         .topology_snapshot()
         .root_subnet()
@@ -37,7 +38,21 @@ fn test(env: TestEnv) {
         .next()
         .expect("Unable to find GuestOS node.");
 
-    info!(env.logger(), "Waiting for GuestOS to launch");
+    info!(log, "Waiting for GuestOS to launch");
     node.await_can_login_as_admin_via_ssh().unwrap();
-    info!(env.logger(), "GuestOS has launched!");
+    info!(log, "GuestOS has launched!");
+
+    let failed_units = node
+        .block_on_bash_script("systemctl list-units --failed --no-legend --no-pager")
+        .expect("Failed to run systemctl list-units --failed on GuestOS");
+
+    info!(log, "systemctl list-units --failed:\n{}", failed_units);
+
+    assert!(
+        failed_units.trim().is_empty(),
+        "GuestOS has failed systemd units:\n{}",
+        failed_units
+    );
+
+    info!(log, "No failed systemd units found.");
 }
