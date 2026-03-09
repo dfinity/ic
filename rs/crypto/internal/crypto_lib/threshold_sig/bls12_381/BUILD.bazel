@@ -111,6 +111,7 @@ rust_bench(
         "//rs/crypto/internal/crypto_lib/seed",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
+        "@crate_index//:rand",
     ],
 )
 
