@@ -437,11 +437,12 @@ impl CanisterHttpPayloadBuilderImpl {
                     .get(&id)
                     .map(|c| &c.replication)
                 else {
+                    // debug_unreachable!("Should only contain contexts for flexible outcalls");
                     continue;
                 };
 
                 let mut responses = Vec::new();
-                let mut responses_size = size_of::<CallbackId>();
+                let mut flexible_responses_size = size_of::<CallbackId>();
                 let mut signers = BTreeSet::new();
 
                 for (metadata, shares) in &grouped_shares {
@@ -457,12 +458,12 @@ impl CanisterHttpPayloadBuilderImpl {
                             let response_size = http_response.count_bytes()
                                 + size_of::<CanisterHttpResponseShare>();
                             let new_total = NumBytes::new(
-                                (accumulated_size + responses_size + response_size) as u64,
+                                (accumulated_size + flexible_responses_size + response_size) as u64,
                             );
                             if new_total >= max_payload_size {
                                 continue;
                             }
-                            responses_size += response_size;
+                            flexible_responses_size += response_size;
                             responses.push(FlexibleCanisterHttpResponseWithProof {
                                 response: http_response,
                                 proof: (*share).clone(),
@@ -478,7 +479,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 }
 
                 if responses.len() >= *min_responses as usize {
-                    accumulated_size += responses_size;
+                    accumulated_size += flexible_responses_size;
                     responses_included += 1;
                     flexible_responses.push(FlexibleCanisterHttpResponses {
                         callback_id: id,
