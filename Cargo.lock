@@ -12188,6 +12188,7 @@ dependencies = [
  "ic-http-types",
  "ic-ledger-core",
  "ic-limits",
+ "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-nervous-system-chunks",
  "ic-nervous-system-clients",
