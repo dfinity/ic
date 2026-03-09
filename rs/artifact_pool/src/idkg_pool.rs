@@ -549,7 +549,7 @@ impl ValidatedPoolReader<IDkgMessage> for IDkgPoolImpl {
         self.validated.as_pool_section().get(msg_id)
     }
 
-    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage> + '_> {
+    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage> + '_> {
         let pool_section = self.validated.as_pool_section();
         let dealings = pool_section
             .signed_dealings()
@@ -1358,13 +1358,13 @@ mod tests {
     }
 
     #[test]
-    fn test_get_all_for_broadcast_returns_only_own_artifacts() {
+    fn test_get_all_for_initial_broadcast_returns_only_own_artifacts() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
                 // No artifacts in the pool yet
-                assert_eq!(idkg_pool.get_all_for_broadcast().count(), 0);
+                assert_eq!(idkg_pool.get_all_for_initial_broadcast().count(), 0);
 
                 // For each artifact type, add two artifacts to the pool,
                 // one for ourselves (NODE_1) and one for NODE_2.
@@ -1452,7 +1452,8 @@ mod tests {
 
                 idkg_pool.apply(change_set);
 
-                let broadcast: Vec<IDkgMessage> = idkg_pool.get_all_for_broadcast().collect();
+                let broadcast: Vec<IDkgMessage> =
+                    idkg_pool.get_all_for_initial_broadcast().collect();
 
                 assert_eq!(broadcast.len(), IDkgMessageType::iter().count());
                 for msg in &broadcast {
@@ -1473,7 +1474,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_all_for_broadcast_excludes_unvalidated() {
+    fn test_get_all_for_initial_broadcast_excludes_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
@@ -1486,7 +1487,8 @@ mod tests {
                     timestamp: UNIX_EPOCH,
                 });
 
-                let broadcast: Vec<IDkgMessage> = idkg_pool.get_all_for_broadcast().collect();
+                let broadcast: Vec<IDkgMessage> =
+                    idkg_pool.get_all_for_initial_broadcast().collect();
                 assert!(broadcast.is_empty());
             })
         })
