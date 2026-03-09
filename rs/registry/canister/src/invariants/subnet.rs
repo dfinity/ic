@@ -94,13 +94,14 @@ pub(crate) fn check_subnet_invariants(
         }
 
         // Only application subnets can be rented and have a "free" cycles cost schedule.
-        if subnet_record.subnet_type != i32::from(SubnetType::Application)
+        if !(subnet_record.subnet_type == i32::from(SubnetType::Application)
+            || subnet_record.subnet_type == i32::from(SubnetType::CloudEngine))
             && subnet_record.canister_cycles_cost_schedule
                 == i32::from(CanisterCyclesCostSchedule::Free)
         {
             return Err(InvariantCheckError {
                 msg: format!(
-                    "Subnet {subnet_id:} is not an application subnet but has a free cycles cost schedule"
+                    "Subnet {subnet_id:} is not an application subnet or CloudEngine but has a free cycles cost schedule"
                 ),
                 source: None,
             });
