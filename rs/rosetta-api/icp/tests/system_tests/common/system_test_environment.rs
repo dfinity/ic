@@ -151,58 +151,74 @@ impl RosettaTestingEnvironment {
             }
 
             let rosetta_transfer_args = args_builder.build();
-            let response = self
-                .rosetta_client
-                .transfer(
-                    rosetta_transfer_args.clone(),
-                    self.network_identifier.clone(),
-                    &arg_with_caller.caller,
-                )
-                .await
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "Rosetta transfer failed: {e:?}, to: {}, amount: {}",
-                        transfer_to, transfer_amount,
-                    )
-                });
 
-            // Check if the server reported a FAILED status in the response metadata.
-            // This can happen when the Rosetta server's internal wait_for_result times out
-            // but the transaction may or may not have been submitted to the ledger.
-            // We retry with the same args (same created_at_time + memo) so the ledger's
-            // dedup logic makes this safe: either the retry succeeds (original wasn't
-            // processed) or we get a duplicate error (original was processed, balance is
-            // correct).
-            if Self::response_has_failed_status(&response) {
-                eprintln!(
-                    "Rosetta transfer returned FAILED status, retrying: to={}, amount={}",
-                    transfer_to, transfer_amount,
-                );
+            // The Rosetta server's internal wait_for_result can time out (20s),
+            // returning a 200 OK with FAILED status in the metadata. The transaction
+            // may or may not have been submitted to the ledger. We retry with the
+            // same args (same created_at_time + memo = same dedup key) so the
+            // ledger's dedup logic makes this safe: either the retry succeeds
+            // (original wasn't processed) or we get a duplicate error (original was
+            // processed, balance is correct).
+            const MAX_ROSETTA_TRANSFER_RETRIES: u32 = 1;
+            let mut last_response = None;
+            for attempt in 0..=MAX_ROSETTA_TRANSFER_RETRIES {
                 match self
                     .rosetta_client
                     .transfer(
-                        rosetta_transfer_args,
+                        rosetta_transfer_args.clone(),
                         self.network_identifier.clone(),
                         &arg_with_caller.caller,
                     )
                     .await
                 {
-                    Ok(retry_response) => {
-                        if Self::response_has_failed_status(&retry_response) {
-                            panic!(
-                                "Rosetta transfer retry also returned FAILED status: to={}, amount={}",
-                                transfer_to, transfer_amount,
-                            );
+                    Ok(response) => {
+                        if !Self::response_has_failed_status(&response) {
+                            last_response = None;
+                            break;
                         }
+                        eprintln!(
+                            "Rosetta transfer returned FAILED status (attempt {}): to={}, amount={}",
+                            attempt + 1,
+                            transfer_to,
+                            transfer_amount,
+                        );
+                        last_response = Some(Ok(response));
                     }
                     Err(e) => {
-                        // An error on retry likely means the original transaction was
-                        // processed (e.g. duplicate transaction error). This is fine -
-                        // the balance is correct.
+                        let err_msg = format!("{e:?}");
+                        let is_duplicate =
+                            err_msg.contains("transaction is a duplicate of another transaction");
+                        if attempt > 0 && is_duplicate {
+                            // The ledger rejected the retry as a duplicate, which
+                            // means the original transaction was processed
+                            // successfully. The balance is correct.
+                            eprintln!(
+                                "Rosetta transfer retry confirmed duplicate \
+                                 (original succeeded): {err_msg}"
+                            );
+                            last_response = None;
+                            break;
+                        }
                         eprintln!(
-                            "Rosetta transfer retry returned error (original likely succeeded): {e:?}"
+                            "Rosetta transfer returned error (attempt {}): {err_msg}",
+                            attempt + 1,
                         );
+                        last_response = Some(Err(e));
                     }
+                }
+            }
+            if let Some(result) = last_response {
+                match result {
+                    Ok(_) => panic!(
+                        "Rosetta transfer failed after {} attempts with FAILED status: to={}, amount={}",
+                        MAX_ROSETTA_TRANSFER_RETRIES + 1,
+                        transfer_to,
+                        transfer_amount,
+                    ),
+                    Err(e) => panic!(
+                        "Rosetta transfer failed: {e:?}, to: {}, amount: {}",
+                        transfer_to, transfer_amount,
+                    ),
                 }
             }
         }
