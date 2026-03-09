@@ -1001,6 +1001,10 @@ fn eq_sans_height(dkg_id1: &NiDkgId, dkg_id2: &NiDkgId) -> bool {
         && dkg_id1.target_subnet == dkg_id2.target_subnet
 }
 
+// Build a map from target id to callback id according to contexts in the replicated state.
+// Additionally, for each target ID, return the expected number of DKG instances necessary
+// to answer the request. Specifically, setup initial DKG requests require two DKGs, whereas
+// resharing a chain key requires on DKG instance.
 fn build_target_id_callback_map(
     state: &ReplicatedState,
 ) -> BTreeMap<NiDkgTargetId, (usize, CallbackId)> {
