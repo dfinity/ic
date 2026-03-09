@@ -3955,7 +3955,7 @@ impl StateMachine {
         args: ListCanisterSnapshotArgs,
     ) -> Result<ListCanisterSnapshotResponse, UserError> {
         let sender = self.get_controller(&args.get_canister_id());
-        self.list_canister_snapshot_as(args, sender)
+        self.list_canister_snapshots_as(args, sender)
     }
 
     /// List canister snapshots.

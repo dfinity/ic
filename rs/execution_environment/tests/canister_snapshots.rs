@@ -1176,7 +1176,7 @@ mod snapshot_visibility {
             match &self.expected_result {
                 Err(err) => {
                     assert_eq!(
-                        env.list_canister_snapshot_as(
+                        env.list_canister_snapshots_as(
                             ListCanisterSnapshotArgs::new(canister_id),
                             self.sender
                         )
@@ -1187,7 +1187,7 @@ mod snapshot_visibility {
                 }
                 Ok(()) => {
                     assert_eq!(
-                        env.list_canister_snapshot_as(
+                        env.list_canister_snapshots_as(
                             ListCanisterSnapshotArgs::new(canister_id),
                             self.sender
                         ),
