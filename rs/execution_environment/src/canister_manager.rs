@@ -2250,7 +2250,10 @@ impl CanisterManager {
                 Some(snapshot_canister) => snapshot_canister,
                 None => {
                     return (
-                        Err(CanisterManagerError::CanisterNotFound(snapshot_canister_id)),
+                        Err(CanisterManagerError::CanisterSnapshotNotFound {
+                            canister_id,
+                            snapshot_id,
+                        }),
                         NumInstructions::new(0),
                     );
                 }
