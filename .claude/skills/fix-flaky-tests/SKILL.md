@@ -60,6 +60,12 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
 3. Analyze the source code of `label` and the logs in `<LOG_DIR>` to determine the root cause of the flakiness.
 
+   Ignore failures containing the error:
+   ```
+   Retried too many times: sending a request to Farm
+   ```
+   as those are due to infrastructure issues unrelated to the test code.
+
 4. Once you have determined the root cause,
    fix the test taking `.claude/CLAUDE.md` into account.
 

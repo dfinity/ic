@@ -33,7 +33,6 @@ const SPAMMY_LOG_INTERVAL_ROUNDS: u64 = 10 * 60;
 pub struct ReplicatedStateMetrics {
     canister_balance: Histogram,
     canister_binary_size: Histogram,
-    canister_log_memory_usage_v2: Histogram,
     canister_log_memory_usage_v3: Histogram,
     canister_wasm_memory_usage: Histogram,
     canister_stable_memory_usage: Histogram,
@@ -80,26 +79,6 @@ impl ReplicatedStateMetrics {
                 "canister_binary_size_bytes",
                 "Canisters Wasm binary size distribution in bytes.",
                 metrics_registry,
-            ),
-            canister_log_memory_usage_v2: metrics_registry.histogram(
-                "canister_log_memory_usage_bytes_v2",
-                "Canisters log memory usage distribution in bytes.",
-                unique_sorted_buckets(&[
-                    0,
-                    KIB,
-                    2 * KIB,
-                    5 * KIB,
-                    10 * KIB,
-                    20 * KIB,
-                    50 * KIB,
-                    100 * KIB,
-                    200 * KIB,
-                    500 * KIB,
-                    MIB,
-                    2 * MIB,
-                    5 * MIB,
-                    10 * MIB,
-                ])
             ),
             canister_log_memory_usage_v3: metrics_registry.histogram(
                 "canister_log_memory_usage_bytes_v3",
@@ -565,8 +544,6 @@ impl ReplicatedStateMetrics {
         } else {
             canister.system_state.canister_log.bytes_used()
         };
-        self.canister_log_memory_usage_v2
-            .observe(log_memory_usage as f64);
         self.canister_log_memory_usage_v3
             .observe(log_memory_usage as f64);
     }

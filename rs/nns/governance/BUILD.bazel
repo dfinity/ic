@@ -83,6 +83,7 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
+    "//rs/nns/governance/conversions",
     "//rs/nns/governance/init",
     "//rs/nns/handlers/lifeline/interface",
     "//rs/nns/handlers/root/interface",
@@ -134,6 +135,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
+    "//rs/nervous_system/query_instruction_logger",
     "//rs/nns/governance/derive_self_describing",
     "@crate_index//:async-trait",
     "@crate_index//:rust_decimal_macros",
@@ -259,7 +261,6 @@ rust_library(
 rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
-    add_test = True,
     noise_threshold = 5.0,
     # For some reason, the NNS Governance benchmarks are sensitive to the optimization level.
     # We would like to figure out why and fix it, but for now, we are reducing the optimization

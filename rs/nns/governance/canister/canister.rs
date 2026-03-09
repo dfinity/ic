@@ -1,11 +1,12 @@
 use ic_base_types::PrincipalId;
-use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, println, query, update};
+use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, println, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
 };
+use ic_nervous_system_query_instruction_logger::query;
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger},

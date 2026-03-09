@@ -1642,6 +1642,7 @@ pub struct MetricsFetcher {
     nodes: Vec<IcNodeSnapshot>,
     metrics: Vec<String>,
     port: u16,
+    client: reqwest::Client,
 }
 
 impl MetricsFetcher {
@@ -1656,10 +1657,15 @@ impl MetricsFetcher {
         metrics: Vec<String>,
         port: u16,
     ) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(AGENT_REQUEST_TIMEOUT)
+            .build()
+            .expect("Failed to build HTTP client for metrics fetching");
         Self {
             nodes: nodes.collect(),
             metrics,
             port,
+            client,
         }
     }
 
@@ -1704,7 +1710,7 @@ impl MetricsFetcher {
 
         let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, self.port, 0, 0));
         let url = format!("http://{socket_addr}");
-        let response = reqwest::get(url).await?.text().await?;
+        let response = self.client.get(url).send().await?.text().await?;
 
         // Filter out only lines that contain metrics we are interested in
         let mut result = BTreeMap::new();
