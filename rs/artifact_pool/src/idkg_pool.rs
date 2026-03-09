@@ -1363,6 +1363,11 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
+                // No artifacts in the pool yet
+                assert_eq!(idkg_pool.get_all_for_broadcast().count(), 0);
+
+                // For each artifact type, add two artifacts to the pool, 
+                // one for ourselves (NODE_1) and one for NODE_2.
                 let mut change_set = Vec::new();
                 for (i, node) in [(1u8, NODE_1), (2u8, NODE_2)] {
                     let tid = dummy_idkg_transcript_id_for_tests(i as u64);
@@ -1466,17 +1471,6 @@ mod tests {
                         IDkgMessage::VetKdKeyShare(s) => assert_eq!(s.signer_id, NODE_1),
                     }
                 }
-            })
-        })
-    }
-
-    #[test]
-    fn test_get_all_for_broadcast_empty_pool() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let idkg_pool = create_idkg_pool(pool_config, logger);
-                let broadcast: Vec<IDkgMessage> = idkg_pool.get_all_for_broadcast().collect();
-                assert!(broadcast.is_empty());
             })
         })
     }
