@@ -856,8 +856,8 @@ fn canister_state_ingress_induction_cycles_debit() {
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        ingress_induction_debit.into()
+        system_state.canister_metrics().consumed_cycles().get(),
+        ingress_induction_debit.get()
     );
     assert_eq!(
         *system_state
@@ -865,7 +865,7 @@ fn canister_state_ingress_induction_cycles_debit() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
-        ingress_induction_debit.into()
+        NominalCycles::from(ingress_induction_debit.get()),
     );
 }
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -881,7 +881,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::from(initial_consumed_cycles)
+        NominalCycles::from(initial_consumed_cycles.get())
     );
 
     let cycles = Cycles::new(100);
@@ -892,7 +892,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::from(initial_consumed_cycles - cycles)
+        NominalCycles::from((initial_consumed_cycles - cycles).get())
     );
 }
 
@@ -914,7 +914,7 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)
             .unwrap(),
-        NominalCycles::from(cycles_to_consume - cycles_to_add)
+        NominalCycles::from((cycles_to_consume - cycles_to_add).get())
     );
 }
 

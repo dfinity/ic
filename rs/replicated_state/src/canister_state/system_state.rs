@@ -1953,7 +1953,7 @@ impl SystemState {
             .entry(use_case)
             .or_insert_with(|| NominalCycles::from(0));
 
-        let nominal_amount = amount.into();
+        let nominal_amount = NominalCycles::from(amount.get());
 
         match consuming_cycles {
             ConsumingCycles::Yes => {

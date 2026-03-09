@@ -1113,9 +1113,9 @@ prop_compose! {
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
-        metrics.consumed_cycles_by_deleted_canisters = consumed_cycles_by_deleted_canisters;
-        metrics.consumed_cycles_http_outcalls = consumed_cycles_http_outcalls;
-        metrics.consumed_cycles_ecdsa_outcalls = consumed_cycles_ecdsa_outcalls;
+        metrics.observe_consumed_cycles_by_deleted_canisters(consumed_cycles_by_deleted_canisters);
+        metrics.observe_consumed_cycles_http_outcalls(consumed_cycles_http_outcalls);
+        metrics.observe_consumed_cycles_ecdsa_outcalls(consumed_cycles_ecdsa_outcalls);
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;

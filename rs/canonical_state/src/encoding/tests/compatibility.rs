@@ -215,9 +215,9 @@ fn canonical_encoding_stream_header() {
 fn canonical_encoding_subnet_metrics() {
     for certification_version in all_supported_versions() {
         let mut metrics = SubnetMetrics::default();
-        metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
-        metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
-        metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
+        metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::from(0));
+        metrics.observe_consumed_cycles_http_outcalls(NominalCycles::from(50_000_000_000));
+        metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::from(100_000_000_000));
         metrics.num_canisters = 5;
         metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
         metrics.update_transactions_total = 4200;

@@ -4004,7 +4004,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_before + NominalCycles::from(fee),
+        consumed_cycles_before + NominalCycles::from(fee.get()),
         consumed_cycles_after
     );
 
@@ -4105,7 +4105,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_before + NominalCycles::from(fee),
+        consumed_cycles_before + NominalCycles::from(fee.get()),
         consumed_cycles_after
     );
 

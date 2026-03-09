@@ -334,9 +334,9 @@ pub fn can_have_subnet_admins(
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetMetrics {
-    pub consumed_cycles_by_deleted_canisters: NominalCycles,
-    pub consumed_cycles_http_outcalls: NominalCycles,
-    pub consumed_cycles_ecdsa_outcalls: NominalCycles,
+    consumed_cycles_by_deleted_canisters: NominalCycles,
+    consumed_cycles_http_outcalls: NominalCycles,
+    consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
@@ -362,6 +362,30 @@ impl SubnetMetrics {
             .consumed_cycles_by_use_case
             .entry(use_case)
             .or_insert_with(|| NominalCycles::from(0)) += cycles;
+    }
+
+    pub fn observe_consumed_cycles_by_deleted_canisters(&mut self, cycles: NominalCycles) {
+        self.consumed_cycles_by_deleted_canisters += cycles;
+    }
+
+    pub fn get_consumed_cycles_by_deleted_canisters(&self) -> NominalCycles {
+        self.consumed_cycles_by_deleted_canisters
+    }
+
+    pub fn observe_consumed_cycles_http_outcalls(&mut self, cycles: NominalCycles) {
+        self.consumed_cycles_http_outcalls += cycles;
+    }
+
+    pub fn get_consumed_cycles_http_outcalls(&self) -> NominalCycles {
+        self.consumed_cycles_http_outcalls
+    }
+
+    pub fn observe_consumed_cycles_ecdsa_outcalls(&mut self, cycles: NominalCycles) {
+        self.consumed_cycles_ecdsa_outcalls += cycles;
+    }
+
+    pub fn get_consumed_cycles_ecdsa_outcalls(&self) -> NominalCycles {
+        self.consumed_cycles_ecdsa_outcalls
     }
 
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {

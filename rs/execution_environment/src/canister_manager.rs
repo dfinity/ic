@@ -1331,7 +1331,7 @@ impl CanisterManager {
         state
             .metadata
             .subnet_metrics
-            .consumed_cycles_by_deleted_canisters += consumed_cycles_by_canister_to_delete;
+            .observe_consumed_cycles_by_deleted_canisters(consumed_cycles_by_canister_to_delete);
 
         for (use_case, cycles) in canister_to_delete
             .system_state

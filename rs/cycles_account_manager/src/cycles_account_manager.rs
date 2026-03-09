@@ -1317,7 +1317,8 @@ impl CyclesAccountManager {
         &self,
         system_state: &SystemState,
     ) -> NominalCycles {
-        NominalCycles::from(system_state.balance() + system_state.reserved_balance())
+        let raw_amount = (system_state.balance() + system_state.reserved_balance()).get();
+        NominalCycles::from(raw_amount)
     }
 
     // The fee for `UpdateSettings` is charged after applying

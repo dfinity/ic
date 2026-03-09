@@ -2170,7 +2170,7 @@ fn delete_canister_consumed_cycles_observed() {
             .get_consumed_cycles_by_use_case()
             .get(&CyclesUseCase::DeletedCanisters)
             .unwrap(),
-        NominalCycles::from(initial_cycles)
+        NominalCycles::from(initial_cycles.get())
     );
 }
 

@@ -1,5 +1,4 @@
 //! Cycles struct to be used for metrics collection.
-use crate::Cycles;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -27,10 +26,6 @@ impl NominalCycles {
         Self(input)
     }
 
-    pub fn from_cycles(input: Cycles) -> Self {
-        Self(input.get())
-    }
-
     pub fn from_parts(high: u64, low: u64) -> Self {
         Self(((high as u128) << 64) | low as u128)
     }
@@ -55,12 +50,6 @@ impl NominalCycles {
 impl From<u128> for NominalCycles {
     fn from(input: u128) -> Self {
         Self::new(input)
-    }
-}
-
-impl From<Cycles> for NominalCycles {
-    fn from(input: Cycles) -> Self {
-        Self::new(input.get())
     }
 }
 

@@ -421,7 +421,7 @@ impl ReplicatedStateMetrics {
         consumed_cycles_total += state
             .metadata
             .subnet_metrics
-            .consumed_cycles_by_deleted_canisters;
+            .get_consumed_cycles_by_deleted_canisters();
 
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
@@ -432,10 +432,16 @@ impl ReplicatedStateMetrics {
         );
 
         // Add the consumed cycles in ecdsa outcalls.
-        consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls;
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_ecdsa_outcalls();
 
         // Add the consumed cycles in http outcalls.
-        consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_http_outcalls;
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_http_outcalls();
 
         self.consumed_cycles.set(consumed_cycles_total.get() as f64);
 

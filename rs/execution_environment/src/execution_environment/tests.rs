@@ -3054,15 +3054,15 @@ fn execute_canister_http_request() {
     assert_eq!(http_request_context.request.payment, payment - fee);
 
     assert_eq!(
-        NominalCycles::from(fee),
+        NominalCycles::from(fee.get()),
         test.state()
             .metadata
             .subnet_metrics
-            .consumed_cycles_http_outcalls
+            .get_consumed_cycles_http_outcalls()
     );
 
     assert_eq!(
-        NominalCycles::from(fee),
+        NominalCycles::from(fee.get()),
         *test
             .state()
             .metadata
@@ -3866,7 +3866,7 @@ fn replicated_query_can_burn_cycles() {
         .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
-    assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn));
+    assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn.get()));
 }
 
 #[test]
@@ -4039,12 +4039,12 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that consumed cycles are correct for both use cases.
     assert_eq!(
         transmission_consumption_after_response,
-        NominalCycles::from(transmission_cost)
+        NominalCycles::from(transmission_cost.get())
     );
 
     assert_eq!(
         instruction_consumption_after_response,
-        NominalCycles::from(execution_cost)
+        NominalCycles::from(execution_cost.get())
     );
 
     // Consumed cycles after the response should be smaller than before
@@ -4082,7 +4082,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
-        NominalCycles::from(test.canister_execution_cost(b_id))
+        NominalCycles::from(test.canister_execution_cost(b_id).get())
     );
 }
 
