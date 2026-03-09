@@ -134,15 +134,11 @@ pub(crate) fn check_subnet_invariants(
     Ok(())
 }
 
-// Checks that only rented subnets can have admins. (Here, it is taken that
-// rented subnets are of type application and on a free schedule.)
-//
+// Checks that only rented subnets can have admins.
 fn check_subnet_admins_invariant(
     subnet_record: &SubnetRecord,
     subnet_id: SubnetId,
 ) -> Result<(), InvariantCheckError> {
-    // Only rented subnets can have admins.
-    //
     // Here, it is taken that rented subnets are of type application and on a
     // free schedule. This is not very reliable and could be improved in the
     // future (e.g. by adding a new subnet type).
@@ -150,6 +146,7 @@ fn check_subnet_admins_invariant(
     let is_on_free_cost_schedule =
         subnet_record.canister_cycles_cost_schedule == i32::from(CanisterCyclesCostSchedule::Free);
     let is_rented = is_on_free_cost_schedule && is_application_subnet;
+
     let ok = subnet_record.subnet_admins.is_empty() || is_rented;
     if !ok {
         return Err(InvariantCheckError {
