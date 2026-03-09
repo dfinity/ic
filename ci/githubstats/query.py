@@ -285,22 +285,14 @@ def filter_columns(columns_metadata, columns_list):
     return result
 
 
-def download_and_process_logs(
-    logs_base_dir, test_target: str, download_console_logs: bool, download_ic_logs: bool, df: pd.DataFrame
-):
+def download_and_process_logs(logs_base_dir, download_console_logs: bool, download_ic_logs: bool, df: pd.DataFrame):
     """
-    Download the logs of all runs of test_target in the given DataFrame,
+    Download the logs of all runs in the given DataFrame,
     save them to the specified logs_base_dir
     and annotate the DataFrame with error summaries from the downloaded logs.
     """
     original_cwd = Path(os.environ.get("BUILD_WORKING_DIRECTORY", Path.cwd()))
-    test_name = test_target.split(":")[-1]
     timestamp = datetime.now().isoformat(timespec="seconds")
-    output_dir = original_cwd / logs_base_dir / test_name / timestamp
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"Downloading logs to: {output_dir}", file=sys.stderr)
 
     # Create a new column "error_summaries" in the DataFrame of type dict[int, SystemGroupSummary | str]
     # mapping the attempt number to either the SystemGroupSummary in case of a system-test
@@ -309,7 +301,16 @@ def download_and_process_logs(
 
     # Collect all download tasks
     download_tasks = []
+    output_dirs = set()
     for _ix, row in df.iterrows():
+        test_target = row["label"]
+        test_name = test_target.split(":")[-1]
+        output_dir = original_cwd / logs_base_dir / test_name / timestamp
+        output_dirs.add(output_dir)
+        if not output_dir.is_dir():
+            output_dir.mkdir(parents=True, exist_ok=True)
+            print(f"Downloading logs to: {output_dir}", file=sys.stderr)
+
         # Add a lock to each row for thread-safe updates when annotating the DataFrame with errors below
         row["lock"] = threading.Lock()
 
@@ -329,11 +330,15 @@ def download_and_process_logs(
         for attempt_num, download_url, attempt_status in log_urls:
             attempt_dir = invocation_dir / str(attempt_num)
             download_to_path = attempt_dir / f"{attempt_status}.log"
-            download_tasks.append((row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path))
+            download_tasks.append(
+                (row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path, output_dir)
+            )
 
-    execute_download_tasks(download_tasks, test_target, output_dir, download_console_logs, download_ic_logs, df)
+    execute_download_tasks(download_tasks, download_console_logs, download_ic_logs, df)
 
-    write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp, download_console_logs, download_ic_logs)
+    if len(output_dirs) == 1:
+        output_dir = output_dirs.pop()
+        write_log_dir_readme(output_dir / "README.md", df, timestamp, download_console_logs, download_ic_logs)
 
 
 def get_all_log_urls_from_buildbuddy(
@@ -429,8 +434,6 @@ def convert_download_url(uri, cluster) -> str:
 
 def execute_download_tasks(
     download_tasks: list,
-    test_target: str,
-    output_dir: Path,
     download_console_logs: bool,
     download_ic_logs: bool,
     df: pd.DataFrame,
@@ -446,7 +449,7 @@ def execute_download_tasks(
     ):
 
         def download_log(task):
-            row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path = task
+            row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path, output_dir = task
             shortened_path = download_to_path.relative_to(output_dir)
             try:
                 response = requests.get(download_url, timeout=60, stream=True)
@@ -460,7 +463,6 @@ def execute_download_tasks(
                         target=process_log,
                         args=(
                             row,
-                            test_target,
                             attempt_num,
                             attempt_status,
                             attempt_dir,
@@ -501,7 +503,7 @@ def execute_download_tasks(
     df["errors"] = df["error_summaries"].apply(render_error_summaries)
 
     print(
-        f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs to {output_dir}",
+        f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs.",
         file=sys.stderr,
     )
 
@@ -511,7 +513,6 @@ TIMESTAMP_LEN = 23
 
 def process_log(
     row: pd.Series,
-    test_target: str,
     attempt_num: int,
     attempt_status: str,
     attempt_dir: Path,
@@ -539,7 +540,7 @@ def process_log(
     # system-tests have structured logs with JSON objects that we can parse to get more detailed error summaries
     # and to determine the group (testnet) name for downloading the IC logs from ElasticSearch.
     # Non-system-tests just get annotated with the last line of the log which usually contains the error message.
-    if test_target.startswith("//rs/tests/"):
+    if row["label"].startswith("//rs/tests/"):
         with open(download_to_path, "r", encoding="utf-8") as f:
             for line in f:
                 if len(line) < TIMESTAMP_LEN:
@@ -912,6 +913,7 @@ TOP_COLUMNS = [
 LAST_COLUMNS = [
     # (column_name,         header,                  alignment)
     ("last_started_at",     "last started at (UTC)", "right"),
+    ("label",               "label",                 "left"),
     ("duration",            "duration",              "right"),
     ("status",              "status",                "left"),
     ("branch",              "branch",                "left"),
@@ -925,7 +927,6 @@ LAST_COLUMNS = [
 
 def write_log_dir_readme(
     readme_path: Path,
-    test_target: str,
     df: pd.DataFrame,
     timestamp: datetime.timestamp,
     download_console_logs: bool,
@@ -965,15 +966,16 @@ def write_log_dir_readme(
         if download_console_logs
         else ""
     )
+    contains_system_tests = df["label"].str.startswith("//rs/tests/").any()
     system_test_desc = (
         f"""
 
 The attempt directory will also contain:{ic_logs_desc}{console_logs_desc}
 """
-        if test_target.startswith("//rs/tests/") and (download_ic_logs or download_console_logs)
+        if contains_system_tests and (download_ic_logs or download_console_logs)
         else ""
     )
-    readme = f"""Logs of `{test_target}`
+    readme = f"""Test Logs
 ===
 Generated at {timestamp} using:
 ```
@@ -982,7 +984,7 @@ Generated at {timestamp} using:
 {table_md}
 
 This directory contains an "invocation" directory, named like `<bazel_invocation_timestamp>_<bazel_invocation_id>`,
-per bazel invocation that ran the test `{test_target}`.
+per bazel invocation.
 
 The invocation directory will have a directory per attempt of the test, named like `1`, `2`, `3`, etc.
 
@@ -1105,7 +1107,7 @@ def last(args):
         overall_statuses = {1, 2, 3, 4}
 
     query = sql.SQL((THIS_SCRIPT_DIR / "last.sql").read_text()).format(
-        test_target=sql.Literal(args.test_target),
+        test_target=sql.Literal(args.test_target if args.test_target else ""),
         overall_statuses=sql.SQL(",".join(map(str, overall_statuses))),
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
@@ -1122,13 +1124,13 @@ def last(args):
     # We need to create links to the cluster-specific BuildBuddy service.
     # To get the cluster-specific BuildBuddy URL we need to resolve the redirect via the BuildBuddy redirect service.
     # Since this I/O takes time we parallelize to speed it up by an order of magnitude.
-    def direct_url_to_buildbuddy(invocation_id):
+    def direct_url_to_buildbuddy(invocation_id, target):
         url = f"https://dash.idx.dfinity.network/invocation/{invocation_id}"
         redirect = get_redirect_location(url)
-        return f"{redirect}?target={args.test_target}" if redirect else url
+        return f"{redirect}?target={target}" if redirect else url
 
     with ThreadPoolExecutor() as executor:
-        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["build_id"]))
+        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["build_id"], df["label"]))
 
     df["buildbuddy"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
 
@@ -1151,14 +1153,20 @@ def last(args):
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
-        download_and_process_logs(
-            args.logs_base_dir, args.test_target, args.download_console_logs, args.download_ic_logs, df
-        )
+        download_and_process_logs(args.logs_base_dir, args.download_console_logs, args.download_ic_logs, df)
 
     columns_metadata = LAST_COLUMNS
     # When downlods are skipped we don't have any error information so skip the "errors" column.
     if args.skip_download:
         columns_metadata = [col for col in columns_metadata if col[0] != "errors"]
+
+    # When a specific test target is queried, the "label" column doesn't add any value
+    # because all rows have the same label, so we can skip it to save space.
+    if df["label"].nunique() == 1:
+        columns_metadata = [col for col in columns_metadata if col[0] != "label"]
+    else:
+        # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
+        df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
     # Apply column filtering if --columns is specified, otherwise use all columns
     colalignments = filter_columns(columns_metadata, args.columns)
@@ -1398,7 +1406,14 @@ logs
 """,
     )
 
-    last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
+    last_runs_parser.add_argument(
+        "test_target",
+        type=str,
+        nargs="?",
+        default=None,
+        help="""Return runs of bazel targets matching the given SQL LIKE pattern.
+If omitted retuns all bazel test runs in the specified period.""",
+    )
     last_runs_parser.set_defaults(func=last)
 
     last_runs_parser.add_argument(

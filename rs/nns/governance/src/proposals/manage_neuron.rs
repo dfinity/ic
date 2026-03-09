@@ -12,16 +12,14 @@ use crate::{
             set_following::FolloweesForTopic,
         },
     },
-    proposals::self_describing::{
-        LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
-    },
+    proposals::self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
 };
 
 use ic_cdk::println;
 
-impl LocallyDescribableProposalAction for ManageNeuron {
-    const TYPE_NAME: &'static str = "Manage Neuron";
-    const TYPE_DESCRIPTION: &'static str = "Call a major function on a specified target neuron. \
+impl DocumentedAction for ManageNeuron {
+    const NAME: &'static str = "Manage Neuron";
+    const DESCRIPTION: &'static str = "Call a major function on a specified target neuron. \
         Only the followees of the target neuron may vote on these proposals, which effectively \
         provides the followees with control over the target neuron. This can provide a convenient \
         and highly secure means for a team of individuals to manage an important neuron. For \
@@ -45,12 +43,14 @@ impl LocallyDescribableProposalAction for ManageNeuron {
         private key by accident, the private key can be destroyed so that the neuron can only be \
         controlled by its followees, although this makes it impossible to subsequently unlock the \
         balance.";
+}
 
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
+impl From<ManageNeuron> for SelfDescribingValue {
+    fn from(value: ManageNeuron) -> Self {
         let builder = ValueBuilder::new();
 
         // Flatten all the id/neuron_id_or_subaccount cases into a single field (either "neuron_id" or "subaccount")
-        let neuron_id_or_subaccount = match self.get_neuron_id_or_subaccount() {
+        let neuron_id_or_subaccount = match value.get_neuron_id_or_subaccount() {
             Ok(Some(neuron_id_or_subaccount)) => Some(neuron_id_or_subaccount),
             _ => {
                 println!(
@@ -76,7 +76,7 @@ impl LocallyDescribableProposalAction for ManageNeuron {
             }
         };
 
-        builder.add_field("command", self.command.clone()).build()
+        builder.add_field("command", value.command).build()
     }
 }
 

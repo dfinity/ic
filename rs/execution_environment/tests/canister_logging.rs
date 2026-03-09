@@ -1661,7 +1661,7 @@ fn test_canister_log_memory_usage_bytes_old() {
     if LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    let metric = "canister_log_memory_usage_bytes_v2";
+    let metric = "canister_log_memory_usage_bytes_v3";
     const PAYLOAD_SIZE: usize = 1_000;
     let env = setup_env();
     let canister_id = create_and_install_canister(
@@ -1690,7 +1690,7 @@ fn test_canister_log_memory_usage_bytes_new() {
         return;
     }
     // Test canister logging metrics record the size of the log.
-    let metric = "canister_log_memory_usage_bytes_v2";
+    let metric = "canister_log_memory_usage_bytes_v3";
     let env = setup_env();
     let _canister_id = create_and_install_canister(
         &env,

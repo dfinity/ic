@@ -114,16 +114,15 @@ impl RingBuffer {
 
     /// Appends records from an iterator.
     pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
+        let mut iter = records.into_iter().peekable();
+        if iter.peek().is_none() {
+            return; // Exit early if no records.
+        }
         let mut index_table = self.io.load_index_table();
-        let mut header = self.io.load_header();
-        let mut i = 0;
-        let mut total_size = 0;
-        for r in records {
-            i += 1;
-            let record = LogRecord::from(r);
-
+        let mut h = self.io.load_header();
+        for record in iter.map(LogRecord::from) {
             // Check that records are added in order, otherwise it breaks the index.
-            if record.idx < header.next_idx {
+            if record.idx < h.next_idx {
                 debug_assert!(false, "Log record idx must be >= than next idx");
                 continue;
             }
@@ -138,24 +137,23 @@ impl RingBuffer {
                 debug_assert!(false, "Log record size exceeds ring buffer capacity");
                 return;
             }
-            total_size += added_size.get();
-            self.evict_for_size(&mut header, added_size);
+            self.evict_for_size(&mut h, added_size);
 
             // Save the record at the tail position.
-            self.io.save_record(&header, header.data_tail, &record);
+            self.io.save_record(&h, h.data_tail, &record);
 
             // Update header with new tail position, size and next idx.
-            let position = header.data_tail;
-            header.data_tail = header.advance_position(position, added_size);
-            header.data_size = header.data_size.saturating_add(added_size);
-            header.next_idx = record.idx + 1;
-            header.max_timestamp = record.timestamp;
+            let position = h.data_tail;
+            h.data_tail = h.advance_position(position, added_size);
+            h.data_size = h.data_size.saturating_add(added_size);
+            h.next_idx = record.idx + 1;
+            h.max_timestamp = record.timestamp;
 
             // Update the index table with the latest record position.
             index_table.update(position, &record);
         }
         // Write header and index ONCE at the end.
-        self.io.save_header(&header);
+        self.io.save_header(&h);
         self.io.save_index_table(&index_table);
         println!("ABC Appended {} records, total size: {}", i, total_size);
     }
@@ -306,7 +304,10 @@ impl<'a> Iterator for RingBufferIterator<'a> {
             return None;
         }
 
-        let record = self.io.load_record(&self.header, self.pos)?;
+        let record = self.io.load_record(&self.header, self.pos).or_else(|| {
+            self.remaining_size = 0;
+            None
+        })?;
         let len = record.bytes_len();
 
         // Safety check to prevent infinite loops or panics on corruption
@@ -315,7 +316,7 @@ impl<'a> Iterator for RingBufferIterator<'a> {
             return None;
         }
 
-        self.remaining_size -= len;
+        self.remaining_size = self.remaining_size.saturating_sub(len);
         self.pos = self
             .header
             .advance_position(self.pos, MemorySize::new(len as u64));

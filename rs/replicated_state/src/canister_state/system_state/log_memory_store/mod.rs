@@ -281,6 +281,8 @@ impl LogMemoryStore {
             .sum()
     }
 
+    /// Calculates the size of a single log record when encoded
+    /// and stored within the `LogMemoryStore`.
     pub fn estimate_record_size(content_size: usize) -> usize {
         LogRecord::estimate_bytes_len(content_size)
     }

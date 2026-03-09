@@ -230,8 +230,9 @@ pub fn verify(
         let version = RegistryVersion::new(version);
         match client.get_cup_contents(subnet_id, version) {
             Ok(contents) => {
-                if contents.value.is_some() && contents.version == version {
-                    let cup_contents = contents.value.unwrap();
+                if let Some(cup_contents) = contents.value
+                    && contents.version == version
+                {
                     println!("Found Recovery proposal at version {version}:");
                     println!("{:>20}: {}", "TIME", cup_contents.time);
                     println!("{:>20}: {}", "HEIGHT", cup_contents.height);
