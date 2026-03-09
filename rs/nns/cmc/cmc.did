@@ -5,6 +5,11 @@ type log_visibility = variant {
   public;
   allowed_viewers : vec principal;
 };
+type snapshot_visibility = variant {
+  controllers;
+  public;
+  allowed_viewers : vec principal;
+};
 type environment_variable = record { 
   name: text; 
   value: text;
@@ -16,6 +21,7 @@ type CanisterSettings = record {
   freezing_threshold : opt nat;
   reserved_cycles_limit : opt nat;
   log_visibility : opt log_visibility;
+  snapshot_visibility : opt snapshot_visibility;
   wasm_memory_limit : opt nat;
   wasm_memory_threshold : opt nat;
   environment_variables : opt vec environment_variable;

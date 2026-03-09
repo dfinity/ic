@@ -64,6 +64,7 @@ use ic_nns_governance_api::{
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+        SnapshotVisibility as GovernanceSnapshotVisibility,
     },
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
@@ -167,8 +168,8 @@ use std::{
 };
 use types::{
     LogVisibility, NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload,
-    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetDescriptor,
-    SubnetRecord,
+    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SnapshotVisibility,
+    SubnetDescriptor, SubnetRecord,
 };
 use update_subnet::ProposeToUpdateSubnetCmd;
 use url::Url;
@@ -1548,6 +1549,9 @@ struct ProposeToUpdateCanisterSettingsCmd {
     #[clap(long)]
     /// If set, it will update the canister's wasm memory threshold to this value.
     wasm_memory_threshold: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's snapshot visibility to this value.
+    snapshot_visibility: Option<SnapshotVisibility>,
 }
 
 impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
@@ -1583,6 +1587,13 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
             Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
             None => None,
         };
+        let snapshot_visibility = match self.snapshot_visibility {
+            Some(SnapshotVisibility::Controllers) => {
+                Some(GovernanceSnapshotVisibility::Controllers as i32)
+            }
+            Some(SnapshotVisibility::Public) => Some(GovernanceSnapshotVisibility::Public as i32),
+            None => None,
+        };
 
         let update_settings = UpdateCanisterSettings {
             canister_id,
@@ -1594,6 +1605,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
                 wasm_memory_limit,
                 log_visibility,
                 wasm_memory_threshold,
+                snapshot_visibility,
             }),
         };
 
