@@ -3,7 +3,7 @@ use crate::common::{
     default_archive_options, get_fee_collectors_ranges, icrc1_balance_of, icrc1_transfer,
     icrc2_approve, icrc2_transfer_from, index_init_arg_without_interval, index_ng_wasm,
     install_icrc3_test_ledger, install_index_ng, install_ledger, ledger_get_all_blocks,
-    ledger_wasm, parse_index_logs, transfer, wait_until_sync_is_completed,
+    parse_index_logs, transfer, wait_until_sync_is_completed,
 };
 #[cfg(not(feature = "icrc3_disabled"))]
 use candid::Principal;
@@ -17,7 +17,6 @@ use ic_icrc1_index_ng::{
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, ListSubaccountsArgs,
     TransactionWithId,
 };
-use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
     valid_transactions_strategy,
@@ -55,28 +54,6 @@ fn index_wasm() -> Vec<u8> {
         "ic-icrc1-index-ng",
         &[],
     )
-}
-
-fn upgrade_ledger(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    fee_collector_account: Option<Account>,
-) {
-    let change_fee_collector =
-        Some(fee_collector_account.map_or(ChangeFeeCollector::Unset, ChangeFeeCollector::SetTo));
-    let args = LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
-        metadata: None,
-        token_name: None,
-        token_symbol: None,
-        transfer_fee: None,
-        change_fee_collector,
-        max_memo_length: None,
-        feature_flags: None,
-        change_archive_options: None,
-        index_principal: None,
-    }));
-    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
-        .unwrap()
 }
 
 fn index_get_blocks(
