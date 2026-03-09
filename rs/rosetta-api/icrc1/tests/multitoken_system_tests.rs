@@ -401,9 +401,11 @@ impl RosettaTestingEnvironmentBuilder {
         )
         .await;
 
-        let rosetta_client =
-            RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
-                .expect("Unable to parse url");
+        let rosetta_client = RosettaClient::from_str_url_and_timeout(
+            &format!("http://0.0.0.0:{}", rosetta_context.port),
+            Duration::from_secs(120),
+        )
+        .expect("Unable to parse url");
 
         let rosetta_ledger_testing_envs = futures::future::join_all(
             self.rosetta_ledger_testing_env_builders

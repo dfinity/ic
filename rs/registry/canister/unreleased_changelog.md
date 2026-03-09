@@ -10,7 +10,6 @@ on the process that this file is part of, see
 ## Added
 
 * **SEV invariant:** Enforced that SEV-enabled subnets contain only SEV-enabled nodes (i.e., nodes with a chip ID in their node record).
-* Adding support for recalling replica versions for subnets.
 
 ## Changed
 

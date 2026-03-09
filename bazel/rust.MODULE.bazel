@@ -17,7 +17,7 @@ archive_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.90.0"],
+    versions = ["1.93.1"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -237,11 +237,11 @@ crate.spec(
 )
 crate.spec(
     package = "canbench",
-    version = "^0.4.0",
+    version = "^0.4.1",
 )
 crate.spec(
     package = "canbench-rs",
-    version = "^0.4.0",
+    version = "^0.4.1",
 )
 crate.spec(
     package = "candid",

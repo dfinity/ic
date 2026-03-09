@@ -1019,6 +1019,7 @@ mod tests {
             )));
 
             let idkg_pool = Arc::new(RwLock::new(ic_artifact_pool::idkg_pool::IDkgPoolImpl::new(
+                replica_config.node_id,
                 pool_config,
                 no_op_logger(),
                 MetricsRegistry::new(),

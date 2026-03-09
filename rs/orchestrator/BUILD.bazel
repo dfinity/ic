@@ -108,6 +108,9 @@ rust_test(
         "testdata/nftables_boundary_node_system_subnet.conf.golden",
     ],
     crate = ":lib",
+    # Disable optimizations to speed up compilation otherwise it will take over 9 minutes on CI.
+    # It does not have an effect on the test runtime.
+    rustc_flags = ["-Copt-level=0"],
     deps = [
         # Keep sorted.
         "//rs/crypto/temp_crypto",
