@@ -144,7 +144,7 @@ const MB: usize = 1024 * 1024;
 proptest! {
     #![proptest_config(ProptestConfig {
         cases: 256,
-        timeout: 60_000, // = 60s
+        timeout: 60_000, // = 60s; we introduce a timeout to detect infinite loops in the ingress selector
         max_shrink_time: 60_000, // = 60s
         ..ProptestConfig::default()
     })]
