@@ -126,7 +126,7 @@ impl RingBuffer {
                 debug_assert!(false, "Log record idx must be >= than next idx");
                 continue;
             }
-            if record.timestamp < header.max_timestamp {
+            if record.timestamp < h.max_timestamp {
                 debug_assert!(false, "Log record timestamp must be >= than max timestamp");
                 continue;
             }
@@ -155,7 +155,6 @@ impl RingBuffer {
         // Write header and index ONCE at the end.
         self.io.save_header(&h);
         self.io.save_index_table(&index_table);
-        println!("ABC Appended {} records, total size: {}", i, total_size);
     }
 
     /// Evicts oldest records from the front until `added_size` fits.
