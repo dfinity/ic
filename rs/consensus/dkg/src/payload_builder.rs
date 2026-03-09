@@ -202,8 +202,8 @@ pub(crate) fn create_early_remote_transcripts(
 
         // Check that we have the expected number of configs for this target_id
         if configs.len() != *expected_config_num {
-            // This may happen if we only managed to create one transcript (out of two) as part
-            // of the last summary block. We will handle this in the next summary block instead.
+            // This may happen if we did not manage to create all required transcripts as part of
+            // the last summary block. We will handle this in the next summary block instead.
             continue;
         }
 
