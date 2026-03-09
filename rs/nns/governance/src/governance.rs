@@ -1519,7 +1519,7 @@ impl Governance {
         if _reservation.is_none() {
             let effective_count =
                 self.neuron_store.len() + self.neuron_store.neuron_slot_reservation_count();
-            if effective_count + 1 > MAX_NUMBER_OF_NEURONS {
+            if effective_count + 1 > self.neuron_store.max_neurons() {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     "Cannot add neuron. Max number of neurons reached.",
@@ -2678,7 +2678,6 @@ impl Governance {
         .with_maturity_e8s_equivalent(maturity_to_spawn)
         .build();
 
-        // `add_neuron_without_reservation` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
         self.add_neuron_without_reservation(child_nid.id, child_neuron)?;
 
         // Get the parent neuron again, but this time mutable references.
@@ -5870,14 +5869,6 @@ impl Governance {
         Ok(nid)
     }
 
-    /// Claim a new neuron, unless the account doesn't have enough to stake a
-    /// neuron or we've reached the maximum number of neurons, in which case
-    /// we return an error.
-    ///
-    /// We can't return the funds without more information about the
-    /// source account, so as a workaround for insufficient stake we can ask the
-    /// user to transfer however much is missing to stake a neuron and they can
-    /// then disburse if they so choose. We need to do something more involved
     /// Claim a neuron by verifying that sufficient ICP has been transferred to the neuron's
     /// subaccount, then creating the neuron with the correct stake.
     ///

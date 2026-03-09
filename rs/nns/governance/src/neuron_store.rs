@@ -342,6 +342,10 @@ impl NeuronStore {
         }
     }
 
+    pub fn max_neurons(&self) -> usize {
+        self.max_neurons
+    }
+
     #[cfg(test)]
     pub fn with_max_neurons(mut self, max_neurons: usize) -> Self {
         self.max_neurons = max_neurons;
