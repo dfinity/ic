@@ -1675,6 +1675,8 @@ impl ExecutionEnvironment {
                         let payload = payload.to_vec();
                         match &mut msg {
                             CanisterCall::Request(request) => {
+                                // TODO: don't require payment for max fetch logs size,
+                                // require min(max_fetch_canister_logs_fee, actual log size)
                                 let max_fetch_canister_logs_fee =
                                     self.cycles_account_manager.max_fetch_canister_logs_fee(
                                         registry_settings.subnet_size,
