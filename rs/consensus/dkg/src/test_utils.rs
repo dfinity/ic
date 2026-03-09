@@ -11,7 +11,10 @@ use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
 use ic_types::{
     Height, RegistryVersion,
-    consensus::dkg::{DealingContent, DealingMessages, Message},
+    consensus::{
+        BlockPayload,
+        dkg::{DealingContent, DealingMessages, Message},
+    },
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript, config::NiDkgConfig,
     },
@@ -99,22 +102,10 @@ pub(super) fn extract_remote_dkgs_from_highest_block(
         .content
         .into_inner();
 
-    if block.payload.as_ref().is_summary() {
-        &block
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .transcripts_for_remote_subnets
-    } else {
-        &block
-            .payload
-            .as_ref()
-            .as_data()
-            .dkg
-            .transcripts_for_remote_subnets
+    match block.payload.as_ref() {
+        BlockPayload::Summary(summary) => summary.dkg.transcripts_for_remote_subnets.clone(),
+        BlockPayload::Data(data) => data.dkg.transcripts_for_remote_subnets.clone(),
     }
-    .clone()
 }
 
 /// Extract the dealings from the current highest validated block
@@ -127,10 +118,9 @@ pub(super) fn extract_dealings_from_highest_block(pool: &TestConsensusPool) -> D
         .content
         .into_inner();
 
-    if block.payload.as_ref().is_summary() {
-        vec![]
-    } else {
-        block.payload.as_ref().as_data().dkg.messages.clone()
+    match block.payload.as_ref() {
+        BlockPayload::Summary(_) => vec![],
+        BlockPayload::Data(data) => data.dkg.messages.clone(),
     }
 }
 
@@ -159,10 +149,9 @@ pub(super) fn extract_dkg_configs_from_highest_block(
         .content
         .into_inner();
 
-    if block.payload.as_ref().is_summary() {
-        block.payload.as_ref().as_summary().dkg.configs.clone()
-    } else {
-        BTreeMap::new()
+    match block.payload.as_ref() {
+        BlockPayload::Summary(summary) => summary.dkg.configs.clone(),
+        BlockPayload::Data(_) => BTreeMap::new(),
     }
 }
 
