@@ -2031,7 +2031,7 @@ fn test_canister_resize_up_preserves_logs() {
         return;
     }
     let log_memory_limit = 2 * MIB;
-    let log_records_per_call = 1_000;
+    let log_records_per_call = 10_000;
     const LOG_MESSAGE_LEN: usize = 0;
 
     // Create canister and install wasm.
@@ -2058,9 +2058,7 @@ fn test_canister_resize_up_preserves_logs() {
     // Fill all log memory store.
     let calls = 1 + log_memory_limit as usize
         / (log_records_per_call * LogMemoryStore::estimate_record_size(LOG_MESSAGE_LEN));
-    //let calls = 1;
-    for i in 0..calls {
-        //println!("\nABC call {}", i);
+    for _ in 0..calls {
         let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
     }
     let logs_before = fetch_log_records(&env, controller, canister_id);
@@ -2097,7 +2095,7 @@ fn test_canister_resize_down_preserves_logs() {
         return;
     }
     let log_memory_limit = 2 * MIB;
-    let log_records_per_call = 1_000;
+    let log_records_per_call = 10_000;
     const LOG_MESSAGE_LEN: usize = 0;
 
     // Create canister and install wasm.

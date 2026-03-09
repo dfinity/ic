@@ -176,13 +176,12 @@ impl CanisterLog {
     pub fn new_delta_with_next_index(next_idx: u64, byte_capacity: usize) -> Self {
         // Limit the delta canister log memory to the maximum allowed.
         let byte_capacity = byte_capacity.min(MAX_DELTA_LOG_MEMORY_LIMIT);
-        println!("ABC new delta next_idx {next_idx} capacity {byte_capacity}");
+        //println!("ABC new delta next_idx {next_idx} capacity {byte_capacity}");
         Self::new_inner(next_idx, vec![], byte_capacity)
     }
 
     /// Takes the canister log, leaving an empty log in its place.
     pub fn take(&mut self) -> Self {
-        println!("ABC take");
         // Just in case preserve next_idx and byte_capacity for the new empty log — otherwise
         // we could leave a zero-capacity log and cause underflow on later truncations.
         let next_idx = self.next_idx;
@@ -261,10 +260,10 @@ impl CanisterLog {
             self.next_idx = last.idx + 1;
         }
         self.records.append(&mut delta_log.records);
-        println!(
-            "ABC CanisterLog append delta bytes used {} capacity {}",
-            self.records.bytes_used, self.records.byte_capacity
-        );
+        // println!(
+        //     "ABC CanisterLog append delta bytes used {} capacity {}",
+        //     self.records.bytes_used, self.records.byte_capacity
+        // );
     }
 
     /// Records the size of the appended delta log.
