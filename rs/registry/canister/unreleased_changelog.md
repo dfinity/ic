@@ -10,6 +10,7 @@ on the process that this file is part of, see
 ## Added
 
 * Adding support for recalling replica versions for subnets.
+* CloudEngines can have a Free cycles cost schedule. 
 
 ## Changed
 
