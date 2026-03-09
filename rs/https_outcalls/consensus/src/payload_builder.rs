@@ -217,20 +217,26 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut active_shares = 0;
         let mut unique_responses_count = 0;
 
-        let empty_contexts = BTreeMap::new();
-
-        let state_result = self
+        let state = match self
             .state_reader
-            .get_state_at(validation_context.certified_height);
+            .get_state_at(validation_context.certified_height)
+        {
+            Ok(state) => state,
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "CanisterHttpPayloadBuilder: state unavailable at height {}: {err:?}",
+                    validation_context.certified_height,
+                );
+                return CanisterHttpPayload::default();
+            }
+        };
 
-        let canister_http_request_contexts =
-            state_result.as_ref().map_or(&empty_contexts, |state| {
-                &state
-                    .get_ref()
-                    .metadata
-                    .subnet_call_context_manager
-                    .canister_http_request_contexts
-            });
+        let canister_http_request_contexts = &state
+            .get_ref()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
 
         // Check the state for timeouts NOTE: We can not use the existing
         // timed out artifacts for this task, since we don't have consensus
