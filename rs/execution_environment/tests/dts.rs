@@ -979,7 +979,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         aborted_complete: bool,
         f: F,
     ) {
-        let slice_instruction_limit = 10_000_000;
+        let slice_instruction_limit = 1_000_000;
         let env = dts_env(
             NumInstructions::from(slice_instruction_limit * 10),
             NumInstructions::from(slice_instruction_limit),
@@ -1307,7 +1307,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
 
 #[test]
 fn dts_paused_execution_blocks_deposit_cycles() {
-    let slice_instruction_limit = 10_000_000;
+    let slice_instruction_limit = 1_000_000;
     let env = dts_env(
         NumInstructions::from(slice_instruction_limit * 10),
         NumInstructions::from(slice_instruction_limit),
@@ -1454,9 +1454,9 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
 /// The expectation that all messages eventually complete.
 #[test]
 fn dts_long_running_install_and_update() {
-    let slice_instruction_limit = 15_000_000;
+    let slice_instruction_limit = 10_000_000;
     let env = dts_env(
-        NumInstructions::from(100_000_000),
+        NumInstructions::from(70_000_000),
         NumInstructions::from(slice_instruction_limit),
     );
 
