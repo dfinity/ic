@@ -168,7 +168,6 @@ pub fn ledger_wasm() -> Vec<u8> {
     })
 }
 
-#[allow(dead_code)]
 pub fn ledger_mainnet_v5_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_LEDGER_V5_VERSION_WASM_PATH").unwrap()).unwrap()
 }
@@ -436,7 +435,6 @@ pub fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     Decode!(&res, Status).expect("Failed to decode status response")
 }
 
-#[allow(dead_code)]
 pub fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
     IndexInitArg {
         ledger_id: Principal::from(ledger_id),
@@ -447,7 +445,6 @@ pub fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
     }
 }
 
-#[allow(dead_code)]
 pub fn icrc2_approve(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -474,7 +471,6 @@ pub fn icrc2_approve(
         })
 }
 
-#[allow(dead_code)]
 pub fn approve(
     env: &StateMachine,
     ledger: CanisterId,
@@ -498,7 +494,6 @@ pub fn approve(
         .unwrap()
 }
 
-#[allow(dead_code)]
 pub fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
     let res = env
         .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
@@ -511,7 +506,6 @@ pub fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Ac
         .expect("Balance must be a u64!")
 }
 
-#[allow(dead_code)]
 pub fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollectorRanges {
     Decode!(
         &env.execute_ingress(index, "get_fee_collectors_ranges", Encode!(&()).unwrap())
@@ -522,7 +516,6 @@ pub fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCo
     .expect("failed to decode get_fee_collectors_ranges response")
 }
 
-#[allow(dead_code)]
 pub fn icrc1_transfer(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -549,7 +542,6 @@ pub fn icrc1_transfer(
         })
 }
 
-#[allow(dead_code)]
 pub fn transfer(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -569,7 +561,6 @@ pub fn transfer(
     icrc1_transfer(env, ledger_id, owner.into(), req)
 }
 
-#[allow(dead_code)]
 pub fn icrc2_transfer_from(
     env: &StateMachine,
     ledger_id: CanisterId,
