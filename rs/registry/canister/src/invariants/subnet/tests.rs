@@ -10,7 +10,7 @@ use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
 #[test]
-fn only_application_subnets_can_be_free_cycles_cost_schedule() {
+fn only_application_subnets_and_engines_can_be_free_cycles_cost_schedule() {
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
     let (mut snapshot, mut test_subnet_record) =
@@ -32,6 +32,15 @@ fn only_application_subnets_can_be_free_cycles_cost_schedule() {
     );
     check_subnet_invariants(&snapshot).unwrap();
 
+    // Another happy case: CloudEngine
+    test_subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
+    test_subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    check_subnet_invariants(&snapshot).unwrap();
+
     // System or verified application subnets cannot be on "free" cycles cost schedule.
     test_subnet_record.subnet_type = i32::from(SubnetType::System);
     snapshot.insert(
@@ -40,7 +49,7 @@ fn only_application_subnets_can_be_free_cycles_cost_schedule() {
     );
     assert_non_compliant_record(
         &snapshot,
-        "is not an application subnet but has a free cycles cost schedule",
+        "is not an application subnet or CloudEngine but has a free cycles cost schedule",
     );
 
     test_subnet_record.subnet_type = i32::from(SubnetType::VerifiedApplication);
@@ -50,7 +59,7 @@ fn only_application_subnets_can_be_free_cycles_cost_schedule() {
     );
     assert_non_compliant_record(
         &snapshot,
-        "is not an application subnet but has a free cycles cost schedule",
+        "is not an application subnet or CloudEngine but has a free cycles cost schedule",
     );
 }
 
@@ -116,5 +125,5 @@ fn assert_non_compliant_record(snapshot: &RegistrySnapshot, error_msg: &str) {
         panic!("Expected Err, but got Ok!");
     };
     let message = err.msg.to_lowercase();
-    assert!(message.contains(error_msg));
+    assert!(message.contains(&error_msg.to_lowercase()));
 }
