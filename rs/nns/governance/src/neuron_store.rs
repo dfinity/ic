@@ -1,6 +1,6 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
-    governance::{LOG_PREFIX, TimeWarp},
+    governance::{LOG_PREFIX, MAX_NUMBER_OF_NEURONS, TimeWarp},
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
@@ -260,7 +260,7 @@ pub struct NeuronStore {
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
     clock: Box<dyn PracticalClock>,
 
-    /// Maximum number of neurons allowed. Set by Governance from `MAX_NUMBER_OF_NEURONS`.
+    /// Maximum number of neurons allowed. Defaults to `MAX_NUMBER_OF_NEURONS`.
     max_neurons: usize,
 
     /// Count of reserved-but-not-yet-created neuron slots. Used to enforce the neuron limit
@@ -276,7 +276,7 @@ impl NeuronStore {
         // Initializes a neuron store with no neurons.
         let mut neuron_store = Self {
             clock: Box::new(IcClock::new()),
-            max_neurons: usize::MAX,
+            max_neurons: MAX_NUMBER_OF_NEURONS,
             neuron_slot_reservations: Arc::new(AtomicUsize::new(0)),
         };
 
@@ -299,7 +299,7 @@ impl NeuronStore {
     pub fn new_restored() -> Self {
         Self {
             clock: Box::new(IcClock::new()),
-            max_neurons: usize::MAX,
+            max_neurons: MAX_NUMBER_OF_NEURONS,
             neuron_slot_reservations: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -342,8 +342,10 @@ impl NeuronStore {
         }
     }
 
-    pub fn set_max_neurons(&mut self, max_neurons: usize) {
+    #[cfg(test)]
+    pub fn with_max_neurons(mut self, max_neurons: usize) -> Self {
         self.max_neurons = max_neurons;
+        self
     }
 
     /// Reserve a neuron slot, ensuring the neuron limit will not be exceeded. The reservation is

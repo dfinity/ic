@@ -1256,11 +1256,7 @@ impl Governance {
     ) -> Self {
         Self {
             heap_data: HeapGovernanceData::default(),
-            neuron_store: {
-                let mut store = NeuronStore::new(BTreeMap::new());
-                store.set_max_neurons(MAX_NUMBER_OF_NEURONS);
-                store
-            },
+            neuron_store: NeuronStore::new(BTreeMap::new()),
             env,
             ledger,
             cmc,
@@ -1286,11 +1282,7 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: {
-                let mut store = NeuronStore::new(neurons);
-                store.set_max_neurons(MAX_NUMBER_OF_NEURONS);
-                store
-            },
+            neuron_store: NeuronStore::new(neurons),
             env,
             ledger,
             cmc,
@@ -1321,11 +1313,7 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: {
-                let mut store = NeuronStore::new_restored();
-                store.set_max_neurons(MAX_NUMBER_OF_NEURONS);
-                store
-            },
+            neuron_store: NeuronStore::new_restored(),
             env,
             ledger,
             cmc,

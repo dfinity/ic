@@ -1055,9 +1055,7 @@ fn test_record_neuron_vote() {
 }
 
 fn neuron_store_with_max(neurons: BTreeMap<u64, Neuron>, max_neurons: usize) -> NeuronStore {
-    let mut store = NeuronStore::new(neurons);
-    store.set_max_neurons(max_neurons);
-    store
+    NeuronStore::new(neurons).with_max_neurons(max_neurons)
 }
 
 #[test]
