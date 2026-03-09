@@ -1120,27 +1120,16 @@ fn serialize_protos_to_checkpoint_readwrite(
             canister_state,
             state.canister_priority(&canister_state.canister_id()),
             checkpoint_readwrite,
-        )
-    });
-
-    for result in results.into_iter() {
-        result?;
-    }
-
-    let results = parallel_map(
-        thread_pool,
-        state
-            .canister_states()
-            .values()
-            .flat_map(|canister| canister.canister_snapshots.iter()),
-        |canister_snapshot| {
+        )?;
+        for canister_snapshot in canister_state.canister_snapshots.iter() {
             serialize_snapshot_protos_to_checkpoint_readwrite(
                 canister_snapshot.0,
                 canister_snapshot.1,
                 checkpoint_readwrite,
-            )
-        },
-    );
+            )?
+        }
+        Ok::<_, CheckpointError>(())
+    });
 
     for result in results.into_iter() {
         result?;
@@ -1157,26 +1146,18 @@ fn serialize_wasm_binaries_and_pagemaps(
     metrics: &StorageMetrics,
 ) -> Result<(), CheckpointError> {
     parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_wasm_binary_and_pagemaps(canister_state, tip, metrics, lsmt_config)
-    })
-    .into_iter()
-    .try_for_each(identity)?;
-    parallel_map(
-        thread_pool,
-        state
-            .canister_states()
-            .values()
-            .flat_map(|canister| canister.canister_snapshots.iter()),
-        |(snapshot_id, snapshot)| {
+        serialize_canister_wasm_binary_and_pagemaps(canister_state, tip, metrics, lsmt_config)?;
+        for (snapshot_id, snapshot) in canister_state.canister_snapshots.iter() {
             serialize_snapshot_wasm_binary_and_pagemaps(
                 snapshot_id,
                 snapshot,
                 tip,
                 metrics,
                 lsmt_config,
-            )
-        },
-    )
+            )?;
+        }
+        Ok::<_, CheckpointError>(())
+    })
     .into_iter()
     .try_for_each(identity)
 }
