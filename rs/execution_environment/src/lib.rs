@@ -47,8 +47,8 @@ use ic_types::{
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::{DataCertificateWithDelegationMetadata, InternalHttpQueryHandler};
 use query_handler::{HttpQueryHandler, QueryScheduler};
-pub use scheduler::{IterationSchedule, RoundSchedule};
 use scheduler::SchedulerImpl;
+pub use scheduler::{IterationSchedule, RoundSchedule};
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
