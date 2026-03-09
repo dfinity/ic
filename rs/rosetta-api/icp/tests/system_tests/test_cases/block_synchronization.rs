@@ -9,7 +9,7 @@ use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
 use ic_icp_rosetta_runner::RosettaOptions;
 use ic_icrc1_test_utils::{
-    DEFAULT_TRANSFER_FEE, TransactionStrategyOptions, minter_identity,
+    ArgWithCaller, DEFAULT_TRANSFER_FEE, TransactionStrategyOptions, minter_identity,
     valid_transactions_strategy_with_options,
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
@@ -17,11 +17,8 @@ use icp_ledger::LedgerCanisterPayload;
 use icp_ledger::LedgerCanisterUpgradePayload;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
+use proptest::prelude::ProptestConfig;
 use proptest::strategy::Strategy;
-use proptest::test_runner::Config as TestRunnerConfig;
-use proptest::test_runner::RngAlgorithm;
-use proptest::test_runner::TestRng;
-use proptest::test_runner::TestRunner;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::runtime::Runtime;
@@ -29,331 +26,266 @@ use tokio::runtime::Runtime;
 lazy_static! {
     pub static ref TEST_ACCOUNT: Account = test_identity().sender().unwrap().into();
     pub static ref MAX_NUM_GENERATED_BLOCKS: usize = 50;
-    pub static ref NUM_TEST_CASES: u32 = 1;
     pub static ref MINTING_IDENTITY: Arc<BasicIdentity> = Arc::new(minter_identity());
 }
 
-/// Creates a `TestRunner` with a logged seed for reproducibility.
-///
-/// Set `PROPTEST_SEED` to a hex-encoded 16-byte seed to reproduce a specific run.
-fn new_test_runner(test_name: &str) -> TestRunner {
-    let config = TestRunnerConfig {
-        max_shrink_iters: 0,
-        cases: *NUM_TEST_CASES,
-        ..Default::default()
-    };
-    let seed: [u8; 16] = match std::env::var("PROPTEST_SEED") {
-        Ok(hex) => {
-            let bytes = hex::decode(&hex).expect("PROPTEST_SEED must be valid hex");
-            bytes
-                .try_into()
-                .expect("PROPTEST_SEED must be 32 hex chars (16 bytes)")
-        }
-        Err(_) => rand::random(),
-    };
-    eprintln!(
-        "proptest seed for {}: {} (set PROPTEST_SEED={} to reproduce)",
-        test_name,
-        hex::encode(seed),
-        hex::encode(seed),
-    );
-    let rng = TestRng::from_seed(RngAlgorithm::XorShift, &seed);
-    TestRunner::new_with_rng(config, rng)
+fn single_batch_valid_transactions_strategy() -> impl Strategy<Value = Vec<ArgWithCaller>> {
+    valid_transactions_strategy_with_options(
+        (*MINTING_IDENTITY).clone(),
+        DEFAULT_TRANSFER_FEE,
+        *MAX_NUM_GENERATED_BLOCKS,
+        SystemTime::now(),
+        TransactionStrategyOptions {
+            excluded_transaction_types: vec![],
+            // ICP Rosetta requires created_at_time and memo to be set for
+            // deterministic dedup keys, enabling safe retries on timeout.
+            require_created_at_time: true,
+            require_memo: true,
+        },
+    )
+    .no_shrink()
 }
 
-#[test]
-fn test_block_synchronization() {
-    let mut runner = new_test_runner("test_block_synchronization");
-
-    runner
-        .run(
-            &(valid_transactions_strategy_with_options(
-                (*MINTING_IDENTITY).clone(),
-                DEFAULT_TRANSFER_FEE,
-                *MAX_NUM_GENERATED_BLOCKS,
-                SystemTime::now(),
-                TransactionStrategyOptions {
-                    excluded_transaction_types: vec![],
-                    // ICP Rosetta requires created_at_time and memo to be set for
-                    // deterministic dedup keys, enabling safe retries on timeout.
-                    require_created_at_time: true,
-                    require_memo: true,
-                },
-            )
-            .no_shrink()),
-            |args_with_caller| {
-                let rt = Runtime::new().unwrap();
-                rt.block_on(async {
-                    let rosetta_testing_environment = RosettaTestingEnvironment::builder()
-                        .with_transfer_args_for_block_generating(args_with_caller.clone())
-                        .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
-                        .build()
-                        .await;
-
-                    assert_rosetta_blockchain_is_valid(
-                        &rosetta_testing_environment.rosetta_client,
-                        rosetta_testing_environment.network_identifier.clone(),
-                        &get_test_agent(
-                            rosetta_testing_environment
-                                .pocket_ic
-                                .url()
-                                .unwrap()
-                                .port()
-                                .unwrap(),
-                        )
-                        .await,
-                    )
-                    .await;
-                });
-
-                Ok(())
-            },
-        )
-        .unwrap();
+fn double_batch_valid_transactions_strategy() -> impl Strategy<Value = Vec<ArgWithCaller>> {
+    valid_transactions_strategy_with_options(
+        (*MINTING_IDENTITY).clone(),
+        DEFAULT_TRANSFER_FEE,
+        *MAX_NUM_GENERATED_BLOCKS * 2,
+        SystemTime::now(),
+        TransactionStrategyOptions {
+            excluded_transaction_types: vec![],
+            // ICP Rosetta requires created_at_time and memo to be set for
+            // deterministic dedup keys, enabling safe retries on timeout.
+            require_created_at_time: true,
+            require_memo: true,
+        },
+    )
+    .no_shrink()
 }
 
-#[test]
-fn test_ledger_upgrade_synchronization() {
-    let mut runner = new_test_runner("test_ledger_upgrade_synchronization");
+#[test_strategy::proptest(ProptestConfig { cases: 1, max_shrink_iters: 0, ..ProptestConfig::default() })]
+fn test_block_synchronization(
+    #[strategy(single_batch_valid_transactions_strategy())] args_with_caller: Vec<ArgWithCaller>,
+) {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let rosetta_testing_environment = RosettaTestingEnvironment::builder()
+            .with_transfer_args_for_block_generating(args_with_caller.clone())
+            .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
+            .build()
+            .await;
 
-    runner
-        .run(
-            &(valid_transactions_strategy_with_options(
-                (*MINTING_IDENTITY).clone(),
-                DEFAULT_TRANSFER_FEE,
-                *MAX_NUM_GENERATED_BLOCKS * 2,
-                SystemTime::now(),
-                TransactionStrategyOptions {
-                    excluded_transaction_types: vec![],
-                    // ICP Rosetta requires created_at_time and memo to be set for
-                    // deterministic dedup keys, enabling safe retries on timeout.
-                    require_created_at_time: true,
-                    require_memo: true,
-                },
+        assert_rosetta_blockchain_is_valid(
+            &rosetta_testing_environment.rosetta_client,
+            rosetta_testing_environment.network_identifier.clone(),
+            &get_test_agent(
+                rosetta_testing_environment
+                    .pocket_ic
+                    .url()
+                    .unwrap()
+                    .port()
+                    .unwrap(),
             )
-            .no_shrink()),
-            |args_with_caller| {
-                let rt = Runtime::new().unwrap();
-                rt.block_on(async {
-                    let mut env = RosettaTestingEnvironment::builder()
-                        .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
-                        .build()
-                        .await;
-
-                    // Currently, the ledger canister version is that of this branch
-                    // We need to reinstall it to the mainnet version
-                    let ledger_canister_id = Principal::from(LEDGER_CANISTER_ID);
-
-                    let ledger_wasm_mainnet = std::fs::read(
-                        std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap(),
-                    )
-                    .unwrap();
-                    env.pocket_ic
-                        .reinstall_canister(
-                            ledger_canister_id,
-                            ledger_wasm_mainnet,
-                            Encode!(
-                                &icp_ledger::LedgerCanisterInitPayload::builder()
-                                    .minting_account(MINTING_IDENTITY.sender().unwrap().into())
-                                    // We need some initial values otherwise the install fails
-                                    .initial_values(
-                                        [(
-                                            icp_ledger::AccountIdentifier::new(
-                                                test_identity().sender().unwrap().into(),
-                                                None
-                                            ),
-                                            icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
-                                        )]
-                                        .into()
-                                    )
-                                    .build()
-                                    .unwrap()
-                            )
-                            .unwrap(),
-                            None,
-                        )
-                        .await
-                        .unwrap();
-
-                    wait_for_rosetta_to_sync_up_to_block(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        0,
-                    )
-                    .await
-                    .unwrap();
-
-                    let pockt_ic_url = env.pocket_ic.url().unwrap();
-
-                    // Let's restart rosetta to make sure it can handle the mainnet ledger version
-                    env = env
-                        .restart_rosetta_node(
-                            RosettaOptions::builder(pockt_ic_url.to_string()).build(),
-                        )
-                        .await;
-
-                    // We split up the transactions into two batches to make sure we have a valid blockchain
-                    let (first_block_batch, second_block_batch) =
-                        args_with_caller.split_at(args_with_caller.len() / 2);
-
-                    // Let's create a few transactions to make sure rosetta is working with the mainnet ledger version
-                    env.generate_blocks(first_block_batch.to_owned()).await;
-
-                    wait_for_rosetta_to_sync_up_to_block(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        first_block_batch.len() as u64,
-                    )
-                    .await
-                    .unwrap();
-
-                    // Let's check that rosetta has a valid blockchain when compared to the ledger
-                    assert_rosetta_blockchain_is_valid(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        &get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await,
-                    )
-                    .await;
-
-                    // Now we upgrade the ledger canister to the latest version of the current branch
-                    let ledger_wasm_current_branch =
-                        std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap();
-                    env.pocket_ic
-                        .upgrade_canister(
-                            ledger_canister_id,
-                            ledger_wasm_current_branch,
-                            Encode!(&LedgerCanisterUpgradePayload(
-                                LedgerCanisterPayload::Upgrade(None)
-                            ))
-                            .unwrap(),
-                            None,
-                        )
-                        .await
-                        .unwrap();
-
-                    // Let's create a few transactions on the new ledger version
-                    env.generate_blocks(second_block_batch.to_owned()).await;
-
-                    wait_for_rosetta_to_sync_up_to_block(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        args_with_caller.len() as u64,
-                    )
-                    .await
-                    .unwrap();
-
-                    // Let's check that rosetta has a valid blockchain when compared to the ledger
-                    assert_rosetta_blockchain_is_valid(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        &get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await,
-                    )
-                    .await;
-                });
-
-                Ok(())
-            },
+            .await,
         )
-        .unwrap();
+        .await;
+    });
 }
 
-#[test]
-fn test_load_from_storage() {
-    let mut runner = new_test_runner("test_load_from_storage");
+#[test_strategy::proptest(ProptestConfig { cases: 1, max_shrink_iters: 0, ..ProptestConfig::default() })]
+fn test_ledger_upgrade_synchronization(
+    #[strategy(double_batch_valid_transactions_strategy())] args_with_caller: Vec<ArgWithCaller>,
+) {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let mut env = RosettaTestingEnvironment::builder()
+            .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
+            .build()
+            .await;
 
-    runner
-        .run(
-            &(valid_transactions_strategy_with_options(
-                (*MINTING_IDENTITY).clone(),
-                DEFAULT_TRANSFER_FEE,
-                *MAX_NUM_GENERATED_BLOCKS * 2,
-                SystemTime::now(),
-                TransactionStrategyOptions {
-                    excluded_transaction_types: vec![],
-                    // ICP Rosetta requires created_at_time and memo to be set for
-                    // deterministic dedup keys, enabling safe retries on timeout.
-                    require_created_at_time: true,
-                    require_memo: true,
-                },
-            )
-            .no_shrink()),
-            |args_with_caller| {
-                // We split up the transactions into two batches to make sure we have a valid blockchain
-                let (first_block_batch, second_block_batch) =
-                    args_with_caller.split_at(args_with_caller.len() / 2);
+        // Currently, the ledger canister version is that of this branch
+        // We need to reinstall it to the mainnet version
+        let ledger_canister_id = Principal::from(LEDGER_CANISTER_ID);
 
-                let rt = Runtime::new().unwrap();
-                rt.block_on(async {
-                    let mut env = RosettaTestingEnvironment::builder()
-                        .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
-                        .with_persistent_storage(true)
+        let ledger_wasm_mainnet =
+            std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+        env.pocket_ic
+            .reinstall_canister(
+                ledger_canister_id,
+                ledger_wasm_mainnet,
+                Encode!(
+                    &icp_ledger::LedgerCanisterInitPayload::builder()
+                        .minting_account(MINTING_IDENTITY.sender().unwrap().into())
+                        // We need some initial values otherwise the install fails
+                        .initial_values(
+                            [(
+                                icp_ledger::AccountIdentifier::new(
+                                    test_identity().sender().unwrap().into(),
+                                    None
+                                ),
+                                icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
+                            )]
+                            .into()
+                        )
                         .build()
-                        .await;
-                    env.generate_blocks(first_block_batch.to_owned()).await;
+                        .unwrap()
+                )
+                .unwrap(),
+                None,
+            )
+            .await
+            .unwrap();
 
-                    wait_for_rosetta_to_sync_up_to_block(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        first_block_batch.len() as u64,
-                    )
-                    .await
-                    .unwrap();
-
-                    let replica_url = env.pocket_ic.url();
-                    // We restart rosetta in offline mode to make sure it has to load the blocks from storage
-                    env = env
-                        .restart_rosetta_node(
-                            RosettaOptions::builder(replica_url.clone().unwrap().to_string())
-                                .with_persistent_storage()
-                                .offline()
-                                .build(),
-                        )
-                        .await;
-
-                    // Make sure rosetta syncs up all existing blocks from storage
-                    wait_for_rosetta_to_sync_up_to_block(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        first_block_batch.len() as u64,
-                    )
-                    .await
-                    .unwrap();
-
-                    // Check that rosetta has a valid blockchain when compared to the ledger
-                    assert_rosetta_blockchain_is_valid(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        &get_test_agent(replica_url.clone().unwrap().port().unwrap()).await,
-                    )
-                    .await;
-
-                    // Now we restart rosetta in online mode and with persistent storage and check that making transactions still works
-                    env = env
-                        .restart_rosetta_node(
-                            RosettaOptions::builder(replica_url.clone().unwrap().to_string())
-                                .with_persistent_storage()
-                                .build(),
-                        )
-                        .await;
-
-                    env.generate_blocks(second_block_batch.to_owned()).await;
-                    wait_for_rosetta_to_sync_up_to_block(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        args_with_caller.len() as u64,
-                    )
-                    .await;
-
-                    assert_rosetta_blockchain_is_valid(
-                        &env.rosetta_client,
-                        env.network_identifier.clone(),
-                        &get_test_agent(replica_url.clone().unwrap().port().unwrap()).await,
-                    )
-                    .await;
-                });
-
-                Ok(())
-            },
+        wait_for_rosetta_to_sync_up_to_block(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            0,
         )
+        .await
         .unwrap();
+
+        let pockt_ic_url = env.pocket_ic.url().unwrap();
+
+        // Let's restart rosetta to make sure it can handle the mainnet ledger version
+        env = env
+            .restart_rosetta_node(RosettaOptions::builder(pockt_ic_url.to_string()).build())
+            .await;
+
+        // We split up the transactions into two batches to make sure we have a valid blockchain
+        let (first_block_batch, second_block_batch) =
+            args_with_caller.split_at(args_with_caller.len() / 2);
+
+        // Let's create a few transactions to make sure rosetta is working with the mainnet ledger version
+        env.generate_blocks(first_block_batch.to_owned()).await;
+
+        wait_for_rosetta_to_sync_up_to_block(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            first_block_batch.len() as u64,
+        )
+        .await
+        .unwrap();
+
+        // Let's check that rosetta has a valid blockchain when compared to the ledger
+        assert_rosetta_blockchain_is_valid(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            &get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await,
+        )
+        .await;
+
+        // Now we upgrade the ledger canister to the latest version of the current branch
+        let ledger_wasm_current_branch =
+            std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap();
+        env.pocket_ic
+            .upgrade_canister(
+                ledger_canister_id,
+                ledger_wasm_current_branch,
+                Encode!(&LedgerCanisterUpgradePayload(
+                    LedgerCanisterPayload::Upgrade(None)
+                ))
+                .unwrap(),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Let's create a few transactions on the new ledger version
+        env.generate_blocks(second_block_batch.to_owned()).await;
+
+        wait_for_rosetta_to_sync_up_to_block(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            args_with_caller.len() as u64,
+        )
+        .await
+        .unwrap();
+
+        // Let's check that rosetta has a valid blockchain when compared to the ledger
+        assert_rosetta_blockchain_is_valid(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            &get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await,
+        )
+        .await;
+    });
+}
+
+#[test_strategy::proptest(ProptestConfig { cases: 1, max_shrink_iters: 0, ..ProptestConfig::default() })]
+fn test_load_from_storage(
+    #[strategy(double_batch_valid_transactions_strategy())] args_with_caller: Vec<ArgWithCaller>,
+) {
+    // We split up the transactions into two batches to make sure we have a valid blockchain
+    let (first_block_batch, second_block_batch) =
+        args_with_caller.split_at(args_with_caller.len() / 2);
+
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let mut env = RosettaTestingEnvironment::builder()
+            .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
+            .with_persistent_storage(true)
+            .build()
+            .await;
+        env.generate_blocks(first_block_batch.to_owned()).await;
+
+        wait_for_rosetta_to_sync_up_to_block(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            first_block_batch.len() as u64,
+        )
+        .await
+        .unwrap();
+
+        let replica_url = env.pocket_ic.url();
+        // We restart rosetta in offline mode to make sure it has to load the blocks from storage
+        env = env
+            .restart_rosetta_node(
+                RosettaOptions::builder(replica_url.clone().unwrap().to_string())
+                    .with_persistent_storage()
+                    .offline()
+                    .build(),
+            )
+            .await;
+
+        // Make sure rosetta syncs up all existing blocks from storage
+        wait_for_rosetta_to_sync_up_to_block(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            first_block_batch.len() as u64,
+        )
+        .await
+        .unwrap();
+
+        // Check that rosetta has a valid blockchain when compared to the ledger
+        assert_rosetta_blockchain_is_valid(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            &get_test_agent(replica_url.clone().unwrap().port().unwrap()).await,
+        )
+        .await;
+
+        // Now we restart rosetta in online mode and with persistent storage and check that making transactions still works
+        env = env
+            .restart_rosetta_node(
+                RosettaOptions::builder(replica_url.clone().unwrap().to_string())
+                    .with_persistent_storage()
+                    .build(),
+            )
+            .await;
+
+        env.generate_blocks(second_block_batch.to_owned()).await;
+        wait_for_rosetta_to_sync_up_to_block(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            args_with_caller.len() as u64,
+        )
+        .await;
+
+        assert_rosetta_blockchain_is_valid(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            &get_test_agent(replica_url.clone().unwrap().port().unwrap()).await,
+        )
+        .await;
+    });
 }
