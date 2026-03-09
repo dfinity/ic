@@ -3,7 +3,7 @@ use crate::common::{
     default_archive_options, get_fee_collectors_ranges, icrc1_balance_of, icrc1_transfer,
     icrc2_approve, icrc2_transfer_from, index_init_arg_without_interval, index_ng_wasm,
     install_icrc3_test_ledger, install_index_ng, install_ledger, ledger_get_all_blocks,
-    parse_index_logs, transfer, wait_until_sync_is_completed,
+    ledger_wasm, parse_index_logs, transfer, wait_until_sync_is_completed,
 };
 #[cfg(not(feature = "icrc3_disabled"))]
 use candid::Principal;
@@ -17,6 +17,7 @@ use ic_icrc1_index_ng::{
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, ListSubaccountsArgs,
     TransactionWithId,
 };
+use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
     valid_transactions_strategy,
@@ -76,28 +77,6 @@ fn upgrade_ledger(
     }));
     env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
         .unwrap()
-}
-
-fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
-    IndexInitArg {
-        ledger_id: Principal::from(ledger_id),
-        #[allow(deprecated)]
-        retrieve_blocks_from_ledger_interval_seconds: None,
-        min_retrieve_blocks_from_ledger_interval_seconds: None,
-        max_retrieve_blocks_from_ledger_interval_seconds: None,
-    }
-}
-
-fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
-    let res = env
-        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
-        .expect("Failed to send icrc1_balance_of")
-        .bytes();
-    Decode!(&res, Nat)
-        .expect("Failed to decode icrc1_balance_of response")
-        .0
-        .to_u64()
-        .expect("Balance must be a u64!")
 }
 
 fn index_get_blocks(

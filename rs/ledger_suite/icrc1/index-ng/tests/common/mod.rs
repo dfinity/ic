@@ -441,6 +441,8 @@ pub fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
     IndexInitArg {
         ledger_id: Principal::from(ledger_id),
         retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
     }
 }
 
