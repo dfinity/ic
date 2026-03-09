@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+- Added the optional `snapshot_visibility` field to `CanisterSettings` in the Candid API. This a non-breaking change impacting the type `CreateCanisterArg` and the endpoint `create_canister`.
+
 ## Changed
 
 ## Deprecated
