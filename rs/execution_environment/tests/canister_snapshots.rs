@@ -1105,6 +1105,16 @@ mod snapshot_visibility {
                 expected_result: Ok(()),
             },
             TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: allowed_viewer,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: not_allowed_viewer,
+                expected_result: Ok(()),
+            },
+            TestCase {
                 snapshot_visibility: SnapshotVisibility::Controllers,
                 sender: controller,
                 expected_result: Ok(()),
@@ -1115,9 +1125,24 @@ mod snapshot_visibility {
                 expected_result: not_allowed_error(&not_a_controller),
             },
             TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: allowed_viewer,
+                expected_result: not_allowed_error(&allowed_viewer),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: not_allowed_viewer,
+                expected_result: not_allowed_error(&not_allowed_viewer),
+            },
+            TestCase {
                 snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
                 sender: allowed_viewer,
                 expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
+                sender: not_a_controller,
+                expected_result: not_allowed_error(&not_a_controller),
             },
             TestCase {
                 snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
