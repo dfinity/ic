@@ -48,7 +48,7 @@ use ic_nns_governance_api::{
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
-        governance_parameters::{CustomProposalCriticality, VotingRewardParameters},
+        governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
             DeveloperDistribution, SwapDistribution, TreasuryDistribution,
             developer_distribution::NeuronDistribution,
@@ -3285,13 +3285,6 @@ struct ProposeToCreateServiceNervousSystemCmd {
 
     #[clap(long, value_parser=parse_duration)]
     voting_reward_rate_transition_duration: nervous_system_pb::Duration,
-
-    // Custom Proposal Criticality
-    // ---------------------------
-    /// Native action IDs that should be treated as critical, requiring a higher
-    /// level of consensus to be executed. Can be specified multiple times.
-    #[clap(long)]
-    additional_critical_native_action_id: Vec<u64>,
 }
 
 impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSystem {
@@ -3349,9 +3342,6 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             initial_voting_reward_rate,
             final_voting_reward_rate,
             voting_reward_rate_transition_duration,
-
-            // Deconstruct to a more indicative name
-            additional_critical_native_action_id: additional_critical_native_action_ids,
 
             // Not used.
             proposer: _,
@@ -3541,15 +3531,8 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
                 voting_reward_parameters,
 
-                custom_proposal_criticality: if additional_critical_native_action_ids.is_empty() {
-                    None
-                } else {
-                    Some(CustomProposalCriticality {
-                        additional_critical_native_action_ids: Some(
-                            additional_critical_native_action_ids,
-                        ),
-                    })
-                },
+                // TODO: Support additional critical native action IDs
+                custom_proposal_criticality: None,
             })
         };
 
