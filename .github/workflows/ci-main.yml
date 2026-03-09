@@ -271,6 +271,7 @@ jobs:
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: ${{ secrets.AWS_ASSUME_ROLE }}
+          aws-region: eu-central-1
 
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
@@ -340,6 +341,7 @@ jobs:
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: ${{ secrets.AWS_ASSUME_ROLE }}
+          aws-region: eu-central-1
 
       - name: Upload artifacts
         # NOTE: GHA output quirk, 'true' is a string
@@ -482,6 +484,7 @@ jobs:
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: ${{ secrets.AWS_ASSUME_ROLE }}
+          aws-region: eu-central-1
 
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
