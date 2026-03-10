@@ -314,7 +314,6 @@ fn canister_manager_config(
     rate_limiting_of_instructions: FlagStatus,
 ) -> CanisterMgrConfig {
     CanisterMgrConfig::new(
-        MEMORY_CAPACITY,
         DEFAULT_PROVISIONAL_BALANCE,
         NumSeconds::from(100_000),
         subnet_id,
