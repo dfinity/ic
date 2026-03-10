@@ -13,8 +13,8 @@ use ic_protobuf::{
         node::v1::NodeRecord,
         subnet::v1::{
             CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-            ChainKeyConfig as ChainKeyConfigPb, ResourceLimits, SubnetFeatures as SubnetFeaturesPb,
-            SubnetRecord,
+            ChainKeyConfig as ChainKeyConfigPb, ResourceLimits as ResourceLimitsPb,
+            SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
         },
     },
     types::v1::PrincipalId as PrincipalIdPb,
@@ -23,6 +23,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{KeyConfig as KeyConfigInternal, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
@@ -569,7 +570,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .map(PrincipalIdPb::from)
                 .collect(),
 
-            resource_limits: val.resource_limits,
+            resource_limits: val.resource_limits.map(ResourceLimitsPb::from),
 
             recalled_replica_version_ids: vec![],
         }

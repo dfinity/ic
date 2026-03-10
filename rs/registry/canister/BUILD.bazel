@@ -33,6 +33,7 @@ DEPENDENCIES = [
     "//rs/registry/canister/chunkify",
     "//rs/registry/keys",
     "//rs/registry/node_provider_rewards",
+    "//rs/registry/resource_limits",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
