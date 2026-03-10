@@ -691,6 +691,7 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
 }
 
 /// Convenience wrapper for `BatchProcessorImpl::try_to_read_registry()`.
+#[allow(clippy::type_complexity)]
 fn try_to_read_registry(
     registry: Arc<FakeRegistryClient>,
     log: ReplicaLogger,
@@ -1063,7 +1064,14 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             own_resource_limits,
             latest_state.metadata.own_resource_limits
         );
-        assert_eq!(latest_state.metadata.own_resource_limits.unwrap().maximum_state_size, Some(own_maximum_state_size));
+        assert_eq!(
+            latest_state
+                .metadata
+                .own_resource_limits
+                .unwrap()
+                .maximum_state_size,
+            Some(own_maximum_state_size)
+        );
         assert_eq!(
             *registry_settings.lock().unwrap(),
             registry_execution_settings,

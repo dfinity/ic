@@ -8,8 +8,8 @@ use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-    InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
-    ResourceLimits as ResourceLimitsPb,
+    InitialNiDkgTranscriptRecord, ResourceLimits as ResourceLimitsPb, SubnetListRecord,
+    SubnetRecord,
 };
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdPb, master_public_key_id::KeyId};
 use ic_registry_client_fake::FakeRegistryClient;
