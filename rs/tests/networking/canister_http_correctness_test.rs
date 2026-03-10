@@ -16,7 +16,7 @@ Success::
 end::catalog[] */
 #![allow(deprecated)]
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_matches::assert_matches;
 use candid::{CandidType, Deserialize, Encode, Principal, decode_one};
 use canister_http::*;
@@ -37,7 +37,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::HasTopologySnapshot,
     },
-    systest,
+    retry_with_msg_async, systest,
     util::{block_on, get_app_subnet_and_node},
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
@@ -53,6 +53,7 @@ use proxy_canister::{
 };
 use serde_json::Value;
 use std::collections::{BTreeSet, HashSet};
+use std::time::Duration;
 
 const MAX_REQUEST_BYTES_LIMIT: usize = 2_000_000;
 const MAX_MAX_RESPONSE_BYTES: usize = 2_000_000;
@@ -2560,11 +2561,27 @@ where
     let principal_id: PrincipalId = handlers.proxy_canister().effective_canister_id();
     let principal: Principal = principal_id.into();
 
-    let canister_response = agent
-        .update(&principal, "send_request_with_refund_callback")
-        .with_arg(args)
-        .call_and_wait()
-        .await;
+    // Retry on transport errors (e.g., read_state timeout during polling under load).
+    let log = handlers.env.logger();
+    let canister_response = retry_with_msg_async!(
+        "submit_outcall: call_and_wait",
+        &log,
+        Duration::from_secs(120),
+        Duration::from_secs(5),
+        || async {
+            let result = agent
+                .update(&principal, "send_request_with_refund_callback")
+                .with_arg(args.clone())
+                .call_and_wait()
+                .await;
+            match result {
+                Err(AgentError::TransportError(e)) => Err(anyhow!(e)),
+                other => Ok(other),
+            }
+        }
+    )
+    .await
+    .expect("submit_outcall retries exhausted");
 
     match canister_response {
         Err(agent_error) => {
