@@ -32,12 +32,12 @@ use crate::driver::{
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
 };
-use crate::util::block_on;
 use crate::driver::{
     farm::{DnsRecord, DnsRecordType},
     test_env::TestEnvAttribute,
     test_env_api::CreateDnsRecords,
 };
+use crate::util::block_on;
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
