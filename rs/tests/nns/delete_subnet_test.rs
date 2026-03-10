@@ -152,7 +152,7 @@ pub fn test(env: TestEnv) {
         try_delete_subnet(
             &app_subnet.subnet_id,
             &governance_canister,
-            Some("Only CloudEngines and rental subnets may be deleted".to_string()),
+            Some("Only CloudEngines may be deleted".to_string()),
         )
         .await;
 
@@ -160,7 +160,7 @@ pub fn test(env: TestEnv) {
         try_delete_subnet(
             &nns_subnet.subnet_id,
             &governance_canister,
-            Some("Only CloudEngines and rental subnets may be deleted".to_string()),
+            Some("Only CloudEngines may be deleted".to_string()),
         )
         .await;
 

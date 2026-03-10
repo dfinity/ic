@@ -41,15 +41,9 @@ impl Registry {
         let DeleteSubnetPayload { subnet_id } = payload;
         let subnet_id_ = SubnetId::from(PrincipalId::from(subnet_id));
         let subnet_record = self.get_subnet(subnet_id_, self.latest_version())?;
-        // It is tempting to simplify this boolean expression to just using the cost schedule (because engines always have
-        // a Free cost schedule). However, we want to be able to delete both Engines and rental subnets. Currently, we have
-        // no way to distinguish rental subnets from regular subnets apart from the cost schedule. So even though this expr
-        // is redundant, it should stay to communciate the intent, until we have a better way to tell rental subnets from others.
-        if subnet_record.subnet_type != i32::from(SubnetType::CloudEngine)
-            || subnet_record.canister_cycles_cost_schedule
-                != CanisterCyclesCostSchedulePb::from(CanisterCyclesCostSchedule::Free) as i32
-        {
-            return Err("Only CloudEngines and rental subnets may be deleted".to_string());
+        // Currently, only CloudEngines can be deleted.
+        if subnet_record.subnet_type != i32::from(SubnetType::CloudEngine) {
+            return Err("Only CloudEngines may be deleted".to_string());
         }
 
         // Remove from `subnet_list`.
