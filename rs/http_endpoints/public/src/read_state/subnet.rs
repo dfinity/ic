@@ -223,19 +223,30 @@ fn verify_paths(
                 _node_id,
                 b"domain" | b"ipv4_address" | b"ipv6_address",
             ] => {
-                metrics.observe_read_state_path(ENDPOINT, "api_boundary_nodes");
+                metrics.observe_read_state_path(ENDPOINT, "api_boundary_nodes_info");
             }
             [b"subnet"] => {
                 metrics.observe_read_state_path(ENDPOINT, "subnet");
             }
             [b"subnet", _subnet_id] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet");
+                metrics.observe_read_state_path(ENDPOINT, "subnet_info");
             }
             [b"subnet", _subnet_id, b"public_key"] => {
                 metrics.observe_read_state_path(ENDPOINT, "subnet_public_key");
             }
+            [b"subnet", subnet_id, b"metrics"] => {
+                let principal_id = parse_principal_id(subnet_id)?;
+                verify_principal_ids(&principal_id, &effective_principal_id)?;
+                metrics.observe_read_state_path(ENDPOINT, "subnet_metrics");
+            }
             [b"subnet", _subnet_id, b"node"] => {
                 metrics.observe_read_state_path(ENDPOINT, "subnet_node");
+            }
+            [b"subnet", _subnet_id, b"node", _node_id] => {
+                metrics.observe_read_state_path(ENDPOINT, "subnet_node_info");
+            }
+            [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {
+                metrics.observe_read_state_path(ENDPOINT, "subnet_node_public_key");
             }
             // `/subnet/<subnet_id>/canister_ranges` is always allowed on the `/api/v2` endpoint
             [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {
@@ -249,19 +260,8 @@ fn verify_paths(
             {
                 metrics.observe_read_state_path(ENDPOINT, "subnet_canister_ranges");
             }
-            [b"subnet", _subnet_id, b"node", _node_id] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_node");
-            }
-            [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_node_public_key");
-            }
             [b"canister_ranges", _subnet_id] => {
                 metrics.observe_read_state_path(ENDPOINT, "canister_ranges");
-            }
-            [b"subnet", subnet_id, b"metrics"] => {
-                let principal_id = parse_principal_id(subnet_id)?;
-                verify_principal_ids(&principal_id, &effective_principal_id)?;
-                metrics.observe_read_state_path(ENDPOINT, "subnet_metrics");
             }
             _ => {
                 // All other paths are unsupported.
