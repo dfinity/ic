@@ -29,7 +29,7 @@ jobs:
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:0a0cff0b12c7586c2f312c739176924edf0c9e71df92f382eba836913da9f1c6
       options: >-
-         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers" -v /var/tmp/bazel-output:/var/tmp/bazel-output
     timeout-minutes: 90
     steps:
       - &checkout
