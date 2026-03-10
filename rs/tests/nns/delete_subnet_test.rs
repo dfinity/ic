@@ -1,7 +1,7 @@
 /* tag::catalog[]
 Title:: Delete Subnet
 
-Goal:: Ensure that subnets can be deleted
+Goal:: Ensure that CloudEngines can be deleted, and that regular App and System subnets cannot be deleted.
 
 end::catalog[] */
 
@@ -28,7 +28,6 @@ use ic_system_test_driver::nns::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
 use ic_types::{Height, RegistryVersion, SubnetId};
-use ic_universal_canister::{call_args, wasm};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use std::collections::BTreeSet;
@@ -40,13 +39,13 @@ const DKG_INTERVAL_LENGTH: u64 = 29;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        // .without_assert_no_replica_restarts()
         .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
 }
 
-// Small IC for correctness test pre-master
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
@@ -149,35 +148,23 @@ pub fn test(env: TestEnv) {
             UniversalCanister::new(&app_agent, app_node.effective_canister_id()).await;
 
         // Deleting the engine should work:
-        let arg = DeleteSubnetPayload {
-            subnet_id: engine_subnet.subnet_id.get().into(),
-        };
-        let result_bytes = governance_canister
-            .forward_to(
-                &REGISTRY_CANISTER_ID.get().0,
-                "delete_subnet",
-                Encode!(&arg).unwrap(),
-            )
-            .await
-            .unwrap();
-        Decode!(&result_bytes, Result<(), String>).unwrap().unwrap();
+        try_delete_subnet(&engine_subnet.subnet_id, &governance_canister, None).await;
 
         // Deleting the app subnet should not work:
-        let arg = DeleteSubnetPayload {
-            subnet_id: app_subnet.subnet_id.get().into(),
-        };
-        let result_bytes = governance_canister
-            .forward_to(
-                &REGISTRY_CANISTER_ID.get().0,
-                "delete_subnet",
-                Encode!(&arg).unwrap(),
-            )
-            .await
-            .unwrap();
-        let err_str = Decode!(&result_bytes, Result<(), String>)
-            .unwrap()
-            .unwrap_err();
-        assert!(err_str.contains("Only CloudEngines and rental subnets may be deleted"));
+        try_delete_subnet(
+            &app_subnet.subnet_id,
+            &governance_canister,
+            Some("Only CloudEngines and rental subnets may be deleted".to_string()),
+        )
+        .await;
+
+        // Deleting the system subnet should not work:
+        try_delete_subnet(
+            &nns_subnet.subnet_id,
+            &governance_canister,
+            Some("Only CloudEngines and rental subnets may be deleted".to_string()),
+        )
+        .await;
 
         let new_topology_snapshot = topology_snapshot
             .block_for_min_registry_version(RegistryVersion::new(2))
@@ -202,20 +189,35 @@ pub fn test(env: TestEnv) {
             .map(|x| x.node_id)
             .collect::<BTreeSet<_>>();
         assert_eq!(unassigned_node_ids, engine_node_ids);
-
-        // A call to the canister on the deleted engine should fail due to a routing error.
-        // TODO
-        let err_bytes = _canister_app
-            .update(wasm().call_simple(
-                _canister_eng.canister_id().as_slice(),
-                "yesn't",
-                call_args(),
-            ))
-            .await
-            .unwrap();
-
-        println!("{:?}", err_bytes);
     });
+}
+
+/// Attempt to delete the given subnet. Expect it to fail with the given error message if given, or
+/// to succeed if None.
+async fn try_delete_subnet<'a>(
+    subnet_id: &SubnetId,
+    governance_canister: &UniversalCanister<'a>,
+    expected_error: Option<String>,
+) {
+    let arg = DeleteSubnetPayload {
+        subnet_id: subnet_id.get().into(),
+    };
+    let result_bytes = governance_canister
+        .forward_to(
+            &REGISTRY_CANISTER_ID.get().0,
+            "delete_subnet",
+            Encode!(&arg).unwrap(),
+        )
+        .await
+        .unwrap();
+    if let Some(expected_err) = expected_error {
+        let err_str = Decode!(&result_bytes, Result<(), String>)
+            .unwrap()
+            .unwrap_err();
+        assert!(err_str.contains(&expected_err));
+    } else {
+        Decode!(&result_bytes, Result<(), String>).unwrap().unwrap();
+    }
 }
 
 async fn make_schedule_free(

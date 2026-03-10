@@ -52,7 +52,7 @@ impl Registry {
             return Err("Only CloudEngines and rental subnets may be deleted".to_string());
         }
 
-        // Remove from subnet_list.
+        // Remove from `subnet_list`.
         let mut subnet_list = self.get_subnet_list_record().subnets;
         if !subnet_list.contains(&subnet_id.as_slice().to_vec()) {
             return Err(format!(
@@ -70,7 +70,7 @@ impl Registry {
             value: new_subnet_list_record.encode_to_vec(),
         };
 
-        // Add to deleted_subnet_list.
+        // Add to `deleted_subnet_list`.
         let mut deleted_subnet_list = self.get_deleted_subnet_list_record().deleted_subnets;
         deleted_subnet_list.push(subnet_id.as_slice().to_vec());
         let new_deleted_subnet_list_record = DeletedSubnetListRecord {
