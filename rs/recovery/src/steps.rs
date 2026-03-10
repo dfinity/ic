@@ -574,11 +574,8 @@ pub struct UploadStateAndRestartStep {
 
 impl UploadStateAndRestartStep {
     const CMD_STOP_REPLICA: &str = "sudo systemctl stop ic-replica;";
-    // Note that on older versions of IC-OS this service does not exist.
-    // So try this operation, but ignore possible failure if service
-    // does not exist on the affected version.
     const CMD_RESTART_REPLICA: &str = "\
-        (sudo systemctl restart setup-permissions || true);\
+        sudo systemctl restart setup-permissions;\
         sudo systemctl start ic-replica;\
         sudo systemctl status ic-replica;";
 }
@@ -905,7 +902,7 @@ sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
 sudo systemctl stop ic-replica;
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
 sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo systemctl restart setup-permissions || true ;
+sudo systemctl restart setup-permissions;
 sudo systemctl start ic-replica;
 sudo systemctl status ic-replica;
 "#,
