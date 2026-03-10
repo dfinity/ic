@@ -59,3 +59,11 @@ Control the hash of the downloaded file with
 ```bash
 sha256sum downloaded.wasm.gz
 ```
+
+### Get metadata
+
+Query metadata (uploader, insertion time, size, tags) without downloading the blob:
+
+```bash
+icp canister call blob_store get_metadata "(\"$HASH\")"
+```
