@@ -1836,7 +1836,7 @@ mod tests {
     #[test]
     fn test_no_early_transcripts_for_single_setup_initial_dkg_config() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut deps, _target_id, remote_dkg_ids) = setup_initial_dkg_test(pool_config);
+            let (mut deps, target_id, remote_dkg_ids) = setup_initial_dkg_test(pool_config);
 
             let original_summary = {
                 let block: Block = deps
@@ -1920,6 +1920,32 @@ mod tests {
                  setup_initial_dkg config, but got {early_transcripts:?}",
             );
 
+            // The next summary should contain both transcripts: the one already
+            // in the modified summary's transcripts_for_remote_subnets and the
+            // one created from the remaining config's dealings.
+            let next_summary = payload_builder::create_summary_payload(
+                subnet_test_id(0),
+                deps.registry.as_ref(),
+                deps.crypto.as_ref(),
+                &pool_reader,
+                &modified_summary,
+                &parent,
+                deps.registry.get_latest_version(),
+                deps.state_manager.as_ref(),
+                &validation_context,
+                no_op_logger(),
+            )
+            .unwrap();
+            assert_eq!(
+                next_summary.transcripts_for_remote_subnets.len(),
+                2,
+                "The next summary should contain both remote transcripts",
+            );
+            for (dkg_id, _callback_id, result) in &next_summary.transcripts_for_remote_subnets {
+                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
+                assert!(result.is_ok());
+            }
+
             // Control: using the original summary with both configs DOES
             // produce early transcripts.
             let early_transcripts = payload_builder::create_early_remote_transcripts(
@@ -1933,6 +1959,10 @@ mod tests {
             )
             .unwrap();
             assert_eq!(early_transcripts.len(), 2);
+            for (dkg_id, _callback_id, result) in &early_transcripts {
+                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
+                assert!(result.is_ok());
+            }
 
             // If a config exists in the summary but there is no corresponding
             // context in the state, no early transcript should be created.
