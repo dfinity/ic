@@ -35,6 +35,7 @@ enum PayloadValidationError {
     NotEnabled,
     DuplicateDestinationNodeIds,
     InvalidCanisterIdRanges(WellFormedError),
+    SourceSubnetHalted,
 }
 
 #[cfg(not(test))]
@@ -161,9 +162,7 @@ impl Registry {
         let destination_subnet_id = destination_cup_contents.1.fresh_subnet_id;
         source_cup_contents.0.cup_type = Some(
             pb::catch_up_package_contents::CupType::SubnetSplitting(pb::SubnetSplittingArgs {
-                destination_subnet_id: Some(subnet_id_into_protobuf(
-                    destination_cup_contents.1.fresh_subnet_id,
-                )),
+                destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
             }),
         );
 
@@ -203,9 +202,7 @@ impl Registry {
             ),
             // destination subnet threshold public key
             insert(
-                make_crypto_threshold_signing_pubkey_key(
-                    destination_cup_contents.1.fresh_subnet_id,
-                ),
+                make_crypto_threshold_signing_pubkey_key(destination_subnet_id),
                 destination_cup_contents
                     .1
                     .subnet_threshold_public_key
@@ -213,7 +210,7 @@ impl Registry {
             ),
             // destination cup contents
             insert(
-                make_catch_up_package_contents_key(destination_cup_contents.1.fresh_subnet_id),
+                make_catch_up_package_contents_key(destination_subnet_id),
                 destination_cup_contents.0.encode_to_vec(),
             ),
         ];
@@ -332,6 +329,10 @@ impl Registry {
             CanisterIdRanges::try_from(payload.destination_canister_ranges.clone())
                 .map_err(PayloadValidationError::InvalidCanisterIdRanges)?;
 
+        if source_subnet_record.is_halted {
+            return Err(PayloadValidationError::SourceSubnetHalted);
+        }
+
         Ok((source_subnet_record, ranges_to_migrate))
     }
 
@@ -439,6 +440,9 @@ impl std::fmt::Display for PayloadValidationError {
             }
             PayloadValidationError::DuplicateDestinationNodeIds => {
                 write!(f, "The payload contains duplicate destination node ids")
+            }
+            PayloadValidationError::SourceSubnetHalted => {
+                write!(f, "We cannot split a subnet which is halted")
             }
             PayloadValidationError::InvalidCanisterIdRanges(error) => {
                 write!(
@@ -625,32 +629,42 @@ mod tests {
         Err(PayloadValidationError::DuplicateDestinationNodeIds)
     )]
     #[case::non_disjoint_canister_ranges(
-            SubnetInfo {
-                canister_id_ranges: vec![CanisterIdRange {
-                    start: canister_test_id(0),
-                    end: canister_test_id(20),
-                }],
-                ..invariants_compliant_subnet_info()
-            },
-            SplitSubnetPayload {
-                destination_canister_ranges: vec![
-                    CanisterIdRange {
-                        start: canister_test_id(5),
-                        end: canister_test_id(10),
-                    },
-                    CanisterIdRange {
-                        start: canister_test_id(5),
-                        end: canister_test_id(15),
-                    },
-                ],
-                ..invariants_compliant_payload()
-            },
-            Err(PayloadValidationError::InvalidCanisterIdRanges(
-                WellFormedError::CanisterIdRangeNotSortedOrNotDisjoint(
-                    "previous_end qaa6y-5yaaa-aaaaa-aaafa-cai >= current_start rno2w-sqaaa-aaaaa-aaacq-cai".into()
-                )
-            )),
-        )]
+        SubnetInfo {
+            canister_id_ranges: vec![CanisterIdRange {
+                start: canister_test_id(0),
+                end: canister_test_id(20),
+            }],
+            ..invariants_compliant_subnet_info()
+        },
+        SplitSubnetPayload {
+            destination_canister_ranges: vec![
+                CanisterIdRange {
+                    start: canister_test_id(5),
+                    end: canister_test_id(10),
+                },
+                CanisterIdRange {
+                    start: canister_test_id(5),
+                    end: canister_test_id(15),
+                },
+            ],
+            ..invariants_compliant_payload()
+        },
+        Err(PayloadValidationError::InvalidCanisterIdRanges(
+            WellFormedError::CanisterIdRangeNotSortedOrNotDisjoint(
+                "previous_end qaa6y-5yaaa-aaaaa-aaafa-cai >= current_start rno2w-sqaaa-aaaaa-aaacq-cai".into()
+            )
+        )),
+    )]
+    #[case::halted_subnet(
+        SubnetInfo {
+            is_halted: true,
+            ..invariants_compliant_subnet_info()
+        },
+        SplitSubnetPayload {
+            ..invariants_compliant_payload()
+        },
+        Err(PayloadValidationError::SourceSubnetHalted)
+    )]
     fn payload_validation_test(
         #[case] source_subnet_info: SubnetInfo,
         #[case] payload: SplitSubnetPayload,
@@ -688,6 +702,7 @@ mod tests {
         canister_id_ranges: Vec<CanisterIdRange>,
         is_signing: bool,
         is_already_being_split: bool,
+        is_halted: bool,
     }
 
     fn invariants_compliant_subnet_info() -> SubnetInfo {
@@ -701,6 +716,7 @@ mod tests {
             }],
             is_signing: false,
             is_already_being_split: false,
+            is_halted: false,
         }
     }
 
@@ -740,6 +756,7 @@ mod tests {
                 .collect(),
         );
         source_subnet_record.subnet_type = source_subnet_info.subnet_type.into();
+        source_subnet_record.is_halted = source_subnet_info.is_halted;
 
         if source_subnet_info.is_signing {
             let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
