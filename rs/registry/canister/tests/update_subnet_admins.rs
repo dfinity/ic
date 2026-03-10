@@ -168,6 +168,7 @@ fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
                             ssh_backup_access: vec![],
                             chain_key_config: None,
                             recalled_replica_version_ids: vec![],
+                            resource_limits: None,
                         }
                         .encode_to_vec(),
                     )],
@@ -258,6 +259,7 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
                             ssh_backup_access: vec![],
                             chain_key_config: None,
                             recalled_replica_version_ids: vec![],
+                            resource_limits: None,
                         }
                         .encode_to_vec(),
                     )],
@@ -347,6 +349,7 @@ fn test_subnet_rental_canister_can_update_subnet_admins_of_rented_subnet() {
                             ssh_backup_access: vec![],
                             chain_key_config: None,
                             recalled_replica_version_ids: vec![],
+                            resource_limits: None,
                         }
                         .encode_to_vec(),
                     )],
