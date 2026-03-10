@@ -47,7 +47,7 @@ const MAX_BLOCK_SIZE: u64 = 4 * 1024 * 1024;
 proptest! {
     #![proptest_config(ProptestConfig {
         cases: 64,
-        max_shrink_time: 60_000, // = 60s
+        max_shrink_time: 60000,
         ..ProptestConfig::default()
     })]
 
@@ -143,9 +143,8 @@ const MB: usize = 1024 * 1024;
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 256,
-        timeout: 60_000, // = 60s; we introduce a timeout to detect infinite loops in the ingress selector
-        max_shrink_time: 60_000, // = 60s
+        cases: 1024,
+        timeout: 10_000, // 10 seconds
         ..ProptestConfig::default()
     })]
     #[test]
