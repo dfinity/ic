@@ -281,7 +281,8 @@ impl InternalHttpQueryHandler {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory = full_subnet_memory_capacity(&self.config);
+        let subnet_available_memory =
+            full_subnet_memory_capacity(&self.config, state.get_ref().resource_limits());
         // Letting the canister use the full subnet memory reservation
         // is fine as we do not persist state modifications.
         let subnet_memory_reservation = self.config.subnet_memory_reservation;

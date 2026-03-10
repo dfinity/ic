@@ -23,6 +23,7 @@ use ic_interfaces::messaging::{
 };
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -955,6 +956,10 @@ impl ReplicatedState {
                     .map_or(0, |ccm| ccm.callbacks().len())
             })
             .sum()
+    }
+
+    pub fn resource_limits(&self) -> Option<ResourceLimits> {
+        self.metadata.own_resource_limits
     }
 
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or

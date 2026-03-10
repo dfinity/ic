@@ -728,7 +728,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
 
         // Own subnet characteristics.
         let own_subnet_id = subnet_test_id(13);
-        let own_maximum_state_size = 1 << 30;
+        let own_maximum_state_size = NumBytes::new(1 << 30);
         let own_subnet_record = SubnetRecord {
             membership: &[node_test_id(1), node_test_id(2)],
             subnet_type: SubnetType::Application,

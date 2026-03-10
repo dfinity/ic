@@ -1196,6 +1196,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 time,
                 network_topology,
                 &mut round_limits,
+                None,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
             );

@@ -41,6 +41,7 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, WellFormedError,
 };
@@ -301,6 +302,7 @@ pub struct ExecutionTest {
     chain_key_data: ChainKeyData,
     replica_version: ReplicaVersion,
     canister_snapshot_baseline_instructions: NumInstructions,
+    resource_limits: Option<ResourceLimits>,
 
     // The actual implementation.
     exec_env: Arc<ExecutionEnvironment>,
@@ -1244,6 +1246,7 @@ impl ExecutionTest {
             Arc::clone(&network_topology),
             self.time,
             &mut round_limits,
+            self.resource_limits,
             self.subnet_size(),
             cost_schedule,
         );
@@ -1365,6 +1368,7 @@ impl ExecutionTest {
             UNIX_EPOCH,
             network_topology,
             &mut round_limits,
+            self.resource_limits,
             self.subnet_size(),
             cost_schedule,
         );
@@ -1566,6 +1570,7 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
+                    self.resource_limits,
                     self.subnet_size(),
                     cost_schedule,
                 );
@@ -1693,6 +1698,7 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
+                    self.resource_limits,
                     self.subnet_size(),
                     cost_schedule,
                 );
@@ -1965,7 +1971,7 @@ impl ExecutionTest {
 
     pub fn subnet_memory_saturation(&self) -> ResourceSaturation {
         self.exec_env
-            .subnet_memory_saturation(&self.subnet_available_memory)
+            .subnet_memory_saturation(&self.subnet_available_memory, self.resource_limits)
     }
 
     pub fn expected_storage_reservation_cycles(
@@ -2058,6 +2064,7 @@ pub struct ExecutionTestBuilder {
     subnet_admins: BTreeSet<PrincipalId>,
     network_topology: Option<NetworkTopology>,
     log_level: Option<Level>,
+    resource_limits: Option<ResourceLimits>,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -2095,6 +2102,7 @@ impl Default for ExecutionTestBuilder {
             subnet_admins: BTreeSet::new(),
             network_topology: None,
             log_level: Some(Level::Warning),
+            resource_limits: None,
         }
     }
 }
@@ -2547,6 +2555,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_resource_limits(mut self, resource_limits: Option<ResourceLimits>) -> Self {
+        self.resource_limits = resource_limits;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2833,6 +2846,7 @@ impl ExecutionTestBuilder {
                 .subnet_config
                 .scheduler_config
                 .canister_snapshot_baseline_instructions,
+            resource_limits: self.resource_limits,
         }
     }
 }

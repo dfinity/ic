@@ -10,6 +10,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/protobuf",
+        "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:serde",
     ],
