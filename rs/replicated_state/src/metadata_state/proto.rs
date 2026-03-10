@@ -4,7 +4,7 @@ use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyc
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
-    registry::subnet::v1 as pb_subnet,
+    registry::subnet::v1::{self as pb_subnet, ResourceLimits as ResourceLimitsPb},
     state::{
         canister_state_bits::v1::{ConsumedCyclesByUseCase, CyclesUseCase as pbCyclesUseCase},
         ingress::v1 as pb_ingress,
@@ -13,6 +13,7 @@ use ic_protobuf::{
     },
     types::v1 as pb_types,
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_types::subnet_id_try_from_protobuf;
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
@@ -298,6 +299,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
             own_subnet_features: Some(item.own_subnet_features.into()),
+            own_resource_limits: item.own_resource_limits.map(ResourceLimitsPb::from),
             subnet_metrics: Some((&item.subnet_metrics).into()),
             bitcoin_get_successors_follow_up_responses: item
                 .bitcoin_get_successors_follow_up_responses
@@ -426,6 +428,7 @@ impl
             // properly set this value.
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
+            own_resource_limits: item.own_resource_limits.map(ResourceLimits::from),
             node_public_keys,
             api_boundary_nodes,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,

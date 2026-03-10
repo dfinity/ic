@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(CandidType, Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
 pub struct ResourceLimits {
     // The maximum size of the (replicated) state in bytes.
-    maximum_state_size: Option<u64>,
+    pub maximum_state_size: Option<u64>,
 }
 
 impl From<ResourceLimits> for pb::ResourceLimits {

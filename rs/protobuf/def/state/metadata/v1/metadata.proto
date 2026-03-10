@@ -401,6 +401,8 @@ message SystemMetadata {
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
+
+  registry.subnet.v1.ResourceLimits own_resource_limits = 24;
 }
 
 message StableMemory {

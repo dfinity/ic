@@ -15,6 +15,7 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-local-store = { path = "../../registry/local_store" }
 ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifacts" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-registry-resource-limits = { path = "../../registry/resource_limits" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }

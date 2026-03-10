@@ -9,6 +9,7 @@ use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
     InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
+    ResourceLimits as ResourceLimitsPb,
 };
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdPb, master_public_key_id::KeyId};
 use ic_registry_client_fake::FakeRegistryClient;
@@ -19,6 +20,7 @@ use ic_registry_keys::{
 };
 use ic_registry_local_store::{LocalStoreImpl, compact_delta_to_changelog};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -398,6 +400,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
         self.record.subnet_admins = subnet_admins.into_iter().map(PrincipalIdPb::from).collect();
+        self
+    }
+
+    pub fn with_resource_limits(mut self, resource_limits: Option<ResourceLimits>) -> Self {
+        self.record.resource_limits = resource_limits.map(ResourceLimitsPb::from);
         self
     }
 

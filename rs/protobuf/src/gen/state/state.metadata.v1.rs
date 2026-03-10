@@ -580,6 +580,9 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
+    #[prost(message, optional, tag = "24")]
+    pub own_resource_limits:
+        ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {
