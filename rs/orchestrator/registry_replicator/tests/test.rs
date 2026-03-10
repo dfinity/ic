@@ -304,8 +304,18 @@ where
 async fn wait_for_canister_certified_time_gt(pocket_ic: &PocketIcHelper, time: Time) {
     wait_for_condition(
         || async {
-            let (_, _, certified_time) = pocket_ic.get_all_certified_records().await;
-            certified_time > time
+            // Use a single non-retrying attempt per iteration. If the HTTP request fails
+            // (e.g., due to a 30s timeout when PocketIC is busy), we return false and let
+            // the outer wait_for_condition loop retry. This prevents the internal retry loop
+            // in get_all_certified_records from consuming the entire CONDITION_TIMEOUT budget.
+            match pocket_ic
+                .registry_canister
+                .get_certified_changes_since(0, &pocket_ic.nns_pub_key)
+                .await
+            {
+                Ok((_, _, certified_time)) => certified_time > time,
+                Err(_) => false,
+            }
         },
         &format!("Timed out waiting for canister's certified time to exceed {time:?}"),
     )
