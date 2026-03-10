@@ -21,7 +21,7 @@ use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, 
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{CanisterId, Cycles, NumInstructions, ingress::WasmResult};
-use more_asserts::{assert_le, assert_lt};
+use more_asserts::{assert_gt, assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
 
@@ -2097,12 +2097,18 @@ fn test_canister_resize_up_preserves_logs() {
         fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
 
     // Resize log memory store.
+    let balance_before = env.cycle_balance(canister_id);
+    let start = std::time::Instant::now();
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
             .with_log_memory_limit(log_memory_limit)
             .build(),
     );
+    println!("ABC update_settings duration: {:?}", start.elapsed());
+    let balance_after = env.cycle_balance(canister_id);
+    assert_gt!(balance_before, balance_after);
+    println!("ABC resize cost: {}", balance_before - balance_after);
 
     // After resizing.
     let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
@@ -2174,6 +2180,7 @@ fn test_canister_resize_down_preserves_logs() {
     let sum_before = update_settings_duration_sum(&env);
 
     // Resize log memory store.
+    let balance_before = env.cycle_balance(canister_id);
     let start = std::time::Instant::now();
     let _ = env.update_settings(
         &canister_id,
@@ -2182,6 +2189,9 @@ fn test_canister_resize_down_preserves_logs() {
             .build(),
     );
     println!("ABC update_settings duration: {:?}", start.elapsed());
+    let balance_after = env.cycle_balance(canister_id);
+    assert_gt!(balance_before, balance_after);
+    println!("ABC resize cost: {}", balance_before - balance_after);
 
     // Snapshot metrics AFTER the resize.
     let sum_after = update_settings_duration_sum(&env);
