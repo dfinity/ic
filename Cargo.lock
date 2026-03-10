@@ -11026,6 +11026,7 @@ dependencies = [
  "ic-registry-local-registry",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
