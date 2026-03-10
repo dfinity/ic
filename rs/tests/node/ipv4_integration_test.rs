@@ -191,7 +191,7 @@ EOT
         }
 
         info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());
-        // Use a longer timeout (300) since node re-registration involves
+        // Use a longer timeout (300s) with a 2s polling interval since node re-registration involves
         // generating new crypto keys and registering with the NNS, which
         // is significantly slower than a direct registry canister call.
         let topology = topology
