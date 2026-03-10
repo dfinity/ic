@@ -155,6 +155,23 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "BlessAlternativeGuestOsVersion",
         "TakeCanisterSnapshot",
         "LoadCanisterSnapshot",
+        "NodeProvider",
+        "RewardNodeProvider",
+        "RewardNodeProviders",
+        // ManageNeuron nested types
+        "ManageNeuron.IncreaseDissolveDelay",
+        "ManageNeuron.AddHotKey",
+        "ManageNeuron.RemoveHotKey",
+        "ManageNeuron.SetDissolveTimestamp",
+        "ManageNeuron.ChangeAutoStakeMaturity",
+        "ManageNeuron.Split",
+        "ManageNeuron.Spawn",
+        "ManageNeuron.StakeMaturity",
+        "ManageNeuron.DisburseToNeuron",
+        "ManageNeuron.Merge",
+        "ManageNeuron.DisburseMaturity",
+        // ManageNeuron oneof
+        "ManageNeuron.neuron_id_or_subaccount",
     ];
     for type_name in self_describing_types {
         config.type_attribute(
