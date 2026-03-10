@@ -1,4 +1,4 @@
-use blob_store_lib::api::{GetError, InsertError, InsertRequest};
+use blob_store_lib::api::{BlobMetadata, GetError, InsertError, InsertRequest};
 
 #[ic_cdk::init]
 fn init() {}
@@ -11,10 +11,20 @@ fn get(hash: String) -> Result<Vec<u8>, GetError> {
     blob_store_lib::query::get(&hash)
 }
 
+#[ic_cdk::query]
+fn get_metadata(hash: String) -> Result<BlobMetadata, GetError> {
+    blob_store_lib::query::get_metadata(&hash)
+}
+
 #[ic_cdk::update]
 fn insert(request: InsertRequest) -> Result<String, InsertError> {
-    blob_store_lib::update::insert(ic_cdk::api::msg_caller(), &request.hash, request.data)
-        .map(|hash| hash.to_string())
+    blob_store_lib::update::insert(
+        ic_cdk::api::msg_caller(),
+        &request.hash,
+        request.data,
+        request.tags.unwrap_or_default(),
+    )
+    .map(|hash| hash.to_string())
 }
 
 fn main() {}

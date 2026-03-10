@@ -1,3 +1,4 @@
+use crate::canister_settings::VisibilitySettings;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
@@ -42,22 +43,13 @@ pub(crate) fn check_log_visibility_permission(
     log_visibility: &LogVisibilityV2,
     controllers: &std::collections::BTreeSet<PrincipalId>,
 ) -> Result<(), UserError> {
-    let has_access = match log_visibility {
-        LogVisibilityV2::Public => true,
-        LogVisibilityV2::Controllers => controllers.contains(caller),
-        LogVisibilityV2::AllowedViewers(principals) => {
-            principals.get().contains(caller) || controllers.contains(caller)
-        }
-    };
-
-    if has_access {
-        Ok(())
-    } else {
-        Err(UserError::new(
+    if !VisibilitySettings::from(log_visibility).has_access(caller, controllers) {
+        return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!("Caller {caller} is not allowed to access canister logs"),
-        ))
+        ));
     }
+    Ok(())
 }
 
 fn filter_records(

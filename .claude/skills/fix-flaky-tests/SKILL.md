@@ -60,6 +60,12 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
 3. Analyze the source code of `label` and the logs in `<LOG_DIR>` to determine the root cause of the flakiness.
 
+   Ignore failures containing the error:
+   ```
+   Retried too many times: sending a request to Farm
+   ```
+   as those are due to infrastructure issues unrelated to the test code.
+
 4. Once you have determined the root cause,
    fix the test taking `.claude/CLAUDE.md` into account.
 
@@ -76,7 +82,12 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
       and `<date>` with the current date in `YYYY-MM-DD` format,
       and commit your fix to that branch.
 
-   2. Submit a draft PR using `gh` with the fix.
+   2. Push the branch to `origin` (assuming it's `git@github.com:dfinity/ic.git`) using:
+      ```
+      git push --set-upstream origin HEAD
+      ```
+
+   3. Submit a draft PR using `gh` with the fix.
       Name it: `fix: deflake <label>`.
       Include the root cause analysis in the PR description
       and mention the PR was created following the steps in `.claude/skills/fix-flaky-tests/SKILL.md`.

@@ -1507,6 +1507,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "candid_parser",
+ "ciborium",
  "hex",
  "ic-cdk",
  "ic-stable-structures 0.6.8",
