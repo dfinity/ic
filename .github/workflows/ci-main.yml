@@ -267,6 +267,7 @@ jobs:
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        if: needs.config.outputs.release-build == 'true'
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: "arn:aws:iam::065893714542:role/ICReleaseUploader"
@@ -337,6 +338,7 @@ jobs:
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        if: needs.config.outputs.release-build == 'true'
         with:
           role-session-name: "GitHub-Actions_ic_upload-artifacts"
           role-to-assume: "arn:aws:iam::065893714542:role/ICReleaseUploader"
