@@ -287,7 +287,7 @@ pub struct ExecutionTest {
     execution_cost: HashMap<CanisterId, Cycles>,
     // Tracks paused subnet message executions per canister.
     // The value is reset when the execution finishes.
-    paused_subnet_message: HashMap<CanisterId, PausedSubnetMessage>,
+    paused_subnet_messages: HashMap<CanisterId, PausedSubnetMessage>,
     // Messages to canisters on other subnets.
     xnet_messages: Vec<RequestOrResponse>,
     // Messages that couldn't be delivered to other canisters
@@ -1684,7 +1684,7 @@ impl ExecutionTest {
                         cycles_used_before: cycles_used_before.unwrap(),
                         instructions: NumInstructions::from(slice_instructions_used.get() as u64),
                     };
-                    self.paused_subnet_message
+                    self.paused_subnet_messages
                         .insert(canister_id, paused_subnet_message);
                 }
             }
@@ -1821,7 +1821,7 @@ impl ExecutionTest {
                 match execute_subnet_message_result_type {
                     ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
                         let paused_subnet_message =
-                            self.paused_subnet_message.remove(&canister_id).unwrap();
+                            self.paused_subnet_messages.remove(&canister_id).unwrap();
                         let instructions_used_before = paused_subnet_message.instructions;
                         let instructions_used =
                             NumInstructions::from(slice_instructions_used.get() as u64)
@@ -1858,7 +1858,7 @@ impl ExecutionTest {
                         unreachable!()
                     }
                     ExecuteSubnetMessageResultType::Paused => {
-                        self.paused_subnet_message
+                        self.paused_subnet_messages
                             .get_mut(&canister_id)
                             .unwrap()
                             .instructions +=
@@ -1908,7 +1908,7 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         self.exec_env
             .abort_all_paused_executions(&mut state, &self.log);
-        for (_, paused_subnet_message) in self.paused_subnet_message.iter_mut() {
+        for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
             paused_subnet_message.instructions = NumInstructions::new(0);
         }
         self.state = Some(state);
@@ -2972,7 +2972,7 @@ impl ExecutionTestBuilder {
             message_id: 0,
             executed_instructions: HashMap::new(),
             execution_cost: HashMap::new(),
-            paused_subnet_message: HashMap::new(),
+            paused_subnet_messages: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
             subnet_available_memory,
