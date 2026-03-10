@@ -212,12 +212,18 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+    runtime_deps = SNS_CANISTER_RUNTIME_DEPS | IC_GATEWAY_RUNTIME_DEPS | {
+        "II_WASM_PATH": "@ii_dev_canister//file",
+        "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
+        "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
+    },
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
     ],
 )

@@ -53,9 +53,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
-    ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
+    ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm, HasIcGatewayVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
+};
+use nns_dapp::{
+    install_ii_nns_dapp_and_subnet_rental, set_authorized_subnets,
 };
 
 fn main() -> Result<()> {
@@ -68,11 +71,11 @@ fn main() -> Result<()> {
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
-        .with_unassigned_nodes(1)
+        .with_unassigned_nodes(10)
         .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
+
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCustomizations::default(),
@@ -80,4 +83,13 @@ pub fn setup(env: TestEnv) {
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(&env)
         .expect("failed to setup ic-gateway");
+
+    // sets the application subnets as "authorized" for canister creation by CMC
+    set_authorized_subnets(&env);
+
+    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
+    let ic_gateway_url = ic_gateway.get_public_url();
+
+    // install II, NNS dapp, and Subnet Rental Canister
+    install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
 }

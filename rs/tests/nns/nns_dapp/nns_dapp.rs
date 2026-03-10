@@ -108,6 +108,19 @@ pub fn install_sns_aggregator(
     })
 }
 
+/// Init arguments for Internet Identity canister.
+#[derive(CandidType, Serialize)]
+pub struct InternetIdentityInit {
+    pub fetch_root_key: Option<bool>,
+    pub is_production: Option<bool>,
+    pub backend_canister_id: Option<Principal>,
+    pub enable_dapps_explorer: Option<bool>,
+    pub new_flow_origins: Option<Vec<String>>,
+    pub related_origins: Option<Vec<String>>,
+    pub dummy_auth: Option<()>,
+}
+
+
 /// Installs II, NNS dapp, and Subnet Rental Canister.
 /// The Subnet Rental Canister is installed since otherwise
 /// the canister ID of the ckETH ledger (required by the NNS dapp)
@@ -122,8 +135,25 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     // deploy the II canister
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let ii_canister_id =
-        nns_node.create_and_install_canister_with_arg(&env::var("II_WASM_PATH").unwrap(), None);
+    let ii_init_arg = InternetIdentityInit {
+        fetch_root_key: Some(true),
+        is_production: Some(false),
+        backend_canister_id: Some(
+            Principal::from_text("sp3hj-caaaa-aaaaa-aaajq-cai").unwrap(),
+        ),
+        enable_dapps_explorer: Some(false),
+        new_flow_origins: Some(vec![format!(
+            "https://sp3hj-caaaa-aaaaa-aaajq-cai.{ic_gateway_domain}"
+        )]),
+        related_origins: Some(vec![format!(
+            "https://sp3hj-caaaa-aaaaa-aaajq-cai.{ic_gateway_domain}"
+        )]),
+        dummy_auth: Some(()),
+    };
+    let ii_canister_id = nns_node.create_and_install_canister_with_arg(
+        &env::var("II_WASM_PATH").unwrap(),
+        Some(Encode!(&ii_init_arg).unwrap()),
+    );
 
     // create the NNS dapp canister so that its canister ID is allocated
     // and the Subnet Rental Canister gets its mainnet canister ID in the next step
