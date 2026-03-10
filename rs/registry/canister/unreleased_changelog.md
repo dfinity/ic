@@ -9,7 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* Adding support for recalling replica versions for subnets.
 * New invariant to check that subnet admins can be non-empty only for rented subnets.
 * New endpoint to update the subnet admins field in the SubnetRecord.
 
