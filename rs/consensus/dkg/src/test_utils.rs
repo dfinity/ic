@@ -22,7 +22,7 @@ use ic_types::{
 };
 use std::{collections::BTreeMap, sync::Arc};
 
-fn make_setup_initial_dkg_context(
+pub(super) fn make_setup_initial_dkg_context(
     registry_version: RegistryVersion,
     node_ids: Vec<u64>,
     target_id: NiDkgTargetId,
@@ -36,7 +36,7 @@ fn make_setup_initial_dkg_context(
     })
 }
 
-fn make_reshare_chain_key_context(
+pub(super) fn make_reshare_chain_key_context(
     registry_version: RegistryVersion,
     key_id: VetKdKeyId,
     node_ids: Vec<u64>,
@@ -104,24 +104,6 @@ pub(super) fn complement_state_manager_with_reshare_chain_key_request(
         })
         .collect();
     complement_state_manager_with_dkg_contexts(state_manager, contexts, times);
-}
-
-pub(super) fn complement_state_manager_with_both_dkg_contexts(
-    state_manager: Arc<RefMockStateManager>,
-    registry_version: RegistryVersion,
-    key_id: VetKdKeyId,
-    node_ids: Vec<u64>,
-    setup_target_id: NiDkgTargetId,
-    reshare_target_id: NiDkgTargetId,
-) {
-    complement_state_manager_with_dkg_contexts(
-        state_manager,
-        vec![
-            make_setup_initial_dkg_context(registry_version, node_ids.clone(), setup_target_id),
-            make_reshare_chain_key_context(registry_version, key_id, node_ids, reshare_target_id),
-        ],
-        None,
-    );
 }
 
 /// Extract the remote dkg transcripts from the current highest validated block

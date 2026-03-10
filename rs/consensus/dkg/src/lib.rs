@@ -397,10 +397,11 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
 mod tests {
     use super::*;
     use crate::test_utils::{
-        complement_state_manager_with_both_dkg_contexts,
+        complement_state_manager_with_dkg_contexts,
         complement_state_manager_with_reshare_chain_key_request,
         complement_state_manager_with_setup_initial_dkg_request, create_dealing,
         extract_dkg_configs_from_highest_block, extract_remote_dkg_ids_from_highest_block,
+        make_reshare_chain_key_context, make_setup_initial_dkg_context,
     };
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
@@ -2137,15 +2138,18 @@ mod tests {
         });
     }
 
-    /// Tests that when the state has both a SetupInitialDKG context (needing 2
-    /// transcripts) and a ReshareChainKey context (needing 1 transcript), they
-    /// d not all appear in the same block due to MAX_EARLY_REMOTE_TRANSCRIPTS
-    /// (= 2). Only the transcripts for the first context are included.
+    /// Tests that when the state has a SetupInitialDKG context (needing 2
+    /// transcripts), a ReshareChainKey context (needing 1 transcript), and an
+    /// additional SetupInitialDKG context (lowest target_id) with insufficient
+    /// dealings for one of its configs:
+    /// - The first setup target is skipped (insufficient dealings).
+    /// - The remaining two contexts compete for MAX_EARLY_REMOTE_TRANSCRIPTS
+    ///   (= 2), and only the first context's transcripts are included.
     #[test]
     fn test_early_remote_transcripts_respects_max() {
         for (setup_target_bytes, reshare_target_bytes, desc) in [
-            ([0u8; 32], [1u8; 32], "SetupInitialDKG first"),
-            ([1u8; 32], [0u8; 32], "ReshareChainKey first"),
+            ([1u8; 32], [2u8; 32], "SetupInitialDKG first"),
+            ([2u8; 32], [1u8; 32], "ReshareChainKey first"),
         ] {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let node_ids = (1..4).map(node_test_id).collect::<Vec<_>>();
@@ -2153,6 +2157,9 @@ mod tests {
                     curve: VetKdCurve::Bls12_381_G2,
                     name: String::from("some_vetkey"),
                 };
+                // This context always comes first but will be
+                // skipped because one of its two configs lacks dealings.
+                let skipped_target_id = NiDkgTargetId::new([0u8; 32]);
                 let setup_target_id = NiDkgTargetId::new(setup_target_bytes);
                 let reshare_target_id = NiDkgTargetId::new(reshare_target_bytes);
 
@@ -2177,39 +2184,81 @@ mod tests {
                     )],
                 );
 
-                complement_state_manager_with_both_dkg_contexts(
+                let registry_version = deps.registry.get_latest_version();
+                complement_state_manager_with_dkg_contexts(
                     deps.state_manager.clone(),
-                    deps.registry.get_latest_version(),
-                    key_id.clone(),
-                    vec![10, 11, 12, 13],
-                    setup_target_id,
-                    reshare_target_id,
+                    vec![
+                        make_setup_initial_dkg_context(
+                            registry_version,
+                            vec![10, 11, 12, 13],
+                            skipped_target_id,
+                        ),
+                        make_setup_initial_dkg_context(
+                            registry_version,
+                            vec![10, 11, 12, 13],
+                            setup_target_id,
+                        ),
+                        make_reshare_chain_key_context(
+                            registry_version,
+                            key_id.clone(),
+                            vec![10, 11, 12, 13],
+                            reshare_target_id,
+                        ),
+                    ],
+                    None,
                 );
 
                 // Advance to one block before the summary.
                 deps.pool
                     .advance_round_normal_operation_n(EARLY_DKG_INTERVAL);
 
-                // Create the summary block (without inserting it yet). Due to
-                // MAX_REMOTE_DKGS_PER_INTERVAL=1, only the SetupInitialDKG configs
-                // are included.
+                // The original summary only includes configs for the first target
+                // (skipped_target_id) due to MAX_REMOTE_DKGS_PER_INTERVAL=1.
                 let summary_proposal = deps.pool.make_next_block();
                 let mut summary_block: Block = summary_proposal.content.into_inner();
                 let original_summary = summary_block.payload.as_ref().as_summary().dkg.clone();
 
-                let setup_remote_dkg_ids: Vec<NiDkgId> = original_summary
+                let skipped_remote_dkg_ids: Vec<NiDkgId> = original_summary
                     .configs
                     .keys()
-                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(setup_target_id))
+                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(skipped_target_id))
                     .cloned()
                     .collect();
                 assert_eq!(
-                    setup_remote_dkg_ids.len(),
+                    skipped_remote_dkg_ids.len(),
                     2,
-                    "[{desc}] Expected 2 SetupInitialDKG remote configs"
+                    "[{desc}] Expected 2 skipped SetupInitialDKG remote configs"
                 );
 
-                // Manually create a ReshareChainKey config for the second target.
+                // Create setup configs for setup_target_id by cloning from the
+                // skipped target's configs (same structure, different target).
+                let setup_configs: Vec<NiDkgConfig> = original_summary
+                    .configs
+                    .values()
+                    .filter(|c| {
+                        c.dkg_id().target_subnet == NiDkgTargetSubnet::Remote(skipped_target_id)
+                    })
+                    .map(|c| {
+                        NiDkgConfig::new(NiDkgConfigData {
+                            dkg_id: NiDkgId {
+                                target_subnet: NiDkgTargetSubnet::Remote(setup_target_id),
+                                ..c.dkg_id().clone()
+                            },
+                            max_corrupt_dealers: c.max_corrupt_dealers(),
+                            dealers: c.dealers().get().clone(),
+                            max_corrupt_receivers: c.max_corrupt_receivers(),
+                            receivers: c.receivers().get().clone(),
+                            threshold: c.threshold().get(),
+                            registry_version: c.registry_version(),
+                            resharing_transcript: c.resharing_transcript().clone(),
+                        })
+                        .unwrap()
+                    })
+                    .collect();
+                let setup_remote_dkg_ids: Vec<NiDkgId> =
+                    setup_configs.iter().map(|c| c.dkg_id().clone()).collect();
+
+                // Manually create a ReshareChainKey config.
                 let reshare_dkg_id = NiDkgId {
                     start_block_height: original_summary.height,
                     dealer_subnet: subnet_test_id(0),
@@ -2220,7 +2269,7 @@ mod tests {
                 };
 
                 let dealers: BTreeSet<_> = node_ids.iter().cloned().collect();
-                let receivers: BTreeSet<_> = (10..14).into_iter().map(node_test_id).collect();
+                let receivers: BTreeSet<_> = (10..14).map(node_test_id).collect();
 
                 let resharing_transcript = dummy_transcript_for_tests_with_params(
                     node_ids.clone(),
@@ -2245,16 +2294,15 @@ mod tests {
                     ),
                     dealers,
                     receivers,
-                    registry_version: deps.registry.get_latest_version(),
+                    registry_version,
                     resharing_transcript: Some(resharing_transcript),
                 })
                 .expect("Failed to create reshare config");
 
-                // Build a modified summary with configs for both targets and insert
-                // it into the pool. This way the pool's actual summary contains both
-                // config groups, so dealings for all configs are picked up normally.
+                // Build a modified summary with configs for all three targets.
                 let mut all_configs: Vec<NiDkgConfig> =
                     original_summary.configs.values().cloned().collect();
+                all_configs.extend(setup_configs);
                 all_configs.push(reshare_config);
                 let modified_summary = DkgSummary::new(
                     all_configs,
@@ -2277,24 +2325,24 @@ mod tests {
                 let proposal = BlockProposal::fake(summary_block, node_test_id(0));
                 deps.pool.advance_round_with_block(&proposal);
 
-                // Add dealings for all 3 remote configs at once, then advance so
-                // they appear on chain.
-                let all_remote_dkg_ids: Vec<NiDkgId> = setup_remote_dkg_ids
-                    .iter()
-                    .cloned()
-                    .chain(std::iter::once(reshare_dkg_id.clone()))
-                    .collect();
-                for dkg_id in &all_remote_dkg_ids {
+                // Add dealings for only ONE of the skipped target's two configs
+                // (insufficient), all setup target configs, and the reshare config.
+                let dkg_ids_with_dealings: Vec<&NiDkgId> =
+                    std::iter::once(&skipped_remote_dkg_ids[0])
+                        .chain(setup_remote_dkg_ids.iter())
+                        .chain(std::iter::once(&reshare_dkg_id))
+                        .collect();
+                for dkg_id in &dkg_ids_with_dealings {
                     let dealings: Vec<_> = (0..3)
-                        .map(|i| ChangeAction::AddToValidated(create_dealing(i, dkg_id.clone())))
+                        .map(|i| ChangeAction::AddToValidated(create_dealing(i, (*dkg_id).clone())))
                         .collect();
                     deps.dkg_pool.write().unwrap().apply(dealings);
                 }
                 deps.pool.advance_round_normal_operation();
                 assert_eq!(
                     extract_dealings_from_highest_block(&deps.pool).len(),
-                    9,
-                    "[{desc}] all 9 dealings should be in the block"
+                    12,
+                    "[{desc}] all 12 dealings should be in the block"
                 );
                 assert_eq!(
                     extract_remote_dkgs_from_highest_block(&deps.pool).len(),
@@ -2302,9 +2350,9 @@ mod tests {
                     "[{desc}] no early transcripts yet"
                 );
 
-                // Advance once more: the block maker now sees the dealings on
-                // chain and creates early remote transcripts, constrained by
-                // MAX_EARLY_REMOTE_TRANSCRIPTS.
+                // The skipped target is skipped (insufficient dealings for its
+                // second config). The remaining setup and reshare targets compete
+                // for MAX_EARLY_REMOTE_TRANSCRIPTS.
                 deps.pool.advance_round_normal_operation();
                 assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 0);
                 let remote_dkgs = extract_remote_dkgs_from_highest_block(&deps.pool);
