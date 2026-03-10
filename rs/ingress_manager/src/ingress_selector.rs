@@ -300,6 +300,7 @@ impl IngressSelector for IngressManager {
                 wire_byte_limit.get()
             );
             messages_in_payload.pop();
+            self.metrics.observe_limit_reached("serialized");
             if messages_in_payload.is_empty() {
                 break IngressPayload::default();
             }
@@ -314,6 +315,7 @@ impl IngressSelector for IngressManager {
 
         debug_assert!(size_estimates.wire <= wire_byte_limit);
         debug_assert!(size_estimates.memory <= memory_byte_limit);
+        debug_assert!(payload.payload.message_count() <= settings.max_ingress_messages_per_block);
         payload
     }
 
