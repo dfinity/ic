@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use slog::{Logger, debug, info, warn};
 
+use ic_registry_local_registry::LocalRegistry;
+
 use crate::driver::{
     constants::SSH_USERNAME,
     farm::HostFeature,
@@ -22,7 +24,7 @@ use crate::driver::{
     ic_gateway_vm::Playnet,
     log_events,
     resource::{DiskImage, ImageType},
-    test_env::TestEnv,
+    test_env::{HasIcPrepDir, TestEnv},
     test_env_api::{
         HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
         TopologySnapshot, scp_recv_from, scp_send_to,
@@ -30,6 +32,7 @@ use crate::driver::{
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
 };
+use crate::util::block_on;
 use crate::driver::{
     farm::{DnsRecord, DnsRecordType},
     test_env::TestEnvAttribute,
@@ -404,6 +407,28 @@ impl HasPrometheus for TestEnv {
         } else {
             None
         };
+
+        // Sync the local registry store with the NNS to pick up topology
+        // changes (e.g. newly added subnets/nodes via ic-admin).
+        if let Some(prep_dir) = self.prep_dir("") {
+            let local_store_path = prep_dir.registry_local_store_path();
+            match LocalRegistry::new(local_store_path, Duration::from_secs(5)) {
+                Ok(local_registry) => {
+                    if let Err(e) = block_on(local_registry.sync_with_nns()) {
+                        warn!(
+                            self.logger(),
+                            "Failed to sync local registry with NNS: {e:?}. Using cached topology."
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        self.logger(),
+                        "Failed to create local registry for NNS sync: {e:?}. Using cached topology."
+                    );
+                }
+            }
+        }
 
         let topology_snapshot = self.safe_topology_snapshot()?;
 
