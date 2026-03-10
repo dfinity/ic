@@ -85,6 +85,10 @@ impl PocketIcHelper {
                 Ok(result) => return result,
                 Err(e) => {
                     last_err = Some(e);
+                    info!(
+                        "Retrying to get certified records due to error: {:?} ...",
+                        last_err
+                    );
                     tokio::time::sleep(Duration::from_millis(500)).await;
                 }
             }
