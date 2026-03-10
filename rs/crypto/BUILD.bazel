@@ -147,10 +147,10 @@ rust_binary(
         "//rs/monitoring/metrics",
         "//rs/sys",
         "@crate_index//:clap",
+        "@crate_index//:rayon",
         "@crate_index//:slog",
         "@crate_index//:tempfile",
         "@crate_index//:thiserror",
-        "@crate_index//:rayon",
         "@crate_index//:tokio",
     ],
 )
