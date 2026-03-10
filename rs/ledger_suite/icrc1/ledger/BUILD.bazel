@@ -378,7 +378,6 @@ package(default_visibility = ["//visibility:public"])
     rust_canbench(
         name = "canbench" + name_suffix,
         srcs = glob(["src/**/*.rs"]),
-        add_test = True,
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.

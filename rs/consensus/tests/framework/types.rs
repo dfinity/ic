@@ -212,6 +212,7 @@ impl ConsensusDependencies {
         )));
         let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
         let idkg_pool = idkg_pool::IDkgPoolImpl::new(
+            replica_config.node_id,
             pool_config,
             no_op_logger(),
             metrics_registry.clone(),

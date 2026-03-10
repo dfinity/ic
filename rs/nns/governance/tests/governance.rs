@@ -13172,6 +13172,7 @@ async fn test_metrics() {
         public_neuron_subset_metrics: None,
         declining_voting_power_neuron_subset_metrics: None,
         fully_lost_voting_power_neuron_subset_metrics: None,
+        total_maturity_disbursements_in_progress_e8s_equivalent: 0,
     };
 
     let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
@@ -13272,6 +13273,7 @@ async fn test_metrics() {
         public_neuron_subset_metrics: None,
         declining_voting_power_neuron_subset_metrics: None,
         fully_lost_voting_power_neuron_subset_metrics: None,
+        total_maturity_disbursements_in_progress_e8s_equivalent: 0,
     };
     let metrics = gov.get_metrics().expect("Error while querying metrics.");
     assert_eq!(

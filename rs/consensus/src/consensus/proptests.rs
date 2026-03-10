@@ -2,6 +2,8 @@ use crate::consensus::payload_builder::test::make_test_payload_impl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
+use ic_interfaces_registry::RegistryClient;
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
@@ -25,74 +27,84 @@ use ic_types::{
 };
 use proptest::prelude::*;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 const MAX_MESSAGES: usize = 10;
 const MAX_SIZE: usize = 5 * 1024 * 1024;
 const MAX_BLOCK_SIZE: usize = 4 * 1024 * 1024;
 
-proptest! {
-    #![proptest_config(ProptestConfig {
-        cases: 512,
-        max_shrink_time: 60000,
-        ..ProptestConfig::default()
-    })]
+#[test]
+fn proptest_payload_size_validation() {
+    ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        let subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)])
+            .with_max_block_payload_size(MAX_BLOCK_SIZE as u64)
+            .with_max_ingress_bytes_per_message(MAX_BLOCK_SIZE as u64)
+            .build();
 
-    #[test]
-    fn proptest_payload_size_validation(
-        height in (0..10u64),
-        ingress in prop_ingress_vec(MAX_MESSAGES, MAX_SIZE),
-        xnet in prop_xnet_slice(MAX_MESSAGES, MAX_SIZE)) {
-            proptest_round(height, ingress, xnet);
-    }
+        let Dependencies { registry, .. } = dependencies_with_subnet_params(
+            pool_config,
+            subnet_test_id(0),
+            vec![(1, subnet_record.clone())],
+        );
+
+        proptest!(
+            ProptestConfig {
+                cases: 512,
+                max_shrink_time: 60000,
+                ..ProptestConfig::default()
+            },
+            |(
+                height in 0..10u64,
+                ingress in prop_ingress_vec(MAX_MESSAGES, MAX_SIZE),
+                xnet in prop_xnet_slice(MAX_MESSAGES, MAX_SIZE),
+            )| {
+                proptest_round(
+                    height,
+                    ingress,
+                    xnet,
+                    registry.clone(),
+                    subnet_record.clone(),
+                );
+            }
+        )
+    })
 }
 
 fn proptest_round(
     height: u64,
     ingress: Vec<SignedIngress>,
     xnet: BTreeMap<SubnetId, CertifiedStreamSlice>,
+    registry: Arc<dyn RegistryClient>,
+    subnet_record: SubnetRecord,
 ) {
-    ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-        let mut subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
+    let subnet_records = SubnetRecords {
+        membership_version: subnet_record.clone(),
+        context_version: subnet_record.clone(),
+    };
+    let validation_context = ValidationContext {
+        certified_height: Height::from(height),
+        registry_version: RegistryVersion::from(1),
+        time: UNIX_EPOCH,
+    };
+    let proposal_context = ProposalContext {
+        proposer: node_test_id(0),
+        validation_context: &validation_context,
+    };
 
-        subnet_record.max_block_payload_size = MAX_BLOCK_SIZE as u64;
-        subnet_record.max_ingress_bytes_per_message = MAX_BLOCK_SIZE as u64;
+    let payload_builder =
+        make_test_payload_impl(registry, vec![ingress], vec![xnet], vec![], vec![]);
 
-        let subnet_records = SubnetRecords {
-            membership_version: subnet_record.clone(),
-            context_version: subnet_record.clone(),
-        };
+    // Build the payload and validate it
+    let payload =
+        payload_builder.get_payload(Height::from(0), &[], &validation_context, &subnet_records);
 
-        let Dependencies { registry, .. } = dependencies_with_subnet_params(
-            pool_config,
-            subnet_test_id(0),
-            vec![(1, subnet_record)],
-        );
+    let wrapped_payload = wrap_batch_payload(0, payload);
+    payload_builder
+        .validate_payload(Height::from(0), &proposal_context, &wrapped_payload, &[])
+        .expect("The payload we just created should be valid");
 
-        let validation_context = ValidationContext {
-            certified_height: Height::from(height),
-            registry_version: RegistryVersion::from(1),
-            time: UNIX_EPOCH,
-        };
-        let proposal_context = ProposalContext {
-            proposer: node_test_id(0),
-            validation_context: &validation_context,
-        };
-
-        let payload_builder =
-            make_test_payload_impl(registry, vec![ingress], vec![xnet], vec![], vec![]);
-
-        // Build the payload and validate it
-        let payload =
-            payload_builder.get_payload(Height::from(0), &[], &validation_context, &subnet_records);
-
-        let wrapped_payload = wrap_batch_payload(0, payload);
-        payload_builder
-            .validate_payload(Height::from(0), &proposal_context, &wrapped_payload, &[])
-            .unwrap();
-
-        // Check that no critical errors occurred during the run.
-        assert_eq!(payload_builder.count_critical_errors(), 0);
-    });
+    // Check that no critical errors occurred during the run.
+    assert_eq!(payload_builder.count_critical_errors(), 0);
 }
 
 /// Build a number of ingress messages
@@ -154,10 +166,22 @@ fn wrap_batch_payload(height: u64, payload: BatchPayload) -> Payload {
 
 #[test]
 fn regression1() {
-    let ingress = vec![make_ingress(965988), make_ingress(1019914)];
-    let mut xnet = BTreeMap::new();
-    xnet.insert(subnet_test_id(0), make_xnet_slice(1389926));
-    xnet.insert(subnet_test_id(1), make_xnet_slice(818147));
+    ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        let subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)])
+            .with_max_block_payload_size(MAX_BLOCK_SIZE as u64)
+            .with_max_ingress_bytes_per_message(MAX_BLOCK_SIZE as u64)
+            .build();
 
-    proptest_round(0, ingress, xnet);
+        let Dependencies { registry, .. } = dependencies_with_subnet_params(
+            pool_config,
+            subnet_test_id(0),
+            vec![(1, subnet_record.clone())],
+        );
+        let ingress = vec![make_ingress(965988), make_ingress(1019914)];
+        let mut xnet = BTreeMap::new();
+        xnet.insert(subnet_test_id(0), make_xnet_slice(1389926));
+        xnet.insert(subnet_test_id(1), make_xnet_slice(818147));
+
+        proptest_round(0, ingress, xnet, registry, subnet_record);
+    })
 }
