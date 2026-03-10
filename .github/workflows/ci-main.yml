@@ -77,7 +77,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ls
+          ls /
           ls /var/tmp/
           ls /cache
           df -T /var/tmp/
