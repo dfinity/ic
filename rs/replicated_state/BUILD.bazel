@@ -30,6 +30,7 @@ rust_library(
         "//rs/monitoring/metrics",
         "//rs/phantom_newtype",
         "//rs/protobuf",
+        "//rs/registry/resource_limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",

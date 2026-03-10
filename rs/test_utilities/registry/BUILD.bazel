@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/registry/local_store",
     "//rs/registry/local_store/artifacts",
     "//rs/registry/proto_data_provider",
+    "//rs/registry/resource_limits",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/types/management_canister_types",
