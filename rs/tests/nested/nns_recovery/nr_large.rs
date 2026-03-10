@@ -44,7 +44,14 @@ fn main() -> Result<()> {
                     subnet_size: LARGE_SUBNET_SIZE,
                     dkg_interval: LARGE_DKG_INTERVAL,
                     nested_nodes_vm_resource_overrides: VmResourceOverrides {
-                        vcpus: Some(NrOfVCPUs::new(36)), // 32 GuestOS CPU + 4 HostOS
+                        // NOTE: This test is quite sensitive to loaded Farm
+                        // hosts. To limit the number of of these VMs that can
+                        // be scheduled to a given Farm host, we request 64
+                        // vCPUs (resulting in approx. 4 VMs per host).
+                        //
+                        // In theory, these VMs should be able to run with 20
+                        // or fewer vCPUs. (16 GuestOS + 4 HostOS)
+                        vcpus: Some(NrOfVCPUs::new(64)),
                         ..NNS_RECOVERY_VM_RESOURCE_OVERRIDES
                     },
                 },
