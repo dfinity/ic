@@ -592,12 +592,8 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
-        self.scale_cost(
-            self.config.ingress_message_reception_fee
-                + self.config.ingress_byte_reception_fee * bytes.get(),
-            subnet_size,
-            cost_schedule,
-        )
+        self.ingress_message_received_fee(subnet_size, cost_schedule)
+            + self.ingress_byte_received_fee(subnet_size, cost_schedule) * bytes.get()
     }
 
     /// How often canisters should be charged for memory and compute allocation.
