@@ -79,6 +79,7 @@ jobs:
           set -euo pipefail
           ls
           ls /var/tmp/
+          ls /cache
           df -T /var/tmp/
 
   config:
