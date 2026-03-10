@@ -314,7 +314,10 @@ async fn wait_for_canister_certified_time_gt(pocket_ic: &PocketIcHelper, time: T
                 .await
             {
                 Ok((_, _, certified_time)) => certified_time > time,
-                Err(_) => false,
+                Err(err) => {
+                    eprintln!("get_certified_changes_since failed (will retry): {err}");
+                    false
+                }
             }
         },
         &format!("Timed out waiting for canister's certified time to exceed {time:?}"),
