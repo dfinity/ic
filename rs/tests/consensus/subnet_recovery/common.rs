@@ -691,7 +691,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: cfg.local_recovery,
     };
 
     // Unlike during a production recovery using the CLI, here we already know all parameters ahead
