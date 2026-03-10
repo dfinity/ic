@@ -20,7 +20,7 @@ use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
     IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits, WasmSource,
-    check_if_wasm64_module, execute_canister,
+    execute_canister, wasm_execution_mode,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -1511,11 +1511,7 @@ impl ExecutionTest {
                     }
                     _ => unreachable!(),
                 };
-                let execution_mode = if check_if_wasm64_module(wasm_source) {
-                    WasmExecutionMode::Wasm64
-                } else {
-                    WasmExecutionMode::Wasm32
-                };
+                let execution_mode = wasm_execution_mode(wasm_source);
                 self.cycles_account_manager().execution_cost(
                     instructions_used,
                     subnet_size,
@@ -1528,11 +1524,7 @@ impl ExecutionTest {
                 let snapshot = self.state.as_ref().unwrap().canister_snapshots.get(payload.snapshot_id()).expect("Loading a non-existing snapshot should fail during validation and no instructions should be used in that case!");
                 let wasm_module = snapshot.execution_snapshot().wasm_binary.clone();
                 let wasm_source = WasmSource::CanisterModule(wasm_module);
-                let execution_mode = if check_if_wasm64_module(wasm_source) {
-                    WasmExecutionMode::Wasm64
-                } else {
-                    WasmExecutionMode::Wasm32
-                };
+                let execution_mode = wasm_execution_mode(wasm_source);
                 self.cycles_account_manager().execution_cost(
                     instructions_used,
                     subnet_size,

@@ -886,8 +886,7 @@ impl CanisterManager {
             };
         }
 
-        let wasm_execution_mode =
-            WasmExecutionMode::from_is_wasm64(check_if_wasm64_module(context.wasm_source.clone()));
+        let wasm_execution_mode = wasm_execution_mode(context.wasm_source.clone());
 
         let prepaid_execution_cycles = match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => prepaid_execution_cycles,
@@ -2272,13 +2271,9 @@ impl CanisterManager {
         }
 
         // All basic checks have passed, prepay cycles for instructions.
-        let wasm_execution_mode = if check_if_wasm64_module(WasmSource::CanisterModule(
+        let wasm_execution_mode = wasm_execution_mode(WasmSource::CanisterModule(
             snapshot.execution_snapshot().wasm_binary.clone(),
-        )) {
-            WasmExecutionMode::Wasm64
-        } else {
-            WasmExecutionMode::Wasm32
-        };
+        ));
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
@@ -3306,16 +3301,17 @@ pub fn uninstall_canister(
         })
 }
 
-/// Checks if the given wasm module is a Wasm64 module.
-/// This is solely for the purpose of install code, when at the replica level
-/// we don't know yet if the module is Wasm32/64 and we need to prepay accordingly.
-/// In case of errors, we simply return false, assuming Wasm32.
-/// The errors will be caught and handled by the sandbox later.
-pub fn check_if_wasm64_module(wasm_module_source: WasmSource) -> bool {
+/// Derives the wasm execution mode of the given module.
+/// This is solely for the purpose of installing code and loading canister snapshot
+/// when we need the wasm execution mode to prepay accordingly.
+/// In case of errors, we simply return `WasmExecutionMode::Wasm32`
+/// since the errors will be caught and handled by the sandbox later
+/// without incurring extra overhead specific to `WasmExecutionMode::Wasm64`.
+pub fn wasm_execution_mode(wasm_module_source: WasmSource) -> WasmExecutionMode {
     let wasm_module = match wasm_module_source.into_canister_module() {
         Ok(wasm_module) => wasm_module,
         Err(_err) => {
-            return false;
+            return WasmExecutionMode::Wasm32;
         }
     };
 
@@ -3325,7 +3321,7 @@ pub fn check_if_wasm64_module(wasm_module_source: WasmSource) -> bool {
     ) {
         Ok(decoded_wasm_module) => decoded_wasm_module,
         Err(_err) => {
-            return false;
+            return WasmExecutionMode::Wasm32;
         }
     };
 
@@ -3334,10 +3330,10 @@ pub fn check_if_wasm64_module(wasm_module_source: WasmSource) -> bool {
         if let wasmparser::Payload::MemorySection(reader) = section
             && let Some(memory) = reader.into_iter().flatten().next()
         {
-            return memory.memory64;
+            return WasmExecutionMode::from_is_wasm64(memory.memory64);
         }
     }
-    false
+    WasmExecutionMode::Wasm32
 }
 
 fn globals_match(g1: &[Global], g2: &[Global]) -> bool {
