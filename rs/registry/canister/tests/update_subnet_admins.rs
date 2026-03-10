@@ -476,10 +476,8 @@ fn test_rate_limit_subnet_admin_updates_per_subnet() {
             expected_subnet_admins.push(PrincipalIdPb::from(new_subnet_admin));
         }
 
-        let expected_subnet_admins: HashSet<PrincipalIdPb> = expected_subnet_admins
-            .into_iter()
-            .map(PrincipalIdPb::from)
-            .collect();
+        let expected_subnet_admins: HashSet<PrincipalIdPb> =
+            expected_subnet_admins.into_iter().collect();
 
         // ... and the new subnet admins list should match the expected.
         let subnet_admins = get_value_or_panic::<SubnetRecord>(
