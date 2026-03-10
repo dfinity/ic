@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    AuthorizedSubnetsResponse, BAD_REQUEST_CYCLES_PENALTY, CanisterSettingsArgs,
+    AuthorizedSubnetsResponse, BAD_REQUEST_CYCLES_PENALTY, CanisterSettings,
     ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError, MEANINGFUL_MEMOS,
     MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER, NotifyCreateCanister,
     NotifyError, NotifyErrorCode, NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp,
@@ -300,7 +300,7 @@ fn test_cmc_notify_create_with_settings() {
     //specify single controller
     let canister = notify_create_canister(
         &state_machine,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             // TEST_USER1 creates the canister, so to check it didn't default to the caller we use TEST_USER2
             controllers: Some(vec![TEST_USER2_PRINCIPAL.0]),
             ..Default::default()
@@ -322,7 +322,7 @@ fn test_cmc_notify_create_with_settings() {
     specified_controllers.sort();
     let canister = notify_create_canister(
         &state_machine,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             controllers: Some(specified_controllers.iter().map(|p| p.0).collect()),
             ..Default::default()
         }),
@@ -339,7 +339,7 @@ fn test_cmc_notify_create_with_settings() {
     //specify no controller
     let canister = notify_create_canister(
         &state_machine,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             controllers: Some(vec![]),
             ..Default::default()
         }),
@@ -350,7 +350,7 @@ fn test_cmc_notify_create_with_settings() {
     //specify compute allocation
     let canister = notify_create_canister(
         &state_machine,
-        Some(dbg!(CanisterSettingsArgs {
+        Some(dbg!(CanisterSettings {
             compute_allocation: Some(Nat::from(7u64)),
             ..Default::default()
         })),
@@ -365,7 +365,7 @@ fn test_cmc_notify_create_with_settings() {
     //specify freezing threshold
     let canister = notify_create_canister(
         &state_machine,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             freezing_threshold: Some(Nat::from(7u64)),
             ..Default::default()
         }),
@@ -380,7 +380,7 @@ fn test_cmc_notify_create_with_settings() {
     //specify memory allocation
     let canister = notify_create_canister(
         &state_machine,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             memory_allocation: Some(Nat::from(7u64)),
             ..Default::default()
         }),
@@ -399,7 +399,7 @@ fn test_cmc_notify_create_with_settings() {
     }];
     let canister = notify_create_canister(
         &state_machine,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             environment_variables: Some(
                 env_vars
                     .iter()
@@ -559,7 +559,7 @@ fn test_cmc_cycles_create_with_settings() {
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
         universal_canister,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
             ..Default::default()
         }),
@@ -584,7 +584,7 @@ fn test_cmc_cycles_create_with_settings() {
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
         universal_canister,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             controllers: Some(specified_controllers.iter().map(|p| p.0).collect()),
             ..Default::default()
         }),
@@ -605,7 +605,7 @@ fn test_cmc_cycles_create_with_settings() {
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
         universal_canister,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             controllers: Some(vec![]),
             ..Default::default()
         }),
@@ -620,7 +620,7 @@ fn test_cmc_cycles_create_with_settings() {
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
         universal_canister,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
             compute_allocation: Some(Nat::from(7u64)),
             ..Default::default()
@@ -640,7 +640,7 @@ fn test_cmc_cycles_create_with_settings() {
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
         universal_canister,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
             freezing_threshold: Some(Nat::from(7u64)),
             ..Default::default()
@@ -660,7 +660,7 @@ fn test_cmc_cycles_create_with_settings() {
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
         universal_canister,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
             memory_allocation: Some(Nat::from(7u64)),
             ..Default::default()
@@ -684,7 +684,7 @@ fn test_cmc_cycles_create_with_settings() {
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
         universal_canister,
-        Some(CanisterSettingsArgs {
+        Some(CanisterSettings {
             controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
             environment_variables: Some(
                 env_vars
@@ -1008,7 +1008,7 @@ fn send_transfer(env: &StateMachine, arg: &TransferArgs) -> Result<BlockIndex, T
 /// subaccount of the CMC, which then tries to create a canister with the provided settings.
 fn notify_create_canister(
     state_machine: &StateMachine,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<CanisterSettings>,
 ) -> CanisterId {
     let transfer_args = TransferArgs {
         memo: MEMO_CREATE_CANISTER,
@@ -1111,7 +1111,7 @@ fn cycles_ledger_balance_of(state_machine: &StateMachine, account: Account) -> u
 fn cmc_create_canister_with_cycles(
     state_machine: &StateMachine,
     universal_canister: CanisterId,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<CanisterSettings>,
     subnet_type: Option<String>,
     cycles: u128,
 ) -> Result<CanisterId, CreateCanisterError> {
