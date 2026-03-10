@@ -33,6 +33,11 @@ fn main() {
         .build()
         .expect("should create tokio runtime");
 
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(rayon_worker_threads())
+        .build_global()
+        .expect("Should set Rayon global thread pool size");
+
     let opts = Opts::parse();
     let ic_config = get_ic_config(opts.config);
 
@@ -115,6 +120,23 @@ fn cleanup_obsolete_canister_sks_file_if_it_exists(
         logger,
         metrics,
     );
+}
+
+// By default rayon uses the # of logical cores as the thread pool size,
+// but this can lead to significant over-subscription
+fn rayon_worker_threads() -> usize {
+    if let Ok(cores) = std::thread::available_parallelism() {
+        let cores = cores.get();
+        if cores >= 16 {
+            12
+        } else if cores >= 8 {
+            6
+        } else {
+            2
+        }
+    } else {
+        2
+    }
 }
 
 /// Aborts the whole program with a core dump if a single thread panics.
