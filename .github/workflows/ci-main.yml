@@ -184,6 +184,13 @@ jobs:
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-session-name: "GitHub-Actions_ic_upload-artifacts"
+          role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
+          aws-region: eu-central-1
+
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
@@ -266,14 +273,6 @@ jobs:
 
             bazel_do build
             bazel_do test
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
-        if: needs.config.outputs.release-build == 'true'
-        with:
-          role-session-name: "GitHub-Actions_ic_upload-artifacts"
-          role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
-          aws-region: eu-central-1
 
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
