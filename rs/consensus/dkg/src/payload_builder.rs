@@ -221,7 +221,8 @@ pub(crate) fn create_early_remote_transcripts(
         .map_err(DkgPayloadCreationError::StateManagerError)?;
 
     //  Since this function is relatively expensive, we simply return if there are no outstanding DKG contexts
-    if number_of_contexts(state.get_ref()) == 0 {
+    let callback_id_map = build_target_id_callback_map(state.get_ref());
+    if callback_id_map.is_empty() {
         return Ok(vec![]);
     }
 
@@ -241,22 +242,31 @@ pub(crate) fn create_early_remote_transcripts(
         }
     }
 
-    let state_ref = state.get_ref();
-    let callback_id_map = build_target_id_callback_map(state_ref);
-
     // Try to create transcripts for all configs of each target_id. Note that we either include
     // all transcript results for a target_id or none of them.
     let mut selected_transcripts = vec![];
     for (target_id, configs) in remote_configs {
         // Lookup the callback id and the expected number of configs for this target_id
         let Some((expected_config_num, callback_id)) = callback_id_map.get(&target_id) else {
+            warn!(
+                logger,
+                "Unable to find callback id associated with remote target id {target_id:?} at block height {}",
+                parent.height.increment()
+            );
             continue;
         };
 
         // Check that we have the expected number of configs for this target_id
         if configs.len() != *expected_config_num {
-            // This may happen if we only managed to create one transcript (out of two) as part
-            // of the last summary block. We will handle this in the next summary block instead.
+            // This may happen if we did not manage to create all required transcripts as part of
+            // the last summary block. We will handle this in the next summary block instead.
+            continue;
+        }
+
+        // Ensure that creating these transcripts would not exceed the maximum number of early
+        // remote transcripts. We continue with the next target_id in case it requires less
+        // transcripts.
+        if selected_transcripts.len() + configs.len() > MAX_EARLY_REMOTE_TRANSCRIPTS {
             continue;
         }
 
@@ -288,7 +298,7 @@ pub(crate) fn create_early_remote_transcripts(
                         parent.height.increment(),
                         err
                     );
-                    warn!(logger, "{error_message}");
+                    error!(logger, "{error_message}");
                     Err(error_message)
                 }
                 Err(err) => {
@@ -297,10 +307,6 @@ pub(crate) fn create_early_remote_transcripts(
                 }
             };
             selected_transcripts.push((config.dkg_id().clone(), *callback_id, transcript_result));
-        }
-
-        if selected_transcripts.len() >= MAX_EARLY_REMOTE_TRANSCRIPTS {
-            break;
         }
     }
 
@@ -1054,6 +1060,10 @@ fn eq_sans_height(dkg_id1: &NiDkgId, dkg_id2: &NiDkgId) -> bool {
         && dkg_id1.target_subnet == dkg_id2.target_subnet
 }
 
+// Build a map from target id to callback id according to contexts in the replicated state.
+// Additionally, for each target ID, return the expected number of DKG instances necessary
+// to answer the request. Specifically, setup initial DKG requests require two DKGs, whereas
+// resharing a chain key requires on DKG instance.
 fn build_target_id_callback_map(
     state: &ReplicatedState,
 ) -> BTreeMap<NiDkgTargetId, (usize, CallbackId)> {
@@ -1068,7 +1078,7 @@ fn build_target_id_callback_map(
                 .iter()
                 .map(|(&callback_id, context)| (context.target_id, (1, callback_id))),
         )
-        .collect::<BTreeMap<NiDkgTargetId, (usize, CallbackId)>>()
+        .collect()
 }
 
 fn add_callback_ids_to_transcript_results(
@@ -1096,19 +1106,6 @@ fn add_callback_ids_to_transcript_results(
             },
         })
         .collect()
-}
-
-fn number_of_contexts(state: &ReplicatedState) -> usize {
-    state
-        .metadata
-        .subnet_call_context_manager
-        .setup_initial_dkg_contexts
-        .len()
-        + state
-            .metadata
-            .subnet_call_context_manager
-            .reshare_chain_key_contexts
-            .len()
 }
 
 /// This function is called for each entry on the SubnetCallContext. It returns

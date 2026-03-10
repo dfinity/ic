@@ -397,9 +397,11 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
 mod tests {
     use super::*;
     use crate::test_utils::{
+        complement_state_manager_with_dkg_contexts,
         complement_state_manager_with_reshare_chain_key_request,
         complement_state_manager_with_setup_initial_dkg_request, create_dealing,
         extract_dkg_configs_from_highest_block, extract_remote_dkg_ids_from_highest_block,
+        make_reshare_chain_key_context, make_setup_initial_dkg_context,
     };
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
@@ -409,7 +411,7 @@ mod tests {
     };
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
-    use ic_crypto_test_utils_ni_dkg::dummy_dealing;
+    use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests_with_params};
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -426,18 +428,19 @@ mod tests {
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        RegistryVersion, ReplicaVersion,
+        NumberOfNodes, RegistryVersion, ReplicaVersion,
         batch::ValidationContext,
         consensus::{
-            Block, BlockPayload, BlockProposal, DataPayload, HasHeight, Payload,
+            Block, BlockPayload, BlockProposal, DataPayload, HasHeight, Payload, SummaryPayload,
             dkg::{DkgDataPayload, DkgSummary},
+            get_faults_tolerated,
         },
         crypto::{
             AlgorithmId,
             error::MalformedPublicKeyError,
             threshold_sig::ni_dkg::{
                 NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
-                errors::create_transcript_error::DkgCreateTranscriptError,
+                config::NiDkgConfigData, errors::create_transcript_error::DkgCreateTranscriptError,
             },
         },
         time::UNIX_EPOCH,
@@ -1835,7 +1838,7 @@ mod tests {
     #[test]
     fn test_no_early_transcripts_for_single_setup_initial_dkg_config() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut deps, _target_id, remote_dkg_ids) = setup_initial_dkg_test(pool_config);
+            let (mut deps, target_id, remote_dkg_ids) = setup_initial_dkg_test(pool_config);
 
             let original_summary = {
                 let block: Block = deps
@@ -1919,6 +1922,32 @@ mod tests {
                  setup_initial_dkg config, but got {early_transcripts:?}",
             );
 
+            // The next summary should contain both transcripts: the one already
+            // in the modified summary's transcripts_for_remote_subnets and the
+            // one created from the remaining config's dealings.
+            let next_summary = payload_builder::create_summary_payload(
+                subnet_test_id(0),
+                deps.registry.as_ref(),
+                deps.crypto.as_ref(),
+                &pool_reader,
+                &modified_summary,
+                &parent,
+                deps.registry.get_latest_version(),
+                deps.state_manager.as_ref(),
+                &validation_context,
+                no_op_logger(),
+            )
+            .unwrap();
+            assert_eq!(
+                next_summary.transcripts_for_remote_subnets.len(),
+                2,
+                "The next summary should contain both remote transcripts",
+            );
+            for (dkg_id, _callback_id, result) in &next_summary.transcripts_for_remote_subnets {
+                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
+                assert!(result.is_ok());
+            }
+
             // Control: using the original summary with both configs DOES
             // produce early transcripts.
             let early_transcripts = payload_builder::create_early_remote_transcripts(
@@ -1932,6 +1961,10 @@ mod tests {
             )
             .unwrap();
             assert_eq!(early_transcripts.len(), 2);
+            for (dkg_id, _callback_id, result) in &early_transcripts {
+                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
+                assert!(result.is_ok());
+            }
 
             // If a config exists in the summary but there is no corresponding
             // context in the state, no early transcript should be created.
@@ -2136,6 +2169,260 @@ mod tests {
             // Verify that no more transcripts are created in later blocks.
             assert_no_early_transcript_duplicates(&mut deps.pool, EARLY_DKG_INTERVAL);
         });
+    }
+
+    /// Tests that when the state has a SetupInitialDKG context (needing 2
+    /// transcripts), a ReshareChainKey context (needing 1 transcript), and an
+    /// additional SetupInitialDKG context (lowest target_id) with insufficient
+    /// dealings for one of its configs:
+    /// - The first setup target is skipped (insufficient dealings).
+    /// - The remaining two contexts compete for MAX_EARLY_REMOTE_TRANSCRIPTS
+    ///   (= 2), and only the first context's transcripts are included.
+    #[test]
+    fn test_early_remote_transcripts_respects_max() {
+        for (setup_target_bytes, reshare_target_bytes, desc) in [
+            ([1u8; 32], [2u8; 32], "SetupInitialDKG first"),
+            ([2u8; 32], [1u8; 32], "ReshareChainKey first"),
+        ] {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let node_ids = (1..4).map(node_test_id).collect::<Vec<_>>();
+                let key_id = VetKdKeyId {
+                    curve: VetKdCurve::Bls12_381_G2,
+                    name: String::from("some_vetkey"),
+                };
+                // This context always comes first but will be
+                // skipped because one of its two configs lacks dealings.
+                let skipped_target_id = NiDkgTargetId::new([0u8; 32]);
+                let setup_target_id = NiDkgTargetId::new(setup_target_bytes);
+                let reshare_target_id = NiDkgTargetId::new(reshare_target_bytes);
+
+                let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
+                    pool_config,
+                    subnet_test_id(0),
+                    vec![(
+                        10,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(EARLY_DKG_INTERVAL)
+                            .with_chain_key_config(ChainKeyConfig {
+                                key_configs: vec![KeyConfig {
+                                    key_id: MasterPublicKeyId::VetKd(key_id.clone()),
+                                    pre_signatures_to_create_in_advance: None,
+                                    max_queue_size: 20,
+                                }],
+                                signature_request_timeout_ns: None,
+                                idkg_key_rotation_period_ms: None,
+                                max_parallel_pre_signature_transcripts_in_creation: None,
+                            })
+                            .build(),
+                    )],
+                );
+
+                let registry_version = deps.registry.get_latest_version();
+                complement_state_manager_with_dkg_contexts(
+                    deps.state_manager.clone(),
+                    vec![
+                        make_setup_initial_dkg_context(
+                            registry_version,
+                            vec![10, 11, 12, 13],
+                            skipped_target_id,
+                        ),
+                        make_setup_initial_dkg_context(
+                            registry_version,
+                            vec![10, 11, 12, 13],
+                            setup_target_id,
+                        ),
+                        make_reshare_chain_key_context(
+                            registry_version,
+                            key_id.clone(),
+                            vec![10, 11, 12, 13],
+                            reshare_target_id,
+                        ),
+                    ],
+                    None,
+                );
+
+                // Advance to one block before the summary.
+                deps.pool
+                    .advance_round_normal_operation_n(EARLY_DKG_INTERVAL);
+
+                // The original summary only includes configs for the first target
+                // (skipped_target_id) due to MAX_REMOTE_DKGS_PER_INTERVAL=1.
+                let summary_proposal = deps.pool.make_next_block();
+                let mut summary_block: Block = summary_proposal.content.into_inner();
+                let original_summary = summary_block.payload.as_ref().as_summary().dkg.clone();
+
+                let skipped_remote_dkg_ids: Vec<NiDkgId> = original_summary
+                    .configs
+                    .keys()
+                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(skipped_target_id))
+                    .cloned()
+                    .collect();
+                assert_eq!(
+                    skipped_remote_dkg_ids.len(),
+                    2,
+                    "[{desc}] Expected 2 skipped SetupInitialDKG remote configs"
+                );
+
+                // Create setup configs for setup_target_id by cloning from the
+                // skipped target's configs (same structure, different target).
+                let setup_configs: Vec<NiDkgConfig> = original_summary
+                    .configs
+                    .values()
+                    .filter(|c| {
+                        c.dkg_id().target_subnet == NiDkgTargetSubnet::Remote(skipped_target_id)
+                    })
+                    .map(|c| {
+                        NiDkgConfig::new(NiDkgConfigData {
+                            dkg_id: NiDkgId {
+                                target_subnet: NiDkgTargetSubnet::Remote(setup_target_id),
+                                ..c.dkg_id().clone()
+                            },
+                            max_corrupt_dealers: c.max_corrupt_dealers(),
+                            dealers: c.dealers().get().clone(),
+                            max_corrupt_receivers: c.max_corrupt_receivers(),
+                            receivers: c.receivers().get().clone(),
+                            threshold: c.threshold().get(),
+                            registry_version: c.registry_version(),
+                            resharing_transcript: c.resharing_transcript().clone(),
+                        })
+                        .unwrap()
+                    })
+                    .collect();
+                let setup_remote_dkg_ids: Vec<NiDkgId> =
+                    setup_configs.iter().map(|c| c.dkg_id().clone()).collect();
+
+                // Manually create a ReshareChainKey config.
+                let reshare_dkg_id = NiDkgId {
+                    start_block_height: original_summary.height,
+                    dealer_subnet: subnet_test_id(0),
+                    dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
+                        key_id.clone(),
+                    )),
+                    target_subnet: NiDkgTargetSubnet::Remote(reshare_target_id),
+                };
+
+                let dealers: BTreeSet<_> = node_ids.iter().cloned().collect();
+                let receivers: BTreeSet<_> = (10..14).map(node_test_id).collect();
+
+                let resharing_transcript = dummy_transcript_for_tests_with_params(
+                    node_ids.clone(),
+                    NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id.clone())),
+                    2,
+                    10,
+                );
+
+                let reshare_config = NiDkgConfig::new(NiDkgConfigData {
+                    threshold: NumberOfNodes::from(
+                        reshare_dkg_id
+                            .dkg_tag
+                            .threshold_for_subnet_of_size(receivers.len())
+                            as u32,
+                    ),
+                    dkg_id: reshare_dkg_id.clone(),
+                    max_corrupt_dealers: NumberOfNodes::from(
+                        get_faults_tolerated(dealers.len()) as u32
+                    ),
+                    max_corrupt_receivers: NumberOfNodes::from(
+                        get_faults_tolerated(receivers.len()) as u32,
+                    ),
+                    dealers,
+                    receivers,
+                    registry_version,
+                    resharing_transcript: Some(resharing_transcript),
+                })
+                .expect("Failed to create reshare config");
+
+                // Build a modified summary with configs for all three targets.
+                let mut all_configs: Vec<NiDkgConfig> =
+                    original_summary.configs.values().cloned().collect();
+                all_configs.extend(setup_configs);
+                all_configs.push(reshare_config);
+                let modified_summary = DkgSummary::new(
+                    all_configs,
+                    original_summary.current_transcripts().clone(),
+                    original_summary.next_transcripts().clone(),
+                    vec![],
+                    original_summary.registry_version,
+                    original_summary.interval_length,
+                    original_summary.next_interval_length,
+                    original_summary.height,
+                    BTreeMap::new(),
+                );
+                summary_block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload {
+                        dkg: modified_summary,
+                        idkg: None,
+                    }),
+                );
+                let proposal = BlockProposal::fake(summary_block, node_test_id(0));
+                deps.pool.advance_round_with_block(&proposal);
+
+                // Add dealings for only ONE of the skipped target's two configs
+                // (insufficient), all setup target configs, and the reshare config.
+                let dkg_ids_with_dealings: Vec<&NiDkgId> =
+                    std::iter::once(&skipped_remote_dkg_ids[0])
+                        .chain(setup_remote_dkg_ids.iter())
+                        .chain(std::iter::once(&reshare_dkg_id))
+                        .collect();
+                for dkg_id in &dkg_ids_with_dealings {
+                    let dealings: Vec<_> = (0..3)
+                        .map(|i| ChangeAction::AddToValidated(create_dealing(i, (*dkg_id).clone())))
+                        .collect();
+                    deps.dkg_pool.write().unwrap().apply(dealings);
+                }
+                deps.pool.advance_round_normal_operation();
+                assert_eq!(
+                    extract_dealings_from_highest_block(&deps.pool).len(),
+                    12,
+                    "[{desc}] all 12 dealings should be in the block"
+                );
+                assert_eq!(
+                    extract_remote_dkgs_from_highest_block(&deps.pool).len(),
+                    0,
+                    "[{desc}] no early transcripts yet"
+                );
+
+                // The skipped target is skipped (insufficient dealings for its
+                // second config). The remaining setup and reshare targets compete
+                // for MAX_EARLY_REMOTE_TRANSCRIPTS.
+                deps.pool.advance_round_normal_operation();
+                assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 0);
+                let remote_dkgs = extract_remote_dkgs_from_highest_block(&deps.pool);
+
+                if setup_target_id < reshare_target_id {
+                    assert_eq!(
+                        remote_dkgs.len(),
+                        2,
+                        "[{desc}] Expected 2 SetupInitialDKG transcripts, got {}",
+                        remote_dkgs.len()
+                    );
+                    for (dkg_id, _, result) in &remote_dkgs {
+                        assert_eq!(
+                            dkg_id.target_subnet,
+                            NiDkgTargetSubnet::Remote(setup_target_id),
+                            "[{desc}] transcript should be for SetupInitialDKG target id"
+                        );
+                        assert!(result.is_ok(), "[{desc}]");
+                    }
+                } else {
+                    // Reshare comes first: 1 reshare transcript; setup's 2 exceed the limit.
+                    assert_eq!(
+                        remote_dkgs.len(),
+                        1,
+                        "[{desc}] Expected 1 ReshareChainKey transcript, got {}",
+                        remote_dkgs.len()
+                    );
+                    let (dkg_id, _, result) = &remote_dkgs[0];
+                    assert_eq!(
+                        dkg_id.target_subnet,
+                        NiDkgTargetSubnet::Remote(reshare_target_id),
+                        "[{desc}] transcript should be for ReshareChainKey target id"
+                    );
+                    assert!(result.is_ok(), "[{desc}]");
+                }
+            });
+        }
     }
 
     #[test]
