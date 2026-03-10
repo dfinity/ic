@@ -69,7 +69,9 @@ jobs:
 
   test-job:
     name: Test Job
-    runs-on: *dind-large-setup
+    runs-on:
+      labels: dind-large
+      group: dm2
     container: *container-setup
     steps:
       - name: Test Mounts
