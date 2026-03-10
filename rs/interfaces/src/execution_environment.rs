@@ -6,6 +6,7 @@ use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
@@ -1463,6 +1464,7 @@ pub struct RegistryExecutionSettings {
     pub subnet_size: usize,
     pub node_ids: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
+    pub resource_limits: Option<ResourceLimits>,
 }
 
 /// Chain key configuration of execution that comes from the registry.

@@ -41,6 +41,7 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, WellFormedError,
 };
@@ -220,6 +221,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
             .map(|i| node_test_id(i as u64))
             .collect(),
         registry_version: RegistryVersion::default(),
+        resource_limits: None,
     }
 }
 
@@ -2304,6 +2306,16 @@ impl ExecutionTestBuilder {
         Self {
             registry_settings: RegistryExecutionSettings {
                 max_number_of_canisters,
+                ..self.registry_settings
+            },
+            ..self
+        }
+    }
+
+    pub fn with_resource_limits(self, resource_limits: ResourceLimits) -> Self {
+        Self {
+            registry_settings: RegistryExecutionSettings {
+                resource_limits: Some(resource_limits),
                 ..self.registry_settings
             },
             ..self

@@ -366,6 +366,7 @@ mod tests {
                 subnet_size: 0,
                 node_ids: BTreeSet::new(),
                 registry_version: RegistryVersion::from(0),
+                resource_limits: None,
             },
             &SchedulerMetrics::new(&MetricsRegistry::new()),
             &no_op_logger(),

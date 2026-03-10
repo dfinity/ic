@@ -14,6 +14,7 @@ ic-error-types = { path = "../../packages/ic-error-types" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-resource-limits = { path = "../registry/resource_limits" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }
 ic-wasm-types = { path = "../types/wasm_types" }

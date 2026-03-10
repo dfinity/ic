@@ -19,6 +19,7 @@ rust_library(
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/provisional_whitelist",
+        "//rs/registry/resource_limits",
         "//rs/registry/subnet_type",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",

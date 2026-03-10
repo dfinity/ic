@@ -32,6 +32,7 @@ rust_library(
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/provisional_whitelist",
+        "//rs/registry/resource_limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
