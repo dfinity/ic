@@ -222,8 +222,8 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 /// this desired period by a few seconds.
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
-/// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 500_000;
+// Re-export for backwards compatibility.
+pub use crate::neuron_store::MAX_NUMBER_OF_NEURONS;
 
 // Spawning is exempted from rate limiting, so we don't need large of a limit here.
 pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;

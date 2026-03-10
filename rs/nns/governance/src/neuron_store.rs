@@ -1,6 +1,6 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
-    governance::{LOG_PREFIX, MAX_NUMBER_OF_NEURONS, TimeWarp},
+    governance::{LOG_PREFIX, TimeWarp},
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
@@ -251,6 +251,9 @@ impl Drop for NeuronSlotReservation {
         self.counter.fetch_sub(1, Ordering::Relaxed);
     }
 }
+
+/// The maximum number of neurons supported.
+pub const MAX_NUMBER_OF_NEURONS: usize = 500_000;
 
 /// This struct stores and provides access to all neurons within NNS Governance, which can live
 /// in either heap memory or stable memory.
