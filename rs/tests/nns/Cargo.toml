@@ -60,6 +60,8 @@ ic-registry-transport = { path = "../../registry/transport" }
 prost = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 url = { workspace = true }
+ic-registry-keys = { path = "../../registry/keys" }
+
 
 [[bin]]
 name = "certified_registry_test"

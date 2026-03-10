@@ -1,4 +1,6 @@
 use candid::{CandidType, Principal};
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, DeletedSubnetListRecord,
     SubnetListRecord,
@@ -12,7 +14,9 @@ use ic_types::{PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
-use crate::{mutations::do_create_subnet::CanisterCyclesCostSchedule, registry::Registry};
+use crate::{
+    common::LOG_PREFIX, mutations::do_create_subnet::CanisterCyclesCostSchedule, registry::Registry,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct DeleteSubnetPayload {
@@ -20,7 +24,10 @@ pub struct DeleteSubnetPayload {
 }
 
 impl Registry {
-    /// Deleting a subnet means:
+    /// Note: Currently, only CloudEngines can be deleted.
+    ///       Subnet deletion requires changes in the deterministic state machine!
+    ///
+    /// Deleting a subnet means to:
     /// - Remove its subnet ID from the key `subnet_list`.
     /// - Remove its subnet record.
     /// - Remove all routing table shards that its subnet ID maps to.
@@ -29,6 +36,8 @@ impl Registry {
     /// Consumers of `subnet_list`, the subnet record and the routing table assume live subnets.
     /// Consumers that must take deleted subnets into account do so via `deleted_subnet_list` and old registry versions.
     pub async fn do_delete_subnet(&mut self, payload: DeleteSubnetPayload) -> Result<(), String> {
+        println!("{LOG_PREFIX}do_delete_subnet: {payload:?}");
+
         let DeleteSubnetPayload { subnet_id } = payload;
         let subnet_id_ = SubnetId::from(PrincipalId::from(subnet_id));
         let subnet_record = self.get_subnet(subnet_id_, self.latest_version())?;

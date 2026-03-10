@@ -38,10 +38,12 @@ use ic_nns_test_utils::governance::{
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
 use ic_protobuf::registry::{
     replica_version::v1::GuestLaunchMeasurements,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    subnet::v1::{DeletedSubnetListRecord, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_deleted_subnet_list_record_key, make_subnet_list_record_key, make_subnet_record_key,
+};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
@@ -768,6 +770,26 @@ pub async fn get_subnet_list_from_registry(client: &RegistryCanister) -> Vec<Sub
         .expect("could not decode subnet list record")
         .unwrap()
         .subnets
+        .iter()
+        .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
+        .collect::<Vec<SubnetId>>()
+}
+
+// Queries the registry for the deleted_subnet_list record, awaits, decodes, and returns
+// the response.
+pub async fn get_deleted_subnet_list_from_registry(client: &RegistryCanister) -> Vec<SubnetId> {
+    let (original_deleted_subnets_enc, _) = client
+        .get_value(
+            make_deleted_subnet_list_record_key().as_bytes().to_vec(),
+            None,
+        )
+        .await
+        .expect("failed to get value for deleted subnet list");
+
+    deserialize_registry_value::<DeletedSubnetListRecord>(Ok(Some(original_deleted_subnets_enc)))
+        .expect("could not decode deleted subnet list record")
+        .unwrap()
+        .deleted_subnets
         .iter()
         .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
         .collect::<Vec<SubnetId>>()

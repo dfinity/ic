@@ -8,12 +8,13 @@ end::catalog[] */
 use anyhow::Result;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::subnet::v1::DeletedSubnetListRecord;
+use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, DeletedSubnetListRecord};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{
     RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
+use ic_registry_transport::update;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -21,13 +22,15 @@ use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
     install_registry_canister_with_testnet_topology,
 };
-use ic_system_test_driver::nns::get_subnet_list_from_registry;
+use ic_system_test_driver::nns::{
+    get_deleted_subnet_list_from_registry, get_subnet_from_registry, get_subnet_list_from_registry,
+};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
-use ic_types::{Height, RegistryVersion};
+use ic_types::{Height, RegistryVersion, SubnetId};
+use ic_universal_canister::{call_args, wasm};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
-use slog::info;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
@@ -68,9 +71,6 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    let log = &env.logger();
-
-    // [Phase I] Prepare NNS
     let deleted_subnet_list_mutation = RegistryMutation {
         mutation_type: registry_mutation::Type::Insert as i32,
         key: "deleted_subnet_list".as_bytes().to_vec(),
@@ -95,12 +95,15 @@ pub fn test(env: TestEnv) {
         .filter(|s| s.subnet_type() == SubnetType::Application)
         .collect::<Vec<_>>();
     let app_subnet = app_subnet.first().unwrap();
+    let app_nodes: Vec<IcNodeSnapshot> = app_subnet.nodes().collect();
+    let app_node = &app_nodes[0];
     let engine_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::CloudEngine)
         .collect::<Vec<_>>();
     let engine_subnet = engine_subnet.first().unwrap();
     let engine_nodes: Vec<IcNodeSnapshot> = engine_subnet.nodes().collect();
+    let engine_node = &engine_nodes[0];
     assert_eq!(
         engine_nodes.first().unwrap().subnet_id(),
         Some(engine_subnet.subnet_id)
@@ -113,21 +116,37 @@ pub fn test(env: TestEnv) {
             .is_empty()
     );
 
-    let nns_endpoint = nns_subnet.nodes().next().unwrap();
+    let nns_node = nns_subnet.nodes().next().unwrap();
 
-    let client = RegistryCanister::new_with_query_timeout(
-        vec![nns_endpoint.get_public_url()],
+    let registry_client = RegistryCanister::new_with_query_timeout(
+        vec![nns_node.get_public_url()],
         Duration::from_secs(10),
     );
 
     block_on(async move {
-        let nns_agent = assert_create_agent(nns_endpoint.get_public_url().as_str()).await;
-        let original_subnets = get_subnet_list_from_registry(&client).await;
-        info!(log, "original subnets: {:?}", original_subnets);
+        let nns_agent = assert_create_agent(nns_node.get_public_url().as_str()).await;
+        let engine_agent = assert_create_agent(engine_node.get_public_url().as_str()).await;
+        let app_agent = assert_create_agent(app_node.get_public_url().as_str()).await;
+        let original_subnets = get_subnet_list_from_registry(&registry_client).await;
+        assert_eq!(original_subnets.len(), 3);
 
-        // install a universal canister with the governance canister's canister ID
+        // Install a universal canister with the governance canister's canister ID
         let governance_canister =
-            UniversalCanister::new(&nns_agent, nns_endpoint.effective_canister_id()).await;
+            UniversalCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
+
+        // Give the engine a free cost schedule:
+        make_schedule_free(
+            &engine_subnet.subnet_id,
+            &registry_client,
+            &governance_canister,
+        )
+        .await;
+
+        // Install a canister each on the engine subnet and on the app subnet.
+        let _canister_eng =
+            UniversalCanister::new(&engine_agent, engine_node.effective_canister_id()).await;
+        let _canister_app =
+            UniversalCanister::new(&app_agent, app_node.effective_canister_id()).await;
 
         // Deleting the engine should work:
         let arg = DeleteSubnetPayload {
@@ -164,16 +183,64 @@ pub fn test(env: TestEnv) {
             .block_for_min_registry_version(RegistryVersion::new(2))
             .await
             .expect("Could not obtain updated registry.");
+
+        // The deleted engine should not be in the subnet list any more.
+        let final_subnets = get_subnet_list_from_registry(&registry_client).await;
+        assert!(!final_subnets.contains(&engine_subnet.subnet_id));
+
+        // The deleted engine should be in the deleted subnet list.
+        let deleted_subnets = get_deleted_subnet_list_from_registry(&registry_client).await;
+        assert!(deleted_subnets.contains(&engine_subnet.subnet_id));
+
+        // The subnet record and routing table entries of the engine should be gone.
+        let routing_table = new_topology_snapshot.subnet_canister_ranges(engine_subnet.subnet_id);
+        assert!(routing_table.is_empty());
+
+        // The nodes from the engine should be unassigned.
         let unassigned_node_ids = new_topology_snapshot
             .unassigned_nodes()
             .map(|x| x.node_id)
             .collect::<BTreeSet<_>>();
         assert_eq!(unassigned_node_ids, engine_node_ids);
 
-        let final_subnets = get_subnet_list_from_registry(&client).await;
-        info!(log, "final subnets: {:?}", final_subnets);
-        assert!(!final_subnets.contains(&engine_subnet.subnet_id));
+        // A call to the canister on the deleted engine should fail due to a routing error.
+        // TODO
+        let err_bytes = _canister_app
+            .update(wasm().call_simple(
+                _canister_eng.canister_id().as_slice(),
+                "yesn't",
+                call_args(),
+            ))
+            .await
+            .unwrap();
+
+        println!("{:?}", err_bytes);
     });
+}
+
+async fn make_schedule_free(
+    subnet_id: &SubnetId,
+    registry_client: &RegistryCanister,
+    governance_canister: &UniversalCanister<'_>,
+) {
+    use ic_registry_keys::make_subnet_record_key;
+    let mut subnet_record = get_subnet_from_registry(registry_client, *subnet_id).await;
+    subnet_record.canister_cycles_cost_schedule = CanisterCyclesCostSchedule::Free as i32;
+    let mutation_request = RegistryAtomicMutateRequest {
+        mutations: vec![update(
+            make_subnet_record_key(*subnet_id).as_bytes(),
+            subnet_record.encode_to_vec(),
+        )],
+        preconditions: vec![],
+    };
+    governance_canister
+        .forward_to(
+            &Principal::from(REGISTRY_CANISTER_ID),
+            "atomic_mutate",
+            mutation_request.encode_to_vec(),
+        )
+        .await
+        .expect("atomic_mutate failed");
 }
 
 #[allow(dead_code)]
