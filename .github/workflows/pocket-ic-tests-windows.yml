@@ -99,6 +99,13 @@ jobs:
     runs-on: windows-2022
     steps:
       - *checkout
+      - name: Disable Defender & add workspace exclusion
+        shell: pwsh
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          $workspace = "${{ github.workspace }}"
+          Write-Host "Adding Defender exclusion: $workspace"
+          Add-MpPreference -ExclusionPath "$workspace"
       - name: Download PocketIC server
         uses: actions/download-artifact@v4
         with:
