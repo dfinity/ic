@@ -1,6 +1,6 @@
-use ic_protobuf::registry::subnet::v1 as pb;
 use candid::CandidType;
-use serde::{Serialize, Deserialize};
+use ic_protobuf::registry::subnet::v1 as pb;
+use serde::{Deserialize, Serialize};
 
 /// Limits on resource consumption (e.g., disk usage).
 #[derive(CandidType, Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
