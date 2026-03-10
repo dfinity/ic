@@ -67,6 +67,17 @@ jobs:
           invocation-names: afl
           run: ./bin/fuzzing/run-all-fuzzers.sh --afl 10
 
+  test-job:
+    name: Test Job
+    runs-on: *dind-large-setup
+    container: *container-setup
+    steps:
+      - name: Test Mounts
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -T /var/tmp/
+
   config:
     name: Set Config
     runs-on: ubuntu-latest
