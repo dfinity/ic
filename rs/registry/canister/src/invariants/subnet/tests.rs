@@ -188,7 +188,7 @@ fn only_rented_subnets_can_have_subnet_admins() {
     );
     assert_non_compliant_record(
         &snapshot,
-        "is not a rented subnet but has a non-empty subnet admins list",
+        "is not a rented or cloud engine subnet but has a non-empty subnet admins list",
     );
 
     test_subnet_record.subnet_type = i32::from(SubnetType::VerifiedApplication);
@@ -200,7 +200,66 @@ fn only_rented_subnets_can_have_subnet_admins() {
     );
     assert_non_compliant_record(
         &snapshot,
-        "is not a rented subnet but has a non-empty subnet admins list",
+        "is not a rented or cloud engine subnet but has a non-empty subnet admins list",
+    );
+}
+
+#[test]
+fn cloud_engine_subnets_can_have_subnet_admins() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, mut test_subnet_record) =
+        setup_minimal_registry_snapshot_for_check_subnet_invariants(
+            system_subnet_id,
+            test_subnet_id,
+            1,     // num_nodes_in_test_subnet
+            false, // with_chip_id
+        );
+
+    // CloudEngine subnets can have subnet admins with any cycles cost schedule.
+    test_subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
+    test_subnet_record.canister_cycles_cost_schedule =
+        i32::from(CanisterCyclesCostSchedule::Normal);
+    test_subnet_record.subnet_admins = vec![PrincipalIdPb::from(user_test_id(1).get())];
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    check_subnet_invariants(&snapshot).unwrap();
+
+    // CloudEngine subnets with no admins are also valid.
+    test_subnet_record.subnet_admins = vec![];
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    check_subnet_invariants(&snapshot).unwrap();
+}
+
+#[test]
+fn non_rented_application_subnets_cannot_have_subnet_admins() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, mut test_subnet_record) =
+        setup_minimal_registry_snapshot_for_check_subnet_invariants(
+            system_subnet_id,
+            test_subnet_id,
+            1,     // num_nodes_in_test_subnet
+            false, // with_chip_id
+        );
+
+    // Application subnets on a normal (non-free) cycles cost schedule cannot have admins.
+    test_subnet_record.subnet_type = i32::from(SubnetType::Application);
+    test_subnet_record.canister_cycles_cost_schedule =
+        i32::from(CanisterCyclesCostSchedule::Normal);
+    test_subnet_record.subnet_admins = vec![PrincipalIdPb::from(user_test_id(1).get())];
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    assert_non_compliant_record(
+        &snapshot,
+        "is not a rented or cloud engine subnet but has a non-empty subnet admins list",
     );
 }
 
