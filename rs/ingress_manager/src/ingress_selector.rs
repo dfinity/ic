@@ -253,9 +253,12 @@ impl IngressSelector for IngressManager {
                 }
             }
 
-            if wire_byte_limit <= accumulated_wire_size
-                || memory_byte_limit <= accumulated_memory_size
-            {
+            if wire_byte_limit <= accumulated_wire_size {
+                self.metrics.observe_limit_reached("wire_byte_limit");
+                // No remaining quota means the block is full. No more iterations needed.
+                break;
+            } else if memory_byte_limit <= accumulated_memory_size {
+                self.metrics.observe_limit_reached("memory_byte_limit");
                 // No remaining quota means the block is full. No more iterations needed.
                 break;
             } else {
