@@ -75,7 +75,6 @@ pub(crate) enum StopCanisterResult {
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub(crate) struct CanisterMgrConfig {
-    pub(crate) subnet_memory_capacity: NumBytes,
     pub(crate) default_provisional_cycles_balance: Cycles,
     pub(crate) default_freeze_threshold: NumSeconds,
     pub(crate) compute_capacity: u64,
@@ -99,7 +98,6 @@ pub(crate) struct CanisterMgrConfig {
 impl CanisterMgrConfig {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        subnet_memory_capacity: NumBytes,
         default_provisional_cycles_balance: Cycles,
         default_freeze_threshold: NumSeconds,
         own_subnet_id: SubnetId,
@@ -121,7 +119,6 @@ impl CanisterMgrConfig {
         max_environment_variable_value_length: usize,
     ) -> Self {
         Self {
-            subnet_memory_capacity,
             default_provisional_cycles_balance,
             default_freeze_threshold,
             own_subnet_id,
