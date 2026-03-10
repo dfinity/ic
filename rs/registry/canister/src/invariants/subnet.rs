@@ -4,10 +4,11 @@ use std::{
 };
 
 use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, get_subnet_ids_from_snapshot,
+    InvariantCheckError, RegistrySnapshot, get_node_record_from_snapshot,
+    get_subnet_ids_from_snapshot,
 };
 
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType};
 use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_node_record_key, make_subnet_record_key};
@@ -21,6 +22,8 @@ use prost::Message;
 ///    * There is at least one system subnet
 ///    * Each subnet in the registry occurs in the subnet list and vice versa
 ///    * Only application subnets can be rented and therefore have a "free" cycles cost schedule
+///    * SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
+/// * Only rented subnets can have subnet admins set to a non-empty list
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -36,6 +39,7 @@ pub(crate) fn check_subnet_invariants(
                 panic!("Subnet {subnet_id:} is in subnet list but no record exists")
             });
 
+        // Each SSH key access list does not contain more than 50 keys
         if subnet_record.ssh_readonly_access.len() > MAX_NUM_SSH_KEYS
             || subnet_record.ssh_backup_access.len() > MAX_NUM_SSH_KEYS
         {
@@ -52,35 +56,35 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        let num_nodes = subnet_record.membership.len();
-        let mut subnet_members: HashSet<NodeId> = subnet_record
+        let subnet_members: HashSet<NodeId> = subnet_record
             .membership
             .iter()
             .map(|v| NodeId::from(PrincipalId::try_from(v).unwrap()))
             .collect();
 
         // Subnet membership must contain registered nodes only
-        subnet_members.retain(|&k| {
-            let node_key = make_node_record_key(k);
-            let node_exists = snapshot.contains_key(node_key.as_bytes());
-            if !node_exists {
-                panic!("Node {k} does not exist in Subnet {subnet_id}");
+        for &node_id in &subnet_members {
+            let node_key = make_node_record_key(node_id);
+            if !snapshot.contains_key(node_key.as_bytes()) {
+                panic!("Node {node_id} does not exist in Subnet {subnet_id}");
             }
-            node_exists
-        });
+        }
 
         // Each node appears at most once in a subnet membership
+        let num_nodes = subnet_record.membership.len();
         if num_nodes > subnet_members.len() {
             panic!("Repeated nodes in subnet {subnet_id:}");
         }
+
         // Each subnet contains at least one node
         if subnet_members.is_empty() {
             panic!("No node in subnet {subnet_id:}");
         }
+
+        // Each node appears at most once in at most one subnet membership
         let intersection = accumulated_nodes_in_subnets
             .intersection(&subnet_members)
             .collect::<HashSet<_>>();
-        // Each node appears at most once in at most one subnet membership
         if !intersection.is_empty() {
             return Err(InvariantCheckError {
                 msg: format!("Nodes in subnet {subnet_id:} also belong to other subnets"),
@@ -88,6 +92,7 @@ pub(crate) fn check_subnet_invariants(
             });
         }
         accumulated_nodes_in_subnets.extend(&subnet_members);
+
         // Count occurrence of system subnets
         if subnet_record.subnet_type == i32::from(SubnetType::System) {
             system_subnet_count += 1;
@@ -109,6 +114,15 @@ pub(crate) fn check_subnet_invariants(
                 source: None,
             });
         }
+
+        // SEV-enabled subnets invariants
+        if let Some(features) = subnet_record.features.as_ref()
+            && features.sev_enabled == Some(true)
+        {
+            check_sev_subnet_invariants(subnet_id, subnet_members, snapshot)?;
+        }
+
+        check_subnet_admins_invariant(&subnet_record, subnet_id)?;
     }
 
     // There is at least one system subnet. Note that we disable this invariant for benchmarks, as
@@ -135,6 +149,31 @@ pub(crate) fn check_subnet_invariants(
     Ok(())
 }
 
+// Checks that only rented subnets can have admins.
+fn check_subnet_admins_invariant(
+    subnet_record: &SubnetRecord,
+    subnet_id: SubnetId,
+) -> Result<(), InvariantCheckError> {
+    // Here, it is taken that rented subnets are of type application and on a
+    // free schedule. This is not very reliable and could be improved in the
+    // future (e.g. by adding a new subnet type).
+    let is_application_subnet = subnet_record.subnet_type == i32::from(SubnetType::Application);
+    let is_on_free_cost_schedule =
+        subnet_record.canister_cycles_cost_schedule == i32::from(CanisterCyclesCostSchedule::Free);
+    let is_rented = is_on_free_cost_schedule && is_application_subnet;
+
+    let ok = subnet_record.subnet_admins.is_empty() || is_rented;
+    if !ok {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id:} is not a rented subnet but has a non-empty subnet admins list"
+            ),
+            source: None,
+        });
+    }
+    Ok(())
+}
+
 // Return all subnet records in the snapshot
 pub(crate) fn get_subnet_records_map(
     snapshot: &RegistrySnapshot,
@@ -147,6 +186,49 @@ pub(crate) fn get_subnet_records_map(
         }
     }
     subnets
+}
+
+/// All nodes of a subnet must support SEV in order for SEV to be enabled on the subnet.
+fn check_sev_subnet_invariants(
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
+    subnet_members: HashSet<NodeId>,
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    // SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
+    let nodes_missing_chip_id: Vec<NodeId> = subnet_members
+        .iter()
+        .filter_map(|&node_id| {
+            let node_record = get_node_record_from_snapshot(node_id, snapshot)
+                .ok()
+                .flatten();
+
+            let Some(node_record) = node_record else {
+                // Missing nodes are ok, because that is checked earlier.
+                // (What we really care about here is that all (existing)
+                // nodes support SEV.)
+                return None;
+            };
+            if node_record.chip_id.is_some() {
+                // This node is SEV-enabled as it has a chip ID;
+                // no need to report it as non-compliant.
+                return None;
+            }
+            // We have found a non-compliant node! Report it (to the caller)!
+            Some(node_id)
+        })
+        .collect();
+
+    if !nodes_missing_chip_id.is_empty() {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id} is SEV-enabled, but the following nodes are missing a chip ID: {:?}",
+                nodes_missing_chip_id
+            ),
+            source: None,
+        });
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
