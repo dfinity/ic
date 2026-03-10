@@ -24,10 +24,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
-use ic_cycles_account_manager::{
-    CyclesAccountManager, IngressInductionCost, ResourceSaturation,
-    is_delayed_ingress_induction_cost,
-};
+use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -866,7 +863,9 @@ impl ExecutionEnvironment {
                         if let CanisterCall::Ingress(ingress) = &msg {
                             let cost_schedule = state.get_own_cost_schedule();
                             if let Ok(canister) = canister_make_mut(canister_id, &mut state)
-                                && is_delayed_ingress_induction_cost(&ingress.method_payload)
+                                && self
+                                    .cycles_account_manager
+                                    .is_delayed_ingress_induction_cost(&ingress.method_payload)
                             {
                                 let bytes_to_charge =
                                     ingress.method_payload.len() + ingress.method_name.len();
