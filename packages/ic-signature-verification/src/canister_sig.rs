@@ -127,48 +127,48 @@ fn verify_delegation(
 
     // Try new structure first: /canister_ranges/<subnet_id>/<range_key>
     let canister_ranges_path = ["canister_ranges".as_bytes(), delegation.subnet_id.as_ref()];
-    let canister_ranges: Vec<(Principal, Principal)> =
-        match cert.tree.lookup_subtree(&canister_ranges_path) {
-            SubtreeLookupResult::Found(subnet_tree) => subnet_tree
-                .list_paths()
-                .iter()
-                .filter(|path| !path.is_empty())
-                .try_fold(
-                    Vec::new(),
-                    |mut acc, range_key_path| -> Result<Vec<(Principal, Principal)>, String> {
-                        if let LookupResult::Found(range_data) =
-                            subnet_tree.lookup_path([range_key_path[0].as_bytes()])
-                        {
-                            let subnet_ranges: Vec<(Principal, Principal)> =
-                                serde_cbor::from_slice(range_data)
-                                    .map_err(|e| format!("invalid canister range: {e}"))?;
-                            acc.extend(subnet_ranges);
-                        }
-                        Ok(acc)
-                    },
-                )?,
-            SubtreeLookupResult::Absent | SubtreeLookupResult::Unknown => {
-                let old_canister_ranges_path = [
-                    "subnet".as_bytes(),
-                    delegation.subnet_id.as_ref(),
-                    "canister_ranges".as_bytes(),
-                ];
-                match cert.tree.lookup_path(&old_canister_ranges_path) {
-                    LookupResult::Found(old_range_data) => {
-                        let canister_ranges: Vec<(Principal, Principal)> =
-                            serde_cbor::from_slice(old_range_data)
-                                .map_err(|e| format!("invalid canister range: {e}"))?;
-                        canister_ranges
-                    }
-                    _ => {
-                        // Neither format found - this is an error
-                        return Err("canister_ranges-entry not found".to_string());
+    let canister_in_ranges = match cert.tree.lookup_subtree(&canister_ranges_path) {
+        SubtreeLookupResult::Found(subnet_tree) => {
+            let mut found = false;
+            for range_key_path in subnet_tree.list_paths() {
+                if range_key_path.is_empty() {
+                    continue;
+                }
+                if let LookupResult::Found(range_data) =
+                    subnet_tree.lookup_path([range_key_path[0].as_bytes()])
+                {
+                    let subnet_ranges: Vec<(Principal, Principal)> =
+                        serde_cbor::from_slice(range_data)
+                            .map_err(|e| format!("invalid canister range: {e}"))?;
+                    if principal_is_within_ranges(&signing_canister_id, &subnet_ranges) {
+                        found = true;
+                        break;
                     }
                 }
             }
-        };
+            found
+        }
+        SubtreeLookupResult::Absent | SubtreeLookupResult::Unknown => {
+            let old_canister_ranges_path = [
+                "subnet".as_bytes(),
+                delegation.subnet_id.as_ref(),
+                "canister_ranges".as_bytes(),
+            ];
+            match cert.tree.lookup_path(&old_canister_ranges_path) {
+                LookupResult::Found(old_range_data) => {
+                    let canister_ranges: Vec<(Principal, Principal)> =
+                        serde_cbor::from_slice(old_range_data)
+                            .map_err(|e| format!("invalid canister range: {e}"))?;
+                    principal_is_within_ranges(&signing_canister_id, &canister_ranges)
+                }
+                _ => {
+                    return Err("canister_ranges-entry not found".to_string());
+                }
+            }
+        }
+    };
 
-    if !principal_is_within_ranges(&signing_canister_id, &canister_ranges[..]) {
+    if !canister_in_ranges {
         return Err("signing canister id not in canister_ranges".to_string());
     }
 
