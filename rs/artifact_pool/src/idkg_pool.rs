@@ -23,6 +23,7 @@ use ic_interfaces::p2p::consensus::{
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
+    NodeId,
     artifact::IDkgMessageId,
     consensus::{
         CatchUpPackage,
@@ -357,6 +358,7 @@ impl MutableIDkgPoolSection for InMemoryIDkgPoolSection {
 
 /// The artifact pool implementation.
 pub struct IDkgPoolImpl {
+    node_id: NodeId,
     validated: Box<dyn MutableIDkgPoolSection>,
     unvalidated: Box<dyn MutableIDkgPoolSection>,
     transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
@@ -368,6 +370,7 @@ pub struct IDkgPoolImpl {
 
 impl IDkgPoolImpl {
     pub fn new(
+        node_id: NodeId,
         config: ArtifactPoolConfig,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
@@ -391,6 +394,7 @@ impl IDkgPoolImpl {
             )) as Box<_>,
         };
         Self {
+            node_id,
             invalidated_artifacts: metrics_registry.int_counter(
                 "idkg_invalidated_artifacts",
                 "The number of invalidated IDKG artifacts",
@@ -544,6 +548,41 @@ impl ValidatedPoolReader<IDkgMessage> for IDkgPoolImpl {
     fn get(&self, msg_id: &IDkgMessageId) -> Option<IDkgMessage> {
         self.validated.as_pool_section().get(msg_id)
     }
+
+    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage> + '_> {
+        let pool_section = self.validated.as_pool_section();
+        let dealings = pool_section
+            .signed_dealings()
+            .filter(|(_, dealing)| dealing.signature.signer == self.node_id)
+            .map(|(_, dealing)| IDkgMessage::Dealing(dealing));
+        let supports = pool_section
+            .dealing_support()
+            .filter(|(_, support)| support.sig_share.signer == self.node_id)
+            .map(|(_, support)| IDkgMessage::DealingSupport(support));
+        let complaints = pool_section
+            .complaints()
+            .filter(|(_, complaint)| complaint.signature.signer == self.node_id)
+            .map(|(_, complaint)| IDkgMessage::Complaint(complaint));
+        let openings = pool_section
+            .openings()
+            .filter(|(_, opening)| opening.signature.signer == self.node_id)
+            .map(|(_, opening)| IDkgMessage::Opening(opening));
+        let signature_shares = pool_section
+            .signature_shares()
+            .filter(|(_, sig_share)| sig_share.signer() == self.node_id)
+            .map(|(_, sig_share)| match sig_share {
+                SigShare::Ecdsa(share) => IDkgMessage::EcdsaSigShare(share),
+                SigShare::Schnorr(share) => IDkgMessage::SchnorrSigShare(share),
+                SigShare::VetKd(share) => IDkgMessage::VetKdKeyShare(share),
+            });
+        Box::new(
+            dealings
+                .chain(supports)
+                .chain(complaints)
+                .chain(openings)
+                .chain(signature_shares),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -557,15 +596,23 @@ mod tests {
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6, NODE_7};
     use ic_types::artifact::IdentifiableArtifact;
     use ic_types::consensus::idkg::IDkgComplaintContent;
+    use ic_types::consensus::idkg::IDkgOpeningContent;
+    use ic_types::consensus::idkg::RequestId;
     use ic_types::consensus::idkg::{IDkgObject, dealing_support_prefix};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgComplaint;
+    use ic_types::crypto::canister_threshold_sig::idkg::IDkgOpening;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
+    use ic_types::crypto::canister_threshold_sig::{
+        ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
+    };
+    use ic_types::crypto::vetkd::{VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent};
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::{NodeId, signature::BasicSignature, time::UNIX_EPOCH};
     use std::collections::BTreeSet;
 
     fn create_idkg_pool(config: ArtifactPoolConfig, log: ReplicaLogger) -> IDkgPoolImpl {
         IDkgPoolImpl::new(
+            NODE_1,
             config,
             log,
             MetricsRegistry::new(),
@@ -1306,6 +1353,143 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 check_search_by_transcript_id(&mut idkg_pool, false);
+            })
+        })
+    }
+
+    #[test]
+    fn test_get_all_for_initial_broadcast_returns_only_own_artifacts() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
+
+                // No artifacts in the pool yet
+                assert_eq!(idkg_pool.get_all_for_initial_broadcast().count(), 0);
+
+                // For each artifact type, add two artifacts to the pool,
+                // one for ourselves (NODE_1) and one for NODE_2.
+                let mut change_set = Vec::new();
+                for (i, node) in [(1u8, NODE_1), (2u8, NODE_2)] {
+                    let tid = dummy_idkg_transcript_id_for_tests(i as u64);
+
+                    let mut dealing_content = dummy_idkg_dealing_for_tests();
+                    dealing_content.transcript_id = tid;
+                    change_set.push(IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        SignedIDkgDealing::fake(dealing_content, node),
+                    )));
+
+                    change_set.push(IDkgChangeAction::AddToValidated(
+                        IDkgMessage::DealingSupport(IDkgDealingSupport {
+                            transcript_id: tid,
+                            dealer_id: NODE_3,
+                            dealing_hash: CryptoHashOf::new(CryptoHash(vec![i; 32])),
+                            sig_share: BasicSignature::fake(node),
+                        }),
+                    ));
+
+                    change_set.push(IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                        SignedIDkgComplaint::fake(
+                            IDkgComplaintContent {
+                                idkg_complaint: IDkgComplaint {
+                                    transcript_id: tid,
+                                    dealer_id: NODE_3,
+                                    internal_complaint_raw: vec![i],
+                                },
+                            },
+                            node,
+                        ),
+                    )));
+
+                    change_set.push(IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
+                        SignedIDkgOpening::fake(
+                            IDkgOpeningContent {
+                                idkg_opening: IDkgOpening {
+                                    transcript_id: tid,
+                                    dealer_id: NODE_3,
+                                    internal_opening_raw: vec![i],
+                                },
+                            },
+                            node,
+                        ),
+                    )));
+
+                    let request_id = |offset: u64| RequestId {
+                        callback_id: ic_types::messages::CallbackId::from(i as u64 + offset * 10),
+                        height: ic_types::Height::from(0),
+                    };
+
+                    change_set.push(IDkgChangeAction::AddToValidated(
+                        IDkgMessage::EcdsaSigShare(EcdsaSigShare {
+                            signer_id: node,
+                            request_id: request_id(0),
+                            share: ThresholdEcdsaSigShare {
+                                sig_share_raw: vec![i],
+                            },
+                        }),
+                    ));
+
+                    change_set.push(IDkgChangeAction::AddToValidated(
+                        IDkgMessage::SchnorrSigShare(SchnorrSigShare {
+                            signer_id: node,
+                            request_id: request_id(1),
+                            share: ThresholdSchnorrSigShare {
+                                sig_share_raw: vec![i],
+                            },
+                        }),
+                    ));
+
+                    change_set.push(IDkgChangeAction::AddToValidated(
+                        IDkgMessage::VetKdKeyShare(VetKdKeyShare {
+                            signer_id: node,
+                            request_id: request_id(2),
+                            share: VetKdEncryptedKeyShare {
+                                encrypted_key_share: VetKdEncryptedKeyShareContent(vec![i]),
+                                node_signature: vec![i],
+                            },
+                        }),
+                    ));
+                }
+
+                idkg_pool.apply(change_set);
+
+                let broadcast: Vec<IDkgMessage> =
+                    idkg_pool.get_all_for_initial_broadcast().collect();
+
+                assert_eq!(broadcast.len(), IDkgMessageType::iter().count());
+                for msg in &broadcast {
+                    match msg {
+                        IDkgMessage::Dealing(d) => assert_eq!(d.signature.signer, NODE_1),
+                        IDkgMessage::DealingSupport(s) => {
+                            assert_eq!(s.sig_share.signer, NODE_1)
+                        }
+                        IDkgMessage::Complaint(c) => assert_eq!(c.signature.signer, NODE_1),
+                        IDkgMessage::Opening(o) => assert_eq!(o.signature.signer, NODE_1),
+                        IDkgMessage::EcdsaSigShare(s) => assert_eq!(s.signer_id, NODE_1),
+                        IDkgMessage::SchnorrSigShare(s) => assert_eq!(s.signer_id, NODE_1),
+                        IDkgMessage::VetKdKeyShare(s) => assert_eq!(s.signer_id, NODE_1),
+                    }
+                }
+            })
+        })
+    }
+
+    #[test]
+    fn test_get_all_for_initial_broadcast_excludes_unvalidated() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
+
+                // Add a dealing by NODE_1 to *unvalidated* pool only
+                let dealing = create_idkg_dealing(dummy_idkg_transcript_id_for_tests(1));
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Dealing(dealing),
+                    peer_id: NODE_1,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let broadcast: Vec<IDkgMessage> =
+                    idkg_pool.get_all_for_initial_broadcast().collect();
+                assert!(broadcast.is_empty());
             })
         })
     }

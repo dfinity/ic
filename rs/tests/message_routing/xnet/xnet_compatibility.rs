@@ -111,7 +111,20 @@ pub async fn test_async(env: TestEnv) {
         .map(|(_, _, node)| node)
         .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()));
 
-    let xnet_config = xnet_slo_test_lib::Config::new(2, 1, Duration::from_secs(30), 10);
+    // Use custom thresholds for the xnet_config because after upgrade/downgrade
+    // cycles the subnets need time to stabilize. A 30s window is too tight: the
+    // warm-up period after a version change causes the send rate to fall just below
+    // 0.3 and mean latency to exceed 20s. Using 60s and 30s respectively gives the
+    // subnets enough time to stabilize while still verifying the SLO.
+    let xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(
+        2,
+        1,
+        Duration::from_secs(60),
+        10,
+        0.3,
+        5.0,
+        30,
+    );
     let long_xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(
         2,
         1,

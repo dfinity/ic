@@ -99,6 +99,24 @@ rust_bench(
     ],
 )
 
+rust_bench(
+    name = "log_memory_store_bench",
+    testonly = True,
+    srcs = [
+        "benches/log_memory_store.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        ":replicated_state",
+        "//rs/config",
+        "//rs/criterion_time",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:more-asserts",
+    ],
+)
+
 rust_test_with_binary(
     name = "replicated_state_test",
     binary_name = "replicated_state_test_binary",

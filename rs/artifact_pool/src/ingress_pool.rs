@@ -337,7 +337,8 @@ impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
         self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
     }
 
-    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = SignedIngress>> {
+    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = SignedIngress>> {
+        // Ingress artifacts are not persisted.
         Box::new(std::iter::empty())
     }
 }
@@ -515,7 +516,7 @@ mod tests {
                     );
                 }
                 // empty
-                let filtered_msgs = ingress_pool.get_all_for_broadcast();
+                let filtered_msgs = ingress_pool.get_all_for_initial_broadcast();
                 assert!(filtered_msgs.count() == 0);
             })
         })

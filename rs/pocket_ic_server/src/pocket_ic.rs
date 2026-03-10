@@ -1,7 +1,7 @@
 use crate::external_canister_types::{
     BitcoinCanisterArg, CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
     DogecoinCanisterArg, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
-    RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
+    OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -1634,7 +1634,10 @@ impl PocketIcSubnets {
             // Install the cycles ledger index.
             let cycles_ledger_index_init_arg = CyclesLedgerIndexInitArg {
                 ledger_id: CYCLES_LEDGER_CANISTER_ID.into(),
+                #[allow(deprecated)]
                 retrieve_blocks_from_ledger_interval_seconds: None,
+                min_retrieve_blocks_from_ledger_interval_seconds: None,
+                max_retrieve_blocks_from_ledger_interval_seconds: None,
             };
             let cycles_ledger_index_arg = CyclesLedgerIndexArg::Init(cycles_ledger_index_init_arg);
             ii_subnet
@@ -2105,6 +2108,7 @@ impl PocketIcSubnets {
                   auth_uri: "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
                   auth_scope: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
                   fedcm_uri: Some("".to_string()),
+                  email_verification: Some(OpenIdEmailVerification::Google),
                 }])
             } else {
                 None
@@ -2129,6 +2133,8 @@ impl PocketIcSubnets {
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
+                backend_canister_id: None,
+                backend_origin: None,
             });
             ii_subnet
                 .state_machine
@@ -2994,21 +3000,20 @@ impl PocketIc {
             subnet_configs.push(subnet_config_internal);
         }
 
-        let default_effective_canister_id = subnet_configs
-            .iter()
-            .find(|config| config.subnet_kind == SubnetKind::Application)
-            .unwrap_or_else(|| {
-                subnet_configs
-                    .iter()
-                    .find(|config| config.subnet_kind == SubnetKind::VerifiedApplication)
-                    .unwrap_or_else(|| {
-                        subnet_configs
-                            .iter()
-                            .find(|config| config.subnet_kind == SubnetKind::System)
-                            .unwrap_or_else(|| subnet_configs.first().unwrap())
-                    })
-            })
-            .default_effective_canister_id();
+        let default_effective_canister_id = [
+            SubnetKind::Application,
+            SubnetKind::CloudEngine,
+            SubnetKind::VerifiedApplication,
+            SubnetKind::System,
+        ]
+        .iter()
+        .find_map(|kind| {
+            subnet_configs
+                .iter()
+                .find(|config| config.subnet_kind == *kind)
+        })
+        .unwrap_or_else(|| subnet_configs.first().unwrap())
+        .default_effective_canister_id();
 
         subnets.persist_topology(default_effective_canister_id);
 
