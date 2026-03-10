@@ -72,28 +72,25 @@ impl PocketIcHelper {
     }
 
     async fn get_all_certified_records(&self) -> (Vec<RegistryRecord>, RegistryVersion, Time) {
+        // We retry in a loop here to avoid test flakes due to transient errors in the registry
+        // canister calls.
+        const MAX_RETRIES: usize = 5;
         let mut last_err = None;
-        for attempt in 0..5 {
+        for _ in 0..MAX_RETRIES {
             match self
                 .registry_canister
                 .get_certified_changes_since(0, &self.nns_pub_key)
                 .await
             {
                 Ok(result) => return result,
-                Err(
-                    e @ ic_registry_transport::Error::RegistryUnreachable(_)
-                    | e @ ic_registry_transport::Error::UnknownError(_),
-                ) => {
+                Err(e) => {
                     last_err = Some(e);
-                    if attempt < 4 {
-                        tokio::time::sleep(Duration::from_millis(500)).await;
-                    }
+                    tokio::time::sleep(Duration::from_millis(500)).await;
                 }
-                Err(e) => panic!("Failed to get certified records: {e:?}"),
             }
         }
         panic!(
-            "Failed to get certified records after retries: {:?}",
+            "Failed to get certified records after {MAX_RETRIES} retries: {:?}",
             last_err.unwrap()
         );
     }
