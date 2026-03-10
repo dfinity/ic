@@ -195,6 +195,11 @@ pub(crate) fn create_early_remote_transcripts(
     for (target_id, configs) in remote_configs {
         // Lookup the callback id and the expected number of configs for this target_id
         let Some((expected_config_num, callback_id)) = callback_id_map.get(&target_id) else {
+            warn!(
+                logger,
+                "Unable to find callback id associated with remote target id {target_id:?} at block height {}",
+                parent.height.increment()
+            );
             continue;
         };
 
@@ -240,7 +245,7 @@ pub(crate) fn create_early_remote_transcripts(
                         parent.height.increment(),
                         err
                     );
-                    warn!(logger, "{error_message}");
+                    error!(logger, "{error_message}");
                     Err(error_message)
                 }
                 Err(err) => {
