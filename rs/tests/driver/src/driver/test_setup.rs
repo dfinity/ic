@@ -22,7 +22,6 @@ impl GroupSetup {
             ..Default::default()
         };
         let time = Utc::now().format("%Y-%m-%dT%H-%M-%S-%6f");
-
         res.infra_group_name = format!("{group_base_name}--{time}").replace('_', "-");
         res.group_timeout = timeout;
         res
