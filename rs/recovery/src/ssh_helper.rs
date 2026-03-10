@@ -75,7 +75,7 @@ impl SshHelper {
         if self.require_confirmation {
             wait_for_confirmation(&self.logger);
         }
-        info!(
+        warn!(
             self.logger,
             "Remember to touch your Yubikey to confirm the SSH connection."
         );

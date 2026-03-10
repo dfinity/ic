@@ -173,7 +173,7 @@ fn exec_rsync(
         wait_for_confirmation(logger);
     }
     info!(logger, "Starting transfer, waiting for output...");
-    info!(
+    warn!(
         logger,
         "Remember to touch your Yubikey to confirm the SSH connection."
     );
