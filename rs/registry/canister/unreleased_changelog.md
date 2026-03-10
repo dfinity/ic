@@ -11,8 +11,11 @@ on the process that this file is part of, see
 
 * Adding support for recalling replica versions for subnets.
 * CloudEngines can have a Free cycles cost schedule. 
+* **SEV invariant:** Enforced that SEV-enabled subnets contain only SEV-enabled nodes (i.e., nodes with a chip ID in their node record).
 
 ## Changed
+
+* **SEV on existing subnets:** Enabled SEV activation for existing subnets. Once enabled, SEV cannot be disabled.
 
 ## Deprecated
 

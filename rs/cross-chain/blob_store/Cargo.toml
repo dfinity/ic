@@ -16,6 +16,7 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
+ciborium = { workspace = true }
 hex = { workspace = true }
 ic-cdk = { workspace = true }
 ic-stable-structures = { workspace = true }
