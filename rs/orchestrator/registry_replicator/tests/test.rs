@@ -278,52 +278,58 @@ async fn random_mutate(pocket_ic: &PocketIcHelper, rng: &mut ReproducibleRng) ->
     }
 }
 
-async fn sleep_until_canister_certified_time_larger_than(
-    after_time: Time,
-    pocket_ic: &PocketIcHelper,
-) {
-    loop {
-        let (_, _, certified_time) = pocket_ic.get_all_certified_records().await;
-        if certified_time > after_time {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
-}
-
 const CONDITION_TIMEOUT: Duration = Duration::from_secs(30);
 const CONDITION_BACKOFF: Duration = Duration::from_millis(100);
 
-async fn wait_for_condition<F>(mut condition: F, message_on_timeout: &str)
+async fn wait_for_condition<F, Fut>(condition: F, message_on_timeout: &str)
 where
-    F: FnMut() -> bool,
+    Fut: Future<Output = bool>,
+    F: Fn() -> Fut,
 {
     let start = tokio::time::Instant::now();
-    while !condition() {
-        assert!(start.elapsed() < CONDITION_TIMEOUT, message_on_timeout);
+    while !condition().await {
+        assert!(
+            start.elapsed() < CONDITION_TIMEOUT,
+            "{}",
+            message_on_timeout
+        );
         tokio::time::sleep(CONDITION_BACKOFF).await;
     }
 }
 
+async fn wait_for_canister_certified_time_gt(pocket_ic: &PocketIcHelper, time: Time) {
+    wait_for_condition(
+        || async {
+            let (_, _, certified_time) = pocket_ic.get_all_certified_records().await;
+            certified_time > time
+        },
+        &format!("Timed out waiting for canister's certified time to exceed {time:?}"),
+    )
+    .await;
+}
+
 async fn wait_for_replicator_version(replicator: &RegistryReplicator, version: RegistryVersion) {
     wait_for_condition(
-        || replicator.get_registry_client().get_latest_version() >= version,
+        || async { replicator.get_registry_client().get_latest_version() >= version },
         &format!("Timed out waiting for replicator to reach version {version}"),
     )
+    .await;
 }
 
 async fn wait_for_not_polling(replicator: &RegistryReplicator) {
     wait_for_condition(
-        || !replicator.is_polling(),
+        || async { !replicator.is_polling() },
         "Timed out waiting for replicator to stop polling",
     )
+    .await;
 }
 
 async fn wait_for_certified_time_gt(replicator: &RegistryReplicator, time: Time) {
     wait_for_condition(
-        || *replicator.get_latest_certified_time().read().unwrap() > time,
+        || async { *replicator.get_latest_certified_time().read().unwrap() > time },
         &format!("Timed out waiting for replicator's latest certified time to exceed {time:?}"),
     )
+    .await;
 }
 
 #[tokio::test]
@@ -471,7 +477,7 @@ async fn test_has_replicated_all_versions_certified_before_init() {
     // Wait until the canister replies with a certified time that is before the replicator's
     // initialization time, so that we can test that the replicator does not claim to have
     // replicated all versions certified before init until it actually starts polling
-    sleep_until_canister_certified_time_larger_than(time_before_init, &pocket_ic).await;
+    wait_for_canister_certified_time_gt(&pocket_ic, time_before_init).await;
 
     let replicator =
         new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, Some(nns_pub_key)).await;
@@ -485,7 +491,7 @@ async fn test_has_replicated_all_versions_certified_before_init() {
 
     // Wait until the canister replies with a certified time that is after the replicator's
     // initialization time
-    sleep_until_canister_certified_time_larger_than(time_after_init, &pocket_ic).await;
+    wait_for_canister_certified_time_gt(&pocket_ic, time_after_init).await;
 
     tokio::spawn(replicator.start_polling(token).unwrap());
 
@@ -505,7 +511,7 @@ async fn test_has_replicated_all_versions_certified_before_init() {
     }
 
     // Wait until the canister replies with a larger certified time
-    sleep_until_canister_certified_time_larger_than(latest_certified_time, &pocket_ic).await;
+    wait_for_canister_certified_time_gt(&pocket_ic, latest_certified_time).await;
 
     // Wait for the replicator to poll the NNS again and get an even newer certified time
     wait_for_certified_time_gt(&replicator, latest_certified_time).await;
@@ -527,7 +533,7 @@ async fn test_has_not_replicated_all_versions_certified_before_init_when_caniste
     // Wait until the canister replies with a certified time that is before the replicator's
     // initialization time, so that we can test that the replicator does not claim to have
     // replicated all versions certified before init until it actually starts polling
-    sleep_until_canister_certified_time_larger_than(time_before_init, &pocket_ic).await;
+    wait_for_canister_certified_time_gt(&pocket_ic, time_before_init).await;
 
     let replicator =
         new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, Some(nns_pub_key)).await;
@@ -541,7 +547,7 @@ async fn test_has_not_replicated_all_versions_certified_before_init_when_caniste
 
     // Wait until the canister replies with a certified time that is after the replicator's
     // initialization time
-    sleep_until_canister_certified_time_larger_than(time_after_init, &pocket_ic).await;
+    wait_for_canister_certified_time_gt(&pocket_ic, time_after_init).await;
 
     tokio::spawn(replicator.start_polling(token).unwrap());
 
