@@ -71,6 +71,9 @@ pub struct HttpHandlerMetrics {
     // sync call handler metrics
     pub sync_call_early_response_trigger_total: IntCounterVec,
     pub sync_call_certificate_status_total: IntCounterVec,
+
+    // read_state metrics
+    pub read_state_path_type_total: IntCounterVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -207,6 +210,17 @@ impl HttpHandlerMetrics {
                 "The count of early response triggers for the /{v3,v4}/.../call endpoint.",
                 &[LABEL_SYNC_CALL_EARLY_RESPONSE_TRIGGER],
             ),
+            read_state_path_type_total: metrics_registry.int_counter_vec(
+                "replica_http_read_state_path_type_total",
+                "Count of read_state paths requested, by endpoint type and path type.",
+                &["endpoint", "path_type"],
+            ),
         }
+    }
+
+    pub fn observe_read_state_path(&self, endpoint_type: &str, path_type: &str) {
+        self.read_state_path_type_total
+            .with_label_values(&[endpoint_type, path_type])
+            .inc()
     }
 }
