@@ -75,6 +75,10 @@ impl SshHelper {
         if self.require_confirmation {
             wait_for_confirmation(&self.logger);
         }
+        info!(
+            self.logger,
+            "Remember to touch your Yubikey to confirm the SSH connection."
+        );
         match exec_cmd(&mut ssh) {
             Ok(Some(res)) => {
                 info!(self.logger, "{}", res);
