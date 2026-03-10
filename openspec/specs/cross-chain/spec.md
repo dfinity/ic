@@ -83,6 +83,61 @@ The `Blob` type pairs data with its content hash for integrity verification.
 
 ---
 
+### Requirement: Blob Tags
+Tags are optional user-specified labels for organizing blobs within the store, with validation enforced.
+
+#### Scenario: Insert blob with tags
+- **WHEN** a blob is inserted with an optional set of tags
+- **THEN** the tags are stored alongside the blob data
+- **AND** each tag is validated to be at most 100 characters
+- **AND** the tag set is serialized with the blob in stable memory
+
+#### Scenario: Invalid tag validation
+- **WHEN** a tag exceeds 100 characters or fails validation
+- **THEN** an `InvalidTag` error is returned with the reason
+- **AND** the blob insertion is rejected
+
+#### Scenario: Insert blob without tags
+- **WHEN** a blob is inserted with no tags (or `None`)
+- **THEN** the blob is stored with an empty tag vector
+- **AND** retrieval of tags returns an empty list
+
+#### Scenario: Tag retrieval with metadata
+- **WHEN** blob metadata is queried
+- **THEN** all tags associated with the blob are returned
+- **AND** tags are returned in insertion order
+
+---
+
+### Requirement: Blob Metadata
+Metadata tracks the origin and context of stored blobs: uploader principal, insertion time, size, and tags.
+
+#### Scenario: Metadata structure
+- **WHEN** a blob is inserted
+- **THEN** metadata is recorded with the uploader principal, insertion time (nanoseconds), blob size (bytes), and tag list
+- **AND** metadata is persisted in stable memory alongside blob data
+
+#### Scenario: Get blob metadata
+- **WHEN** `get_metadata` is called with a valid hash
+- **THEN** the metadata record is returned with uploader, insertion time, size, and tags
+- **AND** no blob data is returned (query-only)
+
+#### Scenario: Metadata for non-existent blob
+- **WHEN** `get_metadata` is called with a hash that does not exist
+- **THEN** a `NotFound` error is returned
+
+#### Scenario: Uploader tracking
+- **WHEN** a blob is inserted
+- **THEN** the caller's principal is recorded as the uploader in metadata
+- **AND** the uploader principal is immutable and returned with metadata queries
+
+#### Scenario: Insertion time precision
+- **WHEN** a blob is inserted
+- **THEN** the insertion time is captured in nanoseconds from `ic0::time()`
+- **AND** the time is preserved across canister upgrades
+
+---
+
 ### Requirement: Cross-Chain Proposal CLI
 The proposal CLI automates the creation of NNS governance proposals for upgrading and installing cross-chain canisters (ckBTC minter, ckETH minter, ledger suite orchestrator, etc.).
 

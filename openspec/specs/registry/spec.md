@@ -723,6 +723,36 @@ HostOS versions are managed separately from GuestOS/replica versions and can be 
 - **WHEN** a `UpdateNodesHostosVersionPayload` is submitted
 - **THEN** the specified nodes' HostOS version is updated
 
+### Requirement: Subnet Admins
+
+Subnets may designate a list of principal IDs as administrators with additional operational privileges. Subnet admin assignments are managed through registry mutations.
+
+#### Scenario: Store subnet admins in registry
+- **WHEN** subnet configuration is stored in the registry
+- **THEN** a `subnet_admins` field contains an optional vector of principal IDs
+- **AND** the field is persisted across canister upgrades
+
+#### Scenario: Update subnet admins
+- **WHEN** an `UpdateSubnetAdminsPayload` is submitted
+- **THEN** the target subnet's admin list is updated
+- **AND** the registry version is incremented
+- **AND** the change is reflected in subsequent registry queries
+
+#### Scenario: Admin list validation
+- **WHEN** a subnet's admin list is updated
+- **THEN** the new list is validated for correctness
+- **AND** duplicate principals in the admin list are rejected if applicable
+
+#### Scenario: Subnet admins are optional
+- **WHEN** a subnet has no designated admins
+- **THEN** the `subnet_admins` field is `None` or empty
+- **AND** no special privileges are granted
+
+#### Scenario: Admin access control
+- **WHEN** admin-only subnet operations are checked (e.g., certain configuration changes)
+- **THEN** the caller's principal is checked against the subnet's admin list
+- **AND** operations are rejected if the caller is not in the list
+
 ### Requirement: Change Subnet Membership
 
 Subnet membership can be changed by simultaneously adding and removing nodes in a single operation.
