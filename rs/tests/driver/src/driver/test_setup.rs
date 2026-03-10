@@ -1,7 +1,6 @@
 use crate::driver::ic::VmResources;
 use crate::driver::test_env::TestEnvAttribute;
 use chrono::Utc;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -22,18 +21,9 @@ impl GroupSetup {
             group_base_name: group_base_name.clone(),
             ..Default::default()
         };
-        let time = Utc::now().format("%Y-%m-%dT%H-%M-%S");
-        let alphabet: Vec<u8> = (b'A'..=b'Z')
-            .chain(b'a'..=b'z')
-            .chain(b'0'..=b'9')
-            .collect();
-        let random: String = (0..3)
-            .map(|_| {
-                let idx = rand::thread_rng().gen_range(0..alphabet.len());
-                alphabet[idx] as char
-            })
-            .collect();
-        res.infra_group_name = format!("{group_base_name}--{time}-{random}").replace('_', "-");
+        let time = Utc::now().format("%Y-%m-%dT%H-%M-%S-%6f");
+
+        res.infra_group_name = format!("{group_base_name}--{time}").replace('_', "-");
         res.group_timeout = timeout;
         res
     }
