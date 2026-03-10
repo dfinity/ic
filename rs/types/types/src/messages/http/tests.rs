@@ -78,7 +78,7 @@ mod try_from {
         }
 
         fn default_signed_ingress_content() -> SignedIngressContent {
-            SignedIngressContent::new(
+            SignedIngressContent::new_for_testing(
                 UserId::from(fixed::principal_id()),
                 fixed::canister_id(),
                 fixed::method_name(),
