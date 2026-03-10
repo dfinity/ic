@@ -578,6 +578,7 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            resource_limits: None,
             recalled_replica_version_ids: vec![],
         };
 
@@ -674,6 +675,7 @@ mod tests {
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: None,
                 recalled_replica_version_ids: vec![],
             }
         );
@@ -703,6 +705,7 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            resource_limits: None,
             recalled_replica_version_ids: vec![],
         };
 
@@ -767,6 +770,7 @@ mod tests {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: None,
                 recalled_replica_version_ids: vec![],
             }
         );

@@ -54,6 +54,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: None,
                 recalled_replica_version_ids: vec![],
             };
 
@@ -176,6 +177,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     chain_key_config: None,
                     canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                     subnet_admins: vec![],
+                    resource_limits: None,
                     recalled_replica_version_ids: vec![],
                 }
             );

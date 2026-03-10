@@ -424,6 +424,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         chain_key_config: None,
         canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
         subnet_admins: Some(vec![]),
+        resource_limits: None,
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),

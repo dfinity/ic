@@ -104,6 +104,9 @@ message SubnetRecord {
   // they check the latest registry version for recalled_replica_version_ids.
   repeated string recalled_replica_version_ids = 33;
 
+  // Limits on resource consumption (e.g., disk usage).
+  ResourceLimits resource_limits = 34;
+
   reserved 1, 2, 4, 6, 13, 20, 21, 22, 27;
   reserved "ic_version_id";
   reserved "initial_dkg_transcript";
@@ -365,4 +368,9 @@ enum CanisterCyclesCostSchedule {
 
   // Canisters are not charged cycles.
   CANISTER_CYCLES_COST_SCHEDULE_FREE = 2;
+}
+
+// Limits on resource consumption (e.g., disk usage).
+message ResourceLimits {
+  optional uint64 maximum_state_size = 1;
 }

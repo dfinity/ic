@@ -100,6 +100,9 @@ pub struct SubnetRecord {
     /// they check the latest registry version for recalled_replica_version_ids.
     #[prost(string, repeated, tag = "33")]
     pub recalled_replica_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Limits on resource consumption (e.g., disk usage).
+    #[prost(message, optional, tag = "34")]
+    pub resource_limits: ::core::option::Option<ResourceLimits>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
@@ -358,6 +361,12 @@ pub struct ChainKeyConfig {
     /// parallel to fill the pre-signature stash.
     #[prost(uint32, optional, tag = "4")]
     pub max_parallel_pre_signature_transcripts_in_creation: ::core::option::Option<u32>,
+}
+/// Limits on resource consumption (e.g., disk usage).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct ResourceLimits {
+    #[prost(uint64, optional, tag = "1")]
+    pub maximum_state_size: ::core::option::Option<u64>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

@@ -13,7 +13,8 @@ use ic_protobuf::{
         node::v1::NodeRecord,
         subnet::v1::{
             CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-            ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+            ChainKeyConfig as ChainKeyConfigPb, ResourceLimits, SubnetFeatures as SubnetFeaturesPb,
+            SubnetRecord,
         },
     },
     types::v1::PrincipalId as PrincipalIdPb,
@@ -290,6 +291,8 @@ pub struct CreateSubnetPayload {
 
     pub subnet_admins: Option<Vec<PrincipalId>>,
 
+    pub resource_limits: Option<ResourceLimits>,
+
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub ingress_bytes_per_block_soft_cap: u64,
     pub gossip_max_artifact_streams_per_peer: u32,
@@ -565,6 +568,8 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .into_iter()
                 .map(PrincipalIdPb::from)
                 .collect(),
+
+            resource_limits: val.resource_limits,
 
             recalled_replica_version_ids: vec![],
         }
