@@ -128,6 +128,16 @@ Before any mutation is applied, the registry validates that the resulting state 
 - **WHEN** the registry state is validated
 - **THEN** node records are consistent and well-formed
 
+#### Scenario: Node chip ID uniqueness
+- **WHEN** the registry state is validated
+- **THEN** each node's chip_id (if present and non-empty) must be unique across all nodes
+- **AND** if two nodes have the same chip_id, the invariant check fails
+
+#### Scenario: SSH key count limits
+- **WHEN** a node record is validated
+- **THEN** the `ssh_node_state_write_access` field must not exceed `MAX_NUM_SSH_KEYS` entries
+- **AND** if the limit is exceeded, the invariant check fails with the node's HTTP endpoint in the error message
+
 ### Requirement: Subnet Creation
 
 New subnets are created through governance proposals. The creation process generates DKG key material, creates subnet records, and updates the routing table.
