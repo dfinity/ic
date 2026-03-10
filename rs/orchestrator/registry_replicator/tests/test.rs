@@ -292,42 +292,38 @@ async fn sleep_until_canister_certified_time_larger_than(
 }
 
 const CONDITION_TIMEOUT: Duration = Duration::from_secs(30);
+const CONDITION_BACKOFF: Duration = Duration::from_millis(100);
+
+async fn wait_for_condition<F>(mut condition: F, message_on_timeout: &str)
+where
+    F: FnMut() -> bool,
+{
+    let start = tokio::time::Instant::now();
+    while !condition() {
+        assert!(start.elapsed() < CONDITION_TIMEOUT, message_on_timeout);
+        tokio::time::sleep(CONDITION_BACKOFF).await;
+    }
+}
 
 async fn wait_for_replicator_version(replicator: &RegistryReplicator, version: RegistryVersion) {
-    let start = tokio::time::Instant::now();
-    loop {
-        let current_version = replicator.get_registry_client().get_latest_version();
-        if current_version >= version {
-            break;
-        }
-        assert!(
-            start.elapsed() < CONDITION_TIMEOUT,
-            "Timed out waiting for replicator to reach version {version}, latest observed version: {current_version}"
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    wait_for_condition(
+        || replicator.get_registry_client().get_latest_version() >= version,
+        &format!("Timed out waiting for replicator to reach version {version}"),
+    )
 }
 
 async fn wait_for_not_polling(replicator: &RegistryReplicator) {
-    let start = tokio::time::Instant::now();
-    while replicator.is_polling() {
-        assert!(
-            start.elapsed() < CONDITION_TIMEOUT,
-            "Timed out waiting for replicator to stop polling"
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    wait_for_condition(
+        || !replicator.is_polling(),
+        "Timed out waiting for replicator to stop polling",
+    )
 }
 
 async fn wait_for_certified_time_gt(replicator: &RegistryReplicator, time: Time) {
-    let start = tokio::time::Instant::now();
-    while *replicator.get_latest_certified_time().read().unwrap() <= time {
-        assert!(
-            start.elapsed() < CONDITION_TIMEOUT,
-            "Timed out waiting for certified time to exceed {time:?}"
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    wait_for_condition(
+        || *replicator.get_latest_certified_time().read().unwrap() > time,
+        &format!("Timed out waiting for replicator's latest certified time to exceed {time:?}"),
+    )
 }
 
 #[tokio::test]
