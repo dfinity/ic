@@ -71,7 +71,6 @@ def component_files(mode):
         # misc
         Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
         Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
-        Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
         Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
         Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
         Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
@@ -89,6 +88,7 @@ def component_files(mode):
         Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
 
         # monitoring
+        Label("monitoring/metrics.sh"): "/opt/ic/bin/metrics.sh",
         Label("monitoring/guestos/ipv4-connectivity-check/ipv4-connectivity-check.sh"): "/opt/ic/bin/ipv4-connectivity-check.sh",
         Label("monitoring/guestos/ipv4-connectivity-check/ipv4-connectivity-check.service"): "/etc/systemd/system/ipv4-connectivity-check.service",
         Label("monitoring/guestos/ipv4-connectivity-check/ipv4-connectivity-check.timer"): "/etc/systemd/system/ipv4-connectivity-check.timer",
