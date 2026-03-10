@@ -19,7 +19,6 @@ hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
-ic-consensus-features = { path = "../../consensus/features" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-cup-explorer = { path = "../../cup_explorer" }
 ic-limits = { path = "../../limits" }

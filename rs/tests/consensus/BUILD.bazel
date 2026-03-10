@@ -257,7 +257,6 @@ system_test_nns(
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/canister_client",
-        "//rs/consensus/features",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/common",
         "//rs/nns/constants",

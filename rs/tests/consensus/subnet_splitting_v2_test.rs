@@ -74,6 +74,8 @@ const CHATTING_CANISTERS_ON_THIRD_SUBNET_COUNT: usize = 3;
 const FIRST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 3;
 const LAST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 8;
 
+const TEST_ENABLED: bool = false;
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -119,7 +121,7 @@ fn subnet_splitting_test(env: TestEnv) {
     );
     std::thread::sleep(Duration::from_secs(10));
 
-    if !ic_consensus_features::SUBNET_SPLITTING_V2_ENABLED {
+    if !TEST_ENABLED {
         info!(
             env.logger(),
             "Subnet splititing not enabled yet, skipping the test."

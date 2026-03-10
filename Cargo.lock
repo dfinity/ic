@@ -15688,7 +15688,6 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-canister-client",
- "ic-consensus-features",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-cup-explorer",
  "ic-limits",
