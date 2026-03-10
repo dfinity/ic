@@ -335,7 +335,10 @@ impl LedgerSuiteConfig {
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
         let index_upgrade_arg = IndexArg::Upgrade(IndexUpgradeArg {
             ledger_id: None,
+            #[allow(deprecated)]
             retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: None,
+            max_retrieve_blocks_from_ledger_interval_seconds: None,
         });
         let args = Encode!(&index_upgrade_arg).unwrap();
         state_machine

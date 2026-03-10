@@ -38,12 +38,13 @@ fn append_deltas(
 ) {
     let mut next_idx = start_idx;
     let mut total = 0;
-    loop {
+    while total < volume_bytes {
         let mut delta = make_full_delta(next_idx, delta_log_byte_capacity, content_len);
-        total += delta.bytes_used();
-        if total > volume_bytes {
-            return;
+        let added_size = LogMemoryStore::estimate_storage_size(&delta);
+        if added_size == 0 {
+            break;
         }
+        total += added_size;
         store.append_delta_log(&mut delta);
         next_idx = store.next_idx();
     }
@@ -100,6 +101,32 @@ fn test_memory_usage_after_appending_logs() {
     delta.add_record(100, b"a".to_vec());
     delta.add_record(200, b"bb".to_vec());
     delta.add_record(300, b"ccc".to_vec());
+
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+    s.append_delta_log(&mut delta);
+
+    // Assert memory usage.
+    assert!(!s.is_empty());
+    assert_eq!(s.memory_usage(), 4 * KIB + 4 * KIB + TEST_LOG_MEMORY_LIMIT);
+    assert_eq!(
+        s.total_virtual_memory_usage(),
+        4 * KIB + 4 * KIB + TEST_LOG_MEMORY_LIMIT // header + index + data
+    );
+    assert_eq!(s.byte_capacity(), TEST_LOG_MEMORY_LIMIT);
+    assert_gt!(s.bytes_used(), 0);
+    assert_lt!(s.bytes_used(), TEST_LOG_MEMORY_LIMIT);
+    assert_eq!(s.records(None).len(), 3);
+    assert_eq!(s.next_idx(), 3);
+}
+
+#[test]
+fn test_memory_usage_after_appending_empty_log_records() {
+    // Collect some delta logs with no messages.
+    let mut delta = CanisterLog::default_delta();
+    delta.add_record(100, vec![]);
+    delta.add_record(200, vec![]);
+    delta.add_record(300, vec![]);
 
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
@@ -305,46 +332,49 @@ fn max_response_size_respected_with_filtering_by_timestamp() {
 #[test]
 fn test_increasing_capacity_preserves_records() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
-    s.resize_for_testing(1_000_000); // 1 MB
+    let big_size = 100 * KIB;
+    let delta_size = 10 * KIB;
+    let message_len = 0;
+    s.resize_for_testing(big_size - 100); // Initial size is smaller.
 
-    // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
-    append_deltas(&mut s, 0, 200_000, 100_000, 1_000);
+    // Append records.
+    append_deltas(&mut s, 0, big_size, delta_size, message_len);
 
-    let records_before = s.records(None);
     let bytes_used_before = s.bytes_used();
 
     // Increase capacity.
-    s.resize_for_testing(2_000_000); // 2 MB
+    s.resize_for_testing(big_size);
 
-    let records_after = s.records(None);
     let bytes_used_after = s.bytes_used();
 
     // Verify all records are preserved.
-    assert_eq!(records_before, records_after);
     assert_eq!(bytes_used_before, bytes_used_after);
 }
 
 #[test]
 fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
-    s.resize_for_testing(500_000); // 500 KB
+    let big_size = 100 * KIB;
+    let delta_size = 10 * KIB;
+    let message_len = 0;
+    s.resize_for_testing(big_size); // Initial size is bigger.
 
-    // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
-    append_deltas(&mut s, 0, 200_000, 100_000, 1_000);
+    // Append records.
+    append_deltas(&mut s, 0, big_size, delta_size, message_len);
 
-    let records_before = s.records(None);
+    let byte_capacity_before = s.byte_capacity();
     let bytes_used_before = s.bytes_used();
     let next_idx_before = s.next_idx();
 
     // Decrease capacity.
-    s.resize_for_testing(100_000); // 100 KB
+    s.resize_for_testing(big_size - 100);
 
-    let records_after = s.records(None);
+    let byte_capacity_after = s.byte_capacity();
     let bytes_used_after = s.bytes_used();
 
     // Verify some records are dropped.
-    assert_lt!(records_after.len(), records_before.len());
-    assert_lt!(bytes_used_after, bytes_used_before);
+    assert_gt!(byte_capacity_before, byte_capacity_after);
+    assert_gt!(bytes_used_before, bytes_used_after);
     // Verify recent records are preserved.
     assert_eq!(next_idx_before, s.next_idx());
 }

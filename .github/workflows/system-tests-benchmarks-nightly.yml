@@ -13,11 +13,16 @@ env:
 jobs:
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
-    runs-on: *dind-large-setup
-    container: *container-setup
+    runs-on:
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:0a0cff0b12c7586c2f312c739176924edf0c9e71df92f382eba836913da9f1c6
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 480
     steps:
-      - *checkout
+      - name: Checkout
+        uses: actions/checkout@v4
       - uses: ./.github/actions/netrc
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks

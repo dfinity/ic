@@ -33,7 +33,7 @@ use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
 use ic_ckbtc_minter::updates::update_balance::UtxoStatus::Checked;
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_system_test_driver::{
-    driver::{test_env::TestEnv, universal_vm::UniversalVms},
+    driver::{test_env::TestEnv, test_env_api::RETRY_BACKOFF, universal_vm::UniversalVms},
     util::UniversalCanister,
 };
 use ic_universal_canister::{management, wasm};
@@ -597,15 +597,37 @@ pub async fn assert_no_transaction(agent: &Icrc1Agent, logger: &Logger) {
 }
 
 /// Assert that calling update_balance does not detect new UTXOs.
-pub async fn assert_no_new_utxo(agent: &CkBtcMinterAgent, subaccount: &Subaccount) {
-    let result = agent
-        .update_balance(UpdateBalanceArgs {
-            owner: None,
-            subaccount: Some(*subaccount),
-        })
-        .await
-        .expect("Error while calling update_balance");
-    assert_matches!(result, Err(UpdateBalanceError::NoNewUtxos { .. }));
+/// Retries on `TemporarilyUnavailable` errors which can occur when the
+/// Bitcoin canister hasn't synced enough blocks yet.
+pub async fn assert_no_new_utxo(
+    agent: &CkBtcMinterAgent,
+    logger: &Logger,
+    subaccount: &Subaccount,
+) {
+    ic_system_test_driver::retry_with_msg_async!(
+        "assert_no_new_utxo",
+        logger,
+        SHORT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            let result = agent
+                .update_balance(UpdateBalanceArgs {
+                    owner: None,
+                    subaccount: Some(*subaccount),
+                })
+                .await
+                .expect("Error while calling update_balance");
+            match result {
+                Err(UpdateBalanceError::NoNewUtxos { .. }) => Ok(()),
+                Err(UpdateBalanceError::TemporarilyUnavailable(msg)) => {
+                    anyhow::bail!("TemporarilyUnavailable: {msg}")
+                }
+                other => panic!("Expected NoNewUtxos but got: {other:?}"),
+            }
+        }
+    )
+    .await
+    .expect("assert_no_new_utxo failed");
 }
 
 /// Assert that calling update_balance returns a transient error.
