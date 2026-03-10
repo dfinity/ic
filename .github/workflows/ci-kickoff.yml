@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+      - 'maksym/enable-lms'
       - 'dev-gh-*'
   pull_request:
     branches-ignore:
