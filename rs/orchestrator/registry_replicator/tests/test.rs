@@ -324,7 +324,7 @@ async fn wait_for_not_polling(replicator: &RegistryReplicator) {
     .await;
 }
 
-async fn wait_for_certified_time_gt(replicator: &RegistryReplicator, time: Time) {
+async fn wait_for_replicator_certified_time_gt(replicator: &RegistryReplicator, time: Time) {
     wait_for_condition(
         || async { *replicator.get_latest_certified_time().read().unwrap() > time },
         &format!("Timed out waiting for replicator's latest certified time to exceed {time:?}"),
@@ -495,16 +495,12 @@ async fn test_has_replicated_all_versions_certified_before_init() {
 
     tokio::spawn(replicator.start_polling(token).unwrap());
 
-    // Wait for the replicator to poll the NNS and get a certified time after init.
-    // This may take longer than poll_delay under load, so we wait for the condition
-    // rather than sleeping a fixed amount.
-    wait_for_certified_time_gt(&replicator, time_after_init).await;
-
-    // The replicator has polled the NNS and its response was certified after the replicator's
-    // initialization time, even if the canister is behind (it has only 1 version). This mocks
-    // the scenario where the replicator contacts a node that is behind.
-    let latest_certified_time = *replicator.get_latest_certified_time().read().unwrap();
+    // Wait for the replicator to poll the NNS and get a response certified after the replicator's
+    // initialization time, even if the canister is behind (it has only 1 version). This mocks the
+    // scenario where the replicator contacts a node that is behind.
+    wait_for_replicator_certified_time_gt(&replicator, time_after_init).await;
     assert!(replicator.has_replicated_all_versions_certified_before_init());
+    let latest_certified_time = *replicator.get_latest_certified_time().read().unwrap();
 
     for _ in 0..(INIT_NUM_VERSIONS + 2) {
         random_mutate(&pocket_ic, &mut rng).await;
@@ -514,8 +510,7 @@ async fn test_has_replicated_all_versions_certified_before_init() {
     wait_for_canister_certified_time_gt(&pocket_ic, latest_certified_time).await;
 
     // Wait for the replicator to poll the NNS again and get an even newer certified time
-    wait_for_certified_time_gt(&replicator, latest_certified_time).await;
-
+    wait_for_replicator_certified_time_gt(&replicator, latest_certified_time).await;
     assert!(replicator.has_replicated_all_versions_certified_before_init());
 }
 
@@ -551,8 +546,9 @@ async fn test_has_not_replicated_all_versions_certified_before_init_when_caniste
 
     tokio::spawn(replicator.start_polling(token).unwrap());
 
-    // Wait for the replicator to poll the NNS and get a certified time after init
-    wait_for_certified_time_gt(&replicator, time_after_init).await;
+    // Wait for the replicator to poll the NNS and get a response certified after the replicator's
+    // initialization time
+    wait_for_replicator_certified_time_gt(&replicator, time_after_init).await;
 
     assert!(replicator.has_replicated_all_versions_certified_before_init());
 }
