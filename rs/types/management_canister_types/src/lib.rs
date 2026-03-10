@@ -1233,7 +1233,7 @@ impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
                                     .get()
                                     .iter()
                                     .map(|c| (*c).into())
-                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
                             },
                         ),
                     ),
