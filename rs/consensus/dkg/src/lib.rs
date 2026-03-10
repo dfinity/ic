@@ -2177,9 +2177,9 @@ mod tests {
     ///   (= 2), and only the first context's transcripts are included.
     #[test]
     fn test_early_remote_transcripts_respects_max() {
-        for (setup_target_bytes, reshare_target_bytes, desc) in [
-            ([1u8; 32], [2u8; 32], "SetupInitialDKG first"),
-            ([2u8; 32], [1u8; 32], "ReshareChainKey first"),
+        for (skipped_target_bytes, setup_target_bytes, reshare_target_bytes, desc) in [
+            ([0u8; 32], [1u8; 32], [2u8; 32], "SetupInitialDKG first"),
+            ([0u8; 32], [2u8; 32], [1u8; 32], "ReshareChainKey first"),
         ] {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let node_ids = (1..4).map(node_test_id).collect::<Vec<_>>();
@@ -2189,7 +2189,7 @@ mod tests {
                 };
                 // This context always comes first but will be
                 // skipped because one of its two configs lacks dealings.
-                let skipped_target_id = NiDkgTargetId::new([0u8; 32]);
+                let skipped_target_id = NiDkgTargetId::new(skipped_target_bytes);
                 let setup_target_id = NiDkgTargetId::new(setup_target_bytes);
                 let reshare_target_id = NiDkgTargetId::new(reshare_target_bytes);
 
