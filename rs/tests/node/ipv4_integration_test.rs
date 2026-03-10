@@ -191,7 +191,16 @@ EOT
         }
 
         info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());
-        let topology = topology.block_for_newer_registry_version().await.unwrap();
+        // Use a longer timeout (300) since node re-registration involves
+        // generating new crypto keys and registering with the NNS, which
+        // is significantly slower than a direct registry canister call.
+        let topology = topology
+            .block_for_newer_registry_version_within_duration(
+                Duration::from_secs(300),
+                Duration::from_secs(2),
+            )
+            .await
+            .unwrap();
 
         info!(log, "Assert there is 1 unassigned node again");
         assert_eq!(topology.unassigned_nodes().count(), 1);
