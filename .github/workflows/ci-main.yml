@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
   pull-requests: read
 
 env:
@@ -139,6 +138,9 @@ jobs:
           else
               skip_buf_checks="false"
           fi
+
+          release_build="true"
+          diff_only="false"
 
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
