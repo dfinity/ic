@@ -16,10 +16,10 @@ fn should_render_empty_dashboard() {
     assert_has_text(&parsed, "#total-size > td > code", "0");
     assert!(
         parsed
-            .select(&Selector::parse("#blobs + table > tbody > tr").unwrap())
+            .select(&Selector::parse("#blobs").unwrap())
             .next()
             .is_none(),
-        "expected no blob rows"
+        "expected no blobs section"
     );
 }
 
@@ -59,7 +59,7 @@ fn should_render_blobs() {
         "98ac5cfe873a7b42b7c98a1b3fbeff2255e340deb9c80aa9eb0bd0ba3a0d2a99",
         "principal-1",
         "100",
-        "ledger, u256",
+        &["ledger", "u256"],
     );
     assert_row_contains(
         &parsed,
@@ -67,7 +67,7 @@ fn should_render_blobs() {
         "3d33f9edeae50572a42378d1eaaa29f5149543ec16268797b058156b1b575a04",
         "principal-2",
         "200",
-        "",
+        &[],
     );
 }
 
@@ -87,7 +87,7 @@ fn assert_row_contains(
     hash: &str,
     uploader: &str,
     size: &str,
-    tags: &str,
+    tags: &[&str],
 ) {
     let row_sel =
         Selector::parse(&format!("#blobs + table > tbody > tr:nth-child({row})")).unwrap();
@@ -104,5 +104,14 @@ fn assert_row_contains(
     assert_eq!(cells[2], size, "size mismatch in row {row}");
     // cells[3] is the formatted timestamp, just check it's not empty
     assert!(!cells[3].is_empty(), "timestamp missing in row {row}");
-    assert_eq!(cells[4], tags, "tags mismatch in row {row}");
+    let tag_sel = Selector::parse(".tag").unwrap();
+    let actual_tags: Vec<String> = row_el
+        .select(&tag_sel)
+        .map(|el| el.text().collect::<String>())
+        .collect();
+    assert_eq!(
+        actual_tags,
+        tags.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+        "tags mismatch in row {row}"
+    );
 }

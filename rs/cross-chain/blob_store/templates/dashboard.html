@@ -40,6 +40,15 @@
             padding: 0.5em;
             vertical-align: top;
         }
+
+        .tag {
+            display: inline-block;
+            background-color: #e0e0e0;
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: small;
+            margin: 2px;
+        }
     </style>
 </head>
 
@@ -60,6 +69,7 @@
                     </tr>
                 </tbody>
             </table>
+            {% if !blobs.is_empty() %}
             <h3 id="blobs">Blobs</h3>
             <table>
                 <thead>
@@ -76,11 +86,12 @@
                         <td><code>{{ blob.uploader }}</code></td>
                         <td><code>{{ blob.size }}</code></td>
                         <td><code>{{ blob.inserted_at_ns|timestamp_to_datetime }}</code></td>
-                        <td>{% for tag in blob.tags %}{{ tag }}{%+ if !loop.last %}, {%+ endif %}{% endfor %}</td>
+                        <td>{% for tag in blob.tags %}<span class="tag">{{ tag }}</span>{%+ endfor %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            {% endif %}
         </div>
     </div>
 </body>
