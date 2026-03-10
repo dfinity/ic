@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
   pull-requests: read
 
 env:
@@ -82,7 +83,7 @@ jobs:
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
-          protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
+          protected_branches=("^master$" "^rc--" "^hotfix-" "^public-hotfix-")
           for pattern in "${protected_branches[@]}"; do
               if [[ "$BRANCH_NAME" =~ $pattern ]]; then
                   is_protected_branch="true"
@@ -138,7 +139,6 @@ jobs:
           else
               skip_buf_checks="false"
           fi
-
 
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
@@ -203,7 +203,7 @@ jobs:
               )
             if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
                 bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
-            elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
+            elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
                 bazel_args+=( --test_timeout_filters=short,moderate )
             else
                 bazel_args+=( --keep_going )
@@ -265,12 +265,18 @@ jobs:
             bazel_do build
             bazel_do test
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        if: needs.config.outputs.release-build == 'true'
+        with:
+          role-session-name: "GitHub-Actions_ic_upload-artifacts"
+          role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
+          aws-region: eu-central-1
+
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true'
         env:
-          AWS_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_AWS_ACCESS_KEY_ID }}
-          AWS_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_AWS_SECRET_ACCESS_KEY }}
           CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
@@ -330,13 +336,19 @@ jobs:
               --test_tag_filters=test_all_platforms \
               //...
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        if: needs.config.outputs.release-build == 'true'
+        with:
+          role-session-name: "GitHub-Actions_ic_upload-artifacts"
+          role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
+          aws-region: eu-central-1
+
       - name: Upload artifacts
         # NOTE: GHA output quirk, 'true' is a string
         if: ${{ needs.config.outputs.full_macos_build == 'true' && needs.config.outputs.release-build == 'true' }}
         uses: ./.github/actions/upload-artifacts
         env:
-          AWS_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_AWS_ACCESS_KEY_ID }}
-          AWS_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_AWS_SECRET_ACCESS_KEY }}
           CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
@@ -468,11 +480,16 @@ jobs:
 
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-session-name: "GitHub-Actions_ic_upload-artifacts"
+          role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
+          aws-region: eu-central-1
+
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
         env:
-          AWS_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_AWS_ACCESS_KEY_ID }}
-          AWS_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_AWS_SECRET_ACCESS_KEY }}
           CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
@@ -686,7 +703,8 @@ jobs:
           contains(github.event.pull_request.labels.*.name, 'CI_RUN_CARGO_JOBS') ||
           env.BRANCH_NAME == 'master' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-')
+          startsWith(env.BRANCH_NAME, 'hotfix-') ||
+          startsWith(env.BRANCH_NAME, 'public-hotfix-')
         shell: bash
         run: |
           set -eExuo pipefail
@@ -748,6 +766,7 @@ jobs:
           steps.filter.outputs.container-run == 'true' ||
           env.BRANCH_NAME == 'master' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-')
+          startsWith(env.BRANCH_NAME, 'hotfix-') ||
+          startsWith(env.BRANCH_NAME, 'public-hotfix-')
         run: |
           ./ci/container/container-run.sh ${{ matrix.command }}

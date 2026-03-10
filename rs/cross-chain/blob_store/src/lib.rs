@@ -9,6 +9,7 @@ mod tests;
 use ic_stable_structures::Storable;
 use ic_stable_structures::storable::Bound;
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -55,6 +56,49 @@ impl Storable for Hash {
     };
 }
 
+const MAX_TAG_LENGTH: usize = 100;
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Tag(String);
+
+impl Tag {
+    pub fn new(s: String) -> Result<Self, InvalidTagError> {
+        if s.len() > MAX_TAG_LENGTH {
+            return Err(InvalidTagError::TooLong {
+                max: MAX_TAG_LENGTH,
+                actual: s.len(),
+            });
+        }
+        Ok(Self(s))
+    }
+}
+
+impl Display for Tag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum InvalidTagError {
+    TooLong { max: usize, actual: usize },
+}
+
+impl Display for InvalidTagError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InvalidTagError::TooLong { max, actual } => {
+                write!(
+                    f,
+                    "tag is too long: expected at most {max} bytes, got {actual} bytes"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for InvalidTagError {}
+
 pub struct Blob {
     data: Vec<u8>,
     hash: Hash,
@@ -83,4 +127,12 @@ impl From<Vec<u8>> for Blob {
     fn from(data: Vec<u8>) -> Self {
         Self::new(data)
     }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Metadata {
+    pub uploader: candid::Principal,
+    pub inserted_at_ns: u64,
+    pub size: u64,
+    pub tags: BTreeSet<Tag>,
 }

@@ -96,6 +96,7 @@ impl ArtifactPools {
         )));
 
         let mut idkg_pool = IDkgPoolImpl::new(
+            node_id,
             config.clone(),
             log.clone(),
             metrics_registry.clone(),
