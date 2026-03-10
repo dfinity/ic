@@ -141,6 +141,7 @@ jobs:
           fi
 
           release_build="true"
+          diff_only="false"
 
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
