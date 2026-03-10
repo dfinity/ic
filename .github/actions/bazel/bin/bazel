@@ -147,7 +147,7 @@ bazel_bes() {
 }
 
 startup_options=(
-    --output_base=/cache
+    --output_base=/var/tmp/bazel-output # Output base wiped after run
 )
 
 # Add the original arguments back
