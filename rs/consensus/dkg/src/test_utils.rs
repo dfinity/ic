@@ -22,30 +22,50 @@ use ic_types::{
 };
 use std::{collections::BTreeMap, sync::Arc};
 
-pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
-    state_manager: Arc<RefMockStateManager>,
+fn make_setup_initial_dkg_context(
     registry_version: RegistryVersion,
     node_ids: Vec<u64>,
+    target_id: NiDkgTargetId,
+) -> SubnetCallContext {
+    SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
+        request: RequestBuilder::new().build(),
+        nodes_in_target_subnet: node_ids.into_iter().map(node_test_id).collect(),
+        target_id,
+        registry_version,
+        time: ic_types::time::UNIX_EPOCH,
+    })
+}
+
+fn make_reshare_chain_key_context(
+    registry_version: RegistryVersion,
+    key_id: VetKdKeyId,
+    node_ids: Vec<u64>,
+    target_id: NiDkgTargetId,
+) -> SubnetCallContext {
+    SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
+        request: RequestBuilder::new().build(),
+        key_id: MasterPublicKeyId::VetKd(key_id),
+        nodes: node_ids.into_iter().map(node_test_id).collect(),
+        registry_version,
+        time: ic_types::time::UNIX_EPOCH,
+        target_id,
+    })
+}
+
+/// Set up the state manager mock to return an initial state containing the
+/// given subnet call contexts.
+pub(super) fn complement_state_manager_with_dkg_contexts(
+    state_manager: Arc<RefMockStateManager>,
+    contexts: Vec<SubnetCallContext>,
     times: Option<usize>,
-    target: Option<NiDkgTargetId>,
 ) {
     let mut state = ic_test_utilities_state::get_initial_state(0, 0);
-
-    // Add the context into state_manager.
-    let nodes_in_target_subnet = node_ids.into_iter().map(node_test_id).collect();
-
-    if let Some(target_id) = target {
-        state.metadata.subnet_call_context_manager.push_context(
-            SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
-                request: RequestBuilder::new().build(),
-                nodes_in_target_subnet,
-                target_id,
-                registry_version,
-                time: state.time(),
-            }),
-        );
+    for context in contexts {
+        state
+            .metadata
+            .subnet_call_context_manager
+            .push_context(context);
     }
-
     let mut mock = state_manager.get_mut();
     let expectation = mock
         .expect_get_state_at()
@@ -53,6 +73,20 @@ pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
     if let Some(times) = times {
         expectation.times(times);
     }
+}
+
+pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
+    state_manager: Arc<RefMockStateManager>,
+    registry_version: RegistryVersion,
+    node_ids: Vec<u64>,
+    times: Option<usize>,
+    target: Option<NiDkgTargetId>,
+) {
+    let contexts = target
+        .into_iter()
+        .map(|t| make_setup_initial_dkg_context(registry_version, node_ids.clone(), t))
+        .collect();
+    complement_state_manager_with_dkg_contexts(state_manager, contexts, times);
 }
 
 pub(super) fn complement_state_manager_with_reshare_chain_key_request(
@@ -63,31 +97,31 @@ pub(super) fn complement_state_manager_with_reshare_chain_key_request(
     times: Option<usize>,
     target: Option<NiDkgTargetId>,
 ) {
-    let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+    let contexts = target
+        .into_iter()
+        .map(|t| {
+            make_reshare_chain_key_context(registry_version, key_id.clone(), node_ids.clone(), t)
+        })
+        .collect();
+    complement_state_manager_with_dkg_contexts(state_manager, contexts, times);
+}
 
-    // Add the context into state_manager.
-    let nodes_in_target_subnet = node_ids.into_iter().map(node_test_id).collect();
-
-    if let Some(target_id) = target {
-        state.metadata.subnet_call_context_manager.push_context(
-            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
-                request: RequestBuilder::new().build(),
-                key_id: MasterPublicKeyId::VetKd(key_id),
-                nodes: nodes_in_target_subnet,
-                registry_version,
-                time: state.time(),
-                target_id,
-            }),
-        );
-    }
-
-    let mut mock = state_manager.get_mut();
-    let expectation = mock
-        .expect_get_state_at()
-        .return_const(Ok(Labeled::new(Height::new(0), Arc::new(state))));
-    if let Some(times) = times {
-        expectation.times(times);
-    }
+pub(super) fn complement_state_manager_with_both_dkg_contexts(
+    state_manager: Arc<RefMockStateManager>,
+    registry_version: RegistryVersion,
+    key_id: VetKdKeyId,
+    node_ids: Vec<u64>,
+    setup_target_id: NiDkgTargetId,
+    reshare_target_id: NiDkgTargetId,
+) {
+    complement_state_manager_with_dkg_contexts(
+        state_manager,
+        vec![
+            make_setup_initial_dkg_context(registry_version, node_ids.clone(), setup_target_id),
+            make_reshare_chain_key_context(registry_version, key_id, node_ids, reshare_target_id),
+        ],
+        None,
+    );
 }
 
 /// Extract the remote dkg transcripts from the current highest validated block
