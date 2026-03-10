@@ -18,7 +18,7 @@ use reqwest::{Client, Response};
 use serde_bytes::ByteBuf;
 use std::time::{Duration, Instant};
 
-pub const UPDATE_POLLING_TIMEOUT: Duration = Duration::from_secs(10);
+pub const UPDATE_POLLING_TIMEOUT: Duration = Duration::from_secs(60);
 /// user ids start with 10000 and increase by 1 for each new user
 pub const USER_NUMBER_OFFSET: u64 = 10_000;
 
