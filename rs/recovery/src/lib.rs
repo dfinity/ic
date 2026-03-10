@@ -143,7 +143,7 @@ impl Recovery {
         let local_store_path = work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE);
         let nns_pem = recovery_dir.join("nns.pem");
 
-        let mut to_create: Vec<&Path> = vec![&binary_dir, &data_dir, &work_dir, &local_store_path];
+        let to_create: Vec<&Path> = vec![&binary_dir, &data_dir, &work_dir, &local_store_path];
 
         match Recovery::create_dirs(&to_create) {
             Err(RecoveryError::IoError(s, err)) => match err.kind() {
