@@ -1234,7 +1234,6 @@ impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
                                     .iter()
                                     .map(|c| (*c).into())
                                     .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
-                                    .clone(),
                             },
                         ),
                     ),
@@ -1323,7 +1322,6 @@ impl From<&SnapshotVisibility> for pb_canister_state_bits::SnapshotVisibility {
                                     .iter()
                                     .map(|c| (*c).into())
                                     .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
-                                    .clone(),
                             },
                         ),
                     ),
