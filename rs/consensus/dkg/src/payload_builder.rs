@@ -168,7 +168,8 @@ pub(crate) fn create_early_remote_transcripts(
         .map_err(DkgPayloadCreationError::StateManagerError)?;
 
     //  Since this function is relatively expensive, we simply return if there are no outstanding DKG contexts
-    if number_of_contexts(state.get_ref()) == 0 {
+    let callback_id_map = build_target_id_callback_map(state.get_ref());
+    if callback_id_map.is_empty() {
         return Ok(vec![]);
     }
 
@@ -187,9 +188,6 @@ pub(crate) fn create_early_remote_transcripts(
             remote_configs.entry(target_id).or_default().push(config);
         }
     }
-
-    let state_ref = state.get_ref();
-    let callback_id_map = build_target_id_callback_map(state_ref);
 
     // Try to create transcripts for all configs of each target_id. Note that we either include
     // all transcript results for a target_id or none of them.
@@ -1047,19 +1045,6 @@ fn add_callback_ids_to_transcript_results(
             },
         })
         .collect()
-}
-
-fn number_of_contexts(state: &ReplicatedState) -> usize {
-    state
-        .metadata
-        .subnet_call_context_manager
-        .setup_initial_dkg_contexts
-        .len()
-        + state
-            .metadata
-            .subnet_call_context_manager
-            .reshare_chain_key_contexts
-            .len()
 }
 
 /// This function is called for each entry on the SubnetCallContext. It returns
