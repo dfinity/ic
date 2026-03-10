@@ -122,7 +122,7 @@ perform_recovery() {
     echo "Recovery artifacts applied successfully"
 
     echo "Restarting services..."
-    sudo systemctl restart setup-permissions || true
+    sudo systemctl restart setup-permissions
 
     echo "GuestOS recovery engine completed successfully"
 }

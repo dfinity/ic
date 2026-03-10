@@ -23,6 +23,7 @@ use prost::Message;
 ///    * Each subnet in the registry occurs in the subnet list and vice versa
 ///    * Only application subnets can be rented and therefore have a "free" cycles cost schedule
 ///    * SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
+/// * Only rented subnets can have subnet admins set to a non-empty list
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -116,6 +117,8 @@ pub(crate) fn check_subnet_invariants(
         {
             check_sev_subnet_invariants(subnet_id, subnet_members, snapshot)?;
         }
+
+        check_subnet_admins_invariant(&subnet_record, subnet_id)?;
     }
 
     // There is at least one system subnet. Note that we disable this invariant for benchmarks, as
@@ -139,6 +142,31 @@ pub(crate) fn check_subnet_invariants(
     //    );
     //}
 
+    Ok(())
+}
+
+// Checks that only rented subnets can have admins.
+fn check_subnet_admins_invariant(
+    subnet_record: &SubnetRecord,
+    subnet_id: SubnetId,
+) -> Result<(), InvariantCheckError> {
+    // Here, it is taken that rented subnets are of type application and on a
+    // free schedule. This is not very reliable and could be improved in the
+    // future (e.g. by adding a new subnet type).
+    let is_application_subnet = subnet_record.subnet_type == i32::from(SubnetType::Application);
+    let is_on_free_cost_schedule =
+        subnet_record.canister_cycles_cost_schedule == i32::from(CanisterCyclesCostSchedule::Free);
+    let is_rented = is_on_free_cost_schedule && is_application_subnet;
+
+    let ok = subnet_record.subnet_admins.is_empty() || is_rented;
+    if !ok {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id:} is not a rented subnet but has a non-empty subnet admins list"
+            ),
+            source: None,
+        });
+    }
     Ok(())
 }
 
