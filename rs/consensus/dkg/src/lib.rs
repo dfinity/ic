@@ -2142,7 +2142,7 @@ mod tests {
     /// d not all appear in the same block due to MAX_EARLY_REMOTE_TRANSCRIPTS
     /// (= 2). Only the transcripts for the first context are included.
     #[test]
-    fn test_early_remote_transcripts_max_limits_to_one_context() {
+    fn test_early_remote_transcripts_respects_max() {
         for (setup_target_bytes, reshare_target_bytes, desc) in [
             ([0u8; 32], [1u8; 32], "SetupInitialDKG first"),
             ([1u8; 32], [0u8; 32], "ReshareChainKey first"),
