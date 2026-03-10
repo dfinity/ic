@@ -110,6 +110,11 @@ def expand_lv(device_name, lv_name, mount_point, fs_free, required_avail, expand
     # in the logical volume.
     subprocess.run(["xfs_growfs", mount_point], check=True)
 
+    # Flush all dirty buffers to disk. This ensures that the LVM metadata
+    # (recording the new LV size) is persisted, so a hard power-off won't
+    # leave the XFS filesystem larger than the underlying logical volume.
+    subprocess.run(["sync"], check=True)
+
 
 def main():
     # Total VG and LV sizes change only if we call lvextend below.
