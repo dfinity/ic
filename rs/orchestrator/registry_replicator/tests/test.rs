@@ -85,7 +85,7 @@ impl PocketIcHelper {
                 Ok(result) => return result,
                 Err(e) => {
                     last_err = Some(e);
-                    info!(
+                    eprintln!(
                         "Retrying to get certified records due to error: {:?} ...",
                         last_err
                     );
