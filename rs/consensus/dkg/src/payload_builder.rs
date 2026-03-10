@@ -205,6 +205,13 @@ pub(crate) fn create_early_remote_transcripts(
             continue;
         }
 
+        // Ensure that creating these transcripts would not exceed the maximum number of early
+        // remote transcripts. We continue with the next target_id in case it requires less
+        // transcripts.
+        if selected_transcripts.len() + configs.len() > MAX_EARLY_REMOTE_TRANSCRIPTS {
+            continue;
+        }
+
         // If any of the configs has less dealings than the threshold, we skip this target_id
         if configs.iter().any(|config| {
             let dealings_count = all_dealings
@@ -242,10 +249,6 @@ pub(crate) fn create_early_remote_transcripts(
                 }
             };
             selected_transcripts.push((config.dkg_id().clone(), *callback_id, transcript_result));
-        }
-
-        if selected_transcripts.len() >= MAX_EARLY_REMOTE_TRANSCRIPTS {
-            break;
         }
     }
 
