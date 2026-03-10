@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Blob Store Dashboard</title>
+    <style>
+        table {
+            border: solid;
+            text-align: left;
+            width: 100%;
+            border-width: thin;
+        }
+
+        h3 {
+            font-variant: small-caps;
+            margin-top: 30px;
+            margin-bottom: 5px;
+        }
+
+        .background {
+            margin: 0;
+            padding: 0;
+        }
+
+        .content {
+            max-width: 100vw;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        tbody tr:nth-child(odd) {
+            background-color: #eeeeee;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #ffffff;
+        }
+
+        td {
+            padding: 0.5em;
+            vertical-align: top;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background">
+        <div class="content">
+            <h2>Blob Store Dashboard</h2>
+            <h3>Metadata</h3>
+            <table>
+                <tbody>
+                    <tr id="total-blobs">
+                        <th>Total Blobs</th>
+                        <td><code>{{ total_blobs }}</code></td>
+                    </tr>
+                    <tr id="total-size">
+                        <th>Total Size (bytes)</th>
+                        <td><code>{{ total_size_bytes }}</code></td>
+                    </tr>
+                </tbody>
+            </table>
+            <h3 id="blobs">Blobs</h3>
+            <table>
+                <thead>
+                    <th>Hash</th>
+                    <th>Uploader</th>
+                    <th>Size (bytes)</th>
+                    <th>Inserted At</th>
+                    <th>Tags</th>
+                </thead>
+                <tbody>
+                    {% for blob in blobs %}
+                    <tr>
+                        <td><code>{{ blob.hash }}</code></td>
+                        <td><code>{{ blob.uploader }}</code></td>
+                        <td><code>{{ blob.size }}</code></td>
+                        <td><code>{{ blob.inserted_at_ns|timestamp_to_datetime }}</code></td>
+                        <td>{% for tag in blob.tags %}{{ tag }}{%+ if !loop.last %}, {%+ endif %}{% endfor %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
