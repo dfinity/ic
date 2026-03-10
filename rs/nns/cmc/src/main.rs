@@ -1921,7 +1921,7 @@ async fn process_create_canister(
     from: AccountIdentifier,
     amount: Tokens,
     subnet_selection: Option<SubnetSelection>,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<CanisterSettings>,
 ) -> Result<CanisterId, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2169,7 +2169,7 @@ async fn do_create_canister(
     controller_id: PrincipalId,
     cycles: Cycles,
     subnet_selection: Option<SubnetSelection>,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<CanisterSettings>,
 ) -> Result<CanisterId, String> {
     // Retrieve randomness from the system to use later to get a random
     // permutation of subnets. Performing the asynchronous call before
