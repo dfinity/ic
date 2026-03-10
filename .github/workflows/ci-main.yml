@@ -29,7 +29,7 @@ jobs:
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:0a0cff0b12c7586c2f312c739176924edf0c9e71df92f382eba836913da9f1c6
       options: >-
-         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers" --mount type=tmpfs,target=/var/tmp/bazel-output
     timeout-minutes: 90
     steps:
       - &checkout
@@ -71,7 +71,6 @@ jobs:
     name: Test Job
     runs-on:
       labels: dind-large
-      group: dm2
     container: *container-setup
     steps:
       - name: Test Mounts
@@ -79,6 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           ls /
+          ls /var/tmp/
           df -T /var/tmp/
 
   config:
