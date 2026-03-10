@@ -2692,9 +2692,7 @@ impl ExecutionEnvironment {
             instruction_limits,
             origin,
             &resource_saturation,
-            &self.metrics.long_execution_already_in_progress,
-            &self.metrics.execution_cycles_refund_error,
-            &self.metrics.snapshot_exists_without_associated_canister,
+            &self.metrics,
         );
 
         let result = match result {

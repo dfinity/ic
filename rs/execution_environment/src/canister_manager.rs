@@ -7,6 +7,7 @@ use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
     CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
 };
+use crate::execution_environment_metrics::ExecutionEnvironmentMetrics;
 use crate::util::MIGRATION_CANISTER_ID;
 use crate::{
     canister_settings::{CanisterSettings, ValidatedCanisterSettings},
@@ -2162,7 +2163,6 @@ impl CanisterManager {
         Ok(snapshot)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn load_canister_snapshot(
         &self,
         subnet_size: usize,
@@ -2174,9 +2174,7 @@ impl CanisterManager {
         instruction_limits: InstructionLimits,
         origin: CanisterChangeOrigin,
         resource_saturation: &ResourceSaturation,
-        long_execution_already_in_progress: &IntCounter,
-        execution_refund_error: &IntCounter,
-        snapshot_exists_without_associated_canister: &IntCounter,
+        metrics: &ExecutionEnvironmentMetrics,
     ) -> (Result<CanisterState, CanisterManagerError>, NumInstructions) {
         let canister_id = canister.canister_id();
         // Check sender is a controller.
@@ -2220,7 +2218,7 @@ impl CanisterManager {
                             // The below case should never happen as if the snapshot still exists, it
                             // should be associated with an existing canister. If it happens, it indicates
                             // a bug, so log an error message for investigation.
-                            snapshot_exists_without_associated_canister.inc();
+                            metrics.snapshot_exists_without_associated_canister.inc();
                             error!(
                                 self.log,
                                 "[EXC-BUG]: Canister {} does not exist although there's a snapshot {} associated with it.",
@@ -2257,7 +2255,7 @@ impl CanisterManager {
         match canister.next_execution() {
             NextExecution::None | NextExecution::StartNew => {}
             NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                long_execution_already_in_progress.inc();
+                metrics.long_execution_already_in_progress.inc();
                 error!(
                     self.log,
                     "[EXC-BUG] Attempted to start a new `load_canister_snapshot` execution while the previous execution is still in progress for {}.",
@@ -2326,7 +2324,7 @@ impl CanisterManager {
                 instructions_to_refund,
                 prepaid_execution_instructions,
                 prepaid_execution_cycles,
-                execution_refund_error,
+                &metrics.execution_cycles_refund_error,
                 subnet_size,
                 state.get_own_cost_schedule(),
                 wasm_execution_mode,
