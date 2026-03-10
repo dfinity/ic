@@ -196,7 +196,10 @@ impl IngressSelector for IngressManager {
                         Ok(()) => (),
                         Err(ValidationError::InvalidArtifact(
                             InvalidIngressPayloadReason::IngressPayloadTooManyMessages(_, _),
-                        )) => break 'outer,
+                        )) => {
+                            self.metrics.observe_limit_reached("messages_count_limit");
+                            break 'outer;
+                        }
                         _ => {
                             queue.msgs.pop();
                             continue;
@@ -206,9 +209,12 @@ impl IngressSelector for IngressManager {
                     let size_estimates = self.message_size_estimates(&ingress.signed_ingress);
 
                     // Break criterion #1: global byte limit
-                    if accumulated_wire_size + size_estimates.wire > wire_byte_limit
-                        || accumulated_memory_size + size_estimates.memory > memory_byte_limit
-                    {
+                    if accumulated_wire_size + size_estimates.wire > wire_byte_limit {
+                        self.metrics.observe_limit_reached("wire_byte_limit");
+                        break 'outer;
+                    }
+                    if accumulated_memory_size + size_estimates.memory > memory_byte_limit {
+                        self.metrics.observe_limit_reached("memory_byte_limit");
                         break 'outer;
                     }
 
