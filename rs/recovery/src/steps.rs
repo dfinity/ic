@@ -21,13 +21,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
 use ic_types::{Height, SubnetId, consensus::certification::CertificationMessage};
 use slog::{Logger, debug, info, warn};
-use std::{
-    collections::HashMap,
-    net::IpAddr,
-    path::{Path, PathBuf},
-    process::Command,
-    thread, time,
-};
+use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
