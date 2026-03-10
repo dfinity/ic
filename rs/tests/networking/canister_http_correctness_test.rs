@@ -2575,7 +2575,7 @@ where
                 .call_and_wait()
                 .await;
             match result {
-                Err(AgentError::TransportError(e)) => Err(anyhow!(e)),
+                Err(AgentError::TransportError(e)) => Err(anyhow!("transport error: {e}")),
                 other => Ok(other),
             }
         }
