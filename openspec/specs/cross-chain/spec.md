@@ -138,6 +138,31 @@ Metadata tracks the origin and context of stored blobs: uploader principal, inse
 
 ---
 
+### Requirement: Blob Store Dashboard
+The blob store provides a web-based dashboard for visualizing stored blobs, their metadata, and statistics.
+
+#### Scenario: Dashboard template rendering
+- **WHEN** the dashboard endpoint is accessed
+- **THEN** a dashboard HTML page is rendered using Askama template engine
+- **AND** the dashboard displays total blob count and total size in bytes
+
+#### Scenario: Blob listing on dashboard
+- **WHEN** the dashboard is rendered
+- **THEN** all blobs in the store are listed with their information
+- **AND** each blob entry displays: hash, uploader principal, size in bytes, insertion timestamp, and tags
+
+#### Scenario: Timestamp formatting
+- **WHEN** blob metadata is displayed on the dashboard
+- **THEN** insertion timestamps (nanoseconds) are formatted as ISO 8601 datetime strings
+- **AND** the format is: `[year]-[month]-[day]T[hour]:[minute]:[second]+00:00`
+
+#### Scenario: Dashboard metadata iteration
+- **WHEN** the dashboard collects blob information
+- **THEN** it iterates over all stored blob metadata without requiring blob data to be fetched
+- **AND** total size is calculated by summing individual blob sizes
+
+---
+
 ### Requirement: Cross-Chain Proposal CLI
 The proposal CLI automates the creation of NNS governance proposals for upgrading and installing cross-chain canisters (ckBTC minter, ckETH minter, ledger suite orchestrator, etc.).
 
