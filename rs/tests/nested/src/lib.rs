@@ -124,6 +124,24 @@ pub fn registration(env: TestEnv) {
         }
     ).unwrap();
     info!(logger, "All {n} nodes successfully came up and registered.");
+
+    // Check for failed systemd units on each GuestOS node now that they are up.
+    for node in new_topology.unassigned_nodes() {
+        let failed_units = node
+            .block_on_bash_script("systemctl list-units --failed --no-legend --no-pager")
+            .expect("Failed to run systemctl list-units --failed on GuestOS node");
+        info!(
+            logger,
+            "Node {}: systemctl list-units --failed:\n{}", node.node_id, failed_units
+        );
+        assert!(
+            failed_units.trim().is_empty(),
+            "Node {} has failed systemd units:\n{}",
+            node.node_id,
+            failed_units
+        );
+    }
+    info!(logger, "No failed systemd units found on any GuestOS node.");
 }
 
 /// Clean up the environment after nested tests.
