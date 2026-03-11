@@ -122,7 +122,7 @@ pub(crate) fn check_subnet_invariants(
             return Err(InvariantCheckError {
                 msg: format!(
                     "Subnet {subnet_id:} is a cloud engine subnet but its cycles cost schedule \
-                         is not free"
+                    is not free"
                 ),
                 source: None,
             });
@@ -178,8 +178,9 @@ fn check_subnet_admins_invariant(
     let is_cloud_engine_subnet =
         subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) && is_on_free_cost_schedule;
 
-    let ok = subnet_record.subnet_admins.is_empty() || is_rented || is_cloud_engine_subnet;
-    if !ok {
+    let can_have_admins =
+        subnet_record.subnet_admins.is_empty() || is_rented || is_cloud_engine_subnet;
+    if !can_have_admins {
         return Err(InvariantCheckError {
             msg: format!(
                 "Subnet {subnet_id:} is not a rented or cloud engine subnet but has a non-empty subnet admins list"
