@@ -302,7 +302,7 @@ pub struct ExecutionTest {
     chain_key_data: ChainKeyData,
     replica_version: ReplicaVersion,
     canister_snapshot_baseline_instructions: NumInstructions,
-    resource_limits: Option<ResourceLimits>,
+    resource_limits: ResourceLimits,
 
     // The actual implementation.
     exec_env: Arc<ExecutionEnvironment>,
@@ -2064,7 +2064,7 @@ pub struct ExecutionTestBuilder {
     subnet_admins: BTreeSet<PrincipalId>,
     network_topology: Option<NetworkTopology>,
     log_level: Option<Level>,
-    resource_limits: Option<ResourceLimits>,
+    resource_limits: ResourceLimits,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -2102,7 +2102,7 @@ impl Default for ExecutionTestBuilder {
             subnet_admins: BTreeSet::new(),
             network_topology: None,
             log_level: Some(Level::Warning),
-            resource_limits: None,
+            resource_limits: Default::default(),
         }
     }
 }
@@ -2555,7 +2555,7 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_resource_limits(mut self, resource_limits: Option<ResourceLimits>) -> Self {
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
         self.resource_limits = resource_limits;
         self
     }

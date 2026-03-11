@@ -958,7 +958,7 @@ impl ReplicatedState {
             .sum()
     }
 
-    pub fn resource_limits(&self) -> Option<ResourceLimits> {
+    pub fn resource_limits(&self) -> ResourceLimits {
         self.metadata.own_resource_limits
     }
 

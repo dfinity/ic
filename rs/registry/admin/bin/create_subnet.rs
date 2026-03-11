@@ -323,7 +323,7 @@ impl ProposeToCreateSubnetCmd {
                 do_create_subnet::CanisterCyclesCostSchedule::Normal,
             ),
             subnet_admins: Some(vec![]),
-            resource_limits: None,
+            resource_limits: Default::default(),
 
             // Deprecated fields.
             ingress_bytes_per_block_soft_cap: Default::default(),

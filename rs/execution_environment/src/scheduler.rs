@@ -690,7 +690,7 @@ impl SchedulerImpl {
         cost_schedule: CanisterCyclesCostSchedule,
         is_first_iteration: bool,
         round_limits: &mut RoundLimits,
-        resource_limits: Option<ResourceLimits>,
+        resource_limits: ResourceLimits,
         measurement_scope: &MeasurementScope,
     ) -> (
         Vec<Arc<CanisterState>>,
@@ -1738,7 +1738,7 @@ fn execute_canisters_on_thread(
     cost_schedule: CanisterCyclesCostSchedule,
     is_first_iteration: bool,
     mut round_limits: RoundLimits,
-    resource_limits: Option<ResourceLimits>,
+    resource_limits: ResourceLimits,
     metrics: Arc<SchedulerMetrics>,
     logger: ReplicaLogger,
 ) -> ExecutionThreadResult {

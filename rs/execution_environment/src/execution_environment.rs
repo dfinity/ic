@@ -2091,7 +2091,7 @@ impl ExecutionEnvironment {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
-        resource_limits: Option<ResourceLimits>,
+        resource_limits: ResourceLimits,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> ExecuteMessageResult {
@@ -2259,7 +2259,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         round: RoundContext,
         round_limits: &mut RoundLimits,
-        resource_limits: Option<ResourceLimits>,
+        resource_limits: ResourceLimits,
         subnet_size: usize,
     ) -> ExecuteMessageResult {
         let execution_parameters = self.execution_parameters(
@@ -2285,7 +2285,7 @@ impl ExecutionEnvironment {
     }
 
     /// Returns the subnet memory capacity.
-    pub fn subnet_memory_capacity(&self, resource_limits: Option<ResourceLimits>) -> NumBytes {
+    pub fn subnet_memory_capacity(&self, resource_limits: ResourceLimits) -> NumBytes {
         subnet_memory_capacity(&self.config, resource_limits)
     }
 
@@ -2319,7 +2319,7 @@ impl ExecutionEnvironment {
         registry_settings: &RegistryExecutionSettings,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
-        resource_limits: Option<ResourceLimits>,
+        resource_limits: ResourceLimits,
     ) -> ExecuteSubnetMessageResult {
         let (res, cycles) = self.canister_manager.create_canister(
             origin,
@@ -3063,7 +3063,7 @@ impl ExecutionEnvironment {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
-        resource_limits: Option<ResourceLimits>,
+        resource_limits: ResourceLimits,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> ExecuteMessageResult {
@@ -4478,7 +4478,7 @@ impl ExecutionEnvironment {
     pub fn subnet_memory_saturation(
         &self,
         subnet_available_memory: &SubnetAvailableMemory,
-        resource_limits: Option<ResourceLimits>,
+        resource_limits: ResourceLimits,
     ) -> ResourceSaturation {
         // We apply the scaling factor `self.scheduler_cores`
         // consistently with the scaling factor of `SubnetAvailableMemory`
@@ -4576,12 +4576,9 @@ impl CompilationCostHandling {
     }
 }
 
-fn subnet_memory_capacity(
-    config: &ExecutionConfig,
-    resource_limits: Option<ResourceLimits>,
-) -> NumBytes {
+fn subnet_memory_capacity(config: &ExecutionConfig, resource_limits: ResourceLimits) -> NumBytes {
     resource_limits
-        .and_then(|resource_limits| resource_limits.maximum_state_size)
+        .maximum_state_size
         .and_then(|maximum_state_size| {
             if maximum_state_size.get() != 0 {
                 Some(maximum_state_size)
@@ -4595,7 +4592,7 @@ fn subnet_memory_capacity(
 /// Returns the subnet's configured memory capacity (ignoring current usage).
 pub(crate) fn full_subnet_memory_capacity(
     config: &ExecutionConfig,
-    resource_limits: Option<ResourceLimits>,
+    resource_limits: ResourceLimits,
 ) -> SubnetAvailableMemory {
     SubnetAvailableMemory::new_scaled(
         subnet_memory_capacity(config, resource_limits).get() as i64,
@@ -4657,7 +4654,7 @@ fn execute_canister_input(
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
-    resource_limits: Option<ResourceLimits>,
+    resource_limits: ResourceLimits,
     subnet_size: usize,
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
@@ -4725,7 +4722,7 @@ pub fn execute_canister(
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
-    resource_limits: Option<ResourceLimits>,
+    resource_limits: ResourceLimits,
     subnet_size: usize,
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {

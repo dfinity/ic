@@ -800,7 +800,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     ) -> (
         NetworkTopology,
         SubnetFeatures,
-        Option<ResourceLimits>,
+        ResourceLimits,
         RegistryExecutionSettings,
         NodePublicKeys,
         ApiBoundaryNodes,
@@ -847,7 +847,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         (
             NetworkTopology,
             SubnetFeatures,
-            Option<ResourceLimits>,
+            ResourceLimits,
             RegistryExecutionSettings,
             NodePublicKeys,
             ApiBoundaryNodes,
@@ -881,7 +881,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let node_public_keys = self.try_to_populate_node_public_keys(&nodes, registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
-        let resource_limits = subnet_record.resource_limits.map(ResourceLimits::from);
+        let resource_limits = subnet_record.resource_limits.unwrap_or_default().into();
         let max_number_of_canisters = if subnet_record.max_number_of_canisters == 0 {
             DEFAULT_MAX_NUMBER_OF_CANISTERS
         } else {

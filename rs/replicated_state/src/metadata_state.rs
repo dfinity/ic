@@ -96,7 +96,7 @@ pub struct SystemMetadata {
 
     pub own_subnet_features: SubnetFeatures,
 
-    pub own_resource_limits: Option<ResourceLimits>,
+    pub own_resource_limits: ResourceLimits,
 
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
@@ -422,7 +422,7 @@ impl SystemMetadata {
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: None,
+            own_resource_limits: Default::default(),
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
@@ -2023,7 +2023,7 @@ pub mod testing {
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: None,
+            own_resource_limits: Default::default(),
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,

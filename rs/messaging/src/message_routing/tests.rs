@@ -270,7 +270,7 @@ struct SubnetRecord<'a> {
     max_number_of_canisters: u64,
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
-    resource_limits: Option<ResourceLimits>,
+    resource_limits: ResourceLimits,
 }
 
 impl From<SubnetRecord<'_>> for SubnetRecordProto {
@@ -628,7 +628,7 @@ impl StateMachine for FakeStateMachine {
         network_topology: NetworkTopology,
         _batch: Batch,
         subnet_features: SubnetFeatures,
-        resource_limits: Option<ResourceLimits>,
+        resource_limits: ResourceLimits,
         registry_settings: &RegistryExecutionSettings,
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
@@ -699,7 +699,7 @@ fn try_to_read_registry(
     (
         NetworkTopology,
         SubnetFeatures,
-        Option<ResourceLimits>,
+        ResourceLimits,
         RegistryExecutionSettings,
         NodePublicKeys,
         ApiBoundaryNodes,
@@ -761,9 +761,9 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
 
             max_number_of_canisters: 387,
 
-            resource_limits: Some(ResourceLimits {
+            resource_limits: ResourceLimits {
                 maximum_state_size: Some(own_maximum_state_size),
-            }),
+            },
 
             ..Default::default()
         };
@@ -1064,11 +1064,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             latest_state.metadata.own_resource_limits
         );
         assert_eq!(
-            latest_state
-                .metadata
-                .own_resource_limits
-                .unwrap()
-                .maximum_state_size,
+            latest_state.metadata.own_resource_limits.maximum_state_size,
             Some(own_maximum_state_size)
         );
         assert_eq!(

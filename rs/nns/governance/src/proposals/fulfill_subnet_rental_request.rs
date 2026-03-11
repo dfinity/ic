@@ -218,7 +218,7 @@ impl ValidFulfillSubnetRentalRequest {
             // These are the main things that distinguish this subnet from "normal" subnets.
             canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Free),
             subnet_admins: Some(vec![self.user]),
-            resource_limits: None,
+            resource_limits: Default::default(),
 
             // Copy values from self.
             node_ids: self
