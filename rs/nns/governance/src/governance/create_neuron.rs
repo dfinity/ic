@@ -160,11 +160,13 @@ impl Governance {
             }
         };
         let controller = controller.unwrap_or(caller);
-        if amount_e8s <= neuron_minimum_stake_e8s {
+        if amount_e8s < neuron_minimum_stake_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
-                "Amount {amount_e8s} e8s is less than the minimum stake for a neuron \
-                {neuron_minimum_stake_e8s} e8s",
+                format!(
+                    "Amount {amount_e8s} e8s is less than the minimum stake \
+                    {neuron_minimum_stake_e8s} e8s for a neuron"
+                ),
             ));
         }
         let neuron_account = Icrc1Account {

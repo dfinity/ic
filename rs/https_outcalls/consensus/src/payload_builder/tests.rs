@@ -62,7 +62,7 @@ const MAX_SUBNET_SIZE: usize = 40;
 fn default_payload_serializes_to_empty_vec() {
     assert!(
         parse::payload_to_bytes(
-            &CanisterHttpPayload::default(),
+            CanisterHttpPayload::default(),
             NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64)
         )
         .is_empty()
@@ -217,8 +217,9 @@ fn multiple_payload_test() {
                 }],
                 timeouts: vec![],
                 divergence_responses: vec![],
+                flexible_responses: vec![],
             };
-            let past_payload = payload_to_bytes(&past_payload, NumBytes::new(4 * 1024 * 1024));
+            let past_payload = payload_to_bytes(past_payload, NumBytes::new(4 * 1024 * 1024));
 
             let past_payloads = vec![PastPayload {
                 height: Height::from(0),
@@ -644,8 +645,9 @@ fn duplicate_validation() {
             responses: vec![response_and_metadata_to_proof(&response, &metadata)],
             timeouts: vec![],
             divergence_responses: vec![],
+            flexible_responses: vec![],
         };
-        let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+        let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
         let past_payloads = vec![PastPayload {
             height: Height::new(1),
             time: UNIX_EPOCH,
@@ -697,8 +699,9 @@ fn divergence_response_validation_test() {
                         }))
                         .collect(),
                 }],
+                flexible_responses: vec![],
             };
-            let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+            let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
@@ -717,8 +720,9 @@ fn divergence_response_validation_test() {
                         .map(|node_id| metadata_to_share(node_id.try_into().unwrap(), &metadata))
                         .collect(),
                 }],
+                flexible_responses: vec![],
             };
-            let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+            let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
@@ -754,8 +758,9 @@ fn divergence_response_validation_test() {
                         }))
                         .collect(),
                 }],
+                flexible_responses: vec![],
             };
-            let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+            let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
@@ -1177,7 +1182,7 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
             responses: vec![proof],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
 
         // ACT & ASSERT
         let validation_result = payload_builder.validate_payload(
@@ -1245,7 +1250,7 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
             responses: vec![proof],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
 
         // ACT
         let validation_result = payload_builder.validate_payload(
@@ -1326,7 +1331,7 @@ fn validate_payload_fails_for_response_with_no_signatures() {
             responses: vec![proof],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
 
         // ACT
         let validation_result = payload_builder.validate_payload(
@@ -1420,7 +1425,7 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
             responses: vec![proof],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
 
         // ACT
         let validation_result = payload_builder.validate_payload(
@@ -1512,7 +1517,7 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
             responses: vec![proof.clone(), proof], // Duplicate the proof
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
 
         // ACT
         let validation_result = payload_builder.validate_payload(
@@ -1790,9 +1795,10 @@ where
             responses: vec![response_and_metadata_to_proof(&response, &metadata)],
             timeouts: vec![],
             divergence_responses: vec![],
+            flexible_responses: vec![],
         };
 
-        let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+        let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
         payload_builder.validate_payload(
             Height::from(1),
             &test_proposal_context(validation_context),

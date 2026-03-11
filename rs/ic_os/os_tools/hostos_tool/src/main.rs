@@ -4,11 +4,15 @@ use config_tool::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
+use grub::BootAlternative;
 use manual_guestos_recovery::GuestOSRecoveryApp;
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
 use utils::to_cidr;
+
+mod guestos_alternative;
+use guestos_alternative::{show_guestos_alternative, swap_guestos_alternative};
 
 mod node_gen;
 use node_gen::get_node_gen_metric;
@@ -44,6 +48,18 @@ pub enum Commands {
     },
     /// Launch the Recovery TUI tool for manual node recovery
     ManualRecovery,
+    /// Show or swap the GuestOS boot alternative (A/B)
+    #[command(name = "guestos-alternative", subcommand)]
+    GuestosAlternative(GuestosAlternativeCommands),
+}
+
+#[derive(Subcommand)]
+pub enum GuestosAlternativeCommands {
+    /// Show the current GuestOS boot alternative
+    Show,
+    /// Swap the GuestOS boot alternative. If no target is given, uses the opposite of the
+    /// current one (A -> B or B -> A).
+    Swap { target: Option<BootAlternative> },
 }
 
 #[derive(Parser)]
@@ -138,6 +154,10 @@ pub fn main() -> Result<()> {
             app.run()?;
             Ok(())
         }
+        Some(Commands::GuestosAlternative(cmd)) => match cmd {
+            GuestosAlternativeCommands::Show => show_guestos_alternative(),
+            GuestosAlternativeCommands::Swap { target } => swap_guestos_alternative(target),
+        },
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
         )),

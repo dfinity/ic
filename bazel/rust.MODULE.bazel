@@ -17,7 +17,7 @@ archive_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.90.0"],
+    versions = ["1.93.1"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -237,11 +237,11 @@ crate.spec(
 )
 crate.spec(
     package = "canbench",
-    version = "^0.4.0",
+    version = "^0.4.1",
 )
 crate.spec(
     package = "canbench-rs",
-    version = "^0.4.0",
+    version = "^0.4.1",
 )
 crate.spec(
     package = "candid",
@@ -453,7 +453,7 @@ crate.spec(
 )
 crate.spec(
     package = "evm_rpc_client",
-    version = "^0.3.0",
+    version = "^0.4.0",
 )
 crate.spec(
     package = "evm_rpc_types",
@@ -634,7 +634,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-canister-runtime",
-    version = "^0.1.0",
+    version = "^0.2.0",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
@@ -1646,7 +1646,7 @@ crate.spec(
 )
 crate.spec(
     package = "thiserror",
-    version = "^2.0.3",
+    version = "^2.0.18",
 )
 crate.spec(
     package = "thousands",

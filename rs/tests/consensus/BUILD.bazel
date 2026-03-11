@@ -136,6 +136,9 @@ system_test(
 
 system_test_nns(
     name = "max_ingress_payload_size_test",
+    tags = [
+        "colocate",
+    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -157,6 +160,9 @@ system_test_nns(
 
 system_test(
     name = "max_xnet_payload_size_test",
+    tags = [
+        "colocate",
+    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -327,6 +333,10 @@ rust_binary(
     name = "consensus_performance_bin",
     testonly = True,
     srcs = ["consensus_performance.rs"],
+    crate_features = select({
+        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
+        "//conditions:default": [],
+    }),
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -352,10 +362,6 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    crate_features = select({
-        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
-        "//conditions:default": [],
-    }),
     enable_head_nns_variant = False,
     enable_metrics = True,
     env = {
@@ -385,10 +391,6 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    crate_features = select({
-        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
-        "//conditions:default": [],
-    }),
     enable_head_nns_variant = False,
     enable_metrics = True,
     env = {

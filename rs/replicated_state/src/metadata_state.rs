@@ -320,6 +320,18 @@ pub struct SubnetTopology {
     pub subnet_admins: BTreeSet<PrincipalId>,
 }
 
+/// Only rented subnets, i.e., application subnets on a "free" cost schedule,
+/// and cloud engines on a "free" cost schedule can have subnet admins set.
+#[allow(clippy::nonminimal_bool)]
+pub fn can_have_subnet_admins(
+    subnet_type: SubnetType,
+    cost_schedule: CanisterCyclesCostSchedule,
+) -> bool {
+    (subnet_type == SubnetType::Application && cost_schedule == CanisterCyclesCostSchedule::Free)
+        || (subnet_type == SubnetType::CloudEngine
+            && cost_schedule == CanisterCyclesCostSchedule::Free)
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetMetrics {
     pub consumed_cycles_by_deleted_canisters: NominalCycles,
