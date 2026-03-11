@@ -50,12 +50,6 @@ struct SplitArgs {
     #[clap(long)]
     pub skip_prompts: bool,
 
-    /// Flag to indicate we're running recovery directly on a node, and should use
-    /// the locally available binaries. If this option is not set, missing binaries
-    /// will be downloaded.
-    #[clap(long)]
-    pub use_local_binaries: bool,
-
     #[clap(flatten)]
     subnet_splitting_args: SubnetSplittingArgs,
 }
@@ -180,7 +174,6 @@ fn do_split(args: SplitArgs, logger: Logger) -> anyhow::Result<()> {
         admin_key_file: args.admin_key_file,
         test_mode: args.test,
         skip_prompts: args.skip_prompts,
-        use_local_binaries: args.use_local_binaries,
     };
 
     let subnet_splitting_state =

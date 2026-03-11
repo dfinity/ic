@@ -15,7 +15,7 @@ use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
 
 #[test]
-fn only_application_subnets_and_cloud_engines_can_be_free_cycles_cost_schedule() {
+fn only_application_subnets_and_engines_can_be_free_cycles_cost_schedule() {
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
     let (mut snapshot, mut test_subnet_record) =
@@ -39,6 +39,7 @@ fn only_application_subnets_and_cloud_engines_can_be_free_cycles_cost_schedule()
     );
     check_subnet_invariants(&snapshot).unwrap();
 
+    // Another happy case: CloudEngine
     test_subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
     test_subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
     snapshot.insert(
@@ -55,7 +56,7 @@ fn only_application_subnets_and_cloud_engines_can_be_free_cycles_cost_schedule()
     );
     assert_non_compliant_record(
         &snapshot,
-        "is not an application subnet or a cloud engine subnet but has a free cycles cost schedule",
+        "is not an application subnet or CloudEngine but has a free cycles cost schedule",
     );
 
     test_subnet_record.subnet_type = i32::from(SubnetType::VerifiedApplication);
@@ -65,7 +66,7 @@ fn only_application_subnets_and_cloud_engines_can_be_free_cycles_cost_schedule()
     );
     assert_non_compliant_record(
         &snapshot,
-        "is not an application subnet or a cloud engine subnet but has a free cycles cost schedule",
+        "is not an application subnet or CloudEngine but has a free cycles cost schedule",
     );
 }
 
@@ -346,5 +347,5 @@ fn assert_non_compliant_record(snapshot: &RegistrySnapshot, error_msg: &str) {
     };
     let message = err.msg.to_lowercase();
     println!("Error message: {message}");
-    assert!(message.contains(error_msg));
+    assert!(message.contains(&error_msg.to_lowercase()));
 }

@@ -15,15 +15,20 @@ name = "blob_store_lib"
 path = "src/lib.rs"
 
 [dependencies]
+askama = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
 ic-cdk = { workspace = true }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-stable-structures = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 sha2 = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
+scraper = "0.17.1"
