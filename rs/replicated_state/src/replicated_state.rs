@@ -24,7 +24,7 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    AccumulatedPriority, CanisterId, Cycles, NumBytes, SubnetId, Time,
+    AccumulatedPriority, CanisterId, NumBytes, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     cycles_use_case::CyclesUseCase,
@@ -32,6 +32,7 @@ use ic_types::{
     messages::{
         CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
     },
+    nominal_cycles::NominalCycles,
     time::CoarseTime,
 };
 use ic_validate_eq::ValidateEq;
@@ -41,6 +42,9 @@ use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
+
+#[cfg(debug_assertions)]
+use ic_types::Cycles;
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -1032,7 +1036,9 @@ impl ReplicatedState {
                         // Best-effort responses are silently dropped if the canister is not found.
                         RequestOrResponse::Response(response) if response.is_best_effort() => {
                             if !response.refund.is_zero() {
-                                self.observe_lost_cycles_due_to_dropped_messages(response.refund);
+                                self.observe_lost_cycles_due_to_dropped_messages(
+                                    NominalCycles::from(response.refund.get()),
+                                );
                             }
                             Ok(false)
                         }
@@ -1686,10 +1692,10 @@ impl ReplicatedState {
 
     /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort
     /// responses to deleted canisters).
-    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: Cycles) {
+    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: NominalCycles) {
         self.metadata
             .subnet_metrics
-            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles.into());
+            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles);
     }
 
     /// Computes the subnet's total cycle balance including cycles attached to

@@ -1998,8 +1998,11 @@ impl ExecutionEnvironment {
             ))
         } else {
             canister_http_request_context.request.payment -= http_request_fee;
-            let http_fee = NominalCycles::from(http_request_fee);
-            state.metadata.subnet_metrics.consumed_cycles_http_outcalls += http_fee;
+            let http_fee = NominalCycles::from(http_request_fee.get());
+            state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_http_outcalls(http_fee);
             state
                 .metadata
                 .subnet_metrics
@@ -3563,10 +3566,13 @@ impl ExecutionEnvironment {
             } else {
                 // Charge for the request.
                 request.payment -= signature_fee;
-                let nominal_fee = NominalCycles::from(signature_fee);
+                let nominal_fee = NominalCycles::from(signature_fee.get());
                 let use_case = match args {
                     ThresholdArguments::Ecdsa(_) => {
-                        state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += nominal_fee;
+                        state
+                            .metadata
+                            .subnet_metrics
+                            .observe_consumed_cycles_ecdsa_outcalls(nominal_fee);
                         CyclesUseCase::ECDSAOutcalls
                     }
                     ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
