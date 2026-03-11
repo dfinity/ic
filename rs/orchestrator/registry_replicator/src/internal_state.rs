@@ -400,19 +400,28 @@ impl InternalState {
     ) -> Result<Vec<Url>, String> {
         let node_ids = match self.node_id {
             None => self.get_nns_node_ids(nns_subnet_id, version)?,
-            Some(node_id) => match self.get_node_reward_type(node_id, version)? {
-                NodeRewardType::Unspecified
-                | NodeRewardType::Type0
-                | NodeRewardType::Type1
-                | NodeRewardType::Type2
-                | NodeRewardType::Type3
-                | NodeRewardType::Type3dot1
-                | NodeRewardType::Type1dot1 => self.get_nns_node_ids(nns_subnet_id, version)?,
-                NodeRewardType::Type4 => {
-                    // For type4 nodes, we contact API BNs instead of NNS nodes, since NNS nodes would
-                    // not accept our connections due to firewall rules.
-                    self.get_api_boundary_node_ids(version)?
+            Some(node_id) => match self.get_node_reward_type(node_id, version) {
+                Err(err) => {
+                    warn!(
+                        self.logger,
+                        "Could not get reward type: {err}, contacting NNS nodes directly"
+                    );
+                    self.get_nns_node_ids(nns_subnet_id, version)?
                 }
+                Ok(reward) => match reward {
+                    NodeRewardType::Unspecified
+                    | NodeRewardType::Type0
+                    | NodeRewardType::Type1
+                    | NodeRewardType::Type2
+                    | NodeRewardType::Type3
+                    | NodeRewardType::Type3dot1
+                    | NodeRewardType::Type1dot1 => self.get_nns_node_ids(nns_subnet_id, version)?,
+                    NodeRewardType::Type4 => {
+                        // For type4 nodes, we contact API BNs instead of NNS nodes, since NNS nodes would
+                        // not accept our connections due to firewall rules.
+                        self.get_api_boundary_node_ids(version)?
+                    }
+                },
             },
         };
 
