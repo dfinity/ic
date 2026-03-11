@@ -799,7 +799,7 @@ mod test {
         registry_client.update_to_latest_version();
         if let Some(endpoint) = nns_node_endpoint {
             let nns_node_id = NODE_1;
-            set_nns_membership_in_registry(
+            setup_nns_membership_in_registry(
                 &local_store,
                 registry_client.get_latest_version(),
                 nns_subnet_id,
@@ -888,7 +888,7 @@ mod test {
     }
 
     // Initialize NNS membership in the registry
-    fn set_nns_membership_in_registry(
+    fn setup_nns_membership_in_registry(
         local_store: &LocalStoreImpl,
         from_version: RegistryVersion,
         nns_subnet_id: SubnetId,
