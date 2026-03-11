@@ -332,6 +332,10 @@ impl AgentWithDelegation<'_> {
                         "Update call to {canister_id}/{method_name} (request_id={request_id}) \
                          reached terminal state 'done' without a reply"
                     ))),
+                    "pruned" => Ok(Err(format!(
+                        "Update call to {canister_id}/{method_name} (request_id={request_id}) \
+                         reached terminal state 'pruned': reply/reject data has been pruned"
+                    ))),
                     _ => {
                         bail!("Request status is '{status_str}', keep polling")
                     }
