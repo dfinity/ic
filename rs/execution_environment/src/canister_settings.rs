@@ -1,7 +1,7 @@
 use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    BoundedAllowedViewers, CanisterSettingsArgs, LogVisibilityV2,
+    BoundedAllowedViewers, CanisterSettingsArgs, LogVisibilityV2, SnapshotVisibility,
 };
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, MemoryAllocation, PrincipalId,
@@ -27,6 +27,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
+    pub(crate) snapshot_visibility: Option<SnapshotVisibility>,
     pub(crate) log_memory_limit: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     pub(crate) environment_variables: Option<EnvironmentVariables>,
@@ -41,6 +42,7 @@ impl CanisterSettings {
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
+        snapshot_visibility: Option<SnapshotVisibility>,
         log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
@@ -53,6 +55,7 @@ impl CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            snapshot_visibility,
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
@@ -85,6 +88,10 @@ impl CanisterSettings {
 
     pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
         self.log_visibility.as_ref()
+    }
+
+    pub fn snapshot_visibility(&self) -> Option<&SnapshotVisibility> {
+        self.snapshot_visibility.as_ref()
     }
 
     pub fn log_memory_limit(&self) -> Option<NumBytes> {
@@ -193,6 +200,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             input.log_visibility,
+            input.snapshot_visibility,
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
@@ -219,6 +227,7 @@ pub(crate) struct CanisterSettingsBuilder {
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
+    snapshot_visibility: Option<SnapshotVisibility>,
     log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
@@ -235,6 +244,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
+            snapshot_visibility: None,
             log_memory_limit: None,
             wasm_memory_limit: None,
             environment_variables: None,
@@ -250,6 +260,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
+            snapshot_visibility: self.snapshot_visibility,
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             environment_variables: self.environment_variables,
@@ -301,6 +312,13 @@ impl CanisterSettingsBuilder {
     pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
+            ..self
+        }
+    }
+
+    pub fn with_snapshot_visibility(self, snapshot_visibility: SnapshotVisibility) -> Self {
+        Self {
+            snapshot_visibility: Some(snapshot_visibility),
             ..self
         }
     }
@@ -407,6 +425,7 @@ pub(crate) struct ValidatedCanisterSettings {
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibilityV2>,
+    snapshot_visibility: Option<SnapshotVisibility>,
     log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
@@ -422,6 +441,7 @@ impl ValidatedCanisterSettings {
         reserved_cycles_limit: Option<Cycles>,
         reservation_cycles: Cycles,
         log_visibility: Option<LogVisibilityV2>,
+        snapshot_visibility: Option<SnapshotVisibility>,
         log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
@@ -435,6 +455,7 @@ impl ValidatedCanisterSettings {
             reserved_cycles_limit,
             reservation_cycles,
             log_visibility,
+            snapshot_visibility,
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
@@ -473,6 +494,10 @@ impl ValidatedCanisterSettings {
         self.log_visibility.as_ref()
     }
 
+    pub fn snapshot_visibility(&self) -> Option<&SnapshotVisibility> {
+        self.snapshot_visibility.as_ref()
+    }
+
     pub fn log_memory_limit(&self) -> Option<NumBytes> {
         self.log_memory_limit
     }
@@ -499,6 +524,16 @@ impl<'a> From<&'a LogVisibilityV2> for VisibilitySettings<'a> {
             LogVisibilityV2::Public => Self::Public,
             LogVisibilityV2::Controllers => Self::Controllers,
             LogVisibilityV2::AllowedViewers(principals) => Self::AllowedViewers(principals),
+        }
+    }
+}
+
+impl<'a> From<&'a SnapshotVisibility> for VisibilitySettings<'a> {
+    fn from(v: &'a SnapshotVisibility) -> Self {
+        match v {
+            SnapshotVisibility::Public => Self::Public,
+            SnapshotVisibility::Controllers => Self::Controllers,
+            SnapshotVisibility::AllowedViewers(principals) => Self::AllowedViewers(principals),
         }
     }
 }
