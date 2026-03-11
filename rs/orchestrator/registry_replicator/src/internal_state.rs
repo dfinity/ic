@@ -700,14 +700,11 @@ mod test {
         // Whether the config contains an NNS URL
         config_nns_url: Option<Url>,
         // Whether the subnet record of the NNS subnet contains a node or not in the registry, and
-        // if yes, its endpoint. It can also mock the situation where the registry client return an
-        // error.
+        // if yes, its endpoint.
         nns_node_endpoint: Option<ConnectionEndpoint>,
-        // Whether the registry contains an API BN record or not, and if yes, its endpoint. It can
-        // also mock the situation where the registry client return an error.
+        // Whether the registry contains an API BN record or not, and if yes, its endpoint.
         api_bn_endpoint: Option<ConnectionEndpoint>,
         // Whether the node record of this node exists in the registry, and if yes, its reward type.
-        // It can also mock the situation where the registry client return an error.
         node_reward_type: Option<NodeRewardType>,
     }
 
