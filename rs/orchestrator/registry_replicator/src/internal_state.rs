@@ -385,11 +385,12 @@ impl InternalState {
         version: RegistryVersion,
     ) -> Result<ConnectionEndpoint, String> {
         match self.registry_client.get_node_record(node_id, version) {
-            Ok(Some(record)) => Ok(record.http.ok_or_else(|| {
-                format!(
+            Ok(Some(record)) => match record.http {
+                Some(http) => Ok(http),
+                None => Err(format!(
                     "Node record for node id {node_id} does not have an http endpoint at version {version}"
-                )
-            })?),
+                )),
+            },
             Ok(None) => Err(format!(
                 "Node record for node id {node_id} not found at version {version}",
             )),
