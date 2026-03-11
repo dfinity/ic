@@ -315,13 +315,11 @@ impl AgentWithDelegation<'_> {
                             ) => String::from_utf8_lossy(m).to_string(),
                             _ => "no message".to_string(),
                         };
-                        Err(anyhow::anyhow!(
-                            "Update call was rejected with code {code}: {message}"
-                        ))
+                        panic!("Update call was rejected with code {code}: {message}")
                     }
-                    "done" => Err(anyhow::anyhow!(
-                        "Request reached terminal state 'done' without a reply"
-                    )),
+                    "done" => {
+                        panic!("Request reached terminal state 'done' without a reply")
+                    }
                     _ => {
                         bail!("Request status is '{status_str}', keep polling")
                     }
