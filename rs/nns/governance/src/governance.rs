@@ -2163,7 +2163,7 @@ impl Governance {
                 memo,
             ));
             self.neuron_store
-                .validate_deterministic_subaccount(to_subaccount)?
+                .ensure_subaccount_available(to_subaccount)?
         } else {
             self.neuron_store
                 .new_neuron_subaccount(&mut *self.randomness)?
@@ -2616,7 +2616,7 @@ impl Governance {
                 let to_subaccount =
                     ledger::compute_neuron_staking_subaccount(child_controller, nonce_val);
                 self.neuron_store
-                    .validate_deterministic_subaccount(to_subaccount)?
+                    .ensure_subaccount_available(to_subaccount)?
             }
         };
 
@@ -2899,9 +2899,8 @@ impl Governance {
             child_controller,
             disburse_to_neuron.nonce,
         ));
-        let to_subaccount = self
-            .neuron_store
-            .validate_deterministic_subaccount(to_subaccount)?;
+        self.neuron_store
+            .ensure_subaccount_available(to_subaccount)?;
 
         let in_flight_command = NeuronInFlightCommand {
             timestamp: created_timestamp_seconds,

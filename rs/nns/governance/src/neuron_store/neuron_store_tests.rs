@@ -1128,3 +1128,39 @@ fn test_new_neuron_subaccount_retries_on_collision() {
     // Verify that both byte arrays were consumed (i.e., a retry happened).
     assert_eq!(rng.index, 2);
 }
+
+#[test]
+fn test_ensure_subaccount_available_succeeds_when_unused() {
+    let neuron_store = NeuronStore::new(BTreeMap::new());
+    let subaccount = Subaccount([42u8; 32]);
+
+    let observed = neuron_store.ensure_subaccount_available(subaccount);
+
+    assert_eq!(observed, Ok(subaccount));
+}
+
+#[test]
+fn test_ensure_subaccount_available_fails_on_collision() {
+    let colliding_bytes = [1u8; 32];
+    let neuron = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount(colliding_bytes),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 1,
+            aging_since_timestamp_seconds: 0,
+        },
+        CREATED_TIMESTAMP_SECONDS,
+    )
+    .build();
+    let neuron_store = NeuronStore::new(btreemap! { 1 => neuron });
+
+    let observed = neuron_store.ensure_subaccount_available(Subaccount(colliding_bytes));
+
+    assert_eq!(
+        observed,
+        Err(NeuronStoreError::SubaccountAlreadyExists {
+            subaccount: Subaccount(colliding_bytes),
+        })
+    );
+}

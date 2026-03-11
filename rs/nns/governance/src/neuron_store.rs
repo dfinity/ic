@@ -485,7 +485,7 @@ impl NeuronStore {
     /// Checks that a deterministic (caller-supplied) subaccount is not already
     /// in use. Unlike random subaccounts (which retry on collision), deterministic
     /// subaccounts must fail immediately since retrying would produce the same result.
-    pub fn validate_deterministic_subaccount(
+    pub fn ensure_subaccount_available(
         &self,
         subaccount: Subaccount,
     ) -> Result<Subaccount, NeuronStoreError> {
