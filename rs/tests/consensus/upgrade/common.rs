@@ -323,33 +323,43 @@ async fn upgrade_to(
     graceful_stops_result.unwrap();
     info!(logger, "All orchestrators shut down the tasks gracefully");
 
-    let state_hashes_from_logs = fetch_hashes_result.unwrap();
-    // Find all nodes that logged the same latest computed root hash and pick the most common one
-    let mut state_hashes_counts = BTreeMap::new();
-    for (node_id, hash) in state_hashes_from_logs.iter() {
-        state_hashes_counts
-            .entry(hash.clone())
-            .or_insert_with(Vec::new)
-            .push(*node_id);
-    }
-    let (most_common_hash, nodes_that_logged_hash) = state_hashes_counts
-        .into_iter()
-        .max_by_key(|(_, nodes)| nodes.len())
-        .expect("No state hashes found in logs");
+    let hashes_per_height = fetch_hashes_result.unwrap();
 
     let n = num_nodes;
     let f = (n - 1) / 3;
-    assert!(
-        nodes_that_logged_hash.len() >= n - f,
-        "{} < n - f nodes produced the same latest computed root hash in logs",
-        nodes_that_logged_hash.len()
-    );
+
+    // Find the highest height at which at least n - f nodes produced the same root hash.
+    // We search by descending height because different nodes' log streams may close at
+    // different times during the upgrade reboot, so not all nodes may have emitted the
+    // root hash at the highest observed height. By looking for the highest height with
+    // n - f agreement, we tolerate this race condition.
+    let (best_height, best_hash, best_nodes) = hashes_per_height
+        .iter()
+        .rev()
+        .find_map(|(&height, node_hashes)| {
+            let mut hash_groups: BTreeMap<&String, Vec<&NodeId>> = BTreeMap::new();
+            for (node_id, hash) in node_hashes {
+                hash_groups.entry(hash).or_default().push(node_id);
+            }
+            hash_groups
+                .into_iter()
+                .max_by_key(|(_, nodes)| nodes.len())
+                .and_then(|(hash, nodes)| {
+                    if nodes.len() >= n - f {
+                        Some((height, hash.clone(), nodes))
+                    } else {
+                        None
+                    }
+                })
+        })
+        .expect("No height found where n - f nodes produced the same computed root hash in logs");
 
     info!(
         logger,
-        "Extracted state hash from logs of {} nodes before they rebooted: {}",
-        nodes_that_logged_hash.len(),
-        most_common_hash
+        "Extracted state hash from logs of {} nodes at height {} before they rebooted: {}",
+        best_nodes.len(),
+        best_height,
+        best_hash
     );
 
     for node in healthy_nodes {
@@ -387,20 +397,20 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
     info!(logger, "Node started: {}", app_node.get_ip_addr());
 }
 
-/// Fetches the latest computed state root hash from the node logs by continously searching for
+/// Fetches the computed state root hashes from the node logs by continuously searching for
 /// matching log entries until the log stream ends (which indicates that all nodes rebooted).
-/// Returns the last computed root hash found in the logs for every node.
+/// Returns the computed root hash at each height for every node.
 ///
 /// This function will never return if an upgrade is not scheduled.
 async fn fetch_latest_computed_root_hashes_from_logs(
     logger: &Logger,
     mut log_streams: LogStream,
-) -> BTreeMap<NodeId, String> {
+) -> BTreeMap<u64, BTreeMap<NodeId, String>> {
     let computed_root_hash_regex =
         regex::Regex::new(r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\) of state @(\d*)"#)
             .unwrap();
 
-    let mut latest_root_hash_per_node = BTreeMap::new();
+    let mut root_hashes_per_height: BTreeMap<u64, BTreeMap<NodeId, String>> = BTreeMap::new();
     while let Ok((node, entry)) = log_streams
         .find(|_, line| computed_root_hash_regex.is_match(line))
         .await
@@ -422,10 +432,13 @@ async fn fetch_latest_computed_root_hashes_from_logs(
             computed_root_hash
         );
 
-        latest_root_hash_per_node.insert(node.node_id, computed_root_hash);
+        root_hashes_per_height
+            .entry(height)
+            .or_default()
+            .insert(node.node_id, computed_root_hash);
     }
 
-    latest_root_hash_per_node
+    root_hashes_per_height
 }
 
 /// Asserts that the orchestrator has shut down gracefully by searching for a specific log entry.
