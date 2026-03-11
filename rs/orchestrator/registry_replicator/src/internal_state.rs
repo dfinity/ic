@@ -825,11 +825,10 @@ mod test {
 
         if let Some(endpoint) = api_bn_endpoint {
             let api_bn_id = NODE_2;
-            setup_api_bn_in_registry(
+            setup_api_bns_in_registry(
                 &local_store,
                 registry_client.get_latest_version(),
-                api_bn_id,
-                endpoint,
+                vec![(api_bn_id, endpoint)],
             );
         }
         registry_client.update_to_latest_version();
@@ -950,44 +949,45 @@ mod test {
     }
 
     // Initialize API BN record and node record in the registry
-    fn setup_api_bn_in_registry(
+    fn setup_api_bns_in_registry(
         local_store: &LocalStoreImpl,
         from_version: RegistryVersion,
-        api_bn_id: NodeId,
-        http_endpoint: ConnectionEndpoint,
+        api_bns: Vec<(NodeId, ConnectionEndpoint)>,
     ) {
         let mut version = from_version;
-        version += 1.into();
-        local_store
-            .store(
-                version,
-                vec![KeyMutation {
-                    key: make_api_boundary_node_record_key(api_bn_id),
-                    value: Some(
-                        ApiBoundaryNodeRecord {
-                            ..Default::default()
-                        }
-                        .encode_to_vec(),
-                    ),
-                }],
-            )
-            .expect("Failed to set API BN record");
-        version += 1.into();
-        local_store
-            .store(
-                version,
-                vec![KeyMutation {
-                    key: make_node_record_key(api_bn_id),
-                    value: Some(
-                        NodeRecord {
-                            http: Some(http_endpoint.clone()),
-                            ..Default::default()
-                        }
-                        .encode_to_vec(),
-                    ),
-                }],
-            )
-            .expect("Failed to set node record");
+        for (node_id, http_endpoint) in &api_bns {
+            version += 1.into();
+            local_store
+                .store(
+                    version,
+                    vec![KeyMutation {
+                        key: make_api_boundary_node_record_key(*node_id),
+                        value: Some(
+                            ApiBoundaryNodeRecord {
+                                ..Default::default()
+                            }
+                            .encode_to_vec(),
+                        ),
+                    }],
+                )
+                .expect("Failed to set API BN record");
+            version += 1.into();
+            local_store
+                .store(
+                    version,
+                    vec![KeyMutation {
+                        key: make_node_record_key(*node_id),
+                        value: Some(
+                            NodeRecord {
+                                http: Some(http_endpoint.clone()),
+                                ..Default::default()
+                            }
+                            .encode_to_vec(),
+                        ),
+                    }],
+                )
+                .expect("Failed to set node record");
+        }
     }
 
     // Initialize node reward type in the registry
