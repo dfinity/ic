@@ -256,8 +256,6 @@ impl AgentWithDelegation<'_> {
         let body = serde_cbor::ser::to_vec(&read_state_envelope).unwrap();
         let status_path: Vec<&[u8]> = vec![b"request_status", request_id.as_bytes(), b"status"];
         let reply_path: Vec<&[u8]> = vec![b"request_status", request_id.as_bytes(), b"reply"];
-        let reject_code_path: Vec<&[u8]> =
-            vec![b"request_status", request_id.as_bytes(), b"reject_code"];
         let reject_message_path: Vec<&[u8]> =
             vec![b"request_status", request_id.as_bytes(), b"reject_message"];
         // The closure returns anyhow::Result<Result<Vec<u8>, String>>:
@@ -311,12 +309,6 @@ impl AgentWithDelegation<'_> {
                         }
                     }
                     "rejected" => {
-                        let code = match tree.lookup(&reject_code_path) {
-                            ic_crypto_tree_hash::LookupStatus::Found(
-                                ic_crypto_tree_hash::MixedHashTree::Leaf(c),
-                            ) => String::from_utf8_lossy(c).to_string(),
-                            _ => "unknown".to_string(),
-                        };
                         let message = match tree.lookup(&reject_message_path) {
                             ic_crypto_tree_hash::LookupStatus::Found(
                                 ic_crypto_tree_hash::MixedHashTree::Leaf(m),
@@ -325,7 +317,7 @@ impl AgentWithDelegation<'_> {
                         };
                         Ok(Err(format!(
                             "Update call to {canister_id}/{method_name} (request_id={request_id}) \
-                             was rejected with code {code}: {message}"
+                             was rejected with message: {message}"
                         )))
                     }
                     "done" => Ok(Err(format!(
