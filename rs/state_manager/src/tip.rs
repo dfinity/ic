@@ -1321,12 +1321,6 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
         .canister_metrics()
         .load_metrics();
 
-    let next_canister_log_record_idx = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        canister_state.system_state.log_memory_store.next_idx()
-    } else {
-        canister_state.system_state.canister_log.next_idx()
-    };
-
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
@@ -1394,7 +1388,11 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             log_visibility: canister_state.system_state.log_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
             canister_log: canister_state.system_state.canister_log.clone(),
-            next_canister_log_record_idx,
+            next_canister_log_record_idx: if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                canister_state.system_state.log_memory_store.next_idx()
+            } else {
+                canister_state.system_state.canister_log.next_idx()
+            },
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id(),
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
