@@ -115,6 +115,7 @@ pub fn test(env: TestEnv) {
                 signed_delegation: user.signed_delegation.clone(),
                 delegation_identity,
                 polling_timeout: UPDATE_POLLING_TIMEOUT,
+                log: env.logger(),
             })
             .collect();
 

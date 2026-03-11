@@ -1,6 +1,7 @@
 use crate::util::{expiry_time, sign_query, sign_update};
 
 use super::sign_read_state;
+use anyhow::bail;
 use candid::{CandidType, Deserialize, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
@@ -16,9 +17,11 @@ use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_utils::interfaces::ManagementCanister;
 use reqwest::{Client, Response};
 use serde_bytes::ByteBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub const UPDATE_POLLING_TIMEOUT: Duration = Duration::from_secs(60);
+pub const UPDATE_POLLING_BACKOFF: Duration = Duration::from_millis(500);
+
 /// user ids start with 10000 and increase by 1 for each new user
 pub const USER_NUMBER_OFFSET: u64 = 10_000;
 
@@ -122,6 +125,7 @@ pub struct AgentWithDelegation<'a> {
     pub signed_delegation: SignedDelegation,
     pub delegation_identity: &'a BasicIdentity,
     pub polling_timeout: Duration,
+    pub log: slog::Logger,
 }
 
 impl AgentWithDelegation<'_> {
@@ -256,38 +260,37 @@ impl AgentWithDelegation<'_> {
             let p3: &[u8] = b"reply";
             vec![p1, p2, p3]
         };
-        let start = Instant::now();
-        let read_state: Vec<u8> = loop {
-            if start.elapsed() > self.polling_timeout {
-                return Err(format!(
-                    "Polling timeout of {} ms was reached",
-                    self.polling_timeout.as_millis()
-                ));
+        let read_state: Vec<u8> = crate::retry_with_msg_async!(
+            "update_and_wait read_state polling",
+            &self.log,
+            self.polling_timeout,
+            UPDATE_POLLING_BACKOFF,
+            || async {
+                let response = self
+                    .send_http_request("read_state", canister_id, body.clone())
+                    .await;
+                let read_state_body = response.bytes().await.unwrap();
+                let response_bytes: HttpReadStateResponse =
+                    serde_cbor::from_slice(&read_state_body).unwrap();
+                let certificate: Certificate =
+                    serde_cbor::from_slice(&response_bytes.certificate).unwrap();
+                let lookup_status = certificate.tree.lookup(&path);
+                match lookup_status {
+                    ic_crypto_tree_hash::LookupStatus::Found(x) => match x {
+                        ic_crypto_tree_hash::MixedHashTree::Leaf(y) => Ok(y.clone()),
+                        _ => panic!("Unexpected result from the read_state tree hash structure"),
+                    },
+                    ic_crypto_tree_hash::LookupStatus::Absent => {
+                        bail!("Request status is absent, keep polling")
+                    }
+                    ic_crypto_tree_hash::LookupStatus::Unknown => {
+                        bail!("Request status is unknown, keep polling")
+                    }
+                }
             }
-            let response = self
-                .send_http_request("read_state", canister_id, body.clone())
-                .await;
-            let read_state_body = response.bytes().await.unwrap();
-            let response_bytes: HttpReadStateResponse =
-                serde_cbor::from_slice(&read_state_body).unwrap();
-            let certificate: Certificate =
-                serde_cbor::from_slice(&response_bytes.certificate).unwrap();
-            let lookup_status = certificate.tree.lookup(&path);
-            match lookup_status {
-                ic_crypto_tree_hash::LookupStatus::Found(x) => match x {
-                    ic_crypto_tree_hash::MixedHashTree::Leaf(y) => break y.clone(),
-                    _ => panic!("Unexpected result from the read_state tree hash structure"),
-                },
-                ic_crypto_tree_hash::LookupStatus::Absent => {
-                    // If request is absent, keep polling
-                    continue;
-                }
-                ic_crypto_tree_hash::LookupStatus::Unknown => {
-                    // If request is unknown, keep polling
-                    continue;
-                }
-            };
-        };
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         Ok(read_state)
     }
 }

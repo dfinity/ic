@@ -103,6 +103,7 @@ pub fn test(env: TestEnv) {
         signed_delegation,
         delegation_identity: &delegation_identity,
         polling_timeout: UPDATE_POLLING_TIMEOUT,
+        log: log.clone(),
     };
     info!(
         log,
