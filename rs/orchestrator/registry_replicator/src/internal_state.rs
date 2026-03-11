@@ -288,11 +288,20 @@ impl InternalState {
             self.nns_pub_key = Some(pub_key);
             self.nns_urls.clone_from(&urls);
 
-            // reinitialize client
-            self.registry_canister = Some(Arc::new(RegistryCanister::new_with_query_timeout(
-                urls,
-                self.poll_delay,
-            )));
+            if !urls.is_empty() {
+                // Update the client with the new URLs
+                self.registry_canister = Some(Arc::new(RegistryCanister::new_with_query_timeout(
+                    urls,
+                    self.poll_delay,
+                )));
+            } else {
+                // If the list of URLs is empty, we reset `registry_canister` to None, to avoid a
+                // panic inside `RegistryCanister::new_with_query_timeout`.
+                // By doing so, we reset the state back to right after the constructor (but
+                // eventually with a new public key), meaning that we will use
+                // `registry_canister_fallback`, if set.
+                self.registry_canister = None;
+            }
         }
         Ok(())
     }
