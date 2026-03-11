@@ -1,6 +1,6 @@
 # Registry
 
-**Crates**: `ic-registry-canister-client`, `ic-registry-client-fake`, `ic-registry-nns-data-provider-wrappers`, `ic-registry-node-provider-rewards`, `ic-registry-proto-data-provider`, `ic-registry-replicator`, `ic-regedit`
+**Crates**: `ic-registry-canister-client`, `ic-registry-client-fake`, `ic-registry-nns-data-provider-wrappers`, `ic-registry-node-provider-rewards`, `ic-registry-proto-data-provider`, `ic-registry-replicator`, `ic-regedit`, `registry-canister`
 
 The Registry is the configuration backbone of the Internet Computer (IC). It is a versioned key-value store implemented as an NNS canister that holds all system configuration: subnet membership, node records, replica versions, routing tables, firewall rules, cryptographic keys, and more. Every mutation increments the registry version atomically, and the full history of changes is maintained as an append-only changelog.
 

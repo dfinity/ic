@@ -1,5 +1,7 @@
 # Ethereum Integration
 
+**Crates**: `ic-ethereum-types`
+
 ## Requirements
 
 ### Requirement: ckETH Minter - Deposit (ETH to ckETH)

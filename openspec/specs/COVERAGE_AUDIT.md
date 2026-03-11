@@ -1,7 +1,7 @@
 # OpenSpec Coverage Audit Report
 
-**Date:** 2026-03-08 (final audit after gap-filling)
-**Scope:** All 522 crates under `rs/` vs. 132 spec files under `openspec/specs/`
+**Date:** 2026-03-11 (updated after gap-filling for new crates)
+**Scope:** All 541 crates under `rs/` vs. 132 spec files under `openspec/specs/`
 **Method:** Automated word-boundary grep of every crate name against all spec files (excluding this audit file)
 
 ---
@@ -10,11 +10,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Total crates under `rs/` | 522 |
+| Total crates under `rs/` | 541 |
 | Top-level modules (with crates) | 66 |
 | Spec files | 132 |
 | Spec domains | 24 |
-| Crate names found in spec files (word-boundary grep) | **522 (100%)** |
+| Crate names found in spec files (word-boundary grep) | **541 (100%)** |
 | Module-level coverage | **66/66 (100%)** |
 
 ---

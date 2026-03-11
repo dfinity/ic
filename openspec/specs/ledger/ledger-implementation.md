@@ -17,6 +17,14 @@ This specification covers the ledger implementation crates in the IC repository.
 | `ic-icrc1-tokens-u256` | `rs/ledger_suite/icrc1/tokens_u256/` |
 | `ic-ledger-suite-state-machine-tests` | `rs/ledger_suite/tests/sm-tests/` |
 | `ledger-suite-orchestrator` | `rs/ethereum/ledger-suite-orchestrator/` |
+| `ic-icrc1` | `rs/ledger_suite/icrc1/` |
+| `ledger-canister` | `rs/ledger_suite/icp/ledger/` |
+| `ic-ledger-hash-of` | `packages/ic-ledger-hash-of/` |
+| `icrc-cbor` | `packages/icrc-cbor/` |
+| `icrc-ledger-agent` | `packages/icrc-ledger-agent/` |
+| `icrc-ledger-client` | `packages/icrc-ledger-client/` |
+| `icrc-ledger-client-cdk` | `packages/icrc-ledger-client-cdk/` |
+| `icrc-ledger-types` | `packages/icrc-ledger-types/` |
 
 ---
 

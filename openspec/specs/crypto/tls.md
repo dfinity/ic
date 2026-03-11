@@ -1,6 +1,6 @@
 # TLS Configuration and Handshake
 
-**Crates**: `ic-crypto-tls-cert-validation`
+**Crates**: `ic-crypto-tls-cert-validation`, `ic-crypto-tls-interfaces`
 
 ## Requirements
 

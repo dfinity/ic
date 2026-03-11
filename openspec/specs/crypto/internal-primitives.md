@@ -1,6 +1,6 @@
 # Crypto Internal Primitives Specification
 
-**Crates**: `ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils`, `ic-crypto-node-key-generation`, `ic-crypto-node-key-validation`, `ic-crypto-sha2`, `ic-crypto-standalone-sig-verifier`
+**Crates**: `ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils`, `ic-crypto-node-key-generation`, `ic-crypto-node-key-validation`, `ic-crypto-sha2`, `ic-crypto-standalone-sig-verifier`, `ic-crypto-prng`, `ic-crypto-tree-hash`, `ic-ed25519`, `ic-hpke`, `ic-pub-key`, `ic-secp256k1`, `ic-secp256r1`, `ic-sha3`, `ic-signature-verification`, `ic-dummy-getrandom-for-wasm`
 
 This specification covers the internal cryptographic primitive crates that form the foundation of the Internet Computer's cryptographic subsystem. These crates reside under `rs/crypto/internal/` and provide low-level implementations for signatures, encryption, key generation, threshold cryptography, and related building blocks.
 

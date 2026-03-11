@@ -1,6 +1,6 @@
 # Rosetta API
 
-**Crates**: `ic-rosetta-api`
+**Crates**: `ic-rosetta-api`, `ic-icrc-rosetta`
 
 The Rosetta API implementation provides a standard interface (Coinbase Rosetta specification) for interacting with the ICP and ICRC-1 ledgers. There are two separate implementations: one for ICP (with neuron management extensions) and one for ICRC-1 tokens (supporting multiple tokens). Both implement the Construction API and Data API.
 

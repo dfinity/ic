@@ -1,6 +1,6 @@
 # Supporting Crates
 
-**Crates**: `candid-utils`, `fe-derive`, `command_runner`, `local_key`
+**Crates**: `candid-utils`, `fe-derive`, `command_runner`, `local_key`, `ic-error-types`, `ic-http-types`, `ic-heap-bytes`, `ic-heap-bytes-derive`, `canlog`, `canlog_derive`, `ic-metrics-assert`
 
 ## Requirements
 

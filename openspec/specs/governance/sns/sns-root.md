@@ -1,6 +1,6 @@
 # SNS Root Canister
 
-**Crates**: `ic-sns-root`
+**Crates**: `ic-sns-root`, `ic-sns-governance-api`
 
 The SNS Root canister is the administrative hub of an SNS. It tracks all canisters in the SNS, manages dapp canister registration and settings, provides status summaries, and handles extension canister registration. Root serves as the controller of all SNS-managed canisters (governance, ledger, swap, dapps, archives, index, and extensions).
 

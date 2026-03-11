@@ -1,6 +1,6 @@
 # PocketIC Server Specification
 
-**Crates**: `pocket-ic-server`
+**Crates**: `pocket-ic-server`, `pocket-ic`, `pocket-ic-test-canister`
 
 This specification covers the PocketIC Server (`rs/pocket_ic_server/`), a self-contained, lightweight platform for testing canister smart contracts by emulating the Internet Computer locally.
 
