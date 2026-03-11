@@ -678,17 +678,17 @@ fn test_from_checkpoint_feature_disabled() {
 fn test_next_idx_preserved_after_deallocate() {
     let mut store = LogMemoryStore::new(FlagStatus::Enabled);
     store.resize_for_testing(4096);
-    
+
     let mut delta = ic_types::CanisterLog::default_delta();
     delta.add_record(1, b"a".to_vec());
     delta.add_record(2, b"b".to_vec());
     store.append_delta_log(&mut delta);
-    
+
     assert_eq!(store.next_idx(), 3);
-    
+
     // Setting limit to 0 invokes deallocate()
     store.resize_for_testing(0);
-    
+
     // The next_idx should be preserved even if deallocated
     assert_eq!(store.next_idx(), 3);
 }
