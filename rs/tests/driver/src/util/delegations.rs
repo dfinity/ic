@@ -254,12 +254,12 @@ impl AgentWithDelegation<'_> {
             )]),
         };
         let body = serde_cbor::ser::to_vec(&read_state_envelope).unwrap();
-        let path = {
-            let p1: &[u8] = b"request_status";
-            let p2: &[u8] = request_id.as_bytes();
-            let p3: &[u8] = b"reply";
-            vec![p1, p2, p3]
-        };
+        let status_path: Vec<&[u8]> = vec![b"request_status", request_id.as_bytes(), b"status"];
+        let reply_path: Vec<&[u8]> = vec![b"request_status", request_id.as_bytes(), b"reply"];
+        let reject_code_path: Vec<&[u8]> =
+            vec![b"request_status", request_id.as_bytes(), b"reject_code"];
+        let reject_message_path: Vec<&[u8]> =
+            vec![b"request_status", request_id.as_bytes(), b"reject_message"];
         let read_state: Vec<u8> = crate::retry_with_msg_async!(
             "update_and_wait read_state polling",
             &self.log,
@@ -274,17 +274,56 @@ impl AgentWithDelegation<'_> {
                     serde_cbor::from_slice(&read_state_body).unwrap();
                 let certificate: Certificate =
                     serde_cbor::from_slice(&response_bytes.certificate).unwrap();
-                let lookup_status = certificate.tree.lookup(&path);
-                match lookup_status {
-                    ic_crypto_tree_hash::LookupStatus::Found(x) => match x {
-                        ic_crypto_tree_hash::MixedHashTree::Leaf(y) => Ok(y.clone()),
-                        _ => panic!("Unexpected result from the read_state tree hash structure"),
-                    },
-                    ic_crypto_tree_hash::LookupStatus::Absent => {
-                        bail!("Request status is absent, keep polling")
+                let tree = &certificate.tree;
+
+                // First, check the status path to determine the request state.
+                let status_str = match tree.lookup(&status_path) {
+                    ic_crypto_tree_hash::LookupStatus::Found(
+                        ic_crypto_tree_hash::MixedHashTree::Leaf(s),
+                    ) => String::from_utf8(s.clone()).expect("request status should be valid utf8"),
+                    ic_crypto_tree_hash::LookupStatus::Absent
+                    | ic_crypto_tree_hash::LookupStatus::Unknown => {
+                        bail!("Request status not yet available, keep polling")
                     }
-                    ic_crypto_tree_hash::LookupStatus::Unknown => {
-                        bail!("Request status is unknown, keep polling")
+                    ic_crypto_tree_hash::LookupStatus::Found(_) => {
+                        panic!("Unexpected non-leaf node at request status path")
+                    }
+                };
+
+                match status_str.as_str() {
+                    "replied" => {
+                        // Read the reply payload.
+                        match tree.lookup(&reply_path) {
+                            ic_crypto_tree_hash::LookupStatus::Found(
+                                ic_crypto_tree_hash::MixedHashTree::Leaf(y),
+                            ) => Ok(y.clone()),
+                            _ => {
+                                panic!("Status is 'replied' but reply leaf is missing or malformed")
+                            }
+                        }
+                    }
+                    "rejected" => {
+                        let code = match tree.lookup(&reject_code_path) {
+                            ic_crypto_tree_hash::LookupStatus::Found(
+                                ic_crypto_tree_hash::MixedHashTree::Leaf(c),
+                            ) => String::from_utf8_lossy(c).to_string(),
+                            _ => "unknown".to_string(),
+                        };
+                        let message = match tree.lookup(&reject_message_path) {
+                            ic_crypto_tree_hash::LookupStatus::Found(
+                                ic_crypto_tree_hash::MixedHashTree::Leaf(m),
+                            ) => String::from_utf8_lossy(m).to_string(),
+                            _ => "no message".to_string(),
+                        };
+                        Err(anyhow::anyhow!(
+                            "Update call was rejected with code {code}: {message}"
+                        ))
+                    }
+                    "done" => Err(anyhow::anyhow!(
+                        "Request reached terminal state 'done' without a reply"
+                    )),
+                    _ => {
+                        bail!("Request status is '{status_str}', keep polling")
                     }
                 }
             }
