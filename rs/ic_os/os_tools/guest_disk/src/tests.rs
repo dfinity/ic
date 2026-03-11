@@ -292,7 +292,7 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         Key::DiskEncryptionKey {
             device_path: &fixture.device.path().unwrap(),
         },
-        0,
+        None,
     )
     .unwrap();
 
@@ -318,7 +318,7 @@ fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
             Key::DiskEncryptionKey {
                 device_path: &fixture.device.path().unwrap(),
             },
-            0,
+            None,
         )
         .unwrap()
         .as_bytes(),
@@ -362,7 +362,7 @@ fn test_open_store_multiple_times_with_different_keys() {
             Key::DiskEncryptionKey {
                 device_path: &fixture.device.path().unwrap(),
             },
-            0,
+            None,
         )
         .unwrap(),
     )
@@ -377,7 +377,7 @@ fn test_open_store_multiple_times_with_different_keys() {
                 Key::DiskEncryptionKey {
                     device_path: &fixture.device.path().unwrap(),
                 },
-                0,
+                None,
             )
             .unwrap(),
         )
@@ -434,7 +434,7 @@ fn test_can_open_store_with_derived_key_when_previous_key_fails() {
         Key::DiskEncryptionKey {
             device_path: &fixture.device.path().unwrap(),
         },
-        0,
+        None,
     )
     .unwrap();
 

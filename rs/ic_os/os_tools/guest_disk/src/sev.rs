@@ -57,14 +57,14 @@ impl SevDiskEncryption<'_> {
         let old_key = derive_key_from_sev_measurement(
             self.sev_firmware.as_mut(),
             Key::DiskEncryptionKey { device_path },
-            old_tcb_u64,
+            Some(old_tcb_u64),
         )
         .context("Failed to derive old SEV key for TCB rotation")?;
 
         let new_key = derive_key_from_sev_measurement(
             self.sev_firmware.as_mut(),
             Key::DiskEncryptionKey { device_path },
-            new_tcb_u64,
+            Some(new_tcb_u64),
         )
         .context("Failed to derive new SEV key for TCB rotation")?;
 
@@ -198,11 +198,11 @@ impl DiskEncryption for SevDiskEncryption<'_> {
             }
         }
 
-        // Derive the key using the current TCB version (0 means current).
+        // Derive the key using the committed TCB version from the attestation report.
         let key = derive_key_from_sev_measurement(
             self.sev_firmware.as_mut(),
             Key::DiskEncryptionKey { device_path },
-            0,
+            None,
         )
         .context("Failed to derive SEV key for disk encryption")?;
 
@@ -267,7 +267,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
         let key = derive_key_from_sev_measurement(
             self.sev_firmware.as_mut(),
             Key::DiskEncryptionKey { device_path },
-            reported_tcb_from_attestation_report(&report)?,
+            Some(reported_tcb_from_attestation_report(&report)?),
         )
         .context("Failed to derive SEV key for disk encryption")?;
 
@@ -328,7 +328,7 @@ pub fn can_open_store(
                 if let Ok(derived_key) = derive_key_from_sev_measurement(
                     sev_firmware,
                     Key::DiskEncryptionKey { device_path },
-                    token.tcb(),
+                    Some(token.tcb()),
                 ) {
                     if check_encryption_key(device_path, derived_key.as_bytes()).is_ok() {
                         return Ok(true);
@@ -338,9 +338,12 @@ pub fn can_open_store(
         }
     }
 
-    // Try with the default TCB version (0 means current platform TCB).
-    let derived_key =
-        derive_key_from_sev_measurement(sev_firmware, Key::DiskEncryptionKey { device_path }, 0)?;
+    // Try with the committed TCB version from the attestation report.
+    let derived_key = derive_key_from_sev_measurement(
+        sev_firmware,
+        Key::DiskEncryptionKey { device_path },
+        None,
+    )?;
     Ok(check_encryption_key(device_path, derived_key.as_bytes()).is_ok())
 }
 

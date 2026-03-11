@@ -260,7 +260,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             Key::DiskEncryptionKey {
                 device_path: Path::new(STORE_DEVICE),
             },
-            0,
+            None,
         )
         .unwrap();
 
