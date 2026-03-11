@@ -53,14 +53,14 @@ pub(super) struct RingBuffer {
 
 impl RingBuffer {
     /// Creates a new ring buffer with the given data capacity.
-    pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
+    pub fn new(page_map: PageMap, data_capacity: MemorySize, next_idx: u64) -> Self {
         assert_le!(
             data_capacity,
             DATA_CAPACITY_MAX,
             "data capacity exceeds maximum"
         );
         let mut io = StructIO::new(page_map);
-        io.save_header(&Header::new(data_capacity));
+        io.save_header(&Header::new(data_capacity, next_idx));
 
         Self { io }
     }
@@ -95,6 +95,12 @@ impl RingBuffer {
         self.io.load_header().data_size.get() as usize
     }
 
+    /// Returns next_idx of the ring buffer.
+    #[cfg(test)]
+    pub fn next_idx(&self) -> u64 {
+        self.io.load_header().next_idx
+    }
+
     /// Clears the ring buffer.
     pub fn clear(&mut self) {
         let mut h = self.io.load_header();
@@ -114,6 +120,20 @@ impl RingBuffer {
 
     /// Appends records from an iterator.
     pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
+        self.append_log_iter_inner(records, true)
+    }
+
+    /// Append old records from an iterator without checking `next_idx`.
+    pub fn append_old_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
+        self.append_log_iter_inner(records, false)
+    }
+
+    /// Appends records from an iterator.
+    fn append_log_iter_inner(
+        &mut self,
+        records: impl IntoIterator<Item = CanisterLogRecord>,
+        check_idx_when_adding_new_records: bool,
+    ) {
         let mut iter = records.into_iter().peekable();
         if iter.peek().is_none() {
             return; // Exit early if no records.
@@ -121,14 +141,26 @@ impl RingBuffer {
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
         for record in iter.map(LogRecord::from) {
-            // Check that records are added in order, otherwise it breaks the index.
-            if record.idx < h.next_idx {
-                debug_assert!(false, "Log record idx must be >= than next idx");
-                continue;
-            }
-            if record.timestamp < h.max_timestamp {
-                debug_assert!(false, "Log record timestamp must be >= than max timestamp");
-                continue;
+            // Check that new records are added in order, otherwise it breaks the index.
+            // When resizing ring-buffer we do not add new records, but appending
+            // already existing records, therefore this check must be disabled.
+            if check_idx_when_adding_new_records {
+                if record.idx < h.next_idx {
+                    debug_assert!(
+                        false,
+                        "Log record idx {} must be >= than next idx {}",
+                        record.idx, h.next_idx
+                    );
+                    continue;
+                }
+                if record.timestamp < h.max_timestamp {
+                    debug_assert!(
+                        false,
+                        "Log record timestamp {} must be >= than max timestamp {}",
+                        record.timestamp, h.max_timestamp
+                    );
+                    continue;
+                }
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
@@ -333,6 +365,7 @@ mod tests {
     use more_asserts::assert_gt;
 
     const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(2_000_000); // 2 MB
+    const TEST_NEXT_IDX: u64 = 0;
 
     fn log_record(idx: u64, timestamp: u64, message: &str) -> CanisterLogRecord {
         CanisterLogRecord {
@@ -351,18 +384,20 @@ mod tests {
     fn test_initialization() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
+        let next_idx = 123;
 
-        let rb = RingBuffer::new(page_map, data_capacity);
+        let rb = RingBuffer::new(page_map, data_capacity, next_idx);
 
         assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
         assert_eq!(rb.bytes_used(), 0);
+        assert_eq!(rb.next_idx(), next_idx);
     }
 
     #[test]
     fn test_push_and_pop_order_preserved() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
-        let mut rb = RingBuffer::new(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity, TEST_NEXT_IDX);
 
         let r0 = log_record(0, 100, "a");
         let r1 = log_record(1, 200, "bb");
@@ -373,6 +408,7 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r0);
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
+        assert_eq!(rb.next_idx(), 2);
     }
 
     #[test]
@@ -380,7 +416,7 @@ mod tests {
         let record_size: usize = 25;
         let page_map = PageMap::new_for_testing();
         let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity, TEST_NEXT_IDX);
 
         let r0 = log_record(0, 100, "12345");
         assert_eq!(bytes_len(&r0), record_size);
@@ -400,6 +436,7 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert_eq!(rb.pop_front().unwrap(), r2);
         assert_eq!(rb.pop_front().unwrap(), r3);
+        assert_eq!(rb.next_idx(), 4);
     }
 
     #[test]
@@ -407,7 +444,7 @@ mod tests {
         let record_size: usize = 25;
         let page_map = PageMap::new_for_testing();
         let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity, TEST_NEXT_IDX);
 
         let r0 = log_record(0, 100, "12345");
         assert_eq!(bytes_len(&r0), record_size);
@@ -427,13 +464,14 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r2);
         assert_eq!(rb.pop_front().unwrap(), r3);
         assert!(rb.pop_front().is_none());
+        assert_eq!(rb.next_idx(), 4);
     }
 
     #[test]
     fn test_wraps_without_eviction() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = MemorySize::new(137);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity, TEST_NEXT_IDX);
 
         // Push many records to cause wrap-around without eviction.
         let mut pushed: Vec<CanisterLogRecord> = vec![];
@@ -460,7 +498,7 @@ mod tests {
     fn test_lookup_table_and_records_filtering() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
-        let mut rb = RingBuffer::new(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity, TEST_NEXT_IDX);
         let r0 = log_record(0, 1000, "alpha");
         let r1 = log_record(1, 2000, "beta");
         let r2 = log_record(2, 3000, "gamma");
@@ -502,7 +540,7 @@ mod tests {
     fn test_clear() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
-        let mut rb = RingBuffer::new(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity, TEST_NEXT_IDX);
 
         rb.append(&log_record(0, 100, "12345"));
         assert_gt!(rb.bytes_used(), 0);
@@ -517,7 +555,11 @@ mod tests {
 
     #[test]
     fn test_iter() {
-        let mut rb = RingBuffer::new(PageMap::new_for_testing(), TEST_DATA_CAPACITY);
+        let mut rb = RingBuffer::new(
+            PageMap::new_for_testing(),
+            TEST_DATA_CAPACITY,
+            TEST_NEXT_IDX,
+        );
 
         let r0 = log_record(0, 100, "a");
         let r1 = log_record(1, 200, "bb");
@@ -537,7 +579,11 @@ mod tests {
 
     #[test]
     fn test_iter_empty() {
-        let rb = RingBuffer::new(PageMap::new_for_testing(), TEST_DATA_CAPACITY);
+        let rb = RingBuffer::new(
+            PageMap::new_for_testing(),
+            TEST_DATA_CAPACITY,
+            TEST_NEXT_IDX,
+        );
 
         let records: Vec<CanisterLogRecord> = rb.iter().collect();
 
@@ -551,7 +597,7 @@ mod tests {
 
         // Create a valid ring buffer and persist it.
         {
-            let mut rb = RingBuffer::new(page_map, data_capacity);
+            let mut rb = RingBuffer::new(page_map, data_capacity, TEST_NEXT_IDX);
             rb.append(&log_record(0, 100, "test"));
             page_map = rb.to_page_map();
             // Make sure rb is dropped.

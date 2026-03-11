@@ -637,7 +637,6 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 
@@ -649,7 +648,6 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
-        log_memory_store: LogMemoryStore,
     ) -> Self {
         Self {
             canister_id,
@@ -679,7 +677,7 @@ impl SystemState {
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
-            log_memory_store,
+            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::new(0),
@@ -712,6 +710,7 @@ impl SystemState {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
         canister_log: CanisterLog,
+        next_canister_log_record_idx: u64,
         log_memory_store_data: Option<PageMap>,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
@@ -749,6 +748,7 @@ impl SystemState {
             log_memory_store: LogMemoryStore::from_checkpoint(
                 LOG_MEMORY_STORE_FEATURE,
                 log_memory_store_data,
+                next_canister_log_record_idx,
             ),
             wasm_memory_limit,
             next_snapshot_id,
@@ -824,7 +824,6 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 

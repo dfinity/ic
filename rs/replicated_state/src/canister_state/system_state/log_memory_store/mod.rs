@@ -28,10 +28,22 @@ use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
+    /// Feature flag for controlling LogMemoryStore enabled.
     feature_flag: FlagStatus,
 
+    /// Optional PageMap for storing log records ring-buffer with metadata.
+    /// It can be None when canister code is uninstalled and logs are
+    /// removed.
     #[validate_eq(CompareWithValidateEq)]
     maybe_page_map: Option<PageMap>,
+
+    /// Holds the value of `next_idx` field from which LogMemoryStore
+    /// starts counting the records. It may either come from initial
+    /// creation (is zero) or restored from a checkpoint.
+    /// It is stored as a separate field outside of `maybe_page_map`
+    /// in order to continue increasing `next_idx` even after logs
+    /// were cleared during uninstall and re-install.
+    start_idx: u64,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
     #[validate_eq(Ignore)]
@@ -52,15 +64,23 @@ impl LogMemoryStore {
     /// Any attempts to append logs will be silently ignored until the store is
     /// explicitly resized to a non-zero capacity.
     pub fn new(feature_flag: FlagStatus) -> Self {
-        Self::new_inner(feature_flag, None)
+        Self::new_inner(feature_flag, None, 0)
     }
 
     /// Creates a new store from a checkpoint.
-    pub fn from_checkpoint(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
-        Self::new_inner(feature_flag, maybe_page_map)
+    pub fn from_checkpoint(
+        feature_flag: FlagStatus,
+        maybe_page_map: Option<PageMap>,
+        next_idx: u64,
+    ) -> Self {
+        Self::new_inner(feature_flag, maybe_page_map, next_idx)
     }
 
-    fn new_inner(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
+    fn new_inner(
+        feature_flag: FlagStatus,
+        maybe_page_map: Option<PageMap>,
+        start_idx: u64,
+    ) -> Self {
         Self {
             feature_flag,
             maybe_page_map: if feature_flag == FlagStatus::Enabled {
@@ -68,6 +88,7 @@ impl LogMemoryStore {
             } else {
                 None
             },
+            start_idx,
             header_cache: OnceLock::new(),
             delta_log_sizes: VecDeque::new(),
         }
@@ -183,11 +204,15 @@ impl LogMemoryStore {
             // Upsizing or First-time init: Reuse existing or create new.
             _ => self.maybe_page_map.clone().unwrap_or(create_page_map()),
         };
-        let mut new_buffer = RingBuffer::new(page_map, MemorySize::new(target_limit as u64));
+        let mut new_buffer = RingBuffer::new(
+            page_map,
+            MemorySize::new(target_limit as u64),
+            self.next_idx(),
+        );
 
         // Migrate records.
         if let Some(old_buffer) = self.load_ring_buffer() {
-            new_buffer.append_log_iter(old_buffer.iter());
+            new_buffer.append_old_log_iter(old_buffer.iter());
         }
 
         // Update of the state.
@@ -197,7 +222,10 @@ impl LogMemoryStore {
 
     /// Returns the next log record `idx`.
     pub fn next_idx(&self) -> u64 {
-        self.get_header().map(|h| h.next_idx).unwrap_or(0)
+        // Since `next_idx` is always growing we return
+        // the max of start value and latest `header.next_idx`.
+        self.start_idx
+            .max(self.get_header().map(|h| h.next_idx).unwrap_or(0))
     }
 
     /// Returns true if the ring buffer is empty.
@@ -291,6 +319,7 @@ impl Clone for LogMemoryStore {
             // PageMap is a persistent data structure, so clone is cheap and creates
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),
+            start_idx: self.start_idx,
             delta_log_sizes: self.delta_log_sizes.clone(),
             // OnceLock is not Clone, so we must manually clone the state.
             header_cache: match self.header_cache.get() {
@@ -306,6 +335,7 @@ impl PartialEq for LogMemoryStore {
         // header_cache is a transient cache and should not be compared.
         self.feature_flag == other.feature_flag
             && self.maybe_page_map == other.maybe_page_map
+            && self.start_idx == other.start_idx
             && self.delta_log_sizes == other.delta_log_sizes
     }
 }

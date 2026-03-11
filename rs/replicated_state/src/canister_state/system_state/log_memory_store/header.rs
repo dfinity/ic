@@ -32,7 +32,7 @@ pub(super) struct Header {
 }
 
 impl Header {
-    pub fn new(data_capacity: MemorySize) -> Self {
+    pub fn new(data_capacity: MemorySize, next_idx: u64) -> Self {
         Self {
             version: 1,
             magic: *MAGIC,
@@ -46,7 +46,7 @@ impl Header {
             data_tail: MemoryPosition::new(0),
             data_size: MemorySize::new(0),
 
-            next_idx: 0,
+            next_idx,
             max_timestamp: 0,
         }
     }
@@ -59,7 +59,7 @@ impl Header {
         self.data_head = MemoryPosition::new(0);
         self.data_tail = MemoryPosition::new(0);
         self.data_size = MemorySize::new(0);
-        self.next_idx = 0;
+        // do not clear next_idx.
         self.max_timestamp = 0;
     }
 
@@ -105,10 +105,13 @@ impl Header {
 mod tests {
     use super::*;
 
+    const TEST_NEXT_IDX: u64 = 0;
+
     #[test]
     fn new_header_sets_defaults() {
+        let next_idx = 123;
         let capacity = MemorySize::new(1024);
-        let h = Header::new(capacity);
+        let h = Header::new(capacity, next_idx);
         assert_eq!(h.magic, *b"CLB");
         assert_eq!(h.version, 1);
         assert_eq!(h.index_table_pages, 1);
@@ -117,7 +120,7 @@ mod tests {
         assert_eq!(h.data_head, MemoryPosition::new(0));
         assert_eq!(h.data_tail, MemoryPosition::new(0));
         assert_eq!(h.data_size, MemorySize::new(0));
-        assert_eq!(h.next_idx, 0);
+        assert_eq!(h.next_idx, next_idx);
         assert_eq!(h.max_timestamp, 0);
     }
 
@@ -125,7 +128,7 @@ mod tests {
     fn advance_position_wraps_correctly() {
         // With capacity 100, advancing 20 from position 90 wraps to 10.
         let capacity = MemorySize::new(100);
-        let h = Header::new(capacity);
+        let h = Header::new(capacity, TEST_NEXT_IDX);
         let next = h.advance_position(MemoryPosition::new(90), MemorySize::new(20));
         assert_eq!(next, MemoryPosition::new(10));
     }
@@ -133,7 +136,7 @@ mod tests {
     #[test]
     fn is_alive_returns_false_when_outside_capacity() {
         // Positions >= capacity are always not alive.
-        let mut h = Header::new(MemorySize::new(64));
+        let mut h = Header::new(MemorySize::new(64), TEST_NEXT_IDX);
         h.data_head = MemoryPosition::new(0);
         h.data_tail = MemoryPosition::new(0);
         h.data_size = MemorySize::new(64);
@@ -144,7 +147,7 @@ mod tests {
     #[test]
     fn is_alive_returns_false_when_empty() {
         // When head==tail and size==0, buffer is empty, no positions are alive.
-        let mut h = Header::new(MemorySize::new(64));
+        let mut h = Header::new(MemorySize::new(64), TEST_NEXT_IDX);
         h.data_head = MemoryPosition::new(0);
         h.data_tail = MemoryPosition::new(0);
         h.data_size = MemorySize::new(0);
@@ -155,7 +158,7 @@ mod tests {
     #[test]
     fn is_alive_returns_true_when_full() {
         // When head==tail and size==capacity, buffer is full, all positions are alive.
-        let mut h = Header::new(MemorySize::new(16));
+        let mut h = Header::new(MemorySize::new(16), TEST_NEXT_IDX);
         h.data_head = MemoryPosition::new(0);
         h.data_tail = MemoryPosition::new(0);
         h.data_size = MemorySize::new(16);
@@ -167,7 +170,7 @@ mod tests {
     #[test]
     fn is_alive_no_wrap_range() {
         // Capacity 100, no wrap, live bytes span [10..50).
-        let mut h = Header::new(MemorySize::new(100));
+        let mut h = Header::new(MemorySize::new(100), TEST_NEXT_IDX);
         h.data_head = MemoryPosition::new(10);
         h.data_tail = MemoryPosition::new(50);
         h.data_size = MemorySize::new(40);
@@ -181,7 +184,7 @@ mod tests {
     #[test]
     fn is_alive_wraps_around() {
         // Capacity 100, wraps around, live bytes span [80..100) and [0..20).
-        let mut h = Header::new(MemorySize::new(100));
+        let mut h = Header::new(MemorySize::new(100), TEST_NEXT_IDX);
         h.data_head = MemoryPosition::new(80);
         h.data_tail = MemoryPosition::new(20);
         h.data_size = MemorySize::new(40);
