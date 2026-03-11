@@ -1,55 +1,71 @@
 use crate::deserialize_registry_value;
-use crate::subnet::SubnetRegistry;
-use ic_base_types::RegistryVersion;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
-use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
-use ic_registry_keys::make_blessed_replica_versions_key;
-use ic_types::ReplicaVersion;
-use std::str::FromStr;
+use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+use ic_registry_keys::{REPLICA_VERSION_KEY_PREFIX, make_replica_version_key};
+pub use ic_types::replica_version::ReplicaVersion;
+pub use ic_types::{NodeId, RegistryVersion, SubnetId};
 
-pub trait BlessedReplicaVersionRegistry {
-    fn get_blessed_replica_versions(
+pub trait ReplicaVersionRegistry {
+    fn get_replica_versions(
         &self,
         version: RegistryVersion,
-    ) -> RegistryClientResult<BlessedReplicaVersions>;
+    ) -> RegistryClientResult<Vec<ReplicaVersionRecord>>;
 
-    /// Returns all guest launch measurements from all blessed replica versions.
+    fn get_replica_version_record(
+        &self,
+        replica_version_id: &ReplicaVersion,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<ReplicaVersionRecord>;
+
+    /// Returns all guest launch measurements from all replica versions.
     ///
-    /// This method fetches the blessed replica versions from the registry at the given version,
-    /// then retrieves the replica version records for each blessed version, and finally collects
-    /// all guest launch measurements from those records.
-    fn get_blessed_guest_launch_measurements(
+    /// This method fetches all replica version records from the registry at
+    /// the given version, and collects all guest launch measurements from
+    /// those records.
+    fn get_guest_launch_measurements(
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<Vec<u8>>, String>;
 }
 
-impl<T: RegistryClient + ?Sized> BlessedReplicaVersionRegistry for T {
-    fn get_blessed_replica_versions(
+impl<T: RegistryClient + ?Sized> ReplicaVersionRegistry for T {
+    fn get_replica_versions(
         &self,
         version: RegistryVersion,
-    ) -> RegistryClientResult<BlessedReplicaVersions> {
-        deserialize_registry_value(self.get_value(&make_blessed_replica_versions_key(), version))
+    ) -> RegistryClientResult<Vec<ReplicaVersionRecord>> {
+        let keys = self.get_key_family(REPLICA_VERSION_KEY_PREFIX, version)?;
+
+        let mut records = Vec::new();
+        for key in keys {
+            let bytes = self.get_value(&key, version);
+            let replica_version_proto =
+                deserialize_registry_value::<ReplicaVersionRecord>(bytes)?.unwrap_or_default();
+            records.push(replica_version_proto)
+        }
+
+        Ok(Some(records))
     }
 
-    fn get_blessed_guest_launch_measurements(
+    fn get_replica_version_record(
+        &self,
+        replica_version_id: &ReplicaVersion,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<ReplicaVersionRecord> {
+        let bytes = self.get_value(&make_replica_version_key(replica_version_id), version);
+        deserialize_registry_value::<ReplicaVersionRecord>(bytes)
+    }
+
+    fn get_guest_launch_measurements(
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<Vec<u8>>, String> {
-        let blessed_replica_versions = self
-            .get_blessed_replica_versions(version)
-            .map_err(|err| format!("Failed to get blessed replica versions: {err}"))?
+        let replica_versions = self
+            .get_replica_versions(version)
+            .map_err(|err| format!("Failed to get replica versions: {err}"))?
             .ok_or_else(|| "Blessed replica versions not found in registry".to_string())?;
 
-        let measurements = blessed_replica_versions
-            .blessed_version_ids
-            .iter()
-            .filter_map(|version_id| ReplicaVersion::from_str(version_id).ok())
-            .filter_map(|replica_version| {
-                self.get_replica_version_record_from_version_id(&replica_version, version)
-                    .ok()
-                    .flatten()
-            })
+        let measurements = replica_versions
+            .into_iter()
             .flat_map(|record| {
                 record
                     .guest_launch_measurements
@@ -72,6 +88,7 @@ mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_replica_version_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_transport::delete;
     use std::sync::Arc;
 
     fn create_replica_record(
@@ -102,14 +119,13 @@ mod tests {
     }
 
     #[test]
-    fn test_get_blessed_guest_launch_measurements() {
+    fn test_get_guest_launch_measurements() {
         let registry_version = RegistryVersion::from(42);
-        let blessed_versions = ["version1", "version2"];
 
         let measurement1 = [1, 2, 3, 4, 5];
         let measurement2 = [6, 7, 8, 9, 10];
         let measurement3 = [11, 12, 13, 14, 15];
-        let measurement4 = [16, 17, 18, 19, 20]; // From unblessed version
+        let measurement4 = [16, 17, 18, 19, 20]; // From removed version
 
         let replica_versions_and_records = vec![
             (
@@ -127,18 +143,6 @@ mod tests {
         // Set up registry data provider
         let data_provider = ProtoRegistryDataProvider::new();
 
-        // Add blessed replica versions
-        let blessed_versions_proto = BlessedReplicaVersions {
-            blessed_version_ids: blessed_versions.iter().map(|x| x.to_string()).collect(),
-        };
-        data_provider
-            .add(
-                &make_blessed_replica_versions_key(),
-                registry_version,
-                Some(blessed_versions_proto),
-            )
-            .expect("Failed to add blessed replica versions");
-
         // Add replica version records
         for (version_id, record) in &replica_versions_and_records {
             data_provider
@@ -149,12 +153,15 @@ mod tests {
                 )
                 .expect("Failed to add replica version record");
         }
+        data_provider
+            .add_mutations(vec![delete(make_replica_version_key("version3"))])
+            .expect("Failed to remove replica version record");
 
         // Create registry client and update to latest version
         let registry_client = FakeRegistryClient::new(Arc::new(data_provider));
         registry_client.update_to_latest_version();
 
-        let result = registry_client.get_blessed_guest_launch_measurements(registry_version);
+        let result = registry_client.get_guest_launch_measurements(registry_version);
 
         assert_eq!(
             result,

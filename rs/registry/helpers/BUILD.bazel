@@ -26,6 +26,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
     "@crate_index//:assert_matches",
+    "//rs/registry/transport",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

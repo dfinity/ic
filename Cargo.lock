@@ -13050,6 +13050,7 @@ dependencies = [
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
+ "ic-registry-transport",
  "ic-types",
  "serde_cbor",
  "thiserror 2.0.18",
