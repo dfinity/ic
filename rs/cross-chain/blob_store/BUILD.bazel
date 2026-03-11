@@ -12,9 +12,11 @@ rust_library(
             "src/main.rs",
         ],
     ),
+    compile_data = ["templates/dashboard.html"],
     crate_name = "blob_store_lib",
     deps = [
         # Keep sorted.
+        "@crate_index//:askama",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
         "@crate_index//:hex",
@@ -22,6 +24,7 @@ rust_library(
         "@crate_index//:ic-stable-structures",
         "@crate_index//:serde",
         "@crate_index//:sha2",
+        "@crate_index//:time",
     ],
 )
 
@@ -31,6 +34,7 @@ rust_test(
     deps = [
         # Keep sorted.
         ":lib",
+        "@crate_index//:scraper",
     ],
 )
 
@@ -41,8 +45,11 @@ rust_canister(
     deps = [
         # Keep sorted.
         ":lib",
+        "//packages/ic-http-types",
+        "@crate_index//:askama",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:serde_bytes",
     ],
 )
 

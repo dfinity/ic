@@ -67,3 +67,12 @@ Query metadata (uploader, insertion time, size, tags) without downloading the bl
 ```bash
 icp canister call blob_store get_metadata "(\"$HASH\")"
 ```
+
+### View the dashboard
+
+The dashboard can be found at http://t63gs-up777-77776-aaaba-cai.raw.localhost:8000/dashboard:
+* Adapt the canister ID if needed. This should be visible in the output of `icp deploy`.
+    ```
+    Created canister blob_store with ID t63gs-up777-77776-aaaba-cai
+    ```
+* Note the `raw` part of the URL to bypass certification.
