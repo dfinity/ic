@@ -1,7 +1,7 @@
 use crate::util::{expiry_time, sign_query, sign_update};
 
 use super::sign_read_state;
-use anyhow::bail;
+use anyhow::{Context, bail};
 use candid::{CandidType, Deserialize, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
@@ -273,18 +273,18 @@ impl AgentWithDelegation<'_> {
                 let response = self
                     .send_http_request("read_state", canister_id, body.clone())
                     .await;
-                let read_state_body = response.bytes().await.unwrap();
+                let read_state_body = response.bytes().await.context("failed to read read_state response bytes")?;
                 let response_bytes: HttpReadStateResponse =
-                    serde_cbor::from_slice(&read_state_body).unwrap();
+                    serde_cbor::from_slice(&read_state_body).context("failed to deserialize HttpReadStateResponse")?;
                 let certificate: Certificate =
-                    serde_cbor::from_slice(&response_bytes.certificate).unwrap();
+                    serde_cbor::from_slice(&response_bytes.certificate).context("failed to deserialize Certificate")?;
                 let tree = &certificate.tree;
 
                 // First, check the status path to determine the request state.
                 let status_str = match tree.lookup(&status_path) {
                     ic_crypto_tree_hash::LookupStatus::Found(
                         ic_crypto_tree_hash::MixedHashTree::Leaf(s),
-                    ) => String::from_utf8(s.clone()).expect("request status should be valid utf8"),
+                    ) => String::from_utf8(s.clone()).context("request status should be valid utf8")?,
                     ic_crypto_tree_hash::LookupStatus::Absent
                     | ic_crypto_tree_hash::LookupStatus::Unknown => {
                         bail!("Request status not yet available, keep polling")
