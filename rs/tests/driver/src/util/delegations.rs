@@ -260,7 +260,11 @@ impl AgentWithDelegation<'_> {
             vec![b"request_status", request_id.as_bytes(), b"reject_code"];
         let reject_message_path: Vec<&[u8]> =
             vec![b"request_status", request_id.as_bytes(), b"reject_message"];
-        let read_state: Vec<u8> = crate::retry_with_msg_async!(
+        // The closure returns anyhow::Result<Result<Vec<u8>, String>>:
+        //   - bail!(...) → triggers retry (non-terminal)
+        //   - Ok(Err(...)) → terminal failure, stops retrying immediately
+        //   - Ok(Ok(...)) → success
+        let read_state_result: Result<Vec<u8>, String> = crate::retry_with_msg_async!(
             "update_and_wait read_state polling",
             &self.log,
             self.polling_timeout,
@@ -286,7 +290,10 @@ impl AgentWithDelegation<'_> {
                         bail!("Request status not yet available, keep polling")
                     }
                     ic_crypto_tree_hash::LookupStatus::Found(_) => {
-                        panic!("Unexpected non-leaf node at request status path")
+                        return Ok(Err(format!(
+                            "Update call to {canister_id}/{method_name} (request_id={request_id}): \
+                             unexpected non-leaf node at request status path"
+                        )));
                     }
                 };
 
@@ -296,10 +303,11 @@ impl AgentWithDelegation<'_> {
                         match tree.lookup(&reply_path) {
                             ic_crypto_tree_hash::LookupStatus::Found(
                                 ic_crypto_tree_hash::MixedHashTree::Leaf(y),
-                            ) => Ok(y.clone()),
-                            _ => {
-                                panic!("Status is 'replied' but reply leaf is missing or malformed")
-                            }
+                            ) => Ok(Ok(y.clone())),
+                            _ => Ok(Err(format!(
+                                "Update call to {canister_id}/{method_name} (request_id={request_id}): \
+                                 status is 'replied' but reply leaf is missing or malformed"
+                            ))),
                         }
                     }
                     "rejected" => {
@@ -315,11 +323,15 @@ impl AgentWithDelegation<'_> {
                             ) => String::from_utf8_lossy(m).to_string(),
                             _ => "no message".to_string(),
                         };
-                        panic!("Update call was rejected with code {code}: {message}")
+                        Ok(Err(format!(
+                            "Update call to {canister_id}/{method_name} (request_id={request_id}) \
+                             was rejected with code {code}: {message}"
+                        )))
                     }
-                    "done" => {
-                        panic!("Request reached terminal state 'done' without a reply")
-                    }
+                    "done" => Ok(Err(format!(
+                        "Update call to {canister_id}/{method_name} (request_id={request_id}) \
+                         reached terminal state 'done' without a reply"
+                    ))),
                     _ => {
                         bail!("Request status is '{status_str}', keep polling")
                     }
@@ -328,7 +340,7 @@ impl AgentWithDelegation<'_> {
         )
         .await
         .map_err(|e| e.to_string())?;
-        Ok(read_state)
+        read_state_result
     }
 }
 
