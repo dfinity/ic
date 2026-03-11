@@ -15,11 +15,9 @@ use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase,
-    metadata_state::{SubnetMetrics, SystemMetadata},
-};
+use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     CryptoHashOfPartialState, Cycles, NumBytes, Time,
     crypto::CryptoHash,

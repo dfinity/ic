@@ -51,7 +51,6 @@ use ic_replicated_state::{
     PageIndex, ReplicatedState, SubnetTopology,
     canister_state::{
         NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
-        system_state::CyclesUseCase,
     },
     metadata_state::testing::NetworkTopologyTesting,
     page_map::{
@@ -66,6 +65,7 @@ use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::SignedIngressContent;
 use ic_types::{
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,

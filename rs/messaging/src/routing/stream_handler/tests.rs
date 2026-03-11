@@ -11,7 +11,6 @@ use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable}
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, Stream,
-    canister_state::system_state::CyclesUseCase::DroppedMessages,
     metadata_state::{StreamMap, testing::NetworkTopologyTesting},
     replicated_state::LABEL_VALUE_OUT_OF_MEMORY,
     testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
@@ -25,6 +24,7 @@ use ic_test_utilities_state::{CanisterStateBuilder, register_callback};
 use ic_test_utilities_types::ids::{SUBNET_12, SUBNET_23, SUBNET_27, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
+use ic_types::cycles_use_case::CyclesUseCase::DroppedMessages;
 use ic_types::messages::{CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};

@@ -1,4 +1,3 @@
-use crate::canister_state::system_state::CyclesUseCase;
 use crate::{
     CallOrigin, CanisterState, CanisterStatus, ExecutionTask, ReplicatedState, num_bytes_try_from,
 };
@@ -10,6 +9,7 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{
     binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumInstructions, Time,

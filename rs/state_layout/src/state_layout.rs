@@ -13,13 +13,12 @@ use ic_replicated_state::{
     CanisterStatus, ExportedFunctions, NumWasmPages,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{
-            CanisterHistory, CyclesUseCase, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata,
-        },
+        system_state::{CanisterHistory, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata},
     },
     page_map::{Shard, StorageLayout, StorageResult},
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles,
     ExecutionRound, Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId,

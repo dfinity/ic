@@ -12,7 +12,7 @@ use ic_replicated_state::{
     Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-        system_state::{CyclesUseCase, TaskQueue},
+        system_state::TaskQueue,
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
@@ -30,6 +30,7 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
