@@ -1566,7 +1566,10 @@ impl ExecutionTest {
         if instructions_used.get() != 0 {
             let expected_cycles_balance_change =
                 self.expected_cycles_balance_change(message, instructions_used);
-            assert_eq!(cycles_used, expected_cycles_balance_change.into());
+            assert_eq!(
+                cycles_used,
+                NominalCycles::from(expected_cycles_balance_change.get())
+            );
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
                 NumInstructions::new(0),
@@ -1576,7 +1579,9 @@ impl ExecutionTest {
             );
             // the base cost could still be charged in some cases even if no instructions
             // were used (e.g., depending on how early validation fails)
-            assert!(cycles_used.get() == 0 || cycles_used == baseline_cost.into());
+            assert!(
+                cycles_used.get() == 0 || cycles_used == NominalCycles::from(baseline_cost.get())
+            );
         }
     }
 
