@@ -234,6 +234,9 @@ fn verify_paths(
             [b"subnet", _subnet_id, b"public_key"] => {
                 metrics.observe_read_state_path(ENDPOINT, "subnet_public_key");
             }
+            [b"subnet", _subnet_id, b"type"] => {
+                metrics.observe_read_state_path(ENDPOINT, "subnet_type");
+            }
             [b"subnet", subnet_id, b"metrics"] => {
                 let principal_id = parse_principal_id(subnet_id)?;
                 verify_principal_ids(&principal_id, &effective_principal_id)?;
