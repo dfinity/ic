@@ -1771,6 +1771,7 @@ impl ExecutionEnvironment {
                         &mut state,
                         args,
                         round_limits,
+                        instruction_limits,
                         origin,
                     );
                     ExecuteSubnetMessageResult::Finished {
@@ -1820,12 +1821,8 @@ impl ExecutionEnvironment {
                 match ReadCanisterSnapshotMetadataArgs::decode(payload) {
                     Ok(args) => {
                         let canister_id = args.get_canister_id();
-                        let (res, instructions_used) = self.read_canister_snapshot_metadata(
-                            *msg.sender(),
-                            &state,
-                            args,
-                            round_limits,
-                        );
+                        let (res, instructions_used) =
+                            self.read_canister_snapshot_metadata(*msg.sender(), &state, args);
                         let res = res.map(|x| (x, Some(canister_id)));
                         ExecuteSubnetMessageResult::Finished {
                             response: res,
@@ -2664,6 +2661,7 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         args: LoadCanisterSnapshotArgs,
         round_limits: &mut RoundLimits,
+        instruction_limits: InstructionLimits,
         origin: CanisterChangeOrigin,
     ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
@@ -2691,9 +2689,10 @@ impl ExecutionEnvironment {
             snapshot_id,
             state,
             round_limits,
+            instruction_limits,
             origin,
             &resource_saturation,
-            &self.metrics.long_execution_already_in_progress,
+            &self.metrics,
         );
 
         let result = match result {
@@ -2862,20 +2861,17 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &ReplicatedState,
         args: ReadCanisterSnapshotMetadataArgs,
-        round_limits: &mut RoundLimits,
     ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister = match get_canister(args.get_canister_id(), state) {
             Ok(canister) => canister,
             Err(e) => return (Err(e), NumInstructions::new(0)),
         };
         let snapshot_id = args.get_snapshot_id();
-        match self.canister_manager.read_snapshot_metadata(
-            sender,
-            snapshot_id,
-            canister,
-            round_limits,
-        ) {
-            Ok((response, instructions)) => (Ok(Encode!(&response).unwrap()), instructions),
+        match self
+            .canister_manager
+            .read_snapshot_metadata(sender, snapshot_id, canister)
+        {
+            Ok(response) => (Ok(Encode!(&response).unwrap()), NumInstructions::new(0)),
             Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
         }
     }
