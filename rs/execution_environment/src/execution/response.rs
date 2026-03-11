@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use more_asserts::debug_assert_le;
 
 use ic_embedders::{
@@ -21,6 +20,7 @@ use ic_logger::{ReplicaLogger, error, info};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
 use ic_types::Cycles;
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
