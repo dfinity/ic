@@ -159,8 +159,9 @@ async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
     builder.push_init_mutate_request(init_mutate);
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
 
-    // Get initial subnet list
-    let initial_subnet_list_record = get_subnet_list_record_from_pocket_ic(&pocket_ic).await;
+    let initial_subnet_list_record =
+        decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
+            .await;
 
     let payload = make_create_subnet_payload(node_ids.clone());
 
@@ -173,11 +174,12 @@ async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
             Encode!(&payload).unwrap(),
         )
         .await
-        .unwrap();
+        .expect("create_subnet call via governance should succeed");
 
-    // Now let's check directly in the registry that the mutation actually happened
-    // by observing a new subnet in the subnet list
-    let updated_subnet_list_record = get_subnet_list_record_from_pocket_ic(&pocket_ic).await;
+    // Verify a new subnet appeared in the subnet list
+    let updated_subnet_list_record =
+        decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
+            .await;
     let added_subnets: Vec<_> = updated_subnet_list_record
         .subnets
         .iter()
@@ -186,9 +188,10 @@ async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
     assert_eq!(added_subnets.len(), 1);
     let subnet_id = SubnetId::new(PrincipalId::try_from(added_subnets[0].as_slice()).unwrap());
 
-    let subnet_record = get_subnet_record_from_pocket_ic(&pocket_ic, subnet_id).await;
+    let subnet_record =
+        decode_registry_value::<SubnetRecordPb>(&pocket_ic, make_subnet_record_key(subnet_id))
+            .await;
 
-    // Check if some fields are equal
     assert_eq!(subnet_record.replica_version_id, payload.replica_version_id);
     assert_eq!(
         subnet_record.membership,
@@ -198,7 +201,11 @@ async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
             .collect::<Vec<Vec<u8>>>()
     );
 
-    let cup_contents = get_cup_contents_from_pocket_ic(&pocket_ic, subnet_id).await;
+    let cup_contents = decode_registry_value::<CatchUpPackageContents>(
+        &pocket_ic,
+        make_catch_up_package_contents_key(subnet_id),
+    )
+    .await;
 
     assert!(
         cup_contents
@@ -397,51 +404,23 @@ fn test_accepted_proposal_with_vetkd_gets_keys_from_other_subnet() {
     test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id);
 }
 
-// PocketIC helper functions
-async fn get_registry_value(
+async fn decode_registry_value<T: Message + Default>(
     pocket_ic: &pocket_ic::nonblocking::PocketIc,
     key: impl AsRef<str>,
-) -> Vec<u8> {
+) -> T {
+    use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::get_value;
     use ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content;
 
-    let response =
-        ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::get_value(
-            pocket_ic, key, None,
-        )
-        .await
-        .unwrap();
-    match response.content.unwrap() {
+    let response = get_value(pocket_ic, key, None).await.unwrap();
+    let bytes = match response.content.unwrap() {
         Content::Value(bytes) => bytes,
         Content::LargeValueChunkKeys(_) => {
             panic!("Unexpected large value chunk keys in registry response")
         }
-    }
+    };
+    T::decode(bytes.as_slice()).unwrap()
 }
 
-async fn get_subnet_list_record_from_pocket_ic(
-    pocket_ic: &pocket_ic::nonblocking::PocketIc,
-) -> SubnetListRecordPb {
-    let bytes = get_registry_value(pocket_ic, make_subnet_list_record_key()).await;
-    SubnetListRecordPb::decode(bytes.as_slice()).unwrap()
-}
-
-async fn get_subnet_record_from_pocket_ic(
-    pocket_ic: &pocket_ic::nonblocking::PocketIc,
-    subnet_id: SubnetId,
-) -> SubnetRecordPb {
-    let bytes = get_registry_value(pocket_ic, make_subnet_record_key(subnet_id)).await;
-    SubnetRecordPb::decode(bytes.as_slice()).unwrap()
-}
-
-async fn get_cup_contents_from_pocket_ic(
-    pocket_ic: &pocket_ic::nonblocking::PocketIc,
-    subnet_id: SubnetId,
-) -> CatchUpPackageContents {
-    let bytes = get_registry_value(pocket_ic, make_catch_up_package_contents_key(subnet_id)).await;
-    CatchUpPackageContents::decode(bytes.as_slice()).unwrap()
-}
-
-// Start helper functions
 fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
     // create payload message
     CreateSubnetPayload {
