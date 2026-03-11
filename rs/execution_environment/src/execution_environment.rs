@@ -4193,6 +4193,16 @@ impl ExecutionEnvironment {
         }
     }
 
+    /// Testing only: Returns the size of the paused execution registry.
+    #[doc(hidden)]
+    pub fn paused_execution_registry_sizes(&self) -> (usize, usize) {
+        let guard = self.paused_execution_registry.lock().unwrap();
+        (
+            guard.paused_execution.len(),
+            guard.paused_install_code.len(),
+        )
+    }
+
     /// If the given result corresponds to a finished execution, then it processes
     /// the response and return the ingress status (if any). Otherwise, it registers
     /// the paused execution and adds it to the task queue.
