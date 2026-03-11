@@ -691,6 +691,43 @@ mod test {
         }
     }
 
+    fn setup_fake_registry_client(
+        old_nns_subnet_id: SubnetId,
+        shards: BTreeMap<String, BTreeMap<CanisterIdRange, SubnetId>>,
+    ) -> FakeRegistryClient {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+        // Set root subnet ID
+        let old_nns_subnet_id_proto = ic_types::subnet_id_into_protobuf(old_nns_subnet_id);
+
+        data_provider
+            .add(
+                ROOT_SUBNET_ID_KEY,
+                RegistryVersion::from(1),
+                Some(old_nns_subnet_id_proto),
+            )
+            .expect("Failed to set root subnet ID");
+
+        // Add canister range keys
+        for (key, shard) in shards {
+            let pb_routing_table = PbRoutingTable::from(
+                RoutingTable::try_from(shard).expect("Invalid routing table shard"),
+            );
+            data_provider
+                .add(
+                    &key,
+                    RegistryVersion::from(3),
+                    Some(pb_routing_table.clone()), // Just use the same data for test
+                )
+                .expect("Failed to set canister range");
+        }
+
+        let client = FakeRegistryClient::new(data_provider);
+        client.update_to_latest_version();
+
+        client
+    }
+
     // Struct to define the setup for the tests. Each test case corresponds to a different setup,
     // and the expected contacted URL in `poll()` is determined based on the setup according to the
     // logic in `InternalState::get_node_api_urls`.
@@ -1058,43 +1095,6 @@ mod test {
             assert_poll_contacts_expected_url(&mut internal_state, expected_url.as_ref()).await;
         })
         .await
-    }
-
-    fn setup_fake_registry_client(
-        old_nns_subnet_id: SubnetId,
-        shards: BTreeMap<String, BTreeMap<CanisterIdRange, SubnetId>>,
-    ) -> FakeRegistryClient {
-        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-        // Set root subnet ID
-        let old_nns_subnet_id_proto = ic_types::subnet_id_into_protobuf(old_nns_subnet_id);
-
-        data_provider
-            .add(
-                ROOT_SUBNET_ID_KEY,
-                RegistryVersion::from(1),
-                Some(old_nns_subnet_id_proto),
-            )
-            .expect("Failed to set root subnet ID");
-
-        // Add canister range keys
-        for (key, shard) in shards {
-            let pb_routing_table = PbRoutingTable::from(
-                RoutingTable::try_from(shard).expect("Invalid routing table shard"),
-            );
-            data_provider
-                .add(
-                    &key,
-                    RegistryVersion::from(3),
-                    Some(pb_routing_table.clone()), // Just use the same data for test
-                )
-                .expect("Failed to set canister range");
-        }
-
-        let client = FakeRegistryClient::new(data_provider);
-        client.update_to_latest_version();
-
-        client
     }
 
     #[test]
