@@ -37,9 +37,9 @@ use ic_types::{
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
-        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseWithConsensus, Replication,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
+        Replication,
     },
     consensus::Committee,
     crypto::{Signed, crypto_hash},
@@ -466,16 +466,15 @@ impl CanisterHttpPayloadBuilderImpl {
         // do all the cheap checks first
         for response in &payload.responses {
             let callback_id = response.content.id;
-            let (effective_committee, effective_threshold) = match http_contexts.get(&callback_id) {
-                Some(&CanisterHttpRequestContext {
-                    replication: Replication::NonReplicated(ref node_id),
-                    ..
-                }) => (vec![*node_id], 1),
-                None
-                | Some(&CanisterHttpRequestContext {
-                    replication: Replication::FullyReplicated,
-                    ..
-                }) => {
+            let request_context = http_contexts.get(&callback_id).ok_or(
+                CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
+                ),
+            )?;
+
+            let (effective_committee, effective_threshold) = match request_context.replication {
+                Replication::NonReplicated(node_id) => (vec![node_id], 1),
+                Replication::FullyReplicated => {
                     let threshold = match self
                         .membership
                         .get_committee_threshold(height, Committee::CanisterHttp)
@@ -490,10 +489,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     };
                     (committee.clone(), threshold)
                 }
-                Some(&CanisterHttpRequestContext {
-                    replication: Replication::Flexible { .. },
-                    ..
-                }) => {
+                Replication::Flexible { .. } => {
                     return invalid_artifact(
                         InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
                     );
