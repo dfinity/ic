@@ -97,6 +97,15 @@ pub enum PrivateKeyFormat {
     Pkcs8v2WithRingBug,
 }
 
+fn hash_seed(seed: &[u8]) -> [u8; 32] {
+    let mut sha2 = Sha512::new();
+    sha2.update(seed);
+    let digest: [u8; 64] = sha2.finalize().into();
+    let mut truncated = [0u8; 32];
+    truncated.copy_from_slice(&digest[..32]);
+    truncated
+}
+
 impl PrivateKey {
     /// The length in bytes of the raw private key
     pub const BYTES: usize = 32;
@@ -122,18 +131,8 @@ impl PrivateKey {
     /// For security the seed should be at least 256 bits and
     /// randomly generated
     pub fn generate_from_seed(seed: &[u8]) -> Self {
-        let digest: [u8; 32] = {
-            let mut sha2 = Sha512::new();
-            sha2.update(seed);
-            let digest: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
-            truncated.copy_from_slice(&digest[..32]);
-            truncated
-        };
-
-        Self {
-            sk: SigningKey::from_bytes(&digest),
-        }
+        let sk = SigningKey::from_bytes(&hash_seed(seed));
+        Self { sk }
     }
 
     /// Sign a message and return a signature
@@ -725,6 +724,32 @@ impl PublicKey {
         } else {
             Err(SignatureError::InvalidSignature)
         }
+    }
+
+    /// Verify a batch of signatures
+    ///
+    /// Returns Ok if the signatures are all valid, or Err otherwise
+    ///
+    /// Note that this does not indicate which of the signature(s) are invalid;
+    /// if batch verification fails you must then test serially to find the
+    /// valid signatures (if any).
+    ///
+    /// This verification follows ZIP215 validation rules
+    ///
+    /// # Warning
+    ///
+    /// The seed should be randomly chosen - if an attacker can predict it
+    /// then it's possible to introduce a forgery into the batch
+    #[cfg(feature = "rand")]
+    pub fn batch_verify_with_seed(
+        messages: &[&[u8]],
+        signatures: &[&[u8]],
+        keys: &[Self],
+        seed: &[u8],
+    ) -> Result<(), SignatureError> {
+        use rand::SeedableRng;
+        let mut rng = rand_chacha::ChaCha20Rng::from_seed(hash_seed(seed));
+        Self::batch_verify(messages, signatures, keys, &mut rng)
     }
 
     /// Verify a batch of signatures

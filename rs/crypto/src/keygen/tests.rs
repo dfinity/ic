@@ -21,6 +21,7 @@ use ic_crypto_test_utils_keys::public_keys::{
 };
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use ic_crypto_test_utils_metrics::assertions::MetricsObservationsAssert;
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -1348,6 +1349,7 @@ mod rotate_idkg_dealing_encryption_keys {
             node_id(),
             Arc::new(CryptoMetrics::none()),
             Some(Arc::clone(&time_source) as Arc<_>),
+            Box::new(ReproducibleRng::new()),
         );
         registry_client.reload();
 
@@ -1968,6 +1970,7 @@ impl SetupBuilder {
             node_id(),
             crypto_metrics,
             Some(Arc::clone(&time_source) as Arc<_>),
+            Box::new(ReproducibleRng::new()),
         );
 
         Setup {

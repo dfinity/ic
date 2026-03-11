@@ -323,6 +323,7 @@ mod create_dealing {
                 env.nodes.random_dealer(&params, rng).id(),
                 Arc::new(CryptoMetrics::none()),
                 None,
+                Box::new(ReproducibleRng::new()),
             );
 
             (env, params, dealer)
@@ -2086,6 +2087,7 @@ mod load_transcript_with_openings {
                 node_id_not_in_receivers,
                 metrics,
                 None,
+                Box::new(ReproducibleRng::new()),
             );
 
             env.nodes
@@ -2898,6 +2900,7 @@ mod verify_dealing_private {
                 node_id,
                 crypto_metrics,
                 time_source,
+                Box::new(ReproducibleRng::new()),
             );
 
             Setup {

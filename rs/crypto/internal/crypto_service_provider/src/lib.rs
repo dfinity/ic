@@ -55,7 +55,7 @@ pub struct Csp {
 }
 
 /// This lock provides the option to add metrics about lock acquisition times.
-struct CspRwLock<T> {
+pub struct CspRwLock<T> {
     name: String,
     rw_lock: RwLock<T>,
     metrics: Arc<CryptoMetrics>,
@@ -68,19 +68,19 @@ impl<T> CspRwLock<T> {
         Self::new(content, "csprng".to_string(), metrics)
     }
 
-    pub fn new_for_sks(content: T, metrics: Arc<CryptoMetrics>) -> Self {
+    pub(crate) fn new_for_sks(content: T, metrics: Arc<CryptoMetrics>) -> Self {
         // Note: The name will appear on metric dashboards and may be used in alerts, do
         // not change this unless you are also updating the monitoring.
         Self::new(content, "secret_key_store".to_string(), metrics)
     }
 
-    pub fn new_for_csks(content: T, metrics: Arc<CryptoMetrics>) -> Self {
+    pub(crate) fn new_for_csks(content: T, metrics: Arc<CryptoMetrics>) -> Self {
         // Note: The name will appear on metric dashboards and may be used in alerts, do
         // not change this unless you are also updating the monitoring.
         Self::new(content, "canister_secret_key_store".to_string(), metrics)
     }
 
-    pub fn new_for_public_key_store(content: T, metrics: Arc<CryptoMetrics>) -> Self {
+    pub(crate) fn new_for_public_key_store(content: T, metrics: Arc<CryptoMetrics>) -> Self {
         // Note: The name will appear on metric dashboards and may be used in alerts, do
         // not change this unless you are also updating the monitoring.
         Self::new(content, "public_key_store".to_string(), metrics)

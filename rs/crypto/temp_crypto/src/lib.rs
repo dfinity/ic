@@ -445,6 +445,7 @@ pub mod internal {
                 node_id,
                 metrics,
                 Some(time_source),
+                Box::new(OsRng),
             );
 
             TempCryptoComponentGeneric {
