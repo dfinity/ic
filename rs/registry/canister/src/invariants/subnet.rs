@@ -98,14 +98,29 @@ pub(crate) fn check_subnet_invariants(
             system_subnet_count += 1;
         }
 
-        // Only application subnets can be rented and have a "free" cycles cost schedule.
-        if subnet_record.subnet_type != i32::from(SubnetType::Application)
+        // Only application subnets and cloud engine subnets can be rented and have a "free" cycles cost schedule.
+        if (subnet_record.subnet_type != i32::from(SubnetType::Application)
+            && subnet_record.subnet_type != i32::from(SubnetType::CloudEngine))
             && subnet_record.canister_cycles_cost_schedule
                 == i32::from(CanisterCyclesCostSchedule::Free)
         {
             return Err(InvariantCheckError {
                 msg: format!(
-                    "Subnet {subnet_id:} is not an application subnet but has a free cycles cost schedule"
+                    "Subnet {subnet_id:} is not an application subnet or a cloud engine subnet \
+                    but has a free cycles cost schedule"
+                ),
+                source: None,
+            });
+        }
+
+        if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine)
+            && subnet_record.canister_cycles_cost_schedule
+                != i32::from(CanisterCyclesCostSchedule::Free)
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Subnet {subnet_id:} is a cloud engine subnet but its cycles cost schedule \
+                    is not free"
                 ),
                 source: None,
             });
@@ -154,10 +169,12 @@ fn check_subnet_admins_invariant(
     // free schedule. This is not very reliable and could be improved in the
     // future (e.g. by adding a new subnet type).
     let is_application_subnet = subnet_record.subnet_type == i32::from(SubnetType::Application);
-    let is_cloud_engine_subnet = subnet_record.subnet_type == i32::from(SubnetType::CloudEngine);
     let is_on_free_cost_schedule =
         subnet_record.canister_cycles_cost_schedule == i32::from(CanisterCyclesCostSchedule::Free);
     let is_rented = is_on_free_cost_schedule && is_application_subnet;
+
+    let is_cloud_engine_subnet =
+        subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) && is_on_free_cost_schedule;
 
     let ok = subnet_record.subnet_admins.is_empty() || is_rented || is_cloud_engine_subnet;
     if !ok {

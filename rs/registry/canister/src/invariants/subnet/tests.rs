@@ -15,7 +15,7 @@ use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
 
 #[test]
-fn only_application_subnets_can_be_free_cycles_cost_schedule() {
+fn only_application_subnets_and_cloud_engines_can_be_free_cycles_cost_schedule() {
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
     let (mut snapshot, mut test_subnet_record) =
@@ -30,8 +30,16 @@ fn only_application_subnets_can_be_free_cycles_cost_schedule() {
     // case, and edge cases is where many mistakes are made.)
     check_subnet_invariants(&snapshot).unwrap();
 
-    // Happy case: a compliant `SubnetRecord`.
+    // Happy case: a compliant application type `SubnetRecord`.
     test_subnet_record.subnet_type = i32::from(SubnetType::Application);
+    test_subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    check_subnet_invariants(&snapshot).unwrap();
+
+    test_subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
     test_subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
     snapshot.insert(
         make_subnet_record_key(test_subnet_id).into_bytes(),
@@ -47,7 +55,7 @@ fn only_application_subnets_can_be_free_cycles_cost_schedule() {
     );
     assert_non_compliant_record(
         &snapshot,
-        "is not an application subnet but has a free cycles cost schedule",
+        "is not an application subnet or a cloud engine subnet but has a free cycles cost schedule",
     );
 
     test_subnet_record.subnet_type = i32::from(SubnetType::VerifiedApplication);
@@ -57,7 +65,7 @@ fn only_application_subnets_can_be_free_cycles_cost_schedule() {
     );
     assert_non_compliant_record(
         &snapshot,
-        "is not an application subnet but has a free cycles cost schedule",
+        "is not an application subnet or a cloud engine subnet but has a free cycles cost schedule",
     );
 }
 
@@ -216,10 +224,9 @@ fn cloud_engine_subnets_can_have_subnet_admins() {
             false, // with_chip_id
         );
 
-    // CloudEngine subnets can have subnet admins with any cycles cost schedule.
+    // CloudEngine subnets can have subnet admins with free cost schedule.
     test_subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
-    test_subnet_record.canister_cycles_cost_schedule =
-        i32::from(CanisterCyclesCostSchedule::Normal);
+    test_subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
     test_subnet_record.subnet_admins = vec![PrincipalIdPb::from(user_test_id(1).get())];
     snapshot.insert(
         make_subnet_record_key(test_subnet_id).into_bytes(),
