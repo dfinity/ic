@@ -4,7 +4,10 @@ use crate::{
     metrics::CanisterHttpPayloadBuilderMetrics,
     payload_builder::{
         parse::bytes_to_payload,
-        utils::{group_shares_by_callback_id, grouped_shares_meet_divergence_criteria},
+        utils::{
+            find_flexible_responses, find_fully_replicated_response, find_non_replicated_response,
+            group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
+        },
     },
 };
 use ic_consensus_utils::{
@@ -30,14 +33,13 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
-        CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        CanisterHttpPayload, ConsensusResponse, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
         CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
         CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus, Replication,
+        CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::Committee,
     crypto::{Signed, crypto_hash},
@@ -68,17 +70,6 @@ pub struct CanisterHttpBatchStats {
     pub divergence_responses: usize,
     pub single_signature_responses: usize,
     pub payload_bytes: usize,
-}
-
-enum CandidateOrDivergence {
-    Candidate(
-        (
-            CanisterHttpResponseMetadata,
-            BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
-            CanisterHttpResponse,
-        ),
-    ),
-    Divergence(CanisterHttpResponseDivergence),
 }
 
 /// Implementation of the [`BatchPayloadBuilder`] for the canister http feature.
@@ -167,19 +158,17 @@ impl CanisterHttpPayloadBuilderImpl {
         delivered_ids: HashSet<CallbackId>,
         max_payload_size: NumBytes,
     ) -> CanisterHttpPayload {
-        // Get the threshold value that is needed for consensus
-        let threshold = match self
-            .membership
-            .get_committee_threshold(height, Committee::CanisterHttp)
-        {
-            Ok(threshold) => threshold,
+        // Derive threshold and faults_tolerated from a single committee call
+        let committee_members = match self.membership.get_canister_http_committee(height) {
+            Ok(members) => members,
             Err(err) => {
-                warn!(self.log, "Failed to get membership: {:?}", err);
+                warn!(self.log, "Failed to get canister http committee: {:?}", err);
                 return CanisterHttpPayload::default();
             }
         };
+        let faults_tolerated = ic_types::consensus::get_faults_tolerated(committee_members.len());
+        let threshold = committee_members.len() - faults_tolerated;
 
-        // Get the consensus registry version
         let consensus_registry_version = match registry_version_at_height(
             self.cache.as_ref(),
             height,
@@ -193,29 +182,6 @@ impl CanisterHttpPayloadBuilderImpl {
                 return CanisterHttpPayload::default();
             }
         };
-
-        let faults_tolerated = match self.membership.get_canister_http_committee(height) {
-            Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
-            _ => {
-                warn!(self.log, "Failed to get canister http committee");
-                return CanisterHttpPayload::default();
-            }
-        };
-
-        let mut accumulated_size = 0;
-        let mut responses_included = 0;
-
-        let mut candidates = vec![];
-        let mut timeouts = vec![];
-        let mut divergence_responses = vec![];
-        let mut flexible_responses = vec![];
-
-        // Metrics counters
-        let mut unique_includable_responses = 0;
-        let mut timeouts_included = 0;
-        let mut total_share_count = 0;
-        let mut active_shares = 0;
-        let mut unique_responses_count = 0;
 
         let state = match self
             .state_reader
@@ -238,43 +204,29 @@ impl CanisterHttpPayloadBuilderImpl {
             .subnet_call_context_manager
             .canister_http_request_contexts;
 
-        // Check the state for timeouts NOTE: We can not use the existing
-        // timed out artifacts for this task, since we don't have consensus
-        // on them. For example a malicious node might publish a single
-        // timed out metadata share and we would pick it up to generate a
-        // time out response. Instead, we scan the state metadata for timed
-        // out requests and generate time out responses based on that
-        // Iterate over all outstanding canister http requests
-        for (callback_id, request) in canister_http_request_contexts {
-            unique_includable_responses += 1;
-            let candidate_size = callback_id.count_bytes();
-            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-            if size >= max_payload_size {
-                // All timeouts have the same size, so we can stop iterating.
-                break;
-            } else if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time
-                && !delivered_ids.contains(callback_id)
-            {
-                timeouts_included += 1;
-                timeouts.push(*callback_id);
-                accumulated_size += candidate_size;
-            }
-        }
+        let mut accumulated_size = 0;
+        let mut responses_included = 0;
 
-        // Since aggegating the signatures is expensive, we don't want to do the
-        // size checks after aggregation. Also we don't want to hold the lock on
-        // the pool while aggregating. Therefore, we pick the candidates for the
-        // payload first, then aggregate the signatures in a second step
+        let mut candidates = vec![];
+        let mut timeouts = vec![];
+        let mut divergence_responses = vec![];
+        let mut flexible_responses = vec![];
+
+        // Metrics counters
+        let mut total_share_count = 0;
+        let mut active_shares = 0;
+
+        // Since aggregating signatures is potentially expensive (currently for
+        // BasicSignatures it is not expensive), we pick the candidates first
+        // (under the pool lock), then aggregate in a separate step.
         {
             let pool_access = self.pool.read().unwrap();
 
-            // Get share candidates to include in the block
             let share_candidates = pool_access
                 .get_validated_shares()
                 .inspect(|_| {
                     total_share_count += 1;
                 })
-                // Filter out shares that are timed out or have the wrong registry versions
                 .filter(|&response| {
                     utils::check_share_against_context(
                         consensus_registry_version,
@@ -285,235 +237,111 @@ impl CanisterHttpPayloadBuilderImpl {
                 .inspect(|_| {
                     active_shares += 1;
                 })
-                // Filter out shares for responses to requests that already have
-                // responses in the block chain up to the point we are creating a
-                // new payload.
                 .filter(|&response| !delivered_ids.contains(&response.content.id));
 
-            // Group the shares by their metadata
-            let response_candidates_by_callback_id = group_shares_by_callback_id(share_candidates);
+            let shares_by_callback_id = group_shares_by_callback_id(share_candidates);
 
             self.metrics.total_shares.set(total_share_count);
             self.metrics.active_shares.set(active_shares);
 
-            // Separate flexible and non-flexible candidates, as they are handled
-            // differently (flexible doesn't use consensus/divergence).
-            let (flex_candidates_by_callback_id, non_flex_candidates_by_callback_id): (
-                BTreeMap<_, _>,
-                BTreeMap<_, _>,
-            ) = response_candidates_by_callback_id
-                .into_iter()
-                .partition(|(id, _)| {
-                    matches!(
-                        canister_http_request_contexts
-                            .get(id)
-                            .map(|c| &c.replication),
-                        Some(Replication::Flexible { .. })
-                    )
-                });
-
-            let non_flex_candidates_and_divergences = non_flex_candidates_by_callback_id
-                .into_iter()
-                .filter_map(|(id, grouped_shares)| {
-                    /////////////////////////////////////////////////////////////
-                    // Temporary Note for reviewers:
-                    //
-                    // The replication matching was lifted one level up so that we can return early in the
-                    // Flexible match arm out of the outer loop (filter_map) with `return None`.
-                    //
-                    // Without the restructuring, we would have to return None
-                    // in the inner loop (find_map) in the Flexible arm, which means we wound enter the
-                    // else-branch (i.e., the divergence logic) if there was a bug in the partition logic,
-                    // which is not ideal. Alternatively, we'd have to panic (e.g., unreachable!), but that is
-                    // even worse.
-                    //
-                    // Lifting the replication matching one level up to also has the nice side effect that the
-                    // replication lookup is only done once per callback_id (which is fine because the
-                    // replication anyway doesn't change).
-                    //
-                    // TODO: remove this comment before merging
-                    /////////////////////////////////////////////////////////////
-                    let replication = canister_http_request_contexts
-                        .get(&id)
-                        .map(|context| &context.replication);
-
-                    let consensus_candidate = match replication {
-                        Some(Replication::NonReplicated(node_id)) => {
-                            grouped_shares.iter().find_map(|(metadata, shares)| {
-                                unique_responses_count += 1;
-                                // For a non-replicated call, we require EXACTLY ONE share,
-                                // and it MUST be from the designated node.
-                                shares
-                                    .iter()
-                                    .find(|share| share.signature.signer == *node_id)
-                                    .map(|correct_share| (metadata, vec![*correct_share]))
-                            })
-                        }
-                        None | Some(Replication::FullyReplicated) => {
-                            grouped_shares.iter().find_map(|(metadata, shares)| {
-                                unique_responses_count += 1;
-                                let signers: BTreeSet<_> =
-                                    shares.iter().map(|share| share.signature.signer).collect();
-                                if signers.len() >= threshold {
-                                    Some((metadata, shares.clone()))
-                                } else {
-                                    None
-                                }
-                            })
-                        }
-                        Some(Replication::Flexible { .. }) => {
-                            // This arm should be _unreachable_ as flexible replications were partitioned off.
-                            // Returning None gracefully skips this (should we ever reach this due to a bug)
-                            return None;
-                        }
-                    };
-
-                    if let Some((metadata, shares)) = consensus_candidate {
-                        pool_access
-                            .get_response_content_by_hash(&metadata.content_hash)
-                            .map(|content| {
-                                CandidateOrDivergence::Candidate((
-                                    metadata.clone(),
-                                    shares.iter().map(|share| share.signature.clone()).collect(),
-                                    content,
-                                ))
-                            })
-                    } else {
-                        // No set of grouped shares large enough was found
-                        // so now we check whether we have divergence.
-                        if grouped_shares_meet_divergence_criteria(
-                            &grouped_shares,
-                            faults_tolerated,
-                        ) {
-                            Some(CandidateOrDivergence::Divergence(
-                                CanisterHttpResponseDivergence {
-                                    shares: grouped_shares
-                                        .into_iter()
-                                        .flat_map(|(_, shares)| shares.into_iter().cloned())
-                                        .collect(),
-                                },
-                            ))
-                        } else {
-                            // If not, we don't include this response candidate at all
-                            None
-                        }
-                    }
-                });
-
-            for non_flex_candidate_or_divergence in non_flex_candidates_and_divergences {
-                unique_includable_responses += 1;
-                match non_flex_candidate_or_divergence {
-                    CandidateOrDivergence::Candidate((metadata, shares, content)) => {
-                        let candidate_size =
-                            size_of::<CanisterHttpResponseProof>() + content.count_bytes();
-                        let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                        if size < max_payload_size {
-                            candidates.push((metadata.clone(), shares, content));
-                            responses_included += 1;
-                            accumulated_size += candidate_size;
-                        }
-                    }
-                    CandidateOrDivergence::Divergence(divergence) => {
-                        let divergence_size = divergence.count_bytes();
-                        let size = NumBytes::new((accumulated_size + divergence_size) as u64);
-                        if size < max_payload_size {
-                            divergence_responses.push(divergence);
-                            responses_included += 1;
-                            accumulated_size += divergence_size;
-                        }
-                    }
+            // Single pass over all open request contexts. Each callback_id is
+            // handled exactly once.
+            for (callback_id, request) in canister_http_request_contexts {
+                if delivered_ids.contains(callback_id) {
+                    continue;
                 }
-
                 if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                    break;
+                    continue;
                 }
-            }
-
-            // Build flexible responses. Each entry collects individual
-            // (response, share) pairs from distinct committee members.
-            for (id, grouped_shares) in flex_candidates_by_callback_id {
-                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                    break;
+                if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time {
+                    let candidate_size = callback_id.count_bytes();
+                    let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                    if size < max_payload_size {
+                        timeouts.push(*callback_id);
+                        responses_included += 1;
+                        accumulated_size += candidate_size;
+                    }
+                    continue;
                 }
-                let Some(Replication::Flexible {
-                    committee,
-                    min_responses,
-                    max_responses,
-                }) = canister_http_request_contexts
-                    .get(&id)
-                    .map(|c| &c.replication)
-                else {
-                    // debug_unreachable!("Should only contain contexts for flexible outcalls");
+                let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
                     continue;
                 };
-
-                let mut responses = Vec::new();
-                let mut flexible_responses_size = size_of::<CallbackId>();
-                let mut signers = BTreeSet::new();
-
-                for (metadata, shares) in &grouped_shares {
-                    for share in shares {
-                        if !committee.contains(&share.signature.signer)
-                            || !signers.insert(share.signature.signer)
+                match &request.replication {
+                    Replication::FullyReplicated => {
+                        if let Some((metadata, shares, content)) =
+                            find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
                         {
-                            continue;
-                        }
-                        if let Some(http_response) =
-                            pool_access.get_response_content_by_hash(&metadata.content_hash)
-                        {
-                            let response_size = http_response.count_bytes()
-                                + size_of::<CanisterHttpResponseShare>();
-                            let new_total = NumBytes::new(
-                                (accumulated_size + flexible_responses_size + response_size) as u64,
-                            );
-                            if new_total >= max_payload_size {
-                                continue;
+                            let candidate_size =
+                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                            if size < max_payload_size {
+                                candidates.push((metadata, shares, content));
+                                responses_included += 1;
+                                accumulated_size += candidate_size;
                             }
-                            flexible_responses_size += response_size;
-                            responses.push(FlexibleCanisterHttpResponseWithProof {
-                                response: http_response,
-                                proof: (*share).clone(),
-                            });
-                        }
-                        if responses.len() >= *max_responses as usize {
-                            break;
+                        } else if grouped_shares_meet_divergence_criteria(
+                            grouped_shares,
+                            faults_tolerated,
+                        ) {
+                            let divergence = CanisterHttpResponseDivergence {
+                                shares: grouped_shares
+                                    .values()
+                                    .flat_map(|shares| shares.iter())
+                                    .map(|share| (*share).clone())
+                                    .collect(),
+                            };
+                            let divergence_size = divergence.count_bytes();
+                            let size = NumBytes::new((accumulated_size + divergence_size) as u64);
+                            if size < max_payload_size {
+                                divergence_responses.push(divergence);
+                                responses_included += 1;
+                                accumulated_size += divergence_size;
+                            }
                         }
                     }
-                    if responses.len() >= *max_responses as usize {
-                        break;
+                    Replication::NonReplicated(designated_node_id) => {
+                        if let Some((metadata, shares, content)) = find_non_replicated_response(
+                            grouped_shares,
+                            designated_node_id,
+                            &*pool_access,
+                        ) {
+                            let candidate_size =
+                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                            if size < max_payload_size {
+                                candidates.push((metadata, shares, content));
+                                responses_included += 1;
+                                accumulated_size += candidate_size;
+                            }
+                        }
+                    }
+                    Replication::Flexible {
+                        committee,
+                        min_responses,
+                        max_responses,
+                    } => {
+                        if let Some((group, group_size)) = find_flexible_responses(
+                            *callback_id,
+                            grouped_shares,
+                            committee,
+                            *min_responses,
+                            *max_responses,
+                            accumulated_size,
+                            max_payload_size,
+                            &*pool_access,
+                        ) {
+                            flexible_responses.push(group);
+                            responses_included += 1;
+                            accumulated_size += group_size;
+                        }
                     }
                 }
-
-                if responses.len() >= *min_responses as usize {
-                    accumulated_size += flexible_responses_size;
-                    responses_included += 1;
-                    flexible_responses.push(FlexibleCanisterHttpResponses {
-                        callback_id: id,
-                        responses,
-                    });
-                }
-
-                /////////////////////////////////////////////////////////////
-                // Question for reviewers:
-                // 1. do we need any metrics for flexible responses?
-                // 2. do we need to adapt the existing metrics for flexible responses?
-                //
-                // TODO: remove this comment once we have answered the questions
-                /////////////////////////////////////////////////////////////
             }
-        };
-
-        self.metrics.included_timeouts.set(timeouts_included);
-        self.metrics.unique_responses.set(unique_responses_count);
-        self.metrics
-            .unique_includable_responses
-            .set(unique_includable_responses);
-
-        // Now that we have the candidates, aggregate the signatures and construct the payload
+        }
 
         CanisterHttpPayload {
             responses: candidates
-                .drain(..)
+                .into_iter()
                 .filter_map(|(metadata, shares, content)| {
                     self.aggregate(consensus_registry_version, metadata, shares, content)
                 })

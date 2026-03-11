@@ -1,5 +1,5 @@
 use crate::{
-    ReplicaVersion, Time,
+    CountBytes, ReplicaVersion, Time,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
@@ -50,6 +50,13 @@ pub struct FlexibleCanisterHttpResponses {
 pub struct FlexibleCanisterHttpResponseWithProof {
     pub response: CanisterHttpResponse,
     pub proof: CanisterHttpResponseShare,
+}
+
+impl CountBytes for FlexibleCanisterHttpResponseWithProof {
+    fn count_bytes(&self) -> usize {
+        let Self { response, proof } = self;
+        response.count_bytes() + proof.count_bytes()
+    }
 }
 
 impl CanisterHttpPayload {

@@ -39,10 +39,10 @@ use ic_types::{
         MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
-        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseArtifact,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus, Replication,
+        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CanisterHttpMethod, CanisterHttpRequestContext,
+        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
+        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -80,45 +80,53 @@ fn single_request_test() {
     let context = default_validation_context();
 
     for subnet_size in 1..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(true, subnet_size, |payload_builder, canister_http_pool| {
-            let (response, metadata) = test_response_and_metadata(0);
-            let shares = metadata_to_shares(subnet_size, &metadata);
+        test_config_with_http_feature(
+            true,
+            subnet_size,
+            |mut payload_builder, canister_http_pool| {
+                let cb_id = 0;
+                inject_request_contexts(&mut payload_builder, fully_replicated_contexts([cb_id]));
 
-            {
-                // Add response and shares to pool
-                // NOTE: We are only adding the required minimum of shares to the pool
-                let mut pool_access = canister_http_pool.write().unwrap();
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size - get_faults_tolerated(subnet_size)].to_vec(),
+                let (response, metadata) = test_response_and_metadata(cb_id);
+                let shares = metadata_to_shares(subnet_size, &metadata);
+
+                {
+                    // Add response and shares to pool
+                    // NOTE: We are only adding the required minimum of shares to the pool
+                    let mut pool_access = canister_http_pool.write().unwrap();
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size - get_faults_tolerated(subnet_size)].to_vec(),
+                    );
+                }
+
+                // Build a payload
+                let payload = payload_builder.build_payload(
+                    Height::new(1),
+                    NumBytes::new(4 * 1024 * 1024),
+                    &[],
+                    &context,
                 );
-            }
 
-            // Build a payload
-            let payload = payload_builder.build_payload(
-                Height::new(1),
-                NumBytes::new(4 * 1024 * 1024),
-                &[],
-                &context,
-            );
+                //  Make sure the response is contained in the payload
+                let parsed_payload =
+                    bytes_to_payload(&payload).expect("Failed to parse the payload");
+                assert_eq!(parsed_payload.num_responses(), 1);
+                assert_eq!(parsed_payload.responses[0].content, response);
 
-            //  Make sure the response is contained in the payload
-            let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse the payload");
-            assert_eq!(parsed_payload.num_responses(), 1);
-            assert_eq!(parsed_payload.responses[0].content, response);
-
-            assert!(
-                payload_builder
-                    .validate_payload(
-                        Height::new(1),
-                        &test_proposal_context(&context),
-                        &payload,
-                        &[],
-                    )
-                    .is_ok()
-            );
-        });
+                assert!(
+                    payload_builder
+                        .validate_payload(
+                            Height::new(1),
+                            &test_proposal_context(&context),
+                            &payload,
+                            &[],
+                        )
+                        .is_ok()
+                );
+            },
+        );
 
         // TODO: Test that the payload building fails, if the use threshold -1 many shares.
     }
@@ -141,264 +149,201 @@ fn multiple_payload_test() {
 
     // Run the test over a range of subnet configurations
     for subnet_size in 1..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(true, subnet_size, |payload_builder, canister_http_pool| {
-            // Add response and shares to pool
-            let (past_response, past_metadata) = {
-                let mut pool_access = canister_http_pool.write().unwrap();
+        test_config_with_http_feature(
+            true,
+            subnet_size,
+            |mut payload_builder, canister_http_pool| {
+                inject_request_contexts(&mut payload_builder, fully_replicated_contexts(0..=5));
 
-                // Add the valid response into the pool
-                let shares = metadata_to_shares(subnet_size, &valid_metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &valid_response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                // Add response and shares to pool
+                let (past_response, past_metadata) = {
+                    let mut pool_access = canister_http_pool.write().unwrap();
 
-                // NOTE: This makes only sense for 3+ Nodes and is skipped for less
-                if subnet_size > 2 {
-                    // Add a valid response into the pool but only half of the shares
-                    let (response, metadata) = test_response_and_metadata(1);
+                    // Add the valid response into the pool
+                    let shares = metadata_to_shares(subnet_size, &valid_metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &valid_response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size].to_vec(),
+                    );
+
+                    // NOTE: This makes only sense for 3+ Nodes and is skipped for less
+                    if subnet_size > 2 {
+                        // Add a valid response into the pool but only half of the shares
+                        let (response, metadata) = test_response_and_metadata(1);
+                        let shares = metadata_to_shares(subnet_size, &metadata);
+                        add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                        add_received_shares_to_pool(
+                            pool_access.deref_mut(),
+                            shares[1..subnet_size / 2].to_vec(),
+                        );
+                    }
+
+                    // Add a response that is already timed out
+                    let (mut response, mut metadata) = test_response_and_metadata(2);
+                    response.timeout = UNIX_EPOCH;
+                    metadata.timeout = UNIX_EPOCH;
                     let shares = metadata_to_shares(subnet_size, &metadata);
                     add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
                     add_received_shares_to_pool(
                         pool_access.deref_mut(),
-                        shares[1..subnet_size / 2].to_vec(),
+                        shares[1..subnet_size].to_vec(),
                     );
-                }
 
-                // Add a response that is already timed out
-                let (mut response, mut metadata) = test_response_and_metadata(2);
-                response.timeout = UNIX_EPOCH;
-                metadata.timeout = UNIX_EPOCH;
-                let shares = metadata_to_shares(subnet_size, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                    // Add a response with mismatching registry version
+                    let (response, mut metadata) = test_response_and_metadata(3);
+                    metadata.registry_version = RegistryVersion::new(5);
+                    let shares = metadata_to_shares(subnet_size, &metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size].to_vec(),
+                    );
 
-                // Add a response with mismatching registry version
-                let (response, mut metadata) = test_response_and_metadata(3);
-                metadata.registry_version = RegistryVersion::new(5);
-                let shares = metadata_to_shares(subnet_size, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                    // Add a oversized response
+                    let (mut response, metadata) = test_response_and_metadata(4);
+                    response.content =
+                        CanisterHttpResponseContent::Success(vec![123; 2 * 1024 * 1024]);
+                    let shares = metadata_to_shares(subnet_size, &metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size].to_vec(),
+                    );
 
-                // Add a oversized response
-                let (mut response, metadata) = test_response_and_metadata(4);
-                response.content = CanisterHttpResponseContent::Success(vec![123; 2 * 1024 * 1024]);
-                let shares = metadata_to_shares(subnet_size, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                    // Add response which is valid but we will put it into past_payloads
+                    let (past_response, past_metadata) = test_response_and_metadata(5);
+                    let shares = metadata_to_shares(subnet_size, &past_metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &past_response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size].to_vec(),
+                    );
 
-                // Add response which is valid but we will put it into past_payloads
-                let (past_response, past_metadata) = test_response_and_metadata(5);
-                let shares = metadata_to_shares(subnet_size, &past_metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &past_response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                    (past_response, past_metadata)
+                };
 
-                (past_response, past_metadata)
-            };
-
-            // Set up past payload
-            let past_payload = CanisterHttpPayload {
-                responses: vec![CanisterHttpResponseWithConsensus {
-                    content: past_response,
-                    proof: Signed {
-                        content: past_metadata,
-                        signature: BasicSignatureBatch {
-                            signatures_map: BTreeMap::new(),
+                // Set up past payload
+                let past_payload = CanisterHttpPayload {
+                    responses: vec![CanisterHttpResponseWithConsensus {
+                        content: past_response,
+                        proof: Signed {
+                            content: past_metadata,
+                            signature: BasicSignatureBatch {
+                                signatures_map: BTreeMap::new(),
+                            },
                         },
-                    },
-                }],
-                timeouts: vec![],
-                divergence_responses: vec![],
-                flexible_responses: vec![],
-            };
-            let past_payload = payload_to_bytes(past_payload, NumBytes::new(4 * 1024 * 1024));
+                    }],
+                    timeouts: vec![],
+                    divergence_responses: vec![],
+                    flexible_responses: vec![],
+                };
+                let past_payload = payload_to_bytes(past_payload, NumBytes::new(4 * 1024 * 1024));
 
-            let past_payloads = vec![PastPayload {
-                height: Height::from(0),
-                time: UNIX_EPOCH,
-                block_hash: CryptoHashOf::from(CryptoHash(vec![])),
-                payload: &past_payload,
-            }];
+                let past_payloads = vec![PastPayload {
+                    height: Height::from(0),
+                    time: UNIX_EPOCH,
+                    block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+                    payload: &past_payload,
+                }];
 
-            let validation_context = ValidationContext {
-                registry_version: RegistryVersion::new(1),
-                certified_height: Height::new(0),
-                time: UNIX_EPOCH + Duration::from_secs(3),
-            };
+                let validation_context = ValidationContext {
+                    registry_version: RegistryVersion::new(1),
+                    certified_height: Height::new(0),
+                    time: UNIX_EPOCH + Duration::from_secs(3),
+                };
 
-            // Build a payload
-            let payload = payload_builder.build_payload(
-                Height::new(1),
-                NumBytes::new(4 * 1024 * 1024),
-                &past_payloads,
-                &validation_context,
-            );
-
-            //  Make sure the response is not contained in the payload
-            payload_builder
-                .validate_payload(
+                // Build a payload
+                let payload = payload_builder.build_payload(
                     Height::new(1),
-                    &test_proposal_context(&validation_context),
-                    &payload,
+                    NumBytes::new(4 * 1024 * 1024),
                     &past_payloads,
-                )
-                .unwrap();
+                    &validation_context,
+                );
 
-            let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
-            assert_eq!(parsed_payload.num_responses(), 1);
-            assert_eq!(parsed_payload.responses[0].content, valid_response);
-        });
+                //  Make sure the response is not contained in the payload
+                payload_builder
+                    .validate_payload(
+                        Height::new(1),
+                        &test_proposal_context(&validation_context),
+                        &payload,
+                        &past_payloads,
+                    )
+                    .unwrap();
+
+                let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+                assert_eq!(parsed_payload.num_responses(), 1);
+                assert_eq!(parsed_payload.responses[0].content, valid_response);
+            },
+        );
     }
 }
 
 #[test]
 fn multiple_share_same_source_test() {
     for subnet_size in 3..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(true, subnet_size, |payload_builder, canister_http_pool| {
-            {
-                let mut pool_access = canister_http_pool.write().unwrap();
+        test_config_with_http_feature(
+            true,
+            subnet_size,
+            |mut payload_builder, canister_http_pool| {
+                let cb_id = 1;
+                inject_request_contexts(&mut payload_builder, fully_replicated_contexts([cb_id]));
 
-                let (response, metadata) = test_response_and_metadata(1);
+                {
+                    let mut pool_access = canister_http_pool.write().unwrap();
 
-                let shares = metadata_to_shares(10, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    let (response, metadata) = test_response_and_metadata(cb_id);
 
-                // Ensure that multiple shares from a single source does not result in inclusion
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    (0..subnet_size)
-                        .map(|i| {
-                            metadata_to_share_with_signature(7, &metadata, i.to_be_bytes().to_vec())
-                        })
-                        .collect(),
-                );
-            }
+                    let shares = metadata_to_shares(10, &metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
 
-            let validation_context = ValidationContext {
-                registry_version: RegistryVersion::new(1),
-                certified_height: Height::new(0),
-                time: UNIX_EPOCH + Duration::from_secs(3),
-            };
+                    // Ensure that multiple shares from a single source does not result in inclusion
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        (0..subnet_size)
+                            .map(|i| {
+                                metadata_to_share_with_signature(
+                                    7,
+                                    &metadata,
+                                    i.to_be_bytes().to_vec(),
+                                )
+                            })
+                            .collect(),
+                    );
+                }
 
-            // Build a payload
-            let payload = payload_builder.build_payload(
-                Height::new(1),
-                NumBytes::new(4 * 1024 * 1024),
-                &[],
-                &validation_context,
-            );
-
-            let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
-            assert_eq!(parsed_payload.num_responses(), 0);
-        });
-    }
-}
-
-/// Submit a group of requests (50% timeouts, 100% other), so that the total
-/// request count exceeds the capacity of a single payload.
-///
-/// Expect: Timeout requests are given priority, so they are included in the
-///         payload. That means that 50% of the payload should consist of timeouts
-///         while the rest is filled with the remaining requests.
-#[test]
-fn timeout_priority() {
-    // the time used for the validation context.
-    let context_time = UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1);
-    let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-
-    let response_count = 10;
-    let timeout_count = 100;
-
-    test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
-        {
-            let mut pool_access = canister_http_pool.write().unwrap();
-            // add 100% capacity of normal (non-timeout) requests to the pool
-            for i in 0..response_count {
-                let (response, metadata) = test_response_and_metadata_with_timeout(
-                    i as u64,
-                    context_time + Duration::from_secs(10),
-                );
-                let shares = metadata_to_shares(4, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                add_received_shares_to_pool(pool_access.deref_mut(), shares[1..4].to_vec());
-            }
-            // Fill 50% of a single blocks maximum request capacity with timeouts
-            for i in 0..timeout_count {
-                let k = CallbackId::from(i + 2 * (response_count as u64) + 1);
-                let v = CanisterHttpRequestContext {
-                    request: RequestBuilder::default().build(),
-                    url: String::new(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    // this is the important one
-                    time: UNIX_EPOCH,
-                    replication: ic_types::canister_http::Replication::FullyReplicated,
-                    pricing_version: ic_types::canister_http::PricingVersion::Legacy,
-                    refund_status: ic_types::canister_http::RefundStatus::default(),
+                let validation_context = ValidationContext {
+                    registry_version: RegistryVersion::new(1),
+                    certified_height: Height::new(0),
+                    time: UNIX_EPOCH + Duration::from_secs(3),
                 };
-                init_state
-                    .metadata
-                    .subnet_call_context_manager
-                    .canister_http_request_contexts
-                    .insert(k, v);
-            }
 
-            let state_manager = Arc::new(RefMockStateManager::default());
-            state_manager
-                .get_mut()
-                .expect_get_state_at()
-                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                    Height::new(0),
-                    Arc::new(init_state),
-                )));
-            payload_builder.state_reader = state_manager;
-        }
+                // Build a payload
+                let payload = payload_builder.build_payload(
+                    Height::new(1),
+                    NumBytes::new(4 * 1024 * 1024),
+                    &[],
+                    &validation_context,
+                );
 
-        let validation_context = ValidationContext {
-            registry_version: RegistryVersion::new(1),
-            certified_height: Height::new(0),
-            time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
-        };
-
-        // Build a payload
-        let payload = payload_builder.build_payload(
-            Height::new(1),
-            NumBytes::new(1024),
-            &[],
-            &validation_context,
+                let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+                assert_eq!(parsed_payload.num_responses(), 0);
+            },
         );
-
-        // Responses get evicted, and timeouts fill most of the available space
-        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
-        assert!(parsed_payload.timeouts.len() == timeout_count as usize);
-        assert!(parsed_payload.responses.len() < response_count as usize);
-    });
+    }
 }
 
 /// Check that the payload builder includes a divergence responses
 #[test]
 fn divergence_response_inclusion_test() {
-    test_config_with_http_feature(true, 10, |payload_builder, canister_http_pool| {
+    test_config_with_http_feature(true, 10, |mut payload_builder, canister_http_pool| {
+        let cb_id = 1;
+        inject_request_contexts(&mut payload_builder, fully_replicated_contexts([cb_id]));
+
         {
             let mut pool_access = canister_http_pool.write().unwrap();
 
-            let (response, metadata) = test_response_and_metadata(1);
+            let (response, metadata) = test_response_and_metadata(cb_id);
 
             let shares = metadata_to_shares(10, &metadata);
             add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
@@ -471,7 +416,12 @@ fn divergence_response_inclusion_test() {
 /// payload builder does not process all of them but only CANISTER_HTTP_RESPONSES_PER_BLOCK
 #[test]
 fn max_responses() {
-    test_config_with_http_feature(true, 4, |payload_builder, canister_http_pool| {
+    test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
+        inject_request_contexts(
+            &mut payload_builder,
+            fully_replicated_contexts(0..(CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK + 200) as u64),
+        );
+
         // Add a high number of possible responses to the pool
         (0..CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK + 200)
             .map(|callback| test_response_and_metadata(callback as u64))
@@ -866,22 +816,7 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
         };
 
         // Insert the context in the replicated state
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        init_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .insert(callback_id, request_context);
-
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
 
         // Create artifact containing response.
         let (response, metadata) = test_response_and_metadata(callback_id.get());
@@ -971,22 +906,7 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
         };
 
         // Insert the context in the replicated state
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        init_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .insert(callback_id, request_context);
-
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
 
         // Create two shares for the same metadata: one from the correct delegated
         // node, and one from another "malicious" node.
@@ -1076,22 +996,7 @@ fn non_replicated_share_is_ignored_if_content_is_missing() {
             refund_status: ic_types::canister_http::RefundStatus::default(),
         };
 
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        init_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .insert(callback_id, request_context);
-
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
 
         // 2. Create a valid share from the delegated node.
         let (_, metadata) = test_response_and_metadata(callback_id.get());
@@ -1157,21 +1062,7 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
         };
 
         // Inject this context into the state reader used by the validator.
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        init_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .insert(callback_id, request_context);
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
 
         // 2. Craft a perfect payload containing one non-replicated response.
         let (response, metadata) = test_response_and_metadata(callback_id.get());
@@ -1225,21 +1116,7 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
         };
 
         // Inject this context into the state reader.
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        init_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .insert(callback_id, request_context);
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
 
         // 2. Craft a malicious payload where the proof contains only one signature,
         //    but it's from the wrong node.
@@ -1309,21 +1186,7 @@ fn validate_payload_fails_for_response_with_no_signatures() {
         };
 
         // Inject this context into the state reader used by the validator.
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        init_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .insert(callback_id, request_context);
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
 
         // 2. Craft a payload where the proof for the response contains no signatures.
         let (response, metadata) = test_response_and_metadata(callback_id.get());
@@ -1398,21 +1261,7 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
         };
 
         // Inject this context into the state reader.
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        init_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .insert(callback_id, request_context);
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
 
         // 2. Craft a payload that provides a proof with only a single signature,
         //    as if it were for a NonReplicated request.
@@ -1492,21 +1341,10 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
         };
 
         // 2. Inject this context into the state reader
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        init_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .insert(duplicate_callback_id, request_context);
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
+        inject_request_contexts(
+            &mut payload_builder,
+            [(duplicate_callback_id, request_context)],
+        );
 
         // 3. Craft a valid proof for the NonReplicated response.
         let (response, metadata) = test_response_and_metadata(duplicate_callback_id.get());
@@ -1558,18 +1396,6 @@ pub(crate) fn test_response_and_metadata(
 ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
     test_response_and_metadata_with_content(
         callback_id,
-        CanisterHttpResponseContent::Success(b"abc".to_vec()),
-    )
-}
-
-/// Create response and metadata objects, with specified callback AND timeout
-fn test_response_and_metadata_with_timeout(
-    callback_id: u64,
-    timeout: Time,
-) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
-    test_response_and_metadata_full(
-        callback_id,
-        timeout,
         CanisterHttpResponseContent::Success(b"abc".to_vec()),
     )
 }
@@ -1818,7 +1644,7 @@ fn flexible_build_excludes_group_below_min_responses() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_build_test(num_nodes, callback_id, committee, 3, 4, |pb, pool| {
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, pool| {
         // Only 2 shares, but min_responses = 3
         add_flexible_shares_to_pool(&pool, callback_id, 0..2);
         let parsed = build_and_parse_payload(&pb);
@@ -1833,7 +1659,7 @@ fn flexible_build_filters_non_committee_signers() {
     let committee: BTreeSet<_> = (0..3).map(node_test_id).collect();
     let cb_id = CallbackId::from(42);
 
-    setup_flexible_build_test(num_nodes, cb_id, committee.clone(), 2, 4, |pb, pool| {
+    setup_test_with_flexible_context(num_nodes, cb_id, committee.clone(), 2, 4, |pb, pool| {
         add_flexible_shares_to_pool(&pool, cb_id, 0..4);
         let parsed = build_and_parse_payload(&pb);
 
@@ -1852,7 +1678,7 @@ fn flexible_build_filters_duplicate_signers() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_build_test(num_nodes, callback_id, committee, 1, 4, |pb, pool| {
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 1, 4, |pb, pool| {
         {
             let mut pool_access = pool.write().unwrap();
             // Node 0 submits two shares with different content
@@ -1891,7 +1717,7 @@ fn flexible_build_caps_at_max_responses() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_build_test(num_nodes, callback_id, committee, 1, 2, |pb, pool| {
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 1, 2, |pb, pool| {
         // All 6 committee members submit shares, but max_responses = 2
         add_flexible_shares_to_pool(&pool, callback_id, 0..num_nodes as u64);
         let parsed = build_and_parse_payload(&pb);
@@ -1910,7 +1736,7 @@ fn flexible_build_mixed_with_regular_responses() {
     let flex_cb_id = CallbackId::from(42);
     let regular_cb_id = CallbackId::from(100);
 
-    setup_build_test(
+    setup_test_with_contexts(
         num_nodes,
         vec![
             (flex_cb_id, flexible_request_context(committee, 1, 4)),
@@ -1942,7 +1768,7 @@ fn flexible_build_respects_payload_size_limit() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_build_test(num_nodes, callback_id, committee, 1, 4, |pb, pool| {
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 1, 4, |pb, pool| {
         add_flexible_shares_to_pool(&pool, callback_id, 0..num_nodes as u64);
 
         let one_byte = NumBytes::new(1);
@@ -1971,7 +1797,7 @@ fn flexible_build_respects_max_responses_per_block() {
         .collect();
     contexts.push((flex_cb, flexible_request_context(committee, 1, 4)));
 
-    setup_build_test(num_nodes, contexts, |pb, pool| {
+    setup_test_with_contexts(num_nodes, contexts, |pb, pool| {
         {
             let mut pool_access = pool.write().unwrap();
             for i in 0..regular_count {
@@ -1996,7 +1822,7 @@ fn flexible_build_and_validate_round_trip() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_build_test(num_nodes, callback_id, committee, 2, 4, |pb, pool| {
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, pool| {
         add_flexible_shares_to_pool(&pool, callback_id, 0..num_nodes as u64);
 
         let payload = pb.build_payload(
@@ -2028,7 +1854,7 @@ fn flexible_valid_mixed_content_responses() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 2, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![
@@ -2053,7 +1879,7 @@ fn flexible_valid_at_min_responses_boundary() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 2, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![
@@ -2077,7 +1903,7 @@ fn flexible_valid_at_max_responses_boundary() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 2, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![
@@ -2103,7 +1929,7 @@ fn flexible_invalid_duplicate_callback_id_within_payload() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![
             FlexibleCanisterHttpResponses {
                 callback_id,
@@ -2137,7 +1963,7 @@ fn flexible_invalid_already_delivered_callback_id() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let group = FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![flexible_response(42, 0, b"a")],
@@ -2178,7 +2004,7 @@ fn flexible_invalid_fewer_than_min_responses() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 2, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![flexible_response(42, 0, b"only_one")],
@@ -2211,7 +2037,7 @@ fn flexible_invalid_more_than_max_responses() {
     let committee: BTreeSet<_> = (0..5u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(5, callback_id, committee, 1, 2, |payload_builder| {
+    setup_test_with_flexible_context(5, callback_id, committee, 1, 2, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![
@@ -2248,7 +2074,7 @@ fn flexible_invalid_empty_group_with_nonzero_min() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![],
@@ -2281,7 +2107,7 @@ fn flexible_valid_empty_group_with_zero_min() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 0, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 0, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![],
@@ -2303,7 +2129,7 @@ fn flexible_invalid_callback_id_mismatch_in_proof() {
     let callback_id = CallbackId::from(42);
     let mismatched_id = CallbackId::from(99);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let mut entry = flexible_response(42, 0, b"data");
         entry.proof.content.id = mismatched_id;
 
@@ -2334,7 +2160,7 @@ fn flexible_invalid_duplicate_signer() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 2, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![
@@ -2365,7 +2191,7 @@ fn flexible_invalid_signer_not_in_committee() {
     let committee: BTreeSet<_> = (0..=2).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 1, 3, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 3, |payload_builder, _pool| {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![
@@ -2396,7 +2222,7 @@ fn flexible_invalid_content_hash_mismatch() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let mut entry = flexible_response(42, 0, b"data");
         let expected_calculated_hash = crypto_hash(&entry.response);
         let wrong_metadata_hash = CryptoHashOf::new(CryptoHash(vec![0xff; 32]));
@@ -2433,7 +2259,7 @@ fn flexible_response_in_regular_section_rejected() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 2, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let (response, metadata) = test_response_and_metadata(callback_id.get());
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
         proof
@@ -2468,11 +2294,10 @@ fn flexible_response_in_regular_section_rejected() {
 fn non_flexible_response_in_flexible_section_rejected() {
     // A response whose context is FullyReplicated must not appear in `payload.flexible_responses`.
     let callback_id = CallbackId::from(42);
-    setup_test_with_context(
+    setup_test_with_contexts(
         4,
-        callback_id,
-        request_context(Replication::FullyReplicated),
-        |payload_builder| {
+        vec![(callback_id, request_context(Replication::FullyReplicated))],
+        |payload_builder, _pool| {
             let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
                 callback_id,
                 responses: vec![
@@ -2542,7 +2367,7 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
     let callback_id = CallbackId::from(42);
     let mismatched_id = CallbackId::from(99);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let mut entry = flexible_response(42, 0, b"data");
         entry.response.id = mismatched_id;
 
@@ -2573,7 +2398,7 @@ fn flexible_invalid_metadata_timeout_mismatch() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let mut entry = flexible_response(42, 0, b"data");
         let wrong_metadata_timeout = UNIX_EPOCH + Duration::from_secs(99);
         entry.proof.content.timeout = wrong_metadata_timeout;
@@ -2614,7 +2439,7 @@ fn flexible_invalid_response_timed_out() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let timed_out_at = UNIX_EPOCH + Duration::from_secs(1);
         let validation_context = default_validation_context();
         let (response, metadata) = test_response_and_metadata_full(
@@ -2657,7 +2482,7 @@ fn flexible_invalid_registry_version_mismatch() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |payload_builder| {
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let wrong_registry_version = RegistryVersion::new(999);
         let mut entry = flexible_response(42, 0, b"data");
         entry.proof.content.registry_version = wrong_registry_version;
@@ -2694,43 +2519,116 @@ fn flexible_invalid_signature_error() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_flexible_test(4, callback_id, committee, 1, 4, |mut payload_builder| {
-        let mut mock_crypto = MockCrypto::new();
-        mock_crypto
-            .expect_verify_basic_sig_http()
-            .returning(|_, _, _, _| {
-                Err(ic_types::crypto::CryptoError::SignatureVerification {
-                    algorithm: ic_types::crypto::AlgorithmId::Ed25519,
-                    public_key_bytes: vec![],
-                    sig_bytes: vec![],
-                    internal_error: "mock rejection".to_string(),
-                })
-            });
-        payload_builder.crypto = Arc::new(mock_crypto);
+    setup_test_with_flexible_context(
+        4,
+        callback_id,
+        committee,
+        1,
+        4,
+        |mut payload_builder, _pool| {
+            let mut mock_crypto = MockCrypto::new();
+            mock_crypto
+                .expect_verify_basic_sig_http()
+                .returning(|_, _, _, _| {
+                    Err(ic_types::crypto::CryptoError::SignatureVerification {
+                        algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+                        public_key_bytes: vec![],
+                        sig_bytes: vec![],
+                        internal_error: "mock rejection".to_string(),
+                    })
+                });
+            payload_builder.crypto = Arc::new(mock_crypto);
 
-        let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
-            callback_id,
-            responses: vec![flexible_response(42, 0, b"data")],
-        }]);
+            let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+                callback_id,
+                responses: vec![flexible_response(42, 0, b"data")],
+            }]);
 
-        let result = payload_builder.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::SignatureError(_)
-                )
-            ))
-        );
+            let result = payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            );
+            assert_matches!(
+                result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::SignatureError(_)
+                    )
+                ))
+            );
+        },
+    );
+}
+
+fn setup_test_with_contexts(
+    num_nodes: usize,
+    contexts: Vec<(CallbackId, CanisterHttpRequestContext)>,
+    run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>),
+) {
+    test_config_with_http_feature(true, num_nodes, |mut payload_builder, pool| {
+        inject_request_contexts(&mut payload_builder, contexts);
+        run(payload_builder, pool);
     });
 }
 
-fn request_context(replication: Replication) -> CanisterHttpRequestContext {
+fn setup_test_with_flexible_context(
+    num_nodes: usize,
+    callback_id: CallbackId,
+    committee: BTreeSet<NodeId>,
+    min_responses: u32,
+    max_responses: u32,
+    run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>),
+) {
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            callback_id,
+            flexible_request_context(committee, min_responses, max_responses),
+        )],
+        run,
+    );
+}
+
+/// Replaces the payload_builder's state_reader with one containing the given request contexts.
+pub(crate) fn inject_request_contexts(
+    payload_builder: &mut CanisterHttpPayloadBuilderImpl,
+    contexts: impl IntoIterator<Item = (CallbackId, CanisterHttpRequestContext)>,
+) {
+    let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+    for (cb, ctx) in contexts {
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(cb, ctx);
+    }
+    let state_manager = Arc::new(RefMockStateManager::default());
+    state_manager
+        .get_mut()
+        .expect_get_state_at()
+        .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+            Height::new(0),
+            Arc::new(init_state),
+        )));
+    payload_builder.state_reader = state_manager;
+}
+
+fn fully_replicated_contexts(
+    ids: impl IntoIterator<Item = u64>,
+) -> Vec<(CallbackId, CanisterHttpRequestContext)> {
+    ids.into_iter()
+        .map(|id| {
+            (
+                CallbackId::new(id),
+                request_context(Replication::FullyReplicated),
+            )
+        })
+        .collect()
+}
+
+pub(crate) fn request_context(replication: Replication) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
         request: RequestBuilder::default().build(),
         url: "https://example.com".to_string(),
@@ -2794,99 +2692,6 @@ fn flexible_payload(groups: Vec<FlexibleCanisterHttpResponses>) -> CanisterHttpP
     }
 }
 
-fn setup_test_with_context(
-    num_nodes: usize,
-    callback_id: CallbackId,
-    context: CanisterHttpRequestContext,
-    run: impl FnOnce(CanisterHttpPayloadBuilderImpl),
-) {
-    test_config_with_http_feature(true, num_nodes, |mut payload_builder, _| {
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        init_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts
-            .insert(callback_id, context);
-
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
-
-        run(payload_builder);
-    });
-}
-
-fn setup_flexible_test(
-    num_nodes: usize,
-    callback_id: CallbackId,
-    committee: BTreeSet<NodeId>,
-    min_responses: u32,
-    max_responses: u32,
-    run: impl FnOnce(CanisterHttpPayloadBuilderImpl),
-) {
-    setup_test_with_context(
-        num_nodes,
-        callback_id,
-        flexible_request_context(committee, min_responses, max_responses),
-        run,
-    );
-}
-
-fn payload_to_bytes_max_4mb(payload: CanisterHttpPayload) -> Vec<u8> {
-    payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024))
-}
-
-fn setup_build_test(
-    num_nodes: usize,
-    contexts: Vec<(CallbackId, CanisterHttpRequestContext)>,
-    run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>),
-) {
-    test_config_with_http_feature(true, num_nodes, |mut payload_builder, pool| {
-        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-        for (cb, ctx) in contexts {
-            init_state
-                .metadata
-                .subnet_call_context_manager
-                .canister_http_request_contexts
-                .insert(cb, ctx);
-        }
-        let state_manager = Arc::new(RefMockStateManager::default());
-        state_manager
-            .get_mut()
-            .expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(init_state),
-            )));
-        payload_builder.state_reader = state_manager;
-        run(payload_builder, pool);
-    });
-}
-
-fn setup_flexible_build_test(
-    num_nodes: usize,
-    callback_id: CallbackId,
-    committee: BTreeSet<NodeId>,
-    min_responses: u32,
-    max_responses: u32,
-    run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>),
-) {
-    setup_build_test(
-        num_nodes,
-        vec![(
-            callback_id,
-            flexible_request_context(committee, min_responses, max_responses),
-        )],
-        run,
-    );
-}
-
 fn add_flexible_shares_to_pool(
     pool: &Arc<RwLock<CanisterHttpPoolImpl>>,
     callback_id: CallbackId,
@@ -2910,4 +2715,8 @@ fn build_and_parse_payload(
     let payload =
         payload_builder.build_payload(Height::new(1), max_size, &[], &default_validation_context());
     bytes_to_payload(&payload).expect("parse error")
+}
+
+fn payload_to_bytes_max_4mb(payload: CanisterHttpPayload) -> Vec<u8> {
+    payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024))
 }
