@@ -15,7 +15,7 @@ use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::get_value;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::decode_registry_value;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
@@ -37,10 +37,7 @@ use ic_registry_subnet_features::{
     ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig as KeyConfigInternal,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::{
-    pb::v1::{RegistryAtomicMutateRequest, high_capacity_registry_get_value_response::Content},
-    upsert,
-};
+use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_types::{NodeId, ReplicaVersion};
 use pocket_ic::PocketIcBuilder;
@@ -406,20 +403,6 @@ fn test_accepted_proposal_with_vetkd_gets_keys_from_other_subnet() {
         name: "foo-bar".to_string(),
     });
     test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id);
-}
-
-async fn decode_registry_value<T: Message + Default>(
-    pocket_ic: &pocket_ic::nonblocking::PocketIc,
-    key: impl AsRef<str>,
-) -> T {
-    let response = get_value(pocket_ic, key, None).await.unwrap();
-    let bytes = match response.content.unwrap() {
-        Content::Value(bytes) => bytes,
-        Content::LargeValueChunkKeys(_) => {
-            panic!("Unexpected large value chunk keys in registry response")
-        }
-    };
-    T::decode(bytes.as_slice()).unwrap()
 }
 
 fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
