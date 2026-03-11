@@ -426,11 +426,7 @@ impl InternalState {
                     | NodeRewardType::Type3
                     | NodeRewardType::Type3dot1
                     | NodeRewardType::Type1dot1 => self.get_nns_node_ids(nns_subnet_id, version)?,
-                    NodeRewardType::Type4 => {
-                        // For type4 nodes, we contact API BNs instead of NNS nodes, since NNS nodes would
-                        // not accept our connections due to firewall rules.
-                        self.get_api_boundary_node_ids(version)?
-                    }
+                    NodeRewardType::Type4 => self.get_api_boundary_node_ids(version)?,
                 },
             },
         };
