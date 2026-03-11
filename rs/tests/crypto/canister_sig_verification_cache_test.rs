@@ -286,7 +286,8 @@ async fn increment_counter_canister(
     );
     let _ = app_agents_with_delegation[user_i]
         .update(&ctr_canister_id, "write", Blob(vec![]))
-        .await;
+        .await
+        .expect("Update call on counter canister failed");
 }
 
 async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call_j: usize) {

@@ -134,7 +134,7 @@ impl AgentWithDelegation<'_> {
         method: &str,
         canister_id: &Principal,
         body: Vec<u8>,
-    ) -> Response {
+    ) -> anyhow::Result<Response> {
         let client = Client::new();
         client
             .post(format!(
@@ -147,7 +147,7 @@ impl AgentWithDelegation<'_> {
             .body(body)
             .send()
             .await
-            .unwrap()
+            .context(format!("failed to send {method} request to {canister_id}"))
     }
 
     fn sender(&self) -> Blob {
@@ -158,7 +158,12 @@ impl AgentWithDelegation<'_> {
         )
     }
 
-    pub async fn update(&self, canister_id: &Principal, method_name: &str, arg: Blob) -> MessageId {
+    pub async fn update(
+        &self,
+        canister_id: &Principal,
+        method_name: &str,
+        arg: Blob,
+    ) -> anyhow::Result<MessageId> {
         let update = HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: method_name.to_string(),
@@ -183,8 +188,11 @@ impl AgentWithDelegation<'_> {
             sender_sig: Some(Blob(signature.signature.unwrap())),
         };
         let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-        let _ = self.send_http_request("call", canister_id, body).await;
-        request_id
+        let _ = self
+            .send_http_request("call", canister_id, body)
+            .await
+            .context("failed to send update call")?;
+        Ok(request_id)
     }
 
     pub async fn query(
@@ -192,7 +200,7 @@ impl AgentWithDelegation<'_> {
         canister_id: &Principal,
         method_name: &str,
         arg: Blob,
-    ) -> HttpQueryResponse {
+    ) -> anyhow::Result<HttpQueryResponse> {
         let content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: Blob(canister_id.as_slice().to_vec()),
@@ -217,9 +225,15 @@ impl AgentWithDelegation<'_> {
             sender_sig: Some(Blob(signature.signature.unwrap())),
         };
         let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-        let response = self.send_http_request("query", canister_id, body).await;
-        let response_bytes = response.bytes().await.unwrap();
-        serde_cbor::from_slice(&response_bytes).unwrap()
+        let response = self
+            .send_http_request("query", canister_id, body)
+            .await
+            .context("failed to send query request")?;
+        let response_bytes = response
+            .bytes()
+            .await
+            .context("failed to read query response bytes")?;
+        serde_cbor::from_slice(&response_bytes).context("failed to deserialize query response")
     }
 
     pub async fn update_and_wait(
@@ -228,7 +242,10 @@ impl AgentWithDelegation<'_> {
         method_name: &str,
         arg: Blob,
     ) -> Result<Vec<u8>, String> {
-        let request_id = self.update(canister_id, method_name, arg.clone()).await;
+        let request_id = self
+            .update(canister_id, method_name, arg.clone())
+            .await
+            .map_err(|e| e.to_string())?;
         let content = HttpReadStateContent::ReadState {
             read_state: HttpReadState {
                 sender: self.sender(),
@@ -270,7 +287,8 @@ impl AgentWithDelegation<'_> {
             || async {
                 let response = self
                     .send_http_request("read_state", canister_id, body.clone())
-                    .await;
+                    .await
+                    .context("failed to send read_state request")?;
                 let read_state_body = response.bytes().await.context("failed to read read_state response bytes")?;
                 let response_bytes: HttpReadStateResponse =
                     serde_cbor::from_slice(&read_state_body).context("failed to deserialize HttpReadStateResponse")?;

@@ -120,7 +120,8 @@ pub fn test(env: TestEnv) {
         "Making a query call on counter canister with delegation (read counter)"
     );
     let query_response =
-        block_on(app_agent_with_delegation.query(&counter_canister_id, "read", Blob(vec![])));
+        block_on(app_agent_with_delegation.query(&counter_canister_id, "read", Blob(vec![])))
+            .expect("Query call on counter canister failed");
     match query_response {
         HttpQueryResponse::Replied { reply } => {
             let counter = u32::from_le_bytes(
@@ -149,7 +150,8 @@ pub fn test(env: TestEnv) {
             &ucan_id,
             "query",
             Blob(wasm().caller().append_and_reply().build()),
-        ));
+        ))
+        .expect("Query call on ucan canister failed");
         match response {
             HttpQueryResponse::Replied { reply } => Principal::from_slice(reply.arg.as_ref()),
             HttpQueryResponse::Rejected { reject_message, .. } => {
