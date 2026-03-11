@@ -127,6 +127,7 @@ impl LogMemoryStore {
 
     /// Deallocates underlying memory.
     pub fn deallocate(&mut self) {
+        self.start_idx = self.next_idx();
         self.maybe_page_map = None;
         self.header_cache = OnceLock::new();
     }
