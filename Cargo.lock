@@ -1495,16 +1495,21 @@ dependencies = [
 name = "blob-store"
 version = "0.9.0"
 dependencies = [
+ "askama",
  "assert_matches",
  "candid",
  "candid_parser",
  "ciborium",
  "hex",
  "ic-cdk",
+ "ic-http-types",
  "ic-stable-structures 0.6.8",
  "pocket-ic",
+ "scraper",
  "serde",
+ "serde_bytes",
  "sha2 0.10.9",
+ "time",
 ]
 
 [[package]]
