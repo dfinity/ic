@@ -100,6 +100,12 @@ Before any mutation is applied, the registry validates that the resulting state 
 - **WHEN** the registry state is validated
 - **THEN** subnet records are well-formed and consistent
 
+#### Scenario: Free cycles cost schedule restriction
+- **WHEN** a subnet's canister cycles cost schedule is set to "Free"
+- **THEN** the subnet type must be either Application or CloudEngine
+- **AND** System subnets are not allowed to have a free cycles cost schedule
+- **AND** if a non-Application, non-CloudEngine subnet attempts to use the free schedule, the invariant check fails
+
 #### Scenario: Replica version invariants
 - **WHEN** the registry state is validated
 - **THEN** all referenced replica versions exist in the blessed versions list
