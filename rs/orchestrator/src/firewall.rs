@@ -9,7 +9,10 @@ use ic_config::firewall::{
     ReplicaConfig as ReplicaFirewallConfig,
 };
 use ic_logger::{ReplicaLogger, debug, info, warn};
-use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
+use ic_protobuf::registry::{
+    firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection},
+    node::v1::NodeRewardType,
+};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
@@ -172,6 +175,37 @@ impl Firewall {
             .unwrap_or_else(|| vec![registry_version])
     }
 
+    // Depending on the node reward type, determine the set of node types that should be
+    // whitelisted.
+    // Currently, if the node reward type is `Type4` (cloud engine node), then only cloud engine
+    // nodes will be whitelisted. For all other reward types, all nodes except cloud engine nodes
+    // will be whitelisted.
+    // If the node reward type cannot be determined, we will default to a non cloud engine node to
+    // avoid accidentally blocking nodes due to registry read errors.
+    fn get_whitelisted_node_types(
+        node_reward_type: &Option<NodeRewardType>,
+    ) -> Vec<NodeRewardType> {
+        match node_reward_type {
+            None
+            | Some(NodeRewardType::Unspecified)
+            | Some(NodeRewardType::Type0)
+            | Some(NodeRewardType::Type1)
+            | Some(NodeRewardType::Type2)
+            | Some(NodeRewardType::Type3)
+            | Some(NodeRewardType::Type3dot1)
+            | Some(NodeRewardType::Type1dot1) => vec![
+                NodeRewardType::Unspecified,
+                NodeRewardType::Type0,
+                NodeRewardType::Type1,
+                NodeRewardType::Type2,
+                NodeRewardType::Type3,
+                NodeRewardType::Type3dot1,
+                NodeRewardType::Type1dot1,
+            ],
+            Some(NodeRewardType::Type4) => vec![NodeRewardType::Type4],
+        }
+    }
+
     fn get_node_whitelisting_rules(
         &mut self,
         registry_version: RegistryVersion,
@@ -181,21 +215,69 @@ impl Firewall {
         let registry_versions = self.get_registry_versions(registry_version);
 
         // Get the union of all the node IP addresses from the registry
-        let node_whitelist_ips: BTreeSet<IpAddr> = registry_versions
+        let node_whitelist_ips = registry_versions
             .into_iter()
             .flat_map(|registry_version| {
-                self.registry
-                    .get_all_nodes_ip_addresses(registry_version)
+                // Determine our node reward type for the current version, and its corresponding
+                // list of whitelisted node types.
+                let own_reward_type = self.registry
+                    .get_node_reward_type(registry_version)
                     .inspect_err(|err| {
                         warn!(
                             every_n_seconds => 30,
                             self.logger,
-                            "Failed to get the IPs of all nodes in the registry: {}", err
+                            "Failed to get the node reward type from the registry: {}", err
+                        )
+                    })
+                    .unwrap_or(None);
+                let whitelisted_node_types = Self::get_whitelisted_node_types(&own_reward_type);
+
+                // For all nodes at the current version...
+                self
+                    .registry
+                    .get_node_ids(registry_version)
+                    .inspect_err(|err| {
+                        warn!(
+                            every_n_seconds => 30,
+                            self.logger,
+                            "Failed to get all node IDs in the registry: {}", err
                         )
                     })
                     .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|other_node_id| {
+                        let other_node_record = self
+                            .registry
+                            .get_node_record(other_node_id, registry_version)
+                            .inspect_err(|err| {
+                                warn!(
+                                    every_n_seconds => 30,
+                                    self.logger,
+                                    "Failed to get the node reward type for node ID {}: {}", other_node_id, err
+                                )
+                            }).ok()??;
+
+                        // ... do not include it if its node reward type is not in the list of
+                        // whitelisted node types determined above
+                        if !whitelisted_node_types.contains(&other_node_record.node_reward_type()) {
+                            return None;
+                        }
+
+                        // ... otherwise, include its IP addresses in the whitelist (both xnet and
+                        // http if they exist)
+                        let mut addrs = Vec::new();
+                        if let Some(xnet_record) = other_node_record.xnet && let Ok(ip_addr) = xnet_record.ip_addr.parse::<IpAddr>() {
+                            addrs.push(ip_addr)
+                        };
+                        if let Some(http_record) = other_node_record.http && let Ok(ip_addr) = http_record.ip_addr.parse::<IpAddr>() {
+                            addrs.push(ip_addr)
+                        };
+                        Some(addrs)
+                    })
+                    .flatten()
+                    .collect::<BTreeSet<IpAddr>>()
             })
-            .collect();
+            .collect::<BTreeSet<IpAddr>>();
 
         // Then split it to v4 and v6 separately
         let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(&node_whitelist_ips);

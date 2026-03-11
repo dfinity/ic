@@ -3,14 +3,21 @@ use ic_consensus_cup_utils::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, firewall::v1::FirewallRuleSet,
-    hostos_version::v1::HostosVersionRecord, node::v1::IPv4InterfaceConfig,
-    replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
+    firewall::v1::FirewallRuleSet,
+    hostos_version::v1::HostosVersionRecord,
+    node::v1::{IPv4InterfaceConfig, NodeRewardType},
+    replica_version::v1::ReplicaVersionRecord,
+    subnet::v1::SubnetRecord,
 };
 use ic_registry_client_helpers::{
-    api_boundary_node::ApiBoundaryNodeRegistry, firewall::FirewallRegistry,
-    hostos_version::HostosRegistry, node::NodeRegistry, node_operator::NodeOperatorRegistry,
-    subnet::SubnetRegistry, unassigned_nodes::UnassignedNodeRegistry,
+    api_boundary_node::ApiBoundaryNodeRegistry,
+    firewall::FirewallRegistry,
+    hostos_version::HostosRegistry,
+    node::{NodeRecord, NodeRegistry},
+    node_operator::NodeOperatorRegistry,
+    subnet::SubnetRegistry,
+    unassigned_nodes::UnassignedNodeRegistry,
 };
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::{
@@ -170,13 +177,10 @@ impl RegistryHelper {
             .map_err(OrchestratorError::RegistryClientError)
     }
 
-    pub(crate) fn get_all_nodes_ip_addresses(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<IpAddr>> {
-        let ips = self.registry_client.get_all_nodes_ip_addresses(version)?;
-
-        Ok(ips.unwrap_or_default())
+    pub(crate) fn get_node_ids(&self, version: RegistryVersion) -> OrchestratorResult<Vec<NodeId>> {
+        self.registry_client
+            .get_node_ids(version)
+            .map_err(OrchestratorError::RegistryClientError)
     }
 
     pub(crate) fn get_app_subnet_nodes_ip_addresses(
@@ -290,6 +294,16 @@ impl RegistryHelper {
             .map_err(OrchestratorError::RegistryClientError)
     }
 
+    pub(crate) fn get_node_record(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<NodeRecord>> {
+        self.registry_client
+            .get_node_record(node_id, version)
+            .map_err(OrchestratorError::RegistryClientError)
+    }
+
     /// Return the DC ID where the current replica is located.
     pub fn dc_id(&self) -> Option<String> {
         let registry_version = self.get_latest_version();
@@ -367,6 +381,17 @@ impl RegistryHelper {
             .registry_client
             .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.domain);
+        Ok(result)
+    }
+
+    pub(crate) fn get_node_reward_type(
+        &self,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<NodeRewardType>> {
+        let result = self
+            .registry_client
+            .get_node_record(self.node_id, version)?
+            .map(|node_record| node_record.node_reward_type());
         Ok(result)
     }
 }
