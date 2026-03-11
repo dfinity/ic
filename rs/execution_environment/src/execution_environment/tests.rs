@@ -17,9 +17,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, SystemState,
-    canister_state::{
-        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase,
-    },
+    canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
     metadata_state::subnet_call_context_manager::PreSignatureStash,
     metadata_state::testing::NetworkTopologyTesting,
     testing::{CanisterQueuesTesting, SystemStateTesting},
@@ -31,6 +29,7 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
     batch::CanisterCyclesCostSchedule,

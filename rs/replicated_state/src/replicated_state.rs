@@ -2,9 +2,7 @@ use crate::canister_snapshots::{CanisterSnapshot, CanisterSnapshots};
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{
-    CanisterOutputQueuesIterator, CyclesUseCase, push_input,
-};
+use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
@@ -29,6 +27,7 @@ use ic_types::{
     AccumulatedPriority, CanisterId, Cycles, NumBytes, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
+    cycles_use_case::CyclesUseCase,
     ingress::IngressStatus,
     messages::{
         CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,

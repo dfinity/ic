@@ -10,8 +10,7 @@ use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::canister_state::system_state::testing::SystemStateTesting;
 use crate::canister_state::system_state::{
-    CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
-    MAX_CANISTER_HISTORY_CHANGES,
+    CallContextManager, CanisterHistory, CanisterStatus, MAX_CANISTER_HISTORY_CHANGES,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
@@ -25,6 +24,7 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, MAX_RESPONSE_COUNT_BYTES,
     NO_DEADLINE, StopCanisterCallId, StopCanisterContext,

@@ -7,7 +7,7 @@ mod tests;
 use self::subnet_call_context_manager::SubnetCallContextManager;
 use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
-use crate::{CheckpointLoadingMetrics, canister_state::system_state::CyclesUseCase};
+use crate::CheckpointLoadingMetrics;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
@@ -23,6 +23,7 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,

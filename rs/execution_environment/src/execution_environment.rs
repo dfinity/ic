@@ -55,16 +55,14 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
-    canister_state::{
-        NextExecution,
-        system_state::{CyclesUseCase, PausedExecutionId},
-    },
+    canister_state::{NextExecution, system_state::PausedExecutionId},
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash,
         ReshareChainKeyContext, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
         StopCanisterCall, SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
     ReplicaVersion, SubnetId, Time,

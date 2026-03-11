@@ -52,7 +52,7 @@ use ic_replicated_state::{
         execution_state::Memory,
         execution_state::WasmExecutionMode,
         system_state::{
-            CyclesUseCase, ReservationError,
+            ReservationError,
             wasm_chunk_store::{self, WasmChunkStore},
         },
     },
@@ -60,6 +60,7 @@ use ic_replicated_state::{
     page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
     MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
