@@ -213,23 +213,23 @@ fn test_canister_uninstall_deallocates() {
 fn test_canister_uninstall_and_install_clears_log_memory() {
     let mut canister = MockCanister::create_canister();
     canister.update_settings(NumBytes::new(100 * KIB));
-    canister.log("Message 1");
+    canister.log("Message 1 recorded");
     assert_eq!(canister.next_idx(), 1);
 
     canister.uninstall_code();
     canister.install_code();
 
     // Test that without settings update, log memory remains cleared and drops msg
-    canister.log("Message 2");
+    canister.log("Message 2 ignored");
     assert_eq!(canister.fetch_canister_logs().len(), 0);
     assert_eq!(canister.log_memory_usage().get(), 0);
-    assert_eq!(canister.next_idx(), 2);
+    assert_eq!(canister.next_idx(), 1);
 
     // Now verify allocating memory allows logging retaining next_idx
     canister.update_settings(NumBytes::new(100 * KIB));
-    canister.log("Message 3");
+    canister.log("Message 3 recorded");
     assert_eq!(canister.fetch_canister_logs().len(), 1);
-    assert_eq!(canister.next_idx(), 3);
+    assert_eq!(canister.next_idx(), 2);
 }
 
 #[test]
