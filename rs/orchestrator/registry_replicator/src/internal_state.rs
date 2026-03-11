@@ -694,11 +694,23 @@ mod test {
         }
     }
 
+    // Struct to define the setup for the tests. Each test case corresponds to a different setup,
+    // and the expected contacted URL in `poll()` is determined based on the setup according to the
+    // logic in `InternalState::get_node_api_urls`.
     struct TestSetup {
+        // Whether the node ID of this node is set in the `InternalState`.
         has_node_id: bool,
+        // Whether the config contains an NNS URL
         config_nns_url: Option<Url>,
+        // Whether the subnet record of the NNS subnet contains a node or not in the registry, and
+        // if yes, its endpoint. It can also mock the situation where the registry client return an
+        // error.
         nns_node_endpoint: Option<ConnectionEndpoint>,
+        // Whether the registry contains an API BN record or not, and if yes, its endpoint. It can
+        // also mock the situation where the registry client return an error.
         api_bn_endpoint: Option<ConnectionEndpoint>,
+        // Whether the node record of this node exists in the registry, and if yes, its reward type.
+        // It can also mock the situation where the registry client return an error.
         node_reward_type: Option<NodeRewardType>,
     }
 
@@ -716,14 +728,16 @@ mod test {
 
             if !self.has_node_id {
                 // If we don't have a node ID, we contact NNS nodes directly.
-                // Though, if we fail to find NNS nodes in the registry, we use the config URLs
+                // Though, if we fail to find NNS nodes in the registry, we should use the config
+                // URL as fallback.
                 return maybe_nns_node_url.or(maybe_config_nns_url);
             }
 
             // If we have a node ID, we check the reward type to determine which URLs we contact.
             let Some(reward) = self.node_reward_type else {
                 // If the reward type is not set, we contact NNS nodes directly.
-                // Though, if we fail to find NNS nodes in the registry, we use the config URLs
+                // Though, if we fail to find NNS nodes in the registry, we should use the config
+                // URL as fallback.
                 return maybe_nns_node_url.or(maybe_config_nns_url);
             };
 
@@ -736,12 +750,14 @@ mod test {
                 | NodeRewardType::Type3dot1
                 | NodeRewardType::Type1dot1 => {
                     // For non-type4 nodes, we contact NNS nodes directly.
-                    // Though, if we fail to find NNS nodes in the registry, we use the config URLs.
+                    // Though, if we fail to find NNS nodes in the registry, we should use the
+                    // config URL as fallback.
                     maybe_nns_node_url.or(maybe_config_nns_url)
                 }
                 NodeRewardType::Type4 => {
                     // For type4 nodes, we contact API BNs.
-                    // Though, if we fail to find API BN nodes in the registry, we use the config URLs.
+                    // Though, if we fail to find API BNs in the registry, we use the config URL as
+                    // fallback.
                     maybe_api_bn_url.or(maybe_config_nns_url)
                 }
             }
@@ -754,8 +770,11 @@ mod test {
     ) {
         let result = internal_state.poll().await;
 
-        // Full error message looks like:
+        // Since invalid domains/IPv6s are used in these tests on purpose, the poll is expected to
+        // fail with a connection error. We check that the error message contains the expected URL,
+        // if any, to verify that the correct URLs are contacted.
         //
+        // Full error message looks like:
         // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
         // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request failed for
         // {expected_url}/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
@@ -975,6 +994,7 @@ mod test {
             .expect("Failed to set node record");
     }
 
+    // Initialize node reward type in the registry
     fn setup_node_reward_type_in_registry(
         local_store: &LocalStoreImpl,
         from_version: RegistryVersion,
