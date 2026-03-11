@@ -1,11 +1,13 @@
 use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
+use ic_management_canister_types_private::{
+    BoundedAllowedViewers, CanisterSettingsArgs, LogVisibilityV2,
+};
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, MemoryAllocation, PrincipalId,
 };
 use num_traits::cast::ToPrimitive;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
 #[cfg(test)]
@@ -481,5 +483,38 @@ impl ValidatedCanisterSettings {
 
     pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
         self.environment_variables.as_ref()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub(crate) enum VisibilitySettings<'a> {
+    Public,
+    Controllers,
+    AllowedViewers(&'a BoundedAllowedViewers),
+}
+
+impl<'a> From<&'a LogVisibilityV2> for VisibilitySettings<'a> {
+    fn from(v: &'a LogVisibilityV2) -> Self {
+        match v {
+            LogVisibilityV2::Public => Self::Public,
+            LogVisibilityV2::Controllers => Self::Controllers,
+            LogVisibilityV2::AllowedViewers(principals) => Self::AllowedViewers(principals),
+        }
+    }
+}
+
+impl VisibilitySettings<'_> {
+    pub(crate) fn has_access(
+        &self,
+        caller: &PrincipalId,
+        controllers: &BTreeSet<PrincipalId>,
+    ) -> bool {
+        match self {
+            Self::Public => true,
+            Self::Controllers => controllers.contains(caller),
+            Self::AllowedViewers(allowed) => {
+                allowed.get().contains(caller) || controllers.contains(caller)
+            }
+        }
     }
 }

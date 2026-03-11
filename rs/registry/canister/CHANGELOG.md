@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-07: Proposal 140777
+
+http://dashboard.internetcomputer.org/proposal/140777
+
+## Added
+
+* Adding support for recalling replica versions for subnets.
+
+
 # 2026-02-27: Proposal 140599
 
 http://dashboard.internetcomputer.org/proposal/140599

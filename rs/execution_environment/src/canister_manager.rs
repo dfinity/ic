@@ -7,6 +7,7 @@ use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
     CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
 };
+use crate::execution_environment_metrics::ExecutionEnvironmentMetrics;
 use crate::util::MIGRATION_CANISTER_ID;
 use crate::{
     canister_settings::{CanisterSettings, ValidatedCanisterSettings},
@@ -19,7 +20,8 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
-    wasm_utils::decoding::decode_wasm, wasmtime_embedder::system_api::ExecutionParameters,
+    wasm_utils::decoding::decode_wasm,
+    wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits},
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -183,12 +185,12 @@ impl CanisterManager {
             // Canister creation via ingress is only allowed by subnet admins.
             Ok(Ic00Method::CreateCanister) => {
                 let subnet_admins = state.get_own_subnet_admins();
-                // In case the subnet admins list is empty, return the same error as
-                // before introducing the notion of subnet admins to maintain backward compatibility.
-                if subnet_admins.is_empty() {
-                  Err(UserError::new(ErrorCode::CanisterRejectedMessage, format!("Only canisters can call ic00 method {method_name}")))
-                } else {
+                if let Some(subnet_admins) = subnet_admins {
                   validate_subnet_admin(&subnet_admins, sender.get_ref()).map_err(|err| err.into())
+                } else {
+                  // In case the subnet admins are not set, return the same error as
+                  // before introducing the notion of subnet admins to maintain backward compatibility.
+                  Err(UserError::new(ErrorCode::CanisterRejectedMessage, format!("Only canisters can call ic00 method {method_name}")))
                 }
             }
 
@@ -207,7 +209,7 @@ impl CanisterManager {
                             format!("Canister {canister_id} not found"),
                         ))?;
                         let subnet_admins = state.get_own_subnet_admins();
-                        validate_controller_or_subnet_admin(canister, &subnet_admins, sender.get_ref()).map_err(|err| err.into())
+                        validate_controller_or_subnet_admin(canister, subnet_admins, sender.get_ref()).map_err(|err| err.into())
                     },
                     None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
@@ -753,30 +755,28 @@ impl CanisterManager {
         canister_creation_error: &IntCounter,
     ) -> (Result<CanisterId, UserError>, Cycles) {
         let sender = origin.origin();
-        let subnet_admins = state.get_own_subnet_admins();
-        match validate_subnet_admin(&subnet_admins, &sender) {
-            // subnet admins can always create canisters
+        match self.sender_subnet_is_nns_or_self(state, &sender) {
+            // canisters on NNS or the same subnet can always create canisters
             Ok(()) => (),
-            Err(subnet_admin_err) => match self.sender_subnet_is_nns_or_self(state, &sender) {
-                // canisters on NNS or the same subnet can always create canisters
-                Ok(()) => (),
-                Err(sender_subnet_err) => {
-                    if subnet_admins.is_empty() {
-                        // if there are no subnet admins, then the sender must be a canister
-                        // and the canister creation message should not have been routed
-                        // all the way to here unless the sender subnet is buggy/malicious
-                        canister_creation_error.inc();
-                        error!(
-                            self.log,
-                            "[EXC-BUG] Misrouted canister creation request from sender {}", sender
-                        );
-                        return (Err(sender_subnet_err), cycles);
-                    } else {
-                        return (Err(subnet_admin_err.into()), cycles);
+            Err(sender_subnet_err) => {
+                let subnet_admins = state.get_own_subnet_admins();
+                if let Some(subnet_admins) = subnet_admins {
+                    if let Err(err) = validate_subnet_admin(&subnet_admins, &sender) {
+                        return (Err(err.into()), cycles);
                     }
+                } else {
+                    // if subnet admins are not set, then the sender must be a canister
+                    // and the canister creation message should not have been routed
+                    // all the way to here unless the sender subnet is buggy/malicious
+                    canister_creation_error.inc();
+                    error!(
+                        self.log,
+                        "[EXC-BUG] Misrouted canister creation request from sender {}", sender
+                    );
+                    return (Err(sender_subnet_err), cycles);
                 }
-            },
-        }
+            }
+        };
 
         let fee = self
             .cycles_account_manager
@@ -838,40 +838,6 @@ impl CanisterManager {
         }
     }
 
-    /// Checks if the given wasm module is a Wasm64 module.
-    /// This is solely for the purpose of install code, when at the replica level
-    /// we don't know yet if the module is Wasm32/64 and we need to prepay accordingly.
-    /// In case of errors, we simply return false, assuming Wasm32.
-    /// The errors will be caught and handled by the sandbox later.
-    fn check_if_wasm64_module(&self, wasm_module_source: WasmSource) -> bool {
-        let wasm_module = match wasm_module_source.into_canister_module() {
-            Ok(wasm_module) => wasm_module,
-            Err(_err) => {
-                return false;
-            }
-        };
-
-        let decoded_wasm_module = match decode_wasm(
-            EmbeddersConfig::new().wasm_max_size,
-            Arc::new(wasm_module.as_slice().to_vec()),
-        ) {
-            Ok(decoded_wasm_module) => decoded_wasm_module,
-            Err(_err) => {
-                return false;
-            }
-        };
-
-        let parser = wasmparser::Parser::new(0);
-        for section in parser.parse_all(decoded_wasm_module.as_slice()).flatten() {
-            if let wasmparser::Payload::MemorySection(reader) = section
-                && let Some(memory) = reader.into_iter().flatten().next()
-            {
-                return memory.memory64;
-            }
-        }
-        false
-    }
-
     /// Installs code to a canister.
     ///
     /// Only the controller of the canister can install code.
@@ -921,9 +887,7 @@ impl CanisterManager {
             };
         }
 
-        let wasm_execution_mode = WasmExecutionMode::from_is_wasm64(
-            self.check_if_wasm64_module(context.wasm_source.clone()),
-        );
+        let wasm_execution_mode = wasm_execution_mode(context.wasm_source.clone());
 
         let prepaid_execution_cycles = match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => prepaid_execution_cycles,
@@ -1004,7 +968,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         canister_not_found_error: &IntCounter,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
         let time = state.time();
@@ -1068,7 +1032,7 @@ impl CanisterManager {
         canister_id: CanisterId,
         mut stop_context: StopCanisterContext,
         state: &mut ReplicatedState,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> StopCanisterResult {
         let canister = match state.canister_state(&canister_id) {
             None => {
@@ -1115,7 +1079,7 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &mut CanisterState,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<Vec<StopCanisterContext>, CanisterManagerError> {
         validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
 
@@ -1133,7 +1097,7 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         ready_for_migration: bool,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
@@ -1272,7 +1236,7 @@ impl CanisterManager {
         canister_id_to_delete: CanisterId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
-        subnet_admins: &BTreeSet<PrincipalId>,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<(), CanisterManagerError> {
         if let Ok(canister_id) = CanisterId::try_from(sender)
             && canister_id == canister_id_to_delete
@@ -1663,21 +1627,17 @@ impl CanisterManager {
         // since that check involves hash computation that we also want to charge for.
         let instructions = self.config.upload_wasm_chunk_instructions;
         self.cycles_account_manager
-            .consume_cycles_for_instructions(
+            .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
                 instructions,
                 subnet_size,
                 cost_schedule,
-                // For the `upload_chunk` operation, it does not matter if this is a Wasm64 or Wasm32 module
-                // since the number of instructions charged depends on a constant fee
-                // and Wasm64 does not bring any additional overhead for this operation.
-                // The only overhead is during execution time.
-                WasmExecutionMode::Wasm32,
             )
             .map_err(|err| CanisterManagerError::WasmChunkStoreError {
                 message: format!("Error charging for 'upload_chunk': {err}"),
             })?;
+        round_limits.instructions -= as_round_instructions(instructions);
 
         let validated_chunk = match canister
             .system_state
@@ -1686,7 +1646,6 @@ impl CanisterManager {
         {
             ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
             ChunkValidationResult::AlreadyExists(hash) => {
-                round_limits.instructions -= as_round_instructions(instructions);
                 return Ok(UploadChunkResult {
                     reply: UploadChunkReply {
                         hash: hash.to_vec(),
@@ -1719,7 +1678,7 @@ impl CanisterManager {
             cost_schedule,
             canister,
             sender,
-            Cycles::zero(),
+            NumInstructions::new(0),
             round_limits,
             new_memory_usage,
             memory_usage,
@@ -1737,8 +1696,6 @@ impl CanisterManager {
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit += chunk_bytes;
         }
-
-        round_limits.instructions -= as_round_instructions(instructions);
 
         let hash = validated_chunk.hash().to_vec();
         canister
@@ -1774,7 +1731,7 @@ impl CanisterManager {
             cost_schedule,
             canister,
             sender,
-            Cycles::zero(),
+            NumInstructions::new(0),
             round_limits,
             new_memory_usage,
             memory_usage,
@@ -1824,7 +1781,7 @@ impl CanisterManager {
         cost_schedule: CanisterCyclesCostSchedule,
         canister: &CanisterState,
         sender: PrincipalId,
-        cycles_for_instructions: Cycles,
+        instructions: NumInstructions,
         round_limits: &RoundLimits,
         new_memory_usage: NumBytes,
         old_memory_usage: NumBytes,
@@ -1879,6 +1836,11 @@ impl CanisterManager {
         }
 
         // Check that cycles for instructions can be withdrawn (in particular, the canister is not frozen afterwards).
+        let cycles_for_instructions = self.cycles_account_manager.management_canister_cost(
+            instructions,
+            subnet_size,
+            cost_schedule,
+        );
         self.cycles_account_manager
             .can_withdraw_cycles_with_threshold(
                 &canister.system_state,
@@ -2067,23 +2029,12 @@ impl CanisterManager {
             .config
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
-        let cycles_for_instructions = self.cycles_account_manager.execution_cost(
-            instructions,
-            subnet_size,
-            state.get_own_cost_schedule(),
-            // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
-            // since the number of instructions charged depends on constant set fee and snapshot size
-            // and Wasm64 does not bring any additional overhead for this operation.
-            // The only overhead is during execution time.
-            WasmExecutionMode::Wasm32,
-        );
-
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
             state.get_own_cost_schedule(),
             canister,
             sender,
-            cycles_for_instructions,
+            instructions,
             round_limits,
             new_memory_usage,
             old_memory_usage,
@@ -2220,10 +2171,10 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
+        instruction_limits: InstructionLimits,
         origin: CanisterChangeOrigin,
         resource_saturation: &ResourceSaturation,
-        long_execution_already_in_progress: &IntCounter,
-        snapshot_exists_without_associated_canister: &IntCounter,
+        metrics: &ExecutionEnvironmentMetrics,
     ) -> (Result<CanisterState, CanisterManagerError>, NumInstructions) {
         let canister_id = canister.canister_id();
         // Check sender is a controller.
@@ -2267,7 +2218,7 @@ impl CanisterManager {
                             // The below case should never happen as if the snapshot still exists, it
                             // should be associated with an existing canister. If it happens, it indicates
                             // a bug, so log an error message for investigation.
-                            snapshot_exists_without_associated_canister.inc();
+                            metrics.snapshot_exists_without_associated_canister.inc();
                             error!(
                                 self.log,
                                 "[EXC-BUG]: Canister {} does not exist although there's a snapshot {} associated with it.",
@@ -2304,7 +2255,7 @@ impl CanisterManager {
         match canister.next_execution() {
             NextExecution::None | NextExecution::StartNew => {}
             NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                long_execution_already_in_progress.inc();
+                metrics.long_execution_already_in_progress.inc();
                 error!(
                     self.log,
                     "[EXC-BUG] Attempted to start a new `load_canister_snapshot` execution while the previous execution is still in progress for {}.",
@@ -2317,31 +2268,36 @@ impl CanisterManager {
             }
         }
 
-        // All basic checks have passed, charge baseline instructions.
-        let old_memory_usage = canister.memory_usage();
-        let mut canister_clone = canister.clone();
-
-        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
-            &sender,
-            &mut canister_clone,
-            self.config.canister_snapshot_baseline_instructions,
+        // All basic checks have passed, prepay cycles for instructions.
+        let wasm_execution_mode = wasm_execution_mode(WasmSource::CanisterModule(
+            snapshot.execution_snapshot().wasm_binary.clone(),
+        ));
+        let memory_usage = canister.memory_usage();
+        let message_memory_usage = canister.message_memory_usage();
+        let compute_allocation = canister.compute_allocation();
+        let reveal_top_up = canister.controllers().contains(&sender);
+        let prepaid_execution_instructions = instruction_limits.message();
+        let prepaid_execution_cycles = match self.cycles_account_manager.prepay_execution_cycles(
+            &mut canister.system_state,
+            memory_usage,
+            message_memory_usage,
+            compute_allocation,
+            prepaid_execution_instructions,
             subnet_size,
             state.get_own_cost_schedule(),
-            // For the `load_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
-            // since the number of instructions charged depends on constant set fee
-            // and Wasm64 does not bring any additional overhead for this operation.
-            // The only overhead is during execution time.
-            WasmExecutionMode::Wasm32,
+            reveal_top_up,
+            wasm_execution_mode,
         ) {
-            return (
-                Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
-                0.into(),
-            );
+            Ok(cycles) => cycles,
+            Err(err) => {
+                return (
+                    Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
+                    NumInstructions::new(0),
+                );
+            }
         };
 
-        let (_old_execution_state, mut system_state, scheduler_state) = canister_clone.into_parts();
-
-        let (instructions_used, new_execution_state) = {
+        let (instructions_for_execution, new_execution_state) = {
             let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
             let compilation_cost_handling = if state
                 .metadata
@@ -2353,19 +2309,33 @@ impl CanisterManager {
                 CompilationCostHandling::CountFullAmount
             };
 
-            let (instructions_used, new_execution_state) = self.hypervisor.create_execution_state(
-                execution_snapshot.wasm_binary.clone(),
-                "NOT_USED".into(),
-                canister_id,
-                round_limits,
-                compilation_cost_handling,
+            let (instructions_for_execution, new_execution_state) =
+                self.hypervisor.create_execution_state(
+                    execution_snapshot.wasm_binary.clone(),
+                    "NOT_USED".into(),
+                    canister_id,
+                    round_limits,
+                    compilation_cost_handling,
+                );
+            let instructions_to_refund =
+                prepaid_execution_instructions.saturating_sub(&instructions_for_execution);
+            self.cycles_account_manager.refund_unused_execution_cycles(
+                &mut canister.system_state,
+                instructions_to_refund,
+                prepaid_execution_instructions,
+                prepaid_execution_cycles,
+                &metrics.execution_cycles_refund_error,
+                subnet_size,
+                state.get_own_cost_schedule(),
+                wasm_execution_mode,
+                &self.log,
             );
 
             let mut new_execution_state = match new_execution_state {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
                     let err = CanisterManagerError::from((canister_id, err));
-                    return (Err(err), instructions_used);
+                    return (Err(err), instructions_for_execution);
                 }
             };
 
@@ -2380,7 +2350,7 @@ impl CanisterManager {
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
                             message: "Wasm exported globals of canister module and snapshot metadata do not match.".to_string(),
                         }),
-                        instructions_used,
+                        instructions_for_execution,
                     );
             }
 
@@ -2401,7 +2371,7 @@ impl CanisterManager {
                                 canister_id,
                                 snapshot_id,
                             }),
-                            instructions_used,
+                            instructions_for_execution,
                         );
                     }
                 };
@@ -2418,14 +2388,18 @@ impl CanisterManager {
                                 canister_id,
                                 snapshot_id,
                             }),
-                            instructions_used,
+                            instructions_for_execution,
                         );
                     }
                 };
                 new_execution_state.wasm_memory = new_wasm_memory;
             }
-            (instructions_used, Some(new_execution_state))
+            (instructions_for_execution, Some(new_execution_state))
         };
+
+        let old_memory_usage = canister.memory_usage();
+        let (_old_execution_state, mut system_state, scheduler_state) =
+            canister.clone().into_parts();
 
         system_state.wasm_chunk_store = snapshot.chunk_store().clone();
         system_state
@@ -2450,12 +2424,6 @@ impl CanisterManager {
             }
         }
 
-        let wasm_execution_mode = new_execution_state
-            .as_ref()
-            .map_or(WasmExecutionMode::Wasm32, |exec_state| {
-                exec_state.wasm_execution_mode
-            });
-
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);
         let new_memory_usage = new_canister.memory_usage();
@@ -2475,28 +2443,21 @@ impl CanisterManager {
                             "Hook status ({snapshot_hook_status:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {hook_condition})."
                         ),
                     }),
-                    instructions_used,
+                    instructions_for_execution,
                 );
             }
         }
 
-        // Compute cycles for instructions spent loading a snapshot of the canister.
-        let instructions = instructions_used.saturating_add(&snapshot.size().get().into());
-        let cycles_for_instructions = self.cycles_account_manager.execution_cost(
-            instructions,
-            subnet_size,
-            state.get_own_cost_schedule(),
-            // In this case, when the canister is actually created from the snapshot, we need to check
-            // if the canister is in wasm64 mode to account for its instruction usage.
-            wasm_execution_mode,
-        );
-
+        // Compute cycles for instructions spent for memory overhead when loading a snapshot of the canister.
+        let instructions_for_snapshot_size: NumInstructions =
+            self.config.canister_snapshot_baseline_instructions
+                + NumInstructions::new(snapshot.size().get());
         let validated_cycles_and_memory_usage = match self.cycles_and_memory_usage_checks(
             subnet_size,
             state.get_own_cost_schedule(),
             &new_canister,
             sender,
-            cycles_for_instructions,
+            instructions_for_snapshot_size,
             round_limits,
             new_memory_usage,
             old_memory_usage,
@@ -2504,7 +2465,7 @@ impl CanisterManager {
         ) {
             Ok(validated_cycles_and_memory_usage) => validated_cycles_and_memory_usage,
             Err(err) => {
-                return (Err(err), instructions_used);
+                return (Err(err), instructions_for_execution);
             }
         };
 
@@ -2516,6 +2477,7 @@ impl CanisterManager {
             round_limits,
             validated_cycles_and_memory_usage,
         );
+        round_limits.instructions -= as_round_instructions(instructions_for_snapshot_size);
 
         // The canister ID from which the snapshot was loaded in case
         // it is different from the target canister ID.
@@ -2557,7 +2519,10 @@ impl CanisterManager {
             .heap_delta_estimate
             .saturating_add(&new_canister.heap_delta());
 
-        (Ok(new_canister), instructions_used)
+        (
+            Ok(new_canister),
+            instructions_for_execution + instructions_for_snapshot_size,
+        )
     }
 
     /// Returns the canister snapshots list, or
@@ -2618,7 +2583,7 @@ impl CanisterManager {
             state.get_own_cost_schedule(),
             canister,
             sender,
-            Cycles::zero(),
+            NumInstructions::new(0),
             round_limits,
             new_memory_usage,
             memory_usage,
@@ -2645,8 +2610,7 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         canister: &CanisterState,
         state: &ReplicatedState,
-        round_limits: &mut RoundLimits,
-    ) -> Result<(ReadCanisterSnapshotMetadataResponse, NumInstructions), CanisterManagerError> {
+    ) -> Result<ReadCanisterSnapshotMetadataResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
@@ -2658,37 +2622,31 @@ impl CanisterManager {
         let maybe_instruction_counter = globals.pop();
         debug_assert!(maybe_instruction_counter.is_some());
 
-        let num_instructions = self.config.canister_snapshot_data_baseline_instructions;
-        round_limits.instructions -= as_round_instructions(num_instructions);
-
-        Ok((
-            ReadCanisterSnapshotMetadataResponse {
-                source: snapshot.source(),
-                taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
-                wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
-                globals,
-                wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
-                    * WASM_PAGE_SIZE_IN_BYTES as u64,
-                stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
-                    * WASM_PAGE_SIZE_IN_BYTES as u64,
-                wasm_chunk_store: snapshot
-                    .chunk_store()
-                    .keys()
-                    .cloned()
-                    .map(|x| ChunkHash { hash: x.to_vec() })
-                    .collect(),
-                canister_version: snapshot.canister_version(),
-                certified_data: snapshot.certified_data().clone(),
-                global_timer: snapshot
-                    .execution_snapshot()
-                    .global_timer
-                    .map(GlobalTimer::from),
-                on_low_wasm_memory_hook_status: snapshot
-                    .execution_snapshot()
-                    .on_low_wasm_memory_hook_status,
-            },
-            num_instructions,
-        ))
+        Ok(ReadCanisterSnapshotMetadataResponse {
+            source: snapshot.source(),
+            taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+            wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
+            globals,
+            wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
+                * WASM_PAGE_SIZE_IN_BYTES as u64,
+            stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
+                * WASM_PAGE_SIZE_IN_BYTES as u64,
+            wasm_chunk_store: snapshot
+                .chunk_store()
+                .keys()
+                .cloned()
+                .map(|x| ChunkHash { hash: x.to_vec() })
+                .collect(),
+            canister_version: snapshot.canister_version(),
+            certified_data: snapshot.certified_data().clone(),
+            global_timer: snapshot
+                .execution_snapshot()
+                .global_timer
+                .map(GlobalTimer::from),
+            on_low_wasm_memory_hook_status: snapshot
+                .execution_snapshot()
+                .on_low_wasm_memory_hook_status,
+        })
     }
 
     pub(crate) fn read_snapshot_data(
@@ -2711,15 +2669,16 @@ impl CanisterManager {
             .config
             .canister_snapshot_data_baseline_instructions
             .saturating_add(&NumInstructions::new(num_response_bytes));
-        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
-            &sender,
-            canister,
-            num_instructions,
-            subnet_size,
-            state.get_own_cost_schedule(),
-            // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module.
-            WasmExecutionMode::Wasm32,
-        ) {
+        if let Err(err) = self
+            .cycles_account_manager
+            .consume_cycles_for_management_canister_instructions(
+                &sender,
+                canister,
+                num_instructions,
+                subnet_size,
+                state.get_own_cost_schedule(),
+            )
+        {
             return Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err));
         };
         round_limits.instructions -= as_round_instructions(num_instructions);
@@ -2846,23 +2805,12 @@ impl CanisterManager {
             .config
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
-        let cycles_for_instructions = self.cycles_account_manager.execution_cost(
-            instructions,
-            subnet_size,
-            state.get_own_cost_schedule(),
-            // For the `create_snapshot_from_metadata` operation, it does not matter if this is a Wasm64 or Wasm32 module
-            // since the number of instructions charged depends on constant set fee and snapshot size
-            // and Wasm64 does not bring any additional overhead for this operation.
-            // The only overhead is during execution time.
-            WasmExecutionMode::Wasm32,
-        );
-
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
             state.get_own_cost_schedule(),
             canister,
             sender,
-            cycles_for_instructions,
+            instructions,
             round_limits,
             new_memory_usage,
             old_memory_usage,
@@ -2972,19 +2920,18 @@ impl CanisterManager {
             self.get_bytes_and_cycles_and_instructions(args);
         if let Err(e) = self
             .cycles_account_manager
-            .consume_cycles_for_instructions(
+            .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
                 NumInstructions::new(cycles_cost.low64()),
                 subnet_size,
                 cost_schedule,
-                // It does not matter if this is a Wasm64 or Wasm32 module.
-                WasmExecutionMode::Wasm32,
             )
             .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)
         {
             return (Err(e), NumInstructions::new(0));
         }
+        round_limits.instructions -= as_round_instructions(instructions);
 
         let snapshot_inner = Arc::make_mut(snapshot);
         match args.kind {
@@ -3046,12 +2993,10 @@ impl CanisterManager {
                 {
                     ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
                     ChunkValidationResult::AlreadyExists(_hash) => {
-                        round_limits.instructions -= as_round_instructions(instructions);
                         return (Ok(()), instructions);
                     }
                     ChunkValidationResult::ValidationError(err) => {
                         // In this case, we spent instructions calculating the chunk hash, so we charge them.
-                        round_limits.instructions -= as_round_instructions(instructions);
                         return (
                             Err(CanisterManagerError::WasmChunkStoreError { message: err }),
                             instructions,
@@ -3067,7 +3012,7 @@ impl CanisterManager {
                     state.get_own_cost_schedule(),
                     canister,
                     sender,
-                    Cycles::zero(),
+                    NumInstructions::new(0),
                     round_limits,
                     new_memory_usage,
                     memory_usage,
@@ -3105,7 +3050,6 @@ impl CanisterManager {
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit += NumBytes::new(bytes_written);
         }
-        round_limits.instructions -= as_round_instructions(instructions);
 
         // Return the instructions needed to write the chunk to the destination.
         (Ok(()), instructions)
@@ -3353,6 +3297,41 @@ pub fn uninstall_canister(
                 }
             }
         })
+}
+
+/// Derives the wasm execution mode of the given module.
+/// This is solely for the purpose of installing code and loading canister snapshot
+/// when we need the wasm execution mode to prepay accordingly.
+/// In case of errors, we simply return `WasmExecutionMode::Wasm32`
+/// since the errors will be caught and handled by the sandbox later
+/// without incurring extra overhead specific to `WasmExecutionMode::Wasm64`.
+pub fn wasm_execution_mode(wasm_module_source: WasmSource) -> WasmExecutionMode {
+    let wasm_module = match wasm_module_source.into_canister_module() {
+        Ok(wasm_module) => wasm_module,
+        Err(_err) => {
+            return WasmExecutionMode::Wasm32;
+        }
+    };
+
+    let decoded_wasm_module = match decode_wasm(
+        EmbeddersConfig::new().wasm_max_size,
+        Arc::new(wasm_module.as_slice().to_vec()),
+    ) {
+        Ok(decoded_wasm_module) => decoded_wasm_module,
+        Err(_err) => {
+            return WasmExecutionMode::Wasm32;
+        }
+    };
+
+    let parser = wasmparser::Parser::new(0);
+    for section in parser.parse_all(decoded_wasm_module.as_slice()).flatten() {
+        if let wasmparser::Payload::MemorySection(reader) = section
+            && let Some(memory) = reader.into_iter().flatten().next()
+        {
+            return WasmExecutionMode::from_is_wasm64(memory.memory64);
+        }
+    }
+    WasmExecutionMode::Wasm32
 }
 
 fn globals_match(g1: &[Global], g2: &[Global]) -> bool {
