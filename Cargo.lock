@@ -13026,6 +13026,7 @@ dependencies = [
  "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
+ "rstest",
  "slog",
  "tempfile",
  "tokio",

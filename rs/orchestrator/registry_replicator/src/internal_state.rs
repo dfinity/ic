@@ -649,6 +649,7 @@ mod test {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{CanisterId, SubnetId};
     use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, SUBNET_3};
+    use rstest::rstest;
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
     use std::sync::Arc;
@@ -693,29 +694,116 @@ mod test {
         }
     }
 
-    fn create_internal_state_for_tests(
-        logger: ReplicaLogger,
-        config_nns_urls: Vec<Url>,
-        nns_endpoint: Option<ConnectionEndpoint>,
+    struct TestSetup {
+        has_node_id: bool,
+        config_nns_url: Option<Url>,
+        nns_node_endpoint: Option<ConnectionEndpoint>,
         api_bn_endpoint: Option<ConnectionEndpoint>,
         node_reward_type: Option<NodeRewardType>,
+    }
+
+    impl TestSetup {
+        fn get_expected_node_api_url(&self) -> Option<Url> {
+            let maybe_config_nns_url = self.config_nns_url.clone();
+            let maybe_nns_node_url = self
+                .nns_node_endpoint
+                .as_ref()
+                .map(|endpoint| https_endpoint_to_url(endpoint).unwrap());
+            let maybe_api_bn_url = self
+                .api_bn_endpoint
+                .as_ref()
+                .map(|endpoint| https_endpoint_to_url(endpoint).unwrap());
+
+            if !self.has_node_id {
+                // If we don't have a node ID, we contact NNS nodes directly.
+                // Though, if we fail to find NNS nodes in the registry, we use the config URLs
+                return maybe_nns_node_url.or(maybe_config_nns_url);
+            }
+
+            // If we have a node ID, we check the reward type to determine which URLs we contact.
+            let Some(reward) = self.node_reward_type else {
+                // If the reward type is not set, we contact NNS nodes directly.
+                // Though, if we fail to find NNS nodes in the registry, we use the config URLs
+                return maybe_nns_node_url.or(maybe_config_nns_url);
+            };
+
+            match reward {
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1 => {
+                    // For non-type4 nodes, we contact NNS nodes directly.
+                    // Though, if we fail to find NNS nodes in the registry, we use the config URLs.
+                    maybe_nns_node_url.or(maybe_config_nns_url)
+                }
+                NodeRewardType::Type4 => {
+                    // For type4 nodes, we contact API BNs.
+                    // Though, if we fail to find API BN nodes in the registry, we use the config URLs.
+                    maybe_api_bn_url.or(maybe_config_nns_url)
+                }
+            }
+        }
+    }
+
+    async fn assert_poll_contacts_expected_url(
+        internal_state: &mut InternalState,
+        expected_url: Option<&Url>,
+    ) {
+        let result = internal_state.poll().await;
+
+        // Full error message looks like:
+        //
+        // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
+        // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request failed for
+        // {expected_url}/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
+        // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect error\\\", Os {
+        // code: 101, kind: NetworkUnreachable, message: \\\"Network is unreachable\\\" }))\")"
+        let Err(err) = result else {
+            panic!("Expected poll to fail because the used IPv6 addresses are not routable");
+        };
+        println!("Error message: {err}");
+        if let Some(url) = expected_url {
+            assert!(err.contains("Error when trying to fetch updates from NNS:"));
+            assert!(err.contains(url.as_str()));
+        } else {
+            // Happens when we cannot determine any valid URL to contact
+            assert!(err.contains("No remote registry canister configured"));
+        }
+    }
+
+    fn create_internal_state_for_tests(
+        logger: ReplicaLogger,
+        TestSetup {
+            has_node_id,
+            config_nns_url,
+            nns_node_endpoint,
+            api_bn_endpoint,
+            node_reward_type,
+        }: TestSetup,
     ) -> InternalState {
         let tempdir = TempDir::new().unwrap();
-        // TODO: maybe use keep()
         let local_store = Arc::new(LocalStoreImpl::new(tempdir.path()));
         let registry_client = Arc::new(FakeRegistryClient::new(local_store.clone()));
 
         let config_nns_pub_key = create_threshold_sig_public_key(0);
 
-        if let Some(endpoint) = nns_endpoint {
-            let nns_subnet_id = SUBNET_1;
+        let nns_subnet_id = SUBNET_1;
+        setup_nns_pub_key_in_registry(
+            &local_store,
+            registry_client.get_latest_version(),
+            nns_subnet_id,
+        );
+        registry_client.update_to_latest_version();
+        if let Some(endpoint) = nns_node_endpoint {
             let nns_node_id = NODE_1;
-            setup_nns_subnet_in_registry(
+            set_nns_membership_in_registry(
                 &local_store,
                 registry_client.get_latest_version(),
                 nns_subnet_id,
-                nns_node_id,
-                endpoint,
+                vec![(nns_node_id, endpoint)],
             );
         }
         registry_client.update_to_latest_version();
@@ -731,38 +819,33 @@ mod test {
         }
         registry_client.update_to_latest_version();
 
-        let own_node_id = if let Some(node_reward_type) = node_reward_type {
-            let own_node_id = NODE_3;
+        let own_node_id = NODE_3;
+        if let Some(node_reward_type) = node_reward_type {
             setup_node_reward_type_in_registry(
                 &local_store,
                 registry_client.get_latest_version(),
                 own_node_id,
                 node_reward_type,
             );
-            Some(own_node_id)
-        } else {
-            None
-        };
+        }
         registry_client.update_to_latest_version();
 
         InternalState::new(
             logger,
-            own_node_id,
+            has_node_id.then_some(own_node_id),
             Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
             Arc::clone(&local_store) as Arc<dyn LocalStore>,
-            config_nns_urls.clone(),
+            config_nns_url.into_iter().collect(),
             Some(config_nns_pub_key),
             TEST_POLL_DELAY,
         )
     }
 
-    // Initialize root subnet, public key and node record in the registry
-    fn setup_nns_subnet_in_registry(
+    // Initialize root subnet, public key and an empty subnet record for the NNS in the registry
+    fn setup_nns_pub_key_in_registry(
         local_store: &LocalStoreImpl,
         from_version: RegistryVersion,
         nns_subnet_id: SubnetId,
-        nns_node_id: NodeId,
-        http_endpoint: ConnectionEndpoint,
     ) {
         let mut version = from_version;
         version += 1.into();
@@ -792,17 +875,44 @@ mod test {
             .store(
                 version,
                 vec![KeyMutation {
-                    key: make_node_record_key(nns_node_id),
+                    key: make_subnet_record_key(nns_subnet_id),
                     value: Some(
-                        NodeRecord {
-                            http: Some(http_endpoint.clone()),
+                        SubnetRecord {
                             ..Default::default()
                         }
                         .encode_to_vec(),
                     ),
                 }],
             )
-            .expect("Failed to set node record");
+            .expect("Failed to set subnet record");
+    }
+
+    // Initialize NNS membership in the registry
+    fn set_nns_membership_in_registry(
+        local_store: &LocalStoreImpl,
+        from_version: RegistryVersion,
+        nns_subnet_id: SubnetId,
+        nns_nodes: Vec<(NodeId, ConnectionEndpoint)>,
+    ) {
+        let mut version = from_version;
+        for (node_id, http_endpoint) in &nns_nodes {
+            version += 1.into();
+            local_store
+                .store(
+                    version,
+                    vec![KeyMutation {
+                        key: make_node_record_key(*node_id),
+                        value: Some(
+                            NodeRecord {
+                                http: Some(http_endpoint.clone()),
+                                ..Default::default()
+                            }
+                            .encode_to_vec(),
+                        ),
+                    }],
+                )
+                .expect("Failed to set node record");
+        }
         version += 1.into();
         local_store
             .store(
@@ -811,14 +921,17 @@ mod test {
                     key: make_subnet_record_key(nns_subnet_id),
                     value: Some(
                         SubnetRecord {
-                            membership: vec![nns_node_id.get().to_vec()],
+                            membership: nns_nodes
+                                .iter()
+                                .map(|(node_id, _)| node_id.get().to_vec())
+                                .collect(),
                             ..Default::default()
                         }
                         .encode_to_vec(),
                     ),
                 }],
             )
-            .expect("Failed to set subnet record");
+            .expect("Failed to update subnet record with new node");
     }
 
     // Initialize API BN record and node record in the registry
@@ -887,141 +1000,57 @@ mod test {
             .expect("Failed to set node reward type");
     }
 
-    async fn assert_poll_contacts_expected_endpoint(
-        internal_state: &mut InternalState,
-        expected_url: &Url,
-        unexpected_urls: &[&Url],
-    ) {
-        let result = internal_state.poll().await;
-        assert!(result.is_err_and(|err| {
-            // Full error message looks like:
-            //
-            // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
-            // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
-            // failed for
-            // {expected_url}/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
-            // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
-            // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
-            // unreachable\\\" }))\")"
-            err.contains("Error when trying to fetch updates from NNS:")
-                && err.contains(expected_url.as_str())
-                && unexpected_urls.iter().all(|u| !err.contains(u.as_str()))
-        }));
-    }
-
+    #[rstest]
     #[tokio::test]
-    async fn test_uses_fallback_after_consecutive_failures() {
+    async fn test_internal_state_including_fallback(
+        #[values(false, true)] has_node_id: bool,
+        #[values(None, Some(Url::parse("https://config_url.invalid").unwrap()))]
+        config_nns_url: Option<Url>,
+        #[values(None, Some(ConnectionEndpoint { ip_addr: "2001:db8::1".to_string(), port: 8080 }))]
+        nns_node_endpoint: Option<ConnectionEndpoint>,
+        #[values(None, Some(ConnectionEndpoint { ip_addr: "2001:db8::2".to_string(), port: 443 }))]
+        api_bn_endpoint: Option<ConnectionEndpoint>,
+        #[values(None, Some(NodeRewardType::Type1), Some(NodeRewardType::Type4))] node_reward_type: Option<NodeRewardType>,
+    ) {
         with_test_replica_logger(|logger| async {
-            let config_url = Url::parse("https://fallback:1234").unwrap();
-            // The node endpoint is invalid on purpose to trigger failures.
-            // The expected behavior is to try the fallback URLs after MAX_CONSECUTIVE_FAILURES.
-            let nns_endpoint = ConnectionEndpoint {
-                ip_addr: "2001:db8::1".to_string(),
-                port: 8080,
-            };
-            // Even though there is an API BN, the node is of type1 and it should not contact it
-            let api_bn_endpoint = ConnectionEndpoint {
-                ip_addr: "2001:db8::2".to_string(),
-                port: 443,
+            let test_setup = TestSetup {
+                has_node_id,
+                config_nns_url: config_nns_url.clone(),
+                nns_node_endpoint,
+                api_bn_endpoint,
+                node_reward_type,
             };
 
-            let mut internal_state = create_internal_state_for_tests(
-                logger,
-                vec![config_url.clone()],
-                Some(nns_endpoint.clone()),
-                Some(api_bn_endpoint.clone()),
-                Some(NodeRewardType::Type1),
-            );
+            let expected_url = test_setup.get_expected_node_api_url();
+            let mut internal_state = create_internal_state_for_tests(logger, test_setup);
 
-            // Will first try to fetch from data found inside the registry
-            let nns_url = https_endpoint_to_url(&nns_endpoint).unwrap();
-            let api_bn_url = https_endpoint_to_url(&api_bn_endpoint).unwrap();
+            println!("Expected URL: {expected_url:?}");
+
+            // Will first try to contact the expected node
             for _ in 0..MAX_CONSECUTIVE_FAILURES {
-                assert_poll_contacts_expected_endpoint(
-                    &mut internal_state,
-                    &nns_url,
-                    &[&api_bn_url, &config_url],
-                )
-                .await;
+                assert_poll_contacts_expected_url(&mut internal_state, expected_url.as_ref()).await;
             }
 
-            // Will then try to fetch from the fallback URLs
-            assert_poll_contacts_expected_endpoint(
-                &mut internal_state,
-                &config_url,
-                &[&nns_url, &api_bn_url],
-            )
-            .await;
-        })
-        .await
-    }
+            println!("Reached max consecutive failures");
 
-    #[tokio::test]
-    async fn test_type4_node_goes_through_api_bn() {
-        with_test_replica_logger(|logger| async {
-            let config_url = Url::parse("https://fallback:1234").unwrap();
-            let nns_endpoint = ConnectionEndpoint {
-                ip_addr: "2001:db8::1".to_string(),
-                port: 8080,
-            };
-            // The expected behavior is to use the API boundary node when the current node is of
-            // type4.
-            let api_bn_endpoint = ConnectionEndpoint {
-                ip_addr: "2001:db8::2".to_string(),
-                port: 443,
-            };
+            // After reaching the max consecutive failures, it should use the fallback URL from the
+            // config if it is set.
+            // Otherwise, it should keep trying to contact the expected node, since there is no
+            // fallback URL to use.
+            if config_nns_url.is_some() {
+                println!("Trying to contact fallback URL from config");
+                assert_poll_contacts_expected_url(&mut internal_state, config_nns_url.as_ref())
+                    .await;
+            } else {
+                println!("No fallback URL set, should keep trying to contact expected URL");
+                assert_poll_contacts_expected_url(&mut internal_state, expected_url.as_ref()).await;
+            }
 
-            let mut internal_state = create_internal_state_for_tests(
-                logger,
-                vec![config_url.clone()],
-                Some(nns_endpoint.clone()),
-                Some(api_bn_endpoint.clone()),
-                Some(NodeRewardType::Type4),
-            );
+            println!("Reached max consecutive failures again");
 
-            let nns_url = https_endpoint_to_url(&nns_endpoint).unwrap();
-            let api_bn_url = https_endpoint_to_url(&api_bn_endpoint).unwrap();
-            assert_poll_contacts_expected_endpoint(
-                &mut internal_state,
-                &api_bn_url,
-                &[&nns_url, &config_url],
-            )
-            .await;
-        })
-        .await
-    }
-
-    #[tokio::test]
-    async fn test_no_node_id_goes_directly_to_nns_node() {
-        with_test_replica_logger(|logger| async {
-            let config_url = Url::parse("https://fallback:1234").unwrap();
-            let nns_endpoint = ConnectionEndpoint {
-                ip_addr: "2001:db8::1".to_string(),
-                port: 8080,
-            };
-            // Even though there is an API BN, the replicator does not know its node ID and it
-            // should not contact it.
-            let api_bn_endpoint = ConnectionEndpoint {
-                ip_addr: "2001:db8::2".to_string(),
-                port: 443,
-            };
-
-            let mut internal_state = create_internal_state_for_tests(
-                logger,
-                vec![config_url.clone()],
-                Some(nns_endpoint.clone()),
-                Some(api_bn_endpoint.clone()),
-                None,
-            );
-
-            let nns_url = https_endpoint_to_url(&nns_endpoint).unwrap();
-            let api_bn_url = https_endpoint_to_url(&api_bn_endpoint).unwrap();
-            assert_poll_contacts_expected_endpoint(
-                &mut internal_state,
-                &nns_url,
-                &[&api_bn_url, &config_url],
-            )
-            .await;
+            // Afer the fallback is used (if set), it should go back to trying to contact the
+            // expected node
+            assert_poll_contacts_expected_url(&mut internal_state, expected_url.as_ref()).await;
         })
         .await
     }
