@@ -780,7 +780,6 @@ mod test {
         let Err(err) = result else {
             panic!("Expected poll to fail because the used IPv6 addresses are not routable");
         };
-        println!("Error message: {err}");
         if let Some(url) = expected_url {
             assert!(err.contains("Error when trying to fetch updates from NNS:"));
             assert!(err.contains(url.as_str()));
@@ -1041,29 +1040,21 @@ mod test {
             let expected_url = test_setup.get_expected_node_api_url();
             let mut internal_state = create_internal_state_for_tests(logger, test_setup);
 
-            println!("Expected URL: {expected_url:?}");
-
             // Will first try to contact the expected node
             for _ in 0..MAX_CONSECUTIVE_FAILURES {
                 assert_poll_contacts_expected_url(&mut internal_state, expected_url.as_ref()).await;
             }
-
-            println!("Reached max consecutive failures");
 
             // After reaching the max consecutive failures, it should use the fallback URL from the
             // config if it is set.
             // Otherwise, it should keep trying to contact the expected node, since there is no
             // fallback URL to use.
             if config_nns_url.is_some() {
-                println!("Trying to contact fallback URL from config");
                 assert_poll_contacts_expected_url(&mut internal_state, config_nns_url.as_ref())
                     .await;
             } else {
-                println!("No fallback URL set, should keep trying to contact expected URL");
                 assert_poll_contacts_expected_url(&mut internal_state, expected_url.as_ref()).await;
             }
-
-            println!("Reached max consecutive failures again");
 
             // Afer the fallback is used (if set), it should go back to trying to contact the
             // expected node
