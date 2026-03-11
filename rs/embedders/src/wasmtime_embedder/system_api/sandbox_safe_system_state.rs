@@ -823,11 +823,11 @@ impl SandboxSafeSystemState {
 
         let (next_canister_log_record_idx, canister_log_memory_limit) =
             if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                let log = &system_state.log_memory_store;
-                (log.next_idx(), log.byte_capacity())
+                let lms = &system_state.log_memory_store;
+                (lms.next_idx(), lms.byte_capacity())
             } else {
-                let log = &system_state.canister_log;
-                (log.next_idx(), log.byte_capacity())
+                let cl = &system_state.canister_log;
+                (cl.next_idx(), cl.byte_capacity())
             };
 
         Self::new_internal(
