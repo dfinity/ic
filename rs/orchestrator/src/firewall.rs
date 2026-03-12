@@ -816,16 +816,23 @@ mod tests {
     use ic_test_utilities_registry::{
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
     };
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{SUBNET_1, node_test_id, subnet_test_id};
 
     use super::*;
 
-    const NFTABLES_GOLDEN_BYTES: &[u8] =
+    const NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES: &[u8] =
+        include_bytes!("../testdata/nftables_assigned_cloud_engine.conf.golden");
+    const NFTABLES_ASSIGNED_REPLICA_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_boundary_node_app_subnet.conf.golden");
     const NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_boundary_node_system_subnet.conf.golden");
+    const NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES: &[u8] =
+        include_bytes!("../testdata/nftables_unassigned_cloud_engine.conf.golden");
+    const NFTABLES_UNASSIGNED_REPLICA_GOLDEN_BYTES: &[u8] =
+        include_bytes!("../testdata/nftables_unassigned_replica.conf.golden");
+    const SUBNET_ID: SubnetId = SUBNET_1;
     const API_BOUNDARY_NODE_ID: u64 = 3003;
 
     #[test]
@@ -952,12 +959,70 @@ mod tests {
     }
 
     #[test]
-    fn nftables_golden_test() {
+    fn nftables_golden_assigned_replica_test() {
+        // For assigned replicas, only Type4 (cloud engine) nodes have a different firewall
+        for reward_type in [
+            None,
+            Some(NodeRewardType::Unspecified),
+            Some(NodeRewardType::Type0),
+            Some(NodeRewardType::Type1),
+            Some(NodeRewardType::Type2),
+            Some(NodeRewardType::Type3),
+            Some(NodeRewardType::Type3dot1),
+            Some(NodeRewardType::Type1dot1),
+        ] {
+            golden_test(
+                Role::AssignedReplica(SUBNET_ID),
+                node_test_id(0),
+                reward_type,
+                NFTABLES_ASSIGNED_REPLICA_GOLDEN_BYTES,
+                "assigned_replica",
+            );
+        }
+    }
+
+    #[test]
+    fn nftables_golden_assigned_cloud_engine_test() {
         golden_test(
-            Role::AssignedReplica(subnet_test_id(1)),
+            Role::AssignedReplica(SUBNET_ID),
             node_test_id(0),
-            NFTABLES_GOLDEN_BYTES,
-            "assigned_replica",
+            Some(NodeRewardType::Type4),
+            NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
+            "assigned_cloud_engine",
+        );
+    }
+
+    #[test]
+    fn nftables_unassigned_replica_golden_test() {
+        // For unassigned replicas, only Type4 (cloud engine) nodes have a different firewall
+        for reward_type in [
+            None,
+            Some(NodeRewardType::Unspecified),
+            Some(NodeRewardType::Type0),
+            Some(NodeRewardType::Type1),
+            Some(NodeRewardType::Type2),
+            Some(NodeRewardType::Type3),
+            Some(NodeRewardType::Type3dot1),
+            Some(NodeRewardType::Type1dot1),
+        ] {
+            golden_test(
+                Role::UnassignedReplica,
+                node_test_id(0),
+                reward_type,
+                NFTABLES_UNASSIGNED_REPLICA_GOLDEN_BYTES,
+                "unassigned_replica",
+            );
+        }
+    }
+
+    #[test]
+    fn nftables_golden_unassigned_cloud_engine_test() {
+        golden_test(
+            Role::UnassignedReplica,
+            node_test_id(0),
+            Some(NodeRewardType::Type4),
+            NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
+            "unassigned_cloud_engine",
         );
     }
 
@@ -968,12 +1033,26 @@ mod tests {
         let api_bn_id_for_system_subnet = node_test_id(0);
         assert!(api_bn_id_for_system_subnet < node_test_id(API_BOUNDARY_NODE_ID));
 
-        golden_test(
-            Role::BoundaryNode,
-            api_bn_id_for_system_subnet,
-            NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES,
-            "boundary_node",
-        );
+        // For boundary nodes, the node reward type has no effect on the firewall
+        for reward_type in [
+            None,
+            Some(NodeRewardType::Unspecified),
+            Some(NodeRewardType::Type0),
+            Some(NodeRewardType::Type1),
+            Some(NodeRewardType::Type2),
+            Some(NodeRewardType::Type3),
+            Some(NodeRewardType::Type3dot1),
+            Some(NodeRewardType::Type1dot1),
+            Some(NodeRewardType::Type4),
+        ] {
+            golden_test(
+                Role::BoundaryNode,
+                api_bn_id_for_system_subnet,
+                reward_type,
+                NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES,
+                "boundary_node_system_subnet",
+            );
+        }
     }
 
     #[test]
@@ -983,17 +1062,37 @@ mod tests {
         let api_bn_id_for_app_subnet = node_test_id(1234);
         assert!(api_bn_id_for_app_subnet > node_test_id(API_BOUNDARY_NODE_ID));
 
-        golden_test(
-            Role::BoundaryNode,
-            api_bn_id_for_app_subnet,
-            NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
-            "boundary_node",
-        );
+        // For boundary nodes, the node reward type has no effect on the firewall
+        for reward_type in [
+            None,
+            Some(NodeRewardType::Unspecified),
+            Some(NodeRewardType::Type0),
+            Some(NodeRewardType::Type1),
+            Some(NodeRewardType::Type2),
+            Some(NodeRewardType::Type3),
+            Some(NodeRewardType::Type3dot1),
+            Some(NodeRewardType::Type1dot1),
+            Some(NodeRewardType::Type4),
+        ] {
+            golden_test(
+                Role::BoundaryNode,
+                api_bn_id_for_app_subnet,
+                reward_type,
+                NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
+                "boundary_node_app_subnet",
+            );
+        }
     }
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
     /// golden output.
-    fn golden_test(role: Role, node_id: NodeId, golden_bytes: &[u8], label: &str) {
+    fn golden_test(
+        role: Role,
+        node_id: NodeId,
+        reward_type: Option<NodeRewardType>,
+        golden_bytes: &[u8],
+        label: &str,
+    ) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
@@ -1011,6 +1110,7 @@ mod tests {
             tmp_dir.path(),
             role,
             node_id,
+            reward_type,
         );
 
         firewall
@@ -1081,8 +1181,9 @@ mod tests {
         tmp_dir: &Path,
         role: Role,
         node_id: NodeId,
+        reward_type: Option<NodeRewardType>,
     ) -> Firewall {
-        let registry = set_up_registry(role, node_id);
+        let registry = set_up_registry(role, node_id, reward_type);
 
         let registry_helper = Arc::new(RegistryHelper::new(
             node_id,
@@ -1104,11 +1205,16 @@ mod tests {
     }
 
     /// Sets up the registry with:
-    /// 1) two node records - one for the specified node + another one,
-    /// 2) a bunch of firewall rules,
-    /// 3) a Subnet record,
+    /// 1) a few node records - one for the specified node + ones with different reward types,
+    /// 2) a few subnet records - one system subnet, one application subnet, one cloud engine,
+    ///    optionally one for the specified node if it's an assigned replica,
+    /// 3) a bunch of firewall rules,
     ///    and returns a registry client.
-    fn set_up_registry(role: Role, node: NodeId) -> Arc<FakeRegistryClient> {
+    fn set_up_registry(
+        role: Role,
+        node: NodeId,
+        reward_type: Option<NodeRewardType>,
+    ) -> Arc<FakeRegistryClient> {
         let registry_version = RegistryVersion::new(1);
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
@@ -1118,6 +1224,7 @@ mod tests {
             registry_version,
             node,
             /*ip=*/ "1.1.1.1",
+            reward_type,
         );
 
         // create a system subnet with one node
@@ -1127,6 +1234,7 @@ mod tests {
             registry_version,
             system_subnet_node_id,
             /*ip=*/ "a4c2:7f91:3db6:1e8c:5a4f:cc92:0b37:6e41",
+            Some(NodeRewardType::Type3),
         );
         let system_subnet_record = SubnetRecordBuilder::from(&[system_subnet_node_id])
             .with_subnet_type(SubnetType::System)
@@ -1139,23 +1247,67 @@ mod tests {
             system_subnet_record,
         );
 
-        // create an application subnet
-        let app_subnet_node_id = node_test_id(2002);
-        add_node_record(
-            &registry_data_provider,
-            registry_version,
-            app_subnet_node_id,
-            /*ip=*/ "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5",
-        );
-        let app_subnet_record = SubnetRecordBuilder::from(&[app_subnet_node_id])
-            .with_subnet_type(SubnetType::Application)
-            .build();
+        // create an application subnet with different node reward types
+        let app_subnet_nodes = [
+            (
+                node_test_id(2002),
+                "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5",
+                Some(NodeRewardType::Type3dot1),
+            ),
+            (
+                node_test_id(2003),
+                "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e6",
+                Some(NodeRewardType::Unspecified),
+            ),
+            (
+                node_test_id(2004),
+                "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e7",
+                None,
+            ),
+        ];
+        for (node_id, ip, node_reward_type) in app_subnet_nodes {
+            add_node_record(
+                &registry_data_provider,
+                registry_version,
+                node_id,
+                ip,
+                node_reward_type,
+            );
+        }
+        let app_subnet_record = SubnetRecordBuilder::from(
+            &app_subnet_nodes
+                .into_iter()
+                .map(|(node_id, _, _)| node_id)
+                .collect::<Vec<NodeId>>(),
+        )
+        .with_subnet_type(SubnetType::Application)
+        .build();
         let app_subnet_id = subnet_test_id(200);
         add_single_subnet_record(
             &registry_data_provider,
             registry_version.get(),
             app_subnet_id,
             app_subnet_record,
+        );
+
+        // create a cloud engine with one node
+        let cloud_engine_node_id = node_test_id(5005);
+        add_node_record(
+            &registry_data_provider,
+            registry_version,
+            cloud_engine_node_id,
+            /*ip=*/ "2001:0db8:85a3:0000:0000:8a2e:1370:7334",
+            Some(NodeRewardType::Type4),
+        );
+        let cloud_engine_record = SubnetRecordBuilder::from(&[cloud_engine_node_id])
+            .with_subnet_type(SubnetType::CloudEngine)
+            .build();
+        let cloud_engine_id = subnet_test_id(300);
+        add_single_subnet_record(
+            &registry_data_provider,
+            registry_version.get(),
+            cloud_engine_id,
+            cloud_engine_record,
         );
 
         // Add an API boundary node
@@ -1165,6 +1317,7 @@ mod tests {
             registry_version,
             api_boundary_node_id,
             /*ip=*/ "3.0.0.3",
+            Some(NodeRewardType::Type1dot1),
         );
         add_api_boundary_node_record(
             &registry_data_provider,
@@ -1172,20 +1325,31 @@ mod tests {
             api_boundary_node_id,
         );
 
-        // Add an unassigned node
-        let unassigned_node_id = node_test_id(4004);
-        add_node_record(
-            &registry_data_provider,
-            registry_version,
-            unassigned_node_id,
-            /*ip=*/ "4.0.0.4",
-        );
+        // Add unassigned nodes with different reward types
+        for (unassigned_node_id, ip, node_reward_type) in [
+            (node_test_id(4004), "4.0.0.4", Some(NodeRewardType::Type0)),
+            (node_test_id(4005), "4.0.0.5", Some(NodeRewardType::Type4)), // cloud engine
+            (
+                node_test_id(4006),
+                "4.0.0.6",
+                Some(NodeRewardType::Unspecified),
+            ),
+            (node_test_id(4007), "4.0.0.7", None),
+        ] {
+            add_node_record(
+                &registry_data_provider,
+                registry_version,
+                unassigned_node_id,
+                ip,
+                node_reward_type,
+            );
+        }
 
         // Add a bunch of firewall rules for different scopes.
         add_firewall_rules_record(
             &registry_data_provider,
             registry_version,
-            &FirewallRulesScope::Subnet(subnet_test_id(1)),
+            &FirewallRulesScope::Subnet(SUBNET_ID),
             /*ip=*/ "3.3.3.3",
             /*port=*/ 1003,
         );
@@ -1218,7 +1382,7 @@ mod tests {
             /*port=*/ 1007,
         );
 
-        let mut subnet_ids = vec![system_subnet_id, app_subnet_id];
+        let mut subnet_ids = vec![system_subnet_id, app_subnet_id, cloud_engine_id];
 
         match role {
             Role::AssignedReplica(subnet_id) => {
@@ -1232,15 +1396,7 @@ mod tests {
                 subnet_ids.push(subnet_id);
             }
             Role::BoundaryNode => {
-                registry_data_provider
-                    .add(
-                        &make_api_boundary_node_record_key(node),
-                        RegistryVersion::from(registry_version),
-                        Some(ApiBoundaryNodeRecord {
-                            version: String::from("11"),
-                        }),
-                    )
-                    .expect("Failed to add API BN record.");
+                add_api_boundary_node_record(&registry_data_provider, registry_version, node);
             }
             Role::UnassignedReplica => {}
         }
@@ -1262,6 +1418,7 @@ mod tests {
         registry_version: RegistryVersion,
         node: NodeId,
         ip: &str,
+        node_reward_type: Option<NodeRewardType>,
     ) {
         registry_data_provider
             .add(
@@ -1278,7 +1435,7 @@ mod tests {
                     hostos_version_id: None,
                     public_ipv4_config: None,
                     domain: None,
-                    node_reward_type: None,
+                    node_reward_type: node_reward_type.map(|reward_type| reward_type as i32),
                     ssh_node_state_write_access: vec![],
                 }),
             )
