@@ -118,16 +118,22 @@ impl LogMemoryStore {
     pub fn clear(&mut self) {
         if let Some(mut ring_buffer) = self.load_ring_buffer() {
             ring_buffer.clear();
-            self.maybe_page_map = Some(ring_buffer.to_page_map());
-            self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
+            self.save_ring_buffer(ring_buffer);
         } else {
             self.header_cache = OnceLock::new();
         }
     }
 
+    /// Update page_map, header_cache and start_idx.
+    fn save_ring_buffer(&mut self, ring_buffer: RingBuffer) {
+        self.maybe_page_map = Some(ring_buffer.to_page_map());
+        self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
+        self.start_idx = self.next_idx(); // Preserve current `next_idx`.
+    }
+
     /// Deallocates underlying memory.
     pub fn deallocate(&mut self) {
-        self.start_idx = self.next_idx();
+        self.start_idx = self.next_idx(); // Preserve current `next_idx`.
         self.maybe_page_map = None;
         self.header_cache = OnceLock::new();
     }
@@ -217,8 +223,7 @@ impl LogMemoryStore {
         }
 
         // Update of the state.
-        self.maybe_page_map = Some(new_buffer.to_page_map());
-        self.header_cache = OnceLock::from(Some(new_buffer.get_header()));
+        self.save_ring_buffer(new_buffer);
     }
 
     /// Returns the next log record `idx`.
@@ -267,8 +272,7 @@ impl LogMemoryStore {
         self.push_delta_log_size(delta_log.bytes_used());
         // Append the delta records and persist the ring buffer.
         ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
-        self.maybe_page_map = Some(ring_buffer.to_page_map());
-        self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
+        self.save_ring_buffer(ring_buffer);
     }
 
     /// Records the size of the appended delta log.

@@ -67,7 +67,7 @@ impl MockCanister {
         NumBytes::from(self.log_memory_store.memory_usage() as u64)
     }
 
-    /// TODO: add description
+    /// Returns the next expected log record index.
     fn next_idx(&self) -> u64 {
         self.log_memory_store.next_idx()
     }
