@@ -55,10 +55,7 @@ use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, Routin
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
-    canister_state::system_state::{
-        CyclesUseCase,
-        wasm_chunk_store::{self, ChunkValidationResult},
-    },
+    canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
         subnet_call_context_manager::InstallCodeCallId, testing::NetworkTopologyTesting,
     },
@@ -91,6 +88,7 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, UserId,
     batch::CanisterCyclesCostSchedule,
+    cycles_use_case::CyclesUseCase,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
     nominal_cycles::NominalCycles,
@@ -2170,7 +2168,7 @@ fn delete_canister_consumed_cycles_observed() {
             .get_consumed_cycles_by_use_case()
             .get(&CyclesUseCase::DeletedCanisters)
             .unwrap(),
-        NominalCycles::from(initial_cycles)
+        NominalCycles::from(initial_cycles.get())
     );
 }
 
@@ -5406,11 +5404,10 @@ fn upload_chunk_charges_canister_cycles() {
         chunk: vec![42; 10],
     }
     .encode();
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(canister_id),
     );
     let _hash = test
         .subnet_message("upload_chunk", payload.clone())
@@ -5451,11 +5448,10 @@ fn upload_chunk_charges_if_failing() {
     let canister_id = test.create_canister(CYCLES);
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(canister_id),
     );
     // Verify we are in the expected restricted state (1022 KiB available).
     assert_eq!(
