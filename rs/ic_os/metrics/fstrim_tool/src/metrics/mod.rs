@@ -89,15 +89,31 @@ impl FsTrimMetrics {
         success.set(if self.last_run_success { 1.0 } else { 0.0 });
         runs.inc_by(self.total_runs);
         duration_datadir.set(self.last_duration_milliseconds_datadir);
-        success_datadir.set(if self.last_run_success_datadir { 1.0 } else { 0.0 });
+        success_datadir.set(if self.last_run_success_datadir {
+            1.0
+        } else {
+            0.0
+        });
         runs_datadir.inc_by(self.total_runs_datadir);
 
-        registry.register(Box::new(duration)).expect("failed to register");
-        registry.register(Box::new(success)).expect("failed to register");
-        registry.register(Box::new(runs)).expect("failed to register");
-        registry.register(Box::new(duration_datadir)).expect("failed to register");
-        registry.register(Box::new(success_datadir)).expect("failed to register");
-        registry.register(Box::new(runs_datadir)).expect("failed to register");
+        registry
+            .register(Box::new(duration))
+            .expect("failed to register");
+        registry
+            .register(Box::new(success))
+            .expect("failed to register");
+        registry
+            .register(Box::new(runs))
+            .expect("failed to register");
+        registry
+            .register(Box::new(duration_datadir))
+            .expect("failed to register");
+        registry
+            .register(Box::new(success_datadir))
+            .expect("failed to register");
+        registry
+            .register(Box::new(runs_datadir))
+            .expect("failed to register");
 
         let mut buf = Vec::new();
         TextEncoder::new()

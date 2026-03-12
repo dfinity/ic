@@ -30,7 +30,6 @@ struct Counter {
     bytes: u32,
 }
 
-
 fn get_nft_json_ruleset() -> Result<Value, Error> {
     let mut cmd = Command::new("nft");
     cmd.args(["--json", "list", "ruleset"]);
