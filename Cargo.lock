@@ -9580,6 +9580,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-sys",
  "predicates",
+ "prometheus",
  "rand 0.8.5",
  "regex",
  "tempfile",
@@ -18058,6 +18059,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "prometheus",
  "serde",
  "serde_json",
 ]

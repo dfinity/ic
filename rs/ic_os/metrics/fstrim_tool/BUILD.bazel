@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/sys",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:prometheus",
 ]
 
 DEV_DEPENDENCIES = [

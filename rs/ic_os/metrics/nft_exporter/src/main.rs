@@ -1,9 +1,10 @@
 use anyhow::{Context, Error};
 use clap::Parser;
+use prometheus::{Encoder, IntCounter, Registry, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -29,16 +30,6 @@ struct Counter {
     bytes: u32,
 }
 
-impl Counter {
-    fn to_metric_str(&self) -> String {
-        format!(
-            "# HELP {} Total number of packets the corresponding rule has been applied to.\n\
-             # TYPE {} counter\n\
-             {} {:?}",
-            self.name, self.name, self.name, self.packets,
-        )
-    }
-}
 
 fn get_nft_json_ruleset() -> Result<Value, Error> {
     let mut cmd = Command::new("nft");
@@ -73,23 +64,30 @@ fn get_counters(json_nft_ruleset: &Value) -> Result<Vec<Counter>, Error> {
 fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
-    // Get the current nft ruleset in JSON format
     let json_ruleset = get_nft_json_ruleset().context("Failed to get JSON ruleset")?;
-
-    // Extract the counters from the JSON ruleset
     let counters = get_counters(&json_ruleset).context("Failed to get the counters")?;
 
-    // Turn the counters into prometheus metrics and write it to a file
-    let mut metrics = Vec::new();
-    for counter in counters {
-        metrics.push(counter.to_metric_str());
+    let registry = Registry::new();
+    for counter in &counters {
+        let prom_counter = IntCounter::new(
+            &counter.name,
+            "Total number of packets the corresponding rule has been applied to.",
+        )
+        .with_context(|| format!("Failed to create counter for '{}'", counter.name))?;
+        prom_counter.inc_by(counter.packets as u64);
+        registry
+            .register(Box::new(prom_counter))
+            .with_context(|| format!("Failed to register counter for '{}'", counter.name))?;
     }
 
-    let mut metrics_str = metrics.join("\n");
-    metrics_str.push('\n');
-
-    let mut file = File::create(cli.metrics_file)?;
-    file.write_all(metrics_str.as_bytes())?;
+    let mut file = BufWriter::new(
+        File::create(&cli.metrics_file)
+            .with_context(|| format!("Failed to create {}", cli.metrics_file.display()))?,
+    );
+    TextEncoder::new()
+        .encode(&registry.gather(), &mut file)
+        .context("Failed to encode metrics")?;
+    file.flush().context("Failed to flush metrics file")?;
 
     Ok(())
 }

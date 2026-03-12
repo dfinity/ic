@@ -288,16 +288,8 @@ fn format_metrics_output() {
     };
 
     let metrics_str = metrics.to_p8s_metrics_string();
+    // prometheus sorts metric families alphabetically, so datadir_* precedes last_* precedes runs_*
     let expected_str = "\
-# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
-# TYPE fstrim_last_run_duration_milliseconds gauge
-fstrim_last_run_duration_milliseconds 123.45
-# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
-# TYPE fstrim_last_run_success gauge
-fstrim_last_run_success 1
-# HELP fstrim_runs_total Total number of runs of fstrim
-# TYPE fstrim_runs_total counter
-fstrim_runs_total 6
 # HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
 # TYPE fstrim_datadir_last_run_duration_milliseconds gauge
 fstrim_datadir_last_run_duration_milliseconds 678.9
@@ -307,6 +299,15 @@ fstrim_datadir_last_run_success 0
 # HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
 # TYPE fstrim_datadir_runs_total counter
 fstrim_datadir_runs_total 4
+# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 123.45
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 6
 ";
 
     assert_eq!(metrics_str, expected_str);
