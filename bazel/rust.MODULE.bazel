@@ -1897,7 +1897,7 @@ crate.spec(
 )
 crate.spec(
     package = "wat",
-    version = "^1.244.0",
+    version = "~1.244.0",
 )
 crate.spec(
     package = "which",
