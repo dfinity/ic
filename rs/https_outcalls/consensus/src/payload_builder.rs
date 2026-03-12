@@ -592,20 +592,19 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
                 ),
             )?;
-            let (flex_committee, min_responses, max_responses) = match &context.replication {
-                Replication::Flexible {
-                    committee,
-                    min_responses,
-                    max_responses,
-                } => (committee, *min_responses, *max_responses),
-                _ => {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
-                    );
-                }
+            let Replication::Flexible {
+                committee: flex_committee,
+                min_responses,
+                max_responses,
+            } = &context.replication
+            else {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::InvalidPayloadSection(
+                    callback_id,
+                ));
             };
 
             // Check response count is within [min_responses, max_responses]
+            let (min_responses, max_responses) = (*min_responses, *max_responses);
             let count = group.responses.len();
             if count < min_responses as usize || count > max_responses as usize {
                 return invalid_artifact(
