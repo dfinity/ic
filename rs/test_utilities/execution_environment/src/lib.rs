@@ -51,7 +51,6 @@ use ic_replicated_state::{
     PageIndex, ReplicatedState, SubnetTopology,
     canister_state::{
         NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
-        system_state::CyclesUseCase,
     },
     metadata_state::testing::NetworkTopologyTesting,
     page_map::{
@@ -66,6 +65,7 @@ use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::SignedIngressContent;
 use ic_types::{
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
@@ -1566,7 +1566,10 @@ impl ExecutionTest {
         if instructions_used.get() != 0 {
             let expected_cycles_balance_change =
                 self.expected_cycles_balance_change(message, instructions_used);
-            assert_eq!(cycles_used, expected_cycles_balance_change.into());
+            assert_eq!(
+                cycles_used,
+                NominalCycles::from(expected_cycles_balance_change.get())
+            );
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
                 NumInstructions::new(0),
@@ -1576,7 +1579,9 @@ impl ExecutionTest {
             );
             // the base cost could still be charged in some cases even if no instructions
             // were used (e.g., depending on how early validation fails)
-            assert!(cycles_used.get() == 0 || cycles_used == baseline_cost.into());
+            assert!(
+                cycles_used.get() == 0 || cycles_used == NominalCycles::from(baseline_cost.get())
+            );
         }
     }
 
