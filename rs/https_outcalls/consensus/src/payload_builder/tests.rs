@@ -1822,6 +1822,23 @@ fn flexible_build_caps_at_max_responses() {
 }
 
 #[test]
+fn flexible_build_with_zero_min_and_max_responses() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 0, 0, |pb, pool| {
+        add_flexible_shares_to_pool(&pool, callback_id, 0..num_nodes as u64);
+        let parsed = build_and_parse_payload(&pb);
+
+        assert_eq!(parsed.flexible_responses.len(), 1);
+        let group = &parsed.flexible_responses[0];
+        assert_eq!(group.callback_id, callback_id);
+        assert!(group.responses.is_empty());
+    });
+}
+
+#[test]
 fn flexible_build_mixed_with_regular_responses() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();

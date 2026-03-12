@@ -237,8 +237,11 @@ pub(crate) fn find_flexible_responses(
     let mut flexible_responses_size = size_of::<CallbackId>();
     let mut signers = BTreeSet::new();
 
-    for (metadata, shares) in grouped_shares {
+    'outer: for (metadata, shares) in grouped_shares {
         for share in shares {
+            if flexible_responses.len() >= max_responses as usize {
+                break 'outer;
+            }
             if !committee.contains(&share.signature.signer)
                 || !signers.insert(share.signature.signer)
             {
@@ -261,12 +264,6 @@ pub(crate) fn find_flexible_responses(
                 flexible_responses_size += response_size;
                 flexible_responses.push(response);
             }
-            if flexible_responses.len() >= max_responses as usize {
-                break;
-            }
-        }
-        if flexible_responses.len() >= max_responses as usize {
-            break;
         }
     }
 
