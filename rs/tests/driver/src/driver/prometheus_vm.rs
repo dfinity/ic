@@ -409,27 +409,27 @@ impl HasPrometheus for TestEnv {
         };
 
         // Sync the local registry store with the NNS to pick up topology
-        // changes (e.g. newly added subnets/nodes via ic-admin).
-        if let Some(prep_dir) = self.prep_dir("") {
-            let local_store_path = prep_dir.registry_local_store_path();
-            match LocalRegistry::new(local_store_path, Duration::from_secs(5)) {
-                Ok(local_registry) => {
-                    if let Err(e) = block_on(local_registry.sync_with_nns()) {
-                        warn!(
-                            self.logger(),
-                            "Failed to sync local registry with NNS: {e:?}. Using cached topology."
-                        );
-                    }
-                }
-                Err(e) => {
+        let prep_dir = self
+            .prep_dir("")
+            .ok_or_else(|| anyhow!("No no-name Internet Computer"))?;
+        let local_store_path = prep_dir.registry_local_store_path();
+        match LocalRegistry::new(local_store_path, Duration::from_secs(5)) {
+            Ok(local_registry) => {
+                if let Err(e) = block_on(local_registry.sync_with_nns()) {
                     warn!(
                         self.logger(),
-                        "Failed to create local registry for NNS sync: {e:?}. Using cached topology."
+                        "Failed to sync local registry with NNS: {e:?}. Using cached topology."
                     );
                 }
             }
+            Err(e) => {
+                warn!(
+                    self.logger(),
+                    "Failed to create local registry for NNS sync: {e:?}. Using cached topology."
+                );
+            }
         }
-
+        
         let topology_snapshot = self.safe_topology_snapshot()?;
 
         sync_prometheus_config_dir(
