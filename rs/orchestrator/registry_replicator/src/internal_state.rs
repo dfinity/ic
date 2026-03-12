@@ -369,6 +369,8 @@ impl InternalState {
         version: RegistryVersion,
     ) -> Result<NodeRewardType, String> {
         match self.registry_client.get_node_record(node_id, version) {
+            // node_reward_type() defaults to `Unspecified` if the field is unset or set to an
+            // invalid enum value
             Ok(Some(record)) => Ok(record.node_reward_type()),
             Ok(None) => Err(format!(
                 "Node record for node id {node_id} not found at version {version}",
