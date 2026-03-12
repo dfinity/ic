@@ -40,7 +40,7 @@ impl AlgorithmVersion for RewardsCalculationV1 {
 }
 
 impl RewardsCalculationV1 {
-    pub fn calculate_rewards(
+    pub async fn calculate_rewards(
         from_date: NaiveDate,
         to_date: NaiveDate,
         input_provider: impl PerformanceBasedAlgorithmInputProvider,
@@ -50,6 +50,7 @@ impl RewardsCalculationV1 {
             to_date,
             input_provider,
         )
+        .await
     }
 }
 

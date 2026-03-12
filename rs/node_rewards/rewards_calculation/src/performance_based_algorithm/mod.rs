@@ -73,6 +73,7 @@ struct AdjustedRewardsResults {
     adjusted_rewards: BTreeMap<NodeId, Decimal>,
 }
 
+#[allow(async_fn_in_trait)]
 pub trait PerformanceBasedAlgorithmInputProvider {
     fn get_rewards_table(&self, date: &NaiveDate) -> Result<NodeRewardsTable, String>;
 
@@ -81,7 +82,7 @@ pub trait PerformanceBasedAlgorithmInputProvider {
         date: &NaiveDate,
     ) -> Result<BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>, String>;
 
-    fn get_rewardable_nodes(
+    async fn get_rewardable_nodes(
         &self,
         date: &NaiveDate,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
@@ -105,7 +106,7 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The maximum rewards reduction for a node.
     const MAX_REWARDS_REDUCTION: Decimal;
 
-    fn calculate_rewards(
+    async fn calculate_rewards(
         from_date: NaiveDate,
         to_date: NaiveDate,
         input_provider: impl PerformanceBasedAlgorithmInputProvider,
@@ -120,7 +121,7 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
         // Process each day in the reward period
         for day in reward_period {
-            let result_for_day = Self::calculate_daily_rewards(&input_provider, &day)?;
+            let result_for_day = Self::calculate_daily_rewards(&input_provider, &day).await?;
 
             // Accumulate total rewards per provider across all days
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
@@ -141,13 +142,13 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
         })
     }
 
-    fn calculate_daily_rewards(
+    async fn calculate_daily_rewards(
         data_provider: &impl PerformanceBasedAlgorithmInputProvider,
         date: &NaiveDate,
     ) -> Result<DailyResults, String> {
         let rewards_table = data_provider.get_rewards_table(date)?;
         let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(date)?;
-        let providers_rewardable_nodes = data_provider.get_rewardable_nodes(date)?;
+        let providers_rewardable_nodes = data_provider.get_rewardable_nodes(date).await?;
         let mut results_per_provider = BTreeMap::new();
 
         // Calculate failure rates for subnets and individual nodes

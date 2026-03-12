@@ -1,8 +1,7 @@
-use ic_cdk::api::in_replicated_execution;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::registry::RegistryCanister;
-use ic_nervous_system_timer_task::{RecurringSyncTask, TimerTaskMetricsRegistry};
+use ic_nervous_system_timer_task::TimerTaskMetricsRegistry;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::{
@@ -20,6 +19,9 @@ use ic_node_rewards_canister_api::provider_rewards_calculation::{
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
+};
+use ic_node_rewards_canister_api::rewardable_nodes::{
+    GetRewardableNodesRequest, GetRewardableNodesResponse,
 };
 use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
@@ -60,7 +62,7 @@ fn post_upgrade() {
 
 pub fn schedule_timers() {
     HourlySyncTask::new(&CANISTER).schedule();
-    GetNodeProvidersRewardsInstructionsExporter::new(&CANISTER).schedule(&METRICS_REGISTRY);
+    GetNodeProvidersRewardsInstructionsExporter::new(&CANISTER).schedule();
 }
 
 fn panic_if_caller_not_governance() {
@@ -84,25 +86,25 @@ async fn get_node_providers_monthly_xdr_rewards(
 }
 
 #[update]
-fn get_node_providers_rewards(
+async fn get_node_providers_rewards(
     request: GetNodeProvidersRewardsRequest,
 ) -> GetNodeProvidersRewardsResponse {
     panic_if_caller_not_governance();
-    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request)
+    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
+}
+
+#[update]
+async fn get_node_providers_rewards_calculation(
+    request: GetNodeProvidersRewardsCalculationRequest,
+) -> GetNodeProvidersRewardsCalculationResponse {
+    NodeRewardsCanister::get_node_providers_rewards_calculation(&CANISTER, request).await
 }
 
 #[query]
-fn get_node_providers_rewards_calculation(
-    request: GetNodeProvidersRewardsCalculationRequest,
-) -> GetNodeProvidersRewardsCalculationResponse {
-    if in_replicated_execution() {
-        return Err(
-            "Replicated execution of this method is not allowed. Use a non-replicated query call."
-                .to_string(),
-        );
-    }
-
-    NodeRewardsCanister::get_node_providers_rewards_calculation(&CANISTER, request)
+fn get_rewardable_nodes(
+    request: GetRewardableNodesRequest,
+) -> GetRewardableNodesResponse {
+    NodeRewardsCanister::get_rewardable_nodes(&CANISTER, request)
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {

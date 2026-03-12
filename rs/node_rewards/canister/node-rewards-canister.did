@@ -106,10 +106,30 @@ type NodeProvidersMonthlyXdrRewards = record {
     registry_version: opt nat64;
 };
 
+// get_rewardable_nodes
+
+type RewardableNodeApi = record {
+  node_id: opt principal;
+  region: opt text;
+  node_reward_type: opt int32;
+  dc_id: opt text;
+};
+
+type RewardableNodesResult = record {
+  rewardable_nodes: vec record { principal; vec RewardableNodeApi };
+};
+
+type GetRewardableNodesRequest = record {
+  day: DateUtc;
+};
+
+type GetRewardableNodesResponse = variant { Ok: RewardableNodesResult; Err: text };
+
 service: () -> {
     get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
         GetNodeProvidersMonthlyXdrRewardsResponse
     );
     get_node_providers_rewards: (GetNodeProvidersRewardsRequest) -> (GetNodeProvidersRewardsResponse);
-    get_node_providers_rewards_calculation: (GetNodeProvidersRewardsCalculationRequest) -> (GetNodeProvidersRewardsCalculationResponse) query;
+    get_node_providers_rewards_calculation: (GetNodeProvidersRewardsCalculationRequest) -> (GetNodeProvidersRewardsCalculationResponse);
+    get_rewardable_nodes: (GetRewardableNodesRequest) -> (GetRewardableNodesResponse) query;
 }

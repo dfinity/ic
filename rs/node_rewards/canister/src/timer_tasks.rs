@@ -7,7 +7,7 @@ use futures::FutureExt;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::futures::spawn;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nervous_system_timer_task::{RecurringSyncTask, set_timer};
+use ic_nervous_system_timer_task::set_timer;
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::providers_rewards::GetNodeProvidersRewardsRequest;
 use std::cell::RefCell;
@@ -147,11 +147,10 @@ impl GetNodeProvidersRewardsInstructionsExporter {
         Duration::from_secs(next_sync_target_secs - now_secs)
     }
 }
-impl RecurringSyncTask for GetNodeProvidersRewardsInstructionsExporter {
-    fn execute(self) -> (Duration, Self) {
-        // Yesterday
+#[async_trait(?Send)]
+impl RecurringAsyncTaskNonSend for GetNodeProvidersRewardsInstructionsExporter {
+    async fn execute(self) -> (Duration, Self) {
         let to_day = yesterday().pred_opt().unwrap();
-        // Yesterday - 35 days
         let from_day = to_day.checked_sub_days(Days::new(35)).unwrap();
 
         let request = GetNodeProvidersRewardsRequest {
@@ -161,7 +160,9 @@ impl RecurringSyncTask for GetNodeProvidersRewardsInstructionsExporter {
         };
 
         let instruction_counter = telemetry::InstructionCounter::default();
-        if let Err(e) = NodeRewardsCanister::get_node_providers_rewards(self.canister, request) {
+        if let Err(e) =
+            NodeRewardsCanister::get_node_providers_rewards(self.canister, request).await
+        {
             ic_cdk::println!("Failed to get node providers rewards: {:?}", e);
         }
 
