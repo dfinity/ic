@@ -35,7 +35,7 @@ use ic_ledger_suite_state_machine_tests_constants::{
 use ic_management_canister_types_private::{self as ic00};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, WasmResult};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;

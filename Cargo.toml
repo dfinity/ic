@@ -511,6 +511,7 @@ members = [
     "rs/tree_deserializer",
     "rs/types/base_types",
     "rs/types/base_types/protobuf_generator",
+    "rs/types/cycles",
     "rs/types/exhaustive_derive",
     "rs/types/management_canister_types",
     "rs/types/types",

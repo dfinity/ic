@@ -49,9 +49,10 @@ use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
 use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
-    CanisterId, Cycles, PrincipalId,
+    CanisterId, PrincipalId,
     messages::{HttpCallContent, HttpQueryContent, HttpReadStateContent},
 };
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{

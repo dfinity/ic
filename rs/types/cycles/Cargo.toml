@@ -1,0 +1,17 @@
+[package]
+name = "ic-types-cycles"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
+ic-protobuf = { path = "../../protobuf" }
+candid = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+thousands = "0.2.0"

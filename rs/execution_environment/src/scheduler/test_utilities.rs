@@ -52,7 +52,7 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
+    CanisterTimer, ComputeAllocation, ExecutionRound, MemoryAllocation, NumInstructions,
     Randomness, ReplicaVersion, Time, UserId,
     batch::{AvailablePreSignatures, CanisterCyclesCostSchedule, ChainKeyData},
     consensus::idkg::IDkgMasterPublicKeyId,
@@ -63,6 +63,7 @@ use ic_types::{
     },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use std::{collections::BTreeSet, time::Duration};

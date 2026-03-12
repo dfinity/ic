@@ -16,6 +16,7 @@ rust_library(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:prometheus",

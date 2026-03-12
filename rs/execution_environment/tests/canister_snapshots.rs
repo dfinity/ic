@@ -16,7 +16,8 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
 };
-use ic_types::{CanisterId, Cycles};
+use ic_types::CanisterId;
+use ic_types_cycles::Cycles;
 
 // Asserts that two snapshots are equal modulo their source, timestamp, and canister version (transient values).
 fn assert_snapshot_eq(

@@ -16,11 +16,12 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, SnapshotId, SubnetId,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    SnapshotId, SubnetId,
     ingress::IngressStatus,
     messages::{CanisterCall, MessageId, RejectContext},
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::{AsErrorHelp, CanisterModule, ErrorHelp, WasmHash, doc_ref};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;

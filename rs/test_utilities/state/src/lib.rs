@@ -31,19 +31,17 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
-    SubnetId, Time,
+    CanisterId, ComputeAllocation, MemoryAllocation, NodeId, NumBytes, PrincipalId, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, RawQueryStats},
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
     methods::{Callback, WasmClosure},
-    nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
 use std::{

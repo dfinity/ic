@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "//rs/sys",
     "//rs/tree_deserializer",
     "//rs/types/base_types",
+    "//rs/types/cycles",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",

@@ -9,12 +9,10 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{
     binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
 };
-use ic_types::cycles_use_case::CyclesUseCase;
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes,
-    NumInstructions, Time,
+    Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes, NumInstructions, Time,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use prometheus::{Gauge, GaugeVec, Histogram, HistogramVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
 use std::time::Duration;
