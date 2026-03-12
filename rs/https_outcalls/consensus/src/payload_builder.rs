@@ -222,11 +222,13 @@ impl CanisterHttpPayloadBuilderImpl {
         {
             let pool_access = self.pool.read().unwrap();
 
+            // Get share candidates to include in the block
             let share_candidates = pool_access
                 .get_validated_shares()
                 .inspect(|_| {
                     total_share_count += 1;
                 })
+                // Filter out shares that are timed out or have the wrong registry versions
                 .filter(|&response| {
                     utils::check_share_against_context(
                         consensus_registry_version,
@@ -237,8 +239,12 @@ impl CanisterHttpPayloadBuilderImpl {
                 .inspect(|_| {
                     active_shares += 1;
                 })
+                // Filter out shares for responses to requests that already have
+                // responses in the block chain up to the point we are creating a
+                // new payload.
                 .filter(|&response| !delivered_ids.contains(&response.content.id));
 
+            // Group the shares by their metadata
             let shares_by_callback_id = group_shares_by_callback_id(share_candidates);
 
             self.metrics.total_shares.set(total_share_count);
