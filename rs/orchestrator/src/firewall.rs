@@ -235,18 +235,24 @@ impl Firewall {
         let node_whitelist_ips = registry_versions
             .into_iter()
             .flat_map(|registry_version| {
-                // For all nodes at the current version...
-                self
+                // Fetch all node IDs in the registry at this version.
+                let all_node_ids = match self
                     .registry
-                    .get_node_ids(registry_version)
-                    .inspect_err(|err| {
-                        warn!(
-                            every_n_seconds => 30,
-                            self.logger,
-                            "Failed to get all node IDs in the registry: {}", err
-                        )
-                    })
-                    .unwrap_or_default()
+                    .get_node_ids(registry_version) {
+                        Ok(node_ids) => node_ids,
+                        Err(err) => {
+                            warn!(
+                                every_n_seconds => 30,
+                                self.logger,
+                                "Failed to get all node IDs in the registry: {}", err
+                            );
+                            return BTreeSet::new();
+                        }
+                    };
+
+                // For each of them, check their node reward type and only include the ones with
+                // whitelisted node reward types, then get their IP addresses to be whitelisted.
+                all_node_ids
                     .into_iter()
                     .filter_map(|other_node_id| {
                         let other_node_record = self
@@ -260,24 +266,21 @@ impl Firewall {
                                 )
                             }).ok()??;
 
-                        // ... do not include it if its node reward type is not in the list of
-                        // whitelisted node types determined above
                         if !whitelisted_node_types.contains(&other_node_record.node_reward_type()) {
                             return None;
                         }
 
-                        // ... otherwise, include its IP addresses in the whitelist (both xnet and
-                        // http if they exist)
-                        let mut addrs = Vec::new();
-                        if let Some(xnet_record) = other_node_record.xnet && let Ok(ip_addr) = xnet_record.ip_addr.parse::<IpAddr>() {
-                            addrs.push(ip_addr)
+                        let mut endpoints = Vec::new();
+                        if let Some(xnet_record) = other_node_record.xnet {
+                            endpoints.push(xnet_record)
                         };
-                        if let Some(http_record) = other_node_record.http && let Ok(ip_addr) = http_record.ip_addr.parse::<IpAddr>() {
-                            addrs.push(ip_addr)
+                        if let Some(http_record) = other_node_record.http {
+                            endpoints.push(http_record)
                         };
-                        Some(addrs)
+                        Some(endpoints)
                     })
                     .flatten()
+                    .filter_map(|connection_endpoint| connection_endpoint.ip_addr.parse::<IpAddr>().ok())
                     .collect::<BTreeSet<IpAddr>>()
             })
             .collect::<BTreeSet<IpAddr>>();
