@@ -2801,7 +2801,7 @@ impl ExecutionEnvironment {
             round_limits,
         ) {
             Ok((result, num_instructions)) => (Ok(Encode!(&result).unwrap()), num_instructions),
-            Err(err) => (Err(UserError::from(err)), NumInstructions::new(0)),
+            Err(err) => (Err(err), NumInstructions::new(0)),
         };
 
         // Put canister back.
@@ -2872,7 +2872,7 @@ impl ExecutionEnvironment {
             .read_snapshot_metadata(sender, snapshot_id, canister, state)
         {
             Ok(response) => (Ok(Encode!(&response).unwrap()), NumInstructions::new(0)),
-            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
+            Err(e) => (Err(e), NumInstructions::new(0)),
         }
     }
 

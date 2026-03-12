@@ -232,8 +232,6 @@ impl CanisterManager {
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::LoadCanisterSnapshot)
             | Ok(Ic00Method::DeleteCanisterSnapshot)
-            | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
-            | Ok(Ic00Method::ReadCanisterSnapshotData)
             | Ok(Ic00Method::UploadCanisterSnapshotMetadata)
             | Ok(Ic00Method::UploadCanisterSnapshotData) => {
                 match effective_canister_id {
@@ -259,14 +257,16 @@ impl CanisterManager {
                 }
             },
 
-            Ok(Ic00Method::ListCanisterSnapshots) => {
+            Ok(Ic00Method::ListCanisterSnapshots)
+            | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
+            | Ok(Ic00Method::ReadCanisterSnapshotData) => {
                 match effective_canister_id {
                     Some(canister_id) => {
                         let canister_state = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
                             ErrorCode::CanisterNotFound,
                             format!("Canister {canister_id} not found"),
                         ))?;
-                        validate_snapshot_visibility(canister_state, &sender.get(), "list canister snapshots")?;
+                        validate_snapshot_visibility(canister_state, &sender.get(), method_name)?;
                         Ok(())
                     },
                     None => Err(UserError::new(
@@ -2634,10 +2634,11 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         canister: &CanisterState,
         state: &ReplicatedState,
-    ) -> Result<ReadCanisterSnapshotMetadataResponse, CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
-        let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
+    ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
+        validate_snapshot_visibility(canister, &sender, "read canister snapshot metadata")?;
+        let snapshot = self
+            .get_snapshot(canister.canister_id(), snapshot_id, state)
+            .map_err(UserError::from)?;
         // A snapshot also contains the instruction counter as the last global
         // (because it is *appended* during WASM instrumentation).
         // We pop that last global (which is merely an implementation detail)
@@ -2682,13 +2683,14 @@ impl CanisterManager {
         state: &ReplicatedState,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
-    ) -> Result<(ReadCanisterSnapshotDataResponse, NumInstructions), CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
-        let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
+    ) -> Result<(ReadCanisterSnapshotDataResponse, NumInstructions), UserError> {
+        validate_snapshot_visibility(canister, &sender, "read_canister_snapshot_data")?;
+        let snapshot = self
+            .get_snapshot(canister.canister_id(), snapshot_id, state)
+            .map_err(UserError::from)?;
 
         // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
-        let num_response_bytes = get_response_size(&kind)?;
+        let num_response_bytes = get_response_size(&kind).map_err(UserError::from)?;
         let num_instructions = self
             .config
             .canister_snapshot_data_baseline_instructions
@@ -2703,10 +2705,12 @@ impl CanisterManager {
                 state.get_own_cost_schedule(),
             )
         {
-            return Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err));
+            return Err(UserError::from(
+                CanisterManagerError::CanisterSnapshotNotEnoughCycles(err),
+            ));
         };
         round_limits.instructions -= as_round_instructions(num_instructions);
-        let res = match kind {
+        let res: Result<Vec<u8>, CanisterManagerError> = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
                 let stable_memory = snapshot.execution_snapshot().stable_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(stable_memory, offset, size) {
@@ -2729,20 +2733,21 @@ impl CanisterManager {
             }
             CanisterSnapshotDataKind::WasmChunk { hash } => {
                 let Ok(hash) = <WasmChunkHash>::try_from(hash.clone()) else {
-                    return Err(CanisterManagerError::WasmChunkStoreError {
+                    return Err(UserError::from(CanisterManagerError::WasmChunkStoreError {
                         message: format!("Bytes {hash:02x?} are not a valid WasmChunkHash."),
-                    });
+                    }));
                 };
                 let Some(chunk) = snapshot.chunk_store().get_chunk_complete(&hash) else {
-                    return Err(CanisterManagerError::WasmChunkStoreError {
+                    return Err(UserError::from(CanisterManagerError::WasmChunkStoreError {
                         message: format!("WasmChunkHash {hash:02x?} not found."),
-                    });
+                    }));
                 };
                 Ok(chunk)
             }
         };
 
         res.map(|x| (ReadCanisterSnapshotDataResponse::new(x), num_instructions))
+            .map_err(UserError::from)
     }
 
     /// Creates a new snapshot based on the provided metadata and returns the new snapshot ID.

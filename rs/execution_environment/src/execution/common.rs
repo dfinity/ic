@@ -358,14 +358,14 @@ pub(crate) fn validate_controller(
 pub(crate) fn validate_snapshot_visibility(
     canister: &CanisterState,
     caller: &PrincipalId,
-    err_msg: &str,
+    method_name: &str,
 ) -> Result<(), UserError> {
     if !crate::canister_settings::VisibilitySettings::from(canister.snapshot_visibility())
         .has_access(caller, canister.controllers())
     {
         return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!("Caller {caller} is not allowed to {err_msg}"),
+            format!("Caller {caller} is not allowed to call {method_name}"),
         ));
     }
     Ok(())

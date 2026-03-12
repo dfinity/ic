@@ -3916,6 +3916,14 @@ impl StateMachine {
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
         let sender = self.get_controller(&args.get_canister_id());
+        self.read_canister_snapshot_metadata_as(args, sender)
+    }
+
+    pub fn read_canister_snapshot_metadata_as(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+        sender: PrincipalId,
+    ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3935,6 +3943,14 @@ impl StateMachine {
         args: &ReadCanisterSnapshotDataArgs,
     ) -> Result<ReadCanisterSnapshotDataResponse, UserError> {
         let sender = self.get_controller(&args.get_canister_id());
+        self.read_canister_snapshot_data_as(args, sender)
+    }
+
+    pub fn read_canister_snapshot_data_as(
+        &self,
+        args: &ReadCanisterSnapshotDataArgs,
+        sender: PrincipalId,
+    ) -> Result<ReadCanisterSnapshotDataResponse, UserError> {
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
