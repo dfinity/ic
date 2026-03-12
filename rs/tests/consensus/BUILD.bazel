@@ -136,6 +136,9 @@ system_test(
 
 system_test_nns(
     name = "max_ingress_payload_size_test",
+    tags = [
+        "colocate",
+    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -157,6 +160,9 @@ system_test_nns(
 
 system_test(
     name = "max_xnet_payload_size_test",
+    tags = [
+        "colocate",
+    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

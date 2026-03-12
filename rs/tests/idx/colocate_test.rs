@@ -132,6 +132,10 @@ fn setup(env: TestEnv) {
         .block_on_ssh_session()
         .unwrap_or_else(|e| panic!("Failed to setup SSH session to {UVM_NAME} because: {e}"));
 
+    // Set a timeout so blocking SSH operations fail instead of hanging
+    // indefinitely during network splits.
+    session.set_timeout(60_000);
+
     scp_send_to(
         log.clone(),
         &session,

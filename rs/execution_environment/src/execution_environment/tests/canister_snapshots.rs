@@ -18,8 +18,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionState, SchedulerState,
     canister_state::{
-        WASM_PAGE_SIZE_IN_BYTES,
-        execution_state::{WasmBinary, WasmExecutionMode},
+        WASM_PAGE_SIZE_IN_BYTES, execution_state::WasmBinary,
         system_state::wasm_chunk_store::CHUNK_SIZE,
     },
     metadata_state::UnflushedCheckpointOp,
@@ -41,8 +40,6 @@ use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
 use std::borrow::Borrow;
-
-const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
 fn take_canister_snapshot_decode_round_trip() {
@@ -581,7 +578,7 @@ fn canister_snapshot_reserves_cycles_difference() {
 
 #[test]
 fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_snapshot() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
     const CAPACITY: u64 = 500 * MIB;
     const THRESHOLD: u64 = CAPACITY / 2;
 
@@ -692,7 +689,7 @@ fn take_canister_snapshot_does_not_reduce_subnet_available_memory_when_failing_t
 
 #[test]
 fn take_canister_snapshot_increases_heap_delta() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
     const CAPACITY: u64 = 1_000_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
 
@@ -732,7 +729,7 @@ fn take_canister_snapshot_increases_heap_delta() {
 
 #[test]
 fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
@@ -1332,7 +1329,7 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
 
 #[test]
 fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
@@ -1703,11 +1700,10 @@ fn take_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Take a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        WASM_EXECUTION_MODE,
     );
 
     // Take a snapshot for the canister.
@@ -1767,11 +1763,10 @@ fn load_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Load a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        WASM_EXECUTION_MODE,
     );
 
     // Load an existing snapshot will decrease the balance.
