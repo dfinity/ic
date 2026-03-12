@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, HashMap};
 pub type RetryCount = u64;
 
 #[async_trait]
-pub trait ManagementCanisterClient {
+pub trait ManagementCanisterClient: Send + Sync {
     async fn node_metrics_history(
         &self,
         args: &NodeMetricsHistoryArgs,
@@ -46,6 +46,12 @@ where
         RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
     pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
 }
+
+// SAFETY: IC canisters run in a single-threaded executor. The Send + Sync bounds
+// are required by RecurringAsyncTask (via #[async_trait]) but no actual
+// multi-threaded access occurs at runtime.
+unsafe impl<Memory: ic_stable_structures::Memory> Send for MetricsManager<Memory> {}
+unsafe impl<Memory: ic_stable_structures::Memory> Sync for MetricsManager<Memory> {}
 
 impl<Memory> MetricsManager<Memory>
 where

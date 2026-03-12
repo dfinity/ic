@@ -9,7 +9,7 @@ use ic_registry_canister_client::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, StableCell, Storable};
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 
 const REGISTRY_STORE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const SUBNETS_METRICS_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -34,14 +34,14 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
-    pub static METRICS_MANAGER: Rc<MetricsManager<VM>> = {
+    pub static METRICS_MANAGER: Arc<MetricsManager<VM>> = {
         let metrics_manager = MetricsManager {
             client: Box::new(ICCanisterClient),
             subnets_metrics: RefCell::new(stable_btreemap_init(SUBNETS_METRICS_MEMORY_ID)),
             last_timestamp_per_subnet: RefCell::new(stable_btreemap_init(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID)),
         };
 
-        Rc::new(metrics_manager)
+        Arc::new(metrics_manager)
     };
 
     pub static LAST_DAY_SYNCED: RefCell<StableCell<Option<NaiveDateStorable>, VM>> = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
