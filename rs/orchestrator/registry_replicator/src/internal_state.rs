@@ -335,32 +335,70 @@ impl InternalState {
         }
     }
 
-    fn get_subnet_node_ids(
+    // Returns the URLs of the nodes on the given subnet by parsing their respective connection
+    // endpoints in their node records.
+    fn get_subnet_node_urls(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> Result<Vec<NodeId>, String> {
-        match self
+    ) -> Result<Vec<Url>, String> {
+        let node_ids = match self
             .registry_client
             .get_node_ids_on_subnet(subnet_id, version)
         {
-            Ok(Some(ids)) => Ok(ids),
-            Ok(None) => Err(format!(
-                "Subnet record for subnet {subnet_id} not found at version {version}"
-            )),
-            Err(e) => Err(format!(
-                "Error when retrieving node ids on subnet {subnet_id} at version {version}: {e:?}"
-            )),
-        }
+            Ok(Some(ids)) => ids,
+            Ok(None) => {
+                return Err(format!(
+                    "Subnet record for subnet {subnet_id} not found at version {version}"
+                ));
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Error when retrieving node ids on subnet {subnet_id} at version {version}: {e:?}"
+                ));
+            }
+        };
+
+        Ok(node_ids
+            .iter()
+            .filter_map(|node_id| {
+                let http = self
+                    .get_node_connection_endpoint(*node_id, version)
+                    .inspect_err(|e| warn!(self.logger, "{}", e))
+                    .ok()?;
+
+                https_endpoint_to_url(&http)
+                    .inspect_err(|e| warn!(self.logger, "{}", e))
+                    .ok()
+            })
+            .collect())
     }
 
-    fn get_api_boundary_node_ids(&self, version: RegistryVersion) -> Result<Vec<NodeId>, String> {
-        match self.registry_client.get_api_boundary_node_ids(version) {
-            Ok(ids) => Ok(ids),
-            Err(e) => Err(format!(
-                "Error when retrieving API BN node ids at version {version}: {e:?}"
-            )),
-        }
+    // Returns the URLs of the API boundary nodes by using their respective domain field in their
+    // node records.
+    fn get_api_boundary_node_urls(&self, version: RegistryVersion) -> Result<Vec<Url>, String> {
+        let node_ids = match self.registry_client.get_api_boundary_node_ids(version) {
+            Ok(ids) => ids,
+            Err(e) => {
+                return Err(format!(
+                    "Error when retrieving API BN node ids at version {version}: {e:?}"
+                ));
+            }
+        };
+
+        Ok(node_ids
+            .iter()
+            .filter_map(|node_id| {
+                let domain = self
+                    .get_node_domain(*node_id, version)
+                    .inspect_err(|e| warn!(self.logger, "{}", e))
+                    .ok()?;
+
+                domain_to_url(&domain)
+                    .inspect_err(|e| warn!(self.logger, "{}", e))
+                    .ok()
+            })
+            .collect())
     }
 
     fn get_node_reward_type(
@@ -402,6 +440,23 @@ impl InternalState {
         }
     }
 
+    fn get_node_domain(&self, node_id: NodeId, version: RegistryVersion) -> Result<String, String> {
+        match self.registry_client.get_node_record(node_id, version) {
+            Ok(Some(record)) => match record.domain {
+                Some(domain) => Ok(domain),
+                None => Err(format!(
+                    "Node record for node id {node_id} does not have a domain field at version {version}"
+                )),
+            },
+            Ok(None) => Err(format!(
+                "Node record for node id {node_id} not found at version {version}",
+            )),
+            Err(e) => Err(format!(
+                "Error when retrieving node record for node id {node_id} at version {version}: {e:?}",
+            )),
+        }
+    }
+
     // Returns a list of URLs that should be used to contact the NNS. In case we are not a cloud
     // engine node (not "type4"), these are the URLs of the NNS nodes. In case we are, these are
     // URLS of API BNs since NNS nodes would not accept our connections due to firewall rules.
@@ -410,15 +465,15 @@ impl InternalState {
         nns_subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> Result<Vec<Url>, String> {
-        let node_ids = match self.node_id {
-            None => self.get_subnet_node_ids(nns_subnet_id, version)?,
+        let mut urls = match self.node_id {
+            None => self.get_subnet_node_urls(nns_subnet_id, version)?,
             Some(node_id) => match self.get_node_reward_type(node_id, version) {
                 Err(err) => {
                     warn!(
                         self.logger,
                         "Could not get reward type: {err}, contacting NNS nodes directly"
                     );
-                    self.get_subnet_node_ids(nns_subnet_id, version)?
+                    self.get_subnet_node_urls(nns_subnet_id, version)?
                 }
                 Ok(reward) => match reward {
                     NodeRewardType::Unspecified
@@ -428,26 +483,13 @@ impl InternalState {
                     | NodeRewardType::Type3
                     | NodeRewardType::Type3dot1
                     | NodeRewardType::Type1dot1 => {
-                        self.get_subnet_node_ids(nns_subnet_id, version)?
+                        self.get_subnet_node_urls(nns_subnet_id, version)?
                     }
-                    NodeRewardType::Type4 => self.get_api_boundary_node_ids(version)?,
+                    NodeRewardType::Type4 => self.get_api_boundary_node_urls(version)?,
                 },
             },
         };
 
-        let mut urls: Vec<Url> = node_ids
-            .iter()
-            .filter_map(|node_id| {
-                let http = self
-                    .get_node_connection_endpoint(*node_id, version)
-                    .inspect_err(|e| warn!(self.logger, "{}", e))
-                    .ok()?;
-
-                https_endpoint_to_url(&http)
-                    .inspect_err(|e| warn!(self.logger, "{}", e))
-                    .ok()
-            })
-            .collect();
         urls.sort();
         Ok(urls)
     }
@@ -470,6 +512,11 @@ fn https_endpoint_to_url(http: &ConnectionEndpoint) -> Result<Url, String> {
 
     let url = format!("https://{}:{}/", host_str, http.port);
     Url::parse(&url).map_err(|e| format!("Invalid HTTPS endpoint: {url}: {e:?}"))
+}
+
+fn domain_to_url(domain: &str) -> Result<Url, String> {
+    let url = format!("https://{domain}/");
+    Url::parse(&url).map_err(|e| format!("Invalid domain: {url}: {e:?}"))
 }
 
 pub struct SuccessfulPoll {
@@ -743,8 +790,8 @@ mod test {
         // Whether the subnet record of the NNS subnet contains a node or not in the registry, and
         // if yes, its endpoint.
         nns_node_endpoint: Option<ConnectionEndpoint>,
-        // Whether the registry contains an API BN record or not, and if yes, its endpoint.
-        api_bn_endpoint: Option<ConnectionEndpoint>,
+        // Whether the registry contains an API BN record or not, and if yes, its domain.
+        api_bn_domain: Option<String>,
         // Whether the node record of this node exists in the registry, and if yes, its reward type.
         node_reward_type: Option<NodeRewardType>,
     }
@@ -757,9 +804,9 @@ mod test {
                 .as_ref()
                 .map(|endpoint| https_endpoint_to_url(endpoint).unwrap());
             let maybe_api_bn_url = self
-                .api_bn_endpoint
+                .api_bn_domain
                 .as_ref()
-                .map(|endpoint| https_endpoint_to_url(endpoint).unwrap());
+                .map(|domain| domain_to_url(domain).unwrap());
 
             if !self.has_node_id {
                 // If we don't have a node ID, we contact NNS nodes directly.
@@ -833,7 +880,7 @@ mod test {
             has_node_id,
             config_nns_url,
             nns_node_endpoint,
-            api_bn_endpoint,
+            api_bn_domain,
             node_reward_type,
         }: TestSetup,
     ) -> InternalState {
@@ -861,12 +908,12 @@ mod test {
         }
         registry_client.update_to_latest_version();
 
-        if let Some(endpoint) = api_bn_endpoint {
+        if let Some(domain) = api_bn_domain {
             let api_bn_id = NODE_2;
             setup_api_bns_in_registry(
                 &local_store,
                 registry_client.get_latest_version(),
-                vec![(api_bn_id, endpoint)],
+                vec![(api_bn_id, domain)],
             );
         }
         registry_client.update_to_latest_version();
@@ -990,10 +1037,10 @@ mod test {
     fn setup_api_bns_in_registry(
         local_store: &LocalStoreImpl,
         from_version: RegistryVersion,
-        api_bns: Vec<(NodeId, ConnectionEndpoint)>,
+        api_bns: Vec<(NodeId, String)>,
     ) {
         let mut version = from_version;
-        for (node_id, http_endpoint) in &api_bns {
+        for (node_id, domain) in &api_bns {
             version += 1.into();
             local_store
                 .store(
@@ -1017,7 +1064,7 @@ mod test {
                         key: make_node_record_key(*node_id),
                         value: Some(
                             NodeRecord {
-                                http: Some(http_endpoint.clone()),
+                                domain: Some(domain.clone()),
                                 ..Default::default()
                             }
                             .encode_to_vec(),
@@ -1062,8 +1109,8 @@ mod test {
         config_nns_url: Option<Url>,
         #[values(None, Some(ConnectionEndpoint { ip_addr: "2001:db8::1".to_string(), port: 8080 }))]
         nns_node_endpoint: Option<ConnectionEndpoint>,
-        #[values(None, Some(ConnectionEndpoint { ip_addr: "2001:db8::2".to_string(), port: 443 }))]
-        api_bn_endpoint: Option<ConnectionEndpoint>,
+        #[values(None, Some("api.bn.invalid".to_string()))]
+        api_bn_domain: Option<String>,
         #[values(None, Some(NodeRewardType::Type1), Some(NodeRewardType::Type4))] node_reward_type: Option<NodeRewardType>,
     ) {
         with_test_replica_logger(|logger| async {
@@ -1071,7 +1118,7 @@ mod test {
                 has_node_id,
                 config_nns_url: config_nns_url.clone(),
                 nns_node_endpoint,
-                api_bn_endpoint,
+                api_bn_domain,
                 node_reward_type,
             };
 
