@@ -43,14 +43,14 @@ rust_canister(
     name = "btc_checker_canister",
     srcs = glob(["src/**"]),
     compile_data = [
-        "templates/dashboard.html",
+        "templates/dashboard_header.html",
+        "templates/dashboard_footer.html",
     ],
     service_file = "btc_checker_canister.did",
     deps = [
         # Keep sorted.
         ":btc_checker_lib",
         "//packages/ic-http-types",
-        "@crate_index//:askama",
         "@crate_index//:base64",
         "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:candid",

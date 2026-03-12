@@ -368,7 +368,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             },
             None => 0,
         };
-        let dashboard = dashboard::dashboard(page_index).render().unwrap();
+        let dashboard = dashboard::dashboard(page_index).render();
         http::HttpResponseBuilder::ok()
             .header("Content-Type", "text/html; charset=utf-8")
             .with_body_and_content_length(dashboard)

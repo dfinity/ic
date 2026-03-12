@@ -153,7 +153,7 @@ fn test_pagination() {
     let txids = pages
         .iter()
         .flat_map(|page| {
-            let rendered_html = page.render().unwrap();
+            let rendered_html = page.render();
             assert!(rendered_html.len() < 2_000_000);
             let parsed = Html::parse_document(&rendered_html);
             (1..=DEFAULT_TX_TABLE_PAGE_SIZE).flat_map(move |i| {
