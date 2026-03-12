@@ -37,12 +37,11 @@ pub struct LogMemoryStore {
     #[validate_eq(CompareWithValidateEq)]
     maybe_page_map: Option<PageMap>,
 
-    /// Holds the value of `next_idx` field from which LogMemoryStore
-    /// starts counting the records. It may either come from initial
-    /// creation (is zero) or restored from a checkpoint.
-    /// It is stored as a separate field outside of `maybe_page_map`
-    /// in order to continue increasing `next_idx` even after logs
-    /// were cleared during uninstall and re-install.
+    /// A persistent high-water mark for log record indexing.
+    ///
+    /// This value is persisted independently of the `PageMap` to ensure that
+    /// global record IDs continue to increment monotonically, even if the
+    /// underlying logs are cleared or the canister is reinstalled.
     start_idx: u64,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
@@ -226,10 +225,11 @@ impl LogMemoryStore {
         self.save_ring_buffer(new_buffer);
     }
 
-    /// Returns the next log record `idx`.
+    /// Returns the monotonic sequence index for the next log record.
+    ///
+    /// Calculates the maximum of the persisted `start_idx` and the current
+    /// buffer's index to prevent ID collisions across lifecycle events.
     pub fn next_idx(&self) -> u64 {
-        // Since `next_idx` is always growing we return
-        // the max of start value and latest `header.next_idx`.
         self.start_idx
             .max(self.get_header().map(|h| h.next_idx).unwrap_or(0))
     }

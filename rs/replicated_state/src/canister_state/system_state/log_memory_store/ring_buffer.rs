@@ -141,9 +141,9 @@ impl RingBuffer {
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
         for record in iter.map(LogRecord::from) {
-            // Check that new records are added in order, otherwise it breaks the index.
-            // When resizing ring-buffer we do not add new records, but appending
-            // already existing records, therefore this check must be disabled.
+            // Validate monotonic ordering for new records to maintain index integrity.
+            // This check is skipped during buffer resizing since existing records
+            // are being re-inserted rather than newly generated.
             if check_idx_when_adding_new_records {
                 if record.idx < h.next_idx {
                     debug_assert!(
