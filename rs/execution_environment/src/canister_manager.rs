@@ -2560,7 +2560,7 @@ impl CanisterManager {
         canister: &CanisterState,
         state: &ReplicatedState,
     ) -> Result<Vec<CanisterSnapshotResponse>, UserError> {
-        validate_snapshot_visibility(canister, &sender, "list canister snapshots")?;
+        validate_snapshot_visibility(canister, &sender, "list_canister_snapshots")?;
 
         let mut responses = vec![];
         for (snapshot_id, snapshot) in state
