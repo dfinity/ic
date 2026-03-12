@@ -31,13 +31,13 @@ syntax = "proto3";
 // ${T} types. In this section, we call the former "high-capacity" types, and
 // the latter "legacy" types. For example, this file used to define
 // RegistryValue, and later, HighCapacityRegistryValue was added. High-capacity
-// and legacy types existed side by side for a while in order to let clients to
+// and legacy types existed side by side for a while in order to let clients
 // migrate. That migration has now been completed. See earlier versions of this
-// file for a detailed description of the migraiton plan.
+// file for a detailed description of the migration plan.
 //
 // As indicated by the name, the difference between these is that HighCapacity
 // types allow clients to fetch "large" values from the Registry. Large values
-// requrie follow up calls to the Registry's get_chunk method.
+// require follow up calls to the Registry's get_chunk method.
 //
 // Most of the original legacy types have now been removed from this file.
 // However, the corresponding legacy Rust types remain for use WITHIN the

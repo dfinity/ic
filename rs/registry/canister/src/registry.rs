@@ -163,6 +163,24 @@ impl Registry {
         Some(result)
     }
 
+    /// Returns `Some(true)`  if the value for the given `key` is deleted at `version`.
+    ///         `Some(false)` if it is not deleted, i.e., a value exists at `version`.
+    ///         `None`        if the `key` has never existed in the registry.  
+    pub fn is_deleted(&self, key: &[u8], version: Version) -> Option<bool> {
+        let result = self
+            .store
+            .get(key)?
+            .iter()
+            .rev()
+            .find(|value| value.version <= version)?;
+        match &result.content {
+            Some(high_capacity_registry_value::Content::DeletionMarker(_)) => Some(true),
+            None
+            | Some(high_capacity_registry_value::Content::Value(_))
+            | Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_)) => Some(false),
+        }
+    }
+
     pub fn get_chunk(&self, request: GetChunkRequest) -> Result<Chunk, String> {
         let GetChunkRequest { content_sha256 } = request;
 

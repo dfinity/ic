@@ -1,7 +1,7 @@
 //! For background, see remarks about HighCapacity* types in ./.../transport.proto.
 //!
 //! At least for now, this module contains various conversions. Some are "dumb
-//! trascriptions", while others (smartly) "dechunkify".
+//! transcriptions", while others (smartly) "dechunkify".
 //!
 //! By "dumb transcription", we simply mean that when converting TO
 //! high-capacity types, there is NO chunking. Furthermore, a "dumb
