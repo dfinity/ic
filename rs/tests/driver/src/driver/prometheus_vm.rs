@@ -408,7 +408,7 @@ impl HasPrometheus for TestEnv {
             None
         };
 
-        // Sync the local registry store with the NNS to pick up topology
+        // Sync the local registry store with the NNS before picking up the topology
         let prep_dir = self
             .prep_dir("")
             .ok_or_else(|| anyhow!("No no-name Internet Computer"))?;
