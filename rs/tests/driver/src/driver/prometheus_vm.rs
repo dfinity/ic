@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use ic_crypto_sha2::Sha256;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
