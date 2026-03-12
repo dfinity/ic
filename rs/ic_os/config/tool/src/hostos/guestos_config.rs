@@ -4,7 +4,7 @@ use config_types::{
     GuestVMType, HostOSConfig, Ipv6Config, RecoveryConfig, TrustedExecutionEnvironmentConfig,
 };
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use std::net::Ipv6Addr;
 use std::path::Path;
 use utils::to_cidr;
@@ -97,7 +97,6 @@ fn node_ipv6_address(
     let mac = calculate_deterministic_mac(
         &hostos_config.icos_settings.mgmt_mac,
         hostos_config.icos_settings.deployment_environment,
-        IpVariant::V6,
         node_type,
     );
 

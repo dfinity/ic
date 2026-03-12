@@ -12,7 +12,7 @@ use ic_replicated_state::{
     Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-        system_state::{CyclesUseCase, TaskQueue},
+        system_state::TaskQueue,
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
@@ -20,6 +20,7 @@ use ic_replicated_state::{
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
+        testing::NetworkTopologyTesting,
     },
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
@@ -29,6 +30,7 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
@@ -143,8 +145,11 @@ impl ReplicatedStateBuilder {
             )
             .unwrap();
 
-        state.metadata.network_topology.routing_table = Arc::new(routing_table);
-        state.metadata.network_topology.subnets.insert(
+        state
+            .metadata
+            .network_topology
+            .set_routing_table(routing_table);
+        state.metadata.network_topology.subnets_mut().insert(
             self.subnet_id,
             SubnetTopology {
                 public_key: vec![],
@@ -153,6 +158,7 @@ impl ReplicatedStateBuilder {
                 subnet_features: self.subnet_features,
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
         );
 
@@ -757,7 +763,7 @@ pub fn get_initial_state_with_balance(
 
         state.put_canister_state(canister_state_builder.build());
     }
-    state.metadata.network_topology.routing_table = Arc::new({
+    state.metadata.network_topology.set_routing_table({
         let mut rt = ic_registry_routing_table::RoutingTable::new();
         rt.insert(
             ic_registry_routing_table::CanisterIdRange {
@@ -774,10 +780,7 @@ pub fn get_initial_state_with_balance(
 
 /// Returns the ordered IDs of the canisters contained within `state`.
 pub fn canister_ids(state: &ReplicatedState) -> Vec<CanisterId> {
-    state
-        .canisters_iter()
-        .map(|canister_state| canister_state.canister_id())
-        .collect()
+    state.canister_states().keys().cloned().collect()
 }
 
 pub fn new_canister_state(
@@ -818,7 +821,6 @@ pub fn new_canister_state_with_execution(
 /// Helper function to register a callback.
 pub fn register_callback(
     canister_state: &mut CanisterState,
-    originator: CanisterId,
     respondent: CanisterId,
     deadline: CoarseTime,
 ) -> CallbackId {
@@ -836,7 +838,6 @@ pub fn register_callback(
         .system_state
         .register_callback(Callback::new(
             call_context_id,
-            originator,
             respondent,
             Cycles::zero(),
             Cycles::new(42),
@@ -1113,9 +1114,9 @@ prop_compose! {
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
-        metrics.consumed_cycles_by_deleted_canisters = consumed_cycles_by_deleted_canisters;
-        metrics.consumed_cycles_http_outcalls = consumed_cycles_http_outcalls;
-        metrics.consumed_cycles_ecdsa_outcalls = consumed_cycles_ecdsa_outcalls;
+        metrics.observe_consumed_cycles_by_deleted_canisters(consumed_cycles_by_deleted_canisters);
+        metrics.observe_consumed_cycles_http_outcalls(consumed_cycles_http_outcalls);
+        metrics.observe_consumed_cycles_ecdsa_outcalls(consumed_cycles_ecdsa_outcalls);
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
@@ -1180,7 +1181,7 @@ fn new_replicated_state_with_output_queues(
             canister.system_state.put_queues(queues);
             total_requests += raw_requests.len();
             requests.push_back(raw_requests);
-            (canister_id, canister)
+            (canister_id, Arc::new(canister))
         })
         .collect();
 
@@ -1196,7 +1197,10 @@ fn new_replicated_state_with_output_queues(
             own_subnet_id,
         )
         .unwrap();
-    replicated_state.metadata.network_topology.routing_table = Arc::new(routing_table);
+    replicated_state
+        .metadata
+        .network_topology
+        .set_routing_table(routing_table);
 
     replicated_state.put_canister_states(canister_states);
     if let Some(subnet_queues) = subnet_queues {

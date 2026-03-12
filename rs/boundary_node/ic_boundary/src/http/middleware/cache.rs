@@ -299,7 +299,7 @@ mod test {
             .get::<CacheStatus<BypassReasonIC>>()
             .cloned()
             .unwrap();
-        assert_eq!(cs, CacheStatus::Miss);
+        assert!(matches!(cs, CacheStatus::Miss(_)));
 
         let req = gen_request(CANISTER_1, false);
         let res = app.call(req).await.unwrap();
@@ -308,7 +308,7 @@ mod test {
             .get::<CacheStatus<BypassReasonIC>>()
             .cloned()
             .unwrap();
-        assert_eq!(cs, CacheStatus::Hit);
+        assert!(matches!(cs, CacheStatus::Hit(_)));
 
         // Check if the body from cache is correct
         let (_, body) = res.into_parts();

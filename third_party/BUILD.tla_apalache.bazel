@@ -1,0 +1,37 @@
+load("@rules_java//java:java_binary.bzl", "java_binary")
+load("@rules_java//java:java_import.bzl", "java_import")
+
+# apalache-mc executable
+# uses the packaged `.jar` and wraps it in a `java_binary` and
+# let bazel pull in java in any way it pleases.
+package(default_visibility = ["//visibility:public"])
+
+java_import(
+    name = "tla_jar",
+    jars = [
+        "@tla_apalache//:lib/apalache.jar",
+    ],
+)
+
+java_binary(
+    # the name is unconventional but mirrors the internals of the
+    # tla_apalache archive, which provides a `bin/apalache-mc` (which
+    # we don't use here).
+    name = "bin/apalache-mc",
+    # java-specifics found by running
+    # $ curl -LO https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz
+    # $ tar xzf apalache-0.44.11.tgz
+    # $ jar xf apalache-0.44.11/lib/apalache.jar  META-INF/MANIFEST.MF
+    # $ cat META-INF/MANIFEST.MF
+    # for jvm opts, see the bash wrapper:
+    # $ cat apalache-0.44.11/bin/apalache-mc  META-INF/MANIFEST.MF
+    # and looking for `Main-Class`
+    jvm_flags = [
+        "-Xmx4096m",
+        "-XX:+UseG1GC",
+        "-XX:G1PeriodicGCInterval=600000",
+        "-XX:+G1PeriodicGCInvokesConcurrent",
+    ],
+    main_class = "at.forsyte.apalache.tla.Tool",
+    runtime_deps = [":tla_jar"],
+)

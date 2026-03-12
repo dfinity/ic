@@ -44,7 +44,7 @@ pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
             ParsedSevAttestationPackage::new_with_unverified_certificate_chain(
                 attestation_report,
                 certificate_chain,
-                custom_data_debug_info,
+                Some(custom_data_debug_info),
             ),
         )
     } else {
@@ -59,7 +59,7 @@ pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
             attestation_report,
             certificate_chain,
             sev_root_certificate_verification,
-            custom_data_debug_info,
+            Some(custom_data_debug_info),
         )
     };
 

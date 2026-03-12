@@ -137,7 +137,6 @@ fn subnet_splitting_test(env: TestEnv) {
         admin_key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: false,
     };
 
     let subnet_splitting_args = SubnetSplittingArgs {
@@ -417,6 +416,7 @@ fn canister_id_from_principal(principal: Principal) -> CanisterId {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        .without_assert_no_replica_restarts()
         .add_test(systest!(subnet_splitting_test))
         .execute_from_args()
 }

@@ -1,8 +1,11 @@
 use ic_interfaces::{
-    ingress_manager::IngressSelector, self_validating_payload::SelfValidatingPayloadBuilder,
-    validation::ValidationResult,
+    consensus::PayloadWithSizeEstimate, ingress_manager::IngressSelector,
+    self_validating_payload::SelfValidatingPayloadBuilder,
 };
-use ic_types::{Height, NumBytes, batch::ValidationContext};
+use ic_types::{
+    Height, NumBytes,
+    batch::{IngressPayload, ValidationContext},
+};
 
 use mockall::mock;
 
@@ -39,14 +42,14 @@ mock! {
          past_ingress: &dyn ic_interfaces::ingress_manager::IngressSetQuery,
          context: &ValidationContext,
          byte_limit: NumBytes,
-     ) -> ic_types::batch::IngressPayload;
+     ) -> PayloadWithSizeEstimate<IngressPayload>;
 
      fn validate_ingress_payload(
          &self,
-         payload: &ic_types::batch::IngressPayload,
+         payload: &IngressPayload,
          past_ingress: &dyn ic_interfaces::ingress_manager::IngressSetQuery,
          context: &ValidationContext,
-     ) -> ValidationResult<ic_interfaces::ingress_manager::IngressPayloadValidationError>;
+     ) -> Result<NumBytes, ic_interfaces::ingress_manager::IngressPayloadValidationError>;
 
      fn filter_past_payloads(
          &self,

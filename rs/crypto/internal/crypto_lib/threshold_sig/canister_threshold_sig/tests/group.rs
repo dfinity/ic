@@ -523,8 +523,34 @@ fn test_mul_2_is_correct() -> CanisterThresholdResult<()> {
             let s_0 = EccScalar::random(curve_type, rng);
             let s_1 = EccScalar::random(curve_type, rng);
 
-            let computed_result = EccPoint::mul_2_points(&p_0, &s_0, &p_1, &s_1)?;
+            let computed_result = EccPoint::mul_2_points_vartime(&p_0, &s_0, &p_1, &s_1)?;
             let expected_result = p_0.scalar_mul(&s_0)?.add_points(&p_1.scalar_mul(&s_1)?)?;
+            assert_eq!(computed_result, expected_result);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_mul_3_is_correct() -> CanisterThresholdResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let p = EccPoint::hash_to_point(curve_type, &rng.r#gen::<[u8; 32]>(), b"mul3-p")?;
+        let q = EccPoint::hash_to_point(curve_type, &rng.r#gen::<[u8; 32]>(), b"mul3-q")?;
+        let r = EccPoint::hash_to_point(curve_type, &rng.r#gen::<[u8; 32]>(), b"mul3-r")?;
+
+        for _iteration in 0..100 {
+            let s0 = EccScalar::random(curve_type, rng);
+            let s1 = EccScalar::random(curve_type, rng);
+            let s2 = EccScalar::random(curve_type, rng);
+
+            let computed_result = EccPoint::mul_3_points_vartime(&p, &s0, &q, &s1, &r, &s2)?;
+            let expected_result = p
+                .scalar_mul(&s0)?
+                .add_points(&q.scalar_mul(&s1)?)?
+                .add_points(&r.scalar_mul(&s2)?)?;
             assert_eq!(computed_result, expected_result);
         }
     }

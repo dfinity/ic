@@ -196,6 +196,18 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
+# The "recovery" user account. This is intended for subnet recovery operations,
+# and thus needs access to the same state as "admin".
+RUN adduser --system --disabled-password --home /var/lib/recovery --shell /bin/bash recovery && \
+    chown recovery:staff /var/lib/recovery && \
+    adduser recovery backup && \
+    adduser recovery nonconfidential && \
+    adduser recovery ic-consensus-pool && \
+    adduser recovery ic-registry-local-store && \
+    adduser recovery systemd-journal && \
+    adduser recovery vsock && \
+    adduser recovery sudo
+
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \

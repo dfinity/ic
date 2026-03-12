@@ -1827,10 +1827,6 @@ fn build_idkg_payload_common(
     match (current_key_state) {
         Some(current_key_ref) => {
 
-            if certified_state_height >= last_summary_height {
-                purge_old_key_pre_signatures(available_pre_signatures, signing_request_calls, current_key_ref);
-            }
-
             (pre_signatures_in_creation, uid_generator) =
                 make_new_pre_sigs_if_needed(available_pre_signatures, pre_signatures_in_creation, uid_generator, current_key_ref, height);
 
@@ -1963,24 +1959,6 @@ fn validate_sig(
     sig: Signature,
 ) -> Option<bool>;
 // Crypto-layer function to validate a signature.
-```
-
-```rust
-// Delete all unmatched, available pre-signatures that
-// reference a non-existant key transcript (i.e. because it was rotated)
-fn purge_old_key_pre_signatures(
-    available_pre_signatures: AvailablePreSignatures,
-    signing_request_calls: List<SigningRequestCall>,
-    key_transcript: KeyTranscript,
-) {
-    for (pre_sig_id, pre_sig) in available_pre_signatures {
-        if not pre_sig_id matched in signing_request_calls
-            && pre_sig.key_transcript () != key_transcript {
-
-            Delete(available_pre_signatures[pre_sig_id]);
-        }
-    }
-}
 ```
 
 ```rust

@@ -2,59 +2,6 @@ use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 
-impl From<CyclesUseCase> for pb::CyclesUseCase {
-    fn from(item: CyclesUseCase) -> Self {
-        match item {
-            CyclesUseCase::Memory => pb::CyclesUseCase::Memory,
-            CyclesUseCase::ComputeAllocation => pb::CyclesUseCase::ComputeAllocation,
-            CyclesUseCase::IngressInduction => pb::CyclesUseCase::IngressInduction,
-            CyclesUseCase::Instructions => pb::CyclesUseCase::Instructions,
-            CyclesUseCase::RequestAndResponseTransmission => {
-                pb::CyclesUseCase::RequestAndResponseTransmission
-            }
-            CyclesUseCase::Uninstall => pb::CyclesUseCase::Uninstall,
-            CyclesUseCase::CanisterCreation => pb::CyclesUseCase::CanisterCreation,
-            CyclesUseCase::ECDSAOutcalls => pb::CyclesUseCase::EcdsaOutcalls,
-            CyclesUseCase::HTTPOutcalls => pb::CyclesUseCase::HttpOutcalls,
-            CyclesUseCase::DeletedCanisters => pb::CyclesUseCase::DeletedCanisters,
-            CyclesUseCase::NonConsumed => pb::CyclesUseCase::NonConsumed,
-            CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
-            CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
-            CyclesUseCase::VetKd => pb::CyclesUseCase::VetKd,
-            CyclesUseCase::DroppedMessages => pb::CyclesUseCase::DroppedMessages,
-        }
-    }
-}
-
-impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb::CyclesUseCase) -> Result<Self, Self::Error> {
-        match item {
-            pb::CyclesUseCase::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "CyclesUseCase",
-                err: format!("Unexpected value of cycles use case: {item:?}"),
-            }),
-            pb::CyclesUseCase::Memory => Ok(Self::Memory),
-            pb::CyclesUseCase::ComputeAllocation => Ok(Self::ComputeAllocation),
-            pb::CyclesUseCase::IngressInduction => Ok(Self::IngressInduction),
-            pb::CyclesUseCase::Instructions => Ok(Self::Instructions),
-            pb::CyclesUseCase::RequestAndResponseTransmission => {
-                Ok(Self::RequestAndResponseTransmission)
-            }
-            pb::CyclesUseCase::Uninstall => Ok(Self::Uninstall),
-            pb::CyclesUseCase::CanisterCreation => Ok(Self::CanisterCreation),
-            pb::CyclesUseCase::EcdsaOutcalls => Ok(Self::ECDSAOutcalls),
-            pb::CyclesUseCase::HttpOutcalls => Ok(Self::HTTPOutcalls),
-            pb::CyclesUseCase::DeletedCanisters => Ok(Self::DeletedCanisters),
-            pb::CyclesUseCase::NonConsumed => Ok(Self::NonConsumed),
-            pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
-            pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
-            pb::CyclesUseCase::VetKd => Ok(Self::VetKd),
-            pb::CyclesUseCase::DroppedMessages => Ok(Self::DroppedMessages),
-        }
-    }
-}
-
 impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     fn from(item: &CanisterStatus) -> Self {
         match item {
@@ -75,17 +22,15 @@ impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     }
 }
 
-impl TryFrom<(pb::canister_state_bits::CanisterStatus, CanisterId)> for CanisterStatus {
+impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
     type Error = ProxyDecodeError;
-    fn try_from(
-        (value, own_canister_id): (pb::canister_state_bits::CanisterStatus, CanisterId),
-    ) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::canister_state_bits::CanisterStatus) -> Result<Self, Self::Error> {
         let canister_status = match value {
             pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {
                 call_context_manager,
             }) => Self::Running {
                 call_context_manager: try_from_option_field(
-                    call_context_manager.map(|ccm| (ccm, own_canister_id)),
+                    call_context_manager,
                     "CanisterStatus::Running::call_context_manager",
                 )?,
             },
@@ -102,7 +47,7 @@ impl TryFrom<(pb::canister_state_bits::CanisterStatus, CanisterId)> for Canister
                 }
                 Self::Stopping {
                     call_context_manager: try_from_option_field(
-                        call_context_manager.map(|ccm| (ccm, own_canister_id)),
+                        call_context_manager,
                         "CanisterStatus::Stopping::call_context_manager",
                     )?,
                     stop_contexts: contexts,
@@ -132,10 +77,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     aborted_execution::Input as PbInput,
                 };
                 let input = match input {
-                    CanisterMessageOrTask::Message(CanisterMessage::Response(v)) => {
-                        PbInput::Response(v.as_ref().into())
-                    }
-                    CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
+                    CanisterMessageOrTask::Message(CanisterMessage::Response {
                         response,
                         callback,
                     }) => PbInput::AbortedResponse(AbortedResponse {
@@ -185,12 +127,10 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
     }
 }
 
-impl TryFrom<(pb::ExecutionTask, CanisterId)> for ExecutionTask {
+impl TryFrom<pb::ExecutionTask> for ExecutionTask {
     type Error = ProxyDecodeError;
 
-    fn try_from(
-        (value, own_canister_id): (pb::ExecutionTask, CanisterId),
-    ) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ExecutionTask) -> Result<Self, Self::Error> {
         let task = value
             .task
             .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
@@ -206,19 +146,16 @@ impl TryFrom<(pb::ExecutionTask, CanisterId)> for ExecutionTask {
                     PbInput::Request(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Request(Arc::new(v.try_into()?)),
                     ),
-                    PbInput::Response(v) => CanisterMessageOrTask::Message(
-                        CanisterMessage::Response(Arc::new(v.try_into()?)),
-                    ),
                     PbInput::AbortedResponse(v) => {
                         let response = v
                             .response
                             .ok_or(ProxyDecodeError::MissingField("AbortedResponse::response"))?
                             .try_into()?;
-                        let callback_proto = v
+                        let callback = v
                             .callback
-                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?;
-                        let callback = (callback_proto, own_canister_id).try_into()?;
-                        CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
+                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?
+                            .try_into()?;
+                        CanisterMessageOrTask::Message(CanisterMessage::Response {
                             response: Arc::new(response),
                             callback: Arc::new(callback),
                         })

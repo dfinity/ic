@@ -9,6 +9,7 @@ use crate::{
     },
     crypto::{CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
 };
+use ic_crypto_tree_hash::Witness;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
@@ -142,13 +143,12 @@ impl From<&CertificationMessageHash> for pb::CertificationMessageHash {
     }
 }
 
-impl TryFrom<&pb::CertificationMessageHash> for CertificationMessageHash {
+impl TryFrom<pb::CertificationMessageHash> for CertificationMessageHash {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::CertificationMessageHash) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::CertificationMessageHash) -> Result<Self, Self::Error> {
         use pb::certification_message_hash::Kind;
         let kind = value
             .kind
-            .clone()
             .ok_or_else(|| ProxyDecodeError::MissingField("CertificationMessageHash::kind"))?;
 
         Ok(match kind {
@@ -207,6 +207,9 @@ impl AsRef<CertificationContent> for CertificationMessage {
 pub struct Certification {
     /// the height that the CertificationContent belongs to
     pub height: Height,
+    /// the witness for the height
+    /// TODO: remove option after staged roll-out
+    pub height_witness: Option<Witness>,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignature<CertificationContent>>,
 }
@@ -231,6 +234,8 @@ impl CountBytes for Certification {
 pub struct CertificationShare {
     /// the height that the CertificationContent belongs to
     pub height: Height,
+    /// the witness for the height
+    pub height_witness: Witness,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignatureShare<CertificationContent>>,
 }

@@ -587,7 +587,6 @@ fn load_threshold_signing_key_for_empty_transcript_with_key_id(
 }
 
 fn arbitrary_fs_encryption_key_set() -> CspSecretKey {
-    // TODO(CRP-862): produce random values rather than default.
     //  Copied from ic_crypto_internal_csp::types::test_utils::arbitrary_fs_encryption_key_set
     let fs_enc_key_set = FsEncryptionKeySetWithPop {
         public_key: FsEncryptionPublicKey(Default::default()),

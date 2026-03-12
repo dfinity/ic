@@ -14,7 +14,7 @@ use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold},
     crypto::{
-        CryptoHash, CryptoHashable, Signed,
+        Signed,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
     },
 };
@@ -54,16 +54,6 @@ impl RoundRobin {
         *index = next;
         result
     }
-}
-
-/// Convert a CryptoHashable into a 32 bytes which can be used to seed a RNG
-pub fn crypto_hashable_to_seed<T: CryptoHashable>(hashable: &T) -> [u8; 32] {
-    let hash = ic_types::crypto::crypto_hash(hashable);
-    let CryptoHash(hash_bytes) = hash.get();
-    let mut seed = [0; 32]; // zero padded if digest is less than 32 bytes
-    let n = hash_bytes.len().min(32);
-    seed[0..n].copy_from_slice(&hash_bytes[0..n]);
-    seed
 }
 
 /// Return the validated block proposals with the lowest rank at height `h` that

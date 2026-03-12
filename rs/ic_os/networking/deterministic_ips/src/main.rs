@@ -1,7 +1,7 @@
 use clap::Parser;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use macaddr::MacAddr6;
 use std::net::Ipv6Addr;
 
@@ -32,7 +32,7 @@ fn calculate_ip(
     node_type: NodeType,
 ) -> anyhow::Result<Ipv6Addr> {
     // For now, this tool only outputs IPv6
-    let mac = calculate_deterministic_mac(&mac, deployment_environment, IpVariant::V6, node_type);
+    let mac = calculate_deterministic_mac(&mac, deployment_environment, node_type);
     let ip = mac.calculate_slaac(prefix)?;
 
     Ok(ip)

@@ -33,6 +33,8 @@ macro_rules! maybe_log {
     ($logger:expr, $level:expr, $($arg:tt)+) => {
         if let Some(logger) = $logger.as_ref() {
             log!(logger, $level, $($arg)+);
+        } else {
+            println!($($arg)+);
         }
     };
 }

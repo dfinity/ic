@@ -30,7 +30,7 @@ use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, get_app_subnet_and_node};
+use ic_system_test_driver::util::get_app_subnet_and_node;
 use ic_types::Height;
 use rejoin_test_lib::rejoin_test_long_rounds;
 use std::time::Duration;
@@ -105,10 +105,6 @@ fn setup(env: TestEnv, config: Config) {
 }
 
 fn test(env: TestEnv, config: Config) {
-    block_on(test_async(env, config));
-}
-
-async fn test_async(env: TestEnv, config: Config) {
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
 
@@ -117,6 +113,5 @@ async fn test_async(env: TestEnv, config: Config) {
         app_subnet.nodes().collect(),
         config.num_canisters,
         DKG_INTERVAL,
-    )
-    .await;
+    );
 }

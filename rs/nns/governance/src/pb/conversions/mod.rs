@@ -3,10 +3,9 @@ use crate::pb::v1 as pb;
 
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as api;
-use ic_protobuf::registry::replica_version::v1::{
-    GuestLaunchMeasurement as PbGuestLaunchMeasurement,
-    GuestLaunchMeasurementMetadata as PbGuestLaunchMeasurementMetadata,
-    GuestLaunchMeasurements as PbGuestLaunchMeasurements,
+use ic_nns_governance_conversions::{
+    convert_guest_launch_measurements_from_api_to_pb,
+    convert_guest_launch_measurements_from_pb_to_api,
 };
 
 #[cfg(test)]
@@ -2446,6 +2445,7 @@ impl From<pb::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -2465,6 +2465,7 @@ impl From<api::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -2492,6 +2493,30 @@ impl From<api::create_service_nervous_system::governance_parameters::VotingRewar
             initial_reward_rate: item.initial_reward_rate,
             final_reward_rate: item.final_reward_rate,
             reward_rate_transition_duration: item.reward_rate_transition_duration,
+        }
+    }
+}
+impl From<pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for api::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: Some(item.additional_critical_native_action_ids),
+        }
+    }
+}
+impl From<api::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: api::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: item
+                .additional_critical_native_action_ids
+                .unwrap_or_default(),
         }
     }
 }
@@ -2704,70 +2729,6 @@ impl From<api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestOsVe
                 .base_guest_launch_measurements
                 .map(convert_guest_launch_measurements_from_api_to_pb),
         }
-    }
-}
-
-fn convert_guest_launch_measurements_from_pb_to_api(
-    item: PbGuestLaunchMeasurements,
-) -> api::GuestLaunchMeasurements {
-    api::GuestLaunchMeasurements {
-        guest_launch_measurements: Some(
-            item.guest_launch_measurements
-                .into_iter()
-                .map(convert_guest_launch_measurement_from_pb_to_api)
-                .collect(),
-        ),
-    }
-}
-
-fn convert_guest_launch_measurements_from_api_to_pb(
-    item: api::GuestLaunchMeasurements,
-) -> PbGuestLaunchMeasurements {
-    PbGuestLaunchMeasurements {
-        guest_launch_measurements: item
-            .guest_launch_measurements
-            .unwrap_or_default()
-            .into_iter()
-            .map(convert_guest_launch_measurement_from_api_to_pb)
-            .collect(),
-    }
-}
-
-fn convert_guest_launch_measurement_from_pb_to_api(
-    item: PbGuestLaunchMeasurement,
-) -> api::GuestLaunchMeasurement {
-    api::GuestLaunchMeasurement {
-        measurement: Some(item.measurement),
-        metadata: item
-            .metadata
-            .map(convert_guest_launch_measurement_metadata_from_pb_to_api),
-    }
-}
-
-fn convert_guest_launch_measurement_from_api_to_pb(
-    item: api::GuestLaunchMeasurement,
-) -> PbGuestLaunchMeasurement {
-    PbGuestLaunchMeasurement {
-        measurement: item.measurement.unwrap_or_default(),
-        metadata: item
-            .metadata
-            .map(convert_guest_launch_measurement_metadata_from_api_to_pb),
-    }
-}
-
-fn convert_guest_launch_measurement_metadata_from_pb_to_api(
-    item: PbGuestLaunchMeasurementMetadata,
-) -> api::GuestLaunchMeasurementMetadata {
-    api::GuestLaunchMeasurementMetadata {
-        kernel_cmdline: item.kernel_cmdline,
-    }
-}
-
-fn convert_guest_launch_measurement_metadata_from_api_to_pb(
-    item: api::GuestLaunchMeasurementMetadata,
-) -> PbGuestLaunchMeasurementMetadata {
-    PbGuestLaunchMeasurementMetadata {
-        kernel_cmdline: item.kernel_cmdline,
     }
 }
 
@@ -2997,6 +2958,8 @@ impl From<pb::governance::GovernanceCachedMetrics> for api::governance::Governan
             fully_lost_voting_power_neuron_subset_metrics: item
                 .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
+            total_maturity_disbursements_in_progress_e8s_equivalent: item
+                .total_maturity_disbursements_in_progress_e8s_equivalent,
         }
     }
 }
@@ -3061,6 +3024,8 @@ impl From<api::governance::GovernanceCachedMetrics> for pb::governance::Governan
             fully_lost_voting_power_neuron_subset_metrics: item
                 .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
+            total_maturity_disbursements_in_progress_e8s_equivalent: item
+                .total_maturity_disbursements_in_progress_e8s_equivalent,
         }
     }
 }

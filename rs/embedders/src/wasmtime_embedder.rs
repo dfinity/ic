@@ -93,7 +93,7 @@ fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> Option<CanisterBacktrace
     }
 }
 
-fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
+fn wasmtime_error_to_hypervisor_error(err: wasmtime::Error) -> HypervisorError {
     let backtrace = err
         .downcast_ref::<wasmtime::WasmBacktrace>()
         .and_then(convert_backtrace);
@@ -248,9 +248,9 @@ impl WasmtimeEmbedder {
 
     pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<Module> {
         let module = wasmtime::Module::new(&self.create_engine()?, wasm_binary.as_slice())
-            .map_err(|e| {
+            .map_err(|_| {
                 HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
-                    format!("{e:?}"),
+                    "Error in Wasm compilation".to_string(),
                 ))
             })?;
         Ok(module)

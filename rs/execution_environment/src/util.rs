@@ -58,7 +58,7 @@ pub fn process_responses(
             );
         }
         Response::Canister(canister_response) => {
-            if let Some(canister) = state.canister_state_mut(&canister_response.respondent) {
+            if let Some(canister) = state.canister_state_make_mut(&canister_response.respondent) {
                 canister.push_output_response(canister_response.into())
             } else {
                 canister_not_found_error.inc();

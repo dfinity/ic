@@ -35,6 +35,7 @@ use slog::{Logger, info};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 use ic_recovery::file_sync_helper::download_binary;
 use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv, test_env_api::*};
@@ -90,7 +91,7 @@ fn download_mainnet_binary(
     block_on(ic_system_test_driver::retry_with_msg_async!(
         "download mainnet binary",
         log,
-        READY_WAIT_TIMEOUT,
+        Duration::from_secs(30),
         RETRY_BACKOFF,
         || async {
             download_binary(log, version, binary_name.into(), target_dir)
@@ -272,12 +273,10 @@ fn test(env: TestEnv) {
                 "canister_state::queues::tests::mainnet_compatibility_tests::refunds_test",
             ),
             TestCase::new(
-                // TODO(MR-539): Switch to bi-directional once we have mainnet binaries.
-                // TestType::Bidirectional {
-                //     published_binary: "state_layout-test".to_string(),
-                //     mainnet_version: v.clone(),
-                // },
-                TestType::SelfTestOnly,
+                TestType::Bidirectional {
+                    published_binary: "state-layout-test".to_string(),
+                    mainnet_version: v.clone(),
+                },
                 "STATE_LAYOUT_TEST_BINARY_PATH",
                 "state_layout::tests::mainnet_compatibility_tests::task_queue_compatibility_test",
             ),

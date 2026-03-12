@@ -9,14 +9,20 @@ on the process that this file is part of, see
 
 ## Added
 
+* Adding support for recalling replica versions for subnets.
+* CloudEngines can have a Free cycles cost schedule. 
+* **SEV invariant:** Enforced that SEV-enabled subnets contain only SEV-enabled nodes (i.e., nodes with a chip ID in their node record).
+* New invariant to check that subnet admins can be non-empty only for rented subnets.
+* New endpoint to update the subnet admins field in the SubnetRecord.
+
 ## Changed
+
+* **SEV on existing subnets:** Enabled SEV activation for existing subnets. Once enabled, SEV cannot be disabled.
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
-
-* When performing `RemoveNodes`, generate 1 update mutation per node operator key. Before this change, a single node operator record would be changed multiple times in a single version if the remove nodes proposal removed multiple nodes from the same node operator, which caused confusion. This bug resulted in incorrect tracking of node operator allowance depending on how they are fetched from the registry (given the different implementations in the registry utility functions).
 
 ## Security

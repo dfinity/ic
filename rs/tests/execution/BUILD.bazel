@@ -188,7 +188,7 @@ system_test(
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = {
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
     },
     deps = [

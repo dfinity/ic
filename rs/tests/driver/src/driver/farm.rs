@@ -235,28 +235,12 @@ impl Farm {
         Ok(())
     }
 
-    // delete with large timeout but only one attempt, because it takes a long time and farm's
-    // garbage collector would interfere with retries.
-    pub fn delete_group(&self, group_name: &str) {
-        // bump TTL, so that farm garbage collector does not remove while we remove
-        if self
-            .set_group_ttl(group_name, Duration::from_secs(120))
-            .is_err()
-        {
-            warn!(self.logger, "Failed to bump TTL before deleting group.");
-        }
-        let path = format!("group/{group_name}");
-        let mut req = self.delete(&path);
-        req = req.timeout(Duration::from_secs(130)); // longer than VM soft shutdown timeout (120s)
-        match req.send() {
-            Err(e) => error!(self.logger, "Sending a request to Farm failed: {:?}", e),
-            Ok(r) if !r.status().is_success() => warn!(
-                self.logger,
-                "unexpected response from Farm: {:?}",
-                r.text().unwrap()
-            ),
-            _ => {}
-        };
+    pub fn delete_group(&self, group_name: &str) -> FarmResult<()> {
+        let path = format!("group/{group_name}/async");
+        let rb = self.delete(&path);
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let _resp = self.retry_until_success(rbb)?;
+        Ok(())
     }
 
     /// Creates DNS records under the suffix: `.<group-name>.farm.dfinity.systems`.

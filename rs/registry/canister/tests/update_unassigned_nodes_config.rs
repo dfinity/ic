@@ -3,8 +3,8 @@ use dfn_candid::candid;
 
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value, get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
@@ -20,7 +20,7 @@ use assert_matches::assert_matches;
 
 #[test]
 fn test_the_anonymous_user_cannot_update_unassigned_nodes_config() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -57,7 +57,7 @@ fn test_the_anonymous_user_cannot_update_unassigned_nodes_config() {
 
 #[test]
 fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()

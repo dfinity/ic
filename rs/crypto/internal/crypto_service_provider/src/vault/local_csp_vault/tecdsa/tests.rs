@@ -225,7 +225,6 @@ mod ecdsa_sign_share {
             };
             let result = parameters_with_invalid_hashed_message_length.ecdsa_sign_share(&vault);
 
-            //TODO CRP-1340 add dedicated error type for hash length mismatch
             assert_matches!(
                 result,
                 Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })

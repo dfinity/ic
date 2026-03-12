@@ -133,8 +133,7 @@ impl VectorVm {
         info!(log, "Syncing vector targets.");
 
         let testnet_nodes = env
-            .read_json_object::<NodesInfo, _>(NODES_INFO)
-            .expect("Couldn't read info of the nodes from file")
+            .read_json_object::<NodesInfo, _>(NODES_INFO)?
             .into_keys()
             .collect::<Vec<NodeId>>();
         match env.safe_topology_snapshot() {

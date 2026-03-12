@@ -262,6 +262,13 @@ def icos_build(
             )
 
         if image_deps.get("generate_launch_measurements", False):
+            # The vCPU count in the launch measurement must match the GuestOS VM configuration.
+            #
+            # For dev images, we generate measurements for multiple vCPU configurations to support
+            # different common deployment scenarios:
+            # - 16 vCPUs: local dev testing (per deployment.json.template dev_vm_resources.nr_of_vcpus)
+            # - 64 vCPUs: production-like environments
+            vcpu_configs = "16 64" if "dev" in mode else "64"
             native.genrule(
                 name = "generate-" + launch_measurements,
                 outs = [launch_measurements],
@@ -272,14 +279,16 @@ def icos_build(
                 cmd = r"""
                     source $(execpath """ + boot_args + """)
                     # Create GuestLaunchMeasurements JSON
-                    (for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
-                        hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus 64 --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" --vcpu-type=EPYC-v4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
-                        # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
-                        measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
-                        jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
-                          measurement: ($$m | split("\n") | map(tonumber)),
-                          metadata: {kernel_cmdline: $$cmd}
-                        }'
+                    (for vcpus in """ + vcpu_configs + """; do
+                        for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
+                            hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" --vcpu-type=EPYC-v4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                            # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
+                            measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
+                            jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
+                              measurement: ($$m | split("\n") | map(tonumber)),
+                              metadata: {kernel_cmdline: $$cmd}
+                            }'
+                        done
                     done) | jq -sc "{guest_launch_measurements: .}" > $@
                 """,
             )

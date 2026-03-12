@@ -13,7 +13,7 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, Payload, RejectContext,
     Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CountBytes, Cycles, SubnetId};
+use ic_types::{CountBytes, Cycles, SubnetId, nominal_cycles::NominalCycles};
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
@@ -256,7 +256,9 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
-                state.observe_lost_cycles_due_to_dropped_messages(req.payment);
+                state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::from(
+                    req.payment.get(),
+                ));
             });
     }
 
@@ -469,7 +471,7 @@ impl StreamBuilderImpl {
                         && is_at_limit(
                             &dst_stream_entry,
                             network_topology
-                                .subnets
+                                .subnets()
                                 .get(&dst_subnet_id)
                                 .map_or(SubnetType::Application, |topology| topology.subnet_type),
                         )
@@ -720,7 +722,7 @@ impl StreamBuilderImpl {
                 }
             }
         });
-        state.observe_lost_cycles_due_to_dropped_messages(cycles_lost);
+        state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::from(cycles_lost.get()));
     }
 }
 

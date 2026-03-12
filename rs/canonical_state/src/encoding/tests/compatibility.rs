@@ -15,13 +15,11 @@ use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase,
-    metadata_state::{SubnetMetrics, SystemMetadata},
-};
+use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
+    CryptoHashOfPartialState, Cycles, NumBytes, Time,
     crypto::CryptoHash,
     messages::{
         CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata,
@@ -215,9 +213,9 @@ fn canonical_encoding_stream_header() {
 fn canonical_encoding_subnet_metrics() {
     for certification_version in all_supported_versions() {
         let mut metrics = SubnetMetrics::default();
-        metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
-        metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
-        metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
+        metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::from(0));
+        metrics.observe_consumed_cycles_http_outcalls(NominalCycles::from(50_000_000_000));
+        metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::from(100_000_000_000));
         metrics.num_canisters = 5;
         metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
         metrics.update_transactions_total = 4200;
@@ -1716,42 +1714,6 @@ fn invalid_refund_missing_amount() {
 }
 
 //
-// `Funds` decoding
-//
-
-#[test]
-fn valid_funds() {
-    for certification_version in all_supported_versions() {
-        let funds = funds();
-        let bytes = types::Funds::proxy_encode((&funds, certification_version)).unwrap();
-
-        assert_eq!(funds, types::Funds::proxy_decode(&bytes).unwrap());
-    }
-}
-
-#[test]
-#[should_panic(expected = "expected field index 0 <= i < 2")]
-fn invalid_funds_extra_field() {
-    for certification_version in all_supported_versions() {
-        let bytes =
-            types::Funds::encode_with_extra_field((&funds(), certification_version)).unwrap();
-
-        let _: Funds = types::Funds::proxy_decode(&bytes).unwrap();
-    }
-}
-
-#[test]
-#[should_panic(expected = "missing field `cycles`")]
-fn invalid_funds_missing_cycles() {
-    for certification_version in all_supported_versions() {
-        let bytes =
-            types::Funds::encode_without_field((&funds(), certification_version), 0).unwrap();
-
-        let _: Funds = types::Funds::proxy_decode(&bytes).unwrap();
-    }
-}
-
-//
 // `Payload` decoding
 //
 
@@ -1996,10 +1958,6 @@ fn response(_certification_version: CertificationVersion) -> Response {
 
 fn anonymous_refund(_certification_version: CertificationVersion) -> Refund {
     Refund::anonymous(canister_test_id(7), cycles())
-}
-
-fn funds() -> Funds {
-    Funds::new(Cycles::new(3))
 }
 
 fn cycles() -> Cycles {

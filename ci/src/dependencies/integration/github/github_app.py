@@ -1,4 +1,3 @@
-import logging
 import os
 import re
 import time
@@ -12,9 +11,6 @@ GITHUB_APP_CREDENTIALS = {
     "dfinity": (os.environ.get("GITHUB_APP_CLIENT_ID_DFINITY"), os.environ.get("GITHUB_APP_SIGNING_KEY_DFINITY")),
     "utopia-icp": (os.environ.get("GITHUB_APP_CLIENT_ID_UTOPIA"), os.environ.get("GITHUB_APP_SIGNING_KEY_UTOPIA")),
 }
-
-if GITHUB_APP_CREDENTIALS["dfinity"][0] is None or GITHUB_APP_CREDENTIALS["dfinity"][1] is None:
-    logging.warning("GITHUB_APP_CREDENTIALS for dfinity are not set, can not clone private repos")
 
 
 class GithubApp:

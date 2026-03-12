@@ -253,7 +253,9 @@ fn router() -> Router {
             "/anything",
             get(anything_handler)
                 .post(anything_handler)
-                .head(anything_handler),
+                .head(anything_handler)
+                .put(anything_handler)
+                .delete(anything_handler),
         )
         .route(
             "/anything/{*key}",

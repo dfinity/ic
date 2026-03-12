@@ -95,8 +95,6 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     );
 }
 
-// TODO(CRP-430): check/improve the test coverage of SKS checks.
-
 #[test]
 fn should_fail_check_keys_with_registry_if_no_keys_are_present_in_registry() {
     let crypto = TestKeygenCrypto::builder()

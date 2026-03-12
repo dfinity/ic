@@ -3,15 +3,10 @@
 
 use std::time::Duration;
 
-use crate::{
-    execution_environment::{NUMBER_OF_EXECUTION_THREADS, SUBNET_HEAP_DELTA_CAPACITY},
-    flag_status::FlagStatus,
-};
+use crate::execution_environment::{NUMBER_OF_EXECUTION_THREADS, SUBNET_HEAP_DELTA_CAPACITY};
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    Cycles, ExecutionRound, NumInstructions, consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE,
-};
+use ic_types::{Cycles, ExecutionRound, NumInstructions};
 use serde::{Deserialize, Serialize};
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -278,9 +273,6 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading or downloading binary snapshot data.
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
-
-    /// Whether to store pre-signatures in the replicated state.
-    pub store_pre_signatures_in_state: FlagStatus,
 }
 
 impl SchedulerConfig {
@@ -312,11 +304,6 @@ impl SchedulerConfig {
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
             canister_snapshot_data_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
-            store_pre_signatures_in_state: if STORE_PRE_SIGNATURES_IN_STATE {
-                FlagStatus::Enabled
-            } else {
-                FlagStatus::Disabled
-            },
         }
     }
 
@@ -361,15 +348,14 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
-            store_pre_signatures_in_state: if STORE_PRE_SIGNATURES_IN_STATE {
-                FlagStatus::Enabled
-            } else {
-                FlagStatus::Disabled
-            },
         }
     }
 
     pub fn verified_application_subnet() -> Self {
+        Self::application_subnet()
+    }
+
+    pub fn cloud_engine() -> Self {
         Self::application_subnet()
     }
 
@@ -378,6 +364,7 @@ impl SchedulerConfig {
             SubnetType::Application => Self::application_subnet(),
             SubnetType::System => Self::system_subnet(),
             SubnetType::VerifiedApplication => Self::verified_application_subnet(),
+            SubnetType::CloudEngine => Self::cloud_engine(),
         }
     }
 }
@@ -573,6 +560,10 @@ impl CyclesAccountManagerConfig {
             fetch_canister_logs_per_byte_fee: Cycles::zero(),
         }
     }
+
+    pub fn cloud_engine() -> Self {
+        Self::application_subnet()
+    }
 }
 
 /// If a component has at least one static configuration that is different for
@@ -589,6 +580,7 @@ impl SubnetConfig {
             SubnetType::Application => Self::default_application_subnet(),
             SubnetType::System => Self::default_system_subnet(),
             SubnetType::VerifiedApplication => Self::default_verified_application_subnet(),
+            SubnetType::CloudEngine => Self::default_cloud_engine(),
         }
     }
 
@@ -615,6 +607,14 @@ impl SubnetConfig {
             scheduler_config: SchedulerConfig::verified_application_subnet(),
             cycles_account_manager_config: CyclesAccountManagerConfig::verified_application_subnet(
             ),
+        }
+    }
+
+    /// Returns the subnet configuration for a cloud engine subnet type.
+    fn default_cloud_engine() -> Self {
+        Self {
+            scheduler_config: SchedulerConfig::cloud_engine(),
+            cycles_account_manager_config: CyclesAccountManagerConfig::cloud_engine(),
         }
     }
 }
