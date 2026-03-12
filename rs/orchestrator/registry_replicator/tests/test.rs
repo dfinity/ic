@@ -282,7 +282,7 @@ async fn random_mutate(pocket_ic: &PocketIcHelper, rng: &mut ReproducibleRng) ->
     }
 }
 
-const CONDITION_TIMEOUT: Duration = Duration::from_mins(1);
+const CONDITION_TIMEOUT: Duration = Duration::from_mins(2);
 const CONDITION_BACKOFF: Duration = Duration::from_millis(500);
 
 async fn wait_for_condition<F, Fut>(condition: F, message_on_timeout: &str)

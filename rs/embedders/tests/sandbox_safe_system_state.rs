@@ -12,7 +12,6 @@ use ic_management_canister_types_private::{
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{NetworkTopology, SystemState};
@@ -23,6 +22,7 @@ use ic_test_utilities_types::ids::{
 };
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE};
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;

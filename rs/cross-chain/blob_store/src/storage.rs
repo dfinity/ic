@@ -73,6 +73,18 @@ impl<M: Memory> BlobStore<M> {
         self.metadata.get(&hash)
     }
 
+    pub fn len(&self) -> u64 {
+        self.store.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.store.is_empty()
+    }
+
+    pub fn iter_metadata(&self) -> impl Iterator<Item = (Hash, Metadata)> + '_ {
+        self.metadata.iter()
+    }
+
     pub fn insert<B: Into<Blob>>(&mut self, blob: B, metadata: Metadata) -> Option<Hash> {
         let Blob { data, hash } = blob.into();
         if self.store.contains_key(&hash) {

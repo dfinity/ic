@@ -16,7 +16,6 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_metrics::{
@@ -25,6 +24,7 @@ use ic_test_utilities_metrics::{
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_types::batch::ConsensusResponse;
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
@@ -921,7 +921,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_before + NominalCycles::from(fee),
+        consumed_cycles_before + NominalCycles::from(fee.get()),
         consumed_cycles_after
     );
 
@@ -1022,7 +1022,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_before + NominalCycles::from(fee),
+        consumed_cycles_before + NominalCycles::from(fee.get()),
         consumed_cycles_after
     );
 

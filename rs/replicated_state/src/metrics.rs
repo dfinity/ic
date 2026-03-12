@@ -1,4 +1,3 @@
-use crate::canister_state::system_state::CyclesUseCase;
 use crate::{
     CallOrigin, CanisterState, CanisterStatus, ExecutionTask, ReplicatedState, num_bytes_try_from,
 };
@@ -10,6 +9,7 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{
     binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumInstructions, Time,
@@ -421,7 +421,7 @@ impl ReplicatedStateMetrics {
         consumed_cycles_total += state
             .metadata
             .subnet_metrics
-            .consumed_cycles_by_deleted_canisters;
+            .get_consumed_cycles_by_deleted_canisters();
 
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
@@ -432,10 +432,16 @@ impl ReplicatedStateMetrics {
         );
 
         // Add the consumed cycles in ecdsa outcalls.
-        consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls;
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_ecdsa_outcalls();
 
         // Add the consumed cycles in http outcalls.
-        consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_http_outcalls;
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_http_outcalls();
 
         self.consumed_cycles.set(consumed_cycles_total.get() as f64);
 
