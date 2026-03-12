@@ -339,13 +339,13 @@ rust_test(
         ],
         aliases = {},
         data = [
-            ":pocket-ic-server",
+            "//:pocket-ic-server",
             "@ii_dev_canister//file",
             "@mozilla_root_ca_store//file",
         ],
         env = {
             "RUST_TEST_THREADS": "2",
-            "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+            "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
             "II_WASM": "$(rootpath @ii_dev_canister//file)",
             "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         },
@@ -371,13 +371,13 @@ rust_test(
     ],
     aliases = {},
     data = [
-        ":pocket-ic-server",
         "//:bitcoind",
+        "//:pocket-ic-server",
         "@bitcoin_example_canister//file",
         "@mozilla_root_ca_store//file",
     ],
     env = {
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+        "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
         "BITCOIN_EXAMPLE_CANISTER_WASM": "$(rootpath @bitcoin_example_canister//file)",
         "BITCOIND_BIN": "$(rootpath //:bitcoind)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",

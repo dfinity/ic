@@ -288,7 +288,7 @@ jobs:
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
-    needs: [config]
+    needs: [config, bazel-test-arm64]
     environment:
       # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
       # It also requires the AWS & CF secrets which are only available in the `upload-artifacts` environment.
@@ -307,53 +307,35 @@ jobs:
           fetch-depth: 1 # on macOS we don't need any git history
           ref: ${{ inputs.commit-sha }}
       - uses: ./.github/actions/netrc
-        # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
-        # wanna make sure bazel evaluates successfully.
-      - name: Evaluate workspace
-        uses: ./.github/actions/bazel
-        with:
-          invocation-names: eval
-          run: |
-            bazel build \
-              --config=stamped \
-              --build_tag_filters=test_all_platforms \
-              //... --nobuild
 
-            # make sure the artifacts always evaluate successfully even if we don't
-            # upload them
-            bazel build \
-              --config=stamped \
-              //:upload-artifacts --nobuild
+      - name: Download pocket-ic-server
+        uses: actions/download-artifact@v4
+        with:
+          name: pocket-ic-server-x86_64-darwin.gz
+          path: .install
+
+      - name: Test pocket-ic-server
+        shell: bash
+        run: |
+          pushd .install
+          gzip -d ./pocket-ic-server-x86_64-darwin.gz
+          mv pocket-ic-server-x86_64-darwin pocket-ic-server
+          chmod +x ./pocket-ic-server
+          popd
+
+          .install/pocket-ic-server --version
 
       - name: Build & Test
-        if: ${{ needs.config.outputs.full_macos_build == 'true' }}
         uses: ./.github/actions/bazel
         with:
           invocation-names: build
           run: |
+
             bazel test \
               --config=stamped \
               --test_tag_filters=test_all_platforms \
-              //...
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
-        if: needs.config.outputs.release-build == 'true'
-        with:
-          role-session-name: "GitHub-Actions_ic_upload-artifacts"
-          role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
-          aws-region: eu-central-1
-
-      - name: Upload artifacts
-        # NOTE: GHA output quirk, 'true' is a string
-        if: ${{ needs.config.outputs.full_macos_build == 'true' && needs.config.outputs.release-build == 'true' }}
-        uses: ./.github/actions/upload-artifacts
-        env:
-          CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
-          CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
-        with:
-          name: macOS Intel artifacts
-          upload-command: bazel run --check_up_to_date //:upload-artifacts
+              --//:pocket-ic-server-variant=local \
+              //rs/pocket_ic_server/...
 
       - name: Purge Bazel Output
         if: always()

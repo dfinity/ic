@@ -1,4 +1,4 @@
-load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
@@ -233,6 +233,7 @@ alias(
     actual = select({
         ":pocket-ic-server-variant-mainnet": "//:pocket-ic-mainnet",
         ":pocket-ic-server-variant-head": "//rs/pocket_ic_server:pocket-ic-server",
+        ":pocket-ic-server-variant-local": "@pocket-ic-server-local//:pocket-ic-server",
         "//conditions:default": "//rs/pocket_ic_server:pocket-ic-server",
     }),
 )
@@ -240,7 +241,7 @@ alias(
 # A setting to switch between different variants of pocket-ic. The
 # default pocket-ic variant/version (head) is the one as in the
 # source tree.
-string_setting(
+string_flag(
     name = "pocket-ic-server-variant",
     build_setting_default = "head",
     visibility = ["//visibility:public"],
@@ -259,6 +260,13 @@ config_setting(
     name = "pocket-ic-server-variant-mainnet",
     flag_values = {
         ":pocket-ic-server-variant": "mainnet",
+    },
+)
+
+config_setting(
+    name = "pocket-ic-server-variant-local",
+    flag_values = {
+        ":pocket-ic-server-variant": "local",
     },
 )
 

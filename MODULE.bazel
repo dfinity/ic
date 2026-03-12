@@ -1167,3 +1167,13 @@ archive_override(
 
 motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
 motoko.toolchain(version = "0.16.3")
+
+new_local_repository(
+    name = "pocket-ic-server-local",
+    build_file_content = """
+exports_files([
+    "pocket-ic-server",
+])
+""",
+    path = ".install",
+)
