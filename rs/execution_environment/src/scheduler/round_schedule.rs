@@ -370,8 +370,6 @@ impl RoundSchedule {
         state: &mut ReplicatedState,
         fully_executed_canister_ids: BTreeSet<CanisterId>,
     ) {
-        let number_of_canisters = state.canister_states().len();
-
         // Charge canisters for full executions in this round.
         for canister_id in fully_executed_canister_ids {
             state.canister_priority_mut(canister_id).priority_credit += ONE_HUNDRED_PERCENT;
@@ -407,7 +405,7 @@ impl RoundSchedule {
 
         // Fully distribute the free allocation among all canisters, ensuring that we
         // end up with exactly zero at the end of the loop.
-        let mut remaining_canisters = number_of_canisters as i64;
+        let mut remaining_canisters = subnet_schedule.len() as i64;
         // We called `SubnetSchedule::get_mut()` for all canisters above (which inserts
         // a default priority when not found), so this iteration covers all canisters.
         for (_, canister_priority) in subnet_schedule.iter_mut() {

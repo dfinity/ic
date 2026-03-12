@@ -71,11 +71,22 @@ message CanisterHttpResponseDivergence {
   repeated CanisterHttpShare shares = 1;
 }
 
+message FlexibleCanisterHttpResponseWithProof {
+  CanisterHttpResponse response = 1;
+  CanisterHttpShare proof = 2;
+}
+
+message FlexibleCanisterHttpResponses {
+  uint64 callback_id = 1;
+  repeated FlexibleCanisterHttpResponseWithProof responses = 2;
+}
+
 message CanisterHttpResponseMessage {
   oneof message_type {
     CanisterHttpResponseWithConsensus response = 1;
     uint64 timeout = 2;
     CanisterHttpResponseDivergence divergence_response = 3;
+    FlexibleCanisterHttpResponses flexible_responses = 4;
   }
 }
 

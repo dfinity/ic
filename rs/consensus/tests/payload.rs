@@ -74,6 +74,9 @@ fn consensus_produces_expected_batches() {
             .expect_list_state_hashes_to_certify()
             .return_const(vec![]);
         state_manager
+            .expect_list_state_heights_to_certify()
+            .return_const(vec![]);
+        state_manager
             .expect_latest_certified_height()
             .return_const(Height::new(0));
         state_manager
@@ -109,6 +112,7 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
         )));
         let idkg_pool = Arc::new(RwLock::new(idkg_pool::IDkgPoolImpl::new(
+            replica_config.node_id,
             pool_config.clone(),
             no_op_logger(),
             metrics_registry.clone(),

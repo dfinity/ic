@@ -31,12 +31,13 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    AdminAndUserKeys, break_nodes, get_admin_keys_and_generate_backup_keys,
+    BACKUP_USERNAME, SshKeys, break_nodes, get_ssh_keys_for_user,
     node_with_highest_certification_share_height,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
-    SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
+    NNS_RECOVERY_VM_RESOURCES, SetupConfig, grant_backup_access_to_all_nns_nodes,
+    replace_nns_with_unassigned_nodes,
 };
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
@@ -63,6 +64,7 @@ fn setup(env: TestEnv) {
             impersonate_upstreams: false,
             subnet_size,
             dkg_interval,
+            nested_nodes_vm_resources: NNS_RECOVERY_VM_RESOURCES,
         },
     );
 }
@@ -89,11 +91,11 @@ fn log_instructions(env: TestEnv) {
         );
     }
 
-    let AdminAndUserKeys {
-        user_auth: backup_auth,
-        ssh_user_pub_key: ssh_backup_pub_key,
-        ..
-    } = get_admin_keys_and_generate_backup_keys(&env);
+    let SshKeys {
+        ssh_priv_key_path: _,
+        auth: backup_auth,
+        ssh_pub_key: ssh_backup_pub_key,
+    } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);

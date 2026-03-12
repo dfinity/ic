@@ -974,7 +974,7 @@ fn build_streams_with_refunds(
         prop_assert_eq!(remote_stream_refunds, remote_stream.refund_count());
         let remote_stream_messages = match subnet_type {
             // On application subnets, there can be at most `N - refunds` canister messages.
-            SubnetType::Application | SubnetType::VerifiedApplication => {
+            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
                 (initial_messages + messages_to_route).min(N - remote_stream_refunds)
             }
             // On system subnets, also apply the `2 * system_subnet_stream_msg_limit` limit.

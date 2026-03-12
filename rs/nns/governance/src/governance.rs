@@ -150,22 +150,22 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-pub mod disburse_maturity;
+#[cfg(feature = "canbench-rs")]
+mod benches;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
-pub mod test_data;
 #[cfg(test)]
 mod tests;
-pub mod voting_power_snapshots;
 
-#[cfg(feature = "canbench-rs")]
-mod benches;
-
-#[macro_use]
-pub mod tla_macros;
+pub mod create_neuron;
+pub mod disburse_maturity;
+pub mod test_data;
 #[cfg(feature = "tla")]
 pub mod tla;
+#[macro_use]
+pub mod tla_macros;
+pub mod voting_power_snapshots;
 
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
@@ -240,7 +240,7 @@ pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 20;
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
 /// The maximum number of neurons returned by `list_neurons`
-pub const MAX_LIST_NEURONS_RESULTS: usize = 500;
+pub const MAX_LIST_NEURONS_RESULTS: usize = 50;
 
 const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 
@@ -2708,6 +2708,13 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Can't perform operation on neuron: Neuron is spawning.",
+            ));
+        }
+
+        if neuron_state == NeuronState::Dissolved {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Neuron is dissolved.",
             ));
         }
 
@@ -7812,6 +7819,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
             declining_voting_power_neuron_subset_metrics,
@@ -7876,6 +7884,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             total_staked_e8s_non_self_authenticating_controller,
             total_voting_power_non_self_authenticating_controller,
 

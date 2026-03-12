@@ -242,9 +242,24 @@ impl Point {
     /// Perform multi-exponentiation
     ///
     /// Equivalent to p1*s1 + p2*s2
-    pub fn lincomb(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
+    pub fn lincomb_vartime(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
         // Use mul2 table here!
         Self::new(p256::ProjectivePoint::lincomb(&p1.p, &s1.s, &p2.p, &s2.s))
+    }
+
+    /// Perform multi-exponentiation
+    ///
+    /// Equivalent to p1*s1 + p2*s2 + p3*s3
+    pub fn lincomb3_vartime(
+        p1: &Point,
+        s1: &Scalar,
+        p2: &Point,
+        s2: &Scalar,
+        p3: &Point,
+        s3: &Scalar,
+    ) -> Self {
+        // p256 doesn't currently offer anything for this
+        Self::lincomb_vartime(p1, s1, p2, s2).add(&p3.mul(s3))
     }
 
     pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {

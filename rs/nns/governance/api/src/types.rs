@@ -2954,6 +2954,7 @@ pub mod governance {
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
         pub fully_lost_voting_power_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        pub total_maturity_disbursements_in_progress_e8s_equivalent: u64,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
@@ -4538,3 +4539,22 @@ pub struct SelfDescribingProposalAction {
 pub struct GetPendingProposalsRequest {
     pub return_self_describing_action: Option<bool>,
 }
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct CreateNeuronRequest {
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub source_subaccount: Option<Vec<u8>>,
+    pub amount_e8s: Option<u64>,
+    pub controller: Option<PrincipalId>,
+    pub followees: Option<manage_neuron::SetFollowing>,
+    pub dissolve_delay_seconds: Option<u64>,
+    pub dissolving: Option<bool>,
+    pub auto_stake_maturity: Option<bool>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct CreatedNeuron {
+    pub neuron_id: Option<NeuronId>,
+}
+
+pub type CreateNeuronResponse = Result<CreatedNeuron, GovernanceError>;

@@ -6,6 +6,7 @@ use serde::Serialize;
 use url::Url;
 
 use std::{
+    collections::BTreeMap,
     fmt::Display,
     path::{Path, PathBuf},
     process::Command,
@@ -14,6 +15,7 @@ use std::{
 
 pub const SUMMARY_ARG: &str = "summary";
 pub const SSH_READONLY_ACCESS_ARG: &str = "ssh-readonly-access";
+pub const SSH_WRITE_ACCESS_ARG: &str = "ssh-node-state-write-access";
 
 pub type IcAdmin = Vec<String>;
 
@@ -69,14 +71,6 @@ impl AdminHelper {
         ic_admin
     }
 
-    pub fn add_propose_to_update_subnet_base(&self, ic_admin: &mut IcAdmin, subnet_id: SubnetId) {
-        ic_admin
-            .add_positional_argument("propose-to-update-subnet")
-            .add_argument("subnet", subnet_id);
-
-        self.add_proposer_args(ic_admin);
-    }
-
     // Existence of [NeuronArgs] implies no testing mode. Add proposer neuron id,
     // else add test neuron proposer.
     pub fn add_proposer_args(&self, ic_admin: &mut IcAdmin) {
@@ -94,9 +88,11 @@ impl AdminHelper {
         keys: &[String],
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base();
-        self.add_propose_to_update_subnet_base(&mut ic_admin, subnet_id);
 
-        ic_admin.add_argument("is-halted", is_halted);
+        ic_admin
+            .add_positional_argument("propose-to-update-subnet")
+            .add_argument("subnet", subnet_id)
+            .add_argument("is-halted", is_halted);
         if !keys.is_empty() {
             ic_admin.add_arguments(SSH_READONLY_ACCESS_ARG, keys.iter().map(quote));
         }
@@ -108,6 +104,66 @@ impl AdminHelper {
                 subnet_id,
             )),
         );
+
+        self.add_proposer_args(&mut ic_admin);
+
+        ic_admin
+    }
+
+    pub fn get_propose_to_take_subnet_offline_for_repairs_command(
+        &self,
+        subnet_id: SubnetId,
+        subnet_readonly_keys: &[String],
+        node_write_keys: &BTreeMap<NodeId, Vec<String>>,
+    ) -> IcAdmin {
+        let mut ic_admin = self.get_ic_admin_cmd_base();
+
+        ic_admin
+            .add_positional_argument("propose-to-take-subnet-offline-for-repairs")
+            .add_argument("subnet", subnet_id);
+        if !subnet_readonly_keys.is_empty() {
+            ic_admin.add_arguments(
+                SSH_READONLY_ACCESS_ARG,
+                subnet_readonly_keys.iter().map(quote),
+            );
+        }
+        if !node_write_keys.is_empty() {
+            ic_admin.add_arguments(
+                SSH_WRITE_ACCESS_ARG,
+                node_write_keys
+                    .iter()
+                    .map(|(node_id, keys)| quote(format!("{}:{}", node_id, keys.join(","),))),
+            );
+        }
+        ic_admin.add_argument(
+            SUMMARY_ARG,
+            quote(format!(
+                "Take subnet {subnet_id} offline for recovery, updating readonly and write access ssh keys",
+            )),
+        );
+
+        self.add_proposer_args(&mut ic_admin);
+
+        ic_admin
+    }
+
+    pub fn get_propose_to_bring_subnet_back_online_after_repairs_command(
+        &self,
+        subnet_id: SubnetId,
+    ) -> IcAdmin {
+        let mut ic_admin = self.get_ic_admin_cmd_base();
+
+        ic_admin
+            .add_positional_argument("propose-to-bring-subnet-back-online-after-repairs")
+            .add_argument("subnet", subnet_id)
+            .add_argument(
+                SUMMARY_ARG,
+                quote(format!(
+                    "Bring subnet {subnet_id} back online after repairs",
+                )),
+            );
+
+        self.add_proposer_args(&mut ic_admin);
 
         ic_admin
     }
@@ -382,10 +438,10 @@ mod tests {
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-subnet \
             --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
-            --test-neuron-proposer \
             --is-halted true \
             --ssh-readonly-access \"fake public key\" \
-            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\""
+            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\" \
+            --test-neuron-proposer"
         );
     }
 

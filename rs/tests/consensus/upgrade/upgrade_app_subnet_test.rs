@@ -18,7 +18,7 @@ use ic_system_test_driver::driver::test_env_api::{
 use ic_system_test_driver::systest;
 use ic_types::Height;
 
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
@@ -81,6 +81,8 @@ fn main() -> Result<()> {
         .with_timeout_per_test(UP_DOWNGRADE_PER_TEST_TIMEOUT)
         .with_setup(setup)
         .add_test(systest!(upgrade_app_subnet))
+        // TODO(CON-1658): Re-enable after certification witnesses are deployed to all subnets.
+        .remove_metrics_to_check("certification_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }
