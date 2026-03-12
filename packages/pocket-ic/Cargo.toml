@@ -55,6 +55,7 @@ candid_parser = { workspace = true }
 cycles-minting-canister = { path = "../../rs/nns/cmc" }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../rs/types/base_types" }
 ic-cdk = { workspace = true }
 icrc-ledger-types = { path = "../icrc-ledger-types" }
@@ -63,14 +64,21 @@ ic-management-canister-types-private = { path = "../../rs/types/management_canis
 ic-migration-canister = { path = "../../rs/migration_canister" }
 ic-nns-governance-api = { path = "../../rs/nns/governance/api" }
 ic-sns-wasm = { path = "../../rs/nns/sns-wasm" }
+ic-utils = { workspace = true }
 ic-vetkeys = { workspace = true }
 k256 = { workspace = true }
 registry-canister = { path = "../../rs/registry/canister" }
 wat = { workspace = true }
 
 [target.'cfg(not(windows))'.dev-dependencies]
+ic-config = { path = "../../rs/config" }
+ic-crypto-node-key-generation = { path = "../../rs/crypto/node_key_generation" }
+ic-protobuf = { path = "../../rs/protobuf" }
+ic-registry-canister-api = { path = "../../rs/registry/canister/api" }
 ic-registry-client = { path = "../../rs/registry/client" }
 ic-registry-client-helpers = { path = "../../rs/registry/helpers" }
 ic-registry-proto-data-provider = { path = "../../rs/registry/proto_data_provider" }
 ic-registry-transport = { path = "../../rs/registry/transport" }
+ic-types = { path = "../../rs/types/types" }
+maplit = "1.0.2"
 prost = { workspace = true }

@@ -1385,6 +1385,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .clone(),
             total_query_stats: canister_state.system_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
+            snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
@@ -1730,6 +1731,7 @@ mod test {
 
             let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {
                 certifications_metadata: Default::default(),
+                certifications: Default::default(),
                 states_metadata: Default::default(),
                 snapshots: Default::default(),
                 last_advertised: Height::new(0),

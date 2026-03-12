@@ -57,6 +57,7 @@ pub(crate) struct NeuronMetrics {
     pub(crate) not_dissolving_neurons_e8s_buckets_seed: HashMap<u64, f64>,
     pub(crate) not_dissolving_neurons_e8s_buckets_ect: HashMap<u64, f64>,
     pub(crate) spawning_neurons_count: u64,
+    pub(crate) total_maturity_disbursements_in_progress_e8s_equivalent: u64,
 
     // Much of the above could also be done like this, but we leave such refactoring as an exercise
     // to the reader.
@@ -461,6 +462,9 @@ impl NeuronStore {
             metrics.total_locked_e8s = metrics
                 .total_staked_e8s
                 .saturating_sub(metrics.dissolved_neurons_e8s);
+
+            metrics.total_maturity_disbursements_in_progress_e8s_equivalent =
+                stable_neuron_store.total_maturity_disbursements_in_progress_e8s_equivalent();
         });
 
         metrics

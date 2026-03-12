@@ -1,4 +1,5 @@
 use crate::GuestVMType;
+use crate::metrics::GuestVmMetrics;
 use anyhow::{Context, Result, ensure};
 use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
@@ -15,10 +16,10 @@ const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log"
 const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
 
 #[cfg(not(feature = "dev"))]
-const DEFAULT_VM_MEMORY_GB: u32 = 480;
+const DEFAULT_VM_MEMORY_GIB: u32 = 480;
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_VCPUS: u32 = 64;
-const UPGRADE_VM_MEMORY_GB: u32 = 4;
+const UPGRADE_VM_MEMORY_GIB: u32 = 4;
 
 #[derive(Template)]
 #[template(path = "guestos_vm_template.xml", escape = "xml")]
@@ -34,6 +35,7 @@ pub struct GuestOSTemplateProps {
     pub config_media_path: PathBuf,
     pub enable_sev: bool,
     pub direct_boot: Option<DirectBootConfig>,
+    pub use_hugepages: bool,
 }
 
 #[derive(Debug)]
@@ -95,6 +97,7 @@ fn make_bootstrap_options(
 }
 
 /// Generate the GuestOS VM libvirt XML configuration and return it as String.
+/// Writes a metric indicating whether hugepages are enabled.
 pub fn generate_vm_config(
     config: &HostOSConfig,
     media_path: &Path,
@@ -102,6 +105,8 @@ pub fn generate_vm_config(
     disk_device: &Path,
     serial_log_path: &Path,
     guest_vm_type: GuestVMType,
+    available_hugepages_gib: u64,
+    metrics: &GuestVmMetrics,
 ) -> Result<String> {
     let node_type = match guest_vm_type {
         GuestVMType::Default => NodeType::GuestOS,
@@ -120,13 +125,20 @@ pub fn generate_vm_config(
     // contain nodes with and without SEV should have the same memory settings for consistency
     // across nodes.
     ensure!(
-        total_vm_memory >= UPGRADE_VM_MEMORY_GB,
-        "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GB}GB but is {total_vm_memory}GB."
+        total_vm_memory >= UPGRADE_VM_MEMORY_GIB,
+        "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GIB}GiB but is {total_vm_memory}GiB."
     );
-    let vm_memory = match guest_vm_type {
-        GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GB,
-        GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GB,
+    let vm_memory_gib = match guest_vm_type {
+        GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GIB,
+        GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GIB,
     };
+
+    // Enable hugepages if enough are available for this VM and TEE is disabled (hugepages are not
+    // supported by the kernel for confidential VMs)
+    let use_hugepages = available_hugepages_gib >= vm_memory_gib as u64
+        && !config.icos_settings.enable_trusted_execution_environment;
+
+    metrics.set_hugepages_enabled(guest_vm_type, use_hugepages);
 
     GuestOSTemplateProps {
         domain_name: vm_domain_name(guest_vm_type).to_string(),
@@ -134,19 +146,20 @@ pub fn generate_vm_config(
         disk_device: disk_device.to_path_buf(),
         cpu_domain,
         console_log_path: serial_log_path.display().to_string(),
-        vm_memory,
+        vm_memory: vm_memory_gib,
         nr_of_vcpus,
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,
         enable_sev: config.icos_settings.enable_trusted_execution_environment,
+        use_hugepages,
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
 }
 
 #[cfg(feature = "dev")]
-fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
+pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
     let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
         "qemu".to_string()
     } else {
@@ -160,8 +173,8 @@ fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
 }
 
 #[cfg(not(feature = "dev"))]
-fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
-    ("kvm".to_string(), DEFAULT_VM_MEMORY_GB, DEFAULT_VM_VCPUS)
+pub(crate) fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
+    ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS)
 }
 
 pub fn vm_domain_name(guest_vm_type: GuestVMType) -> &'static str {
@@ -195,7 +208,7 @@ mod tests {
     use goldenfile::Mint;
     use std::env;
     use std::os::unix::prelude::MetadataExt;
-    use tempfile::tempdir;
+    use tempfile::{NamedTempFile, tempdir};
 
     fn create_test_hostos_config() -> HostOSConfig {
         HostOSConfig {
@@ -273,6 +286,7 @@ mod tests {
         enable_trusted_execution_environment: bool,
         enable_direct_boot: bool,
         guest_vm_type: GuestVMType,
+        available_hugepages_gib: u64,
     ) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
@@ -292,6 +306,9 @@ mod tests {
             None
         };
 
+        let temp_metrics = NamedTempFile::new().unwrap();
+        let metrics = GuestVmMetrics::new(temp_metrics.path().to_path_buf()).unwrap();
+
         let vm_config = generate_vm_config(
             &config,
             Path::new("/tmp/config.img"),
@@ -299,6 +316,8 @@ mod tests {
             Path::new("/dev/guest_disk"),
             Path::new("/var/serial/console.txt"),
             guest_vm_type,
+            available_hugepages_gib,
+            &metrics,
         )
         .unwrap();
         std::fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
@@ -319,6 +338,7 @@ mod tests {
             /*enable_trusted_execution_environment=*/ false,
             /*enable_direct_boot=*/ true,
             GuestVMType::Default,
+            16,
         );
     }
 
@@ -337,6 +357,7 @@ mod tests {
             /*enable_trusted_execution_environment=*/ true,
             /*enable_direct_boot=*/ true,
             GuestVMType::Upgrade,
+            4,
         );
     }
 
@@ -355,11 +376,12 @@ mod tests {
             /*enable_trusted_execution_environment=*/ false,
             /*enable_direct_boot=*/ false,
             GuestVMType::Default,
+            0,
         );
     }
 
     #[test]
-    fn test_generate_vm_config_sev() {
+    fn test_generate_vm_config_sev_hugepages() {
         test_vm_config(
             "guestos_vm_sev.xml",
             HostOSSettings {
@@ -373,6 +395,7 @@ mod tests {
             /*enable_trusted_execution_environment=*/ true,
             /*enable_direct_boot=*/ true,
             GuestVMType::Default,
+            470,
         );
     }
 

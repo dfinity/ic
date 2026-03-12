@@ -155,6 +155,7 @@ impl WasmtimeInstanceBuilder {
             SubnetType::Application => SchedulerConfig::application_subnet(),
             SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
             SubnetType::System => SchedulerConfig::system_subnet(),
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
         }
         .dirty_page_overhead;
         let subnet_available_callbacks =

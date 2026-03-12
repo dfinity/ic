@@ -10,6 +10,8 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .with_timeout_per_test(Duration::from_secs(25 * 60))
         .add_test(systest!(test))
+        // TODO(CON-1658): Re-enable after certification witnesses are deployed to all subnets.
+        .remove_metrics_to_check("certification_invalidated_artifacts")
         .execute_from_args()?;
 
     Ok(())

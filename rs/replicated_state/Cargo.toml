@@ -77,6 +77,10 @@ test-strategy = "0.4.0"
 harness = false
 name = "bench_allocator"
 
+[[bench]]
+harness = false
+name = "log_memory_store"
+
 [features]
 fuzzing_code = [
     "dep:arbitrary",

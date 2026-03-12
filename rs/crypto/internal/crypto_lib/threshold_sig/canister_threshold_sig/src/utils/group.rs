@@ -884,7 +884,10 @@ impl EccPoint {
     }
 
     /// Return pt1 * scalar1 + pt2 * scalar2
-    pub fn mul_2_points(
+    ///
+    /// This function may run in variable time with respect to the inputs and
+    /// should not be used with secret values
+    pub fn mul_2_points_vartime(
         pt1: &EccPoint,
         scalar1: &EccScalar,
         pt2: &EccPoint,
@@ -896,21 +899,77 @@ impl EccPoint {
                 EccScalar::K256(s1),
                 EccPointInternal::K256(pt2),
                 EccScalar::K256(s2),
-            ) => Ok(Self::from(secp256k1::Point::lincomb(pt1, s1, pt2, s2))),
+            ) => Ok(Self::from(secp256k1::Point::lincomb_vartime(
+                pt1, s1, pt2, s2,
+            ))),
 
             (
                 EccPointInternal::P256(pt1),
                 EccScalar::P256(s1),
                 EccPointInternal::P256(pt2),
                 EccScalar::P256(s2),
-            ) => Ok(Self::from(secp256r1::Point::lincomb(pt1, s1, pt2, s2))),
+            ) => Ok(Self::from(secp256r1::Point::lincomb_vartime(
+                pt1, s1, pt2, s2,
+            ))),
 
             (
                 EccPointInternal::Ed25519(pt1),
                 EccScalar::Ed25519(s1),
                 EccPointInternal::Ed25519(pt2),
                 EccScalar::Ed25519(s2),
-            ) => Ok(Self::from(ed25519::Point::lincomb(pt1, s1, pt2, s2))),
+            ) => Ok(Self::from(ed25519::Point::lincomb_vartime(
+                pt1, s1, pt2, s2,
+            ))),
+
+            _ => Err(CanisterThresholdError::CurveMismatch),
+        }
+    }
+
+    /// Compute 3-ary multi scalar multiplication (p1*s1 + p2*s2 + p3*s3)
+    ///
+    /// This function may run in variable time with respect to the inputs and
+    /// should not be used with secret values
+    pub fn mul_3_points_vartime(
+        p1: &EccPoint,
+        s1: &EccScalar,
+        p2: &EccPoint,
+        s2: &EccScalar,
+        p3: &EccPoint,
+        s3: &EccScalar,
+    ) -> CanisterThresholdResult<Self> {
+        match (&p1.point, s1, &p2.point, s2, &p3.point, s3) {
+            (
+                EccPointInternal::K256(p1),
+                EccScalar::K256(s1),
+                EccPointInternal::K256(p2),
+                EccScalar::K256(s2),
+                EccPointInternal::K256(p3),
+                EccScalar::K256(s3),
+            ) => Ok(Self::from(secp256k1::Point::lincomb3_vartime(
+                p1, s1, p2, s2, p3, s3,
+            ))),
+
+            (
+                EccPointInternal::P256(p1),
+                EccScalar::P256(s1),
+                EccPointInternal::P256(p2),
+                EccScalar::P256(s2),
+                EccPointInternal::P256(p3),
+                EccScalar::P256(s3),
+            ) => Ok(Self::from(secp256r1::Point::lincomb3_vartime(
+                p1, s1, p2, s2, p3, s3,
+            ))),
+
+            (
+                EccPointInternal::Ed25519(p1),
+                EccScalar::Ed25519(s1),
+                EccPointInternal::Ed25519(p2),
+                EccScalar::Ed25519(s2),
+                EccPointInternal::Ed25519(p3),
+                EccScalar::Ed25519(s3),
+            ) => Ok(Self::from(ed25519::Point::lincomb3_vartime(
+                p1, s1, p2, s2, p3, s3,
+            ))),
 
             _ => Err(CanisterThresholdError::CurveMismatch),
         }
