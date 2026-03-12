@@ -1218,9 +1218,14 @@ pub mod nns {
 
     pub mod registry {
         use ic_registry_transport::{
-            deserialize_get_value_response, pb::v1::HighCapacityRegistryGetValueResponse,
+            deserialize_get_value_response,
+            pb::v1::{
+                HighCapacityRegistryGetValueResponse,
+                high_capacity_registry_get_value_response::Content,
+            },
             serialize_get_value_request,
         };
+        use prost::Message;
         use registry_canister::mutations::do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload;
 
         use super::*;
@@ -1266,6 +1271,21 @@ pub mod nns {
 
                     response
                 })
+        }
+
+        /// Fetch a registry value by key and decode it as a protobuf message.
+        pub async fn decode_registry_value<T: Message + Default>(
+            pocket_ic: &PocketIc,
+            key: impl AsRef<str>,
+        ) -> T {
+            let response = get_value(pocket_ic, key, None).await.unwrap();
+            let bytes = match response.content.unwrap() {
+                Content::Value(bytes) => bytes,
+                Content::LargeValueChunkKeys(_) => {
+                    panic!("Unexpected large value chunk keys in registry response")
+                }
+            };
+            T::decode(bytes.as_slice()).unwrap()
         }
     }
 
