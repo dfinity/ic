@@ -1109,8 +1109,7 @@ mod test {
         config_nns_url: Option<Url>,
         #[values(None, Some(ConnectionEndpoint { ip_addr: "2001:db8::1".to_string(), port: 8080 }))]
         nns_node_endpoint: Option<ConnectionEndpoint>,
-        #[values(None, Some("api.bn.invalid".to_string()))]
-        api_bn_domain: Option<String>,
+        #[values(None, Some("api.bn.invalid".to_string()))] api_bn_domain: Option<String>,
         #[values(None, Some(NodeRewardType::Type1), Some(NodeRewardType::Type4))] node_reward_type: Option<NodeRewardType>,
     ) {
         with_test_replica_logger(|logger| async {
