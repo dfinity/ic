@@ -21,13 +21,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
 use ic_types::{Height, SubnetId, consensus::certification::CertificationMessage};
 use slog::{Logger, debug, info, warn};
-use std::{
-    collections::HashMap,
-    net::IpAddr,
-    path::{Path, PathBuf},
-    process::Command,
-    thread, time,
-};
+use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -574,32 +568,10 @@ pub struct UploadStateAndRestartStep {
 
 impl UploadStateAndRestartStep {
     const CMD_STOP_REPLICA: &str = "sudo systemctl stop ic-replica;";
-    // Note that on older versions of IC-OS this service does not exist.
-    // So try this operation, but ignore possible failure if service
-    // does not exist on the affected version.
     const CMD_RESTART_REPLICA: &str = "\
-        (sudo systemctl restart setup-permissions || true);\
+        sudo systemctl restart setup-permissions;\
         sudo systemctl start ic-replica;\
         sudo systemctl status ic-replica;";
-
-    /// Sets the right state permissions on `target`, by copying the
-    /// permissions of the src path, removing executable permission and
-    /// giving read permissions for the target path to group and others.
-    fn cmd_set_permissions<S: AsRef<Path>, T: AsRef<Path>>(src: S, target: T) -> String {
-        let src = src.as_ref().display();
-        let target = target.as_ref().display();
-
-        let mut set_permissions = String::new();
-        set_permissions.push_str(&format!("sudo chmod -R --reference={src} {target};"));
-        set_permissions.push_str(&format!("sudo chown -R --reference={src} {target};"));
-        set_permissions.push_str(&format!(
-            r"sudo find {target} -type f -exec chmod a-x {{}} \;;"
-        ));
-        set_permissions.push_str(&format!(
-            r"sudo find {target} -type f -exec chmod go+r {{}} \;;"
-        ));
-        set_permissions
-    }
 }
 impl Step for UploadStateAndRestartStep {
     fn descr(&self) -> String {
@@ -689,7 +661,6 @@ impl Step for UploadStateAndRestartStep {
                 &ssh_helper.remote_path(upload_dir.join("")),
             )?;
 
-            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
             let cmd_replace_state = format!(
                 "sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};",
                 ic_state_path = ic_state_path.display(),
@@ -698,7 +669,6 @@ impl Step for UploadStateAndRestartStep {
 
             info!(self.logger, "Restarting replica...");
             ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
-            ssh_helper.ssh(cmd_set_permissions)?;
             ssh_helper.ssh(cmd_replace_state)?;
             ssh_helper.ssh(Self::CMD_RESTART_REPLICA.to_string())?;
         } else {
@@ -708,10 +678,6 @@ impl Step for UploadStateAndRestartStep {
                 Command::new("bash").arg("-c").arg(Self::CMD_STOP_REPLICA),
                 log,
             )?;
-
-            info!(self.logger, "Setting file permissions...");
-            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &self.data_src);
-            confirm_exec_cmd(Command::new("bash").arg("-c").arg(cmd_set_permissions), log)?;
 
             // For local recoveries we first backup the original state, and
             // then simply `mv` the new state to the upload directory. No
@@ -930,7 +896,7 @@ sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
 sudo systemctl stop ic-replica;
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
 sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo systemctl restart setup-permissions || true ;
+sudo systemctl restart setup-permissions;
 sudo systemctl start ic-replica;
 sudo systemctl status ic-replica;
 "#,

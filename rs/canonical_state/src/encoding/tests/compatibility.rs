@@ -15,11 +15,9 @@ use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase,
-    metadata_state::{SubnetMetrics, SystemMetadata},
-};
+use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     CryptoHashOfPartialState, Cycles, NumBytes, Time,
     crypto::CryptoHash,
@@ -215,9 +213,9 @@ fn canonical_encoding_stream_header() {
 fn canonical_encoding_subnet_metrics() {
     for certification_version in all_supported_versions() {
         let mut metrics = SubnetMetrics::default();
-        metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
-        metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
-        metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
+        metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::from(0));
+        metrics.observe_consumed_cycles_http_outcalls(NominalCycles::from(50_000_000_000));
+        metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::from(100_000_000_000));
         metrics.num_canisters = 5;
         metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
         metrics.update_transactions_total = 4200;
