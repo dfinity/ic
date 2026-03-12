@@ -12,9 +12,10 @@ pub use data_size::*;
 pub use http::{
     ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, BoundedHttpHeaders, CanisterHttpRequestArgs,
     CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION,
-    FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod, PRICING_VERSION_LEGACY,
-    PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformArgs, TransformContext,
-    TransformFunc,
+    FlexibleCanisterHttpRequestArgs, FlexibleHttpGlobalError, FlexibleHttpNodeDetail,
+    FlexibleHttpNodeError, FlexibleHttpRequestErr, FlexibleHttpRequestResult, HttpHeader,
+    HttpMethod, HttpRequestResourceReport, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
+    ReplicationCounts, ResourceUsage, TransformArgs, TransformContext, TransformFunc,
 };
 use ic_base_types::{
     CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
@@ -1232,8 +1233,7 @@ impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
                                     .get()
                                     .iter()
                                     .map(|c| (*c).into())
-                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
-                                    .clone(),
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
                             },
                         ),
                     ),
@@ -1322,7 +1322,6 @@ impl From<&SnapshotVisibility> for pb_canister_state_bits::SnapshotVisibility {
                                     .iter()
                                     .map(|c| (*c).into())
                                     .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
-                                    .clone(),
                             },
                         ),
                     ),

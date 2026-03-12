@@ -253,6 +253,16 @@ pub fn get_node_operator_nodes(
     registry: &Registry,
     query_node_operator_id: PrincipalId,
 ) -> Vec<NodeRecord> {
+    get_node_operator_nodes_with_id(registry, query_node_operator_id)
+        .into_iter()
+        .map(|(_, record)| record)
+        .collect()
+}
+
+pub fn get_node_operator_nodes_with_id(
+    registry: &Registry,
+    query_node_operator_id: PrincipalId,
+) -> Vec<(NodeId, NodeRecord)> {
     get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
         .into_iter()
         .filter(|(_, node_record)| {
@@ -261,7 +271,7 @@ pub fn get_node_operator_nodes(
 
             record_node_operator_id == query_node_operator_id
         })
-        .map(|(_, node_record)| node_record)
+        .map(|(k, v)| (NodeId::new(PrincipalId::from_str(&k).unwrap()), v))
         .collect()
 }
 

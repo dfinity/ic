@@ -2711,6 +2711,13 @@ impl Governance {
             ));
         }
 
+        if neuron_state == NeuronState::Dissolved {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Neuron is dissolved.",
+            ));
+        }
+
         if !is_neuron_controlled_by_caller {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
         }
@@ -7812,6 +7819,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
             declining_voting_power_neuron_subset_metrics,
@@ -7876,6 +7884,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             total_staked_e8s_non_self_authenticating_controller,
             total_voting_power_non_self_authenticating_controller,
 

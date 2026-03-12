@@ -76,9 +76,8 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         ExecutionState, ExportedFunctions, Memory, NumWasmPages, PageMap, ReplicatedState,
-        canister_state::{
-            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-            system_state::CyclesUseCase,
+        canister_state::execution_state::{
+            CustomSection, CustomSectionType, WasmBinary, WasmMetadata,
         },
         metadata_state::{
             ApiBoundaryNodeEntry, Stream, SubnetMetrics, testing::NetworkTopologyTesting,
@@ -91,6 +90,7 @@ mod tests {
         canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+    use ic_types::cycles_use_case::CyclesUseCase;
     use ic_types::{
         CanisterId, CryptoHashOfPartialState, Cycles, Height, Time,
         crypto::CryptoHash,
@@ -335,9 +335,11 @@ mod tests {
 
             let mut subnet_metrics = SubnetMetrics::default();
 
-            subnet_metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
-            subnet_metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
-            subnet_metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
+            subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::from(0));
+            subnet_metrics
+                .observe_consumed_cycles_http_outcalls(NominalCycles::from(50_000_000_000));
+            subnet_metrics
+                .observe_consumed_cycles_ecdsa_outcalls(NominalCycles::from(100_000_000_000));
             subnet_metrics.num_canisters = 5;
             subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
             subnet_metrics.update_transactions_total = 4200;

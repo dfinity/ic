@@ -523,6 +523,13 @@ impl SystemTestGroup {
         self
     }
 
+    pub fn remove_all_metrics_to_check(mut self) -> Self {
+        self.replica_metrics_to_check = Vec::new();
+        self.orchestrator_metrics_to_check = Vec::new();
+
+        self
+    }
+
     pub fn without_assert_no_replica_restarts(mut self) -> Self {
         self.assert_no_replica_restarts = false;
         self

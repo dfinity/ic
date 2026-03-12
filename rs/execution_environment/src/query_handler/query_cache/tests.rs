@@ -8,10 +8,10 @@ use ic_error_types::ErrorCode;
 use ic_heap_bytes::{DeterministicHeapBytes, HeapBytes, total_bytes};
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::universal_canister::wasm;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
