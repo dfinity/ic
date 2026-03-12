@@ -115,6 +115,19 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
+        if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine)
+            && subnet_record.canister_cycles_cost_schedule
+                != i32::from(CanisterCyclesCostSchedule::Free)
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Subnet {subnet_id:} is a cloud engine subnet but its cycles cost schedule \
+                    is not free"
+                ),
+                source: None,
+            });
+        }
+
         // SEV-enabled subnets invariants
         if let Some(features) = subnet_record.features.as_ref()
             && features.sev_enabled == Some(true)
@@ -149,7 +162,7 @@ pub(crate) fn check_subnet_invariants(
     Ok(())
 }
 
-// Checks that only rented subnets can have admins.
+// Checks that only rented subnets or cloud engine subnets can have admins.
 fn check_subnet_admins_invariant(
     subnet_record: &SubnetRecord,
     subnet_id: SubnetId,
@@ -162,11 +175,15 @@ fn check_subnet_admins_invariant(
         subnet_record.canister_cycles_cost_schedule == i32::from(CanisterCyclesCostSchedule::Free);
     let is_rented = is_on_free_cost_schedule && is_application_subnet;
 
-    let ok = subnet_record.subnet_admins.is_empty() || is_rented;
-    if !ok {
+    let is_cloud_engine_subnet =
+        subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) && is_on_free_cost_schedule;
+
+    let can_have_admins =
+        subnet_record.subnet_admins.is_empty() || is_rented || is_cloud_engine_subnet;
+    if !can_have_admins {
         return Err(InvariantCheckError {
             msg: format!(
-                "Subnet {subnet_id:} is not a rented subnet but has a non-empty subnet admins list"
+                "Subnet {subnet_id:} is not a rented or cloud engine subnet but has a non-empty subnet admins list"
             ),
             source: None,
         });

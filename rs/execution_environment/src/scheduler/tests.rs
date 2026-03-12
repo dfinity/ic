@@ -4,6 +4,7 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::STOP_CANISTER_TIMEOUT_DURATION;
 use ic_config::subnet_config::SchedulerConfig;
+use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
@@ -15,7 +16,7 @@ use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::messages::CallbackId;
+use ic_types::messages::{CallbackId, Payload, RejectContext};
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
 use ic_types::{ComputeAllocation, Cycles};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
@@ -33,6 +34,172 @@ mod routing;
 mod scheduling;
 mod subnet_messages;
 mod timers;
+
+#[test]
+fn state_sync_clears_paused_execution_registry() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // Create a canister and hold on to a clean copy of it.
+    let canister = test.create_canister();
+    let clean_canister = test.canister_state(canister).clone();
+
+    // Execute one DTS round to create a paused execution in both the canister's
+    // task queue and the execution environment's paused execution registry.
+    test.send_ingress(canister, ingress(1000));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_paused_execution());
+    assert_eq!(
+        test.scheduler().exec_env.paused_execution_registry_sizes(),
+        (1, 0)
+    );
+
+    // Simulate a state sync replacing the replicated state: replace the canister
+    // state with the clean copy. The registry still holds the orphaned paused
+    // execution entry.
+    test.state_mut().put_canister_state(clean_canister);
+    assert!(!test.canister_state(canister).has_paused_execution());
+
+    // Execute another round. The scheduler detects that no canister has a paused
+    // execution and calls `abandon_paused_executions()` to clear the paused
+    // execution registry.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.scheduler().exec_env.paused_execution_registry_sizes(),
+        (0, 0)
+    );
+
+    // At this point, a new short message should complete immediately.
+    let new_msg = test.send_ingress(canister, ingress(50));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.ingress_error(&new_msg).code(),
+        ErrorCode::CanisterDidNotReply
+    );
+}
+
+#[test]
+fn expired_ingress_messages_are_removed_from_ingress_queues() {
+    let batch_time = Time::from_nanos_since_unix_epoch(u64::MAX / 2);
+    let mut test = SchedulerTestBuilder::new()
+        .with_batch_time(batch_time)
+        .build();
+
+    let canister_id = test.create_canister();
+
+    // Send some ingress messages to a canister. Half of them have expiry times
+    // before the current batch time, half have expiry times after.
+    let canister_ingress_messages = 10;
+    let expiry_time_before = batch_time.saturating_sub(Duration::from_secs(1));
+    let expiry_time_after = batch_time + Duration::from_secs(1);
+    for i in 0..canister_ingress_messages {
+        if i % 2 == 0 {
+            test.send_ingress_with_expiry(canister_id, ingress(1000), expiry_time_before);
+        } else {
+            test.send_ingress_with_expiry(canister_id, ingress(1000), expiry_time_after);
+        }
+    }
+
+    // Send some ingress messages to the subnet. Half of them have expiry times
+    // before the current batch time, half have expiry times after.
+    let subnet_ingress_messages = 6;
+    for i in 0..subnet_ingress_messages {
+        if i % 2 == 0 {
+            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+            test.inject_ingress_to_ic00(Method::CanisterStatus, payload, expiry_time_before);
+        } else {
+            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+            test.inject_ingress_to_ic00(Method::CanisterStatus, payload, expiry_time_after);
+        }
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Ingress queues should be empty, with all messages either expired or executed.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+    assert_eq!(test.subnet_ingress_queue_size(), 0);
+
+    // Verify that half of the messages expired and the other half got executed.
+    assert_eq!(
+        fetch_counter(
+            test.metrics_registry(),
+            "scheduler_expired_ingress_messages_count",
+        )
+        .unwrap() as u64,
+        (canister_ingress_messages / 2) + (subnet_ingress_messages / 2)
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        (canister_ingress_messages / 2) + (subnet_ingress_messages / 2)
+    );
+}
+
+#[test]
+fn consensus_queue_is_emptied() {
+    use ic_management_canister_types_private::{
+        DerivationPath, MasterPublicKeyId, SignWithECDSAArgs,
+    };
+    use ic_types::batch::ConsensusResponse;
+
+    let ecdsa_key_id = make_ecdsa_key_id(0);
+    let master_ecdsa_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    let mut test = SchedulerTestBuilder::new()
+        .with_replica_version(ReplicaVersion::default())
+        .with_chain_keys(vec![master_ecdsa_key_id.clone()])
+        .build();
+
+    let canister_id = test.create_canister();
+
+    let ecdsa_payload = Encode!(&SignWithECDSAArgs {
+        message_hash: [1; 32],
+        derivation_path: DerivationPath::new(Vec::new()),
+        key_id: ecdsa_key_id,
+    })
+    .unwrap();
+
+    // Execute two signing requests.
+    for _ in 0..2 {
+        test.inject_call_to_ic00(
+            Method::SignWithECDSA,
+            ecdsa_payload.clone(),
+            test.ecdsa_signature_fee(),
+            canister_id,
+            InputQueueType::RemoteSubnet,
+        );
+    }
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager now contains two signing contexts.
+    let sign_with_ecdsa_contexts = test.state().signature_request_contexts().clone();
+    assert_eq!(sign_with_ecdsa_contexts.len(), 2);
+
+    // Produce reject responses for both contexts and execute a round.
+    for (callback_id, _) in sign_with_ecdsa_contexts.iter() {
+        let response = ConsensusResponse::new(
+            *callback_id,
+            Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
+        );
+        test.state_mut().consensus_queue.push(response);
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // After the round, the signature request contexts should have completed.
+    assert!(test.state().signature_request_contexts().is_empty());
+}
 
 #[test]
 fn stopping_canisters_are_stopped_when_they_are_ready() {
@@ -276,84 +443,6 @@ fn can_timeout_stop_canister_requests() {
 }
 
 #[test]
-fn expired_ingress_messages_are_removed_from_ingress_queues() {
-    let batch_time = Time::from_nanos_since_unix_epoch(u64::MAX / 2);
-    let mut test = SchedulerTestBuilder::new()
-        .with_batch_time(batch_time)
-        .build();
-
-    let canister_id = test.create_canister();
-
-    // Add some ingress messages to a canister's queue.
-    // Half of them are set with expiry time before the
-    // time of the current round while the other half
-    // are set to expire after the current round.
-    let num_ingress_messages_to_canisters = 10;
-    for i in 0..num_ingress_messages_to_canisters {
-        if i % 2 == 0 {
-            test.send_ingress_with_expiry(
-                canister_id,
-                ingress(1000),
-                batch_time.saturating_sub(Duration::from_secs(1)),
-            );
-        } else {
-            test.send_ingress_with_expiry(
-                canister_id,
-                ingress(1000),
-                batch_time + Duration::from_secs(1),
-            );
-        }
-    }
-
-    // Add some ingress messages to the subnet's queue.
-    // Half of them are set with expiry time before the
-    // time of the current round while the other half
-    // are set to expire after the current round.
-    let num_ingress_messages_to_subnet: u64 = 20;
-    for i in 0..num_ingress_messages_to_subnet {
-        if i % 2 == 0 {
-            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-            test.inject_ingress_to_ic00(
-                Method::CanisterStatus,
-                payload,
-                batch_time + Duration::from_secs(1),
-            );
-        } else {
-            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-            test.inject_ingress_to_ic00(
-                Method::CanisterStatus,
-                payload,
-                batch_time.saturating_sub(Duration::from_secs(1)),
-            );
-        }
-    }
-
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    // Ingress queues should be empty, messages either expired
-    // or were executed in the round.
-    assert_eq!(test.ingress_queue_size(canister_id), 0);
-    assert_eq!(test.subnet_ingress_queue_size(), 0);
-
-    // Verify that half of the messages expired and the other half got executed.
-    assert_eq!(
-        fetch_counter(
-            test.metrics_registry(),
-            "scheduler_expired_ingress_messages_count",
-        )
-        .unwrap() as u64,
-        (num_ingress_messages_to_canisters / 2) + (num_ingress_messages_to_subnet / 2)
-    );
-    assert_eq!(
-        test.state()
-            .metadata
-            .subnet_metrics
-            .update_transactions_total,
-        (num_ingress_messages_to_canisters / 2) + (num_ingress_messages_to_subnet / 2)
-    );
-}
-
-#[test]
 fn test_is_next_method_added_to_task_queue() {
     let mut test = SchedulerTestBuilder::new().build();
 
@@ -541,7 +630,6 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
             max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
@@ -627,7 +715,6 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
             max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
