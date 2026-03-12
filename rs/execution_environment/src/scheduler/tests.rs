@@ -10,15 +10,14 @@ use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{CanisterStatus, metadata_state::testing::NetworkTopologyTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
+use ic_types::Cycles;
 use ic_types::messages::{CallbackId, Payload, RejectContext};
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
-use ic_types::{ComputeAllocation, Cycles};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use ic00::{CanisterHttpRequestArgs, HttpMethod};
 use proptest::prelude::*;
@@ -443,182 +442,101 @@ fn can_timeout_stop_canister_requests() {
 }
 
 #[test]
-fn test_is_next_method_added_to_task_queue() {
-    let mut test = SchedulerTestBuilder::new().build();
+fn test_maybe_add_heartbeat_or_global_timer_tasks() {
+    use ExecutionTask as Task;
+    use NextScheduledMethod::*;
 
-    let canister = test.create_canister_with(
-        Cycles::new(1_000_000_000_000),
-        ComputeAllocation::zero(),
-        MemoryAllocation::default(),
-        None,
-        None,
-        None,
-    );
-    let has_heartbeat = false;
-    let has_active_timer = false;
+    /// Calls `maybe_add_heartbeat_or_global_timer_tasks` in the given state and
+    /// returns the tasks that were enqueued and the next scheduled method.
+    fn call(
+        has_input: bool,
+        has_heartbeat: bool,
+        has_active_timer: bool,
+        next_scheduled_method: NextScheduledMethod,
+    ) -> (Vec<ExecutionTask>, NextScheduledMethod) {
+        let mut test = SchedulerTestBuilder::new().build();
+        let canister_id = test.create_canister();
+        let canister = test.canister_state_mut(canister_id);
 
-    let mut heartbeat_and_timer_canisters = BTreeSet::new();
-    assert!(
-        !test
-            .canister_state(canister)
-            .system_state
-            .queues()
-            .has_input()
-    );
+        if has_input {
+            canister.push_ingress(Ingress {
+                source: user_test_id(77),
+                receiver: canister_id,
+                effective_canister_id: None,
+                method_name: String::from("test"),
+                method_payload: vec![1_u8],
+                message_id: message_test_id(555),
+                expiry_time: expiry_time_from_now(),
+            });
+        }
+        while canister.get_next_scheduled_method() != next_scheduled_method {
+            canister.inc_next_scheduled_method();
+        }
 
-    for _ in 0..3 {
-        // The timer did not reach the deadline and the canister does not have
-        // input, hence no method will be chosen.
-        assert!(!is_next_method_chosen(
-            test.canister_state_mut(canister),
+        let mut heartbeat_and_timer_canisters = BTreeSet::new();
+        maybe_add_heartbeat_or_global_timer_tasks(
+            canister,
             has_heartbeat,
             has_active_timer,
             &mut heartbeat_and_timer_canisters,
-        ));
-        assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
-        test.canister_state_mut(canister)
-            .inc_next_scheduled_method();
+        );
+
+        let mut tasks = Vec::new();
+        while let Some(task) = canister.system_state.task_queue.pop_front() {
+            tasks.push(task);
+        }
+
+        // Iff a task was enqueued, the canister was added to the set.
+        assert!(
+            tasks.is_empty() || heartbeat_and_timer_canisters.contains(&canister_id),
+            "tasks: {tasks:?}, heartbeat_and_timer_canisters: {heartbeat_and_timer_canisters:?}"
+        );
+
+        (tasks, canister.get_next_scheduled_method())
     }
 
-    // Make canister able to schedule both heartbeat and global timer.
-    let has_heartbeat = true;
-    let has_active_timer = true;
-
-    // Set input.
-    test.canister_state_mut(canister)
-        .system_state
-        .queues_mut()
-        .push_ingress(Ingress {
-            source: user_test_id(77),
-            receiver: canister,
-            effective_canister_id: None,
-            method_name: String::from("test"),
-            method_payload: vec![1_u8],
-            message_id: message_test_id(555),
-            expiry_time: expiry_time_from_now(),
-        });
-
-    assert!(
-        test.canister_state(canister)
-            .system_state
-            .queues()
-            .has_input()
-    );
-
-    while test.canister_state(canister).get_next_scheduled_method() != NextScheduledMethod::Message
-    {
-        test.canister_state_mut(canister)
-            .inc_next_scheduled_method();
+    fn inc(mut method: NextScheduledMethod) -> NextScheduledMethod {
+        method.inc();
+        method
     }
 
-    assert!(is_next_method_chosen(
-        test.canister_state_mut(canister),
-        has_heartbeat,
-        has_active_timer,
-        &mut heartbeat_and_timer_canisters,
-    ));
-
-    // Since NextScheduledMethod is Message it is not expected that Heartbeat
-    // and GlobalTimer are added to the queue.
-    assert!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .is_empty()
-    );
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
-
-    while test.canister_state(canister).get_next_scheduled_method()
-        != NextScheduledMethod::Heartbeat
-    {
-        test.canister_state_mut(canister)
-            .inc_next_scheduled_method();
-    }
-
-    // Since NextScheduledMethod is Heartbeat it is expected that Heartbeat
-    // and GlobalTimer are added at the front of the queue.
-    assert!(is_next_method_chosen(
-        test.canister_state_mut(canister),
-        has_heartbeat,
-        has_active_timer,
-        &mut heartbeat_and_timer_canisters,
-    ));
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
+    // With no input, no heartbeat, no active timer, nothing changes.
+    assert_eq!(call(false, false, false, Message), (vec![], Message));
+    assert_eq!(call(false, false, false, Heartbeat), (vec![], Heartbeat));
     assert_eq!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .front(),
-        Some(&ExecutionTask::Heartbeat)
+        call(false, false, false, GlobalTimer),
+        (vec![], GlobalTimer)
     );
 
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .pop_front();
-
+    // With an input but no heartbeat or timer, next method advances past Message.
+    assert_eq!(call(true, false, false, Message), (vec![], inc(Message)));
+    assert_eq!(call(true, false, false, Heartbeat), (vec![], inc(Message)));
     assert_eq!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .front(),
-        Some(&ExecutionTask::GlobalTimer)
+        call(true, false, false, GlobalTimer),
+        (vec![], inc(Message))
     );
 
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .pop_front();
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
-
-    heartbeat_and_timer_canisters = BTreeSet::new();
-
-    while test.canister_state(canister).get_next_scheduled_method()
-        != NextScheduledMethod::GlobalTimer
-    {
-        test.canister_state_mut(canister)
-            .inc_next_scheduled_method();
-    }
-    // Since NextScheduledMethod is GlobalTimer it is expected that GlobalTimer
-    // and Heartbeat are added at the front of the queue.
-    assert!(is_next_method_chosen(
-        test.canister_state_mut(canister),
-        has_heartbeat,
-        has_active_timer,
-        &mut heartbeat_and_timer_canisters,
-    ));
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
+    // With an input and a heartbeat or timer, it depends on the next method.
+    assert_eq!(call(true, true, false, Message), (vec![], inc(Message)));
     assert_eq!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .front(),
-        Some(&ExecutionTask::GlobalTimer)
+        call(true, true, false, Heartbeat),
+        (vec![Task::Heartbeat], inc(Heartbeat))
     );
-
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .pop_front();
-
     assert_eq!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .front(),
-        Some(&ExecutionTask::Heartbeat)
+        call(true, false, true, GlobalTimer),
+        (vec![Task::GlobalTimer], inc(GlobalTimer))
     );
 
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .pop_front();
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
+    // With all tree, the next method is always scheduled and advanced past.
+    assert_eq!(call(true, true, true, Message), (vec![], inc(Message)));
+    assert_eq!(
+        call(true, true, true, Heartbeat),
+        (vec![Task::Heartbeat, Task::GlobalTimer], inc(Heartbeat))
+    );
+    assert_eq!(
+        call(true, true, true, GlobalTimer),
+        (vec![Task::GlobalTimer, Task::Heartbeat], inc(GlobalTimer))
+    );
 }
 
 #[test]
