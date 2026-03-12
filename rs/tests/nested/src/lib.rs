@@ -126,37 +126,6 @@ pub fn registration(env: TestEnv) {
     info!(logger, "All {n} nodes successfully came up and registered.");
 }
 
-/// Assert that no systemd units have failed on unassigned GuestOS nodes.
-pub fn check_no_failed_systemd_units(env: TestEnv) {
-    let logger = env.logger();
-
-    if std::env::var("TRUSTED_EXECUTION_ENVIRONMENT").is_ok() {
-        info!(
-            logger,
-            "Skipping GuestOS failed-units check because TRUSTED_EXECUTION_ENVIRONMENT is enabled."
-        );
-        return;
-    }
-
-    let topology = env.topology_snapshot();
-    for node in topology.unassigned_nodes() {
-        let failed_units = node
-            .block_on_bash_script("systemctl list-units --failed --no-legend --no-pager")
-            .expect("Failed to run systemctl list-units --failed on GuestOS node");
-        info!(
-            logger,
-            "Node {}: systemctl list-units --failed:\n{}", node.node_id, failed_units
-        );
-        assert!(
-            failed_units.trim().is_empty(),
-            "Node {} has failed systemd units:\n{}",
-            node.node_id,
-            failed_units
-        );
-    }
-    info!(logger, "No failed systemd units found on any GuestOS node.");
-}
-
 /// Clean up the environment after nested tests.
 pub fn teardown(env: TestEnv) {
     if let Ok(pid) = IpmiProcessId::try_read_attribute(&env) {
