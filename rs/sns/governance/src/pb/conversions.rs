@@ -804,7 +804,6 @@ impl From<pb::ManageDappCanisterSettings> for pb_api::ManageDappCanisterSettings
             freezing_threshold: item.freezing_threshold,
             reserved_cycles_limit: item.reserved_cycles_limit,
             log_visibility: item.log_visibility,
-            snapshot_visibility: item.snapshot_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
         }
@@ -819,7 +818,6 @@ impl From<pb_api::ManageDappCanisterSettings> for pb::ManageDappCanisterSettings
             freezing_threshold: item.freezing_threshold,
             reserved_cycles_limit: item.reserved_cycles_limit,
             log_visibility: item.log_visibility,
-            snapshot_visibility: item.snapshot_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
         }

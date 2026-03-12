@@ -7,7 +7,6 @@ use ic_nns_governance_api::{
     manage_neuron_response::Command,
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
-        SnapshotVisibility as GovernanceSnapshotVisibility,
     },
 };
 use ic_nns_test_utils::{
@@ -94,7 +93,6 @@ fn test_update_canister_settings_proposal(
                         freezing_threshold: Some(target_freezing_threshold),
                         wasm_memory_limit: Some(target_wasm_memory_limit),
                         log_visibility: Some(GovernanceLogVisibility::Public as i32),
-                        snapshot_visibility: Some(GovernanceSnapshotVisibility::Public as i32),
                         wasm_memory_threshold: Some(target_wasm_memory_threshold),
                     }),
                 },
