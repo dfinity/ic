@@ -101,7 +101,8 @@ component_files = {
 
     # upgrade
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
-    Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
+    Label("upgrade/systemd-generators/mount-generator"): "/etc/systemd/system-generators/mount-generator",
+    Label("upgrade/systemd-generators/os-type-hostos"): "/etc/ic/os-type",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
     Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",
