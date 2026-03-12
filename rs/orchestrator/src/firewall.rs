@@ -266,6 +266,8 @@ impl Firewall {
                                 )
                             }).ok()??;
 
+                        // node_reward_type() defaults to `Unspecified` if the field is unset or set
+                        // to an invalid enum value
                         if !whitelisted_node_types.contains(&other_node_record.node_reward_type()) {
                             return None;
                         }

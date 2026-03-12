@@ -391,6 +391,8 @@ impl RegistryHelper {
         let result = self
             .registry_client
             .get_node_record(self.node_id, version)?
+            // node_reward_type() defaults to `Unspecified` if the field is unset or set to an
+            // invalid enum value
             .map(|node_record| node_record.node_reward_type());
         Ok(result)
     }
