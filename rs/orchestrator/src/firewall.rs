@@ -1325,23 +1325,42 @@ mod tests {
             cloud_engine_record,
         );
 
-        // Add an API boundary node
-        let api_boundary_node_id = node_test_id(API_BOUNDARY_NODE_ID);
-        add_node_record(
-            &registry_data_provider,
-            registry_version,
-            api_boundary_node_id,
-            /*ip=*/ "3.0.0.3",
-            Some(NodeRewardType::Type1dot1),
-        );
-        add_api_boundary_node_record(
-            &registry_data_provider,
-            registry_version,
-            api_boundary_node_id,
-        );
+        // Add system and app API boundary nodes with different reward types
+        for (node_id, ip, node_reward_type) in [
+            (
+                node_test_id(1 << 63), // very small in little-endian -> system API BN
+                "3.0.0.3",
+                Some(NodeRewardType::Type1dot1),
+            ),
+            (
+                node_test_id(1 << 62), // slightly bigger but still small -> system API BN
+                "3.0.0.4",
+                Some(NodeRewardType::Type4),
+            ),
+            (node_test_id(API_BOUNDARY_NODE_ID), "3.0.0.5", None), // middle point
+            (
+                node_test_id((1 << 62) - 1), // very big in little-endian -> app API BN
+                "3.0.0.6",
+                Some(NodeRewardType::Type1dot1),
+            ),
+            (
+                node_test_id((1 << 63) - 1), // even bigger in little-endian -> app API BN
+                "3.0.0.7",
+                Some(NodeRewardType::Type4),
+            ),
+        ] {
+            add_node_record(
+                &registry_data_provider,
+                registry_version,
+                node_id,
+                ip,
+                node_reward_type,
+            );
+            add_api_boundary_node_record(&registry_data_provider, registry_version, node_id);
+        }
 
         // Add unassigned nodes with different reward types
-        for (unassigned_node_id, ip, node_reward_type) in [
+        for (node_id, ip, node_reward_type) in [
             (node_test_id(4004), "4.0.0.4", Some(NodeRewardType::Type0)),
             (node_test_id(4005), "4.0.0.5", Some(NodeRewardType::Type4)), // cloud engine
             (
@@ -1354,7 +1373,7 @@ mod tests {
             add_node_record(
                 &registry_data_provider,
                 registry_version,
-                unassigned_node_id,
+                node_id,
                 ip,
                 node_reward_type,
             );
