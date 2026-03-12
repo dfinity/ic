@@ -699,18 +699,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
-                ////////////////////////////////////////////////////////////////
-                // Note for reviewers:
-                // `replica_version` in the metadata is not checked here
-                // (nor in the regular response path). The signature covers it,
-                // so tampering would fail verification, but its unclear to me if
-                // an explicit semantic check is needed for this.
-                // I suggest to not add this check in this PR, but consider
-                // adding a ticket for this.
-                //
-                // TODO: remove this comment once we have answered the question
-                ////////////////////////////////////////////////////////////////
-
                 // Verify the individual share signature
                 self.crypto
                     .verify(&entry.proof, consensus_registry_version)
