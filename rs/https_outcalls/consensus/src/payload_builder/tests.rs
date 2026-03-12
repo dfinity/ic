@@ -2020,6 +2020,27 @@ fn flexible_valid_at_max_responses_boundary() {
 }
 
 #[test]
+fn flexible_valid_with_zero_min_and_max_responses() {
+    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(4, callback_id, committee, 0, 0, |payload_builder, _pool| {
+        let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            callback_id,
+            responses: vec![],
+        }]);
+
+        let result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(result, Ok(_));
+    });
+}
+
+#[test]
 fn flexible_invalid_duplicate_callback_id_within_payload() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
