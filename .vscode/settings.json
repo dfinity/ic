@@ -15,6 +15,5 @@
     ],
     "files.associations": {
         "PULL_REQUEST_BAZEL_TARGETS": "ignore"
-    },
-    "editor.codeActionsOnSave": {}
+    }
 }
