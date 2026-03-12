@@ -1080,22 +1080,75 @@ mod snapshot_visibility {
     use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 
     #[test]
-    fn test_visibility_of_list_canister_snapshots() {
+    fn test_visibility_of_canister_snapshots() {
         let env = StateMachineBuilder::new().build();
         let controller = PrincipalId::new_user_test_id(1);
-
-        let test_cases = visibility_test_cases(
-            controller,
-            PrincipalId::new_user_test_id(2),
-            PrincipalId::new_user_test_id(3),
-            PrincipalId::new_user_test_id(4),
-            |caller| {
-                Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!("Caller {caller} is not allowed to call list_canister_snapshots"),
-                ))
+        let not_a_controller = PrincipalId::new_user_test_id(2);
+        let allowed_viewer = PrincipalId::new_user_test_id(3);
+        let not_allowed_viewer = PrincipalId::new_user_test_id(4);
+        let allowed_viewers = BoundedAllowedViewers::new(vec![allowed_viewer]);
+        let test_cases = vec![
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: controller,
+                expected_result: Ok(()),
             },
-        );
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: not_a_controller,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: allowed_viewer,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: not_allowed_viewer,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: controller,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: not_a_controller,
+                expected_result: Err(not_a_controller),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: allowed_viewer,
+                expected_result: Err(allowed_viewer),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: not_allowed_viewer,
+                expected_result: Err(not_allowed_viewer),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
+                sender: allowed_viewer,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
+                sender: not_a_controller,
+                expected_result: Err(not_a_controller),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
+                sender: not_allowed_viewer,
+                expected_result: Err(not_allowed_viewer),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers),
+                sender: controller,
+                expected_result: Ok(()),
+            },
+        ];
 
         for test_case in &test_cases {
             let canister_id = env
@@ -1111,7 +1164,7 @@ mod snapshot_visibility {
                 )
                 .unwrap();
 
-            test_case.check_list_canister_snapshot(canister_id, &env, &[]);
+            test_case.check_list_canister_snapshot(canister_id, &[], &env);
 
             let snapshot = env
                 .take_canister_snapshot(TakeCanisterSnapshotArgs {
@@ -1121,8 +1174,11 @@ mod snapshot_visibility {
                     sender_canister_version: None,
                 })
                 .unwrap();
+            let snapshot_id = snapshot.snapshot_id();
 
-            test_case.check_list_canister_snapshot(canister_id, &env, &[snapshot]);
+            test_case.check_list_canister_snapshot(canister_id, &[snapshot], &env);
+            test_case.check_read_canister_snapshot_metadata(canister_id, snapshot_id, &env);
+            test_case.check_read_canister_snapshot_data(canister_id, snapshot_id, &env);
         }
     }
 
@@ -1130,37 +1186,30 @@ mod snapshot_visibility {
     struct TestCase {
         snapshot_visibility: SnapshotVisibility,
         sender: PrincipalId,
-        expected_result: Result<(), UserError>,
+        expected_result: Result<(), PrincipalId>,
     }
 
     impl TestCase {
         fn check_list_canister_snapshot(
             &self,
             canister_id: CanisterId,
-            env: &StateMachine,
             snapshots: &[CanisterSnapshotResponse],
+            env: &StateMachine,
         ) {
+            let result = env.list_canister_snapshots_as(
+                ListCanisterSnapshotArgs::new(canister_id),
+                self.sender,
+            );
             match &self.expected_result {
-                Err(err) => {
+                Err(caller) => {
                     assert_eq!(
-                        env.list_canister_snapshots_as(
-                            ListCanisterSnapshotArgs::new(canister_id),
-                            self.sender
-                        )
-                        .as_ref(),
-                        Err(err),
+                        result.as_ref().err(),
+                        Some(&expected_error(caller, "list_canister_snapshots")),
                         "{self:?}"
                     );
                 }
                 Ok(()) => {
-                    assert_eq!(
-                        env.list_canister_snapshots_as(
-                            ListCanisterSnapshotArgs::new(canister_id),
-                            self.sender
-                        ),
-                        Ok(snapshots.to_vec()),
-                        "{self:?}"
-                    );
+                    assert_eq!(result, Ok(snapshots.to_vec()), "{self:?}");
                 }
             }
         }
@@ -1174,8 +1223,12 @@ mod snapshot_visibility {
             let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
             let result = env.read_canister_snapshot_metadata_as(&args, self.sender);
             match &self.expected_result {
-                Err(err) => {
-                    assert_eq!(result.as_ref().err(), Some(err), "{self:?}");
+                Err(caller) => {
+                    assert_eq!(
+                        result.as_ref().err(),
+                        Some(&expected_error(caller, "read_canister_snapshot_metadata")),
+                        "{self:?}"
+                    );
                 }
                 Ok(()) => {
                     assert!(result.is_ok(), "{self:?}: {}", result.unwrap_err());
@@ -1196,8 +1249,12 @@ mod snapshot_visibility {
             );
             let result = env.read_canister_snapshot_data_as(&args, self.sender);
             match &self.expected_result {
-                Err(err) => {
-                    assert_eq!(result.as_ref().err(), Some(err), "{self:?}");
+                Err(caller) => {
+                    assert_eq!(
+                        result.as_ref().err(),
+                        Some(&expected_error(caller, "read_canister_snapshot_data")),
+                        "{self:?}"
+                    );
                 }
                 Ok(()) => {
                     assert!(result.is_ok(), "{self:?}: {}", result.unwrap_err());
@@ -1206,165 +1263,10 @@ mod snapshot_visibility {
         }
     }
 
-    fn visibility_test_cases(
-        controller: PrincipalId,
-        not_a_controller: PrincipalId,
-        allowed_viewer: PrincipalId,
-        not_allowed_viewer: PrincipalId,
-        not_allowed_error: impl Fn(&PrincipalId) -> Result<(), UserError>,
-    ) -> Vec<TestCase> {
-        let allowed_viewers = BoundedAllowedViewers::new(vec![allowed_viewer]);
-        vec![
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::Public,
-                sender: controller,
-                expected_result: Ok(()),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::Public,
-                sender: not_a_controller,
-                expected_result: Ok(()),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::Public,
-                sender: allowed_viewer,
-                expected_result: Ok(()),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::Public,
-                sender: not_allowed_viewer,
-                expected_result: Ok(()),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::Controllers,
-                sender: controller,
-                expected_result: Ok(()),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::Controllers,
-                sender: not_a_controller,
-                expected_result: not_allowed_error(&not_a_controller),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::Controllers,
-                sender: allowed_viewer,
-                expected_result: not_allowed_error(&allowed_viewer),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::Controllers,
-                sender: not_allowed_viewer,
-                expected_result: not_allowed_error(&not_allowed_viewer),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
-                sender: allowed_viewer,
-                expected_result: Ok(()),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
-                sender: not_a_controller,
-                expected_result: not_allowed_error(&not_a_controller),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
-                sender: not_allowed_viewer,
-                expected_result: not_allowed_error(&not_allowed_viewer),
-            },
-            TestCase {
-                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers),
-                sender: controller,
-                expected_result: Ok(()),
-            },
-        ]
-    }
-
-    #[test]
-    fn test_visibility_of_read_canister_snapshot_metadata() {
-        let env = StateMachineBuilder::new().build();
-        let controller = PrincipalId::new_user_test_id(1);
-
-        let test_cases = visibility_test_cases(
-            controller,
-            PrincipalId::new_user_test_id(2),
-            PrincipalId::new_user_test_id(3),
-            PrincipalId::new_user_test_id(4),
-            |caller| {
-                Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!("Caller {caller} is not allowed to call read_canister_snapshot_metadata"),
-                ))
-            },
-        );
-
-        for test_case in &test_cases {
-            let canister_id = env
-                .install_canister(
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
-                    vec![],
-                    Some(
-                        CanisterSettingsArgsBuilder::new()
-                            .with_snapshot_visibility(test_case.snapshot_visibility.clone())
-                            .with_controllers(vec![controller])
-                            .build(),
-                    ),
-                )
-                .unwrap();
-
-            let snapshot = env
-                .take_canister_snapshot(TakeCanisterSnapshotArgs {
-                    canister_id: canister_id.get(),
-                    replace_snapshot: None,
-                    uninstall_code: None,
-                    sender_canister_version: None,
-                })
-                .unwrap();
-
-            test_case.check_read_canister_snapshot_metadata(canister_id, snapshot.id, &env);
-        }
-    }
-
-    #[test]
-    fn test_visibility_of_read_canister_snapshot_data() {
-        let env = StateMachineBuilder::new().build();
-        let controller = PrincipalId::new_user_test_id(1);
-
-        let test_cases = visibility_test_cases(
-            controller,
-            PrincipalId::new_user_test_id(2),
-            PrincipalId::new_user_test_id(3),
-            PrincipalId::new_user_test_id(4),
-            |caller| {
-                Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!("Caller {caller} is not allowed to call read_canister_snapshot_data"),
-                ))
-            },
-        );
-
-        for test_case in &test_cases {
-            let canister_id = env
-                .install_canister(
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
-                    vec![],
-                    Some(
-                        CanisterSettingsArgsBuilder::new()
-                            .with_snapshot_visibility(test_case.snapshot_visibility.clone())
-                            .with_controllers(vec![controller])
-                            .build(),
-                    ),
-                )
-                .unwrap();
-
-            let snapshot = env
-                .take_canister_snapshot(TakeCanisterSnapshotArgs {
-                    canister_id: canister_id.get(),
-                    replace_snapshot: None,
-                    uninstall_code: None,
-                    sender_canister_version: None,
-                })
-                .unwrap();
-
-            test_case.check_read_canister_snapshot_data(canister_id, snapshot.id, &env);
-        }
+    fn expected_error(caller: &PrincipalId, method: &str) -> UserError {
+        UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!("Caller {caller} is not allowed to call {method}"),
+        )
     }
 }
