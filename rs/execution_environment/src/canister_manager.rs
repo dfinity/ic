@@ -52,7 +52,7 @@ use ic_replicated_state::{
         execution_state::Memory,
         execution_state::WasmExecutionMode,
         system_state::{
-            CyclesUseCase, ReservationError,
+            ReservationError,
             wasm_chunk_store::{self, WasmChunkStore},
         },
     },
@@ -60,6 +60,7 @@ use ic_replicated_state::{
     page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
     MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
@@ -517,6 +518,7 @@ impl CanisterManager {
             settings.reserved_cycles_limit(),
             reservation_cycles,
             settings.log_visibility().cloned(),
+            settings.snapshot_visibility().cloned(),
             log_memory_limit,
             settings.wasm_memory_limit(),
             settings.environment_variables().cloned(),
@@ -590,6 +592,9 @@ impl CanisterManager {
         }
         if let Some(log_visibility) = settings.log_visibility() {
             canister.system_state.log_visibility = log_visibility.clone();
+        }
+        if let Some(snapshot_visibility) = settings.snapshot_visibility() {
+            canister.system_state.snapshot_visibility = snapshot_visibility.clone();
         }
         if let Some(log_memory_limit) = settings.log_memory_limit() {
             canister
@@ -1130,6 +1135,7 @@ impl CanisterManager {
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility.clone();
+        let snapshot_visibility = canister.system_state.snapshot_visibility.clone();
         let log_memory_limit = canister.log_memory_limit().get();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
@@ -1160,6 +1166,7 @@ impl CanisterManager {
             freeze_threshold.get(),
             reserved_cycles_limit.map(|x| x.get()),
             log_visibility,
+            snapshot_visibility,
             log_memory_limit,
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
@@ -1297,7 +1304,7 @@ impl CanisterManager {
         state
             .metadata
             .subnet_metrics
-            .consumed_cycles_by_deleted_canisters += consumed_cycles_by_canister_to_delete;
+            .observe_consumed_cycles_by_deleted_canisters(consumed_cycles_by_canister_to_delete);
 
         for (use_case, cycles) in canister_to_delete
             .system_state
