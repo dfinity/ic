@@ -39,10 +39,10 @@ use ic_types::{
         MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CanisterHttpMethod, CanisterHttpRequestContext,
-        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
-        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
-        CanisterHttpResponseWithConsensus, Replication,
+        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
+        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseArtifact,
+        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -461,6 +461,98 @@ fn max_responses() {
             )
             .unwrap();
     })
+}
+
+/// Timeouts must not count against CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK.
+/// Fill the block with exactly MAX regular responses, then add timed-out
+/// request contexts. The builder should still include timeouts, and the
+/// resulting payload must pass validation.
+#[test]
+fn timeouts_bypass_max_responses_per_block() {
+    let subnet_size = 4;
+    let num_contexts = CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK + 50;
+
+    test_config_with_http_feature(
+        true,
+        subnet_size,
+        |mut payload_builder, _canister_http_pool| {
+            let callback_ids = 0..num_contexts as u64;
+
+            let contexts = fully_replicated_contexts(callback_ids.clone());
+            inject_request_contexts(&mut payload_builder, contexts);
+
+            // The contexts created above use the default time = UNIX_EPOCH, so any
+            // validation time beyond UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL
+            // makes those contexts time out.
+            let validation_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+            };
+
+            let payload = payload_builder.build_payload(
+                Height::new(1),
+                NumBytes::new(4 * 1024 * 1024),
+                &[],
+                &validation_context,
+            );
+
+            let parsed = bytes_to_payload(&payload).expect("Failed to parse payload");
+
+            assert_eq!(parsed.num_non_timeout_responses(), 0);
+            assert_eq!(parsed.timeouts.len(), num_contexts);
+
+            payload_builder
+                .validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&validation_context),
+                    &payload,
+                    &[],
+                )
+                .unwrap();
+        },
+    );
+}
+
+/// Divergence responses must be counted by num_non_timeout_responses() and
+/// therefore be subject to the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit
+/// during validation.
+#[test]
+fn divergence_responses_count_toward_max_responses() {
+    test_config_with_http_feature(true, 4, |payload_builder, _| {
+        let over_limit = CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK + 1;
+        let divergence_responses: Vec<_> = (0..over_limit)
+            .map(|i| CanisterHttpResponseDivergence {
+                shares: vec![metadata_to_share(
+                    0,
+                    &test_response_and_metadata(i as u64).1,
+                )],
+            })
+            .collect();
+
+        let payload = CanisterHttpPayload {
+            responses: vec![],
+            timeouts: vec![],
+            divergence_responses,
+            flexible_responses: vec![],
+        };
+
+        let result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024)),
+            &[],
+        );
+
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::TooManyResponses { expected, received }
+                )
+            )) if expected == CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK && received == over_limit
+        );
+    });
 }
 
 /// Test that oversized payloads don't validate
@@ -1812,7 +1904,10 @@ fn flexible_build_respects_max_responses_per_block() {
 
         let parsed = build_and_parse_payload(&pb);
 
-        assert!(parsed.num_responses() <= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,);
+        assert_eq!(
+            parsed.num_non_timeout_responses(),
+            CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
+        );
     });
 }
 

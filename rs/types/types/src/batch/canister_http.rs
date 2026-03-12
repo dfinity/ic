@@ -76,10 +76,10 @@ impl CanisterHttpPayload {
         let CanisterHttpPayload {
             responses,
             timeouts: _,
-            divergence_responses: _,
+            divergence_responses,
             flexible_responses,
         } = self;
-        responses.len() + flexible_responses.len()
+        responses.len() + divergence_responses.len() + flexible_responses.len()
     }
 
     /// Returns true, if this is an empty payload

@@ -250,17 +250,21 @@ impl CanisterHttpPayloadBuilderImpl {
                 if delivered_ids.contains(callback_id) {
                     continue;
                 }
-                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                    continue;
-                }
                 if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time {
                     let candidate_size = callback_id.count_bytes();
                     let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                     if size < max_payload_size {
                         timeouts.push(*callback_id);
-                        responses_included += 1;
                         accumulated_size += candidate_size;
+                        // Because timeouts are very cheap to verify, they are
+                        // not counted as responses (so that they are irrelevant
+                        // for the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit.
                     }
+                    continue;
+                }
+                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                    // We use `continue` here and not `break` so that more
+                    // timeouts can be included in the payload.
                     continue;
                 }
                 let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
