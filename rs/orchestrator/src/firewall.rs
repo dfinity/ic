@@ -214,24 +214,27 @@ impl Firewall {
         // in the registry inclusive.
         let registry_versions = self.get_registry_versions(registry_version);
 
+        // Determine our node reward type, since this will affect the set of nodes that we
+        // whitelist.
+        // We assume that nodes' reward types do not change across registry versions, so we just get
+        // it from the latest registry version.
+        let own_reward_type = self
+            .registry
+            .get_node_reward_type(registry_version)
+            .inspect_err(|err| {
+                warn!(
+                    every_n_seconds => 30,
+                    self.logger,
+                    "Failed to get the node reward type from the registry: {}", err
+                )
+            })
+            .unwrap_or(None);
+        let whitelisted_node_types = Self::get_whitelisted_node_types(&own_reward_type);
+
         // Get the union of all the node IP addresses from the registry
         let node_whitelist_ips = registry_versions
             .into_iter()
             .flat_map(|registry_version| {
-                // Determine our node reward type for the current version, and its corresponding
-                // list of whitelisted node types.
-                let own_reward_type = self.registry
-                    .get_node_reward_type(registry_version)
-                    .inspect_err(|err| {
-                        warn!(
-                            every_n_seconds => 30,
-                            self.logger,
-                            "Failed to get the node reward type from the registry: {}", err
-                        )
-                    })
-                    .unwrap_or(None);
-                let whitelisted_node_types = Self::get_whitelisted_node_types(&own_reward_type);
-
                 // For all nodes at the current version...
                 self
                     .registry
