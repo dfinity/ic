@@ -62,6 +62,23 @@ system_test_nns(
     ],
 )
 
+# Tests that no systemd units have failed on GuestOS nodes after they boot and register.
+system_test_nns(
+    name = "guestos_no_failed_systemd_units",
+    env = MAINNET_ENV,
+    setupos = True,
+    tags = ["long_test"],
+    test_timeout = "eternal",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
 rust_binary(
     name = "guestos_upgrade_test_bin",
     testonly = True,
