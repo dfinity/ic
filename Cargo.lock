@@ -6908,7 +6908,6 @@ dependencies = [
 name = "ic-btc-checker"
 version = "0.9.0"
 dependencies = [
- "askama",
  "base64 0.13.1",
  "bitcoin-dogecoin",
  "candid",
