@@ -132,6 +132,10 @@ fn setup(env: TestEnv) {
         .block_on_ssh_session()
         .unwrap_or_else(|e| panic!("Failed to setup SSH session to {UVM_NAME} because: {e}"));
 
+    // Set a timeout so blocking SSH operations fail instead of hanging
+    // indefinitely during network splits.
+    session.set_timeout(60_000);
+
     scp_send_to(
         log.clone(),
         &session,
@@ -435,11 +439,6 @@ fn receive_test_exit_code_async(
 }
 
 fn check_test_exit_code(session: &Session) -> Result<Option<ExitCode>> {
-    // Set a timeout so blocking SSH operations fail instead of hanging
-    // indefinitely during network splits.
-    // The retry loop in receive_test_exit_code_asyncwill handle the error.
-    session.set_timeout(60_000);
-
     // Try to read exit code of the test execution from the file `test_exit_code`.
     // If file doesn't yet exist, it means that the test is still running.
     let test_exit_code_script = r#"
