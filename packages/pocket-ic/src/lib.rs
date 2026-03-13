@@ -1967,6 +1967,12 @@ fn wsl_path(path: &PathBuf, desc: &str) -> String {
 
 #[cfg(windows)]
 fn pocket_ic_server_cmd(bin_path: &PathBuf) -> Command {
+    Command::new("wsl")
+        .arg("bash")
+        .arg("-c")
+        .arg("true")
+        .status()
+        .expect("Failed to warm up WSL");
     let mut cmd = Command::new("wsl");
     cmd.arg(wsl_path(bin_path, "PocketIC binary"));
     cmd
