@@ -14,7 +14,6 @@ use serde::Serialize;
 use std::str::FromStr;
 
 const SUBNET_LIST_KEY: &str = "subnet_list";
-
 /// The subnet id of the NNS subnet.
 /// Remark: This subnet id actually points to the root subnet. In all cases, so
 /// far, the root subnet happens to host the NNS canisters and the registry in

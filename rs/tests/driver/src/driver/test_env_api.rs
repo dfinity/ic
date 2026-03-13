@@ -2116,7 +2116,6 @@ impl NnsInstallationBuilder {
 ///
 /// An optional `customize` closure allows additional registry init parameters to be set. Any mutations
 /// will be added _after_ the initial mutations.
-#[allow(clippy::type_complexity)] // Clippy I am tired of your garbage opinions. 
 pub fn install_registry_canister_with_testnet_topology(
     env: &TestEnv,
     customize: Option<impl FnOnce(&mut RegistryCanisterInitPayloadBuilder)>,

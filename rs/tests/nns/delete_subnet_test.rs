@@ -29,8 +29,8 @@ use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-const NUM_NNS_NODES: usize = 4;
-const NUM_APP_NODES: usize = 7;
+const NUM_NNS_NODES: usize = 1;
+const NUM_APP_NODES: usize = 4;
 const DKG_INTERVAL_LENGTH: u64 = 29;
 
 fn main() -> Result<()> {
