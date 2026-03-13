@@ -2634,7 +2634,7 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         canister: &CanisterState,
     ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
-        validate_snapshot_visibility(canister, &sender, "read canister snapshot metadata")?;
+        validate_snapshot_visibility(canister, &sender, "read_canister_snapshot_metadata")?;
         let snapshot = self
             .get_snapshot(canister, snapshot_id)
             .map_err(UserError::from)?;
