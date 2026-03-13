@@ -100,7 +100,7 @@ fn is_node_assigned() -> bool {
     Path::new("/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb").exists()
 }
 
-pub fn fstrim_tool(
+pub fn run(
     command: &str,
     metrics_filename: String,
     target: String,

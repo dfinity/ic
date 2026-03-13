@@ -1,9 +1,8 @@
 use anyhow::{Context, Result, anyhow};
+use prometheus::{GaugeVec, Opts, Registry};
 use regex::Regex;
 use std::fmt;
 use std::fs;
-
-use crate::prometheus_metric::{LabelPair, MetricType, PrometheusMetric};
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum HardwareGen {
@@ -64,14 +63,18 @@ fn get_node_gen() -> Result<HardwareGen> {
     parse_hardware_gen(&cpu_model_line)
 }
 
-/// Gather CPU info and return CPU metric
+/// Gathers CPU info and returns a prometheus registry containing the hardware
+/// generation gauge.
+///
 /// Sample output:
-/// """
+/// ```text
 /// # HELP node_hardware_generation Generation of Node Hardware
 /// # TYPE node_hardware_generation gauge
-/// node_hardware_generation{gen="Gen1"} 0
-/// """
-pub fn get_node_gen_metric() -> PrometheusMetric {
+/// node_hardware_generation{gen="Gen1"} 1
+/// ```
+pub fn get_node_gen_registry() -> Registry {
+    let registry = Registry::new();
+
     let node_gen = match get_node_gen() {
         Ok(node_gen) => node_gen,
         Err(e) => {
@@ -88,17 +91,19 @@ pub fn get_node_gen_metric() -> PrometheusMetric {
         _ => 1.0,
     };
 
-    PrometheusMetric {
-        name: "node_hardware_generation".into(),
-        help: "Generation of Node Hardware".into(),
-        metric_type: MetricType::Gauge,
-        labels: [LabelPair {
-            label: "gen".into(),
-            value: gen_string.clone(),
-        }]
-        .to_vec(),
-        value: metric_value,
-    }
+    let gauge = GaugeVec::new(
+        Opts::new("node_hardware_generation", "Generation of Node Hardware"),
+        &["gen"],
+    )
+    .expect("failed to create gauge");
+    gauge
+        .with_label_values(&[&gen_string])
+        .set(metric_value);
+    registry
+        .register(Box::new(gauge))
+        .expect("failed to register gauge");
+
+    registry
 }
 
 #[cfg(test)]

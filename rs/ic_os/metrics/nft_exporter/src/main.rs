@@ -1,10 +1,9 @@
 use anyhow::{Context, Error};
 use clap::Parser;
-use prometheus::{Encoder, IntCounter, Registry, TextEncoder};
+use ic_os_metrics_utils::write_registry_to_file;
+use prometheus::{IntCounter, Registry};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fs::File;
-use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -79,16 +78,7 @@ fn main() -> Result<(), Error> {
             .with_context(|| format!("Failed to register counter for '{}'", counter.name))?;
     }
 
-    let mut file = BufWriter::new(
-        File::create(&cli.metrics_file)
-            .with_context(|| format!("Failed to create {}", cli.metrics_file.display()))?,
-    );
-    TextEncoder::new()
-        .encode(&registry.gather(), &mut file)
-        .context("Failed to encode metrics")?;
-    file.flush().context("Failed to flush metrics file")?;
-
-    Ok(())
+    write_registry_to_file(&registry, &cli.metrics_file)
 }
 
 #[cfg(test)]

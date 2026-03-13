@@ -1,7 +1,7 @@
 /* tag::catalog[]
-Title:: ic-crypto-fstrim_tool test
+Title:: ic-crypto-fstrim_metrics test
 
-Goal:: Ensure that running the `fstrim_tool` utility succeeds. A system test is needed, since the
+Goal:: Ensure that running the `fstrim_metrics` utility succeeds. A system test is needed, since the
 bazel integration tests run in `linux-sandbox`, and running `/sbin/fstrim` there results in a
 `discard operation not supported` error.
 
@@ -13,24 +13,24 @@ Runbook::
   by the `node_exporter`.
 . Verify that the `setup-fstrim-metrics` service invocation succeeded, and that the metrics are
   still in the initialized state.
-. Attempt to run the systemd service `fstrim_tool` to run `fstrim` and update the metrics.
-. Verify that the `fstrim_tool` service invocation succeeded and that the metrics were updated
+. Attempt to run the systemd service `fstrim_metrics` to run `fstrim` and update the metrics.
+. Verify that the `fstrim_metrics` service invocation succeeded and that the metrics were updated
   successfully.
-. Perform another invocation of the `fstrim_tool` service and verify that the second update of the
+. Perform another invocation of the `fstrim_metrics` service and verify that the second update of the
   metrics was also successful.
 
-Success:: The `fstrim_tool` utility was successfully executed on the `/var/lib/ic/crypto` partition,
+Success:: The `fstrim_metrics` utility was successfully executed on the `/var/lib/ic/crypto` partition,
 and the metrics were successfully written to a file from where the `node_exporter` can read them.
 
 Coverage::
 . The discard operation is supported
-. The `fstrim_tool` service can successfully execute `fstrim` and write the metrics to a file.
+. The `fstrim_metrics` service can successfully execute `fstrim` and write the metrics to a file.
 
 
 end::catalog[] */
 
 use anyhow::Result;
-use ic_fstrim_tool::FsTrimMetrics;
+use ic_fstrim_metrics::FsTrimMetrics;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
@@ -74,17 +74,17 @@ pub fn ic_crypto_fstrim_tool_test(env: TestEnv) {
     info!(logger, "initial fstrim metrics: {:?}", initial_metrics);
     assert_metrics_are_initialized(&initial_metrics);
 
-    initialize_fstrim_tool_metrics(&node, &logger);
+    initialize_fstrim_metrics(&node, &logger);
     let reinitialized_metrics = retrieve_fstrim_metrics(&node, &logger);
     assert_metrics_are_initialized(&reinitialized_metrics);
 
-    run_fstrim_tool(&node, &logger);
+    run_fstrim_metrics(&node, &logger);
 
     let updated_metrics = retrieve_fstrim_metrics(&node, &logger);
     info!(logger, "updated fstrim metrics: {:?}", updated_metrics);
     assert_successful_run_and_metrics_valid_and_updated(&reinitialized_metrics, &updated_metrics);
 
-    run_fstrim_tool(&node, &logger);
+    run_fstrim_metrics(&node, &logger);
 
     let twice_updated_metrics = retrieve_fstrim_metrics(&node, &logger);
     info!(
@@ -120,33 +120,33 @@ fn retrieve_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) -> FsTrimMetr
         .expect("unable to parse fstrim metrics")
 }
 
-fn initialize_fstrim_tool_metrics(node: &IcNodeSnapshot, logger: &Logger) {
-    const INITIALIZE_FSTRIM_TOOL_METRICS_CMD: &str =
+fn initialize_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) {
+    const INITIALIZE_FSTRIM_METRICS_CMD: &str =
         "sudo systemctl start setup-fstrim-metrics.service";
     info!(
         logger,
-        "initializing fstrim_tool metrics using command: {}", INITIALIZE_FSTRIM_TOOL_METRICS_CMD
+        "initializing fstrim metrics using command: {}", INITIALIZE_FSTRIM_METRICS_CMD
     );
-    let fstrim_metrics_output = node
-        .block_on_bash_script(INITIALIZE_FSTRIM_TOOL_METRICS_CMD)
-        .expect("unable to initialize fstrim_tool metrics using SSH")
+    let output = node
+        .block_on_bash_script(INITIALIZE_FSTRIM_METRICS_CMD)
+        .expect("unable to initialize fstrim metrics using SSH")
         .trim()
         .to_string();
-    assert_eq!(fstrim_metrics_output, "");
+    assert_eq!(output, "");
 }
 
-fn run_fstrim_tool(node: &IcNodeSnapshot, logger: &Logger) {
-    const RUN_FSTRIM_TOOL_CMD: &str = "sudo systemctl start fstrim_tool.service";
+fn run_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) {
+    const RUN_FSTRIM_METRICS_CMD: &str = "sudo systemctl start fstrim_metrics.service";
     info!(
         logger,
-        "running fstrim_tool using command: {}", RUN_FSTRIM_TOOL_CMD
+        "running fstrim_metrics using command: {}", RUN_FSTRIM_METRICS_CMD
     );
-    let fstrim_metrics_output = node
-        .block_on_bash_script(RUN_FSTRIM_TOOL_CMD)
-        .expect("unable to run fstrim_tool using SSH")
+    let output = node
+        .block_on_bash_script(RUN_FSTRIM_METRICS_CMD)
+        .expect("unable to run fstrim_metrics using SSH")
         .trim()
         .to_string();
-    assert_eq!(fstrim_metrics_output, "");
+    assert_eq!(output, "");
 }
 
 fn assert_metrics_are_initialized(metrics: &FsTrimMetrics) {

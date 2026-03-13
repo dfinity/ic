@@ -5473,6 +5473,7 @@ dependencies = [
  "goldenfile",
  "gpt",
  "grub",
+ "ic-os-metrics-utils",
  "ic_device",
  "macaddr",
  "memchr",
@@ -5899,10 +5900,11 @@ dependencies = [
  "config_types",
  "deterministic_ips",
  "grub",
+ "ic-os-metrics-utils",
  "ic_device",
- "itertools 0.12.1",
  "manual_guestos_recovery",
  "network",
+ "prometheus",
  "regex",
  "tempfile",
  "utils",
@@ -9254,6 +9256,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-custom-metrics"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 4.5.27",
+ "ic-os-metrics-utils",
+ "prometheus",
+]
+
+[[package]]
 name = "ic-cycles-account-manager"
 version = "0.9.0"
 dependencies = [
@@ -9570,7 +9582,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-fstrim-tool"
+name = "ic-fstrim-metrics"
 version = "0.9.0"
 dependencies = [
  "anyhow",
@@ -11102,15 +11114,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
 
 [[package]]
-name = "ic-metrics-tool"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap 4.5.27",
- "prometheus",
-]
-
-[[package]]
 name = "ic-migration-canister"
 version = "0.9.0"
 dependencies = [
@@ -12428,6 +12431,15 @@ version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build 0.13.4",
+]
+
+[[package]]
+name = "ic-os-metrics-utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ic-sys",
+ "prometheus",
 ]
 
 [[package]]
@@ -15824,7 +15836,7 @@ dependencies = [
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-ed25519 0.6.0",
- "ic-fstrim-tool",
+ "ic-fstrim-metrics",
  "ic-registry-subnet-type",
  "ic-secp256k1",
  "ic-secp256r1",
@@ -18059,6 +18071,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "ic-os-metrics-utils",
  "prometheus",
  "serde",
  "serde_json",

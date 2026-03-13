@@ -283,7 +283,7 @@ fn command_fails_but_writes_metrics() {
 
     // This should fail to run the command, but still write updated metrics
     assert_matches!(
-        fstrim_tool(
+        run(
             "/non/existent/command",
             metrics_file
                 .to_str()
@@ -324,7 +324,7 @@ fn fails_if_command_cannot_be_run() {
 
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     assert_matches!(
-        fstrim_tool(
+        run(
             "/non/existent/command",
             metrics_file
                 .to_str()
@@ -354,7 +354,7 @@ fn init_flag() {
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
     assert!(
-        fstrim_tool(
+        run(
             "/non/existent/command",
             metrics_file
                 .to_str()
@@ -390,7 +390,7 @@ fn init_flag_does_not_overwrite_existing_metrics() {
 
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     assert!(
-        fstrim_tool(
+        run(
             "true",
             metrics_file
                 .to_str()
@@ -412,7 +412,7 @@ fn init_flag_does_not_overwrite_existing_metrics() {
     );
 
     assert!(
-        fstrim_tool(
+        run(
             "true",
             metrics_file
                 .to_str()
@@ -444,7 +444,7 @@ fn should_fail_if_metrics_file_cannot_be_written() {
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
 
     assert_matches!(
-        fstrim_tool(
+        run(
             "true",
             metrics_file
                 .to_str()
@@ -477,7 +477,7 @@ fn should_fail_if_target_is_not_a_directory() {
     let expected_error = format!("Target {} is not a directory", target.to_str().unwrap());
 
     assert_matches!(
-        fstrim_tool(
+        run(
             "true",
             metrics_file
                 .to_str()
