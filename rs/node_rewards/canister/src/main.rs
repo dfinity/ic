@@ -93,7 +93,7 @@ async fn get_node_providers_rewards(
     NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
 }
 
-#[update]
+#[query(composite = true)]
 async fn get_node_providers_rewards_calculation(
     request: GetNodeProvidersRewardsCalculationRequest,
 ) -> GetNodeProvidersRewardsCalculationResponse {

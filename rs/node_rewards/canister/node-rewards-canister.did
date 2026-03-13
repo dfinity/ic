@@ -130,6 +130,6 @@ service: () -> {
         GetNodeProvidersMonthlyXdrRewardsResponse
     );
     get_node_providers_rewards: (GetNodeProvidersRewardsRequest) -> (GetNodeProvidersRewardsResponse);
-    get_node_providers_rewards_calculation: (GetNodeProvidersRewardsCalculationRequest) -> (GetNodeProvidersRewardsCalculationResponse);
+    get_node_providers_rewards_calculation: (GetNodeProvidersRewardsCalculationRequest) -> (GetNodeProvidersRewardsCalculationResponse) query;
     get_rewardable_nodes: (GetRewardableNodesRequest) -> (GetRewardableNodesResponse) query;
 }
