@@ -10,7 +10,6 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test; CupCorruption::CorruptedIncludingInvalidNiDkgId))
-        .without_assert_no_replica_restarts()
         // The test corrupts the CUPs, so it's expected that the following error metric will be
         // non-zero.
         .remove_metrics_to_check("orchestrator_cup_deserialization_failed_total")

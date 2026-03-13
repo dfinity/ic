@@ -11,7 +11,6 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_timeout_per_test(CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT)
         .with_setup(setup)
-        .without_assert_no_replica_restarts()
         // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
         // belong to, see the recovery CUP, and thus allow the recovery on the same nodes
         .add_test(systest!(test; CupCorruption::CorruptedWithValidNiDkgId))

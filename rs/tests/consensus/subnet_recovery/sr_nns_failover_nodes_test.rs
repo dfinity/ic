@@ -60,8 +60,12 @@ pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .without_assert_no_replica_restarts()
         .add_test(systest!(test))
+        // The replica is restarted when the orchestrator observes the recovery CUP in the registry
+        .update_orchestrator_metrics_to_check(
+            "orchestrator_replica_process_start_attempts_total",
+            2,
+        )
         .execute_from_args()?;
     Ok(())
 }
