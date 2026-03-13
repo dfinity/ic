@@ -93,7 +93,9 @@ pub fn test(env: TestEnv) {
         log,
         "Failing as an experiment to see how it's logged on GitHub ..."
     );
-    panic!("Failing as an experiment to see how it's logged on GitHub!");
+    if true {
+        panic!("Failing as an experiment to see how it's logged on GitHub!");
+    }
 
     info!(
         log,
