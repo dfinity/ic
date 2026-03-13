@@ -1,7 +1,6 @@
 [Unit]
 Description=Initialize configuration in /run/config from bootstrap package
 DefaultDependencies=no
-After=systemd-udev-settle.service
 Before=local-fs.target
 RequiresMountsFor=/run
 

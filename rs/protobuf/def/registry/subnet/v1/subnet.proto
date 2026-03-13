@@ -139,12 +139,15 @@ message CatchUpPackageContents {
   InitialNiDkgTranscriptRecord initial_ni_dkg_transcript_high_threshold = 2;
 
   // The blockchain height that the CUP should have
+  // TODO(CON-1671): deprecate this field in favor of `cup_type`
   uint64 height = 3;
 
   // Block time for the CUP's block
+  // TODO(CON-1671): deprecate this field in favor of `cup_type`
   uint64 time = 4;
 
   // The hash of the state that the subnet should use
+  // TODO(CON-1671): deprecate this field in favor of `cup_type`
   bytes state_hash = 5;
 
   // A uri from which data to replace the registry local store should be downloaded
@@ -167,7 +170,10 @@ message CatchUpPackageContents {
   }
 }
 
-message GenesisArgs {}
+message GenesisArgs {
+  // Initial height of the subnet
+  uint64 height = 1;
+}
 
 message RecoveryArgs {
   // The blockchain height that the CUP should have

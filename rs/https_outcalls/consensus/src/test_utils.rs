@@ -36,8 +36,9 @@ impl BatchPayloadBuilder for FakeCanisterHttpPayloadBuilder {
             responses: self.0.clone(),
             timeouts: vec![],
             divergence_responses: vec![],
+            flexible_responses: vec![],
         };
-        payload_to_bytes(&payload, max_size)
+        payload_to_bytes(payload, max_size)
     }
 
     fn validate_payload(

@@ -3327,3 +3327,25 @@ async fn cloud_engine_with_subnet_admins() {
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None)
         .await;
 }
+
+#[test]
+fn cloud_engine_default_effective_canister_id() {
+    // Create a PocketIC instance with a single (cloud) engine and NNS subnet.
+    let admin = Principal::anonymous();
+    let subnet_spec = SubnetSpec::default().with_subnet_admins(vec![admin]);
+    let config = ExtendedSubnetConfigSet {
+        nns: Some(SubnetSpec::default()),
+        cloud_engine: vec![subnet_spec],
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new_with_config(config).build();
+
+    // Derive the engine's subnet ID and an effective canister ID for canister creation.
+    let topology = pic.topology();
+    let cloud_engine = topology.get_cloud_engines()[0];
+    let config = topology.subnet_configs.get(&cloud_engine).unwrap();
+    let effective_canister_id: Principal = config.canister_ranges[0].start.clone().into();
+    let default_effective_canister_id: Principal =
+        topology.default_effective_canister_id.clone().into();
+    assert_eq!(effective_canister_id, default_effective_canister_id);
+}

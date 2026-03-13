@@ -1,5 +1,6 @@
 use crate::driver::ic::VmResources;
 use crate::driver::test_env::TestEnvAttribute;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -14,24 +15,14 @@ pub struct GroupSetup {
 }
 
 impl GroupSetup {
-    // CI
-    // old: hourly__node_reassignment_pot-3099270401
-    // new: hourly__node_reassignment-3099270401
-
-    // Local
-    // old: boundary_nodes_pre_master__boundary_nodes_pot-username-zh1-spm99_zh7_dfinity_network-2784039865
-    // new:
     pub fn new(group_base_name: String, timeout: Option<Duration>) -> Self {
         // binary_name-timestamp
         let mut res = GroupSetup {
             group_base_name: group_base_name.clone(),
             ..Default::default()
         };
-        let time = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("bad things")
-            .as_millis();
-        res.infra_group_name = format!("{group_base_name}--{time:?}").replace('_', "-");
+        let time = Utc::now().format("%Y-%m-%dT%H-%M-%S-%6f");
+        res.infra_group_name = format!("{group_base_name}--{time}").replace('_', "-");
         res.group_timeout = timeout;
         res
     }

@@ -139,12 +139,15 @@ pub struct CatchUpPackageContents {
     pub initial_ni_dkg_transcript_high_threshold:
         ::core::option::Option<InitialNiDkgTranscriptRecord>,
     /// The blockchain height that the CUP should have
+    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
     #[prost(uint64, tag = "3")]
     pub height: u64,
     /// Block time for the CUP's block
+    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
     #[prost(uint64, tag = "4")]
     pub time: u64,
     /// The hash of the state that the subnet should use
+    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
     #[prost(bytes = "vec", tag = "5")]
     pub state_hash: ::prost::alloc::vec::Vec<u8>,
     /// A uri from which data to replace the registry local store should be downloaded
@@ -177,7 +180,11 @@ pub mod catch_up_package_contents {
     }
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, ::prost::Message)]
-pub struct GenesisArgs {}
+pub struct GenesisArgs {
+    /// Initial height of the subnet
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct RecoveryArgs {
     /// The blockchain height that the CUP should have

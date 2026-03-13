@@ -1,6 +1,8 @@
 SELECT
   bt.first_start_time,
 
+  bt.label,
+
   bt.total_run_duration * INTERVAL '1 second' AS "duration",
 
   CASE
@@ -29,7 +31,7 @@ FROM
   bazel_tests       AS bt ON bi.build_id = bt.build_id
 
 WHERE
-   bt.label = {test_target}
+   ({test_target} = '' OR bt.label LIKE {test_target})
    AND bt.overall_status IN ({overall_statuses})
    AND ({time_filter})
    AND (NOT {only_prs} OR wr.event_type = 'pull_request')

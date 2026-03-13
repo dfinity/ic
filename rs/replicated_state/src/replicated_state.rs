@@ -2,13 +2,13 @@ use crate::canister_snapshots::{CanisterSnapshot, CanisterSnapshots};
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{
-    CanisterOutputQueuesIterator, CyclesUseCase, push_input,
-};
+use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
-use crate::metadata_state::{IngressHistoryState, Stream, StreamMap, SystemMetadata};
+use crate::metadata_state::{
+    IngressHistoryState, Stream, StreamMap, SystemMetadata, can_have_subnet_admins,
+};
 use crate::{
     CanisterPriority, CanisterQueues, CanisterState, DroppedMessageMetrics, SubnetSchedule,
 };
@@ -24,13 +24,15 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    AccumulatedPriority, CanisterId, Cycles, NumBytes, SubnetId, Time,
+    AccumulatedPriority, CanisterId, NumBytes, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
+    cycles_use_case::CyclesUseCase,
     ingress::IngressStatus,
     messages::{
         CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
     },
+    nominal_cycles::NominalCycles,
     time::CoarseTime,
 };
 use ic_validate_eq::ValidateEq;
@@ -40,6 +42,9 @@ use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
+
+#[cfg(debug_assertions)]
+use ic_types::Cycles;
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -734,14 +739,14 @@ impl ReplicatedState {
     }
 
     /// Returns the list of subnet admins of this subnet.
-    pub fn get_own_subnet_admins(&self) -> BTreeSet<PrincipalId> {
+    pub fn get_own_subnet_admins(&self) -> Option<BTreeSet<PrincipalId>> {
         let subnet_id = self.metadata.own_subnet_id;
-        self.metadata
-            .network_topology
-            .subnets()
-            .get(&subnet_id)
-            .map(|x| x.subnet_admins.clone())
-            .unwrap_or_default()
+        let subnet_topology = self.metadata.network_topology.subnets().get(&subnet_id)?;
+        if can_have_subnet_admins(subnet_topology.subnet_type, subnet_topology.cost_schedule) {
+            Some(subnet_topology.subnet_admins.clone())
+        } else {
+            None
+        }
     }
 
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
@@ -1031,7 +1036,9 @@ impl ReplicatedState {
                         // Best-effort responses are silently dropped if the canister is not found.
                         RequestOrResponse::Response(response) if response.is_best_effort() => {
                             if !response.refund.is_zero() {
-                                self.observe_lost_cycles_due_to_dropped_messages(response.refund);
+                                self.observe_lost_cycles_due_to_dropped_messages(
+                                    NominalCycles::from(response.refund.get()),
+                                );
                             }
                             Ok(false)
                         }
@@ -1685,10 +1692,10 @@ impl ReplicatedState {
 
     /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort
     /// responses to deleted canisters).
-    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: Cycles) {
+    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: NominalCycles) {
         self.metadata
             .subnet_metrics
-            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles.into());
+            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles);
     }
 
     /// Computes the subnet's total cycle balance including cycles attached to

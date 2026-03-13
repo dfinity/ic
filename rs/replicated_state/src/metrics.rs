@@ -1,4 +1,3 @@
-use crate::canister_state::system_state::CyclesUseCase;
 use crate::{
     CallOrigin, CanisterState, CanisterStatus, ExecutionTask, ReplicatedState, num_bytes_try_from,
 };
@@ -10,6 +9,7 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{
     binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumInstructions, Time,
@@ -33,7 +33,6 @@ const SPAMMY_LOG_INTERVAL_ROUNDS: u64 = 10 * 60;
 pub struct ReplicatedStateMetrics {
     canister_balance: Histogram,
     canister_binary_size: Histogram,
-    canister_log_memory_usage_v2: Histogram,
     canister_log_memory_usage_v3: Histogram,
     canister_wasm_memory_usage: Histogram,
     canister_stable_memory_usage: Histogram,
@@ -80,26 +79,6 @@ impl ReplicatedStateMetrics {
                 "canister_binary_size_bytes",
                 "Canisters Wasm binary size distribution in bytes.",
                 metrics_registry,
-            ),
-            canister_log_memory_usage_v2: metrics_registry.histogram(
-                "canister_log_memory_usage_bytes_v2",
-                "Canisters log memory usage distribution in bytes.",
-                unique_sorted_buckets(&[
-                    0,
-                    KIB,
-                    2 * KIB,
-                    5 * KIB,
-                    10 * KIB,
-                    20 * KIB,
-                    50 * KIB,
-                    100 * KIB,
-                    200 * KIB,
-                    500 * KIB,
-                    MIB,
-                    2 * MIB,
-                    5 * MIB,
-                    10 * MIB,
-                ])
             ),
             canister_log_memory_usage_v3: metrics_registry.histogram(
                 "canister_log_memory_usage_bytes_v3",
@@ -442,7 +421,7 @@ impl ReplicatedStateMetrics {
         consumed_cycles_total += state
             .metadata
             .subnet_metrics
-            .consumed_cycles_by_deleted_canisters;
+            .get_consumed_cycles_by_deleted_canisters();
 
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
@@ -453,10 +432,16 @@ impl ReplicatedStateMetrics {
         );
 
         // Add the consumed cycles in ecdsa outcalls.
-        consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls;
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_ecdsa_outcalls();
 
         // Add the consumed cycles in http outcalls.
-        consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_http_outcalls;
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_http_outcalls();
 
         self.consumed_cycles.set(consumed_cycles_total.get() as f64);
 
@@ -565,8 +550,6 @@ impl ReplicatedStateMetrics {
         } else {
             canister.system_state.canister_log.bytes_used()
         };
-        self.canister_log_memory_usage_v2
-            .observe(log_memory_usage as f64);
         self.canister_log_memory_usage_v3
             .observe(log_memory_usage as f64);
     }

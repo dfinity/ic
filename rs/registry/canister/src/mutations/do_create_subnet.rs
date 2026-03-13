@@ -103,16 +103,19 @@ impl Registry {
         };
 
         // 3. Create subnet record and associated entries
-        let mut cup_contents = CatchUpPackageContents {
+        let cup_contents = CatchUpPackageContents {
             initial_ni_dkg_transcript_low_threshold: Some(response.low_threshold_transcript_record),
             initial_ni_dkg_transcript_high_threshold: Some(
                 response.high_threshold_transcript_record,
             ),
             chain_key_initializations,
-            ..Default::default()
+            cup_type: Some(CupType::Genesis(GenesisArgs { height: 0 })),
+            height: 0,
+            time: 0,
+            state_hash: vec![],
+            registry_store_uri: None,
+            ecdsa_initializations: vec![],
         };
-
-        cup_contents.cup_type = Some(CupType::Genesis(GenesisArgs {}));
 
         let new_subnet_dkg = RegistryMutation {
             mutation_type: registry_mutation::Type::Insert as i32,
