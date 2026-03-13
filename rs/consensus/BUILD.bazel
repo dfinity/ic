@@ -141,6 +141,7 @@ rust_test(
 
 rust_test(
     name = "integration_test",
+    timeout = "long",
     srcs = glob(["tests/**"]),
     crate_root = "tests/integration.rs",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES + [":malicious_consensus"],

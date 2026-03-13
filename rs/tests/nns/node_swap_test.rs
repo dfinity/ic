@@ -42,13 +42,15 @@ fn setup(env: TestEnv) {
     let snapshot = env.topology_snapshot();
     let subnet = snapshot.root_subnet();
 
-    let mut customizations = RegistryCanisterInitPayloadBuilder::new();
-    customizations
-        .enable_swapping_feature_globally()
-        .enable_swapping_feature_for_subnet(subnet.subnet_id)
-        .whitelist_swapping_feature_caller(caller);
-
-    install_registry_canister_with_testnet_topology(&env, Some(customizations));
+    install_registry_canister_with_testnet_topology(
+        &env,
+        Some(|builder: &mut RegistryCanisterInitPayloadBuilder| {
+            builder
+                .enable_swapping_feature_globally()
+                .enable_swapping_feature_for_subnet(subnet.subnet_id)
+                .whitelist_swapping_feature_caller(caller);
+        }),
+    );
 }
 
 fn test(env: TestEnv) {

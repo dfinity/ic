@@ -16,18 +16,19 @@ grub = { path = "../../boot/grub" }
 sev_host = { path = "../../sev/host" }
 
 anyhow = { workspace = true }
+arc-swap = { workspace = true }
 askama = { workspace = true }
 clap = { workspace = true }
 devicemapper = { workspace = true }
 gpt = { workspace = true }
 macaddr = { workspace = true }
 memchr = { workspace = true }
+mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 regex = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

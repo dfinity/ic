@@ -156,6 +156,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            recalled_replica_version_ids: vec![],
         };
 
         // An attacker got a canister that is trying to pass for the governance
@@ -283,6 +284,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
                                 as i32,
                             subnet_admins: vec![],
+                            recalled_replica_version_ids: vec![],
                         }
                         .encode_to_vec(),
                     )],
@@ -377,6 +379,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                recalled_replica_version_ids: vec![],
             }
         );
 
@@ -462,6 +465,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            recalled_replica_version_ids: vec![],
         };
 
         // Just create the registry canister and wait until the subnet_handler ID is

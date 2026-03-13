@@ -22,7 +22,7 @@ fn deploy_ii(pic: &PocketIc) -> Principal {
     let canister_id = pic.create_canister();
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 1_000_000_000_000);
+    pic.add_cycles(canister_id, 2_000_000_000_000);
     let arg = Encode!(&()).unwrap();
     pic.install_canister(canister_id, ii_wasm, arg, None);
     canister_id
@@ -32,7 +32,7 @@ async fn deploy_ii_async(pic: &pocket_ic::nonblocking::PocketIc) -> Principal {
     let canister_id = pic.create_canister().await;
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 1_000_000_000_000).await;
+    pic.add_cycles(canister_id, 2_000_000_000_000).await;
     let arg = Encode!(&()).unwrap();
     pic.install_canister(canister_id, ii_wasm, arg, None).await;
     canister_id
@@ -586,9 +586,25 @@ async fn test_gateway_custom_domain_provider_file() {
 
     // Verify all three domains: custom (www), apex, and subdomain (app).
     // No canister ID appears in any URL; the file mapping provides it in each case.
+    //
+    // Custom domain mappings are loaded asynchronously by a background polling
+    // task in the gateway, so they may not be available immediately after the
+    // gateway starts listening. We retry each request until the
+    // `x-ic-canister-id` header appears (with a generous timeout).
     for domain in [custom_domain, apex_domain, sub_domain] {
         let url = format!("http://{}:{}", domain, port);
-        let res = client.get(&url).send().await.unwrap();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let res = loop {
+            let res = client.get(&url).send().await.unwrap();
+            if res.headers().get("x-ic-canister-id").is_some() {
+                break res;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "Timed out waiting for x-ic-canister-id header for domain {domain}",
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
         assert_eq!(
             res.headers()
                 .get("x-ic-canister-id")
