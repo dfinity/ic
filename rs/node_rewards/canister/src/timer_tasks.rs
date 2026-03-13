@@ -205,3 +205,77 @@ pub fn yesterday() -> NaiveDate {
         .pred_opt()
         .unwrap()
 }
+
+#[cfg(feature = "test")]
+pub mod test_tasks {
+    use super::*;
+    use std::cell::Cell;
+
+    const RECOVERY_DELAY_SECS: u64 = 10;
+    const SUCCESS_TASK_DELAY_SECS: u64 = 5;
+
+    thread_local! {
+        static PANIC_TASK_COUNTER: Cell<u64> = const { Cell::new(0) };
+        static SUCCESS_TASK_COUNTER: Cell<u64> = const { Cell::new(0) };
+    }
+
+    pub fn get_panic_task_counter() -> u64 {
+        PANIC_TASK_COUNTER.with(|c| c.get())
+    }
+
+    pub fn get_success_task_counter() -> u64 {
+        SUCCESS_TASK_COUNTER.with(|c| c.get())
+    }
+
+    #[derive(Clone)]
+    pub struct PanickingRecoveryTask;
+
+    #[async_trait(?Send)]
+    impl RecurringAsyncTaskNonSend for PanickingRecoveryTask {
+        async fn execute(self) -> (Duration, Self) {
+            PANIC_TASK_COUNTER.with(|c| c.set(c.get() + 1));
+
+            let _: () = ic_cdk::call(ic_cdk::api::id(), "__self_call", ())
+                .await
+                .unwrap();
+
+            panic!("intentional panic for recovery timer test");
+        }
+
+        fn initial_delay(&self) -> Duration {
+            Duration::from_secs(0)
+        }
+
+        fn recovery_delay(&self) -> Duration {
+            Duration::from_secs(RECOVERY_DELAY_SECS)
+        }
+
+        const NAME: &'static str = "panicking_recovery_task";
+    }
+
+    #[derive(Clone)]
+    pub struct SuccessRecoveryTask;
+
+    #[async_trait(?Send)]
+    impl RecurringAsyncTaskNonSend for SuccessRecoveryTask {
+        async fn execute(self) -> (Duration, Self) {
+            SUCCESS_TASK_COUNTER.with(|c| c.set(c.get() + 1));
+
+            let _: () = ic_cdk::call(ic_cdk::api::id(), "__self_call", ())
+                .await
+                .unwrap();
+
+            (Duration::from_secs(SUCCESS_TASK_DELAY_SECS), self)
+        }
+
+        fn initial_delay(&self) -> Duration {
+            Duration::from_secs(0)
+        }
+
+        fn recovery_delay(&self) -> Duration {
+            Duration::from_secs(RECOVERY_DELAY_SECS)
+        }
+
+        const NAME: &'static str = "success_recovery_task";
+    }
+}
