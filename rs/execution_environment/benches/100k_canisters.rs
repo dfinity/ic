@@ -1,7 +1,19 @@
 use criterion::Criterion;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, NumSeconds, PrincipalId};
+use ic_replicated_state::{
+    Memory,
+    canister_state::{
+        CanisterState, ExecutionState, ExportedFunctions, SchedulerState,
+        execution_state::{WasmBinary, WasmMetadata},
+        system_state::SystemState,
+    },
+};
 use ic_state_machine_tests::StateMachine;
+use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::Cycles;
+use ic_wasm_types::CanisterModule;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 const NUM_CREATOR_CANISTERS: usize = 10;
@@ -45,8 +57,8 @@ lazy_static::lazy_static! {
 }
 
 fn round(c: &mut Criterion) {
-    let env = STATE_MACHINE.lock().unwrap();
     c.bench_function("round", |bench| {
+        let env = STATE_MACHINE.lock().unwrap();
         bench.iter_batched(
             || {
                 env.set_checkpoints_enabled(false);
@@ -60,8 +72,8 @@ fn round(c: &mut Criterion) {
 }
 
 fn checkpoint(c: &mut Criterion) {
-    let env = STATE_MACHINE.lock().unwrap();
     c.bench_function("checkpoint", |bench| {
+        let env = STATE_MACHINE.lock().unwrap();
         bench.iter_batched(
             || {
                 env.set_checkpoints_enabled(true);
@@ -71,6 +83,65 @@ fn checkpoint(c: &mut Criterion) {
             },
             criterion::BatchSize::SmallInput,
         );
+    });
+}
+
+fn create_canister_state(canister_id: CanisterId) -> CanisterState {
+    use ic_replicated_state::{NumWasmPages, page_map::PageMap};
+
+    let controller = PrincipalId::new_user_test_id(1);
+    let initial_cycles = Cycles::new(1_000_000_000);
+    let freeze_threshold = NumSeconds::from(2592000); // 30 days
+
+    let system_state = SystemState::new_running_for_testing(
+        canister_id,
+        controller,
+        initial_cycles,
+        freeze_threshold,
+    );
+
+    let wasm_binary = WasmBinary::new(CanisterModule::new(
+        wat::parse_str("(module)").unwrap().into(),
+    ));
+    let exports = ExportedFunctions::new(BTreeSet::new());
+
+    // Create wasm memory with some data (1 page of data with a pattern)
+    let wasm_data = vec![0x42u8; 4096]; // 1 page (4KB) of data
+    let wasm_page_map = PageMap::from(wasm_data.as_slice());
+    let wasm_memory = Memory::new(wasm_page_map, NumWasmPages::from(1));
+
+    // Create stable memory with some data (2 pages of data with a different pattern)
+    let stable_data = vec![0xAAu8; 8192]; // 2 pages (8KB) of data
+    let stable_page_map = PageMap::from(stable_data.as_slice());
+    let stable_memory = Memory::new(stable_page_map, NumWasmPages::from(2));
+
+    let exported_globals = vec![];
+    let wasm_metadata = WasmMetadata::default();
+
+    let execution_state = ExecutionState::new(
+        PathBuf::from("/tmp"),
+        wasm_binary,
+        exports,
+        wasm_memory,
+        stable_memory,
+        exported_globals,
+        wasm_metadata,
+    );
+
+    let scheduler_state = SchedulerState::default();
+
+    CanisterState::new(system_state, Some(execution_state), scheduler_state)
+}
+
+fn clone_100k_canisters(c: &mut Criterion) {
+    let mut canisters = BTreeMap::new();
+    for i in 0..100_000 {
+        let canister_id = canister_test_id(i);
+        canisters.insert(canister_id, create_canister_state(canister_id));
+    }
+
+    c.bench_function("clone_100k_canisters", |bench| {
+        bench.iter(|| canisters.clone());
     });
 }
 
@@ -86,4 +157,10 @@ criterion::criterion_group! {
     targets = checkpoint
 }
 
-criterion::criterion_main!(bench_round, bench_checkpoint);
+criterion::criterion_group! {
+    name = bench_clone;
+    config = Criterion::default().sample_size(10);
+    targets = clone_100k_canisters
+}
+
+criterion::criterion_main!(bench_round, bench_checkpoint, bench_clone);
