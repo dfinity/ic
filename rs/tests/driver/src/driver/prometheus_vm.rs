@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use ic_crypto_sha2::Sha256;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -32,12 +32,12 @@ use crate::driver::{
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
 };
-use crate::util::block_on;
 use crate::driver::{
     farm::{DnsRecord, DnsRecordType},
     test_env::TestEnvAttribute,
     test_env_api::CreateDnsRecords,
 };
+use crate::util::block_on;
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -408,7 +408,7 @@ impl HasPrometheus for TestEnv {
             None
         };
 
-        // Sync the local registry store with the NNS to pick up topology
+        // Sync the local registry store with the NNS before picking up the topology
         let prep_dir = self
             .prep_dir("")
             .ok_or_else(|| anyhow!("No no-name Internet Computer"))?;
@@ -429,7 +429,7 @@ impl HasPrometheus for TestEnv {
                 );
             }
         }
-        
+
         let topology_snapshot = self.safe_topology_snapshot()?;
 
         sync_prometheus_config_dir(
