@@ -1261,7 +1261,7 @@ mod tests {
             registry_version,
             system_subnet_node_id,
             /*ip=*/ "a4c2:7f91:3db6:1e8c:5a4f:cc92:0b37:6e41",
-            Some(NodeRewardType::Type3),
+            Some(NodeRewardType::Type0),
         );
         let system_subnet_record = SubnetRecordBuilder::from(&[system_subnet_node_id])
             .with_subnet_type(SubnetType::System)
@@ -1279,7 +1279,7 @@ mod tests {
             (
                 node_test_id(2002),
                 "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5",
-                Some(NodeRewardType::Type3dot1),
+                Some(NodeRewardType::Type1),
             ),
             (
                 node_test_id(2003),
@@ -1342,7 +1342,7 @@ mod tests {
             (
                 node_test_id(1 << 63), // very small in little-endian -> system API BN
                 "3.0.0.3",
-                Some(NodeRewardType::Type1dot1),
+                Some(NodeRewardType::Type2),
             ),
             (
                 node_test_id(1 << 62), // slightly bigger but still small -> system API BN
@@ -1353,7 +1353,7 @@ mod tests {
             (
                 node_test_id((1 << 62) - 1), // very big in little-endian -> app API BN
                 "3.0.0.6",
-                Some(NodeRewardType::Type1dot1),
+                Some(NodeRewardType::Type3),
             ),
             (
                 node_test_id((1 << 63) - 1), // even bigger in little-endian -> app API BN
@@ -1373,7 +1373,11 @@ mod tests {
 
         // Add unassigned nodes with different reward types
         for (node_id, ip, node_reward_type) in [
-            (node_test_id(4004), "4.0.0.4", Some(NodeRewardType::Type0)),
+            (
+                node_test_id(4004),
+                "4.0.0.4",
+                Some(NodeRewardType::Type3dot1),
+            ),
             (node_test_id(4005), "4.0.0.5", Some(NodeRewardType::Type4)), // cloud engine
             (
                 node_test_id(4006),
