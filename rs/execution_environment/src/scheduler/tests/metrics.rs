@@ -377,16 +377,28 @@ fn execution_round_metrics_are_recorded() {
             .messages
             .get_sample_count()
     );
-    assert_eq!(2, metrics.round_inner_subnet_queue.duration.get_sample_count());
     assert_eq!(
         2,
-        metrics.round_inner_subnet_queue.instructions.get_sample_count()
+        metrics.round_inner_subnet_queue.duration.get_sample_count()
+    );
+    assert_eq!(
+        2,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_count()
     );
     assert_eq!(
         30,
-        metrics.round_inner_subnet_queue.instructions.get_sample_sum() as u64,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_sum() as u64,
     );
-    assert_eq!(2, metrics.round_inner_subnet_queue.messages.get_sample_count());
+    assert_eq!(
+        2,
+        metrics.round_inner_subnet_queue.messages.get_sample_count()
+    );
     assert_eq!(
         3,
         metrics.round_inner_subnet_queue.messages.get_sample_sum() as u64,
