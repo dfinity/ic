@@ -262,7 +262,7 @@ impl Firewall {
         let whitelisted_node_types = Self::get_whitelisted_node_types(own_reward_type);
 
         // Get the union of all the node IP addresses from the registry
-        let node_whitelist_ips = registry_versions
+        let node_whitelist_ips: BTreeSet<IpAddr> = registry_versions
             .into_iter()
             .flat_map(|registry_version| {
                 // Fetch all node IDs in the registry at this version.
@@ -290,7 +290,7 @@ impl Firewall {
                 self.registry
                     .get_available_ip_addresses_for_node_ids(whitelisted_node_ids, registry_version)
             })
-            .collect::<BTreeSet<IpAddr>>();
+            .collect();
 
         // Then split it to v4 and v6 separately
         let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(&node_whitelist_ips);
