@@ -365,11 +365,6 @@ impl SchedulerImpl {
         &self,
         state: &mut ReplicatedState,
     ) -> BTreeSet<CanisterId> {
-        let _timer = self
-            .metrics
-            .round_inner_heartbeat_overhead_duration
-            .start_timer();
-
         let mut heartbeat_and_timer_canisters = BTreeSet::new();
         let now = state.time();
 
@@ -474,18 +469,17 @@ impl SchedulerImpl {
 
             // Add `Heartbeat` and `GlobalTimer` tasks to be executed before input messages.
             if is_first_iteration {
+                let _timer = self
+                    .metrics
+                    .round_inner_heartbeat_overhead_duration
+                    .start_timer();
+
                 heartbeat_and_timer_canisters =
                     self.add_heartbeat_and_global_timer_tasks(&mut state);
             }
 
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
-
-            // Update subnet available memory before taking out the canisters.
-            let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-            round_limits.subnet_available_memory =
-                self.exec_env.scaled_subnet_available_memory(&state);
-            drop(preparation_timer);
 
             // Scheduling.
             let scheduling_timer = self.metrics.round_inner_iteration_scheduling.start_timer();
@@ -497,6 +491,15 @@ impl SchedulerImpl {
             );
             if iteration_schedule.is_empty() {
                 break state;
+            }
+
+            // In every iteration after the first, recompute the subnet available memory,
+            // before taking out the canisters.
+            if !is_first_iteration {
+                let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
+                round_limits.subnet_available_memory =
+                    self.exec_env.scaled_subnet_available_memory(&state);
+                drop(preparation_timer);
             }
 
             let canisters = state.take_canister_states();
@@ -738,6 +741,8 @@ impl SchedulerImpl {
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
 
+            // FIXME: `instructions` can be as low as `1` (and it keeps decreasing after
+            // each iteration). We should divide by `max_instructions_per_slice` instead.
             let divisor = round_limits_per_thread.instructions.get();
             debug_assert_ne!(divisor, 0, "prevent divide by zero panic");
             if divisor > 0 {
@@ -762,11 +767,14 @@ impl SchedulerImpl {
                 - result.round_limits.subnet_available_callbacks;
         }
 
-        // Since there are multiple threads, we update the global limit using
-        // the thread that executed the most instructions.
+        // Reduce the instruction limit by the maximum number of instructions executed
+        // by any thread.
         round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
-
+        // Deduct all created callbacks from the available callbacks limit. This is a
+        // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
+        // `subnet_available_memory` will be recomputed at the beginning of the next
+        // iteration.
 
         (
             canisters,
@@ -833,7 +841,6 @@ impl SchedulerImpl {
                 .duration_between_allocation_charges(),
         );
         let mut all_rejects = Vec::new();
-        let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
             if canister.system_state.time_of_last_allocation_charge
                 > threshold_last_allocation_charge
@@ -864,7 +871,6 @@ impl SchedulerImpl {
                 )
                 .is_err()
             {
-                uninstalled_canisters.push(canister.canister_id());
                 all_rejects.push(uninstall_canister(
                     &self.log,
                     canister,
