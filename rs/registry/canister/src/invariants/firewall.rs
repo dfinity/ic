@@ -340,6 +340,7 @@ mod tests {
             domain: None,
             node_reward_type: None,
             ssh_node_state_write_access: vec![],
+            version_id: None,
         }
     }
 

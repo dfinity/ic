@@ -3734,6 +3734,7 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             pb::NnsFunction::SetSubnetOperationalLevel => {
                 api::NnsFunction::SetSubnetOperationalLevel
             }
+            pb::NnsFunction::DeployGuestosToSomeNodes => api::NnsFunction::DeployGuestosToSomeNodes,
         }
     }
 }
@@ -3829,6 +3830,7 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             api::NnsFunction::SetSubnetOperationalLevel => {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
+            api::NnsFunction::DeployGuestosToSomeNodes => pb::NnsFunction::DeployGuestosToSomeNodes,
         }
     }
 }
