@@ -74,7 +74,7 @@ fn bench_batch_verify(c: &mut Criterion) {
             &(&messages_ref, &signatures_ref, &public_keys),
             |b, (msgs, sigs, pks)| {
                 b.iter_batched(
-                    || rng(),
+                    rng,
                     |mut rng| {
                         PublicKey::batch_verify(
                             black_box(msgs),
