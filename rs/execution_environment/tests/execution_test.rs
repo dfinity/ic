@@ -14,6 +14,7 @@ use ic_management_canister_types_private::{
     EcdsaKeyId, EmptyBlob, IC_00, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
     SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
@@ -2868,4 +2869,36 @@ fn canister_status_via_query_call_by_neither_controller_nor_subnet_admin_fails()
         "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
     )));
     assert_eq!(canister_status_count(&env), 0);
+}
+
+#[test]
+fn resource_limits() {
+    let maximum_state_size = NumBytes::new(1 << 30);
+    let resource_limits = ResourceLimits {
+        maximum_state_size: Some(maximum_state_size),
+    };
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let hypervisor_config = HypervisorConfig {
+        subnet_memory_reservation: NumBytes::new(0),
+        ..Default::default()
+    };
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            hypervisor_config,
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_resource_limits(resource_limits)
+        .build();
+
+    let canister_id = env.create_canister(None);
+
+    // the maximum state size is across all execution threads
+    // and thus setting the memory allocation to the maximum state size
+    // should fail since it strictly exceeds the maximum state size per thread
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(maximum_state_size.get())
+        .build();
+    let err = env.update_settings(&canister_id, settings).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
 }
