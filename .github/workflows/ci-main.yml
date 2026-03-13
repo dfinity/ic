@@ -74,7 +74,6 @@ jobs:
       release-build: ${{ steps.config.outputs.release-build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
-      full_macos_build: ${{ steps.config.outputs.full_macos_build }}
     steps:
       - name: Infer build config
         id: config
@@ -127,13 +126,6 @@ jobs:
               skip_long_tests="true"
           fi
 
-          if [[ $release_build == 'true' ]] || [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL') }}' == 'true' ]]; then
-              full_macos_build="true"
-          else
-              full_macos_build="false"
-          fi
-
-
           if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
               skip_buf_checks="true"
           else
@@ -154,10 +146,6 @@ jobs:
           echo "skip_long_tests: $skip_long_tests"
           echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
           echo "| \`skip_long_tests\` | \`$skip_long_tests\` |" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "full_macos_build: $full_macos_build"
-          echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
-          echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "skip_buf_checks: $skip_buf_checks"
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
