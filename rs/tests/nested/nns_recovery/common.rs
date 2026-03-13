@@ -9,7 +9,7 @@ use ic_consensus_system_test_subnet_recovery::utils::{
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version_with_retries,
-    rw_message::store_message,
+    rw_message::store_message_with_retries,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
@@ -215,7 +215,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     info!(logger, "Ensure NNS subnet is functional");
     let init_msg = "subnet recovery works!";
-    let app_can_id = store_message(
+    let app_can_id = store_message_with_retries(
         &nns_node.get_public_url(),
         nns_node.effective_canister_id(),
         init_msg,
@@ -336,7 +336,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: false,
     };
 
     // Unlike during a production recovery using the CLI, here we already know all parameters ahead

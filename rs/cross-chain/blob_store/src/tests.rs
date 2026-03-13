@@ -29,3 +29,18 @@ mod hash {
         assert!(format!("aa{HELLO_SHA256}").parse::<Hash>().is_err());
     }
 }
+
+mod tag {
+    use crate::Tag;
+
+    #[test]
+    fn should_error_when_tag_too_long() {
+        assert_eq!(
+            Tag::new("a".repeat(101)),
+            Err(crate::InvalidTagError::TooLong {
+                max: 100,
+                actual: 101,
+            })
+        );
+    }
+}

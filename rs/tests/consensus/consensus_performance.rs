@@ -230,7 +230,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test; TestParameters { message_size: 9_500, rps: 1_000.0 }))
         .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 1.0 }))
         .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 5.0 }))
-        .with_teardown(teardown)
+        .add_teardown(teardown)
         .execute_from_args()?;
     Ok(())
 }

@@ -70,6 +70,7 @@ pub mod canister_log;
 pub mod consensus;
 pub mod crypto;
 pub mod cycles;
+pub mod cycles_use_case;
 pub mod hostos_version;
 pub mod ingress;
 pub mod malicious_behavior;

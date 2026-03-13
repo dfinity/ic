@@ -16,6 +16,8 @@ pub trait LibvirtDomain: Send + Sync + Debug {
     fn is_active(&self) -> Result<bool>;
     /// Returns the current `(state, reason)` pair of the domain.
     fn get_state(&self) -> Result<(virDomainState, i32)>;
+    /// Sends an ACPI shutdown signal to the domain, requesting a graceful OS-level shutdown.
+    fn shutdown(&self) -> Result<()>;
     /// Destroys the domain using the provided flags (e.g. `VIR_DOMAIN_DESTROY_GRACEFUL`).
     fn destroy_flags(&self, flags: u32) -> Result<()>;
     /// Returns the XML config of the domain.
@@ -54,6 +56,10 @@ impl LibvirtDomain for VirtDomainImpl {
     fn get_state(&self) -> Result<(virDomainState, i32)> {
         let (state, reason) = self.0.get_state().map_err(Error::from)?;
         Ok((state, reason))
+    }
+
+    fn shutdown(&self) -> Result<()> {
+        self.0.shutdown().map(|_| ()).map_err(Error::from)
     }
 
     fn destroy_flags(&self, flags: u32) -> Result<()> {
