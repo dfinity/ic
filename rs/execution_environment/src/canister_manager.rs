@@ -1987,7 +1987,7 @@ impl CanisterManager {
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.
-                if canister.canister_snapshots.count()
+                if canister.canister_snapshots.len()
                     >= self.config.max_number_of_snapshots_per_canister
                 {
                     return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
@@ -2547,7 +2547,7 @@ impl CanisterManager {
         let mut responses = vec![];
         for (snapshot_id, snapshot) in canister.canister_snapshots.list_snapshots() {
             let snapshot_response = CanisterSnapshotResponse::new(
-                &snapshot_id,
+                snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
                 snapshot.size(),
             );
@@ -2766,7 +2766,7 @@ impl CanisterManager {
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.
-                if canister.canister_snapshots.count()
+                if canister.canister_snapshots.len()
                     >= self.config.max_number_of_snapshots_per_canister
                 {
                     return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
@@ -3141,7 +3141,7 @@ impl CanisterManager {
             return Err(CanisterManagerError::RenameCanisterNotStopped(old_id));
         }
 
-        if canister.canister_snapshots.count() > 0 {
+        if canister.canister_snapshots.len() > 0 {
             return Err(CanisterManagerError::RenameCanisterHasSnapshot(old_id));
         }
 

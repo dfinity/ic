@@ -120,13 +120,14 @@ impl CanisterSnapshots {
     }
 
     /// Lists all snapshots.
-    /// Returns a list of tuples containing the ID and the canister snapshot.
-    pub fn list_snapshots(&self) -> Vec<(SnapshotId, Arc<CanisterSnapshot>)> {
-        self.snapshots.clone().into_iter().collect()
+    /// Returns an iterator over tuples containing the snapshot ID and the canister snapshot.
+    pub fn list_snapshots(&self) -> impl Iterator<Item = (&SnapshotId, &Arc<CanisterSnapshot>)> {
+        self.snapshots.iter()
     }
 
     /// Returns the total number of snapshots of a single canister.
-    pub fn count(&self) -> usize {
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> usize {
         self.snapshots.len()
     }
 
