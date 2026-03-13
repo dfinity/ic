@@ -59,6 +59,11 @@ impl AttestationReportBuilder {
         self
     }
 
+    pub fn with_launch_tcb(mut self, launch_tcb: TcbVersion) -> Self {
+        self.attestation_report.launch_tcb = launch_tcb;
+        self
+    }
+
     pub fn build_unsigned(&self) -> AttestationReport {
         self.attestation_report
     }

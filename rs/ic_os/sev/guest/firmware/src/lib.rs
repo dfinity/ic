@@ -60,28 +60,3 @@ impl SevGuestFirmware for Firmware {
         self.get_derived_key(message_version, derived_key_request)
     }
 }
-
-/// Converts a `TcbVersion` to its raw `u64` representation (little-endian layout
-/// matching the AMD SEV-SNP ABI).
-pub fn tcb_version_to_u64(tcb: &TcbVersion) -> u64 {
-    let mut buf = Vec::new();
-    tcb.encode(&mut buf, Generation::Milan)
-        .expect("Failed to encode TcbVersion");
-    let bytes: [u8; 8] = buf.try_into().expect("TcbVersion should encode to 8 bytes");
-    u64::from_le_bytes(bytes)
-}
-
-/// Returns the reported TCB version from a parsed attestation report.
-pub fn reported_tcb(report: &AttestationReport) -> TcbVersion {
-    report.reported_tcb
-}
-
-/// Returns the SEV launch measurement (48 bytes) from a parsed attestation report.
-pub fn measurement(report: &AttestationReport) -> &[u8; 48] {
-    &report.measurement
-}
-
-/// Parses raw report bytes into an `AttestationReport`.
-pub fn parse_attestation_report(report_bytes: &[u8]) -> Result<AttestationReport, UserApiError> {
-    AttestationReport::from_bytes(report_bytes).map_err(|_| UserApiError::Unknown)
-}

@@ -12,7 +12,6 @@ pub trait SevHostFirmware: Sync + Send {
 #[cfg(target_os = "linux")]
 impl SevHostFirmware for Firmware {
     fn snp_platform_status(&mut self) -> Result<SnpPlatformStatus, UserApiError> {
-        self.snp_set_config()
         self.snp_platform_status()
     }
 

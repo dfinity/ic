@@ -1,8 +1,11 @@
-use crate::firmware::{SevGuestFirmware, parse_attestation_report, tcb_version_to_u64};
+use crate::firmware::SevGuestFirmware;
 use anyhow::Context;
 use anyhow::Result;
+use attestation::attestation_report::AttestationReportExt;
 use hkdf::SimpleHkdf;
-use sev::firmware::guest::{DerivedKey, GuestFieldSelect};
+use sev::Generation;
+use sev::firmware::guest::{AttestationReport, DerivedKey, GuestFieldSelect};
+use sev::parser::ByteParser;
 use sha2::Sha256;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -25,9 +28,11 @@ pub fn derive_key_from_sev_measurement(
             let report_bytes = sev_firmware
                 .get_report(Some(1), None, Some(0))
                 .context("Failed to get attestation report to determine committed TCB version")?;
-            let report = parse_attestation_report(&report_bytes)
+            let report = AttestationReport::from_bytes(&report_bytes)
                 .context("Failed to parse attestation report")?;
-            tcb_version_to_u64(&report.committed_tcb)
+            report
+                .launch_tcb_as_u64()
+                .context("Failed to get launch TCB version")?
         }
     };
 

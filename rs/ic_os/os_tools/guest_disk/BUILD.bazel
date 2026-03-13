@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/ic_os/config/tool:config_lib",
     "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/device",
+    "//rs/ic_os/sev/attestation",
     "//rs/ic_os/sev/guest",
     "//rs/sys",
     "@crate_index//:anyhow",

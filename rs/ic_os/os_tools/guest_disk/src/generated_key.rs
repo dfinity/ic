@@ -1,4 +1,4 @@
-use crate::crypt::{activate_crypt_device, format_crypt_device};
+use crate::crypt::{activate_crypt_device, format_crypt_device, open_luks2_device};
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
 use ic_sys::fs::{Clobber, write_atomically_using_tmp_file};
@@ -17,21 +17,23 @@ pub struct GeneratedKeyDiskEncryption<'a> {
 impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
     fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
         let disk_encryption_key = self.generate_or_read_key()?;
-        let (_crypt_device, _keyslot) = activate_crypt_device(
-            device_path,
+        let mut crypt_device =
+            open_luks2_device(device_path).context("Failed to open crypt device")?;
+        activate_crypt_device(
+            &mut crypt_device,
             crypt_name,
             &disk_encryption_key,
             activate_flags(partition),
+            None,
         )
-        .context("Failed to initialize crypt device")?;
+        .context("Failed to activate crypt device")?;
 
         Ok(())
     }
 
     fn format(&mut self, device_path: &Path, _partition: Partition) -> Result<()> {
-        let (_crypt_device, _keyslot) =
-            format_crypt_device(device_path, &self.generate_or_read_key()?)
-                .context("Failed to format crypt device")?;
+        format_crypt_device(device_path, &self.generate_or_read_key()?)
+            .context("Failed to format crypt device")?;
 
         Ok(())
     }

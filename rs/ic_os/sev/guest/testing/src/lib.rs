@@ -14,6 +14,7 @@ pub struct MockSevGuestFirmwareBuilder {
     measurement: [u8; 48],
     chip_id: [u8; 64],
     reported_tcb: TcbVersion,
+    launch_tcb: TcbVersion,
     signer: Option<FakeAttestationReportSigner>,
     generates_report_with_wrong_custom_data: Option<bool>,
     generates_report_with_wrong_signature: Option<bool>,
@@ -27,6 +28,7 @@ impl Default for MockSevGuestFirmwareBuilder {
             measurement: [0u8; 48],
             chip_id: [0u8; 64],
             reported_tcb: TcbVersion::default(),
+            launch_tcb: TcbVersion::default(),
             signer: None,
             generates_report_with_wrong_custom_data: None,
             generates_report_with_wrong_signature: None,
@@ -95,6 +97,11 @@ impl MockSevGuestFirmwareBuilder {
         self
     }
 
+    pub fn with_launch_tcb(mut self, launch_tcb: TcbVersion) -> Self {
+        self.launch_tcb = launch_tcb;
+        self
+    }
+
     pub fn build(&self) -> MockSevGuestFirmware {
         let mut firmware = MockSevGuestFirmware::new();
         let this = self.clone();
@@ -108,7 +115,8 @@ impl MockSevGuestFirmwareBuilder {
                     .with_measurement(this.measurement)
                     .with_custom_data(actual_custom_data)
                     .with_chip_id(this.chip_id)
-                    .with_reported_tcb(this.reported_tcb);
+                    .with_reported_tcb(this.reported_tcb)
+                    .with_launch_tcb(this.launch_tcb);
 
                 let attestation_report = if let Some(signer) = &this.signer {
                     builder.build_signed(signer)

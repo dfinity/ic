@@ -22,70 +22,60 @@ const LUKS2_N_TOKENS: u32 = 32;
 /// Metadata stored as a LUKS2 token for each key slot. Records the parameters
 /// that were used to derive the encryption key in that slot.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct KeySlotMetadata {
+pub struct KeyslotMetadata {
     /// LUKS2 token type — must be set to [`IC_KEY_TOKEN_TYPE`].
     #[serde(rename = "type")]
     pub token_type: String,
     /// Key slots this token is associated with (LUKS2 requires this field).
     pub keyslots: Vec<String>,
-    /// GuestOS version string (e.g. the content of `/opt/ic/share/version.txt`).
-    pub guestos_version: String,
-    /// Hex-encoded SEV launch measurement (48 bytes → 96 hex chars).
+    /// Hex-encoded SEV launch measurement (96 lowercase hex chars).
     pub measurement: String,
     /// TCB version (raw `u64`, little-endian AMD SEV-SNP ABI layout) used for key derivation.
     pub tcb_version: u64,
 }
 
-impl KeySlotMetadata {
-    pub fn new(
-        keyslot: u32,
-        guestos_version: String,
-        measurement: &[u8],
-        tcb_version: u64,
-    ) -> Self {
+impl KeyslotMetadata {
+    pub fn new(keyslot: u32, measurement: &[u8], tcb_version: u64) -> Self {
         Self {
             token_type: IC_KEY_TOKEN_TYPE.to_string(),
             keyslots: vec![keyslot.to_string()],
-            guestos_version,
             measurement: hex::encode(measurement),
             tcb_version,
         }
     }
 
-    /// Returns the TCB version as a raw `u64`.
-    pub fn tcb(&self) -> u64 {
-        self.tcb_version
+    /// Returns the first keyslot number recorded in this token's `keyslots` list, if parseable.
+    pub fn keyslot(&self) -> Result<u32> {
+        if self.keyslots.len() != 1 {
+            bail!(
+                "Token must have exactly one keyslot, but found {:?}",
+                self.keyslots
+            );
+        }
+        self.keyslots[0]
+            .parse()
+            .context("Keyslot is not a valid number")
     }
 }
 
-/// Initializes a cryptographic device at the specified path with LUKS2 format and activates it
-/// using the provided name and encryption key.
+/// Activates a LUKS2 device under `name` using the given key and optional keyslot restriction.
 ///
-/// Returns the `CryptDevice` and the key slot number that was used for activation.
+/// `keyslot` optionally restricts activation to a specific key slot. When `Some`, the firmware
+/// only tries that slot (faster and more precise). When `None`, all slots are tried.
+///
+/// The caller is responsible for opening and loading the device with [`open_luks2_device`] first.
+/// Returns the key slot number that was used for activation.
 pub fn activate_crypt_device(
-    device_path: &Path,
+    crypt_device: &mut CryptDevice,
     name: &str,
     encryption_key: &[u8],
     flags: CryptActivate,
-) -> Result<(CryptDevice, u32)> {
-    if !device_path.exists() {
-        bail!("Device does not exist: {}", device_path.display());
-    }
-
-    let mut crypt_device =
-        CryptInit::init(device_path).context("Failed to initialize cryptographic device")?;
-
+    keyslot: Option<u32>,
+) -> Result<u32> {
     crypt_device
-        .context_handle()
-        .load::<CryptParamsLuks2Ref>(Some(EncryptionFormat::Luks2), None)
-        .context("Failed to load cryptographic context")?;
-
-    let keyslot = crypt_device
         .activate_handle()
-        .activate_by_passphrase(Some(name), None, encryption_key, flags)
-        .context("Failed to activate cryptographic device")?;
-
-    Ok((crypt_device, keyslot))
+        .activate_by_passphrase(Some(name), keyslot, encryption_key, flags)
+        .context("Failed to activate cryptographic device")
 }
 
 /// Deactivates the cryptographic device with the given name.
@@ -201,8 +191,8 @@ pub fn destroy_key_slots_except(
                 Err(err) => {
                     // It's not a critical error if we fail to destroy a key slot, but it's a
                     // security risk, so we should log it. We panic in debug builds.
-                    debug_assert!(false, "Failed to remove old keyslot {key_slot}: {err:?}",);
-                    eprintln!("Failed to remove old keyslot {key_slot}: {err:?}",)
+                    debug_assert!(false, "Failed to remove old keyslot {key_slot}: {err:#}",);
+                    eprintln!("Failed to remove old keyslot {key_slot}: {err:#}",);
                 }
             }
         }
@@ -211,7 +201,7 @@ pub fn destroy_key_slots_except(
 }
 
 /// Reads all IC SEV key-slot metadata tokens from a LUKS2 device.
-pub fn read_key_slot_metadata(crypt_device: &mut CryptDevice) -> Result<Vec<KeySlotMetadata>> {
+pub fn read_keyslot_metadata(crypt_device: &mut CryptDevice) -> Result<Vec<KeyslotMetadata>> {
     let mut result = Vec::new();
     let mut token_handle = crypt_device.token_handle();
     for token_id in 0..LUKS2_N_TOKENS {
@@ -222,12 +212,16 @@ pub fn read_key_slot_metadata(crypt_device: &mut CryptDevice) -> Result<Vec<KeyS
             {
                 match token_handle.json_get(token_id) {
                     Ok(json) => {
-                        let meta: KeySlotMetadata = serde_json::from_value(json)
+                        let meta: KeyslotMetadata = serde_json::from_value(json)
                             .context("Failed to parse IC SEV token metadata")?;
-                        result.push(meta);
+                        if let Err(err) = meta.keyslot() {
+                            eprintln!("Warning: token {token_id}: {err:#}");
+                        } else {
+                            result.push(meta);
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("Warning: failed to read token {token_id}: {e:?}");
+                    Err(err) => {
+                        eprintln!("Warning: failed to read token {token_id}: {err:#}");
                     }
                 }
             }
@@ -241,67 +235,60 @@ pub fn read_key_slot_metadata(crypt_device: &mut CryptDevice) -> Result<Vec<KeyS
 ///
 /// If a token of our type already exists for this key slot, it is replaced.
 /// This enforces a 1:1 relationship between tokens and key slots.
-pub fn write_key_slot_metadata(
+pub fn write_keyslot_metadata(
     crypt_device: &mut CryptDevice,
-    metadata: &KeySlotMetadata,
-    keyslot: u32,
+    metadata: &KeyslotMetadata,
 ) -> Result<()> {
-    // Remove any existing token for this keyslot first.
-    remove_key_slot_metadata(crypt_device, keyslot)?;
-
-    let json = serde_json::to_value(metadata).context("Failed to serialize key slot metadata")?;
+    let keyslot = metadata.keyslot()?;
     let mut token_handle = crypt_device.token_handle();
-    let token_id = token_handle
+    let json = serde_json::to_value(metadata).context("Failed to serialize key slot metadata")?;
+
+    // Remove any existing token for this keyslot first.
+    for token_id in 0..LUKS2_N_TOKENS {
+        if let Ok(CryptTokenInfo::External(ref t)) | Ok(CryptTokenInfo::ExternalUnknown(ref t)) =
+            token_handle.status(token_id)
+            && t == IC_KEY_TOKEN_TYPE
+            && token_handle.is_assigned(token_id, keyslot)?
+        {
+            token_handle.json_set(TokenInput::RemoveToken(token_id))?;
+        }
+    }
+
+    token_handle
         .json_set(TokenInput::AddToken(&json))
         .context("Failed to write LUKS2 token")?;
-    token_handle
-        .assign_keyslot(token_id, Some(keyslot))
-        .context("Failed to assign token to key slot")?;
     Ok(())
 }
 
-/// Removes the IC key-slot metadata token associated with a specific key slot.
-pub fn remove_key_slot_metadata(crypt_device: &mut CryptDevice, keyslot: u32) -> Result<()> {
-    let keyslot_str = keyslot.to_string();
-    let mut token_handle = crypt_device.token_handle();
-    for token_id in 0..LUKS2_N_TOKENS {
-        let status = token_handle.status(token_id);
-        match status {
-            Ok(CryptTokenInfo::External(ref t)) | Ok(CryptTokenInfo::ExternalUnknown(ref t))
-                if t == IC_KEY_TOKEN_TYPE =>
-            {
-                if let Ok(json) = token_handle.json_get(token_id) {
-                    if let Ok(meta) = serde_json::from_value::<KeySlotMetadata>(json) {
-                        if meta.keyslots.contains(&keyslot_str) {
-                            if let Err(e) = token_handle.json_set(TokenInput::RemoveToken(token_id))
-                            {
-                                eprintln!("Warning: failed to remove token {token_id}: {e:?}");
-                            }
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-/// Removes all IC key-slot metadata tokens from a LUKS2 device.
-pub fn remove_all_key_slot_metadata(crypt_device: &mut CryptDevice) -> Result<()> {
-    let mut token_handle = crypt_device.token_handle();
-    for token_id in 0..LUKS2_N_TOKENS {
-        let status = token_handle.status(token_id);
-        match status {
-            Ok(CryptTokenInfo::External(ref t)) | Ok(CryptTokenInfo::ExternalUnknown(ref t))
-                if t == IC_KEY_TOKEN_TYPE =>
-            {
-                if let Err(e) = token_handle.json_set(TokenInput::RemoveToken(token_id)) {
-                    eprintln!("Warning: failed to remove token {token_id}: {e:?}");
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
+// pub struct KeySlotWithMetadata {
+//     pub slot: u32,
+//     pub metadata: Option<KeySlotMetadata>,
+// }
+//
+// /// Returns all active LUKS2 keyslots paired with their IC metadata token (if any).
+// ///
+// /// Keyslots with status [`KeyslotInfo::Active`] or [`KeyslotInfo::ActiveLast`] are included,
+// /// ordered by slot number.  For each slot, the associated IC `ic-key-metadata` token is
+// /// returned if one exists; otherwise `None` is returned (legacy device without tokens).
+// pub fn get_active_keyslots_with_metadata(
+//     crypt_device: &mut CryptDevice,
+// ) -> Result<Vec<KeySlotWithMetadata>> {
+//     // Build a slot → token map from all IC tokens on the device (each token is associated with a
+//     // single keyslot).
+//     let token_by_slot: HashMap<u32, KeySlotMetadata> = read_key_slot_metadata(crypt_device)?
+//         .into_iter()
+//         .filter_map(|t| t.keyslot().ok().map(|slot| (slot, t)))
+//         .collect();
+//
+//     let mut result = Vec::new();
+//     for slot in 0..LUKS2_N_KEY_SLOTS {
+//         match crypt_device.keyslot_handle().status(slot) {
+//             Ok(KeyslotInfo::Active) | Ok(KeyslotInfo::ActiveLast) => {
+//                 let metadata = token_by_slot.get(&slot).cloned();
+//                 result.push(KeySlotWithMetadata { slot, metadata });
+//             }
+//             _ => {}
+//         }
+//     }
+//     Ok(result)
+// }

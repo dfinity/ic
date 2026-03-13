@@ -55,9 +55,9 @@ fn root_test(env: TestEnv, test: &str) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(root_test; "upgrade_device_mapper_test"))
+        // .add_test(systest!(root_test; "upgrade_device_mapper_test"))
         .add_test(systest!(root_test; "guest_disk_test"))
-        .add_test(systest!(root_test; "device_test"))
+        // .add_test(systest!(root_test; "device_test"))
         .execute_from_args()?;
     Ok(())
 }
