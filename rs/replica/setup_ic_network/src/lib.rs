@@ -614,6 +614,9 @@ fn start_consensus(
         abortable_broadcast_channels.dkg,
         ic_consensus_dkg::DkgImpl::new(
             node_id,
+            subnet_id,
+            Arc::clone(&registry_client),
+            Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_crypto),
             Arc::clone(&consensus_pool_cache),
             dkg_key_manager,

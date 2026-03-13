@@ -9,14 +9,17 @@ use ic_interfaces::{
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationResult,
 };
+use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::{
     MetricsRegistry,
     buckets::{decimal_buckets, linear_buckets},
 };
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, ReplicaVersion,
-    consensus::dkg::{DealingContent, DkgMessageId, InvalidDkgPayloadReason, Message},
+    Height, NodeId, ReplicaVersion, SubnetId,
+    consensus::dkg::{DealingContent, DkgMessageId, DkgSummary, InvalidDkgPayloadReason, Message},
     crypto::{
         Signed,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet, config::NiDkgConfig},
@@ -25,7 +28,7 @@ use ic_types::{
 use prometheus::Histogram;
 use rayon::prelude::*;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
 };
 
@@ -33,6 +36,7 @@ pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
 
+use crate::payload_builder::build_target_id_config_map;
 pub use crate::utils::get_vetkey_public_keys;
 
 #[cfg(test)]
@@ -65,6 +69,9 @@ struct Metrics {
 /// changes in the consensus and DKG pool.
 pub struct DkgImpl {
     node_id: NodeId,
+    subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     crypto: Arc<dyn ConsensusCrypto>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -76,6 +83,9 @@ impl DkgImpl {
     /// Build a new DKG component
     pub fn new(
         node_id: NodeId,
+        subnet_id: SubnetId,
+        registry_client: Arc<dyn RegistryClient>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         crypto: Arc<dyn ConsensusCrypto>,
         consensus_cache: Arc<dyn ConsensusPoolCache>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -83,9 +93,12 @@ impl DkgImpl {
         logger: ReplicaLogger,
     ) -> Self {
         Self {
+            node_id,
+            subnet_id,
+            registry_client,
+            state_reader,
             crypto,
             consensus_cache,
-            node_id,
             dkg_key_manager,
             logger,
             metrics: Metrics {
@@ -157,7 +170,13 @@ impl DkgImpl {
             .crypto
             .sign(&content, self.node_id, config.registry_version())
         {
-            Ok(signature) => Some(ChangeAction::AddToValidated(Signed { content, signature })),
+            Ok(signature) => {
+                info!(
+                    self.logger,
+                    "Signed dealing for dkg id {:?}", content.dkg_id
+                );
+                Some(ChangeAction::AddToValidated(Signed { content, signature }))
+            }
             Err(err) => {
                 error!(self.logger, "Couldn't sign a DKG dealing: {:?}", err);
                 None
@@ -241,7 +260,13 @@ impl DkgImpl {
         // Verify the dealing and move to validated if it was successful,
         // reject, if it was rejected, or skip, if there was an error.
         match crypto_validate_dealing(&*self.crypto, config, message) {
-            Ok(()) => ChangeAction::MoveToValidated((*message).clone()).into(),
+            Ok(()) => {
+                info!(
+                    self.logger,
+                    "Validated dealing for dkg id {:?}", message.content.dkg_id
+                );
+                ChangeAction::MoveToValidated((*message).clone()).into()
+            }
             Err(DkgPayloadValidationError::InvalidArtifact(err)) => {
                 get_handle_invalid_change_action(
                     message,
@@ -257,6 +282,47 @@ impl DkgImpl {
                 Mutations::new()
             }
         }
+    }
+
+    fn configs_new(
+        &self,
+        start_height: Height,
+        dkg_summary: &DkgSummary,
+    ) -> BTreeMap<NiDkgId, NiDkgConfig> {
+        let mut summary_configs = dkg_summary.configs.clone();
+        let Some(state) = self.state_reader.get_latest_certified_state() else {
+            return summary_configs;
+        };
+        let map = build_target_id_config_map(
+            self.subnet_id,
+            start_height,
+            self.registry_client.as_ref(),
+            state.get_ref(),
+            self.registry_client.get_latest_version(),
+            dkg_summary.next_transcripts(),
+            &BTreeSet::new(),
+        );
+        for (_, config_results) in map {
+            let (mut configs, mut errs) = (vec![], vec![]);
+            for config_result in config_results {
+                match config_result {
+                    Ok(config) => configs.push(config),
+                    Err((dkg_id, err)) => errs.push((dkg_id, err)),
+                }
+            }
+            if !errs.is_empty() {
+                continue;
+            }
+            for config in &configs {
+                if summary_configs.contains_key(&config.dkg_id()) {
+                    continue;
+                }
+            }
+            for config in configs {
+                summary_configs.insert(config.dkg_id().clone(), config);
+            }
+        }
+        summary_configs
     }
 }
 
@@ -306,10 +372,13 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
             return ChangeAction::Purge(start_height).into();
         }
 
-        let change_set: Mutations = dkg_summary
-            .configs
+        let configs = self.configs_new(start_height, dkg_summary);
+        // let ids = configs.keys().cloned().collect::<Vec<_>>();
+        // info!(every_n_seconds => 10, self.logger, "[early remote] Creating/Validating dealings for DKGs: {:?}", ids);
+
+        let change_set: Mutations = configs
             .par_iter()
-            .filter_map(|(_id, config)| self.create_dealing(dkg_pool, config))
+            .filter_map(|(_, config)| self.create_dealing(dkg_pool, config))
             .collect();
         if !change_set.is_empty() {
             return change_set;
@@ -336,7 +405,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
             .map(|dealings| {
                 self.validate_dealings_for_dealer(
                     dkg_pool,
-                    &dkg_summary.configs,
+                    &configs,
                     start_height,
                     dealings.to_vec(),
                 )
