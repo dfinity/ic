@@ -34,6 +34,7 @@ use rewards_calculation::performance_based_algorithm::{
 use rewards_calculation::types::{NodeMetricsDailyRaw, RewardableNode};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
@@ -56,7 +57,7 @@ pub fn current_time() -> Time {
 /// through arguments and responses with almost no logic.
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
-    metrics_manager: Arc<MetricsManager<VM>>,
+    metrics_manager: Rc<MetricsManager<VM>>,
     last_day_synced: &'static LocalKey<RefCell<StableCell<Option<NaiveDateStorable>, VM>>>,
 }
 
@@ -64,7 +65,7 @@ pub struct NodeRewardsCanister {
 impl NodeRewardsCanister {
     pub fn new(
         registry_client: Arc<dyn CanisterRegistryClient>,
-        metrics_manager: Arc<MetricsManager<VM>>,
+        metrics_manager: Rc<MetricsManager<VM>>,
         last_day_synced: &'static LocalKey<RefCell<StableCell<Option<NaiveDateStorable>, VM>>>,
     ) -> Self {
         Self {
@@ -79,7 +80,7 @@ impl NodeRewardsCanister {
         self.registry_client.clone()
     }
 
-    pub fn get_metrics_manager(&self) -> Arc<MetricsManager<VM>> {
+    pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
         self.metrics_manager.clone()
     }
 

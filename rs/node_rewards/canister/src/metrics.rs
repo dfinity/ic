@@ -51,7 +51,7 @@ where
 /// Fetches subnets metrics for the specified subnets from their last stored timestamp.
 ///
 /// This is a standalone async function (not a method on MetricsManager) so that
-/// callers can avoid holding an Arc<MetricsManager> across .await points, which
+/// callers can avoid holding an Rc<MetricsManager> across .await points, which
 /// would require MetricsManager to be Send + Sync.
 pub(crate) async fn fetch_subnets_metrics(
     client: Arc<dyn ManagementCanisterClient>,
