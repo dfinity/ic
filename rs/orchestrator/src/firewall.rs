@@ -688,7 +688,10 @@ fn split_ips_by_address_family(ips: &BTreeSet<IpAddr>) -> (Vec<String>, Vec<Stri
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Write, path::Path};
+    use std::{
+        io::Write,
+        path::{Path, PathBuf},
+    };
 
     use config_tool::guestos::generate_ic_config;
     use ic_config::{ConfigOptional, ConfigSource};
