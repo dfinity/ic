@@ -34,8 +34,8 @@ pub struct CanisterSnapshots {
     /// Memory usage of all canister snapshots in bytes.
     ///
     /// This field is updated whenever a snapshot is added or removed and
-    /// is used to report the memory usage of all canister snapshots in
-    /// the subnet.
+    /// is used to report the memory usage of all canister snapshots
+    /// of a single canister.
     memory_usage: NumBytes,
 }
 
@@ -116,7 +116,7 @@ impl CanisterSnapshots {
         }
     }
 
-    /// Remove all snapshots identified by `canister_id` from the collections of snapshots.
+    /// Remove all snapshots from the collections of snapshots.
     /// Returns the list of deleted snapshots.
     pub fn delete_snapshots(&mut self) -> Vec<SnapshotId> {
         let result = self.snapshots.keys().cloned().collect();
@@ -124,28 +124,15 @@ impl CanisterSnapshots {
         result
     }
 
-    /// Selects the snapshots associated with the provided canister ID.
+    /// Lists all snapshots.
     /// Returns a list of tuples containing the ID and the canister snapshot.
     pub fn list_snapshots(&self) -> Vec<(SnapshotId, Arc<CanisterSnapshot>)> {
         self.snapshots.clone().into_iter().collect()
     }
 
-    /// Returns the total number of snapshots stored in the replicated state.
+    /// Returns the total number of snapshots of a single canister.
     pub fn count(&self) -> usize {
         self.snapshots.len()
-    }
-
-    /// Computes the total memory usage of all of the specified canister's snapshots.
-    ///
-    /// Used for testing that `SystemState::snapshots_memory_usage` is updated as needed
-    /// whenever taking or deleting a snapshot.
-    #[doc(hidden)]
-    pub fn compute_memory_usage(&self) -> NumBytes {
-        let mut memory_size = NumBytes::new(0);
-        for snapshot in self.snapshots.values() {
-            memory_size += snapshot.size();
-        }
-        memory_size
     }
 
     /// Returns true if snapshot ID can be found in the collection.
@@ -153,8 +140,8 @@ impl CanisterSnapshots {
         self.snapshots.contains_key(snapshot_id)
     }
 
-    /// Returns the amount of memory taken by all canister snapshots on
-    /// this subnet.
+    /// Returns the amount of memory taken by all canister snapshots
+    /// of a single canister.
     pub fn memory_taken(&self) -> NumBytes {
         // The running sum of the memory usage of all canister snapshots should
         // be the same as the one computed by iterating over all snapshots.
@@ -684,14 +671,8 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot1_size)
         );
-        assert_eq!(
-            snapshot_manager.compute_memory_usage(),
-            NumBytes::from(snapshot1_size)
-        );
 
-        let other_canister_id = canister_test_id(1);
-        let (second_snapshot_id, second_snapshot) = fake_canister_snapshot(other_canister_id, 2);
-        assert_eq!(snapshot_manager.compute_memory_usage(), NumBytes::from(0));
+        let (second_snapshot_id, second_snapshot) = fake_canister_snapshot(canister_id, 2);
 
         // Pushing another snapshot updates the `memory_usage`.
         let snapshot2_size = second_snapshot.size();
@@ -703,10 +684,6 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot1_size + snapshot2_size)
         );
-        assert_eq!(
-            snapshot_manager.compute_memory_usage(),
-            NumBytes::from(snapshot2_size)
-        );
 
         // Deleting a snapshot updates the `memory_usage`.
         snapshot_manager.remove(first_snapshot_id);
@@ -714,11 +691,9 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot2_size)
         );
-        assert_eq!(snapshot_manager.compute_memory_usage(), NumBytes::from(0));
 
         // Deleting the second snapshot brings us back to 0 memory taken.
         snapshot_manager.remove(second_snapshot_id);
         assert_eq!(snapshot_manager.memory_taken(), NumBytes::from(0));
-        assert_eq!(snapshot_manager.compute_memory_usage(), NumBytes::from(0));
     }
 }

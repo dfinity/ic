@@ -3076,7 +3076,7 @@ impl CanisterManager {
         // Confirm that `snapshots_memory_usage` is updated correctly.
         debug_assert_eq!(
             canister.system_state.snapshots_memory_usage,
-            canister.canister_snapshots.compute_memory_usage(),
+            canister.canister_snapshots.memory_taken(),
         );
     }
 
