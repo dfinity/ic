@@ -228,7 +228,7 @@ impl SchedulerImpl {
                 as_num_instructions(instructions_before - round_limits.instructions);
 
             let messages = match execute_subnet_message_result_type {
-                ExecuteSubnetMessageResultType::Finished(_) => NumMessages::from(1),
+                ExecuteSubnetMessageResultType::Finished => NumMessages::from(1),
                 ExecuteSubnetMessageResultType::Processing => NumMessages::from(0),
                 ExecuteSubnetMessageResultType::Paused => NumMessages::from(0),
             };
@@ -350,7 +350,7 @@ impl SchedulerImpl {
         let round_instructions_executed =
             as_num_instructions(instructions_before - round_limits.instructions);
         let messages = match execute_subnet_message_result_type {
-            ExecuteSubnetMessageResultType::Finished(_) => NumMessages::from(1),
+            ExecuteSubnetMessageResultType::Finished => NumMessages::from(1),
             ExecuteSubnetMessageResultType::Processing => NumMessages::from(0),
             ExecuteSubnetMessageResultType::Paused => NumMessages::from(0),
         };
@@ -917,9 +917,7 @@ impl SchedulerImpl {
                 canister.system_state.clear_canister_history();
                 // Burn the remaining balance of the canister.
                 canister.system_state.burn_remaining_balance_for_uninstall();
-                canister
-                    .canister_snapshots
-                    .delete_snapshots(canister.canister_id());
+                canister.canister_snapshots.delete_snapshots();
 
                 info!(
                     self.log,
