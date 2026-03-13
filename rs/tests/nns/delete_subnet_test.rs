@@ -87,22 +87,19 @@ pub fn test(env: TestEnv) {
     let app_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::Application)
-        .collect::<Vec<_>>()
-        .first()
-        .unwrap();
+        .collect::<Vec<_>>();
+    let app_subnet = app_subnet.first().unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
     let vapp_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::VerifiedApplication)
-        .collect::<Vec<_>>()
-        .first()
-        .unwrap();
+        .collect::<Vec<_>>();
+    let vapp_subnet = vapp_subnet.first().unwrap();
     let engine_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::CloudEngine)
-        .collect::<Vec<_>>()
-        .first()
-        .unwrap();
+        .collect::<Vec<_>>();
+    let engine_subnet = engine_subnet.first().unwrap();
     let engine_nodes: Vec<IcNodeSnapshot> = engine_subnet.nodes().collect();
     let engine_node = &engine_nodes[0];
     let engine_node_ids = BTreeSet::from_iter(engine_nodes.iter().map(|x| x.node_id));
@@ -121,9 +118,9 @@ pub fn test(env: TestEnv) {
     block_on(async move {
         let nns_agent = assert_create_agent(nns_node.get_public_url().as_str()).await;
         let engine_agent = assert_create_agent(engine_node.get_public_url().as_str()).await;
-        let vapp_agent = assert_create_agent(vapp_node.get_public_url().as_str()).await;
+        let app_agent = assert_create_agent(app_node.get_public_url().as_str()).await;
         let original_subnets = get_subnet_list_from_registry(&registry_client).await;
-        assert_eq!(original_subnets.len(), 3);
+        assert_eq!(original_subnets.len(), 4);
 
         // Install a universal canister with the governance canister's canister ID
         let governance_canister =
@@ -178,7 +175,7 @@ pub fn test(env: TestEnv) {
         // The deleted engine should not be in the subnet list any more.
         let final_subnets = get_subnet_list_from_registry(&registry_client).await;
         assert!(!final_subnets.contains(&engine_subnet.subnet_id));
-        assert_eq!(final_subnets.len(), 2);
+        assert_eq!(final_subnets.len(), 3);
 
         // The subnet record and routing table entries of the engine should be gone.
         let routing_table = new_topology_snapshot.subnet_canister_ranges(engine_subnet.subnet_id);
