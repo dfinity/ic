@@ -113,17 +113,29 @@ impl NodeRewardsCanister {
     pub async fn schedule_metrics_sync(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
     ) -> Result<(), String> {
-        let (registry_client, metrics_manager) = canister.with(|canister| {
-            (
-                canister.borrow().get_registry_client(),
-                canister.borrow().get_metrics_manager(),
-            )
-        });
-        let registry_querier = RegistryQuerier::new(registry_client.clone());
-        let version = registry_client.get_latest_version();
-        let subnets_list = registry_querier.subnets_list(version)?;
-        let last_day_synced: NaiveDate =
-            metrics_manager.update_subnets_metrics(subnets_list).await?;
+        let (last_timestamp_per_subnet, client, subnets_list) = {
+            let (registry_client, metrics_manager) = canister.with(|canister| {
+                (
+                    canister.borrow().get_registry_client(),
+                    canister.borrow().get_metrics_manager(),
+                )
+            });
+            let registry_querier = RegistryQuerier::new(registry_client.clone());
+            let version = registry_client.get_latest_version();
+            let subnets_list = registry_querier.subnets_list(version)?;
+
+            let last_timestamp_per_subnet =
+                metrics_manager.last_timestamp_per_subnet(subnets_list.clone());
+            let client = metrics_manager.get_client();
+            (last_timestamp_per_subnet, client, subnets_list)
+        };
+
+        let subnets_metrics =
+            crate::metrics::fetch_subnets_metrics(client, &last_timestamp_per_subnet).await;
+
+        let metrics_manager = canister.with(|c| c.borrow().get_metrics_manager());
+        let last_day_synced =
+            metrics_manager.store_fetched_metrics(subnets_metrics, subnets_list)?;
         canister.with_borrow(|canister| {
             canister.set_last_day_synced(last_day_synced);
         });

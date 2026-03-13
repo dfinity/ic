@@ -10,6 +10,7 @@ use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use rewards_calculation::types::NodeMetricsDailyRaw;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 pub mod mock {
     use super::{CallResult, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
@@ -39,7 +40,7 @@ fn node_id(id: u64) -> ic_base_types::NodeId {
 impl MetricsManager<VM> {
     pub(crate) fn new_test(client: mock::MockCanisterClient) -> Self {
         Self {
-            client: Box::new(client),
+            client: Arc::new(client),
             subnets_metrics: RefCell::new(crate::storage::stable_btreemap_init(MemoryId::new(0))),
             last_timestamp_per_subnet: RefCell::new(crate::storage::stable_btreemap_init(
                 MemoryId::new(2),

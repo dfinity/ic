@@ -36,7 +36,7 @@ thread_local! {
 
     pub static METRICS_MANAGER: Arc<MetricsManager<VM>> = {
         let metrics_manager = MetricsManager {
-            client: Box::new(ICCanisterClient),
+            client: Arc::new(ICCanisterClient),
             subnets_metrics: RefCell::new(stable_btreemap_init(SUBNETS_METRICS_MEMORY_ID)),
             last_timestamp_per_subnet: RefCell::new(stable_btreemap_init(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID)),
         };

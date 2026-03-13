@@ -11,6 +11,7 @@ use itertools::Itertools;
 use rewards_calculation::types::{NodeMetricsDailyRaw, UnixTsNanos};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 pub type RetryCount = u64;
 
@@ -41,50 +42,53 @@ pub struct MetricsManager<Memory>
 where
     Memory: ic_stable_structures::Memory,
 {
-    pub(crate) client: Box<dyn ManagementCanisterClient>,
+    pub(crate) client: Arc<dyn ManagementCanisterClient>,
     pub(crate) subnets_metrics:
         RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
     pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
 }
 
-// SAFETY: IC canisters run in a single-threaded executor. The Send + Sync bounds
-// are required by RecurringAsyncTask (via #[async_trait]) but no actual
-// multi-threaded access occurs at runtime.
-unsafe impl<Memory: ic_stable_structures::Memory> Send for MetricsManager<Memory> {}
-unsafe impl<Memory: ic_stable_structures::Memory> Sync for MetricsManager<Memory> {}
+/// Fetches subnets metrics for the specified subnets from their last stored timestamp.
+///
+/// This is a standalone async function (not a method on MetricsManager) so that
+/// callers can avoid holding an Arc<MetricsManager> across .await points, which
+/// would require MetricsManager to be Send + Sync.
+pub(crate) async fn fetch_subnets_metrics(
+    client: Arc<dyn ManagementCanisterClient>,
+    last_timestamp_per_subnet: &BTreeMap<SubnetId, UnixTsNanos>,
+) -> BTreeMap<SubnetId, CallResult<Vec<NodeMetricsHistoryRecord>>> {
+    let mut subnets_history = Vec::new();
+    ic_cdk::println!(
+        "Updating node metrics for {} subnets",
+        last_timestamp_per_subnet.keys().count()
+    );
+
+    for (subnet_id, last_stored_ts) in last_timestamp_per_subnet {
+        let args = NodeMetricsHistoryArgs {
+            subnet_id: subnet_id.get().0,
+            start_at_timestamp_nanos: *last_stored_ts,
+        };
+
+        let client = client.clone();
+        subnets_history
+            .push(async move { (*subnet_id, client.node_metrics_history(&args).await) });
+    }
+
+    futures::future::join_all(subnets_history)
+        .await
+        .into_iter()
+        .collect()
+}
 
 impl<Memory> MetricsManager<Memory>
 where
     Memory: ic_stable_structures::Memory + 'static,
 {
-    /// Fetches subnets metrics for the specified subnets from their last stored timestamp.
-    async fn fetch_subnets_metrics(
-        &self,
-        last_timestamp_per_subnet: &BTreeMap<SubnetId, UnixTsNanos>,
-    ) -> BTreeMap<SubnetId, CallResult<Vec<NodeMetricsHistoryRecord>>> {
-        let mut subnets_history = Vec::new();
-        ic_cdk::println!(
-            "Updating node metrics for {} subnets",
-            last_timestamp_per_subnet.keys().count()
-        );
-
-        for (subnet_id, last_stored_ts) in last_timestamp_per_subnet {
-            let args = NodeMetricsHistoryArgs {
-                subnet_id: subnet_id.get().0,
-                start_at_timestamp_nanos: *last_stored_ts,
-            };
-
-            subnets_history
-                .push(async move { (*subnet_id, self.client.node_metrics_history(&args).await) });
-        }
-
-        futures::future::join_all(subnets_history)
-            .await
-            .into_iter()
-            .collect()
+    pub(crate) fn get_client(&self) -> Arc<dyn ManagementCanisterClient> {
+        self.client.clone()
     }
 
-    fn last_timestamp_per_subnet(&self, subnets: Vec<SubnetId>) -> BTreeMap<SubnetId, UnixTsNanos> {
+    pub(crate) fn last_timestamp_per_subnet(&self, subnets: Vec<SubnetId>) -> BTreeMap<SubnetId, UnixTsNanos> {
         subnets
             .into_iter()
             .map(|subnet| {
@@ -99,19 +103,13 @@ where
             .collect()
     }
 
-    /// Updates the stored subnets metrics from remote management canisters.
-    ///
-    /// This function fetches the nodes metrics for the given subnets from the management canisters
-    /// updating the local metrics with the fetched metrics.
-    /// If all subnets metrics are fetched successfully, it returns the last date
-    /// for which metrics were updated.
-    pub async fn update_subnets_metrics(
+    /// Stores fetched subnets metrics and returns the last date for which metrics were updated.
+    pub(crate) fn store_fetched_metrics(
         &self,
+        subnets_metrics: BTreeMap<SubnetId, CallResult<Vec<NodeMetricsHistoryRecord>>>,
         subnets: Vec<SubnetId>,
     ) -> Result<NaiveDate, String> {
         let mut success = true;
-        let last_timestamp_per_subnet = self.last_timestamp_per_subnet(subnets.clone());
-        let subnets_metrics = self.fetch_subnets_metrics(&last_timestamp_per_subnet).await;
         for (subnet_id, call_result) in subnets_metrics {
             match call_result {
                 Ok(subnet_update) => {
@@ -175,6 +173,21 @@ where
         } else {
             Err("Failed to update metrics".to_string())
         }
+    }
+
+    /// Updates the stored subnets metrics from remote management canisters.
+    ///
+    /// This function fetches the nodes metrics for the given subnets from the management canisters
+    /// updating the local metrics with the fetched metrics.
+    /// If all subnets metrics are fetched successfully, it returns the last date
+    /// for which metrics were updated.
+    pub async fn update_subnets_metrics(
+        &self,
+        subnets: Vec<SubnetId>,
+    ) -> Result<NaiveDate, String> {
+        let last_timestamp_per_subnet = self.last_timestamp_per_subnet(subnets.clone());
+        let subnets_metrics = fetch_subnets_metrics(self.client.clone(), &last_timestamp_per_subnet).await;
+        self.store_fetched_metrics(subnets_metrics, subnets)
     }
 
     /// Computes daily node metrics for a specific date.
