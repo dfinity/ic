@@ -215,7 +215,7 @@ async fn setup(
         if enough_cycles {
             pic.add_cycles(replaced_canister, u128::MAX / 2).await;
         } else {
-            pic.add_cycles(replaced_canister, 5_500_000).await;
+            pic.add_cycles(replaced_canister, 7_000_000).await;
         }
         pic.stop_canister(replaced_canister, Some(c1))
             .await
