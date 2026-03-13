@@ -10,7 +10,6 @@ documentation.workspace = true
 ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
 ic-protobuf = { path = "../../protobuf" }
 candid = { workspace = true }
-rand = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }

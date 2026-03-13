@@ -16,7 +16,6 @@ rust_library(
         "//packages/ic-heap-bytes",
         "//rs/protobuf",
         "@crate_index//:candid",
-        "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:strum",
         "@crate_index//:thousands",

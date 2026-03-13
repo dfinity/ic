@@ -15233,7 +15233,6 @@ dependencies = [
  "candid",
  "ic-heap-bytes",
  "ic-protobuf",
- "rand 0.8.5",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
