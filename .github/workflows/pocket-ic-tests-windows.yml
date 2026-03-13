@@ -84,7 +84,7 @@ jobs:
 
   pocket-ic-lint-on-windows:
     name: PocketIC Lint on Windows
-    runs-on: windows-2022
+    runs-on: windows-2025
     needs: [run-pocket-ic-tests]
     if: ${{ needs.run-pocket-ic-tests.outputs.run-pocket-ic-tests == 'true' }}
     steps:
@@ -96,7 +96,7 @@ jobs:
   pocket-ic-tests-on-windows:
     name: PocketIC Tests on Windows
     needs: [bazel-build-pocket-ic]
-    runs-on: windows-2022
+    runs-on: windows-2025
     steps:
       - *checkout
       - name: Disable Defender & add workspace exclusion
@@ -125,6 +125,4 @@ jobs:
           $env:RUST_TEST_THREADS=2
           $env:POCKET_IC_BIN="$env:WORKDIR\pocket-ic-server"
           $env:TEST_WASM="$env:WORKDIR\test_canister.wasm.gz"
-          $UNIX_PATH=wsl WORKDIR="$env:WORKDIR" bash -c 'wslpath -u "$WORKDIR"'
-          wsl ls "$UNIX_PATH" # force WSL to mount and see the working directory
           cargo test --locked -p pocket-ic
