@@ -83,6 +83,7 @@ BIN_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
+    "//rs/types/cycles",
     "//rs/types/types",
     "@crate_index//:criterion",
     "@crate_index//:maplit",

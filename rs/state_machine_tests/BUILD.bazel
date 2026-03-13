@@ -90,6 +90,7 @@ BIN_DEPENDENCIES = [
     "//rs/crypto/iccsa",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/registry/subnet_type",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",

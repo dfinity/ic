@@ -72,6 +72,7 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/types_test_utils",
