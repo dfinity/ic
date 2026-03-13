@@ -310,6 +310,8 @@ impl SchedulerImpl {
                     break;
                 }
 
+                // TODO(DSM-108): This appears to be counterproductive (`can_execute_subnet_msg`
+                // would simply skip messages that consume instructions). Remove.
                 if round_limits.instructions_reached() {
                     break;
                 }
@@ -1444,6 +1446,8 @@ impl Scheduler for SchedulerImpl {
             // However, we would like to make progress with other subnet
             // messages that do not consume instructions. To allow that, we set
             // the number available instructions to 0 if it is not positive.
+            //
+            // TODO(DSM-108): This appears to do nothing. Remove.
             subnet_round_limits.instructions = subnet_round_limits
                 .instructions
                 .max(RoundInstructions::from(0));
@@ -1911,10 +1915,20 @@ fn execute_canisters_on_thread(
     }
 }
 
-/// Helper function that checks if a subnet message can be executed:
-///     1. A message cannot be executed if it is directed to a canister
-///     with another long-running execution in progress.
-///     2. Install code messages can only be executed sequentially.
+/// Checks whether a subnet message can be executed.
+///
+/// Always execute:
+///  - Responses.
+///  - Calls with invalid method names.
+///  - Calls with no effective canister ID.
+///  - Calls with an effective canister ID, but no matching canister state.
+///
+/// Never execute calls when the canister has a paused execution.
+///
+/// Beyond that, invoke `Ic00MethodPermissions::can_be_executed()` to determine
+/// whether the specific call can be executed, based on factors such as whether
+/// the instruction limit has been reached, there's an ongoing long install code
+/// execution, or the canister has an aborted execution.
 fn can_execute_subnet_msg(
     msg: &SubnetMessage,
     ongoing_long_install_code: bool,
@@ -1922,11 +1936,11 @@ fn can_execute_subnet_msg(
     round_limits: &mut RoundLimits,
 ) -> bool {
     let Some(effective_canister_id) = msg.effective_canister_id() else {
-        // If there is no effective canister ID, we can execute the subnet message.
+        // If there is no effective canister ID, execute the subnet message.
         return true;
     };
     let Some(effective_canister_state) = canister_states.get(&effective_canister_id) else {
-        // If there is no effective canister state, we can execute the subnet message.
+        // If there is no effective canister state, execute the subnet message.
         return true;
     };
     let maybe_method = match msg {
@@ -1935,7 +1949,7 @@ fn can_execute_subnet_msg(
         SubnetMessage::Response { .. } => None,
     };
     let Some(method) = maybe_method else {
-        // If there is no method name, we can execute the subnet message.
+        // If this is a response or the method name is not valid, execute the message.
         return true;
     };
 
@@ -1954,7 +1968,7 @@ fn can_execute_subnet_msg(
 
     if effective_canister_is_paused {
         // If there is a DTS execution in progress, we can't execute the subnet message.
-        // Note, it does NOT include aborted executions.
+        // Note, this does NOT include aborted executions.
         return false;
     }
 
