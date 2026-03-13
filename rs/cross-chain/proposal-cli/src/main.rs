@@ -11,7 +11,7 @@ use crate::dashboard::DashboardClient;
 use crate::forum::{CreateTopicRequest, DiscourseClient, ForumTopic};
 use crate::git::{GitCommitHash, GitRepository};
 use crate::ic_admin::ProposalFiles;
-use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
+use crate::proposal::{InstallProposalTemplate, ProposalTemplate, ReinstallProposalTemplate, UpgradeProposalTemplate};
 use clap::{Parser, Subcommand};
 use ic_admin::IcAdminArgs;
 use std::collections::{BTreeMap, BTreeSet};
@@ -64,6 +64,32 @@ enum Commands {
         /// The git commit hash at which the canister should be installed
         #[arg(long)]
         at: GitCommitHash,
+
+        /// Override default empty initialization args.
+        #[arg(long)]
+        args: Option<String>,
+
+        /// Output directory where generated files will be written
+        #[arg(short, long)]
+        output_dir: PathBuf,
+
+        /// Tool to submit proposal
+        #[command(subcommand)]
+        submit: Option<SubmitProposal>,
+    },
+    /// reinstall a canister
+    #[command(arg_required_else_help = true)]
+    Reinstall {
+        /// The canister(s) to reinstall
+        canisters: Vec<TargetCanister>,
+
+        /// The git commit hash of the currently deployed canister
+        #[arg(long)]
+        from: GitCommitHash,
+
+        /// The git commit hash at which the canister should be reinstalled
+        #[arg(long)]
+        to: GitCommitHash,
 
         /// Override default empty initialization args.
         #[arg(long)]
@@ -169,6 +195,7 @@ async fn main() {
             output_dir,
             submit,
         } => {
+            check_dir_has_required_permissions(&output_dir).expect("invalid output directory");
             let canister_per_git_repo = canisters_per_git_repo(canisters);
 
             for git_repo_url in canister_per_git_repo.keys() {
@@ -195,6 +222,58 @@ async fn main() {
                         compressed_wasm_hash: compressed_wasm_hashes[index].clone(),
                         canister_id: canister_ids[index],
                         install_args: install_args[index].clone(),
+                        build_artifact_command: canister.build_artifact_as_str(),
+                    };
+
+                    write_to_disk(output_dir, proposal, submit.clone(), &git_repo);
+                }
+            }
+        }
+        Commands::Reinstall {
+            canisters,
+            from,
+            to,
+            args,
+            output_dir,
+            submit,
+        } => {
+            check_dir_has_required_permissions(&output_dir).expect("invalid output directory");
+            let canister_per_git_repo = canisters_per_git_repo(canisters);
+
+            for git_repo_url in canister_per_git_repo.keys() {
+                let canisters: Vec<_> = canister_per_git_repo
+                    .get(git_repo_url)
+                    .unwrap()
+                    .iter()
+                    .cloned()
+                    .collect();
+
+                let mut git_repo = GitRepository::clone(git_repo_url);
+                let dashboard = DashboardClient::new();
+                let release_notes = git_repo.release_notes_batch(&canisters, &from, &to);
+                git_repo.checkout(&to);
+                let install_args: Vec<_> = git_repo.encode_args_batch(&canisters, args.clone());
+                let canister_ids: Vec<_> =
+                    canisters.iter().map(TargetCanister::canister_id).collect();
+                let last_proposal_ids: Vec<_> = dashboard
+                    .list_canister_upgrade_proposals_batch(&canister_ids)
+                    .await
+                    .into_iter()
+                    .map(|set| set.last().cloned())
+                    .collect();
+                let compressed_wasm_hashes = git_repo.build_canister_artifact_batch(&canisters);
+
+                for (index, canister) in canisters.into_iter().enumerate() {
+                    let output_dir = output_dir.join(canister.to_string()).join(to.to_string());
+
+                    let proposal = ReinstallProposalTemplate {
+                        canister: canister.clone(),
+                        to: to.clone(),
+                        compressed_wasm_hash: compressed_wasm_hashes[index].clone(),
+                        canister_id: canister_ids[index],
+                        last_proposal_id: last_proposal_ids[index],
+                        install_args: install_args[index].clone(),
+                        release_notes: release_notes[index].clone(),
                         build_artifact_command: canister.build_artifact_as_str(),
                     };
 

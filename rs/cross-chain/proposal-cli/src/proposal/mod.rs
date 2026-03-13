@@ -37,9 +37,31 @@ pub struct InstallProposalTemplate {
     pub build_artifact_command: String,
 }
 
+#[derive(Template)]
+#[template(path = "reinstall.md")]
+pub struct ReinstallProposalTemplate {
+    pub canister: TargetCanister,
+    pub to: GitCommitHash,
+    pub compressed_wasm_hash: CompressedWasmHash,
+    pub canister_id: Principal,
+    pub last_proposal_id: Option<u64>,
+    pub install_args: UpgradeArgs,
+    pub release_notes: ReleaseNotes,
+    pub build_artifact_command: String,
+}
+
+impl ReinstallProposalTemplate {
+    pub fn previous_proposal_url(&self) -> String {
+        self.last_proposal_id
+            .map(|id| format!("https://dashboard.internetcomputer.org/proposal/{id}"))
+            .unwrap_or_else(|| "None".to_string())
+    }
+}
+
 pub enum ProposalTemplate {
     Upgrade(UpgradeProposalTemplate),
     Install(InstallProposalTemplate),
+    Reinstall(ReinstallProposalTemplate),
 }
 
 impl ProposalTemplate {
@@ -47,6 +69,7 @@ impl ProposalTemplate {
         let bin_args = match self {
             ProposalTemplate::Upgrade(template) => template.upgrade_args.upgrade_args_bin(),
             ProposalTemplate::Install(template) => template.install_args.upgrade_args_bin(),
+            ProposalTemplate::Reinstall(template) => template.install_args.upgrade_args_bin(),
         };
         writer
             .write_all(bin_args)
@@ -57,6 +80,7 @@ impl ProposalTemplate {
         match self {
             ProposalTemplate::Upgrade(template) => template.upgrade_args.args_sha256_hex(),
             ProposalTemplate::Install(template) => template.install_args.args_sha256_hex(),
+            ProposalTemplate::Reinstall(template) => template.install_args.args_sha256_hex(),
         }
     }
 
@@ -64,6 +88,7 @@ impl ProposalTemplate {
         match self {
             ProposalTemplate::Upgrade(template) => template.render(),
             ProposalTemplate::Install(template) => template.render(),
+            ProposalTemplate::Reinstall(template) => template.render(),
         }
         .expect("failed to render proposal template")
     }
@@ -72,6 +97,7 @@ impl ProposalTemplate {
         match self {
             ProposalTemplate::Upgrade(template) => &template.canister_id,
             ProposalTemplate::Install(template) => &template.canister_id,
+            ProposalTemplate::Reinstall(template) => &template.canister_id,
         }
     }
 
@@ -79,6 +105,7 @@ impl ProposalTemplate {
         match self {
             ProposalTemplate::Upgrade(template) => &template.compressed_wasm_hash,
             ProposalTemplate::Install(template) => &template.compressed_wasm_hash,
+            ProposalTemplate::Reinstall(template) => &template.compressed_wasm_hash,
         }
     }
 
@@ -86,6 +113,7 @@ impl ProposalTemplate {
         match self {
             ProposalTemplate::Upgrade(template) => &template.canister,
             ProposalTemplate::Install(template) => &template.canister,
+            ProposalTemplate::Reinstall(template) => &template.canister,
         }
     }
 }
@@ -99,5 +127,11 @@ impl From<UpgradeProposalTemplate> for ProposalTemplate {
 impl From<InstallProposalTemplate> for ProposalTemplate {
     fn from(template: InstallProposalTemplate) -> Self {
         ProposalTemplate::Install(template)
+    }
+}
+
+impl From<ReinstallProposalTemplate> for ProposalTemplate {
+    fn from(template: ReinstallProposalTemplate) -> Self {
+        ProposalTemplate::Reinstall(template)
     }
 }
