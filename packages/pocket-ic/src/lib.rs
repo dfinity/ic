@@ -1980,12 +1980,12 @@ fn warm_up_wsl() {
             .output()
             .expect("Failed to warm up WSL");
         if !output.status.success() {
-            return Err(format!(
+            panic!(
                 "Failed to warm up WSL.\nStatus: {}\nStdout: {}\nStderr: {}",
                 output.status,
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr),
-            ));
+            );
         }
     });
 }
