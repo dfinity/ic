@@ -176,6 +176,40 @@ impl Firewall {
             .unwrap_or_else(|| vec![registry_version])
     }
 
+    // Get the node reward type of this node from the registry, and default to `Unspecified` if it's
+    // not found or there's an error.
+    fn get_defaulting_node_reward_type(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> NodeRewardType {
+        match self.registry.get_node_record(node_id, version) {
+            // node_reward_type() defaults to `Unspecified` if the field is unset or set to an
+            // invalid enum value
+            Ok(Some(node_record)) => node_record.node_reward_type(),
+            Ok(None) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.logger,
+                    "Node record for node ID {} not found in the registry at version {}",
+                    node_id,
+                    version
+                );
+                NodeRewardType::Unspecified
+            }
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.logger,
+                    "Failed to get the node record for node ID {}: {}",
+                    node_id,
+                    err
+                );
+                NodeRewardType::Unspecified
+            }
+        }
+    }
+
     // Depending on the node reward type, determine the set of node types that should be
     // whitelisted.
     // Currently, if the node reward type is not `Type4` (cloud engine node), then all nodes except
@@ -224,20 +258,7 @@ impl Firewall {
         // whitelist.
         // We assume that nodes' reward types do not change across registry versions, so we just get
         // it from the latest registry version.
-        let own_reward_type = match self.registry.get_node_reward_type(registry_version) {
-            Ok(Some(reward_type)) => reward_type,
-            Ok(None) => NodeRewardType::Unspecified,
-            Err(err) => {
-                warn!(
-                    every_n_seconds => 30,
-                    self.logger,
-                    "Failed to get own node reward type: {}",
-                    err
-                );
-                NodeRewardType::Unspecified
-            }
-        };
-
+        let own_reward_type = self.get_defaulting_node_reward_type(self.node_id, registry_version);
         let whitelisted_node_types = Self::get_whitelisted_node_types(own_reward_type);
 
         // Get the union of all the node IP addresses from the registry
@@ -253,53 +274,21 @@ impl Firewall {
                             self.logger,
                             "Failed to get all node IDs in the registry: {}", err
                         );
-                        return BTreeSet::new();
+                        return vec![];
                     }
                 };
 
                 // For each of them, check their node reward type and only include the ones with
-                // whitelisted node reward types, then get their IP addresses to be whitelisted.
-                all_node_ids
-                    .into_iter()
-                    .filter_map(|other_node_id| {
-                        let other_node_record = match self
-                            .registry
-                            .get_node_record(other_node_id, registry_version)
-                        {
-                            Ok(Some(record)) => record,
-                            Ok(None) => return None,
-                            Err(err) => {
-                                warn!(
-                                    every_n_seconds => 30,
-                                    self.logger,
-                                    "Failed to get the node record for node ID {}: {}",
-                                    other_node_id,
-                                    err
-                                );
-                                return None;
-                            }
-                        };
+                // whitelisted node reward types.
+                let whitelisted_node_ids = all_node_ids.into_iter().filter(|other_node_id| {
+                    let other_reward_type =
+                        self.get_defaulting_node_reward_type(*other_node_id, registry_version);
 
-                        // node_reward_type() defaults to `Unspecified` if the field is unset or set
-                        // to an invalid enum value
-                        if !whitelisted_node_types.contains(&other_node_record.node_reward_type()) {
-                            return None;
-                        }
+                    whitelisted_node_types.contains(&other_reward_type)
+                });
 
-                        let mut endpoints = Vec::new();
-                        if let Some(xnet_record) = other_node_record.xnet {
-                            endpoints.push(xnet_record)
-                        };
-                        if let Some(http_record) = other_node_record.http {
-                            endpoints.push(http_record)
-                        };
-                        Some(endpoints)
-                    })
-                    .flatten()
-                    .filter_map(|connection_endpoint| {
-                        connection_endpoint.ip_addr.parse::<IpAddr>().ok()
-                    })
-                    .collect::<BTreeSet<IpAddr>>()
+                self.registry
+                    .get_available_ip_addresses_for_node_ids(registry_version, whitelisted_node_ids)
             })
             .collect::<BTreeSet<IpAddr>>();
 

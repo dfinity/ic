@@ -6,7 +6,7 @@ use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     firewall::v1::FirewallRuleSet,
     hostos_version::v1::HostosVersionRecord,
-    node::v1::{IPv4InterfaceConfig, NodeRewardType},
+    node::v1::IPv4InterfaceConfig,
     replica_version::v1::ReplicaVersionRecord,
     subnet::v1::{SubnetRecord, SubnetType},
 };
@@ -195,6 +195,15 @@ impl RegistryHelper {
         Ok(ips.unwrap_or_default())
     }
 
+    pub(crate) fn get_available_ip_addresses_for_node_ids(
+        &self,
+        version: RegistryVersion,
+        node_ids: impl IntoIterator<Item = NodeId>,
+    ) -> Vec<IpAddr> {
+        self.registry_client
+            .get_available_ip_addresses_for_node_ids(version, node_ids)
+    }
+
     pub(crate) fn get_subnet_id_from_node_id(
         &self,
         node_id: NodeId,
@@ -371,19 +380,6 @@ impl RegistryHelper {
             .registry_client
             .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.domain);
-        Ok(result)
-    }
-
-    pub(crate) fn get_node_reward_type(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<Option<NodeRewardType>> {
-        let result = self
-            .registry_client
-            .get_node_record(self.node_id, version)?
-            // node_reward_type() defaults to `Unspecified` if the field is unset or set to an
-            // invalid enum value
-            .map(|node_record| node_record.node_reward_type());
         Ok(result)
     }
 }

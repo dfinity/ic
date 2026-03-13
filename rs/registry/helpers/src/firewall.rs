@@ -11,7 +11,7 @@ use ic_protobuf::registry::{
 use ic_registry_keys::{
     FirewallRulesScope, make_firewall_config_record_key, make_firewall_rules_record_key,
 };
-use ic_types::RegistryVersion;
+use ic_types::{NodeId, RegistryVersion};
 use std::{collections::HashSet, net::IpAddr};
 
 /// A trait that allows access to firewall rules and ancillary information.
@@ -31,6 +31,12 @@ pub trait FirewallRegistry {
         version: RegistryVersion,
         subnet_types: impl IntoIterator<Item = SubnetType>,
     ) -> RegistryClientResult<Vec<IpAddr>>;
+
+    fn get_available_ip_addresses_for_node_ids(
+        &self,
+        version: RegistryVersion,
+        node_ids: impl IntoIterator<Item = NodeId>,
+    ) -> Vec<IpAddr>;
 }
 
 impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
@@ -86,6 +92,16 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             .flatten()
             .collect::<Vec<_>>();
 
+        Ok(Some(self.get_available_ip_addresses_for_node_ids(
+            version, node_ids,
+        )))
+    }
+
+    fn get_available_ip_addresses_for_node_ids(
+        &self,
+        version: RegistryVersion,
+        node_ids: impl IntoIterator<Item = NodeId>,
+    ) -> Vec<IpAddr> {
         let mut ip_addresses = HashSet::new();
         for node_id in node_ids {
             let Ok(Some(node_record)) = self.get_node_record(node_id, version) else {
@@ -105,7 +121,7 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             }
         }
 
-        Ok(Some(Vec::from_iter(ip_addresses)))
+        Vec::from_iter(ip_addresses)
     }
 }
 
