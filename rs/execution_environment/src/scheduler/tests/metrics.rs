@@ -375,28 +375,30 @@ fn execution_round_metrics_are_recorded() {
             .messages
             .get_sample_count()
     );
-    assert_eq!(2, metrics.round_subnet_queue.duration.get_sample_count());
+    assert_eq!(2, metrics.round_inner_subnet_queue.duration.get_sample_count());
     assert_eq!(
         2,
-        metrics.round_subnet_queue.instructions.get_sample_count()
+        metrics.round_inner_subnet_queue.instructions.get_sample_count()
     );
     assert_eq!(
         30,
-        metrics.round_subnet_queue.instructions.get_sample_sum() as u64,
+        metrics.round_inner_subnet_queue.instructions.get_sample_sum() as u64,
     );
-    assert_eq!(2, metrics.round_subnet_queue.messages.get_sample_count());
+    assert_eq!(2, metrics.round_inner_subnet_queue.messages.get_sample_count());
     assert_eq!(
         3,
-        metrics.round_subnet_queue.messages.get_sample_sum() as u64,
+        metrics.round_inner_subnet_queue.messages.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.duration.get_sample_count());
     assert_eq!(1, metrics.round_inner.instructions.get_sample_count());
+    // (3 subnet messages + 10 canister messages) * 10 instructions
     assert_eq!(
-        100,
+        130,
         metrics.round_inner.instructions.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.messages.get_sample_count());
-    assert_eq!(10, metrics.round_inner.messages.get_sample_sum() as u64,);
+    // 3 subnet messages + 10 canister messages
+    assert_eq!(13, metrics.round_inner.messages.get_sample_sum() as u64,);
     assert_eq!(2, metrics.round_inner_iteration.duration.get_sample_count());
     assert_eq!(
         2,

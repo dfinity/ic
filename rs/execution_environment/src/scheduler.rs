@@ -445,8 +445,8 @@ impl SchedulerImpl {
             // they are processed until the subnet messages' instruction limit is reached.
             {
                 let subnet_measurement_scope = MeasurementScope::nested(
-                    &self.metrics.round_subnet_queue,
-                    root_measurement_scope,
+                    &self.metrics.round_inner_subnet_queue,
+                    &measurement_scope,
                 );
 
                 // TODO(EXC-1517): Improve inner loop preparation.
