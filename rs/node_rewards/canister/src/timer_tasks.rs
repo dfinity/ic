@@ -7,7 +7,7 @@ use futures::FutureExt;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::futures::spawn;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nervous_system_timer_task::{set_timer, RecurringAsyncTask, RecurringSyncTask};
+use ic_nervous_system_timer_task::{RecurringAsyncTask, RecurringSyncTask, set_timer};
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::providers_rewards::GetNodeProvidersRewardsRequest;
 use std::cell::RefCell;
