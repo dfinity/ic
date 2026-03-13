@@ -25,12 +25,16 @@ Success::
 
 end::catalog[] */
 
+use http_body_util::{BodyExt, Full};
+use hyper::{Method, Request, StatusCode, body::Bytes};
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_base_types::SubnetId;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
     store_message,
 };
 use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
+use ic_protobuf::types::v1 as pb;
 use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -46,10 +50,12 @@ use ic_system_test_driver::{
     },
     util::*,
 };
+use ic_types::consensus::{CatchUpPackage, HasHeight};
 use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use candid::Principal;
+use prost::Message;
 use slog::{Logger, info};
 use std::{thread, time::Duration};
 
@@ -171,7 +177,7 @@ fn subnet_splitting_test(env: TestEnv) {
             .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
 
         if step_type == StepType::HaltSourceSubnetAtCupHeight {
-            wait_until_halted_at_cup_height(&source_subnet, &logger);
+            wait_until_halting_cup_reached(&env, &source_subnet, &logger);
             info!(
                 logger,
                 "Wait 15 seconds to make sure that \
@@ -356,44 +362,109 @@ fn verify_common(
     info!(logger, "Success!");
 }
 
-fn wait_until_halted_at_cup_height(subnet: &SubnetSnapshot, logger: &Logger) {
+fn wait_until_halting_cup_reached(env: &TestEnv, source_subnet: &SubnetSnapshot, logger: &Logger) {
     let mut heights = vec![];
 
-    for node in subnet.nodes() {
+    for node in source_subnet.nodes() {
         info!(
             logger,
             "Waiting for the node {} to halt at CUP height.",
             node.get_ip_addr()
         );
-        let mut height = block_on(get_node_metrics(logger, &node.get_ip_addr()))
-            .unwrap()
-            .certification_height;
 
         loop {
-            info!(
-                logger,
-                "Current certified height: {}. Sleeping for 5 seconds...", height
+            let cup = block_on(get_cup(&node)).unwrap();
+            let cup_registry_version = cup
+                .content
+                .block
+                .get_value()
+                .payload
+                .as_ref()
+                .as_summary()
+                .dkg
+                .registry_version;
+            let _ = block_on(
+                env.topology_snapshot()
+                    .block_for_min_registry_version(cup_registry_version),
             );
-            thread::sleep(Duration::from_secs(5));
 
-            let tmp = block_on(get_node_metrics(logger, &node.get_ip_addr()))
+            let certified_height = block_on(get_node_metrics(logger, &node.get_ip_addr()))
                 .unwrap()
                 .certification_height;
 
-            if tmp == height {
+            if env
+                .topology_snapshot()
+                .subnets()
+                .find(|subnet| subnet.subnet_id == source_subnet.subnet_id)
+                .expect("The subnet shouldn't have disappeared")
+                .raw_subnet_record_at_version(cup_registry_version)
+                .halt_at_cup_height
+            // Just in case the node is state syncing, we make sure its certified
+            // height is high enough.
+                && certified_height >= cup.height()
+            {
+                info!(
+                    logger,
+                    "Halting CUP has been reached. \
+                    Current CUP's registry version: {cup_registry_version}. \
+                    Current certified height: {certified_height}."
+                );
+                heights.push(cup.height());
                 break;
             }
 
-            height = tmp;
+            info!(
+                logger,
+                "Halting CUP has not yet been reached. \
+                Current CUP's registry version: {cup_registry_version}. \
+                Current certified height: {certified_height}. \
+                Sleeping for 5 seconds."
+            );
+            thread::sleep(Duration::from_secs(5));
         }
-
-        heights.push(height);
     }
 
-    // verify that the nodes have halted at a CUP height (an integer multiple of DKG_INTERVAL + 1).
-    assert!(heights.iter().all(|x| x.get() % (DKG_INTERVAL + 1) == 0));
     // verify that all the heights are equal.
     assert_eq!(heights.iter().min(), heights.iter().max());
+}
+
+async fn get_cup(node: &IcNodeSnapshot) -> anyhow::Result<CatchUpPackage> {
+    let url = node.get_public_url();
+    let cup_url = format!("{url}_/catch_up_package");
+    let client = Client::builder(TokioExecutor::new()).build_http::<Full<Bytes>>();
+
+    let res = client
+        .request(
+            Request::builder()
+                .method(Method::POST)
+                .header(hyper::header::CONTENT_TYPE, "application/cbor")
+                .uri(&cup_url)
+                .body(Full::from(Bytes::new()))
+                .unwrap(),
+        )
+        .await
+        .with_context(|| format!("Failed to send request to {cup_url}"))?;
+
+    if res.status() != StatusCode::OK {
+        anyhow::bail!(
+            "Failed to send request to {cup_url}. Status: {}",
+            res.status()
+        );
+    }
+
+    let body = res
+        .into_body()
+        .collect()
+        .await
+        .context("Failed to collect response body")?;
+
+    let proto =
+        pb::CatchUpPackage::decode(body.to_bytes()).context("Failed to decode the response")?;
+
+    let cup =
+        CatchUpPackage::try_from(&proto).context("Failed to convert proto to CatchUpPackage")?;
+
+    Ok(cup)
 }
 
 fn get_subnets(env: &TestEnv) -> (SubnetSnapshot, SubnetSnapshot) {
