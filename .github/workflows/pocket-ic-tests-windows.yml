@@ -125,4 +125,5 @@ jobs:
           $env:RUST_TEST_THREADS=2
           $env:POCKET_IC_BIN="$env:WORKDIR\pocket-ic-server"
           $env:TEST_WASM="$env:WORKDIR\test_canister.wasm.gz"
+          wsl ls "$env:WORKDIR" # force WSL to mount and see the working directory
           cargo test --locked -p pocket-ic
