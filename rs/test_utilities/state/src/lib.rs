@@ -11,6 +11,7 @@ use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
     Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
+        canister_snapshots::CanisterSnapshots,
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         system_state::TaskQueue,
         testing::new_canister_output_queues_for_test,
@@ -389,6 +390,7 @@ impl CanisterStateBuilder {
             system_state,
             execution_state,
             scheduler_state: SchedulerState::default(),
+            canister_snapshots: CanisterSnapshots::default(),
         }
     }
 }
@@ -635,6 +637,7 @@ pub fn canister_from_exec_state(
             .build(),
         execution_state: Some(execution_state),
         scheduler_state: Default::default(),
+        canister_snapshots: CanisterSnapshots::default(),
     }
 }
 
@@ -663,6 +666,7 @@ pub fn get_running_canister_with_args(
         ),
         execution_state: None,
         scheduler_state: Default::default(),
+        canister_snapshots: CanisterSnapshots::default(),
     }
 }
 
@@ -687,6 +691,7 @@ pub fn get_stopping_canister_with_controller(
         ),
         execution_state: None,
         scheduler_state: Default::default(),
+        canister_snapshots: CanisterSnapshots::default(),
     }
 }
 
@@ -711,6 +716,7 @@ pub fn get_stopped_canister_with_controller(
         ),
         execution_state: None,
         scheduler_state: Default::default(),
+        canister_snapshots: CanisterSnapshots::default(),
     }
 }
 
@@ -801,7 +807,8 @@ pub fn new_canister_state(
         initial_cycles,
         freeze_threshold,
     );
-    CanisterState::new(system_state, None, scheduler_state)
+    let canister_snapshots = CanisterSnapshots::default();
+    CanisterState::new(system_state, None, scheduler_state, canister_snapshots)
 }
 
 pub fn new_canister_state_with_execution(
@@ -820,7 +827,13 @@ pub fn new_canister_state_with_execution(
     let execution_state = ExecutionStateBuilder::default()
         .with_wasm_binary(empty_wasm())
         .build();
-    CanisterState::new(system_state, Some(execution_state), scheduler_state)
+    let canister_snapshots = CanisterSnapshots::default();
+    CanisterState::new(
+        system_state,
+        Some(execution_state),
+        scheduler_state,
+        canister_snapshots,
+    )
 }
 
 /// Helper function to register a callback.

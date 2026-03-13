@@ -41,7 +41,7 @@ Edge cases for method names in update and query calls:
 
 end::catalog[] */
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use candid::Principal;
 use ic_agent::{Agent, AgentError};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -455,23 +455,13 @@ async fn assert_large_request_rejected<F, Fut>(
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<Vec<u8>, AgentError>>,
 {
-    ic_system_test_driver::retry_with_msg_async!(
-        label.as_str(),
-        logger,
-        Duration::from_secs(60),
-        Duration::from_secs(5),
-        || async {
-            match call().await {
-                Err(AgentError::TransportError(e)) => {
-                    bail!("transport error, retrying: {e}")
-                }
-                Err(ref e) if is_expected(e) => Ok(()),
-                other => panic!("{}: unexpected result: {:?}", label, other),
-            }
-        }
-    )
-    .await
-    .unwrap()
+    let err =
+        ic_system_test_driver::retry_agent_on_transport_errors!(label.as_str(), logger, call())
+            .await
+            .expect("Retries exhausted")
+            .expect_err(&label);
+
+    assert!(is_expected(&err));
 }
 
 fn is_http_status(err: &AgentError, status: StatusCode) -> bool {
