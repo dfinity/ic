@@ -10,7 +10,6 @@ use ic_system_test_driver::{
     systest,
 };
 use slog::info;
-use std::time::Duration;
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -52,8 +51,6 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(check_no_failed_systemd_units))
-        .with_timeout_per_test(Duration::from_secs(10 * 60))
-        .with_overall_timeout(Duration::from_secs(20 * 60))
         .execute_from_args()?;
 
     Ok(())
