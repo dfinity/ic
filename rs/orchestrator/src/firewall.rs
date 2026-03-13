@@ -12,6 +12,7 @@ use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_protobuf::registry::{
     firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection},
     node::v1::NodeRewardType,
+    subnet::v1::SubnetType,
 };
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
@@ -376,7 +377,10 @@ impl Firewall {
                 .into_iter()
                 .flat_map(|registry_version| {
                     self.registry
-                        .get_system_subnet_nodes_ip_addresses(registry_version)
+                        .get_subnet_nodes_ip_addresses_of_types(
+                            registry_version,
+                            [SubnetType::System],
+                        )
                         .inspect_err(|err| {
                             warn!(
                                 every_n_seconds => 30,
@@ -391,7 +395,10 @@ impl Firewall {
                 .into_iter()
                 .flat_map(|registry_version| {
                     self.registry
-                        .get_app_subnet_nodes_ip_addresses(registry_version)
+                        .get_subnet_nodes_ip_addresses_of_types(
+                            registry_version,
+                            [SubnetType::Application, SubnetType::VerifiedApplication],
+                        )
                         .inspect_err(|err| {
                             warn!(
                                 every_n_seconds => 30,

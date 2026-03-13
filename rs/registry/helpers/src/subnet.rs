@@ -490,8 +490,9 @@ pub fn get_node_ids_from_subnet_record(
 /// of the current topology of the IC.
 pub trait SubnetListRegistry {
     fn get_subnet_ids(&self, version: RegistryVersion) -> RegistryClientResult<Vec<SubnetId>>;
-    fn get_system_subnet_ids(
+    fn get_subnet_ids_of_type(
         &self,
+        subnet_type: SubnetType,
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<SubnetId>>;
 }
@@ -516,8 +517,9 @@ impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
             .transpose()
     }
 
-    fn get_system_subnet_ids(
+    fn get_subnet_ids_of_type(
         &self,
+        subnet_type: SubnetType,
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<SubnetId>> {
         let subnet_ids = self.get_subnet_ids(version)?;
@@ -526,7 +528,7 @@ impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
                 .filter(|subnet_id| {
                     matches!(
                         self.get_subnet_type(*subnet_id, version),
-                        Ok(Some(SubnetType::System))
+                        Ok(Some(t)) if t == subnet_type
                     )
                 })
                 .collect()

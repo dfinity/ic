@@ -1,18 +1,17 @@
 use crate::{
     deserialize_registry_value,
-    node::NodeRecord,
+    node::NodeRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::{
     firewall::v1::{FirewallConfig, FirewallRuleSet},
-    node::v1::ConnectionEndpoint,
+    subnet::v1::SubnetType,
 };
 use ic_registry_keys::{
-    FirewallRulesScope, NODE_RECORD_KEY_PREFIX, get_node_record_node_id,
-    make_firewall_config_record_key, make_firewall_rules_record_key, make_node_record_key,
+    FirewallRulesScope, make_firewall_config_record_key, make_firewall_rules_record_key,
 };
-use ic_types::{NodeId, RegistryVersion, SubnetId};
+use ic_types::RegistryVersion;
 use std::{collections::HashSet, net::IpAddr};
 
 /// A trait that allows access to firewall rules and ancillary information.
@@ -27,25 +26,10 @@ pub trait FirewallRegistry {
         scope: &FirewallRulesScope,
     ) -> RegistryClientResult<FirewallRuleSet>;
 
-    fn get_all_nodes_ip_addresses(
+    fn get_subnet_nodes_ip_addresses_of_types(
         &self,
         version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<IpAddr>>;
-
-    fn get_system_subnet_nodes_ip_addresses(
-        &self,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<IpAddr>>;
-
-    fn get_app_subnet_nodes_ip_addresses(
-        &self,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<IpAddr>>;
-
-    fn get_ip_addresses_for_node_ids(
-        &self,
-        version: RegistryVersion,
-        node_ids: &[NodeId],
+        subnet_types: impl IntoIterator<Item = SubnetType>,
     ) -> RegistryClientResult<Vec<IpAddr>>;
 }
 
@@ -68,135 +52,71 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
         deserialize_registry_value::<FirewallRuleSet>(bytes)
     }
 
-    /// Get all the IP addresses of all nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
-    fn get_all_nodes_ip_addresses(
+    /// Get the IP addresses of all system subnet nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
+    fn get_subnet_nodes_ip_addresses_of_types(
         &self,
         version: RegistryVersion,
+        subnet_types: impl IntoIterator<Item = SubnetType>,
     ) -> RegistryClientResult<Vec<IpAddr>> {
-        let node_record_keys = self.get_key_family(NODE_RECORD_KEY_PREFIX, version)?;
-
-        // Go over all node IDs, get their corresponding node records, extract all p2p, xnet, api endpoints,
-        // put into a set (to remove duplicates), and then collect into a list.
-        let result: Vec<IpAddr> = node_record_keys
-            .iter()
-            .filter_map(|s| get_node_record_node_id(s.as_str()))
-            .map(NodeId::from)
-            .filter_map(|node_id| {
-                match deserialize_registry_value::<NodeRecord>(
-                    self.get_value(&make_node_record_key(node_id), version),
-                ) {
-                    Ok(Some(node_record)) => {
-                        let mut endpoints: Vec<ConnectionEndpoint> = Vec::new();
-                        if let Some(xnet_record) = node_record.xnet {
-                            endpoints.push(xnet_record)
-                        };
-                        if let Some(http_record) = node_record.http {
-                            endpoints.push(http_record)
-                        };
-                        Some(endpoints)
-                    }
-                    _ => None,
+        let subnet_ids = subnet_types
+            .into_iter()
+            .map(|subnet_id| {
+                match self.get_subnet_ids_of_type(subnet_id, version) {
+                    Ok(Some(ids)) => Ok(ids),
+                    Ok(None) => Ok(vec![]),
+                    Err(e) => Err(e), // Propagate any errors encountered while fetching subnet ids
                 }
             })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .flatten()
-            .filter_map(|connection_endpoint| connection_endpoint.ip_addr.parse::<IpAddr>().ok())
-            .collect::<HashSet<IpAddr>>()
-            .into_iter()
-            .collect();
-        Ok(Some(result))
-    }
+            .collect::<Vec<_>>();
 
-    /// Get the IP addresses of all system subnet nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
-    fn get_system_subnet_nodes_ip_addresses(
-        &self,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<IpAddr>> {
-        let system_subnet_node_ids: Vec<NodeId> = self
-            .get_system_subnet_ids(version)?
-            .unwrap_or_default()
+        let node_ids = subnet_ids
             .into_iter()
-            .map(
-                |subnet_id| match self.get_node_ids_on_subnet(subnet_id, version) {
-                    Ok(Some(node_ids)) => Ok(node_ids),
+            .map(|subnet_id| {
+                match self.get_node_ids_on_subnet(subnet_id, version) {
+                    Ok(Some(ids)) => Ok(ids),
                     Ok(None) => Ok(vec![]),
-                    Err(e) => Err(e),
-                },
-            )
-            .collect::<Result<Vec<Vec<NodeId>>, _>>()?
+                    Err(e) => Err(e), // Propagate any errors encountered while fetching node ids
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flatten()
-            .collect();
+            .collect::<Vec<_>>();
 
-        self.get_ip_addresses_for_node_ids(version, &system_subnet_node_ids)
-    }
-
-    /// Get the IP addresses of all app subnet nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
-    fn get_app_subnet_nodes_ip_addresses(
-        &self,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<IpAddr>> {
-        let all_subnet_ids = self.get_subnet_ids(version)?.unwrap_or_default();
-        let system_subnet_ids = self.get_system_subnet_ids(version)?.unwrap_or_default();
-
-        let app_subnet_ids: Vec<SubnetId> = all_subnet_ids
-            .into_iter()
-            .filter(|id| !system_subnet_ids.contains(id))
-            .collect();
-
-        let app_subnet_node_ids: Vec<NodeId> = app_subnet_ids
-            .into_iter()
-            .map(
-                |subnet_id| match self.get_node_ids_on_subnet(subnet_id, version) {
-                    Ok(Some(node_ids)) => Ok(node_ids),
-                    Ok(None) => Ok(vec![]),
-                    Err(e) => Err(e),
-                },
-            )
-            .collect::<Result<Vec<Vec<NodeId>>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-
-        self.get_ip_addresses_for_node_ids(version, &app_subnet_node_ids)
-    }
-
-    /// Get the IP addresses of the specified nodes
-    fn get_ip_addresses_for_node_ids(
-        &self,
-        version: RegistryVersion,
-        node_ids: &[NodeId],
-    ) -> RegistryClientResult<Vec<IpAddr>> {
-        let mut node_endpoints: HashSet<IpAddr> = HashSet::new();
-
+        let mut ip_addresses = HashSet::new();
         for node_id in node_ids {
-            if let Some(node_record) = deserialize_registry_value::<NodeRecord>(
-                self.get_value(&make_node_record_key(*node_id), version),
-            )? {
-                if let Some(ip_addr) = node_record
-                    .xnet
-                    .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
-                {
-                    node_endpoints.insert(ip_addr);
-                }
-                if let Some(ip_addr) = node_record
-                    .http
-                    .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
-                {
-                    node_endpoints.insert(ip_addr);
-                }
+            let Ok(Some(node_record)) = self.get_node_record(node_id, version) else {
+                // Skip this node if there's an error fetching the node record or if it's not found
+                continue;
+            };
+
+            if let Some(endpoint) = node_record.xnet
+                && let Ok(ip_addr) = endpoint.ip_addr.parse::<IpAddr>()
+            {
+                ip_addresses.insert(ip_addr);
+            }
+            if let Some(endpoint) = node_record.http
+                && let Ok(ip_addr) = endpoint.ip_addr.parse::<IpAddr>()
+            {
+                ip_addresses.insert(ip_addr);
             }
         }
 
-        Ok(Some(Vec::from_iter(node_endpoints)))
+        Ok(Some(Vec::from_iter(ip_addresses)))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::node::NodeRecord;
     use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_types::PrincipalId;
+    use ic_types::{NodeId, PrincipalId};
     use std::sync::Arc;
 
     // Helper function to create a registry client with the provided information.
@@ -219,51 +139,5 @@ mod tests {
         let registry = Arc::new(FakeRegistryClient::new(data_provider));
         registry.update_to_latest_version();
         registry as Arc<dyn RegistryClient>
-    }
-
-    #[test]
-    fn can_get_node_ips() {
-        let test_ip_addrs: Vec<IpAddr> = vec![
-            "1::".parse().unwrap(),
-            "2::".parse().unwrap(),
-            "3::".parse().unwrap(),
-            "4::".parse().unwrap(),
-            "10.0.0.1".parse().unwrap(),
-            "10.0.0.2".parse().unwrap(),
-            "192.168.0.1".parse().unwrap(),
-        ];
-
-        let node_records = test_ip_addrs
-            .iter()
-            .enumerate()
-            .map(|(id, ip)| {
-                (
-                    NodeId::from(PrincipalId::new_node_test_id(id as u64)),
-                    NodeRecord {
-                        http: Some(ConnectionEndpoint {
-                            ip_addr: ip.to_string(),
-                            port: 8080,
-                        }),
-                        xnet: Some(ConnectionEndpoint {
-                            ip_addr: ip.to_string(),
-                            port: 2457,
-                        }),
-                        ..Default::default()
-                    },
-                )
-            })
-            .collect();
-
-        let version = RegistryVersion::from(2);
-
-        let registry = create_test_registry_client(version, node_records);
-        let ip_addrs = registry
-            .get_all_nodes_ip_addresses(version)
-            .unwrap()
-            .unwrap();
-
-        for ip_addr in &test_ip_addrs {
-            assert!(ip_addrs.contains(ip_addr));
-        }
     }
 }

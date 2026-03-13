@@ -8,7 +8,7 @@ use ic_protobuf::registry::{
     hostos_version::v1::HostosVersionRecord,
     node::v1::{IPv4InterfaceConfig, NodeRewardType},
     replica_version::v1::ReplicaVersionRecord,
-    subnet::v1::SubnetRecord,
+    subnet::v1::{SubnetRecord, SubnetType},
 };
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
@@ -183,24 +183,14 @@ impl RegistryHelper {
             .map_err(OrchestratorError::RegistryClientError)
     }
 
-    pub(crate) fn get_app_subnet_nodes_ip_addresses(
+    pub(crate) fn get_subnet_nodes_ip_addresses_of_types(
         &self,
         version: RegistryVersion,
+        subnet_types: impl IntoIterator<Item = SubnetType>,
     ) -> OrchestratorResult<Vec<IpAddr>> {
         let ips = self
             .registry_client
-            .get_app_subnet_nodes_ip_addresses(version)?;
-
-        Ok(ips.unwrap_or_default())
-    }
-
-    pub(crate) fn get_system_subnet_nodes_ip_addresses(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<IpAddr>> {
-        let ips = self
-            .registry_client
-            .get_system_subnet_nodes_ip_addresses(version)?;
+            .get_subnet_nodes_ip_addresses_of_types(version, subnet_types)?;
 
         Ok(ips.unwrap_or_default())
     }
