@@ -284,9 +284,12 @@ fn test_failure_rate_calculation_various_performance() {
             ],
         );
 
-    let mut result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
-    ).expect("Calculation should succeed");
+    let mut result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     let mut daily_result = result.daily_results.remove(&day).unwrap();
     let provider_result = daily_result.provider_results.remove(&provider_id).unwrap();
@@ -427,9 +430,12 @@ fn test_type3_reduction_coefficient_logic() {
             ],
         );
 
-    let result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
-    ).expect("Calculation should succeed");
+    let result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];
@@ -539,9 +545,11 @@ fn test_invalid_date_range() {
 
     let fake_input_provider = FakeInputProvider::new();
 
-    let result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day1, day2, fake_input_provider)
-    );
+    let result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day1,
+        day2,
+        fake_input_provider,
+    ));
 
     match result {
         Err(error_msg) => assert!(error_msg.contains("from_day must be before to_day")),
@@ -554,9 +562,11 @@ fn test_missing_rewards_table() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
     let fake_input_provider = FakeInputProvider::new(); // No rewards table added
 
-    let result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
-    );
+    let result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ));
     assert_eq!(
         result,
         Err("No rewards table found for day 2025-01-01".to_string())
@@ -570,9 +580,11 @@ fn test_missing_metrics() {
         FakeInputProvider::new().add_rewards_table(day, FakeInputProvider::create_rewards_table());
 
     // No metrics added
-    let result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
-    );
+    let result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ));
     assert_eq!(
         result,
         Err("No metrics found for day 2025-01-01".to_string())
@@ -597,9 +609,11 @@ fn test_missing_rewardable_nodes() {
         );
 
     // No rewardable nodes added
-    let result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
-    );
+    let result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ));
     assert_eq!(
         result,
         Err("No rewardable nodes found for day 2025-01-01".to_string())
@@ -642,9 +656,12 @@ fn test_single_node_subnet() {
             }],
         );
 
-    let result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
-    ).expect("Calculation should succeed");
+    let result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];
@@ -680,9 +697,12 @@ fn test_empty_subnet_metrics() {
             }],
         );
 
-    let result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
-    ).expect("Calculation should succeed");
+    let result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];
@@ -718,9 +738,12 @@ fn test_empty_rewardable_nodes() {
         )
         .add_rewardable_nodes(day, provider_id, vec![]); // Empty rewardable nodes
 
-    let result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
-    ).expect("Calculation should succeed");
+    let result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];
@@ -803,9 +826,12 @@ fn test_zero_blocks_edge_cases() {
             ],
         );
 
-    let result = futures::executor::block_on(
-        RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
-    ).expect("Calculation should succeed");
+    let result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];

@@ -101,9 +101,7 @@ async fn get_node_providers_rewards_calculation(
 }
 
 #[query]
-fn get_rewardable_nodes(
-    request: GetRewardableNodesRequest,
-) -> GetRewardableNodesResponse {
+fn get_rewardable_nodes(request: GetRewardableNodesRequest) -> GetRewardableNodesResponse {
     NodeRewardsCanister::get_rewardable_nodes(&CANISTER, request)
 }
 

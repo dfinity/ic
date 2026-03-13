@@ -4,6 +4,8 @@ use crate::registry_querier::RegistryQuerier;
 use crate::storage::{NaiveDateStorable, VM};
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
+#[cfg(target_arch = "wasm32")]
+use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -19,8 +21,6 @@ use ic_node_rewards_canister_api::providers_rewards::{
 use ic_node_rewards_canister_api::rewardable_nodes::{
     GetRewardableNodesRequest, GetRewardableNodesResponse, RewardableNodeApi, RewardableNodesResult,
 };
-#[cfg(target_arch = "wasm32")]
-use ic_node_rewards_canister_api::DateUtc;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
