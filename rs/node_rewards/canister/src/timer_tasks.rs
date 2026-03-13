@@ -7,6 +7,7 @@ use futures::FutureExt;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::futures::spawn;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
+use ic_cdk_timers::clear_timer;
 use ic_nervous_system_timer_task::{RecurringSyncTask, set_timer};
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::providers_rewards::GetNodeProvidersRewardsRequest;
@@ -38,15 +39,30 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
 }
 
 #[async_trait(?Send)]
-pub trait RecurringAsyncTaskNonSend: Sized + 'static {
+pub trait RecurringAsyncTaskNonSend: Clone + Sized + 'static {
     async fn execute(self) -> (Duration, Self);
     fn initial_delay(&self) -> Duration;
+    fn recovery_delay(&self) -> Duration;
 
     fn schedule_with_delay(self, delay: Duration) {
         set_timer(delay, async move {
+            // Set a recovery timer before spawning the task. The timer callback
+            // and the spawned future run in different IC messages, so if the
+            // spawned future traps, the recovery timer survives and will reschedule the task.
+            let recovery = self.clone();
+            let recovery_delay = recovery.recovery_delay();
+            let recovery_timer_id = set_timer(recovery_delay, async move {
+                ic_cdk::println!(
+                    "Task {} recovery timer fired — rescheduling after suspected trap.",
+                    Self::NAME,
+                );
+                recovery.schedule_with_delay(recovery_delay);
+            });
+
             spawn_in_canister_env(async move {
                 let (new_delay, new_task) = self.execute().await;
 
+                clear_timer(recovery_timer_id);
                 new_task.schedule_with_delay(new_delay);
             });
         });
@@ -121,6 +137,11 @@ impl RecurringAsyncTaskNonSend for HourlySyncTask {
     fn initial_delay(&self) -> Duration {
         Duration::from_secs(0)
     }
+
+    fn recovery_delay(&self) -> Duration {
+        Duration::from_secs(RETRY_FAILED_SYNC_SECS)
+    }
+
     const NAME: &'static str = "hourly_sync";
 }
 
