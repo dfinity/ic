@@ -2932,7 +2932,6 @@ impl CanisterManager {
                         return Ok(());
                     }
                     ChunkValidationResult::ValidationError(err) => {
-                        // In this case, we spent instructions calculating the chunk hash, so we charge them.
                         return Err(CanisterManagerError::WasmChunkStoreError { message: err });
                     }
                 };
@@ -2981,7 +2980,6 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += NumBytes::new(bytes_written);
         }
 
-        // Return the instructions needed to write the chunk to the destination.
         Ok(())
     }
 
