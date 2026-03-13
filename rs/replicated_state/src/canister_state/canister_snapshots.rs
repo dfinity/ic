@@ -102,17 +102,12 @@ impl CanisterSnapshots {
 
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
     pub fn remove(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
-        let removed_snapshot = self.snapshots.remove(&snapshot_id);
-        match removed_snapshot {
-            Some(snapshot) => {
-                self.memory_usage -= snapshot.size();
+        if let Some(snapshot) = self.snapshots.remove(&snapshot_id) {
+            self.memory_usage -= snapshot.size();
 
-                Some(snapshot)
-            }
-            None => {
-                // No snapshot found based on the snapshot ID provided.
-                None
-            }
+            Some(snapshot)
+        } else {
+            None
         }
     }
 
