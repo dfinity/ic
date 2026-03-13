@@ -150,6 +150,7 @@ impl WasmtimeInstanceBuilder {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default()
             .environment_variables(self.environment_variables)
+            .log_memory_limit(4_096)
             .build();
         let dirty_page_overhead = match self.subnet_type {
             SubnetType::Application => SchedulerConfig::application_subnet(),

@@ -59,7 +59,9 @@ fn test_api_for_update(
     instruction_limit: NumInstructions,
 ) -> SystemApiImpl {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
-    let system_state = SystemStateBuilder::default().build();
+    let system_state = SystemStateBuilder::default()
+        .log_memory_limit(4_096)
+        .build();
     let cycles_account_manager = Arc::new(
         CyclesAccountManagerBuilder::new()
             .with_subnet_type(subnet_type)

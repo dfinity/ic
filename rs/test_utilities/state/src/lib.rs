@@ -510,6 +510,11 @@ impl SystemStateBuilder {
         self
     }
 
+    pub fn log_memory_limit(mut self, limit: usize) -> Self {
+        self.system_state.log_memory_store.resize_for_testing(limit);
+        self
+    }
+
     pub fn build(self) -> SystemState {
         self.system_state
     }

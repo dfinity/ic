@@ -2033,7 +2033,9 @@ fn test_save_log_message_adds_canister_log_records() {
     ];
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(4_096)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
@@ -2056,7 +2058,9 @@ fn test_save_log_message_invalid_message_size() {
     let invalid_size = message.len() + 1;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(4_096)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
@@ -2077,7 +2081,9 @@ fn test_save_log_message_invalid_message_offset() {
     let invalid_src = 1;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(4_096)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
@@ -2097,7 +2103,9 @@ fn test_save_log_message_trims_long_message() {
     let long_message_size = 2 * TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(4_096)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
@@ -2116,7 +2124,9 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     let long_message_size = 2 * TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(4_096)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
