@@ -3,13 +3,15 @@ use crate::metrics::ICCanisterClient;
 use crate::metrics::MetricsManager;
 #[cfg(feature = "test")]
 use crate::metrics::management_canister_client_test::ICCanisterClient;
+use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use ic_registry_canister_client::{
     RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, StableCell, Storable};
+use rewards_calculation::types::UnixTsNanos;
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 
 const REGISTRY_STORE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const SUBNETS_METRICS_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -34,14 +36,21 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
-    pub static METRICS_MANAGER: Rc<MetricsManager<VM>> = {
+    static SUBNETS_METRICS_BTREE_MAP: RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, VM>> = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
+        StableBTreeMap::init(mm.get(SUBNETS_METRICS_MEMORY_ID))
+    ));
+    static LAST_TIMESTAMP_PER_SUBNET_BTREE_MAP: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, VM>> = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
+        StableBTreeMap::init(mm.get(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID))
+    ));
+
+    pub static METRICS_MANAGER: Arc<MetricsManager> = {
         let metrics_manager = MetricsManager {
             client: Box::new(ICCanisterClient),
-            subnets_metrics: RefCell::new(stable_btreemap_init(SUBNETS_METRICS_MEMORY_ID)),
-            last_timestamp_per_subnet: RefCell::new(stable_btreemap_init(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID)),
+            subnets_metrics: &SUBNETS_METRICS_BTREE_MAP,
+            last_timestamp_per_subnet: &LAST_TIMESTAMP_PER_SUBNET_BTREE_MAP,
         };
 
-        Rc::new(metrics_manager)
+        Arc::new(metrics_manager)
     };
 
     pub static LAST_DAY_SYNCED: RefCell<StableCell<Option<NaiveDateStorable>, VM>> = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
