@@ -586,8 +586,12 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 3.0);
-    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 10.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        3.0
+    );
+    // 3 subnet messages + 10 input messages
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 13.0);
 
     assert_eq!(
         test.state()
