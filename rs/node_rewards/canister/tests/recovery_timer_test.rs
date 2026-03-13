@@ -9,15 +9,10 @@ use std::time::Duration;
 ///   - the panicking task keeps being rescheduled via the recovery timer.
 #[tokio::test]
 async fn test_recovery_timer_rescheduling() {
-    let pocket_ic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .build_async()
-        .await;
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let canister_id = pocket_ic.create_canister().await;
-    pocket_ic
-        .add_cycles(canister_id, 100_000_000_000_000)
-        .await;
+    pocket_ic.add_cycles(canister_id, 100_000_000_000_000).await;
     pocket_ic
         .install_canister(
             canister_id,
