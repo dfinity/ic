@@ -1981,14 +1981,13 @@ impl CanisterManager {
 
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
-        let canister_id = canister.canister_id();
 
         let replace_snapshot_size = match replace_snapshot {
             Some(replace_snapshot_id) => self.get_snapshot(canister, replace_snapshot_id)?.size(),
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.
-                if canister.canister_snapshots.count_by_canister(&canister_id)
+                if canister.canister_snapshots.count()
                     >= self.config.max_number_of_snapshots_per_canister
                 {
                     return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
@@ -2546,10 +2545,7 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
 
         let mut responses = vec![];
-        for (snapshot_id, snapshot) in canister
-            .canister_snapshots
-            .list_snapshots(canister.canister_id())
-        {
+        for (snapshot_id, snapshot) in canister.canister_snapshots.list_snapshots() {
             let snapshot_response = CanisterSnapshotResponse::new(
                 &snapshot_id,
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
@@ -2750,7 +2746,6 @@ impl CanisterManager {
     ) -> Result<(SnapshotId, NumInstructions), UserError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
-        let canister_id = canister.canister_id();
 
         // validate args:
         let wasm_mode = canister
@@ -2771,7 +2766,7 @@ impl CanisterManager {
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.
-                if canister.canister_snapshots.count_by_canister(&canister_id)
+                if canister.canister_snapshots.count()
                     >= self.config.max_number_of_snapshots_per_canister
                 {
                     return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
@@ -3081,9 +3076,7 @@ impl CanisterManager {
         // Confirm that `snapshots_memory_usage` is updated correctly.
         debug_assert_eq!(
             canister.system_state.snapshots_memory_usage,
-            canister
-                .canister_snapshots
-                .compute_memory_usage_by_canister(canister.canister_id()),
+            canister.canister_snapshots.compute_memory_usage(),
         );
     }
 
@@ -3148,7 +3141,7 @@ impl CanisterManager {
             return Err(CanisterManagerError::RenameCanisterNotStopped(old_id));
         }
 
-        if canister.canister_snapshots.count_by_canister(&old_id) > 0 {
+        if canister.canister_snapshots.count() > 0 {
             return Err(CanisterManagerError::RenameCanisterHasSnapshot(old_id));
         }
 

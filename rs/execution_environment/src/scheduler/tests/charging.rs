@@ -198,7 +198,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
+            .list_snapshots()
             .len(),
         0
     );
@@ -237,7 +237,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
+            .list_snapshots()
             .len(),
         1
     );
@@ -278,7 +278,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
+            .list_snapshots()
             .len(),
         0
     );
@@ -311,7 +311,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
+            .list_snapshots()
             .len(),
         0
     );
@@ -357,7 +357,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
+            .list_snapshots()
             .len(),
         1
     );
@@ -416,7 +416,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
+            .list_snapshots()
             .len(),
         0
     );

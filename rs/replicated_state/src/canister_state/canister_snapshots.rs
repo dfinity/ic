@@ -21,10 +21,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 /// A collection of canister snapshots and their IDs.
 ///
@@ -34,8 +31,6 @@ use std::{
 pub struct CanisterSnapshots {
     #[validate_eq(CompareWithValidateEq)]
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
-    /// The set of snapshots ids grouped by canisters.
-    snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
     /// Memory usage of all canister snapshots in bytes.
     ///
     /// This field is updated whenever a snapshot is added or removed and
@@ -46,18 +41,12 @@ pub struct CanisterSnapshots {
 
 impl CanisterSnapshots {
     pub fn new(snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>) -> Self {
-        let mut snapshot_ids = BTreeMap::default();
         let mut memory_usage = NumBytes::from(0);
-        for (snapshot_id, snapshot) in snapshots.iter() {
-            let canister_id = snapshot_id.get_canister_id();
-            let canister_snapshot_ids: &mut BTreeSet<SnapshotId> =
-                snapshot_ids.entry(canister_id).or_default();
-            canister_snapshot_ids.insert(*snapshot_id);
+        for snapshot in snapshots.values() {
             memory_usage += snapshot.size();
         }
         Self {
             snapshots,
-            snapshot_ids,
             memory_usage,
         }
     }
@@ -86,11 +75,8 @@ impl CanisterSnapshots {
 
     /// Adds new snapshot in the collection and assigns a `SnapshotId`.
     pub fn push(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) -> SnapshotId {
-        let canister_id = snapshot.canister_id();
         self.memory_usage += snapshot.size();
         self.snapshots.insert(snapshot_id, snapshot);
-        let snapshot_ids = self.snapshot_ids.entry(canister_id).or_default();
-        snapshot_ids.insert(snapshot_id);
         snapshot_id
     }
 
@@ -119,17 +105,6 @@ impl CanisterSnapshots {
         let removed_snapshot = self.snapshots.remove(&snapshot_id);
         match removed_snapshot {
             Some(snapshot) => {
-                let canister_id = snapshot.canister_id();
-
-                // The snapshot ID if present in the `self.snapshots`,
-                // must also be present in the `self.snapshot_ids`.
-                debug_assert!(self.snapshot_ids.contains_key(&canister_id));
-                let snapshot_ids = self.snapshot_ids.get_mut(&canister_id).unwrap();
-                debug_assert!(snapshot_ids.contains(&snapshot_id));
-                snapshot_ids.remove(&snapshot_id);
-                if snapshot_ids.is_empty() {
-                    self.snapshot_ids.remove(&canister_id);
-                }
                 self.memory_usage -= snapshot.size();
 
                 Some(snapshot)
@@ -143,44 +118,16 @@ impl CanisterSnapshots {
 
     /// Remove all snapshots identified by `canister_id` from the collections of snapshots.
     /// Returns the list of deleted snapshots.
-    pub fn delete_snapshots(&mut self, canister_id: CanisterId) -> Vec<SnapshotId> {
-        let mut result = Vec::default();
-        if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id).cloned() {
-            for snapshot_id in snapshot_ids {
-                let removed = self.remove(snapshot_id);
-                if removed.is_some() {
-                    result.push(snapshot_id)
-                }
-            }
-        }
+    pub fn delete_snapshots(&mut self) -> Vec<SnapshotId> {
+        let result = self.snapshots.keys().cloned().collect();
+        self.snapshots.clear();
         result
     }
 
     /// Selects the snapshots associated with the provided canister ID.
     /// Returns a list of tuples containing the ID and the canister snapshot.
-    pub fn list_snapshots(
-        &self,
-        canister_id: CanisterId,
-    ) -> Vec<(SnapshotId, Arc<CanisterSnapshot>)> {
-        let mut snapshots = vec![];
-
-        if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id) {
-            for snapshot_id in snapshot_ids {
-                // The snapshot ID if present in the `self.snapshot_ids`,
-                // must also be present in the `self.snapshot`.
-                let snapshot = self.snapshots.get(snapshot_id).unwrap();
-                snapshots.push((*snapshot_id, snapshot.clone()))
-            }
-        }
-        snapshots
-    }
-
-    /// Returns the number of snapshots stored for the given canister id.
-    pub fn count_by_canister(&self, canister_id: &CanisterId) -> usize {
-        match self.snapshot_ids.get(canister_id) {
-            Some(snapshot_ids) => snapshot_ids.len(),
-            None => 0,
-        }
+    pub fn list_snapshots(&self) -> Vec<(SnapshotId, Arc<CanisterSnapshot>)> {
+        self.snapshots.clone().into_iter().collect()
     }
 
     /// Returns the total number of snapshots stored in the replicated state.
@@ -193,13 +140,10 @@ impl CanisterSnapshots {
     /// Used for testing that `SystemState::snapshots_memory_usage` is updated as needed
     /// whenever taking or deleting a snapshot.
     #[doc(hidden)]
-    pub fn compute_memory_usage_by_canister(&self, canister_id: CanisterId) -> NumBytes {
+    pub fn compute_memory_usage(&self) -> NumBytes {
         let mut memory_size = NumBytes::new(0);
-        if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id) {
-            for snapshot_id in snapshot_ids {
-                debug_assert!(self.snapshots.contains_key(snapshot_id));
-                memory_size += self.snapshots.get(snapshot_id).unwrap().size();
-            }
+        for snapshot in self.snapshots.values() {
+            memory_size += snapshot.size();
         }
         memory_size
     }
@@ -673,7 +617,6 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::NumBytes;
     use ic_types::time::UNIX_EPOCH;
-    use maplit::{btreemap, btreeset};
 
     fn fake_canister_snapshot(
         canister_id: CanisterId,
@@ -715,50 +658,14 @@ mod tests {
         let (snapshot_id, snapshot) = fake_canister_snapshot(canister_id, 1);
         let mut snapshot_manager = CanisterSnapshots::default();
         assert_eq!(snapshot_manager.snapshots.len(), 0);
-        assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
 
         snapshot_manager.push(snapshot_id, Arc::<CanisterSnapshot>::new(snapshot));
         assert_eq!(snapshot_manager.snapshots.len(), 1);
-        assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
-        assert_eq!(
-            snapshot_manager
-                .snapshot_ids
-                .get(&canister_id)
-                .unwrap()
-                .len(),
-            1
-        );
 
         assert_eq!(snapshot_manager.snapshots.len(), 1);
 
         snapshot_manager.remove(snapshot_id);
         assert_eq!(snapshot_manager.snapshots.len(), 0);
-        assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
-        assert_eq!(snapshot_manager.snapshot_ids.get(&canister_id), None);
-    }
-
-    #[test]
-    fn test_construct_canister_snapshot_ids() {
-        let snapshots: BTreeMap<_, _> = [
-            fake_canister_snapshot(canister_test_id(0), 1),
-            fake_canister_snapshot(canister_test_id(0), 2),
-            fake_canister_snapshot(canister_test_id(1), 0),
-        ]
-        .into_iter()
-        .map(|(i, s)| (i, Arc::new(s)))
-        .collect();
-        let snapshot_manager = CanisterSnapshots::new(snapshots);
-
-        let expected_snapshot_ids = btreemap! {
-            canister_test_id(0) => btreeset!{
-                SnapshotId::from((canister_test_id(0), 1)), SnapshotId::from((canister_test_id(0), 2))
-            },
-            canister_test_id(1) =>  btreeset!{
-                SnapshotId::from((canister_test_id(1), 0))
-            },
-        };
-
-        assert_eq!(snapshot_manager.snapshot_ids, expected_snapshot_ids);
     }
 
     #[test]
@@ -773,22 +680,18 @@ mod tests {
         );
         let mut snapshot_manager = CanisterSnapshots::new(snapshots);
         assert_eq!(snapshot_manager.snapshots.len(), 1);
-        assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
         assert_eq!(
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot1_size)
         );
         assert_eq!(
-            snapshot_manager.compute_memory_usage_by_canister(canister_id),
+            snapshot_manager.compute_memory_usage(),
             NumBytes::from(snapshot1_size)
         );
 
         let other_canister_id = canister_test_id(1);
         let (second_snapshot_id, second_snapshot) = fake_canister_snapshot(other_canister_id, 2);
-        assert_eq!(
-            snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
-            NumBytes::from(0)
-        );
+        assert_eq!(snapshot_manager.compute_memory_usage(), NumBytes::from(0));
 
         // Pushing another snapshot updates the `memory_usage`.
         let snapshot2_size = second_snapshot.size();
@@ -801,7 +704,7 @@ mod tests {
             NumBytes::from(snapshot1_size + snapshot2_size)
         );
         assert_eq!(
-            snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
+            snapshot_manager.compute_memory_usage(),
             NumBytes::from(snapshot2_size)
         );
 
@@ -811,17 +714,11 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot2_size)
         );
-        assert_eq!(
-            snapshot_manager.compute_memory_usage_by_canister(canister_id),
-            NumBytes::from(0)
-        );
+        assert_eq!(snapshot_manager.compute_memory_usage(), NumBytes::from(0));
 
         // Deleting the second snapshot brings us back to 0 memory taken.
         snapshot_manager.remove(second_snapshot_id);
         assert_eq!(snapshot_manager.memory_taken(), NumBytes::from(0));
-        assert_eq!(
-            snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
-            NumBytes::from(0)
-        );
+        assert_eq!(snapshot_manager.compute_memory_usage(), NumBytes::from(0));
     }
 }

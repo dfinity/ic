@@ -344,7 +344,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
+            .compute_memory_usage(),
     );
 
     // Grow the canister's memory before taking another snapshot.
@@ -394,7 +394,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
+            .compute_memory_usage(),
     );
 }
 
@@ -1065,7 +1065,7 @@ fn delete_canister_snapshot_succeeds() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
+            .compute_memory_usage(),
     );
 
     // Deletes canister snapshot successfully.
@@ -1094,7 +1094,7 @@ fn delete_canister_snapshot_succeeds() {
             .canister_state(&canister_id)
             .unwrap()
             .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
+            .compute_memory_usage(),
     );
 
     assert_gt!(
