@@ -11,7 +11,9 @@ use crate::dashboard::DashboardClient;
 use crate::forum::{CreateTopicRequest, DiscourseClient, ForumTopic};
 use crate::git::{GitCommitHash, GitRepository};
 use crate::ic_admin::ProposalFiles;
-use crate::proposal::{InstallProposalTemplate, ProposalTemplate, ReinstallProposalTemplate, UpgradeProposalTemplate};
+use crate::proposal::{
+    InstallProposalTemplate, ProposalTemplate, ReinstallProposalTemplate, UpgradeProposalTemplate,
+};
 use clap::{Parser, Subcommand};
 use ic_admin::IcAdminArgs;
 use std::collections::{BTreeMap, BTreeSet};
