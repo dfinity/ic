@@ -24,7 +24,7 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     AccumulatedPriority, CanisterId, NumBytes, SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
+    batch::{ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{
@@ -32,7 +32,7 @@ use ic_types::{
     },
     time::CoarseTime,
 };
-use ic_types_cycles::{CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};

@@ -18,8 +18,8 @@ pub use self::{
         chain_key_payload_to_bytes,
     },
     execution_environment::{
-        CanisterCyclesCostSchedule, CanisterQueryStats, LocalQueryStats, QueryStats,
-        QueryStatsPayload, RawQueryStats, TotalQueryStats,
+        CanisterQueryStats, LocalQueryStats, QueryStats, QueryStatsPayload, RawQueryStats,
+        TotalQueryStats,
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},

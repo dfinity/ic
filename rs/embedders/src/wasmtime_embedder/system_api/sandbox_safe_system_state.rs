@@ -26,14 +26,13 @@ use ic_replicated_state::{
     CallOrigin, ExecutionTask, NetworkTopology, SystemState,
     canister_state::DEFAULT_QUEUE_CAPACITY, canister_state::execution_state::WasmExecutionMode,
 };
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumInstructions, Time,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
     methods::Callback,
     time::CoarseTime,
 };
-use ic_types_cycles::{Cycles, CyclesUseCase};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -1486,11 +1485,10 @@ mod tests {
     use ic_types::{
         CanisterTimer, ComputeAllocation, MAX_DELTA_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes,
         NumInstructions, Time,
-        batch::CanisterCyclesCostSchedule,
         messages::{NO_DEADLINE, RequestMetadata},
         time::CoarseTime,
     };
-    use ic_types_cycles::{Cycles, CyclesUseCase};
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
 
     use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};
     use crate::wasmtime_embedder::system_api::cycles_balance_change::CyclesBalanceChange;
