@@ -91,6 +91,12 @@ pub fn test(env: TestEnv) {
 
     info!(
         log,
+        "Failing as an experiment to see how it's logged on GitHub ..."
+    );
+    panic!("Failing as an experiment to see how it's logged on GitHub!");
+
+    info!(
+        log,
         "Installing universal canisters on subnets (via all nodes), reading and storing messages ..."
     );
     let ucan_ids: Vec<_> = nodes
