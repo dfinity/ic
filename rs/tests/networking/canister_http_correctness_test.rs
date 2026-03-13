@@ -16,14 +16,14 @@ Success::
 end::catalog[] */
 #![allow(deprecated)]
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use assert_matches::assert_matches;
 use candid::{CandidType, Deserialize, Encode, Principal, decode_one};
 use canister_http::*;
 use canister_test::{Canister, Runtime};
 use ic_agent::{
     Agent, AgentError,
-    agent::{RejectCode, RejectResponse},
+    agent::{CallResponse, RejectCode, RejectResponse},
 };
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_cdk::api::call::RejectionCode;
@@ -37,7 +37,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::HasTopologySnapshot,
     },
-    retry_with_msg_async, systest,
+    retry_agent_on_transport_errors, systest,
     util::{block_on, get_app_subnet_and_node},
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
@@ -53,7 +53,6 @@ use proxy_canister::{
 };
 use serde_json::Value;
 use std::collections::{BTreeSet, HashSet};
-use std::time::Duration;
 
 const MAX_REQUEST_BYTES_LIMIT: usize = 2_000_000;
 const MAX_MAX_RESPONSE_BYTES: usize = 2_000_000;
@@ -2561,27 +2560,28 @@ where
     let principal_id: PrincipalId = handlers.proxy_canister().effective_canister_id();
     let principal: Principal = principal_id.into();
 
-    // Retry on transport errors (e.g., read_state timeout during polling under load).
     let log = handlers.env.logger();
-    let canister_response = retry_with_msg_async!(
-        "submit_outcall: call_and_wait",
+    let canister_response = match retry_agent_on_transport_errors!(
+        "submit_outcall: call",
         &log,
-        Duration::from_secs(120),
-        Duration::from_secs(5),
-        || async {
-            let result = agent
-                .update(&principal, "send_request_with_refund_callback")
-                .with_arg(args.clone())
-                .call_and_wait()
-                .await;
-            match result {
-                Err(AgentError::TransportError(e)) => Err(anyhow!("transport error: {e}")),
-                other => Ok(other),
-            }
-        }
+        agent
+            .update(&principal, "send_request_with_refund_callback")
+            .with_arg(args.clone())
+            .call()
     )
     .await
-    .expect("submit_outcall retries exhausted");
+    .expect("submit_outcall retries exhausted")
+    {
+        Ok(CallResponse::Response(response)) => Ok(response),
+        Ok(CallResponse::Poll(request_id)) => retry_agent_on_transport_errors!(
+            "submit_outcall: wait",
+            &log,
+            agent.wait(&request_id, principal)
+        )
+        .await
+        .expect("submit_outcall retries exhausted"),
+        Err(err) => Err(err),
+    };
 
     match canister_response {
         Err(agent_error) => {
@@ -2600,7 +2600,7 @@ where
         }
         Ok(serialized_bytes) => {
             let response_with_refund =
-                decode_one::<ProxyCanisterResponseWithRefund>(&serialized_bytes)
+                decode_one::<ProxyCanisterResponseWithRefund>(&serialized_bytes.0)
                     .expect("Decoding the canister serialized response should succeed.");
 
             let refunded_cycles = response_with_refund.refunded_cycles;
