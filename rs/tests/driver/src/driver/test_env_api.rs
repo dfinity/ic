@@ -2831,6 +2831,10 @@ pub fn scp_recv_from(
         || {
             let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
             let size = scp_file_stat.size();
+            info!(
+                log,
+                "scp-ing remote {from_remote:?} of {size:?} B to local {to_local:?} ..."
+            );
             let mut to_file = std::fs::File::create(to_local)?;
             std::io::copy(&mut remote_file, &mut to_file)?;
             remote_file.send_eof()?;
