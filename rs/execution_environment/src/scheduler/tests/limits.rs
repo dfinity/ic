@@ -9,6 +9,64 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use proptest::prelude::*;
 
+#[test]
+fn round_limits_account_for_slice_budget() {
+    // The instruction budget for canister execution is:
+    //   budget = max_instructions_per_round
+    //          - max(max_instructions_per_slice, max_instructions_per_install_code_slice)
+    //          + 1
+    //
+    // This ensures that the total instructions consumed never exceed
+    // `max_instructions_per_round` even if a new execution starts just before
+    // the budget hits zero and then uses a full slice.
+    //
+    // Verify that a larger max instructions per slice or install code slice reduces
+    // the effective budget and therefore the number of messages executed.
+    fn execute_round(slice: u64, install_code_slice: u64) -> usize {
+        let config = SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_query_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(slice),
+            max_instructions_per_install_code_slice: NumInstructions::from(install_code_slice),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        };
+
+        let mut test = SchedulerTestBuilder::new()
+            .with_scheduler_config(config)
+            .build();
+        let canister = test.create_canister();
+        for _ in 0..15 {
+            test.send_ingress(canister, ingress(100));
+        }
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        // Return the number of messages executed.
+        15 - test.ingress_queue_size(canister)
+    }
+
+    // --- Scenario A: install_code_slice == slice (100) ---
+    // budget = 1000 - max(100, 100) + 1 = 901
+    // With 100-instruction messages the thread can execute:
+    //   9 messages (budget 901 → 1), then the 10th starts (budget 1 > 0)
+    //   and overshoots to -99. Total = 10 messages.
+    assert_eq!(execute_round(100, 100), 10);
+
+    // --- Scenario B: slice raised to 500 ---
+    // budget = 1000 - max(500, 100) + 1 = 501
+    // 5 messages (budget 501 → 1), 6th overshoots to -99. Total = 6 messages.
+    assert_eq!(execute_round(500, 100), 6);
+
+    // --- Scenario C: install_code_slice raised to 500 ---
+    // budget = 1000 - max(100, 500) + 1 = 501
+    // 5 messages (budget 501 → 1), 6th overshoots to -99. Total = 6 messages.
+    assert_eq!(execute_round(100, 500), 6);
+}
+
 /// This test ensures that inner_loop() breaks out of the loop when the loop
 /// consumes max_instructions_per_round.
 #[test]
