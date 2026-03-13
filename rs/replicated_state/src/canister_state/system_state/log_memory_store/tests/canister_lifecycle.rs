@@ -31,7 +31,9 @@ struct MockCanister {
 #[derive(Default)]
 struct CanisterSettings {
     log_memory_limit: Option<NumBytes>,
-    // Ignore other fields for now.
+
+    #[allow(dead_code)]
+    some_other_field: Option<u64>,
 }
 
 impl MockCanister {
