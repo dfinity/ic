@@ -183,6 +183,15 @@ impl RegistryHelper {
             .map_err(OrchestratorError::RegistryClientError)
     }
 
+    pub(crate) fn get_available_ip_addresses_for_node_ids(
+        &self,
+        node_ids: impl IntoIterator<Item = NodeId>,
+        version: RegistryVersion,
+    ) -> Vec<IpAddr> {
+        self.registry_client
+            .get_available_ip_addresses_for_node_ids(node_ids, version)
+    }
+
     pub(crate) fn get_subnet_nodes_ip_addresses_of_types(
         &self,
         subnet_types: impl IntoIterator<Item = SubnetType>,
@@ -193,15 +202,6 @@ impl RegistryHelper {
             .get_subnet_nodes_ip_addresses_of_types(subnet_types, version)?;
 
         Ok(ips.unwrap_or_default())
-    }
-
-    pub(crate) fn get_available_ip_addresses_for_node_ids(
-        &self,
-        node_ids: impl IntoIterator<Item = NodeId>,
-        version: RegistryVersion,
-    ) -> Vec<IpAddr> {
-        self.registry_client
-            .get_available_ip_addresses_for_node_ids(node_ids, version)
     }
 
     pub(crate) fn get_subnet_id_from_node_id(
