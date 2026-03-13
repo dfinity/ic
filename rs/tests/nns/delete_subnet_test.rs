@@ -29,13 +29,19 @@ use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-const NUM_NNS_NODES: usize = 1;
-const NUM_APP_NODES: usize = 4;
+const NUM_NODES: usize = 1;
+const NUM_ENGINE_NODES: usize = 4;
 const DKG_INTERVAL_LENGTH: u64 = 29;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        // .without_assert_no_replica_restarts()
+        // Currently, the orchestrator does not handle subnet deletion gracefully, so this test can experience
+        // node restarts. However, this
+        // - is ok because it can only affect deleted subnets,
+        // - which is unreachable code at the moment, because there is no governance code making the call,
+        // - and will be fixed in a follow-up PR.
+        // TODO: DSM-111
+        .without_assert_no_replica_restarts()
         .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
@@ -45,15 +51,19 @@ fn main() -> Result<()> {
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
-            Subnet::fast(SubnetType::System, NUM_NNS_NODES)
+            Subnet::fast(SubnetType::System, NUM_NODES)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
         )
         .add_subnet(
-            Subnet::fast(SubnetType::Application, NUM_APP_NODES)
+            Subnet::fast(SubnetType::Application, NUM_NODES)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
         )
         .add_subnet(
-            Subnet::fast(SubnetType::CloudEngine, NUM_APP_NODES)
+            Subnet::fast(SubnetType::VerifiedApplication, NUM_NODES)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
+        )
+        .add_subnet(
+            Subnet::fast(SubnetType::CloudEngine, NUM_ENGINE_NODES)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
         )
         .setup_and_start(&env)
@@ -77,15 +87,22 @@ pub fn test(env: TestEnv) {
     let app_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::Application)
-        .collect::<Vec<_>>();
-    let app_subnet = app_subnet.first().unwrap();
-    let app_nodes: Vec<IcNodeSnapshot> = app_subnet.nodes().collect();
-    let app_node = &app_nodes[0];
+        .collect::<Vec<_>>()
+        .first()
+        .unwrap();
+    let app_node = app_subnet.nodes().next().unwrap();
+    let vapp_subnet = topology_snapshot
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::VerifiedApplication)
+        .collect::<Vec<_>>()
+        .first()
+        .unwrap();
     let engine_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::CloudEngine)
-        .collect::<Vec<_>>();
-    let engine_subnet = engine_subnet.first().unwrap();
+        .collect::<Vec<_>>()
+        .first()
+        .unwrap();
     let engine_nodes: Vec<IcNodeSnapshot> = engine_subnet.nodes().collect();
     let engine_node = &engine_nodes[0];
     let engine_node_ids = BTreeSet::from_iter(engine_nodes.iter().map(|x| x.node_id));
@@ -104,7 +121,7 @@ pub fn test(env: TestEnv) {
     block_on(async move {
         let nns_agent = assert_create_agent(nns_node.get_public_url().as_str()).await;
         let engine_agent = assert_create_agent(engine_node.get_public_url().as_str()).await;
-        let app_agent = assert_create_agent(app_node.get_public_url().as_str()).await;
+        let vapp_agent = assert_create_agent(vapp_node.get_public_url().as_str()).await;
         let original_subnets = get_subnet_list_from_registry(&registry_client).await;
         assert_eq!(original_subnets.len(), 3);
 
@@ -132,6 +149,14 @@ pub fn test(env: TestEnv) {
         // Deleting the app subnet should not work.
         try_delete_subnet(
             &app_subnet.subnet_id,
+            &governance_canister,
+            Some("Only CloudEngines may be deleted".to_string()),
+        )
+        .await;
+
+        // Deleting the verified app subnet should not work.
+        try_delete_subnet(
+            &vapp_subnet.subnet_id,
             &governance_canister,
             Some("Only CloudEngines may be deleted".to_string()),
         )
