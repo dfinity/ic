@@ -1,6 +1,6 @@
 use crate::{
     MAX_EARLY_REMOTE_TRANSCRIPTS, MAX_REMOTE_DKG_ATTEMPTS, MAX_REMOTE_DKGS_PER_INTERVAL,
-    REMOTE_DKG_REPEATED_FAILURE_ERROR,
+    REMOTE_DKG_REPEATED_FAILURE_ERROR, get_configs_for_start_height,
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -97,50 +97,6 @@ pub fn create_payload(
     }
 }
 
-pub fn configs_new(
-    subnet_id: SubnetId,
-    registry_client: &dyn RegistryClient,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
-    registry_version: RegistryVersion,
-    start_height: Height,
-    dkg_summary: &DkgSummary,
-) -> BTreeMap<NiDkgId, NiDkgConfig> {
-    let mut summary_configs = dkg_summary.configs.clone();
-    let Some(state) = state_manager.get_latest_certified_state() else {
-        return summary_configs;
-    };
-    let map = build_target_id_config_map(
-        subnet_id,
-        start_height,
-        registry_client,
-        state.get_ref(),
-        registry_version,
-        dkg_summary.next_transcripts(),
-        &BTreeSet::new(),
-    );
-    for (_, config_results) in map {
-        let (mut configs, mut errs) = (vec![], vec![]);
-        for config_result in config_results {
-            match config_result {
-                Ok(config) => configs.push(config),
-                Err((dkg_id, err)) => errs.push((dkg_id, err)),
-            }
-        }
-        if !errs.is_empty() {
-            continue;
-        }
-        for config in &configs {
-            if summary_configs.contains_key(&config.dkg_id()) {
-                continue;
-            }
-        }
-        for config in configs {
-            summary_configs.insert(config.dkg_id().clone(), config);
-        }
-    }
-    summary_configs
-}
-
 fn create_data_payload(
     this_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
@@ -157,7 +113,7 @@ fn create_data_payload(
 ) -> Result<DkgDataPayload, DkgPayloadCreationError> {
     // Get all existing dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
-    let configs = configs_new(
+    let configs = get_configs_for_start_height(
         this_subnet_id,
         registry_client,
         state_manager,

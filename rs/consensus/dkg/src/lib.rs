@@ -283,47 +283,6 @@ impl DkgImpl {
             }
         }
     }
-
-    fn configs_new(
-        &self,
-        start_height: Height,
-        dkg_summary: &DkgSummary,
-    ) -> BTreeMap<NiDkgId, NiDkgConfig> {
-        let mut summary_configs = dkg_summary.configs.clone();
-        let Some(state) = self.state_reader.get_latest_certified_state() else {
-            return summary_configs;
-        };
-        let map = build_target_id_config_map(
-            self.subnet_id,
-            start_height,
-            self.registry_client.as_ref(),
-            state.get_ref(),
-            self.registry_client.get_latest_version(),
-            dkg_summary.next_transcripts(),
-            &BTreeSet::new(),
-        );
-        for (_, config_results) in map {
-            let (mut configs, mut errs) = (vec![], vec![]);
-            for config_result in config_results {
-                match config_result {
-                    Ok(config) => configs.push(config),
-                    Err((dkg_id, err)) => errs.push((dkg_id, err)),
-                }
-            }
-            if !errs.is_empty() {
-                continue;
-            }
-            for config in &configs {
-                if summary_configs.contains_key(&config.dkg_id()) {
-                    continue;
-                }
-            }
-            for config in configs {
-                summary_configs.insert(config.dkg_id().clone(), config);
-            }
-        }
-        summary_configs
-    }
 }
 
 /// Validate the signature and dealing of the given message against its config
@@ -357,6 +316,50 @@ fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T)
     ChangeAction::HandleInvalid(DkgMessageId::from(message), reason.as_ref().to_string())
 }
 
+pub(crate) fn get_configs_for_start_height(
+    subnet_id: SubnetId,
+    registry_client: &dyn RegistryClient,
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    registry_version: RegistryVersion,
+    start_height: Height,
+    dkg_summary: &DkgSummary,
+) -> BTreeMap<NiDkgId, NiDkgConfig> {
+    let mut summary_configs = dkg_summary.configs.clone();
+    let Some(state) = state_manager.get_latest_certified_state() else {
+        return summary_configs;
+    };
+    let map = build_target_id_config_map(
+        subnet_id,
+        start_height,
+        registry_client,
+        state.get_ref(),
+        registry_version,
+        dkg_summary.next_transcripts(),
+        &BTreeSet::new(),
+    );
+    for (_, config_results) in map {
+        let (mut configs, mut errs) = (vec![], vec![]);
+        for config_result in config_results {
+            match config_result {
+                Ok(config) => configs.push(config),
+                Err((dkg_id, err)) => errs.push((dkg_id, err)),
+            }
+        }
+        if !errs.is_empty() {
+            continue;
+        }
+        for config in &configs {
+            if summary_configs.contains_key(&config.dkg_id()) {
+                continue;
+            }
+        }
+        for config in configs {
+            summary_configs.insert(config.dkg_id().clone(), config);
+        }
+    }
+    summary_configs
+}
+
 impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
     type Mutations = Mutations;
 
@@ -372,7 +375,14 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
             return ChangeAction::Purge(start_height).into();
         }
 
-        let configs = self.configs_new(start_height, dkg_summary);
+        let configs = get_configs_for_start_height(
+            self.subnet_id,
+            self.registry_client.as_ref(),
+            self.state_reader.as_ref(),
+            self.registry_client.get_latest_version(),
+            start_height,
+            dkg_summary,
+        );
         // let ids = configs.keys().cloned().collect::<Vec<_>>();
         // info!(every_n_seconds => 10, self.logger, "[early remote] Creating/Validating dealings for DKGs: {:?}", ids);
 

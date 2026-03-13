@@ -1,4 +1,4 @@
-use crate::payload_builder::configs_new;
+use crate::get_configs_for_start_height;
 
 use self::payload_builder::create_early_remote_transcripts;
 use super::{crypto_validate_dealing, payload_builder, utils};
@@ -189,7 +189,7 @@ fn validate_dealings_payload(
         return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
     }
 
-    let configs = configs_new(
+    let configs = get_configs_for_start_height(
         subnet_id,
         registry_client,
         state_manager,
