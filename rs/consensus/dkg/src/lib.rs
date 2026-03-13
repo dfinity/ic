@@ -170,13 +170,7 @@ impl DkgImpl {
             .crypto
             .sign(&content, self.node_id, config.registry_version())
         {
-            Ok(signature) => {
-                info!(
-                    self.logger,
-                    "Signed dealing for dkg id {:?}", content.dkg_id
-                );
-                Some(ChangeAction::AddToValidated(Signed { content, signature }))
-            }
+            Ok(signature) => Some(ChangeAction::AddToValidated(Signed { content, signature })),
             Err(err) => {
                 error!(self.logger, "Couldn't sign a DKG dealing: {:?}", err);
                 None
@@ -260,13 +254,7 @@ impl DkgImpl {
         // Verify the dealing and move to validated if it was successful,
         // reject, if it was rejected, or skip, if there was an error.
         match crypto_validate_dealing(&*self.crypto, config, message) {
-            Ok(()) => {
-                info!(
-                    self.logger,
-                    "Validated dealing for dkg id {:?}", message.content.dkg_id
-                );
-                ChangeAction::MoveToValidated((*message).clone()).into()
-            }
+            Ok(()) => ChangeAction::MoveToValidated((*message).clone()).into(),
             Err(DkgPayloadValidationError::InvalidArtifact(err)) => {
                 get_handle_invalid_change_action(
                     message,
@@ -383,12 +371,9 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
             start_height,
             dkg_summary,
         );
-        // let ids = configs.keys().cloned().collect::<Vec<_>>();
-        // info!(every_n_seconds => 10, self.logger, "[early remote] Creating/Validating dealings for DKGs: {:?}", ids);
-
         let change_set: Mutations = configs
             .par_iter()
-            .filter_map(|(_, config)| self.create_dealing(dkg_pool, config))
+            .filter_map(|(_id, config)| self.create_dealing(dkg_pool, config))
             .collect();
         if !change_set.is_empty() {
             return change_set;
