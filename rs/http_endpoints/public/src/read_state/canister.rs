@@ -332,6 +332,9 @@ fn verify_paths(
             [b"subnet", _subnet_id, b"public_key"] => {
                 metrics.observe_read_state_path(ENDPOINT, "subnet_public_key");
             }
+            [b"subnet", _subnet_id, b"type"] => {
+                metrics.observe_read_state_path(ENDPOINT, "subnet_type");
+            }
             [b"subnet", _subnet_id, b"node"] => {
                 metrics.observe_read_state_path(ENDPOINT, "subnet_node");
             }

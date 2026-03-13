@@ -55,16 +55,14 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
-    canister_state::{
-        NextExecution,
-        system_state::{CyclesUseCase, PausedExecutionId},
-    },
+    canister_state::{NextExecution, system_state::PausedExecutionId},
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash,
         ReshareChainKeyContext, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
         StopCanisterCall, SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
     ReplicaVersion, SubnetId, Time,
@@ -2000,8 +1998,11 @@ impl ExecutionEnvironment {
             ))
         } else {
             canister_http_request_context.request.payment -= http_request_fee;
-            let http_fee = NominalCycles::from(http_request_fee);
-            state.metadata.subnet_metrics.consumed_cycles_http_outcalls += http_fee;
+            let http_fee = NominalCycles::from(http_request_fee.get());
+            state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_http_outcalls(http_fee);
             state
                 .metadata
                 .subnet_metrics
@@ -3565,10 +3566,13 @@ impl ExecutionEnvironment {
             } else {
                 // Charge for the request.
                 request.payment -= signature_fee;
-                let nominal_fee = NominalCycles::from(signature_fee);
+                let nominal_fee = NominalCycles::from(signature_fee.get());
                 let use_case = match args {
                     ThresholdArguments::Ecdsa(_) => {
-                        state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += nominal_fee;
+                        state
+                            .metadata
+                            .subnet_metrics
+                            .observe_consumed_cycles_ecdsa_outcalls(nominal_fee);
                         CyclesUseCase::ECDSAOutcalls
                     }
                     ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
@@ -4185,6 +4189,16 @@ impl ExecutionEnvironment {
         for p in paused_install_code.into_values() {
             p.abort(&self.log);
         }
+    }
+
+    /// Testing only: Returns the size of the paused execution registry.
+    #[doc(hidden)]
+    pub fn paused_execution_registry_sizes(&self) -> (usize, usize) {
+        let guard = self.paused_execution_registry.lock().unwrap();
+        (
+            guard.paused_execution.len(),
+            guard.paused_install_code.len(),
+        )
     }
 
     /// If the given result corresponds to a finished execution, then it processes

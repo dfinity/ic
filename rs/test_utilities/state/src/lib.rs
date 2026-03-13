@@ -13,7 +13,7 @@ use ic_replicated_state::{
     canister_state::{
         canister_snapshots::CanisterSnapshots,
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-        system_state::{CyclesUseCase, TaskQueue},
+        system_state::TaskQueue,
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
@@ -31,6 +31,7 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
@@ -1126,9 +1127,9 @@ prop_compose! {
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
-        metrics.consumed_cycles_by_deleted_canisters = consumed_cycles_by_deleted_canisters;
-        metrics.consumed_cycles_http_outcalls = consumed_cycles_http_outcalls;
-        metrics.consumed_cycles_ecdsa_outcalls = consumed_cycles_ecdsa_outcalls;
+        metrics.observe_consumed_cycles_by_deleted_canisters(consumed_cycles_by_deleted_canisters);
+        metrics.observe_consumed_cycles_http_outcalls(consumed_cycles_http_outcalls);
+        metrics.observe_consumed_cycles_ecdsa_outcalls(consumed_cycles_ecdsa_outcalls);
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;

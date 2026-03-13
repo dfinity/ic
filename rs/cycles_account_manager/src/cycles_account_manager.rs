@@ -7,8 +7,7 @@ use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, SystemState,
-    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
+    CanisterState, SystemState, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
@@ -16,6 +15,7 @@ use ic_types::{
     batch::CanisterCyclesCostSchedule,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
+    cycles_use_case::CyclesUseCase,
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
     nominal_cycles::NominalCycles,
 };
@@ -34,7 +34,7 @@ const DAY: Duration = Duration::from_secs(SECONDS_PER_DAY as u64);
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 324;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 338;
 
 /// Handles any operation related to cycles accounting, such as charging (due to
 /// using system resources) or refunding unused cycles.
@@ -1357,7 +1357,8 @@ impl CyclesAccountManager {
         &self,
         system_state: &SystemState,
     ) -> NominalCycles {
-        NominalCycles::from(system_state.balance() + system_state.reserved_balance())
+        let raw_amount = (system_state.balance() + system_state.reserved_balance()).get();
+        NominalCycles::from(raw_amount)
     }
 
     // The fee for `UpdateSettings` is charged after applying
