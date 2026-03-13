@@ -26,11 +26,11 @@ pub trait FirewallRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<FirewallRuleSet>;
 
-    fn get_subnet_nodes_ip_addresses_of_types(
+    fn get_subnet_node_ids_of_types(
         &self,
         subnet_types: impl IntoIterator<Item = SubnetType>,
         version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<IpAddr>>;
+    ) -> RegistryClientResult<Vec<NodeId>>;
 
     fn get_available_ip_addresses_for_node_ids(
         &self,
@@ -60,11 +60,11 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
 
     /// Get the IP addresses of nodes in the registry for all subnets of the given types, for
     /// endpoints used for core protocol services (p2p, xnet, api).
-    fn get_subnet_nodes_ip_addresses_of_types(
+    fn get_subnet_node_ids_of_types(
         &self,
         subnet_types: impl IntoIterator<Item = SubnetType>,
         version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<IpAddr>> {
+    ) -> RegistryClientResult<Vec<NodeId>> {
         let subnet_ids = subnet_types
             .into_iter()
             .map(|subnet_id| {
@@ -93,9 +93,7 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             .flatten()
             .collect::<Vec<_>>();
 
-        Ok(Some(self.get_available_ip_addresses_for_node_ids(
-            node_ids, version,
-        )))
+        Ok(Some(node_ids))
     }
 
     /// Get the IP addresses of the given nodes in the registry, for endpoints used for core

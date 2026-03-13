@@ -192,16 +192,16 @@ impl RegistryHelper {
             .get_available_ip_addresses_for_node_ids(node_ids, version)
     }
 
-    pub(crate) fn get_subnet_nodes_ip_addresses_of_types(
+    pub(crate) fn get_subnet_node_ids_of_types(
         &self,
         subnet_types: impl IntoIterator<Item = SubnetType>,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<IpAddr>> {
-        let ips = self
+    ) -> OrchestratorResult<Vec<NodeId>> {
+        let ids = self
             .registry_client
-            .get_subnet_nodes_ip_addresses_of_types(subnet_types, version)?;
+            .get_subnet_node_ids_of_types(subnet_types, version)?;
 
-        Ok(ips.unwrap_or_default())
+        Ok(ids.unwrap_or_default())
     }
 
     pub(crate) fn get_subnet_id_from_node_id(

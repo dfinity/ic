@@ -381,8 +381,8 @@ impl Firewall {
             Ok(true) => registry_versions
                 .into_iter()
                 .flat_map(|registry_version| {
-                    self.registry
-                        .get_subnet_nodes_ip_addresses_of_types(
+                    let system_node_ids = self.registry
+                        .get_subnet_node_ids_of_types(
                             [SubnetType::System],
                             registry_version,
                         )
@@ -390,17 +390,20 @@ impl Firewall {
                             warn!(
                                 every_n_seconds => 30,
                                 self.logger,
-                                "Failed to get the IPs of system subnet nodes in the registry: {}", err
+                                "Failed to get the node IDs of system subnet nodes in the registry: {}", err
                             )
                         })
-                        .unwrap_or_default()
+                        .unwrap_or_default();
+
+                    self.registry
+                        .get_available_ip_addresses_for_node_ids(system_node_ids, registry_version)
                 })
                 .collect(),
             Ok(false) => registry_versions
                 .into_iter()
                 .flat_map(|registry_version| {
-                    self.registry
-                        .get_subnet_nodes_ip_addresses_of_types(
+                    let app_node_ids = self.registry
+                        .get_subnet_node_ids_of_types(
                             [SubnetType::Application, SubnetType::VerifiedApplication],
                             registry_version,
                         )
@@ -408,10 +411,12 @@ impl Firewall {
                             warn!(
                                 every_n_seconds => 30,
                                 self.logger,
-                                "Failed to get the IPs of app subnet nodes in the registry: {}", err
+                                "Failed to get the node IDs of app subnet nodes in the registry: {}", err
                             )
                         })
-                        .unwrap_or_default()
+                        .unwrap_or_default();
+
+                    self.registry.get_available_ip_addresses_for_node_ids(app_node_ids, registry_version)
                 })
                 .collect(),
             Err(err) => {
