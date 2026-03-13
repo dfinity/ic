@@ -341,7 +341,7 @@ dependencies = [
  "bytes",
  "cfg-if",
  "http 1.3.1",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "schemars 0.8.21",
  "serde",
  "serde_json",
@@ -1265,7 +1265,7 @@ dependencies = [
  "bitflags 2.10.0",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -2045,7 +2045,7 @@ dependencies = [
  "on_wire",
  "rand 0.8.5",
  "tokio",
- "wasmprinter 0.243.0",
+ "wasmprinter",
  "wat",
 ]
 
@@ -5228,7 +5228,7 @@ checksum = "0bf7f043f89559805f8c7cacc432749b2fa0d0a0a9ee46ce47164ed5ba7f126c"
 dependencies = [
  "fnv",
  "hashbrown 0.16.1",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "stable_deref_trait",
 ]
 
@@ -5522,7 +5522,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http 0.2.12",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -5541,7 +5541,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http 1.3.1",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -6071,7 +6071,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.9",
  "tokio",
  "tower-service",
  "tracing",
@@ -6291,7 +6291,7 @@ dependencies = [
  "ic-sns-init",
  "ic-sns-wasm",
  "ic-types",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "itertools 0.12.1",
  "maplit",
  "pocket-ic",
@@ -9430,9 +9430,9 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "wasm-encoder 0.243.0",
- "wasmparser 0.243.0",
- "wasmprinter 0.243.0",
+ "wasm-encoder 0.244.0",
+ "wasmparser 0.244.0",
+ "wasmprinter",
  "wasmtime",
  "wast",
  "wat",
@@ -9555,7 +9555,7 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing",
- "wasmparser 0.243.0",
+ "wasmparser 0.244.0",
  "wat",
  "wirm",
 ]
@@ -14747,7 +14747,7 @@ dependencies = [
  "serde_cbor",
  "socket2 0.5.9",
  "tempfile",
- "wasmprinter 0.243.0",
+ "wasmprinter",
  "wat",
 ]
 
@@ -16325,9 +16325,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.12.1"
+version = "2.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad4bb2b565bca0645f4d68c5c9af97fba094e9791da685bf83cb5f3ce74acf2"
+checksum = "7714e70437a7dc3ac8eb7e6f8df75fd8eb422675fc7678aff7364301092b1017"
 dependencies = [
  "equivalent",
  "hashbrown 0.16.1",
@@ -16370,7 +16370,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
 dependencies = [
  "ahash 0.8.11",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "is-terminal",
  "itoa",
  "log",
@@ -16393,7 +16393,7 @@ dependencies = [
  "crossbeam-utils",
  "dashmap",
  "env_logger",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "itoa",
  "log",
  "num-format",
@@ -17230,7 +17230,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
- "wasmprinter 0.243.0",
+ "wasmprinter",
 ]
 
 [[package]]
@@ -18529,7 +18529,7 @@ dependencies = [
  "crc32fast",
  "flate2",
  "hashbrown 0.15.2",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "memchr",
  "ruzstd",
 ]
@@ -19259,7 +19259,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4c5cc86750666a3ed20bdaf5ca2a0344f9c67674cae0515bec2da16fbaa47db"
 dependencies = [
  "fixedbitset 0.4.2",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
 ]
 
 [[package]]
@@ -19269,7 +19269,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
 dependencies = [
  "fixedbitset 0.5.7",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
 ]
 
 [[package]]
@@ -20077,7 +20077,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.12.1",
  "log",
  "multimap",
@@ -20097,8 +20097,8 @@ version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0f3e5beed80eb580c68e2c600937ac2c4eedabdfd5ef1e5b7ea4f3fba84497b"
 dependencies = [
- "heck 0.4.1",
- "itertools 0.10.5",
+ "heck 0.5.0",
+ "itertools 0.13.0",
  "log",
  "multimap",
  "once_cell",
@@ -20131,7 +20131,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "157c5a9d7ea5c2ed2d9fb8f495b64759f7816c7eaea54ba3978f0d63000162e3"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.110",
@@ -20144,7 +20144,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9120690fafc389a67ba3803df527d0ec9cbbc9cc45e4cc20b332996dfb672425"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.110",
@@ -20868,7 +20868,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c11639076bf147be211b90e47790db89f4c22b6c8a9ca6e960833869da67166"
 dependencies = [
  "aho-corasick",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "itertools 0.13.0",
  "nohash",
  "regex",
@@ -21891,7 +21891,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09c024468a378b7e36765cd36702b7a90cc3cba11654f6685c8f233408e89e92"
 dependencies = [
  "dyn-clone",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "schemars_derive",
  "serde",
  "serde_json",
@@ -22333,7 +22333,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "schemars 0.9.0",
  "schemars 1.1.0",
  "serde_core",
@@ -22372,7 +22372,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "itoa",
  "ryu",
  "serde",
@@ -22385,7 +22385,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
 dependencies = [
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "itoa",
  "ryu",
  "serde",
@@ -22855,7 +22855,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.110",
@@ -24022,7 +24022,7 @@ version = "0.22.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02a8b472d1a3d7c18e2d61a489aee3453fd9031c33e4f55bd533f4a7adca1bee"
 dependencies = [
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "toml_datetime",
  "winnow",
 ]
@@ -24129,7 +24129,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "hdrhistogram",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "pin-project-lite",
  "slab",
  "sync_wrapper",
@@ -24458,7 +24458,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f4bf3407e4cded7fa5c1f8083ccc0f38fb58c2640ea3c45dacd26ee8b15a91d"
 dependencies = [
  "bytes",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "rand 0.8.5",
  "rand_distr",
  "scoped-tls",
@@ -25123,10 +25123,10 @@ dependencies = [
  "libfuzzer-sys",
  "num-traits",
  "tokio",
- "wasm-encoder 0.243.0",
+ "wasm-encoder 0.244.0",
  "wasm-smith",
- "wasmparser 0.243.0",
- "wasmprinter 0.243.0",
+ "wasmparser 0.244.0",
+ "wasmprinter",
  "wasmtime",
 ]
 
@@ -25139,7 +25139,7 @@ dependencies = [
  "ahash 0.8.11",
  "bitflags 2.10.0",
  "hashbrown 0.14.5",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "semver",
  "serde",
 ]
@@ -25153,7 +25153,7 @@ dependencies = [
  "ahash 0.8.11",
  "bitflags 2.10.0",
  "hashbrown 0.14.5",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "semver",
  "serde",
 ]
@@ -25166,7 +25166,7 @@ checksum = "8c9d90bb93e764f6beabf1d02028c70a2156a6583e63ac4218dd07ef733368b0"
 dependencies = [
  "bitflags 2.10.0",
  "hashbrown 0.15.2",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "semver",
  "serde",
 ]
@@ -25178,10 +25178,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6d8db401b0528ec316dfbe579e6ab4152d61739cfe076706d2009127970159d"
 dependencies = [
  "bitflags 2.10.0",
- "hashbrown 0.15.2",
- "indexmap 2.12.1",
- "semver",
- "serde",
+ "indexmap 2.13.0",
 ]
 
 [[package]]
@@ -25192,20 +25189,9 @@ checksum = "47b807c72e1bac69382b3a6fb3dbe8ea4c0ed87ff5629b8685ae6b9a611028fe"
 dependencies = [
  "bitflags 2.10.0",
  "hashbrown 0.15.2",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "semver",
  "serde",
-]
-
-[[package]]
-name = "wasmprinter"
-version = "0.243.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb2b6035559e146114c29a909a3232928ee488d6507a1504d8934e8607b36d7b"
-dependencies = [
- "anyhow",
- "termcolor",
- "wasmparser 0.243.0",
 ]
 
 [[package]]
@@ -25269,7 +25255,7 @@ dependencies = [
  "cranelift-entity",
  "gimli 0.33.0",
  "hashbrown 0.15.2",
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "log",
  "object 0.37.3",
  "postcard",
@@ -25279,7 +25265,7 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.244.0",
  "wasmparser 0.244.0",
- "wasmprinter 0.244.0",
+ "wasmprinter",
  "wasmtime-internal-core",
 ]
 
@@ -25399,22 +25385,22 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "243.0.0"
+version = "244.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df21d01c2d91e46cb7a221d79e58a2d210ea02020d57c092e79255cc2999ca7f"
+checksum = "b2e7b9f9e23311275920e3d6b56d64137c160cf8af4f84a7283b36cfecbf4acb"
 dependencies = [
  "bumpalo",
  "leb128fmt",
  "memchr",
  "unicode-width 0.2.0",
- "wasm-encoder 0.243.0",
+ "wasm-encoder 0.244.0",
 ]
 
 [[package]]
 name = "wat"
-version = "1.243.0"
+version = "1.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "226a9a91cd80a50449312fef0c75c23478fcecfcc4092bdebe1dc8e760ef521b"
+checksum = "bbf35b87ed352f9ab6cd0732abde5a67dd6153dfd02c493e61459218b19456fa"
 dependencies = [
  "wast",
 ]

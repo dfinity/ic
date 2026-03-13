@@ -2722,7 +2722,7 @@ impl ExecutionEnvironment {
 
         let result = self
             .canister_manager
-            .list_canister_snapshot(sender, canister, state)?;
+            .list_canister_snapshot(sender, canister)?;
 
         Ok(Encode!(&result).unwrap())
     }
@@ -2869,7 +2869,7 @@ impl ExecutionEnvironment {
         let snapshot_id = args.get_snapshot_id();
         match self
             .canister_manager
-            .read_snapshot_metadata(sender, snapshot_id, canister, state)
+            .read_snapshot_metadata(sender, snapshot_id, canister)
         {
             Ok(response) => (Ok(Encode!(&response).unwrap()), NumInstructions::new(0)),
             Err(e) => (Err(e), NumInstructions::new(0)),
@@ -4188,6 +4188,16 @@ impl ExecutionEnvironment {
         for p in paused_install_code.into_values() {
             p.abort(&self.log);
         }
+    }
+
+    /// Testing only: Returns the size of the paused execution registry.
+    #[doc(hidden)]
+    pub fn paused_execution_registry_sizes(&self) -> (usize, usize) {
+        let guard = self.paused_execution_registry.lock().unwrap();
+        (
+            guard.paused_execution.len(),
+            guard.paused_install_code.len(),
+        )
     }
 
     /// If the given result corresponds to a finished execution, then it processes
