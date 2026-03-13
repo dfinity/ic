@@ -734,11 +734,11 @@ fn finalization_clears_scheduled_canister_log_delta_sizes() {
             .append_delta_log(&mut delta);
         size
     }
-    let size1 = append_delta_log(&mut test.canister_state_mut(canister_a), "hello");
-    let size2 = append_delta_log(&mut test.canister_state_mut(canister_a), "world!");
+    let size1 = append_delta_log(test.canister_state_mut(canister_a), "hello");
+    let size2 = append_delta_log(test.canister_state_mut(canister_a), "world!");
 
     // Also append a delta log to canister_b's canister_log.
-    let size3 = append_delta_log(&mut test.canister_state_mut(canister_b), "oops");
+    let size3 = append_delta_log(test.canister_state_mut(canister_b), "oops");
 
     // Both canisters have delta log sizes.
     fn has_delta_log_sizes(canister: &CanisterState) -> bool {
