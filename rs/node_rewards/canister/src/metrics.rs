@@ -70,8 +70,7 @@ pub(crate) async fn fetch_subnets_metrics(
         };
 
         let client = client.clone();
-        subnets_history
-            .push(async move { (*subnet_id, client.node_metrics_history(&args).await) });
+        subnets_history.push(async move { (*subnet_id, client.node_metrics_history(&args).await) });
     }
 
     futures::future::join_all(subnets_history)
@@ -88,7 +87,10 @@ where
         self.client.clone()
     }
 
-    pub(crate) fn last_timestamp_per_subnet(&self, subnets: Vec<SubnetId>) -> BTreeMap<SubnetId, UnixTsNanos> {
+    pub(crate) fn last_timestamp_per_subnet(
+        &self,
+        subnets: Vec<SubnetId>,
+    ) -> BTreeMap<SubnetId, UnixTsNanos> {
         subnets
             .into_iter()
             .map(|subnet| {
@@ -186,7 +188,8 @@ where
         subnets: Vec<SubnetId>,
     ) -> Result<NaiveDate, String> {
         let last_timestamp_per_subnet = self.last_timestamp_per_subnet(subnets.clone());
-        let subnets_metrics = fetch_subnets_metrics(self.client.clone(), &last_timestamp_per_subnet).await;
+        let subnets_metrics =
+            fetch_subnets_metrics(self.client.clone(), &last_timestamp_per_subnet).await;
         self.store_fetched_metrics(subnets_metrics, subnets)
     }
 
