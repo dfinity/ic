@@ -913,9 +913,7 @@ impl SchedulerImpl {
                 canister.system_state.clear_canister_history();
                 // Burn the remaining balance of the canister.
                 canister.system_state.burn_remaining_balance_for_uninstall();
-                canister
-                    .canister_snapshots
-                    .delete_snapshots(canister.canister_id());
+                canister.canister_snapshots.delete_snapshots();
 
                 info!(
                     self.log,
