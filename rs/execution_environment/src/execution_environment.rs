@@ -4584,6 +4584,9 @@ impl CompilationCostHandling {
     }
 }
 
+/// Returns the subnet memory capacity.
+/// A value of `Some(0)` for a resource limit means that the default value from `ExecutionConfig`
+/// should be used.
 fn subnet_memory_capacity(config: &ExecutionConfig, resource_limits: ResourceLimits) -> NumBytes {
     resource_limits
         .maximum_state_size
