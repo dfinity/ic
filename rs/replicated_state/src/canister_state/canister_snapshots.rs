@@ -121,6 +121,7 @@ impl CanisterSnapshots {
     pub fn delete_snapshots(&mut self) -> Vec<SnapshotId> {
         let result = self.snapshots.keys().cloned().collect();
         self.snapshots.clear();
+        self.memory_usage = NumBytes::new(0);
         result
     }
 
