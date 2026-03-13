@@ -226,12 +226,11 @@ RECOVERY_TOOLS_RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | {
     "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
 }
 
-system_test_nns(
+system_test(
     name = "subnet_splitting_test",
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
-        "subnet_splitting",
     ],
     runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -258,7 +257,6 @@ system_test_nns(
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
-        "subnet_splitting",
     ],
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
