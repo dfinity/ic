@@ -302,7 +302,7 @@ impl NodeRegistration {
         .unwrap()
         .expect("unable to detect IPv6 address");
 
-        warn!(self.log, "IPv6 address detected: {ipv6_address}");
+        info!(self.log, "IPv6 address detected: {ipv6_address}");
 
         AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...

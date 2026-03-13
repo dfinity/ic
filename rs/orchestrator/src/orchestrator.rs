@@ -162,10 +162,14 @@ impl Orchestrator {
                     IPv4: {}
 
                 "#,
-                    ipv6.map(|x| x.to_string())
-                        .unwrap_or("none configured".into()),
-                    ipv4.map(|x| x.to_string())
-                        .unwrap_or("none configured".into())
+                    match ipv6 {
+                        Some(ip) => ip.to_string(),
+                        None => "none configured".to_string(),
+                    },
+                    match ipv4 {
+                        Some(ip) => ip.to_string(),
+                        None => "none configured".to_string(),
+                    },
                 );
 
                 UtilityCommand::notify_host(&message, 1);

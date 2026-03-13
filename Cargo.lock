@@ -18902,7 +18902,6 @@ dependencies = [
  "der 0.7.9",
  "env-file-reader",
  "exec",
- "getifs",
  "guest_upgrade_server",
  "hex",
  "http-body-util",
