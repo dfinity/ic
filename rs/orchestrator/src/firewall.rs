@@ -17,7 +17,6 @@ use std::{
     collections::BTreeSet,
     convert::TryFrom,
     net::IpAddr,
-    path::PathBuf,
     sync::{Arc, RwLock},
 };
 
