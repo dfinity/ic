@@ -261,51 +261,61 @@ impl Firewall {
         let own_reward_type = self.get_defaulting_node_reward_type(self.node_id, registry_version);
         let whitelisted_node_types = Self::get_whitelisted_node_types(own_reward_type);
 
-        // Get the union of all the node IP addresses from the registry
-        let node_whitelist_ips: BTreeSet<IpAddr> = registry_versions
-            .into_iter()
-            .flat_map(|registry_version| {
-                // Fetch all node IDs in the registry at this version.
-                let all_node_ids = match self.registry.get_node_ids(registry_version) {
-                    Ok(node_ids) => node_ids,
-                    Err(err) => {
-                        warn!(
-                            every_n_seconds => 30,
-                            self.logger,
-                            "Failed to get all node IDs in the registry: {}", err
-                        );
-                        return vec![];
-                    }
-                };
+        // Get the union of all the node IP addresses from the registry, as well as whitelisted
+        // ones.
+        let mut all_node_ips = BTreeSet::new();
+        let mut whitelisted_node_ips = BTreeSet::new();
+        for registry_version in registry_versions {
+            // Fetch all node IDs in the registry at this version.
+            let all_node_ids = match self.registry.get_node_ids(registry_version) {
+                Ok(node_ids) => node_ids,
+                Err(err) => {
+                    warn!(
+                        every_n_seconds => 30,
+                        self.logger,
+                        "Failed to get all node IDs in the registry: {}", err
+                    );
+                    continue;
+                }
+            };
 
-                // For each of them, check their node reward type and only include the ones with
-                // whitelisted node reward types.
-                let whitelisted_node_ids = all_node_ids.into_iter().filter(|other_node_id| {
-                    let other_reward_type =
-                        self.get_defaulting_node_reward_type(*other_node_id, registry_version);
+            // For each of them, check their node reward type and only include the ones with
+            // whitelisted node reward types.
+            let whitelisted_node_ids = all_node_ids.clone().into_iter().filter(|other_node_id| {
+                let other_reward_type =
+                    self.get_defaulting_node_reward_type(*other_node_id, registry_version);
 
-                    whitelisted_node_types.contains(&other_reward_type)
-                });
+                whitelisted_node_types.contains(&other_reward_type)
+            });
 
+            all_node_ips.extend(
                 self.registry
-                    .get_available_ip_addresses_for_node_ids(whitelisted_node_ids, registry_version)
-            })
-            .collect();
+                    .get_available_ip_addresses_for_node_ids(all_node_ids, registry_version),
+            );
+            whitelisted_node_ips.extend(
+                self.registry.get_available_ip_addresses_for_node_ids(
+                    whitelisted_node_ids,
+                    registry_version,
+                ),
+            );
+        }
 
         // Then split it to v4 and v6 separately
-        let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(&node_whitelist_ips);
+        let (all_ipv4s, all_ipv6s) = split_ips_by_address_family(&all_node_ips);
+        let (whitelisted_ipv4s, whitelisted_ipv6s) =
+            split_ips_by_address_family(&whitelisted_node_ips);
 
         info!(
             self.logger,
             "Whitelisting node IP addresses ({} v4 and {} v6) on the firewall",
-            node_ipv4s.len(),
-            node_ipv6s.len()
+            whitelisted_ipv4s.len(),
+            whitelisted_ipv6s.len()
         );
 
-        // Build a UDP and TCP rule to whitelist all v4 and v6 IP addresses of nodes.
+        // Build a UDP and TCP rule to whitelist all v4 and v6 IP addresses of whitelisted nodes.
         let tcp_node_whitelisting_rule = FirewallRule {
-            ipv4_prefixes: node_ipv4s.clone(),
-            ipv6_prefixes: node_ipv6s.clone(),
+            ipv4_prefixes: whitelisted_ipv4s.clone(),
+            ipv6_prefixes: whitelisted_ipv6s.clone(),
             ports: self.replica_config.tcp_ports_for_node_whitelist.clone(),
             action: FirewallAction::Allow as i32,
             comment: "Automatic node whitelisting".to_string(),
@@ -314,8 +324,8 @@ impl Firewall {
         };
 
         let udp_node_whitelisting_rule = FirewallRule {
-            ipv4_prefixes: node_ipv4s.clone(),
-            ipv6_prefixes: node_ipv6s.clone(),
+            ipv4_prefixes: whitelisted_ipv4s.clone(),
+            ipv6_prefixes: whitelisted_ipv6s.clone(),
             ports: self.replica_config.udp_ports_for_node_whitelist.clone(),
             action: FirewallAction::Allow as i32,
             comment: "Automatic node whitelisting".to_string(),
@@ -331,9 +341,15 @@ impl Firewall {
 
         // Build a single rule to blacklist v4 and v6 IP addresses
         // that are not supposed to be used by ic-http-adapter.
+        info!(
+            self.logger,
+            "Blacklisting node IP addresses ({} v4 and {} v6) for ic-http-adapter on the firewall",
+            all_ipv4s.len(),
+            all_ipv6s.len()
+        );
         let ic_http_adapter_rule = FirewallRule {
-            ipv4_prefixes: node_ipv4s,
-            ipv6_prefixes: node_ipv6s,
+            ipv4_prefixes: all_ipv4s,
+            ipv6_prefixes: all_ipv6s,
             ports: self.replica_config.ports_for_http_adapter_blacklist.clone(),
             action: FirewallAction::Reject as i32,
             comment: "Automatic blacklisting for ic-http-adapter".to_string(),
