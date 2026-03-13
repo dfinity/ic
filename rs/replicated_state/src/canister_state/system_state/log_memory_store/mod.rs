@@ -42,7 +42,10 @@ pub struct LogMemoryStore {
     /// This value is persisted independently of the `PageMap` to ensure that
     /// global record IDs continue to increment monotonically, even if the
     /// underlying logs are cleared or the canister is reinstalled.
-    start_idx: u64,
+    ///
+    /// It is updated with the current `next_idx()` whenever the logs are
+    /// modified: appended, cleared or deallocated.
+    persistent_next_idx: u64,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
     #[validate_eq(Ignore)]
@@ -70,15 +73,15 @@ impl LogMemoryStore {
     pub fn from_checkpoint(
         feature_flag: FlagStatus,
         maybe_page_map: Option<PageMap>,
-        next_idx: u64,
+        persistent_next_idx: u64,
     ) -> Self {
-        Self::new_inner(feature_flag, maybe_page_map, next_idx)
+        Self::new_inner(feature_flag, maybe_page_map, persistent_next_idx)
     }
 
     fn new_inner(
         feature_flag: FlagStatus,
         maybe_page_map: Option<PageMap>,
-        start_idx: u64,
+        persistent_next_idx: u64,
     ) -> Self {
         Self {
             feature_flag,
@@ -87,7 +90,7 @@ impl LogMemoryStore {
             } else {
                 None
             },
-            start_idx,
+            persistent_next_idx,
             header_cache: OnceLock::new(),
             delta_log_sizes: VecDeque::new(),
         }
@@ -123,16 +126,16 @@ impl LogMemoryStore {
         }
     }
 
-    /// Update page_map, header_cache and start_idx.
+    /// Update page_map, header_cache and persistent_next_idx.
     fn save_ring_buffer(&mut self, ring_buffer: RingBuffer) {
         self.maybe_page_map = Some(ring_buffer.to_page_map());
         self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
-        self.start_idx = self.next_idx(); // Preserve current `next_idx`.
+        self.persistent_next_idx = self.next_idx(); // Preserve current `next_idx`.
     }
 
     /// Deallocates underlying memory.
     pub fn deallocate(&mut self) {
-        self.start_idx = self.next_idx(); // Preserve current `next_idx`.
+        self.persistent_next_idx = self.next_idx(); // Preserve current `next_idx`.
         self.maybe_page_map = None;
         self.header_cache = OnceLock::new();
     }
@@ -227,10 +230,10 @@ impl LogMemoryStore {
 
     /// Returns the monotonic sequence index for the next log record.
     ///
-    /// Calculates the maximum of the persisted `start_idx` and the current
+    /// Calculates the maximum of the `persistent_next_idx` and the current
     /// buffer's index to prevent ID collisions across lifecycle events.
     pub fn next_idx(&self) -> u64 {
-        self.start_idx
+        self.persistent_next_idx
             .max(self.get_header().map(|h| h.next_idx).unwrap_or(0))
     }
 
@@ -324,7 +327,7 @@ impl Clone for LogMemoryStore {
             // PageMap is a persistent data structure, so clone is cheap and creates
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),
-            start_idx: self.start_idx,
+            persistent_next_idx: self.persistent_next_idx,
             delta_log_sizes: self.delta_log_sizes.clone(),
             // OnceLock is not Clone, so we must manually clone the state.
             header_cache: match self.header_cache.get() {
@@ -340,7 +343,7 @@ impl PartialEq for LogMemoryStore {
         // header_cache is a transient cache and should not be compared.
         self.feature_flag == other.feature_flag
             && self.maybe_page_map == other.maybe_page_map
-            && self.start_idx == other.start_idx
+            && self.persistent_next_idx == other.persistent_next_idx
             && self.delta_log_sizes == other.delta_log_sizes
     }
 }
