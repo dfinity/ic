@@ -58,7 +58,8 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
         deserialize_registry_value::<FirewallRuleSet>(bytes)
     }
 
-    /// Get the IP addresses of all system subnet nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
+    /// Get the IP addresses of nodes in the registry for all subnets of the given types, for
+    /// endpoints used for core protocol services (p2p, xnet, api).
     fn get_subnet_nodes_ip_addresses_of_types(
         &self,
         subnet_types: impl IntoIterator<Item = SubnetType>,
@@ -98,8 +99,8 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
     }
 
     /// Get the IP addresses of the given nodes in the registry, for endpoints used for core
-    /// protocol services (xnet, http). If a node record is not found or there's an error fetching
-    /// it, that node will be skipped.
+    /// protocol services (p2p, xnet, api). If a node record is not found or there's an error
+    /// fetching it, that node will be skipped.
     fn get_available_ip_addresses_for_node_ids(
         &self,
         node_ids: impl IntoIterator<Item = NodeId>,
