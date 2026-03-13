@@ -117,7 +117,7 @@ use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
     canister_state::{
         NextExecution, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
-        system_state::{CanisterHistory, CyclesUseCase},
+        canister_snapshots::CanisterSnapshots, system_state::CanisterHistory,
     },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
@@ -134,6 +134,7 @@ use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_types::cycles_use_case::CyclesUseCase;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
     CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Cycles,
@@ -3245,6 +3246,7 @@ impl StateMachine {
         let mut canister_state = ic_state_manager::checkpoint::load_canister_state(
             &tip_canister_layout,
             &canister_id,
+            CanisterSnapshots::default(),
             ic_types::Height::new(0),
             self.state_manager.get_fd_factory(),
             &StrictCheckpointLoadingMetrics,

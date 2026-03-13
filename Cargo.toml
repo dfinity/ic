@@ -909,11 +909,11 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.243.0", features = ["wasmparser"] }
-wasmparser = "0.243.0"
-wasmprinter = "0.243.0"
-wast = "243.0.0"
-wat = "1.243.0"
+wasm-encoder = { version = "0.244.0", features = ["wasmparser"] }
+wasmparser = "0.244.0"
+wasmprinter = "0.244.0"
+wast = "244.0.0"
+wat = "~1.244.0"
 which = "6.0.3"
 wirm = { version = "2.1.0", features = ["parallel"] }
 wsl = "0.1.0"

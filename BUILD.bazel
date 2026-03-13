@@ -298,3 +298,12 @@ upload_artifacts(
 upload_artifacts(
     name = "artifact-uploader",
 )
+
+# Platform that can be used on arm64-darwin to cross compile to x86_64-darwin
+platform(
+    name = "macos-intel",
+    constraint_values = [
+        "@platforms//os:osx",
+        "@platforms//cpu:x86_64",
+    ],
+)
