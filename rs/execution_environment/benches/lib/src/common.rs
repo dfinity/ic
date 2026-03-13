@@ -29,7 +29,7 @@ use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_i
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
+    Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, Time,
     messages::{CallbackId, CanisterMessage, NO_DEADLINE, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
@@ -114,6 +114,10 @@ where
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
     canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(0));
     canister_state.system_state.freeze_threshold = 0.into();
+    canister_state
+        .system_state
+        .log_memory_store
+        .resize_for_testing(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
 
     // Create call context and callback
     let call_origin = CallOrigin::CanisterUpdate(
