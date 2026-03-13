@@ -96,9 +96,7 @@ pub fn get_node_gen_registry() -> Registry {
         &["gen"],
     )
     .expect("failed to create gauge");
-    gauge
-        .with_label_values(&[&gen_string])
-        .set(metric_value);
+    gauge.with_label_values(&[&gen_string]).set(metric_value);
     registry
         .register(Box::new(gauge))
         .expect("failed to register gauge");
