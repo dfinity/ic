@@ -1521,7 +1521,7 @@ impl ExecutionTest {
             }
             Ok(Method::LoadCanisterSnapshot) => {
                 let payload = LoadCanisterSnapshotArgs::decode(message.method_payload()).unwrap();
-                let snapshot = self.state.as_ref().unwrap().canister_snapshots.get(payload.snapshot_id()).expect("Loading a non-existing snapshot should fail during validation and no instructions should be used in that case!");
+                let snapshot = self.canister_state(payload.get_canister_id()).canister_snapshots.get(payload.snapshot_id()).expect("Loading a non-existing snapshot should fail during validation and no instructions should be used in that case!");
                 let wasm_module = snapshot.execution_snapshot().wasm_binary.clone();
                 let wasm_source = WasmSource::CanisterModule(wasm_module);
                 let execution_mode = wasm_execution_mode(wasm_source);
