@@ -235,7 +235,7 @@ pub mod test_tasks {
         async fn execute(self) -> (Duration, Self) {
             PANIC_TASK_COUNTER.with(|c| c.set(c.get() + 1));
 
-            let _: () = ic_cdk::call(ic_cdk::api::id(), "__self_call", ())
+            ic_cdk::call::Call::unbounded_wait(ic_cdk::api::canister_self(), "__self_call")
                 .await
                 .unwrap();
 
@@ -261,7 +261,7 @@ pub mod test_tasks {
         async fn execute(self) -> (Duration, Self) {
             SUCCESS_TASK_COUNTER.with(|c| c.set(c.get() + 1));
 
-            let _: () = ic_cdk::call(ic_cdk::api::id(), "__self_call", ())
+            ic_cdk::call::Call::unbounded_wait(ic_cdk::api::canister_self(), "__self_call")
                 .await
                 .unwrap();
 
