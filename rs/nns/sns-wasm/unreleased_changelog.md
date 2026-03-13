@@ -11,6 +11,10 @@ on the process that this file is part of, see
 
 ## Changed
 
+- Use the default values for `min_retrieve_blocks_from_ledger_interval_seconds` and
+  `max_retrieve_blocks_from_ledger_interval_seconds` for the SNS index-ng canister
+  polling interval when creating a new SNS (previously used the fixed value of 5s).
+
 ## Deprecated
 
 ## Removed

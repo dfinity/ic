@@ -107,8 +107,8 @@ pub fn test_btc_checker(env: TestEnv) {
         // -- beginning of test logic --
 
         // We shouldn't have any new utxo for now.
-        assert_no_new_utxo(&minter_agent, &subaccount0).await;
-        assert_no_new_utxo(&minter_agent, &subaccount1).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount0).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount1).await;
 
         // Mint block to the first sub-account (with single utxo).
         let first_transfer_amount = 100_000_000;

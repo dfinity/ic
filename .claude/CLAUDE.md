@@ -59,6 +59,10 @@ After changing Rust code (`*.rs`) follow these steps in order:
 
 When asked to create a PR, always create it in draft mode.
 
-After the PR has been created, request a review from Copilot.
-
 When updating a PR prefer to push new commits to the PR branch instead of force-pushing over the existing commits.
+
+After the PR has been created or updated, request a review from the GitHub Copilot bot using:
+```
+gh api repos/dfinity/ic/pulls/<PULL_REQUEST_NUMBER>/requested_reviewers --method POST --raw-field 'reviewers[]=copilot-pull-request-reviewer[bot]'
+```
+where `<PULL_REQUEST_NUMBER>` is the number of the Pull Request.

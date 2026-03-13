@@ -1,6 +1,6 @@
 use crate::pb::v1::{
-    Account, ApproveGenesisKyc, Empty, Motion, NetworkEconomics, SelfDescribingValue,
-    SelfDescribingValueArray, SelfDescribingValueMap,
+    Account, ApproveGenesisKyc, Empty, Motion, NetworkEconomics, RewardNodeProvider,
+    RewardNodeProviders, SelfDescribingValue, SelfDescribingValueArray, SelfDescribingValueMap,
     self_describing_value::Value::{self, Array, Blob, Map, Text},
 };
 
@@ -78,6 +78,18 @@ impl DocumentedAction for NetworkEconomics {
     const DESCRIPTION: &'static str = "Update the network economics parameters that control \
         various costs, rewards, and thresholds in the Network Nervous System, including proposal \
         costs, neuron staking requirements, transaction fees, and voting power economics.";
+}
+
+impl DocumentedAction for RewardNodeProvider {
+    const NAME: &'static str = "Reward Node Provider";
+    const DESCRIPTION: &'static str = "Reward a node provider an amount of ICP as compensation \
+        for providing nodes to the IC.";
+}
+
+impl DocumentedAction for RewardNodeProviders {
+    const NAME: &'static str = "Reward Node Providers";
+    const DESCRIPTION: &'static str = "Reward multiple node providers an amount of ICP as \
+        compensation for providing nodes to the IC.";
 }
 
 /// A builder for `SelfDescribingValue` objects.
