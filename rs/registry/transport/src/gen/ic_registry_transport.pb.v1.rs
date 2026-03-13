@@ -72,7 +72,7 @@ pub mod registry_error {
 /// When a "monolithic" blob is too large to fit in a single response, this is
 /// used instead (in the ICP, messages can be at most 2 MiB in size). The
 /// `get_chunk` canister method can then be called to fetch the original
-/// monolithic blob in chunks (which can then be concatenated to reconstitute the
+/// monolithic blob in chunks (which can then be cancatenated to reconstitute the
 /// original monolithic blob).
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LargeValueChunkKeys {
@@ -193,6 +193,26 @@ pub mod high_capacity_registry_get_value_response {
         /// field.
         #[prost(message, tag = "4")]
         LargeValueChunkKeys(super::LargeValueChunkKeys),
+    }
+}
+/// Message corresponding to the response from the
+/// registry canister to an `is_deleted()` request.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IsDeletedResponse {
+    #[prost(oneof = "is_deleted_response::Response", tags = "1, 2")]
+    pub response: ::core::option::Option<is_deleted_response::Response>,
+}
+/// Nested message and enum types in `IsDeletedResponse`.
+pub mod is_deleted_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Response {
+        #[prost(message, tag = "1")]
+        Error(super::RegistryError),
+        /// `true` means the value at this key was deleted.
+        /// `false` mean the value at this key still exists.
+        /// If the key never existed, the error variant is returned.
+        #[prost(bool, tag = "2")]
+        IsDeleted(bool),
     }
 }
 /// Message corresponding to the response from the canister

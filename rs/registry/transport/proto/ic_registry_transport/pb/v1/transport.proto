@@ -198,6 +198,19 @@ message HighCapacityRegistryGetValueResponse {
   uint64 timestamp_nanoseconds = 5;
 }
 
+// Message corresponding to the response from the
+// registry canister to an `is_deleted()` request.
+message IsDeletedResponse {
+  oneof response {
+    RegistryError error = 1;
+
+    // `true` means the value at this key was deleted.
+    // `false` mean the value at this key still exists.
+    // If the key never existed, the error variant is returned.
+    bool is_deleted = 2;
+  }
+}
+
 // Message corresponding to the response from the canister
 // to a get_latest_version() request.
 message RegistryGetLatestVersionResponse {

@@ -17,16 +17,17 @@ use ic_protobuf::registry::{
 };
 use ic_registry_canister_api::{
     AddNodePayload, Chunk, GetChunkRequest, GetNodeProvidersMonthlyXdrRewardsRequest,
-    UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
+    IsDeletedRequest, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
         CertifiedResponse, HighCapacityRegistryGetChangesSinceResponse,
-        HighCapacityRegistryGetValueResponse, HighCapacityRegistryValue,
+        HighCapacityRegistryGetValueResponse, HighCapacityRegistryValue, IsDeletedResponse,
         RegistryAtomicMutateResponse, RegistryError, RegistryGetChangesSinceRequest,
-        RegistryGetLatestVersionResponse, high_capacity_registry_get_value_response,
+        RegistryGetLatestVersionResponse, RegistryGetValueRequest,
+        high_capacity_registry_get_value_response, is_deleted_response::Response,
         registry_error::Code,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
@@ -478,6 +479,40 @@ fn get_chunk() {
 #[candid_method(query, rename = "get_chunk")]
 fn get_chunk_(request: GetChunkRequest) -> Result<Chunk, String> {
     registry().get_chunk(request)
+}
+
+#[unsafe(export_name = "canister_query is_deleted")]
+fn is_deleted() {
+    let response_pb = match deserialize_get_value_request(arg_data()) {
+        Ok((key, version_opt)) => {
+            let registry = registry();
+            let version = version_opt.unwrap_or_else(|| registry.latest_version());
+            match registry.is_deleted(&key, version) {
+                Some(b) => IsDeletedResponse {
+                    response: Some(Response::IsDeleted(b)),
+                },
+                None => IsDeletedResponse {
+                    response: Some(Response::Error(RegistryError {
+                        code: Code::KeyNotPresent as i32,
+                        key,
+                        reason: "Key not found".to_string(),
+                    })),
+                },
+            }
+        }
+        Err(error) => IsDeletedResponse {
+            response: Some(Response::Error(RegistryError {
+                code: Code::MalformedMessage as i32,
+                key: Vec::<u8>::default(),
+                reason: error.to_string(),
+            })),
+        },
+    };
+    let mut bytes = Vec::new();
+    response_pb
+        .encode(&mut bytes)
+        .expect("Error serializing response");
+    reply(&bytes);
 }
 
 /// Modifies records with keys of the form "daniel_wong_{}".
