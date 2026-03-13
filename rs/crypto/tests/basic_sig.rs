@@ -26,6 +26,9 @@ pub const REG_V2: RegistryVersion = RegistryVersion::new(2);
 
 #[test]
 fn should_sign_and_verify() {
+    if true {
+        panic!("The chaos monkey Bas was here!");
+    }
     let rng = ReproducibleRng::new();
     let crypto = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::only_node_signing_key())
