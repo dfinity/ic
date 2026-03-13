@@ -51,22 +51,8 @@ trap "umount /mnt/config" EXIT
 
 mkdir -p /run/config/bootstrap
 
-# Check if ic-bootstrap.tar exists (backward compatibility with older HostOS versions)
-# TODO(NODE-1821): Remove this check once all nodes have HostOS that supports tarless configuration.
-if [ -f /mnt/config/ic-bootstrap.tar ]; then
-    echo "Found ic-bootstrap.tar, using legacy tar-based configuration"
-
-    # Verify that ic-bootstrap.tar contains only regular files (-) and directories (d)
-    if tar -tvf /mnt/config/ic-bootstrap.tar | cut -c 1 | grep -E -q '[^-d]'; then
-        echo "ic-bootstrap.tar contains non-regular files, aborting"
-        exit 1
-    fi
-
-    tar xf /mnt/config/ic-bootstrap.tar -C /run/config/bootstrap
-else
-    echo "Using direct file-based configuration"
-    cp -r /mnt/config/* /run/config/bootstrap/
-fi
+echo "Using direct file-based configuration"
+cp -r /mnt/config/* /run/config/bootstrap/
 
 if [ -f /run/config/bootstrap/config.json ]; then
     cp /run/config/bootstrap/config.json /run/config/config.json
