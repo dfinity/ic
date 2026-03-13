@@ -3,7 +3,9 @@ use candid::{CandidType, Encode};
 use dfn_core::call;
 use ic_base_types::SubnetId;
 use ic_management_canister_types_private::{SetupInitialDKGArgs, SetupInitialDKGResponse};
-use ic_protobuf::registry::subnet::v1::{self as pb, CatchUpPackageContents, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::{
+    self as pb, CanisterCyclesCostSchedule, CatchUpPackageContents, SubnetRecord,
+};
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_catch_up_package_contents_key,
     make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -36,6 +38,7 @@ enum PayloadValidationError {
     DuplicateDestinationNodeIds,
     InvalidCanisterIdRanges(WellFormedError),
     SourceSubnetHalted,
+    SourceSubnetIsRentalSubnet,
 }
 
 #[cfg(not(test))]
@@ -291,6 +294,13 @@ impl Registry {
             return Err(PayloadValidationError::SourceSubnetIsSigningSubnet);
         }
 
+        // Only rental subnets have free cycles cost schedule
+        if source_subnet_record.canister_cycles_cost_schedule() == CanisterCyclesCostSchedule::Free
+            && source_subnet_type == SubnetType::Application
+        {
+            return Err(PayloadValidationError::SourceSubnetIsRentalSubnet);
+        }
+
         let routing_table = self.get_routing_table_or_panic(registry_version);
         let source_subnet_ranges = routing_table.ranges(payload.source_subnet_id);
 
@@ -418,6 +428,9 @@ impl std::fmt::Display for PayloadValidationError {
             }
             PayloadValidationError::SourceSubnetIsSigningSubnet => {
                 write!(f, "Signing subnets are not allowed to be split")
+            }
+            PayloadValidationError::SourceSubnetIsRentalSubnet => {
+                write!(f, "Rental subnets are not allowed to be split")
             }
             PayloadValidationError::UnhostedCanisterIds => write!(
                 f,
@@ -607,6 +620,17 @@ mod tests {
         },
         Err(PayloadValidationError::SourceSubnetIsSigningSubnet)
     )]
+    #[case::cannot_split_rental_subnet(
+        SubnetInfo {
+            cost_schedule: CanisterCyclesCostSchedule::Free,
+            subnet_type: SubnetType::Application,
+            ..invariants_compliant_subnet_info()
+        },
+        SplitSubnetPayload {
+            ..invariants_compliant_payload()
+        },
+        Err(PayloadValidationError::SourceSubnetIsRentalSubnet)
+    )]
     #[case::cannot_split_a_subnet_already_being_split(
         SubnetInfo {
             is_already_being_split: true,
@@ -703,6 +727,7 @@ mod tests {
         is_signing: bool,
         is_already_being_split: bool,
         is_halted: bool,
+        cost_schedule: CanisterCyclesCostSchedule,
     }
 
     fn invariants_compliant_subnet_info() -> SubnetInfo {
@@ -717,6 +742,7 @@ mod tests {
             is_signing: false,
             is_already_being_split: false,
             is_halted: false,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 
@@ -757,6 +783,8 @@ mod tests {
         );
         source_subnet_record.subnet_type = source_subnet_info.subnet_type.into();
         source_subnet_record.is_halted = source_subnet_info.is_halted;
+        source_subnet_record.canister_cycles_cost_schedule =
+            i32::from(source_subnet_info.cost_schedule);
 
         if source_subnet_info.is_signing {
             let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
