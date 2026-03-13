@@ -73,11 +73,10 @@ impl CanisterSnapshots {
         Ok(())
     }
 
-    /// Adds new snapshot in the collection and assigns a `SnapshotId`.
-    pub fn push(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) -> SnapshotId {
+    /// Adds new snapshot to the collection.
+    pub fn push(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) {
         self.memory_usage += snapshot.size();
         self.snapshots.insert(snapshot_id, snapshot);
-        snapshot_id
     }
 
     /// Returns a reference of the canister snapshot identified by `snapshot_id`.
