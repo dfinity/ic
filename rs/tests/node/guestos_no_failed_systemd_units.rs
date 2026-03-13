@@ -5,7 +5,7 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::InternetComputer,
         test_env::TestEnv,
-        test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession},
     },
     systest,
 };
