@@ -75,6 +75,7 @@ impl CanisterSnapshots {
 
     /// Adds new snapshot to the collection.
     pub fn push(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) {
+        debug_assert!(!self.snapshots.contains_key(&snapshot_id));
         self.memory_usage += snapshot.size();
         self.snapshots.insert(snapshot_id, snapshot);
     }
