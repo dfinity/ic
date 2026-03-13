@@ -5,8 +5,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::firewall::{
-    BoundaryNodeConfig as BoundaryNodeFirewallConfig, FIREWALL_FILE_DEFAULT_PATH,
-    ReplicaConfig as ReplicaFirewallConfig,
+    BoundaryNodeConfig as BoundaryNodeFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
 };
 use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
@@ -51,8 +50,6 @@ pub(crate) struct Firewall {
     last_applied_version: Arc<RwLock<RegistryVersion>>,
     /// If true, write the file content even if no change was detected in registry, i.e. first time
     must_write: bool,
-    /// If false, do not update the firewall rules (test mode)
-    enabled: bool,
     node_id: NodeId,
 }
 
@@ -66,18 +63,6 @@ impl Firewall {
         local_cup_reader: LocalCUPReader,
         logger: ReplicaLogger,
     ) -> Self {
-        // Disable if the config is the default one (e.g if we're in a test)
-        let enabled = replica_config
-            .config_file
-            .ne(&PathBuf::from(FIREWALL_FILE_DEFAULT_PATH));
-
-        if !enabled {
-            warn!(
-                logger,
-                "Firewall configuration not found. Orchestrator does not update firewall rules."
-            );
-        }
-
         Self {
             registry,
             metrics,
@@ -88,7 +73,6 @@ impl Firewall {
             compiled_config: Default::default(),
             last_applied_version: Default::default(),
             must_write: true,
-            enabled,
             node_id,
         }
     }
@@ -468,9 +452,6 @@ impl Firewall {
     /// Checks for new firewall config, and if found, update local firewall
     /// rules
     pub fn check_and_update(&mut self) {
-        if !self.enabled {
-            return;
-        }
         let registry_version = self.registry.get_latest_version();
         debug!(
             self.logger,
