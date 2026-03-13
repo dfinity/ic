@@ -10,7 +10,7 @@ use ic_replicated_state::testing::CanisterQueuesTesting;
 use proptest::prelude::*;
 
 #[test]
-fn round_limits_account_for_slice_budget() {
+fn round_instructions_limit_depends_on_slice_instructions() {
     // The instruction budget for canister execution is:
     //   budget = max_instructions_per_round
     //          - max(max_instructions_per_slice, max_instructions_per_install_code_slice)

@@ -6,6 +6,7 @@ use ic_execution_environment::scheduler::scheduler_metrics::SchedulerMetrics;
 use ic_logger::new_replica_logger_from_config;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshots;
 use ic_replicated_state::{
     CanisterState, InputQueueType, ReplicatedState, SchedulerState, SystemState,
 };
@@ -27,7 +28,9 @@ fn main() {
             Cycles::from_parts(1, 2),
             NumSeconds::from(100_000),
         );
-        let mut canister_state = CanisterState::new(system_state, None, scheduler_state);
+        let canister_snapshots = CanisterSnapshots::default();
+        let mut canister_state =
+            CanisterState::new(system_state, None, scheduler_state, canister_snapshots);
         // First 1k canisters are active and will complete an execution every round.
         if i < 1_000 {
             let mut available_memory = i64::MAX;

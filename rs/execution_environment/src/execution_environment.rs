@@ -2722,7 +2722,7 @@ impl ExecutionEnvironment {
 
         let result = self
             .canister_manager
-            .list_canister_snapshot(sender, canister, state)
+            .list_canister_snapshot(sender, canister)
             .map_err(UserError::from)?;
 
         Ok(Encode!(&result).unwrap())
@@ -2870,7 +2870,7 @@ impl ExecutionEnvironment {
         let snapshot_id = args.get_snapshot_id();
         match self
             .canister_manager
-            .read_snapshot_metadata(sender, snapshot_id, canister, state)
+            .read_snapshot_metadata(sender, snapshot_id, canister)
         {
             Ok(response) => (Ok(Encode!(&response).unwrap()), NumInstructions::new(0)),
             Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
