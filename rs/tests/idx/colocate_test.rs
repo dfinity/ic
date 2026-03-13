@@ -369,17 +369,17 @@ fn start_test(env: TestEnv, uvm: &DeployedUniversalVm) {
 
 fn fetch_test_dir(env: TestEnv, uvm: &DeployedUniversalVm, session: &Session) {
     let log = env.logger();
-    let test_dir_tar = Path::new("/home/admin/test.tar");
+    let test_dir_tar = Path::new("/home/admin/test.tar.zst");
     info!(
         log,
         "Tarring the test directory on the {UVM_NAME} to {test_dir_tar:?}..."
     );
     uvm.block_on_bash_script_from_session(
         session,
-        &format!("sudo tar -cf {test_dir_tar:?} -C /home/admin/test ."),
+        &format!("sudo tar --auto-compress -cf {test_dir_tar:?} -C /home/admin/test ."),
     )
     .unwrap_or_else(|e| panic!("Failed to tar the test directory on {UVM_NAME} because: {e}"));
-    let local_test_dir_tar = env.get_path("test.tar");
+    let local_test_dir_tar = env.get_path("test.tar.zst");
     info!(
         log,
         "Copying {test_dir_tar:?} from the {UVM_NAME} to the local test-driver at {local_test_dir_tar:?}..."
