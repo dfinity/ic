@@ -1,6 +1,6 @@
 use crate::{
     MAX_EARLY_REMOTE_TRANSCRIPTS, MAX_REMOTE_DKG_ATTEMPTS, MAX_REMOTE_DKGS_PER_INTERVAL,
-    REMOTE_DKG_REPEATED_FAILURE_ERROR,
+    REMOTE_DKG_REPEATED_FAILURE_ERROR, get_configs_for_start_height,
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -80,6 +80,8 @@ pub fn create_payload(
         // If the height is not a start height, create a payload with new dealings,
         // and possibly early remote transcripts.
         create_data_payload(
+            subnet_id,
+            registry_client,
             pool_reader,
             dkg_pool,
             parent,
@@ -96,6 +98,8 @@ pub fn create_payload(
 }
 
 fn create_data_payload(
+    this_subnet_id: SubnetId,
+    registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     parent: &Block,
@@ -109,19 +113,40 @@ fn create_data_payload(
 ) -> Result<DkgDataPayload, DkgPayloadCreationError> {
     // Get all existing dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
+    let configs = get_configs_for_start_height(
+        this_subnet_id,
+        registry_client,
+        state_manager,
+        validation_context.registry_version,
+        last_summary_block.height,
+        last_dkg_summary,
+    );
     // Select new dealings for the payload.
     let pool_lock = dkg_pool
         .read()
         .expect("Couldn't lock DKG pool for reading.");
     let new_validated_dealings = select_dealings_for_payload(
-        &last_dkg_summary.configs,
+        &configs,
         &dealers_from_chain,
         &*pool_lock,
         max_dealings_per_block,
     );
     drop(pool_lock);
+    for d in &new_validated_dealings {
+        if matches!(d.content.dkg_id.target_subnet, NiDkgTargetSubnet::Remote(_)) {
+            info!(
+                logger,
+                "Including remote dealing for dkg id {:?} in data block payload at height {}",
+                d.content.dkg_id,
+                parent.height.increment(),
+            );
+        }
+    }
 
     let remote_dkg_transcripts = create_early_remote_transcripts(
+        this_subnet_id,
+        last_summary_block.height,
+        registry_client,
         pool_reader,
         crypto,
         parent,
@@ -207,6 +232,9 @@ fn select_dealings_for_payload(
 
 #[allow(clippy::type_complexity)]
 pub(crate) fn create_early_remote_transcripts(
+    this_subnet_id: SubnetId,
+    start_block_height: Height,
+    registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
     crypto: &dyn ConsensusCrypto,
     parent: &Block,
@@ -220,58 +248,60 @@ pub(crate) fn create_early_remote_transcripts(
         .get_state_at(validation_context.certified_height)
         .map_err(DkgPayloadCreationError::StateManagerError)?;
 
-    //  Since this function is relatively expensive, we simply return if there are no outstanding DKG contexts
-    let callback_id_map = build_target_id_callback_map(state.get_ref());
-    if callback_id_map.is_empty() {
-        return Ok(vec![]);
-    }
-
     // Get all dealings for DKGs that have not been completed yet
     let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent);
+    let completed_target_ids =
+        get_completed_target_ids(last_dkg_summary.configs.keys(), &completed);
 
-    // Collect map of remote target_ids to DKG configs
-    let mut remote_configs: BTreeMap<NiDkgTargetId, Vec<&NiDkgConfig>> = BTreeMap::new();
-    for config in last_dkg_summary.configs.values() {
-        let dkg_id = config.dkg_id();
-        if completed.contains(dkg_id) {
-            // Skip DKGs that have already been completed
-            continue;
-        }
-        if let NiDkgTargetSubnet::Remote(target_id) = dkg_id.target_subnet {
-            remote_configs.entry(target_id).or_default().push(config);
-        }
+    //  Since this function is relatively expensive, we simply return if there are no outstanding DKG contexts
+    let callback_id_map = build_target_id_config_map(
+        this_subnet_id,
+        start_block_height,
+        registry_client,
+        state.get_ref(),
+        validation_context.registry_version,
+        last_dkg_summary.next_transcripts(),
+        &completed_target_ids,
+    );
+    if callback_id_map.is_empty() {
+        return Ok(vec![]);
     }
 
     // Try to create transcripts for all configs of each target_id. Note that we either include
     // all transcript results for a target_id or none of them.
     let mut selected_transcripts = vec![];
-    for (target_id, configs) in remote_configs {
-        // Lookup the callback id and the expected number of configs for this target_id
-        let Some((expected_config_num, callback_id)) = callback_id_map.get(&target_id) else {
-            warn!(
-                logger,
-                "Unable to find callback id associated with remote target id {target_id:?} at block height {}",
-                parent.height.increment()
-            );
-            continue;
-        };
-
-        // Check that we have the expected number of configs for this target_id
-        if configs.len() != *expected_config_num {
-            // This may happen if we did not manage to create all required transcripts as part of
-            // the last summary block. We will handle this in the next summary block instead.
-            continue;
-        }
-
+    for (callback_id, config_results) in callback_id_map.into_iter() {
         // Ensure that creating these transcripts would not exceed the maximum number of early
         // remote transcripts. We continue with the next target_id in case it requires less
         // transcripts.
-        if selected_transcripts.len() + configs.len() > MAX_EARLY_REMOTE_TRANSCRIPTS {
+        if selected_transcripts.len() + config_results.len() > MAX_EARLY_REMOTE_TRANSCRIPTS {
+            continue;
+        }
+
+        let (mut configs, mut errs) = (vec![], vec![]);
+        for config_result in config_results {
+            match config_result {
+                Ok(config) => configs.push(config),
+                Err((dkg_id, err)) => errs.push((dkg_id, err)),
+            }
+        }
+
+        if !errs.is_empty() {
+            for (dkg_id, err) in errs {
+                error!(
+                    logger,
+                    "Failed to create early remote transcript for dkg id {:?} at height {}: {}",
+                    dkg_id,
+                    parent.height.increment(),
+                    err
+                );
+                selected_transcripts.push((dkg_id, callback_id, Err(err)));
+            }
             continue;
         }
 
         // If any of the configs has less dealings than the threshold, we skip this target_id
-        if configs.iter().any(|config| {
+        if configs.iter().any(|config: &NiDkgConfig| {
             let dealings_count = all_dealings
                 .get(config.dkg_id())
                 .map_or(0, |dealings| dealings.len());
@@ -306,7 +336,7 @@ pub(crate) fn create_early_remote_transcripts(
                     return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
                 }
             };
-            selected_transcripts.push((config.dkg_id().clone(), *callback_id, transcript_result));
+            selected_transcripts.push((config.dkg_id().clone(), callback_id, transcript_result));
         }
     }
 
@@ -1078,6 +1108,94 @@ fn build_target_id_callback_map(
                 .iter()
                 .map(|(&callback_id, context)| (context.target_id, (1, callback_id))),
         )
+        .collect()
+}
+
+pub fn build_target_id_config_map(
+    dealer_subnet: SubnetId,
+    start_block_height: Height,
+    registry_client: &dyn RegistryClient,
+    state: &ReplicatedState,
+    registry_version: RegistryVersion,
+    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+    completed_target_ids: &BTreeSet<NiDkgTargetId>,
+) -> BTreeMap<CallbackId, Vec<Result<NiDkgConfig, (NiDkgId, String)>>> {
+    let call_contexts = &state.metadata.subnet_call_context_manager;
+    let setup_initial_dkg_configs = call_contexts
+        .setup_initial_dkg_contexts
+        .iter()
+        .filter(|(_, context)| {
+            context.registry_version <= registry_version
+                && !completed_target_ids.contains(&context.target_id)
+        })
+        .filter_map(|(&callback_id, context)| {
+            let dealers =
+                get_node_list(dealer_subnet, registry_client, context.registry_version).ok()?;
+            let low_thr_dkg_id = NiDkgId {
+                start_block_height,
+                dealer_subnet,
+                dkg_tag: NiDkgTag::LowThreshold,
+                target_subnet: NiDkgTargetSubnet::Remote(context.target_id),
+            };
+            let high_thr_dkg_id = NiDkgId {
+                start_block_height,
+                dealer_subnet,
+                dkg_tag: NiDkgTag::HighThreshold,
+                target_subnet: NiDkgTargetSubnet::Remote(context.target_id),
+            };
+            let low_thr_config = create_remote_dkg_config(
+                low_thr_dkg_id.clone(),
+                &dealers,
+                &context.nodes_in_target_subnet,
+                &context.registry_version,
+                None,
+            )
+            .map_err(|err| (low_thr_dkg_id, err.to_string()));
+            let high_thr_config = create_remote_dkg_config(
+                high_thr_dkg_id.clone(),
+                &dealers,
+                &context.nodes_in_target_subnet,
+                &context.registry_version,
+                None,
+            )
+            .map_err(|err| (high_thr_dkg_id, err.to_string()));
+
+            Some((callback_id, vec![low_thr_config, high_thr_config]))
+        });
+
+    // rehsare chain key contexts
+    let reshare_chain_key_configs = call_contexts
+        .reshare_chain_key_contexts
+        .iter()
+        .filter(|(_, context)| {
+            context.registry_version <= registry_version
+                && !completed_target_ids.contains(&context.target_id)
+        })
+        .filter_map(|(&callback_id, context)| {
+            let key_id = NiDkgMasterPublicKeyId::try_from(context.key_id.clone()).ok()?;
+            let tag = NiDkgTag::HighThresholdForKey(key_id);
+            let reshared_transcript = reshared_transcripts.get(&tag)?;
+            let dealers =
+                get_node_list(dealer_subnet, registry_client, context.registry_version).ok()?;
+            let dkg_id = NiDkgId {
+                start_block_height,
+                dealer_subnet,
+                dkg_tag: tag,
+                target_subnet: NiDkgTargetSubnet::Remote(context.target_id),
+            };
+            let config = create_remote_dkg_config(
+                dkg_id.clone(),
+                &dealers,
+                &context.nodes,
+                &context.registry_version,
+                Some(reshared_transcript.clone()),
+            )
+            .map_err(|err| (dkg_id, err.to_string()));
+            Some((callback_id, vec![config]))
+        });
+
+    setup_initial_dkg_configs
+        .chain(reshare_chain_key_configs)
         .collect()
 }
 

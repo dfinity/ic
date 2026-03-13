@@ -1,3 +1,5 @@
+use crate::get_configs_for_start_height;
+
 use self::payload_builder::create_early_remote_transcripts;
 use super::{crypto_validate_dealing, payload_builder, utils};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -11,7 +13,7 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    SubnetId,
+    Height, SubnetId,
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload,
@@ -117,6 +119,9 @@ pub fn validate_payload(
                 });
 
             validate_dealings_payload(
+                subnet_id,
+                last_summary_block.height,
+                registry_client,
                 crypto,
                 pool_reader,
                 dkg_pool,
@@ -136,6 +141,9 @@ pub fn validate_payload(
 // Validates the payload containing dealings.
 #[allow(clippy::result_large_err)]
 fn validate_dealings_payload(
+    subnet_id: SubnetId,
+    start_block_height: Height,
+    registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
@@ -181,6 +189,15 @@ fn validate_dealings_payload(
         return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
     }
 
+    let configs = get_configs_for_start_height(
+        subnet_id,
+        registry_client,
+        state_manager,
+        validation_context.registry_version,
+        start_block_height,
+        last_summary,
+    );
+
     // Check that all messages have a valid DKG config from the summary and the
     // dealer is valid, then verify each dealing.
     for message in &dealings.messages {
@@ -192,7 +209,7 @@ fn validate_dealings_payload(
             continue;
         }
 
-        let Some(config) = last_summary.configs.get(&message.content.dkg_id) else {
+        let Some(config) = configs.get(&message.content.dkg_id) else {
             return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
         };
 
@@ -203,6 +220,9 @@ fn validate_dealings_payload(
     // If we have early transcripts, we compare them
     if !dealings.transcripts_for_remote_subnets.is_empty() {
         let expected_transcripts = create_early_remote_transcripts(
+            subnet_id,
+            start_block_height,
+            registry_client,
             pool_reader,
             crypto,
             parent,
