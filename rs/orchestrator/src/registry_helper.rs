@@ -169,11 +169,11 @@ impl RegistryHelper {
 
     pub(crate) fn get_firewall_rules(
         &self,
-        version: RegistryVersion,
         scope: &FirewallRulesScope,
+        version: RegistryVersion,
     ) -> OrchestratorResult<Option<FirewallRuleSet>> {
         self.registry_client
-            .get_firewall_rules(version, scope)
+            .get_firewall_rules(scope, version)
             .map_err(OrchestratorError::RegistryClientError)
     }
 
@@ -185,23 +185,23 @@ impl RegistryHelper {
 
     pub(crate) fn get_subnet_nodes_ip_addresses_of_types(
         &self,
-        version: RegistryVersion,
         subnet_types: impl IntoIterator<Item = SubnetType>,
+        version: RegistryVersion,
     ) -> OrchestratorResult<Vec<IpAddr>> {
         let ips = self
             .registry_client
-            .get_subnet_nodes_ip_addresses_of_types(version, subnet_types)?;
+            .get_subnet_nodes_ip_addresses_of_types(subnet_types, version)?;
 
         Ok(ips.unwrap_or_default())
     }
 
     pub(crate) fn get_available_ip_addresses_for_node_ids(
         &self,
-        version: RegistryVersion,
         node_ids: impl IntoIterator<Item = NodeId>,
+        version: RegistryVersion,
     ) -> Vec<IpAddr> {
         self.registry_client
-            .get_available_ip_addresses_for_node_ids(version, node_ids)
+            .get_available_ip_addresses_for_node_ids(node_ids, version)
     }
 
     pub(crate) fn get_subnet_id_from_node_id(

@@ -104,7 +104,7 @@ impl Firewall {
         logger: &ReplicaLogger,
     ) -> Vec<FirewallRule> {
         self.registry
-            .get_firewall_rules(registry_version, scope)
+            .get_firewall_rules(scope, registry_version)
             .inspect_err(|err| {
                 warn!(
                     every_n_seconds => 30,
@@ -288,7 +288,7 @@ impl Firewall {
                 });
 
                 self.registry
-                    .get_available_ip_addresses_for_node_ids(registry_version, whitelisted_node_ids)
+                    .get_available_ip_addresses_for_node_ids(whitelisted_node_ids, registry_version)
             })
             .collect::<BTreeSet<IpAddr>>();
 
@@ -367,8 +367,8 @@ impl Firewall {
                 .flat_map(|registry_version| {
                     self.registry
                         .get_subnet_nodes_ip_addresses_of_types(
-                            registry_version,
                             [SubnetType::System],
+                            registry_version,
                         )
                         .inspect_err(|err| {
                             warn!(
@@ -385,8 +385,8 @@ impl Firewall {
                 .flat_map(|registry_version| {
                     self.registry
                         .get_subnet_nodes_ip_addresses_of_types(
-                            registry_version,
                             [SubnetType::Application, SubnetType::VerifiedApplication],
+                            registry_version,
                         )
                         .inspect_err(|err| {
                             warn!(

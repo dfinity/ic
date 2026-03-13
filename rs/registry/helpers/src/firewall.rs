@@ -22,20 +22,20 @@ pub trait FirewallRegistry {
 
     fn get_firewall_rules(
         &self,
-        version: RegistryVersion,
         scope: &FirewallRulesScope,
+        version: RegistryVersion,
     ) -> RegistryClientResult<FirewallRuleSet>;
 
     fn get_subnet_nodes_ip_addresses_of_types(
         &self,
-        version: RegistryVersion,
         subnet_types: impl IntoIterator<Item = SubnetType>,
+        version: RegistryVersion,
     ) -> RegistryClientResult<Vec<IpAddr>>;
 
     fn get_available_ip_addresses_for_node_ids(
         &self,
-        version: RegistryVersion,
         node_ids: impl IntoIterator<Item = NodeId>,
+        version: RegistryVersion,
     ) -> Vec<IpAddr>;
 }
 
@@ -51,8 +51,8 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
 
     fn get_firewall_rules(
         &self,
-        version: RegistryVersion,
         scope: &FirewallRulesScope,
+        version: RegistryVersion,
     ) -> RegistryClientResult<FirewallRuleSet> {
         let bytes = self.get_value(&make_firewall_rules_record_key(scope), version);
         deserialize_registry_value::<FirewallRuleSet>(bytes)
@@ -61,8 +61,8 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
     /// Get the IP addresses of all system subnet nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
     fn get_subnet_nodes_ip_addresses_of_types(
         &self,
-        version: RegistryVersion,
         subnet_types: impl IntoIterator<Item = SubnetType>,
+        version: RegistryVersion,
     ) -> RegistryClientResult<Vec<IpAddr>> {
         let subnet_ids = subnet_types
             .into_iter()
@@ -93,14 +93,14 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             .collect::<Vec<_>>();
 
         Ok(Some(self.get_available_ip_addresses_for_node_ids(
-            version, node_ids,
+            node_ids, version,
         )))
     }
 
     fn get_available_ip_addresses_for_node_ids(
         &self,
-        version: RegistryVersion,
         node_ids: impl IntoIterator<Item = NodeId>,
+        version: RegistryVersion,
     ) -> Vec<IpAddr> {
         let mut ip_addresses = HashSet::new();
         for node_id in node_ids {
