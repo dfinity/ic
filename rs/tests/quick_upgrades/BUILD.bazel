@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_binary(
+    name = "quick_upgrade_toy_bin",
+    testonly = True,
+    srcs = ["quick_upgrade_toy.rs"],
+    crate_name = "quick_upgrade_toy_bin",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:regex",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "run_quick_upgrade_toy",
+    enable_mainnet_nns_variant = False,
+    env = MAINNET_ENV,
+    guestos = True,
+    guestos_update = "malicious",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    test_driver_target = ":quick_upgrade_toy_bin",
+    test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+)

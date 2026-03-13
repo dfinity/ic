@@ -9,13 +9,15 @@ use ic_system_test_driver::{
     driver::test_env_api::*,
     nns::{
         get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
-        submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
+        submit_update_elected_replica_versions_proposal, submit_update_nodes_slow_version_proposal,
+        vote_execute_proposal_assert_executed,
     },
     util::runtime_from_url,
 };
-use ic_types::{ReplicaVersion, SubnetId, messages::ReplicaHealthStatus};
+use ic_types::{NodeId, ReplicaVersion, SubnetId, messages::ReplicaHealthStatus};
 use prost::Message;
 use slog::{Logger, info};
+use std::time::Instant;
 use std::{convert::TryFrom, io::Read, path::Path};
 
 pub async fn get_blessed_replica_versions(
@@ -76,6 +78,7 @@ pub fn assert_assigned_replica_version_with_time(
         Finished,
     }
     let mut state = State::Uninitialized;
+    let mut timer = None;
     let result = ic_system_test_driver::retry_with_msg!(
         format!(
             "Check if node {} is healthy and running replica version {}",
@@ -104,6 +107,7 @@ pub fn assert_assigned_replica_version_with_time(
             }
             Err(err) => {
                 state = State::Reboot;
+                timer.get_or_insert_with(|| Instant::now());
                 bail!("Error reading replica version: {:?}", err)
             }
         }
@@ -120,6 +124,97 @@ pub fn assert_assigned_replica_version_with_time(
             State::Finished => {} // All went well eventually
         }
     }
+    if let Some(timer) = timer {
+        info!(
+            logger,
+            "Node was down for: {}s",
+            timer.elapsed().as_secs_f64()
+        );
+    }
+}
+
+pub fn assert_assigned_replica_hash(node: &IcNodeSnapshot, expected_hash: &str, logger: Logger) {
+    assert_assigned_replica_hash_with_time(node, expected_hash, logger, 600, 10)
+}
+
+/// Waits until the node is healthy and running the given replica hash.
+/// Panics if the timeout is reached while waiting.
+pub fn assert_assigned_replica_hash_with_time(
+    node: &IcNodeSnapshot,
+    expected_hash: &str,
+    logger: Logger,
+    total_secs: u64,
+    backoff_secs: u64,
+) {
+    info!(
+        logger,
+        "Waiting until the node {} is healthy and running replica hash {}",
+        node.get_ip_addr(),
+        expected_hash
+    );
+
+    #[derive(PartialEq)]
+    enum State {
+        Uninitialized,
+        OldHash,
+        Reboot,
+        OldHashAgain,
+        Finished,
+    }
+    let mut state = State::Uninitialized;
+    let mut timer = None;
+    let result = ic_system_test_driver::retry_with_msg!(
+        format!(
+            "Check if node {} is healthy and running replica hash {}",
+            node.get_ip_addr(),
+            expected_hash
+        ),
+        logger.clone(),
+        secs(total_secs),
+        secs(backoff_secs),
+        || match get_assigned_replica_hash(node) {
+            Ok(hash) if &hash == expected_hash => {
+                state = State::Finished;
+                Ok(())
+            }
+            Ok(hash) => {
+                if state == State::Uninitialized || state == State::OldHash {
+                    state = State::OldHash
+                } else {
+                    state = State::OldHashAgain
+                }
+                bail!(
+                    "Node is running the old replica hash: {}. Expected: {}",
+                    hash,
+                    expected_hash
+                )
+            }
+            Err(err) => {
+                state = State::Reboot;
+                timer.get_or_insert_with(|| Instant::now());
+                bail!("Error reading replica hash: {:?}", err)
+            }
+        }
+    );
+    if let Err(error) = result {
+        info!(logger, "Error: {}", error);
+        match state {
+            State::Uninitialized => panic!("No hash is fetched at all!"),
+            State::OldHash => panic!("Replica was running the old hash only!"),
+            State::Reboot => {
+                panic!("Replica did reboot, but never came back online!")
+            }
+            State::OldHashAgain => panic!("Replica rebooted to a wrong hash!"),
+            State::Finished => {} // All went well eventually
+        }
+    }
+    if let Some(timer) = timer {
+        info!(
+            logger,
+            "Node was down for: {}s",
+            timer.elapsed().as_secs_f64()
+        );
+    }
 }
 
 /// Gets the replica version from the node if it is healthy.
@@ -135,6 +230,17 @@ pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<ReplicaVers
     ReplicaVersion::try_from(version).map_err(|_| "Invalid replica version".to_string())
 }
 
+/// Gets the replica hash from the node if it is healthy.
+pub fn get_assigned_replica_hash(node: &IcNodeSnapshot) -> Result<String, String> {
+    match node.status() {
+        Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
+        Ok(status) => return Err(format!("Replica is not healthy: {status:?}")),
+        Err(err) => return Err(err.to_string()),
+    }
+    .impl_hash
+    .ok_or("No hash found in status".to_string())
+}
+
 pub async fn bless_replica_version(
     nns_node: &IcNodeSnapshot,
     target_version: &ReplicaVersion,
@@ -142,6 +248,9 @@ pub async fn bless_replica_version(
     sha256: String,
     guest_launch_measurements: Option<GuestLaunchMeasurements>,
     upgrade_url: Vec<String>,
+    replica_urls: Vec<String>,
+    replica_sha256_hash: Option<String>,
+    fast_upgrade: bool,
 ) {
     bless_replica_version_with_urls(
         nns_node,
@@ -150,6 +259,9 @@ pub async fn bless_replica_version(
         sha256,
         guest_launch_measurements,
         logger,
+        replica_urls,
+        replica_sha256_hash,
+        fast_upgrade,
     )
     .await;
 }
@@ -161,6 +273,9 @@ pub async fn bless_replica_version_with_urls(
     sha256: String,
     guest_launch_measurements: Option<GuestLaunchMeasurements>,
     logger: &Logger,
+    replica_urls: Vec<String>,
+    replica_sha256_hex: Option<String>,
+    fast_upgrade: bool,
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
@@ -184,6 +299,9 @@ pub async fn bless_replica_version_with_urls(
         release_package_urls,
         guest_launch_measurements,
         vec![],
+        replica_urls,
+        replica_sha256_hex,
+        fast_upgrade,
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
@@ -206,6 +324,26 @@ pub async fn deploy_guestos_to_all_subnet_nodes(
         test_neuron_id,
         new_replica_version.clone(),
         subnet_id,
+    )
+    .await;
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+}
+
+pub async fn deploy_slow_to_subnet_node(
+    nns_node: &IcNodeSnapshot,
+    new_replica_version: &ReplicaVersion,
+    node_id: NodeId,
+) {
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance_canister = get_governance_canister(&nns);
+    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+    let proposal_id = submit_update_nodes_slow_version_proposal(
+        &governance_canister,
+        proposal_sender.clone(),
+        test_neuron_id,
+        new_replica_version.clone(),
+        vec![node_id],
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;

@@ -4107,6 +4107,7 @@ pub enum NnsFunction {
     /// UpdateConfigOfSubnet can be used instead. But otherwise, this is the
     /// state of the art (as of Oct 2025) way of doing subnet recovery.
     SetSubnetOperationalLevel = 55,
+    DeploySlowToSomeNodes = 56,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4190,6 +4191,7 @@ impl NnsFunction {
             NnsFunction::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
             NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
+            NnsFunction::DeploySlowToSomeNodes => "NNS_FUNCTION_DEPLOY_SLOW_TO_SOME_NODES",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

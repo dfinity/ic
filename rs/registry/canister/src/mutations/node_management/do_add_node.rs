@@ -198,6 +198,7 @@ impl Registry {
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
             node_operator_id: caller_id.into_vec(),
             hostos_version_id: None,
+            slow_version_id: None,
             chip_id,
             public_ipv4_config: ipv4_intf_config,
             domain,

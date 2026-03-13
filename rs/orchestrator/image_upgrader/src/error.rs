@@ -31,7 +31,7 @@ impl UpgradeError {
         UpgradeError::RebootTimeError(msg.to_string())
     }
 
-    pub(crate) fn file_command_error(e: io::Error, cmd: &Command) -> Self {
+    pub fn file_command_error(e: io::Error, cmd: &Command) -> Self {
         UpgradeError::IoError(format!("Failed to executing command: {cmd:?}"), e)
     }
 }
