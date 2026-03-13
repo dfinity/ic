@@ -175,11 +175,6 @@ message SubnetListRecord {
   repeated bytes subnets = 2;
 }
 
-message DeletedSubnetListRecord {
-  // A list of subnet IDs of all deleted subnets.
-  repeated bytes deleted_subnets = 1;
-}
-
 // Initial non-interactive DKG transcript record
 message InitialNiDkgTranscriptRecord {
   types.v1.NiDkgId id = 1;
