@@ -26,6 +26,8 @@ fn check_no_failed_systemd_units(env: TestEnv) {
     let topology = env.topology_snapshot();
 
     for node in topology.subnets().flat_map(|s| s.nodes()) {
+        node.await_status_is_healthy()
+            .expect("Node's status endpoint didn't report healthy");
         node.await_can_login_as_admin_via_ssh()
             .expect("Failed to establish SSH session to GuestOS node");
 
