@@ -567,6 +567,22 @@ pub async fn create_and_install_mock_exchange_rate_canister(
     install_mock_exchange_rate_canister(&mut mock_exchange_rate_canister, init_payload).await;
 }
 
+/// Warning: This assumes that canisters with ID smaller than that of the
+/// Subnet Rental canister have all already been created.
+pub async fn create_and_install_mock_subnet_rental_canister(runtime: &'_ Runtime) -> Canister<'_> {
+    // Create canisters in a loop until we hit SUBNET_RENTAL_CANISTER_ID.
+    // This is a hack similar to the one in `create_and_install_mock_exchange_rate_canister`.
+    // See the comment there for more details.
+    for _ in 0..100 {
+        let mut canister = runtime.create_canister(Some(0)).await.unwrap();
+        if canister.canister_id() == SUBNET_RENTAL_CANISTER_ID {
+            install_universal_canister(&mut canister).await;
+            return canister;
+        }
+    }
+    panic!("Could not set up mock subnet rental canister");
+}
+
 /// Compiles the governance canister, builds it's initial payload and installs
 /// it
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
