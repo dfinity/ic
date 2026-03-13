@@ -3,7 +3,7 @@ use anyhow::Result;
 use config_types::{GuestOSConfig, ICOSSettings};
 use guest_disk::crypt::{
     KeyslotMetadata, activate_crypt_device, check_encryption_key, deactivate_crypt_device,
-    format_crypt_device, open_luks2_device, write_keyslot_metadata,
+    format_crypt_device, open_luks2_device, read_keyslot_metadata, write_keyslot_metadata,
 };
 use guest_disk::sev::can_open_store;
 use ic_device::device_mapping::{Bytes, TempDevice};
@@ -196,6 +196,7 @@ fn test_does_not_change_existing_generated_key() {
 fn test_sev_key_init_and_reopen() {
     for partition in [Partition::Store, Partition::Var] {
         let mut fixture = TestFixture::new(true);
+        let device_path = fixture.device.path().unwrap();
         let crypt_device_path = get_crypt_device(partition);
 
         assert!(!crypt_device_path.exists());
@@ -214,13 +215,32 @@ fn test_sev_key_init_and_reopen() {
         fs::write(crypt_device_path, "test_data")
             .expect("Failed to write test data to encrypted partition");
 
-        // Test reopening
+        let tcb_after_format = {
+            let mut cd = open_luks2_device(&device_path).unwrap();
+            read_keyslot_metadata(&mut cd).unwrap()[0]
+                .sev_metadata
+                .tcb_version
+        };
+
+        // Test reopening — TCB must not change when the firmware is unchanged.
         deactive_crypt_device_with_check(crypt_name(partition));
         fixture
             .open(partition)
             .expect("Failed to reopen partition with SEV key");
 
         assert_device_has_content(crypt_device_path, b"test_data");
+        deactive_crypt_device_with_check(crypt_name(partition));
+
+        let tcb_after_reopen = {
+            let mut cd = open_luks2_device(&device_path).unwrap();
+            read_keyslot_metadata(&mut cd).unwrap()[0]
+                .sev_metadata
+                .tcb_version
+        };
+        assert_eq!(
+            tcb_after_reopen, tcb_after_format,
+            "token TCB must not change when firmware is unchanged"
+        );
     }
 }
 
@@ -329,7 +349,11 @@ fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
     .unwrap();
 
     let mut crypt_device = open_luks2_device(&fixture.device.path().unwrap()).unwrap();
-    write_keyslot_metadata(&mut crypt_device, &KeyslotMetadata::new(keyslot, &[42], 42)).unwrap();
+    write_keyslot_metadata(
+        &mut crypt_device,
+        &KeyslotMetadata::new_sev(keyslot, &[42; 48], 42),
+    )
+    .unwrap();
 
     // Opening it should succeed
     fixture
@@ -449,7 +473,7 @@ fn test_can_open_store_with_derived_key_when_previous_key_fails() {
 
     write_keyslot_metadata(
         &mut open_luks2_device(&fixture.device.path().unwrap()).unwrap(),
-        &KeyslotMetadata::new(keyslot, &[42], 42),
+        &KeyslotMetadata::new_sev(keyslot, &[42; 48], 42),
     )
     .unwrap();
 
@@ -496,5 +520,95 @@ fn test_cannot_open_with_generated_key_if_sev_is_enabled() {
         fixture
             .open(partition)
             .expect_err("opening with generated key should fail when SEV is enabled");
+    }
+}
+
+// Firmware upgrade tests
+//
+// The mock firmware always returns the same raw derived-key bytes regardless of which TCB version
+// is specified in the DerivedKey request. This matches real AMD SEV-SNP hardware behavior: a chip
+// running at a higher firmware version can still derive the key for an older TCB version, so the
+// old passphrase remains accessible after a firmware upgrade.
+//
+// What changes across the upgrade is only `launch_tcb` (the value embedded in the attestation
+// report). The production code stores `launch_tcb` in the LUKS2 token and, upon detecting a
+// mismatch, re-derives the passphrase at the new TCB level and calls `change_by_passphrase`.
+// Because the mock returns the same raw key for any TCB, the passphrase bytes are unchanged here,
+// but the token metadata is updated — which is the observable effect these tests verify.
+
+#[test]
+fn test_sev_firmware_upgrade_rotates_keyslot_metadata() {
+    for partition in [Partition::Store, Partition::Var] {
+        let mut fixture = TestFixture::new(true);
+        let device_path = fixture.device.path().unwrap();
+        let crypt_device_path = get_crypt_device(partition);
+
+        // Format the partition with an initial TCB version.
+        let initial_tcb = TcbVersion::new(None, 1, 0, 0, 0);
+        fixture.sev_firmware_builder = MockSevGuestFirmwareBuilder::new()
+            .with_derived_key(Some([1; 32]))
+            .with_launch_tcb(initial_tcb);
+        fixture.format(partition).unwrap();
+
+        // Record the TCB stored in the LUKS2 token at format time.
+        let initial_stored_tcb = {
+            let mut cd = open_luks2_device(&device_path).unwrap();
+            read_keyslot_metadata(&mut cd).unwrap()[0]
+                .sev_metadata
+                .tcb_version
+        };
+
+        // Write data to verify it survives the upgrade.
+        fixture.open(partition).unwrap();
+        fs::write(crypt_device_path, "data before upgrade").unwrap();
+        deactive_crypt_device_with_check(crypt_name(partition));
+
+        // Simulate a firmware upgrade: bump the launch TCB.
+        // The raw derived key stays the same — the mock models real hardware where older TCB keys
+        // remain derivable from the upgraded firmware, so the on-disk passphrase is still valid.
+        let upgraded_tcb = TcbVersion::new(None, 2, 0, 0, 0);
+        fixture.sev_firmware_builder = MockSevGuestFirmwareBuilder::new()
+            .with_derived_key(Some([1; 32]))
+            .with_launch_tcb(upgraded_tcb);
+
+        // Opening with the upgraded firmware must succeed.
+        // Internally: the old passphrase (derived with initial_tcb) unlocks the slot, then the
+        // mismatch between the token TCB and launch_tcb triggers key rotation.
+        fixture
+            .open(partition)
+            .expect("open after firmware upgrade should succeed");
+
+        // Data written before the upgrade must still be readable.
+        assert_device_has_content(crypt_device_path, b"data before upgrade");
+        deactive_crypt_device_with_check(crypt_name(partition));
+
+        // The LUKS2 token must now record the upgraded TCB.
+        let upgraded_stored_tcb = {
+            let mut cd = open_luks2_device(&device_path).unwrap();
+            read_keyslot_metadata(&mut cd).unwrap()[0]
+                .sev_metadata
+                .tcb_version
+        };
+        assert_ne!(
+            upgraded_stored_tcb, initial_stored_tcb,
+            "token TCB should have been updated after firmware upgrade"
+        );
+
+        // A subsequent open at the same (upgraded) TCB must succeed without further rotation.
+        fixture
+            .open(partition)
+            .expect("re-open after TCB rotation should succeed");
+        deactive_crypt_device_with_check(crypt_name(partition));
+
+        let final_stored_tcb = {
+            let mut cd = open_luks2_device(&device_path).unwrap();
+            read_keyslot_metadata(&mut cd).unwrap()[0]
+                .sev_metadata
+                .tcb_version
+        };
+        assert_eq!(
+            final_stored_tcb, upgraded_stored_tcb,
+            "token TCB should be stable on second open with the same firmware"
+        );
     }
 }

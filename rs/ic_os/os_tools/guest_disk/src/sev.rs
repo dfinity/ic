@@ -3,7 +3,7 @@ use crate::crypt::{
     format_crypt_device, open_luks2_device, read_keyslot_metadata, write_keyslot_metadata,
 };
 use crate::{DiskEncryption, Partition, activate_flags};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use attestation::attestation_report::AttestationReportExt;
 use config_types::GuestVMType;
 use hex;
@@ -70,7 +70,7 @@ impl SevDiskEncryption<'_> {
 
         // Update LUKS2 token metadata for the new key slot (write_key_slot_metadata
         // replaces any existing token for this keyslot automatically).
-        let metadata = KeyslotMetadata::new(
+        let metadata = KeyslotMetadata::new_sev(
             new_keyslot,
             &report.measurement,
             report
@@ -133,7 +133,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
             }
         }
 
-        let measurement_hex = hex::encode(&report.measurement);
+        let launch_measurement_hex = hex::encode(&report.measurement);
         let keyslot_metadata =
             read_keyslot_metadata(&mut crypt_device).context("Failed to get active keyslots")?;
         ensure!(!keyslot_metadata.is_empty(), "No active keyslots found");
@@ -145,7 +145,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                 let key = derive_key_from_sev_measurement(
                     self.sev_firmware.as_mut(),
                     Key::DiskEncryptionKey { device_path },
-                    Some(candidate.tcb_version),
+                    Some(candidate.sev_metadata.tcb_version),
                 )
                 .context("Failed to derive key via SEV")?;
 
@@ -157,13 +157,14 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                     Some(candidate.keyslot()?),
                 )
                 .with_context(|| {
-                    if candidate.measurement == measurement_hex {
-                        "Failed to activate device with keyslot".to_string()
+                    if candidate.sev_metadata.launch_measurement_hex == launch_measurement_hex {
+                        "Failed to activate device with keyslot even though measurements match"
+                            .to_string()
                     } else {
                         format!(
                             "Failed to activate device with keyslot (keyslot measurement: {}, \
                                 own measurement: {})",
-                            candidate.measurement, measurement_hex
+                            candidate.sev_metadata.launch_measurement_hex, launch_measurement_hex
                         )
                     }
                 })?;
@@ -186,7 +187,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
 
         println!("Activated keyslot {}", metadata.keyslot()?);
 
-        if metadata.tcb_version != launch_tcb {
+        if metadata.sev_metadata.tcb_version != launch_tcb {
             println!(
                 "TCB version changed, rotating LUKS key slots for {}",
                 device_path.display()
@@ -208,10 +209,8 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                 )
                 .context("Failed to change passphrase during TCB rotation")?;
 
-            let new_metadata = KeyslotMetadata {
-                tcb_version: launch_tcb,
-                ..metadata
-            };
+            let mut new_metadata = metadata;
+            new_metadata.sev_metadata.tcb_version = launch_tcb;
             write_keyslot_metadata(&mut crypt_device, &new_metadata)
                 .context("Failed to write token metadata")?;
         }
@@ -235,7 +234,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
         let (mut crypt_device, keyslot) = format_crypt_device(device_path, key.as_bytes())
             .context("Failed to format partition")?;
 
-        let metadata = KeyslotMetadata::new(keyslot, &report.measurement, launch_tcb);
+        let metadata = KeyslotMetadata::new_sev(keyslot, &report.measurement, launch_tcb);
         write_keyslot_metadata(&mut crypt_device, &metadata).context("Failed to write metadata")?;
         Ok(())
     }
@@ -263,7 +262,7 @@ pub fn can_open_store(
         if let Ok(derived_key) = derive_key_from_sev_measurement(
             sev_firmware,
             Key::DiskEncryptionKey { device_path },
-            Some(token.tcb_version),
+            Some(token.sev_metadata.tcb_version),
         ) {
             if check_encryption_key(device_path, derived_key.as_bytes()).is_ok() {
                 return Ok(true);

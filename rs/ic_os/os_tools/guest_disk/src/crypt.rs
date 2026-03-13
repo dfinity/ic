@@ -21,26 +21,35 @@ const LUKS2_N_TOKENS: u32 = 32;
 
 /// Metadata stored as a LUKS2 token for each key slot. Records the parameters
 /// that were used to derive the encryption key in that slot.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyslotMetadata {
     /// LUKS2 token type — must be set to [`IC_KEY_TOKEN_TYPE`].
     #[serde(rename = "type")]
     pub token_type: String,
     /// Key slots this token is associated with (LUKS2 requires this field).
     pub keyslots: Vec<String>,
+    /// Metadata used to derive the key this token refers to.
+    // Can be made optional in the future if other token types are added.
+    pub sev_metadata: SevMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SevMetadata {
     /// Hex-encoded SEV launch measurement (96 lowercase hex chars).
-    pub measurement: String,
+    pub launch_measurement_hex: String,
     /// TCB version (raw `u64`, little-endian AMD SEV-SNP ABI layout) used for key derivation.
     pub tcb_version: u64,
 }
 
 impl KeyslotMetadata {
-    pub fn new(keyslot: u32, measurement: &[u8], tcb_version: u64) -> Self {
+    pub fn new_sev(keyslot: u32, launch_measurement: &[u8; 48], tcb_version: u64) -> Self {
         Self {
             token_type: IC_KEY_TOKEN_TYPE.to_string(),
             keyslots: vec![keyslot.to_string()],
-            measurement: hex::encode(measurement),
-            tcb_version,
+            sev_metadata: SevMetadata {
+                launch_measurement_hex: hex::encode(launch_measurement),
+                tcb_version,
+            },
         }
     }
 
@@ -206,28 +215,35 @@ pub fn read_keyslot_metadata(crypt_device: &mut CryptDevice) -> Result<Vec<Keysl
     let mut token_handle = crypt_device.token_handle();
     for token_id in 0..LUKS2_N_TOKENS {
         let status = token_handle.status(token_id);
-        match status {
-            Ok(CryptTokenInfo::External(ref t)) | Ok(CryptTokenInfo::ExternalUnknown(ref t))
-                if t == IC_KEY_TOKEN_TYPE =>
-            {
-                match token_handle.json_get(token_id) {
-                    Ok(json) => {
-                        let meta: KeyslotMetadata = serde_json::from_value(json)
-                            .context("Failed to parse IC SEV token metadata")?;
-                        if let Err(err) = meta.keyslot() {
-                            eprintln!("Warning: token {token_id}: {err:#}");
-                        } else {
-                            result.push(meta);
-                        }
-                    }
-                    Err(err) => {
-                        eprintln!("Warning: failed to read token {token_id}: {err:#}");
-                    }
-                }
-            }
-            _ => {}
+
+        let (Ok(CryptTokenInfo::External(ref token_type))
+        | Ok(CryptTokenInfo::ExternalUnknown(ref token_type))) = status
+        else {
+            continue;
+        };
+
+        if token_type != IC_KEY_TOKEN_TYPE {
+            continue;
         }
+
+        let Ok(json) = token_handle.json_get(token_id) else {
+            eprintln!("Warning: failed to read token {token_id}");
+            continue;
+        };
+
+        let Ok(metadata) = serde_json::from_value::<KeyslotMetadata>(json) else {
+            eprintln!("Warning: failed to parse token {token_id}");
+            continue;
+        };
+
+        if let Err(err) = metadata.keyslot() {
+            eprintln!("Warning: invalid keyslot in token {token_id}: {err:#}");
+            continue;
+        }
+
+        result.push(metadata);
     }
+
     Ok(result)
 }
 
