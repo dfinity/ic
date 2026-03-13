@@ -365,11 +365,9 @@ fn valid_keys_from_payload(
         None => return Err(String::from("idkg_dealing_encryption_pk is missing")),
         Some(e) if e.is_empty() => return Err(String::from("idkg_dealing_encryption_pk is empty")),
 
-        Some(e) => {
-            PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {
-                format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
-            })?
-        }
+        Some(e) => PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {
+            format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
+        })?,
     };
 
     // 3. get the node id from the node_signing_pk
