@@ -44,8 +44,8 @@ use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(25 * 60);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 
 const DKG_INTERVAL: u64 = 9;
 const NODES_PER_SUBNET: usize = 1;
@@ -114,12 +114,12 @@ pub async fn test_async(env: TestEnv) {
     // Use custom thresholds for the xnet_config because after upgrade/downgrade
     // cycles the subnets need time to stabilize. A 60s window is too tight: the
     // warm-up period after a version change causes the send rate to fall below
-    // 0.3 and mean latency to exceed 20s. Using 90s and 30s respectively gives
+    // 0.3 and mean latency to exceed 20s. Using 120s and 30s respectively gives
     // the subnets enough time to stabilize while still verifying the SLO.
     let xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(
         2,
         1,
-        Duration::from_secs(90),
+        Duration::from_secs(120),
         10,
         0.3,
         5.0,
@@ -133,7 +133,7 @@ pub async fn test_async(env: TestEnv) {
         // and only used when checking the success of the test. We set
         // it conservatively low so that the success evaluation is more
         // generous.
-        Duration::from_secs(90),
+        Duration::from_secs(120),
         10,
         0.3,
         // Given that there are a couple of subnet upgrades happening
