@@ -184,6 +184,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         .unwrap_or_default();
 
     Ok(IcConfigTemplate {
+        // TODO https://dfinity.atlassian.net/browse/NODE-1909
         ipv6_prefix,
         ipv4_address,
         ipv4_gateway,

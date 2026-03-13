@@ -11,12 +11,13 @@ use reqwest::header::{HeaderMap, HeaderValue};
 
 use ::reqwest::Method;
 use serde_json::Value;
+use strum::{Display, EnumString};
 
 /// URL of the metadata server
 const METADATA_URL: &str = "http://169.254.169.254";
 
 /// Type of the cloud that we provision from
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, EnumString)]
 pub enum CloudType {
     Aws,
     Gcp,
@@ -119,7 +120,9 @@ impl CloudType {
                 Ok(azure_get_public_ips(json))
             }
 
-            _ => bail!("unimplemented"),
+            _ => bail!(
+                "Currently the public IP discovery is not implemented for this cloud type ({self})"
+            ),
         }
     }
 }

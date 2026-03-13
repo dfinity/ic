@@ -279,12 +279,14 @@ impl NodeRegistration {
         let node_registration_attestation =
             generate_node_registration_attestation(&self.log, &node_signing_pk);
 
-        // Figure out the external IPv6 address to use for the registration
+        // Determine the globally reachable IPv6 to publish in registry (http_endpoint / xnet_endpoint)
         let ipv6_address = tokio::task::spawn_blocking(|| -> Result<Ipv6Addr, anyhow::Error> {
             let mut addr =
                 get_best_interface_ipv6_address().context("unable to detect IPv6 address")?;
 
-            // If the address is link-local or ULA - then probably we're in a cloud environment - try to discover it
+            // If the address is link-local or ULA - then probably we're in a cloud environment - try to discover it.
+            // Of the major clouds this is currently only the case for Azure, which does 1:1 NAT from public to ULL.
+            // Though in the future we might add support for some other cloud that would exhibit the same behaviour.
             if addr.is_unicast_link_local() || addr.is_unique_local() {
                 addr = CloudType::discover()
                     .context("unable to discover cloud type")?
