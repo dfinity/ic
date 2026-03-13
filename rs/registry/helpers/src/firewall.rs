@@ -97,6 +97,9 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
         )))
     }
 
+    /// Get the IP addresses of the given nodes in the registry, for endpoints used for core
+    /// protocol services (xnet, http). If a node record is not found or there's an error fetching
+    /// it, that node will be skipped.
     fn get_available_ip_addresses_for_node_ids(
         &self,
         node_ids: impl IntoIterator<Item = NodeId>,
@@ -105,7 +108,6 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
         let mut ip_addresses = HashSet::new();
         for node_id in node_ids {
             let Ok(Some(node_record)) = self.get_node_record(node_id, version) else {
-                // Skip this node if there's an error fetching the node record or if it's not found
                 continue;
             };
 
