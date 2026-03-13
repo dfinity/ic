@@ -126,36 +126,3 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
         Vec::from_iter(ip_addresses)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::node::NodeRecord;
-    use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_keys::make_node_record_key;
-    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_types::{NodeId, PrincipalId};
-    use std::sync::Arc;
-
-    // Helper function to create a registry client with the provided information.
-    fn create_test_registry_client(
-        registry_version: RegistryVersion,
-        node_records: Vec<(NodeId, NodeRecord)>,
-    ) -> Arc<dyn RegistryClient> {
-        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-        for (node_id, node_record) in node_records.into_iter() {
-            data_provider
-                .add(
-                    &make_node_record_key(node_id),
-                    registry_version,
-                    Some(node_record),
-                )
-                .unwrap();
-        }
-
-        let registry = Arc::new(FakeRegistryClient::new(data_provider));
-        registry.update_to_latest_version();
-        registry as Arc<dyn RegistryClient>
-    }
-}
