@@ -33,6 +33,8 @@ use ic_wasm_types::BinaryEncodedWasm;
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
+
 pub struct WasmtimeInstanceBuilder {
     wasm: Vec<u8>,
     wat: String,
@@ -150,7 +152,7 @@ impl WasmtimeInstanceBuilder {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default()
             .environment_variables(self.environment_variables)
-            .log_memory_limit(4_096)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build();
         let dirty_page_overhead = match self.subnet_type {
             SubnetType::Application => SchedulerConfig::application_subnet(),

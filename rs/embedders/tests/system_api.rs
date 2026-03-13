@@ -2034,7 +2034,7 @@ fn test_save_log_message_adds_canister_log_records() {
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default()
-            .log_memory_limit(4_096)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
@@ -2059,7 +2059,7 @@ fn test_save_log_message_invalid_message_size() {
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default()
-            .log_memory_limit(4_096)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
@@ -2082,7 +2082,7 @@ fn test_save_log_message_invalid_message_offset() {
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default()
-            .log_memory_limit(4_096)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
@@ -2104,7 +2104,7 @@ fn test_save_log_message_trims_long_message() {
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default()
-            .log_memory_limit(4_096)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
@@ -2125,7 +2125,7 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default()
-            .log_memory_limit(4_096)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
