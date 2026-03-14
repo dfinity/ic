@@ -213,8 +213,6 @@ pub struct ExecutionStateSnapshot {
 /// Contains all information related to a canister snapshot.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct CanisterSnapshot {
-    /// Identifies the canister to which this snapshot belongs.
-    canister_id: CanisterId,
     /// Whether this snapshot was created from the canister or uploaded manually.
     source: SnapshotSource,
     /// The timestamp indicating the moment the snapshot was captured.
@@ -234,7 +232,6 @@ pub struct CanisterSnapshot {
 
 impl CanisterSnapshot {
     pub fn new(
-        canister_id: CanisterId,
         source: SnapshotSource,
         taken_at_timestamp: Time,
         canister_version: u64,
@@ -244,7 +241,6 @@ impl CanisterSnapshot {
         size: NumBytes,
     ) -> CanisterSnapshot {
         Self {
-            canister_id,
             source,
             taken_at_timestamp,
             canister_version,
@@ -282,7 +278,6 @@ impl CanisterSnapshot {
         };
 
         Ok(CanisterSnapshot {
-            canister_id,
             source: SnapshotSource::taken_from_canister(),
             taken_at_timestamp,
             canister_version: canister.system_state.canister_version(),
@@ -326,7 +321,6 @@ impl CanisterSnapshot {
         };
         let chunk_store = WasmChunkStore::new(Arc::clone(&fd_factory));
         Self {
-            canister_id: CanisterId::try_from(metadata.canister_id).unwrap(),
             source: SnapshotSource::metadata_upload(),
             taken_at_timestamp,
             canister_version,
@@ -335,10 +329,6 @@ impl CanisterSnapshot {
             chunk_store,
             execution_snapshot,
         }
-    }
-
-    pub fn canister_id(&self) -> CanisterId {
-        self.canister_id
     }
 
     pub fn source(&self) -> SnapshotSource {
@@ -617,7 +607,6 @@ mod tests {
             on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
         };
         let snapshot = CanisterSnapshot::new(
-            canister_id,
             SnapshotSource::taken_from_canister(),
             UNIX_EPOCH,
             0,
