@@ -136,17 +136,30 @@ impl CanisterSnapshots {
     /// Returns the amount of memory taken by all canister snapshots
     /// of a single canister.
     pub fn memory_taken(&self) -> NumBytes {
-        // The running sum of the memory usage of all canister snapshots should
-        // be the same as the one computed by iterating over all snapshots.
-        debug_assert_eq!(
-            self.snapshots
-                .values()
-                .map(|snapshot| snapshot.size())
-                .sum::<NumBytes>(),
-            self.memory_usage
-        );
+        if cfg!(debug_assertions) {
+            self.check_invariants()
+                .expect("Canister invariant check failed");
+        }
 
         self.memory_usage
+    }
+
+    pub fn check_invariants(&self) -> Result<(), String> {
+        // The running sum of the memory usage of all canister snapshots should
+        // be the same as the one computed by iterating over all snapshots.
+        let actual_memory_usage = self
+            .snapshots
+            .values()
+            .map(|snapshot| snapshot.size())
+            .sum::<NumBytes>();
+        if actual_memory_usage != self.memory_usage {
+            return Err(format!(
+                "Actual canister snapshot memory usage {} does not match cached memory usage {}",
+                actual_memory_usage, self.memory_usage
+            ));
+        }
+
+        Ok(())
     }
 }
 

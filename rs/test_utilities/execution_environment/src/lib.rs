@@ -312,6 +312,7 @@ pub struct ExecutionTest {
     chain_key_data: ChainKeyData,
     replica_version: ReplicaVersion,
     canister_snapshot_baseline_instructions: NumInstructions,
+    execution_config: Config,
 
     // The actual implementation.
     exec_env: Arc<ExecutionEnvironment>,
@@ -1263,6 +1264,7 @@ impl ExecutionTest {
             result.instructions_used.unwrap(),
             cost_schedule,
         );
+        self.check_invariants();
     }
 
     /// Executes a query sent by the system in the given canister.
@@ -1363,6 +1365,9 @@ impl ExecutionTest {
             .unregister_callback(response.originator_reply_callback)
             .unwrap()
             .unwrap();
+        canister
+            .system_state
+            .release_reserved_response_slot_for_testing(&response);
         let result = self.exec_env.execute_canister_response(
             canister,
             Arc::new(response),
@@ -1393,6 +1398,7 @@ impl ExecutionTest {
         self.update_execution_stats(canister_id, instructions_used, cost_schedule);
         state.put_canister_state(canister);
         self.state = Some(state);
+        self.check_invariants();
         response
     }
 
@@ -1687,6 +1693,7 @@ impl ExecutionTest {
         } else {
             assert_eq!(slice_instructions_used.get(), 0);
         }
+        self.check_invariants();
         true
     }
 
@@ -1759,6 +1766,7 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         state.put_canister_states(canisters);
         self.state = Some(state);
+        self.check_invariants();
         executed_any
     }
 
@@ -1896,6 +1904,7 @@ impl ExecutionTest {
                 self.state = Some(state);
             }
         }
+        self.check_invariants();
     }
 
     /// Aborts all paused executions.
@@ -2212,6 +2221,14 @@ impl ExecutionTest {
 
         let state_after_split = state.online_split(subnet_id, other_subnet_id).unwrap();
         self.state = Some(state_after_split);
+    }
+
+    pub fn check_invariants(&self) {
+        for canister in self.state.as_ref().unwrap().canisters_iter() {
+            canister
+                .check_invariants(&self.execution_config.embedders_config)
+                .expect("Canister invariant check failed");
+        }
     }
 }
 
@@ -3019,6 +3036,7 @@ impl ExecutionTestBuilder {
                 .subnet_config
                 .scheduler_config
                 .canister_snapshot_baseline_instructions,
+            execution_config: self.execution_config,
         }
     }
 }

@@ -1590,6 +1590,15 @@ impl CanisterQueues {
         }
     }
 
+    pub fn release_reserved_response_slot_for_testing(&mut self, response: &Response) {
+        let (input_queue, _output_queue) = self
+            .canister_queues
+            .get_mut(&response.respondent)
+            .expect("No matching queue.");
+        Arc::make_mut(input_queue).release_reserved_response_slot();
+        self.queue_stats.on_push_timeout_response();
+    }
+
     /// Handles the timing out or shedding of an outbound message from the pool.
     ///
     /// Generates and enqueues a reject response if the message was an outbound
