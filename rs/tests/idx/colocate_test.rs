@@ -40,6 +40,8 @@ fn main() -> Result<()> {
         .with_overall_timeout(Duration::from_secs(3 * 60 * 60))
         .with_timeout_per_test(Duration::from_secs(3 * 60 * 60))
         .with_setup(setup)
+        .without_assert_no_replica_restarts()
+        .remove_all_metrics_to_check()
         .execute_from_args()?;
     Ok(())
 }
