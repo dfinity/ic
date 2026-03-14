@@ -312,7 +312,9 @@ chmod +x /home/admin/run
         .join()
         .expect("test execution thread failed");
 
-    fetch_test_dir(env.clone(), &uvm, &session);
+    if env::var("FETCH_TEST_DIR").is_ok() {
+        fetch_test_dir(env.clone(), &uvm, &session);
+    }
 
     info!(
         log,
