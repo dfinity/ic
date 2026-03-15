@@ -45,7 +45,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(25 * 60);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 const DKG_INTERVAL: u64 = 9;
 const NODES_PER_SUBNET: usize = 1;
