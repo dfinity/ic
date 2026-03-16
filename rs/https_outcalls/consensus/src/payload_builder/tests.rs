@@ -381,9 +381,8 @@ fn max_responses() {
 }
 
 /// Timeouts must not count against CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK.
-/// Fill the block with exactly MAX regular responses, then add timed-out
-/// request contexts. The builder should still include timeouts, and the
-/// resulting payload must pass validation.
+/// Create MAX + 50 timed-out request contexts. The builder should include
+/// all of them, and the resulting payload must pass validation.
 #[test]
 fn timeouts_bypass_max_responses_per_block() {
     let subnet_size = 4;
