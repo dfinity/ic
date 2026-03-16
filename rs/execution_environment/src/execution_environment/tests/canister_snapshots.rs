@@ -1109,13 +1109,9 @@ fn list_canister_snapshot_fails_invalid_controller() {
     if let RequestOrResponse::Response(res) = response {
         assert_eq!(res.originator, *receiver);
         res.response_payload.assert_contains_reject(
-            RejectCode::CanisterError,
+            RejectCode::CanisterReject,
             &format!(
-                "Only the controllers of the canister {} can control it.\n\
-                    Canister's controllers: {}\n\
-                    Sender's ID: {}",
-                canister_id,
-                test.user_id().get(),
+                "Caller {} is not allowed to call list_canister_snapshots",
                 caller_canister.get(),
             ),
         );
@@ -2057,7 +2053,7 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 fn read_canister_snapshot_data(
@@ -2427,7 +2423,7 @@ fn read_canister_snapshot_data_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_data", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 #[test]

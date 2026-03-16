@@ -2622,12 +2622,9 @@ impl ExecutionEnvironment {
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(args.get_canister_id(), state)?;
 
-        let result = self
-            .canister_manager
+        self.canister_manager
             .list_canister_snapshot(sender, canister)
-            .map_err(UserError::from)?;
-
-        Ok(Encode!(&result).unwrap())
+            .map(|result| Encode!(&result).unwrap())
     }
 
     /// Deletes the specified canister snapshot if it exists.
@@ -2691,18 +2688,18 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
-        let result = match self.canister_manager.read_snapshot_data(
-            sender,
-            Arc::make_mut(&mut canister),
-            args.get_snapshot_id(),
-            args.kind,
-            state,
-            subnet_size,
-            round_limits,
-        ) {
-            Ok(result) => Ok(Encode!(&result).unwrap()),
-            Err(err) => Err(UserError::from(err)),
-        };
+        let result = self
+            .canister_manager
+            .read_snapshot_data(
+                sender,
+                Arc::make_mut(&mut canister),
+                args.get_snapshot_id(),
+                args.kind,
+                state,
+                subnet_size,
+                round_limits,
+            )
+            .map(|response| Encode!(&response).unwrap());
 
         // Put canister back.
         state.put_canister_state(canister);
@@ -2764,13 +2761,9 @@ impl ExecutionEnvironment {
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(args.get_canister_id(), state)?;
         let snapshot_id = args.get_snapshot_id();
-        match self
-            .canister_manager
+        self.canister_manager
             .read_snapshot_metadata(sender, snapshot_id, canister)
-        {
-            Ok(response) => Ok(Encode!(&response).unwrap()),
-            Err(e) => Err(UserError::from(e)),
-        }
+            .map(|response| Encode!(&response).unwrap())
     }
 
     fn create_snapshot_from_metadata(
