@@ -426,7 +426,7 @@ pub struct SystemTestGroup {
     overall_timeout: Option<Duration>,
     with_farm: bool,
     replica_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
-    orchestrator_metrics_to_check: BTreeMap<&'static str, /* max value of the metric =*/ u64>,
+    orchestrator_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
 }
 
 impl Default for SystemTestGroup {
@@ -506,7 +506,7 @@ impl SystemTestGroup {
         self
     }
 
-    /// If the provided metric will have value larger than the provided one, for any of the
+    /// If the provided metric has value larger than the provided one, for any of the
     /// nodes, the test will fail.
     pub fn update_orchestrator_metrics_to_check(
         mut self,
