@@ -17,21 +17,18 @@ end::catalog[] */
 
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use candid::Principal;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
-use http_body_util::{BodyExt, Full};
-use hyper::{Method, Request, StatusCode, body::Bytes};
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_canister_client::Sender;
+use ic_consensus_system_test_utils::get_cup_from_node;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
-use ic_protobuf::types::v1 as pb;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, canister_id_into_u64, difference,
 };
@@ -51,10 +48,8 @@ use ic_system_test_driver::{
     },
     util::runtime_from_url,
 };
-use ic_types::consensus::CatchUpPackage;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet;
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, SubnetId};
-use prost::Message;
 use registry_canister::mutations::do_split_subnet::SplitSubnetPayload;
 use slog::{info, warn};
 use xnet_test::{Metrics, StartArgs};
@@ -797,7 +792,7 @@ fn check_routing_table(
 
 async fn wait_for_cup_with_subnet_id(env: &TestEnv, node: &IcNodeSnapshot, subnet_id: SubnetId) {
     loop {
-        match get_cup(node).await {
+        match get_cup_from_node(node, &env.logger()).await {
             Ok(cup)
                 if cup.signature.signer.target_subnet == NiDkgTargetSubnet::Local
                     && cup.signature.signer.dealer_subnet == subnet_id =>
@@ -819,45 +814,6 @@ async fn wait_for_cup_with_subnet_id(env: &TestEnv, node: &IcNodeSnapshot, subne
 
         tokio::time::sleep(Duration::from_secs(3)).await;
     }
-}
-
-async fn get_cup(node: &IcNodeSnapshot) -> anyhow::Result<CatchUpPackage> {
-    let url = node.get_public_url();
-    let cup_url = format!("{url}_/catch_up_package");
-    let client = Client::builder(TokioExecutor::new()).build_http::<Full<Bytes>>();
-
-    let res = client
-        .request(
-            Request::builder()
-                .method(Method::POST)
-                .header(hyper::header::CONTENT_TYPE, "application/cbor")
-                .uri(&cup_url)
-                .body(Full::from(Bytes::new()))
-                .unwrap(),
-        )
-        .await
-        .with_context(|| format!("Failed to send request to {cup_url}"))?;
-
-    if res.status() != StatusCode::OK {
-        anyhow::bail!(
-            "Failed to send request to {cup_url}. Status: {}",
-            res.status()
-        );
-    }
-
-    let body = res
-        .into_body()
-        .collect()
-        .await
-        .context("Failed to collect response body")?;
-
-    let proto =
-        pb::CatchUpPackage::decode(body.to_bytes()).context("Failed to decode the response")?;
-
-    let cup =
-        CatchUpPackage::try_from(&proto).context("Failed to convert proto to CatchUpPackage")?;
-
-    Ok(cup)
 }
 
 fn get_source_subnet(env: &TestEnv) -> SubnetSnapshot {
