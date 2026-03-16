@@ -552,6 +552,7 @@ service : {
   clear_provisional_whitelist : () -> ();
   complete_canister_migration : (CompleteCanisterMigrationPayload) -> ();
   create_subnet : (CreateSubnetPayload) -> (CreateSubnetResponse);
+  delete_subnet : (DeleteSubnetPayload) -> (DeleteSubnetResponse);
   deploy_guestos_to_all_subnet_nodes : (
     DeployGuestosToAllSubnetNodesPayload
   ) -> ();
