@@ -460,12 +460,7 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             setup: Default::default(),
-<<<<<<< HEAD
-            teardown: Default::default(),
-=======
             teardowns: Default::default(),
-            assert_no_replica_restarts: true,
->>>>>>> master
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
