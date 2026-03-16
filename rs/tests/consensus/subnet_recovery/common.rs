@@ -29,7 +29,7 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    Cursor, READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes,
+    READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes,
     get_node_certification_share_height, get_ssh_keys_for_user, halt_subnet,
     local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
     remote_recovery, unhalt_subnet,
@@ -38,6 +38,7 @@ use anyhow::bail;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
+    journal::{fetch_journal_cursor, find_journal_matches_after_cursor},
     node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
     rw_message::{install_nns_and_check_progress, store_message_with_retries},
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
@@ -919,16 +920,10 @@ fn corrupt_latest_cup(
 
     info!(
         logger,
-        "Setting journal cursor on node {:?}",
+        "Getting journal cursor on node {:?}",
         app_node.get_ip_addr()
     );
-    let message_str = app_node
-        .block_on_bash_script_from_session(
-            &session,
-            "journalctl -n1 -o json --output-fields='__CURSOR'",
-        )
-        .expect("journal message");
-    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+    let cursor = fetch_journal_cursor(&session).expect("Failed to get journal cursor");
 
     info!(logger, "Reading CUP from node {:?}", app_node.get_ip_addr());
     let (mut channel, _) = session.scp_recv(Path::new(CUP_PATH)).unwrap();
@@ -988,14 +983,12 @@ fn corrupt_latest_cup(
         secs(120),
         secs(10),
         || {
-            let res = app_node.block_on_bash_script_from_session(
+            let matches = find_journal_matches_after_cursor(
                 &session,
-                &format!(
-                    "journalctl --after-cursor='{}' | grep -c 'Failed to deserialize CatchUpPackage'",
-                    message.cursor
-                ),
+                &cursor,
+                "Failed to deserialize CatchUpPackage",
             );
-            if res.is_ok_and( |r| r.trim().parse::<i32>().unwrap() > 0) {
+            if matches.is_ok_and(|m| !m.is_empty()) {
                 Ok(())
             } else {
                 bail!("Did not find log entry that cup is corrupted.")

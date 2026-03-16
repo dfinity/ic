@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use candid::Principal;
 use ic_consensus_system_test_utils::{
+    journal::{fetch_journal_cursor, find_journal_matches_after_cursor},
     rw_message::{can_read_msg, cannot_store_msg},
     ssh_access::AuthMean,
 };
@@ -20,7 +21,6 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::SubnetId;
-use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{fmt::Debug, path::PathBuf};
 use url::Url;
@@ -84,12 +84,6 @@ where
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Cursor {
-    #[serde(alias = "__CURSOR")]
-    pub cursor: String,
-}
-
 // Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
 // This function waits until it detects in the subnet node's journal that consensus is halted.
 pub fn halt_subnet(
@@ -101,13 +95,7 @@ pub fn halt_subnet(
 ) {
     info!(logger, "Halting subnet {subnet_id}...");
     let session = subnet_node.block_on_ssh_session().unwrap();
-    let message_str = subnet_node
-        .block_on_bash_script_from_session(
-            &session,
-            "journalctl -n1 -o json --output-fields='__CURSOR'",
-        )
-        .expect("Failed to get journal cursor");
-    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+    let cursor = fetch_journal_cursor(&session).expect("Failed to get journal cursor");
 
     AdminStep {
         logger: logger.clone(),
@@ -122,14 +110,8 @@ pub fn halt_subnet(
         secs(120),
         secs(10),
         || {
-            let res = subnet_node.block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    "journalctl --after-cursor='{}' | grep -c 'is halted'",
-                    message.cursor
-                ),
-            );
-            if res.is_ok_and(|r| r.trim().parse::<i32>().unwrap() > 0) {
+            let matches = find_journal_matches_after_cursor(&session, &cursor, "is halted");
+            if matches.is_ok_and(|m| !m.is_empty()) {
                 Ok(())
             } else {
                 Err(anyhow!("Did not find log entry that consensus is halted"))
