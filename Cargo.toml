@@ -12,6 +12,7 @@ members = [
     "packages/ic-hpke",
     "packages/ic-http-types",
     "packages/ic-ledger-hash-of",
+    "packages/ic-management-canister-types",
     "packages/ic-metrics-assert",
     "packages/ic-pub-key",
     "packages/ic-secp256k1",
