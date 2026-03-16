@@ -465,15 +465,15 @@ impl InternalState {
         nns_subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> Result<Vec<Url>, String> {
-        let mut urls = match self.node_id {
-            None => self.get_subnet_node_urls(nns_subnet_id, version)?,
+        match self.node_id {
+            None => self.get_subnet_node_urls(nns_subnet_id, version),
             Some(node_id) => match self.get_node_reward_type(node_id, version) {
                 Err(err) => {
                     warn!(
                         self.logger,
                         "Could not get reward type: {err}, contacting NNS nodes directly"
                     );
-                    self.get_subnet_node_urls(nns_subnet_id, version)?
+                    self.get_subnet_node_urls(nns_subnet_id, version)
                 }
                 Ok(reward) => match reward {
                     NodeRewardType::Unspecified
@@ -483,14 +483,12 @@ impl InternalState {
                     | NodeRewardType::Type3
                     | NodeRewardType::Type3dot1
                     | NodeRewardType::Type1dot1 => {
-                        self.get_subnet_node_urls(nns_subnet_id, version)?
+                        self.get_subnet_node_urls(nns_subnet_id, version)
                     }
-                    NodeRewardType::Type4 => self.get_api_boundary_node_urls(version)?,
+                    NodeRewardType::Type4 => self.get_api_boundary_node_urls(version),
                 },
             },
-        };
-
-        Ok(urls)
+        }
     }
 }
 
