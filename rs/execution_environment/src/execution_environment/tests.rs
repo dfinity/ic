@@ -1873,15 +1873,17 @@ fn canister_snapshots_after_split() {
     // The snapshots do not exist in the replicated state before the requests.
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         0
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         0
     );
@@ -1908,15 +1910,17 @@ fn canister_snapshots_after_split() {
     // Verify the snapshots exist in the replicated state.
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
     );
@@ -1960,32 +1964,20 @@ fn canister_snapshots_after_split() {
 
     assert_eq!(
         state_a
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
-    );
-    assert_eq!(
-        state_a
-            .canister_snapshots
-            .list_snapshots(canister_id_2)
-            .len(),
-        0
     );
 
     assert_eq!(
         state_b
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
-    );
-    assert_eq!(
-        state_b
-            .canister_snapshots
-            .list_snapshots(canister_id_1)
-            .len(),
-        0
     );
 }
 

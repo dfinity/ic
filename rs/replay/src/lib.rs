@@ -248,6 +248,7 @@ fn cmd_get_recovery_cup(
         registry_store_uri: None,
         ecdsa_initializations: vec![],
         chain_key_initializations: vec![],
+        cup_type: None,
     };
 
     let cup = ic_consensus_cup_utils::make_registry_cup_from_cup_contents(

@@ -184,7 +184,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(12_700_000),
+        Cycles::new(17_780_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
@@ -195,8 +195,9 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         0
     );
@@ -232,8 +233,9 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         1
     );
@@ -271,8 +273,9 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         0
     );
@@ -291,7 +294,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(12_700_000),
+        Cycles::new(17_780_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
@@ -302,8 +305,9 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         0
     );
@@ -346,8 +350,9 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         1
     );
@@ -403,8 +408,9 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         0
     );
