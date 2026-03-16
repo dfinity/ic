@@ -1163,6 +1163,23 @@ impl Player {
             return Ok(());
         }
 
+        if last_cup.height() > self.state_manager.latest_state_height() {
+            // During subnet recovery, the consensus pool and state checkpoint might be downloaded
+            // from different nodes. The consensus pool may contain a CUP at a height for which
+            // the state has not yet been produced locally (e.g. the download node had not yet
+            // delivered the finalized batch at the CUP height). Batch delivery will replay up to
+            // (and past) the CUP height, and certification redelivery will verify state hashes.
+            info!(
+                self.log,
+                "The CUP height {} is strictly above the state height {}. \
+                The state at the CUP height will be produced during replay. \
+                Skipping state hash verification.",
+                last_cup.height(),
+                self.state_manager.latest_state_height()
+            );
+            return Ok(());
+        }
+
         // Verify state hash against the state hash in the CUP
         if self
             .get_state_hash(last_cup.height())
