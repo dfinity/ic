@@ -4,7 +4,9 @@ use common::test_helpers::install_registry_canister_with_payload_builder;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::migrate_node_operator_directly;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::{
+    get_value, migrate_node_operator_directly,
+};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_test_utils::registry::invariant_compliant_mutation_as_atomic_req;
 use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord};
@@ -79,13 +81,24 @@ fn setup_node_operator_mutations(
     (mutations, all_node_ids)
 }
 
-/// Helper to query a registry value from PocketIC and decode it.
+fn decode_get_value_response<T: Message + Default>(
+    response: ic_registry_transport::pb::v1::HighCapacityRegistryGetValueResponse,
+) -> T {
+    let content = match response.content.unwrap() {
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::Value(
+            items,
+        ) => items,
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(_) => {
+            panic!("Didn't expect large value chunk keys")
+        }
+    };
+    T::decode(content.as_slice()).unwrap()
+}
+
+/// Checks whether a key exists in the registry via a raw `get_value` query.
 ///
-/// Returns `None` if the key does not exist in the registry.
-async fn get_registry_value<T: Message + Default>(
-    pocket_ic: &pocket_ic::nonblocking::PocketIc,
-    key: String,
-) -> Option<T> {
+/// Unlike `get_value`, this does not panic when the key is absent.
+async fn key_exists_in_registry(pocket_ic: &pocket_ic::nonblocking::PocketIc, key: &str) -> bool {
     let result = pocket_ic
         .query_call(
             REGISTRY_CANISTER_ID.get().0,
@@ -96,24 +109,9 @@ async fn get_registry_value<T: Message + Default>(
         .await
         .expect("Query call to registry failed");
 
-    let response = match deserialize_get_value_response(result) {
-        Ok(response) => response,
-        Err(_) => return None,
-    };
-
-    if response.error.is_some() {
-        return None;
-    }
-
-    let content = match response.content? {
-        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::Value(
-            items,
-        ) => items,
-        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(_) => {
-            panic!("Didn't expect large value chunk keys")
-        }
-    };
-    Some(T::decode(content.as_slice()).unwrap())
+    deserialize_get_value_response(result)
+        .map(|response| response.error.is_none())
+        .unwrap_or(false)
 }
 
 fn make_node_operator_record(
@@ -130,10 +128,6 @@ fn make_node_operator_record(
         ..Default::default()
     }
 }
-
-// ============================================================================
-// Tests
-// ============================================================================
 
 #[tokio::test]
 async fn missing_input() {
@@ -528,10 +522,15 @@ async fn e2e_successful_migration_new_operator_does_not_exist() {
     assert!(response.is_ok(), "Expected ok but got {response:?}");
 
     // Verify: new operator record exists with inherited data
-    let new_record: NodeOperatorRecord =
-        get_registry_value(&pocket_ic, make_node_operator_record_key(new_operator_id))
-            .await
-            .expect("New node operator record should exist");
+    let new_record: NodeOperatorRecord = decode_get_value_response(
+        get_value(
+            &pocket_ic,
+            make_node_operator_record_key(new_operator_id),
+            None,
+        )
+        .await
+        .unwrap(),
+    );
 
     assert_eq!(
         new_record.node_provider_principal_id,
@@ -543,19 +542,18 @@ async fn e2e_successful_migration_new_operator_does_not_exist() {
     assert_eq!(new_record.max_rewardable_nodes.get("type1"), Some(&8));
 
     // Verify: old operator record is deleted
-    let old_record_after: Option<NodeOperatorRecord> =
-        get_registry_value(&pocket_ic, make_node_operator_record_key(old_operator_id)).await;
     assert!(
-        old_record_after.is_none(),
+        !key_exists_in_registry(&pocket_ic, &make_node_operator_record_key(old_operator_id)).await,
         "Old node operator record should have been deleted"
     );
 
     // Verify: all nodes now point to the new operator
     for node_id in &old_operator_node_ids {
-        let node_record: NodeRecord =
-            get_registry_value(&pocket_ic, make_node_record_key(*node_id))
+        let node_record: NodeRecord = decode_get_value_response(
+            get_value(&pocket_ic, make_node_record_key(*node_id), None)
                 .await
-                .expect("Node record should exist");
+                .unwrap(),
+        );
 
         assert_eq!(
             node_record.node_operator_id,
@@ -646,10 +644,15 @@ async fn e2e_successful_migration_new_operator_exists() {
     assert!(response.is_ok(), "Expected ok but got {response:?}");
 
     // Verify: new operator record exists with merged data
-    let merged_record: NodeOperatorRecord =
-        get_registry_value(&pocket_ic, make_node_operator_record_key(new_operator_id))
-            .await
-            .expect("New node operator record should exist");
+    let merged_record: NodeOperatorRecord = decode_get_value_response(
+        get_value(
+            &pocket_ic,
+            make_node_operator_record_key(new_operator_id),
+            None,
+        )
+        .await
+        .unwrap(),
+    );
 
     assert_eq!(
         merged_record.node_provider_principal_id,
@@ -668,19 +671,18 @@ async fn e2e_successful_migration_new_operator_exists() {
     assert_eq!(merged_record.max_rewardable_nodes.get("type2"), Some(&4));
 
     // Verify: old operator record is deleted
-    let old_record_after: Option<NodeOperatorRecord> =
-        get_registry_value(&pocket_ic, make_node_operator_record_key(old_operator_id)).await;
     assert!(
-        old_record_after.is_none(),
+        !key_exists_in_registry(&pocket_ic, &make_node_operator_record_key(old_operator_id)).await,
         "Old node operator record should have been deleted"
     );
 
     // Verify: old operator's nodes now point to the new operator
     for node_id in &old_operator_node_ids {
-        let node_record: NodeRecord =
-            get_registry_value(&pocket_ic, make_node_record_key(*node_id))
+        let node_record: NodeRecord = decode_get_value_response(
+            get_value(&pocket_ic, make_node_record_key(*node_id), None)
                 .await
-                .expect("Node record should exist");
+                .unwrap(),
+        );
 
         assert_eq!(
             node_record.node_operator_id,
@@ -692,10 +694,11 @@ async fn e2e_successful_migration_new_operator_exists() {
 
     // Verify: new operator's existing nodes still point to the new operator (unchanged)
     for node_id in &new_operator_node_ids {
-        let node_record: NodeRecord =
-            get_registry_value(&pocket_ic, make_node_record_key(*node_id))
+        let node_record: NodeRecord = decode_get_value_response(
+            get_value(&pocket_ic, make_node_record_key(*node_id), None)
                 .await
-                .expect("Node record should exist");
+                .unwrap(),
+        );
 
         assert_eq!(
             node_record.node_operator_id,
