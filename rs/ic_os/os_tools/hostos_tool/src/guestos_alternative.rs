@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use command_runner::RealCommandRunner;
-use tracing::info;
 use grub::BootCycle;
 use ic_device::mount::{FileSystem, GptPartitionProvider, MountOptions, PartitionSelector};
 use std::process::Command;
+use tracing::info;
 use uuid::Uuid;
 
 const GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";

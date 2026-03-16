@@ -3,7 +3,6 @@ mod tests;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use tracing::debug;
 use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
@@ -13,6 +12,7 @@ use nix::unistd::getuid;
 use sev_guest::firmware::SevGuestFirmware;
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
+use tracing::debug;
 
 #[derive(clap::Parser)]
 pub enum Args {

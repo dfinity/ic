@@ -1,7 +1,6 @@
 use crate::GuestVMType;
 use crate::metrics::GuestVmMetrics;
 use anyhow::{Context, Result, ensure};
-use tracing::info;
 use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::hostos::guestos_config::generate_guestos_config;
@@ -9,6 +8,7 @@ use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::calculate_deterministic_mac;
 use deterministic_ips::node_type::NodeType;
 use std::path::{Path, PathBuf};
+use tracing::info;
 
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";

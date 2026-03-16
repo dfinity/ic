@@ -1,10 +1,10 @@
 use anyhow::{Context, Result, bail};
 use itertools::Either::Right;
-use tracing::{info, warn};
 use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle};
 use std::path::Path;
+use tracing::{info, warn};
 
 /// Number of bytes to use for the LUKS2 volume key
 const VOLUME_KEY_BYTES: usize = 512 / 8; // 512 bits

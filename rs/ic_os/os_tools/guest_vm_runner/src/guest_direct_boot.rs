@@ -3,11 +3,11 @@ use crate::boot_args::read_boot_args;
 use crate::guest_vm_config::DirectBootConfig;
 use anyhow::Context;
 use anyhow::Result;
-use tracing::info;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use ic_device::mount::{FileSystem, MountOptions, PartitionProvider, PartitionSelector};
 use std::fs::File;
 use tempfile::NamedTempFile;
+use tracing::info;
 use uuid::Uuid;
 
 const fn const_unwrap(result: std::result::Result<Uuid, uuid::Error>) -> Uuid {

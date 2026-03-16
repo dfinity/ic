@@ -1,9 +1,9 @@
 use anyhow::{Context, Result, bail, ensure};
 use devicemapper::{Bytes, DM, DevId, DmName, DmOptions, Sectors};
-use tracing::warn;
 use ic_device::device_mapping::{BaseDevice, LinearSegment, MappedDevice, TempDevice};
 use std::path::Path;
 use std::sync::Arc;
+use tracing::warn;
 
 const UPGRADE_DM_NAME: &str = "upgrade-guestos";
 const DATA_PARTITION_DM_NAME: &str = "guestos-data";

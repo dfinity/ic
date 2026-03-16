@@ -1,12 +1,12 @@
 use crate::crypt::{activate_crypt_device, format_crypt_device};
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
-use tracing::info;
 use ic_sys::fs::{Clobber, write_atomically_using_tmp_file};
 use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
+use tracing::info;
 
 pub const DEFAULT_GENERATED_KEY_PATH: &str = "/boot/config/store.keyfile";
 const GENERATED_KEY_SIZE_BYTES: usize = 16;

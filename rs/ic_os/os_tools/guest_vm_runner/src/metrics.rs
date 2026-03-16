@@ -1,9 +1,9 @@
 use crate::GuestVMType;
 use anyhow::{Context, Result};
 use ic_os_metrics_utils::write_registry_to_file;
-use tracing::error;
 use prometheus::{IntGaugeVec, Opts, Registry};
 use std::path::PathBuf;
+use tracing::error;
 
 /// Metrics for the guest VM runner service
 pub struct GuestVmMetrics {

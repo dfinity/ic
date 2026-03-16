@@ -3,12 +3,12 @@ use crate::crypt::{
 };
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
-use tracing::{info, warn};
 use config_types::GuestVMType;
 use sev_guest::firmware::SevGuestFirmware;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::fs;
 use std::path::Path;
+use tracing::{info, warn};
 
 pub struct SevDiskEncryption<'a> {
     pub sev_firmware: Box<dyn SevGuestFirmware>,
@@ -112,9 +112,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                     ) {
                         Ok(()) => return Ok(()),
                         Err(err) => {
-                            warn!(
-                                "Failed to unlock store partition with previous key: {err:?}"
-                            );
+                            warn!("Failed to unlock store partition with previous key: {err:?}");
                             // Fall through and try to open the device with the new key
                         }
                     }

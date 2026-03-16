@@ -10,7 +10,6 @@ use crate::metrics::GuestVmMetrics;
 use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{Context, Error, Result, anyhow, bail};
-use tracing::{error, info, warn};
 use clap::{Parser, Subcommand, ValueEnum};
 use command_runner::{AsyncCommandRunner, RealAsyncCommandRunner};
 use config_types::{HostOSConfig, Ipv6Config};
@@ -33,6 +32,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
 use virt::connect::Connect;
 use virt::sys::{
     VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING,

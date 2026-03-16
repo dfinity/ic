@@ -2,7 +2,6 @@ pub mod recovery_utils;
 mod ui;
 
 use anyhow::{Context, Result};
-use tracing::error;
 use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
@@ -19,6 +18,7 @@ use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use tracing::error;
 use tui_textarea::TextArea;
 
 // ============================================================================
