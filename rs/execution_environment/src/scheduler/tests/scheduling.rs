@@ -77,13 +77,9 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
             max_instructions_per_install_code_slice: NumInstructions::new(50),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -124,13 +120,9 @@ fn test_multiple_iterations_of_inner_loop() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(200),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_query_message: NumInstructions::new(50),
             max_instructions_per_slice: NumInstructions::from(50),
             max_instructions_per_install_code_slice: NumInstructions::from(50),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -172,14 +164,10 @@ fn execute_idle_and_canisters_with_messages() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::from(50),
             max_instructions_per_install_code_slice: NumInstructions::from(50),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -297,12 +285,9 @@ fn scheduler_long_execution_progress_across_checkpoints() {
             scheduler_cores,
             max_instructions_per_round: slice_instructions.into(),
             max_instructions_per_message: message_instructions.into(),
-            max_instructions_per_query_message: slice_instructions.into(),
             max_instructions_per_slice: slice_instructions.into(),
             max_instructions_per_install_code_slice: slice_instructions.into(),
-            instruction_overhead_per_execution: 0.into(),
-            instruction_overhead_per_canister: 0.into(),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -386,13 +371,9 @@ fn execution_round_does_not_end_too_early() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(150),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -427,14 +408,7 @@ fn scheduler_maintains_canister_order() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(100),
-            max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
-            max_instructions_per_slice: NumInstructions::from(1),
-            max_instructions_per_install_code_slice: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -502,14 +476,11 @@ fn construct_scheduler_for_prop_test(
         scheduler_cores,
         max_instructions_per_round: NumInstructions::from(instructions_per_round as u64),
         max_instructions_per_message: NumInstructions::from(instructions_per_message as u64),
-        max_instructions_per_query_message: NumInstructions::from(instructions_per_message as u64),
         max_instructions_per_slice: NumInstructions::from(instructions_per_message as u64),
         max_instructions_per_install_code_slice: NumInstructions::from(
             instructions_per_message as u64,
         ),
-        instruction_overhead_per_execution: NumInstructions::from(0),
-        instruction_overhead_per_canister: NumInstructions::from(0),
-        ..SchedulerConfig::application_subnet()
+        ..zero_instruction_overhead_config()
     };
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(scheduler_config)
@@ -941,13 +912,9 @@ fn inner_round_first_execution_is_not_a_full_execution() {
             scheduler_cores,
             max_instructions_per_round: (instructions * max_messages_per_round).into(),
             max_instructions_per_message: instructions.into(),
-            max_instructions_per_query_message: instructions.into(),
             max_instructions_per_slice: instructions.into(),
             max_instructions_per_install_code_slice: instructions.into(),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -1006,13 +973,9 @@ fn inner_round_long_execution_is_a_full_execution() {
             scheduler_cores,
             max_instructions_per_round: (slice * 2).into(),
             max_instructions_per_message: (slice * 10).into(),
-            max_instructions_per_query_message: slice.into(),
             max_instructions_per_slice: slice.into(),
             max_instructions_per_install_code_slice: slice.into(),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -1067,13 +1030,9 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
             scheduler_cores,
             max_instructions_per_round: (instructions * messages_per_round).into(),
             max_instructions_per_message: instructions.into(),
-            max_instructions_per_query_message: instructions.into(),
             max_instructions_per_slice: instructions.into(),
             max_instructions_per_install_code_slice: instructions.into(),
-            instruction_overhead_per_execution: 0.into(),
-            instruction_overhead_per_canister: 0.into(),
-            instruction_overhead_per_canister_for_finalization: 0.into(),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -1162,13 +1121,9 @@ fn charge_idle_canisters_for_full_execution_round() {
             scheduler_cores,
             max_instructions_per_round: slice.into(),
             max_instructions_per_message: slice.into(),
-            max_instructions_per_query_message: slice.into(),
             max_instructions_per_slice: slice.into(),
             max_instructions_per_install_code_slice: slice.into(),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 

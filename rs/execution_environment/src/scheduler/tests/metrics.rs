@@ -4,7 +4,10 @@ use super::super::test_utilities::{
     SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
 };
 use super::super::*;
-use super::{make_ecdsa_key_id, make_schnorr_key_id, zero_instruction_messages};
+use super::{
+    make_ecdsa_key_id, make_schnorr_key_id, zero_instruction_messages,
+    zero_instruction_overhead_config,
+};
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::RejectCode;
@@ -41,14 +44,10 @@ fn validate_consumed_instructions_metric() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
             max_instructions_per_install_code_slice: NumInstructions::new(50),
             max_instructions_per_round: NumInstructions::from(400),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -94,12 +93,9 @@ fn can_record_metrics_single_scheduler_thread() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_query_message: NumInstructions::new(5),
             max_instructions_per_slice: NumInstructions::from(5),
             max_instructions_per_install_code_slice: NumInstructions::from(5),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -136,13 +132,9 @@ fn can_record_metrics_for_a_round() {
             scheduler_cores,
             max_instructions_per_round: NumInstructions::from(instructions * 2),
             max_instructions_per_message: NumInstructions::from(instructions),
-            max_instructions_per_query_message: NumInstructions::new(instructions),
             max_instructions_per_slice: NumInstructions::from(instructions),
             max_instructions_per_install_code_slice: NumInstructions::from(instructions),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -250,20 +242,7 @@ fn can_record_metrics_for_a_round() {
 /// incremented.
 #[test]
 fn prepay_failures_counted() {
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(1000),
-            max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_query_message: NumInstructions::new(100),
-            max_instructions_per_slice: NumInstructions::from(100),
-            max_instructions_per_install_code_slice: NumInstructions::from(100),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister_with_cycles = test.create_canister_with(
         Cycles::new(1_000_000_000_000_000),
@@ -319,18 +298,7 @@ fn execution_round_metrics_are_recorded() {
     // scheduler cores, so each canister gets its own thread for running.
     // Besides canister messages, there are three subnet messages.
     let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(400),
-            max_instructions_per_message: NumInstructions::from(10),
-            max_instructions_per_query_message: NumInstructions::new(10),
-            max_instructions_per_slice: NumInstructions::from(10),
-            max_instructions_per_install_code_slice: NumInstructions::from(10),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
+        .with_scheduler_config(zero_instruction_overhead_config())
         .build();
 
     for _ in 0..2 {
