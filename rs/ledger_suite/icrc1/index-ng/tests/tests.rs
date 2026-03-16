@@ -1937,3 +1937,140 @@ mod fees_in_burn_and_mint_blocks {
         );
     }
 }
+
+#[cfg(not(feature = "icrc3_disabled"))]
+mod icrc122_authorized_blocks {
+    use super::*;
+    use ic_icrc1_ledger::Tokens;
+    use ic_icrc1_test_utils::icrc3::BlockBuilder;
+    use ic_types::time::GENESIS;
+
+    #[test]
+    fn test_authorized_mint_credits_account() {
+        const CONTROLLER: PrincipalId = PrincipalId::new_user_test_id(99);
+        const RECIPIENT: PrincipalId = PrincipalId::new_user_test_id(1);
+        const RECIPIENT_ACCOUNT: Account = Account {
+            owner: RECIPIENT.0,
+            subaccount: None,
+        };
+        const MINT_AMOUNT: u64 = 5_000_000;
+
+        let env = StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(&env);
+
+        let block = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
+            .authorized_mint(
+                RECIPIENT_ACCOUNT,
+                Tokens::from(MINT_AMOUNT),
+                CONTROLLER.0,
+                Some("test authorized mint".to_string()),
+            )
+            .build();
+
+        assert_eq!(
+            Nat::from(0u64),
+            add_block(&env, ledger_id, &block).expect("failed to add authorized mint block")
+        );
+
+        let index_id = install_index_ng(&env, index_init_arg_without_interval(ledger_id));
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+
+        let balance = icrc1_balance_of(&env, index_id, Account::from(Principal::from(RECIPIENT)));
+        assert_eq!(
+            balance, MINT_AMOUNT,
+            "Expected balance {MINT_AMOUNT} after authorized mint, got {balance}"
+        );
+    }
+
+    #[test]
+    fn test_authorized_burn_debits_account() {
+        const CONTROLLER: PrincipalId = PrincipalId::new_user_test_id(99);
+        const USER: PrincipalId = PrincipalId::new_user_test_id(1);
+        const USER_ACCOUNT: Account = Account {
+            owner: USER.0,
+            subaccount: None,
+        };
+        const MINT_AMOUNT: u64 = 10_000_000;
+        const BURN_AMOUNT: u64 = 3_000_000;
+
+        let env = StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(&env);
+
+        // First mint some tokens via regular mint
+        let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
+            .mint(USER_ACCOUNT, Tokens::from(MINT_AMOUNT))
+            .build();
+        add_block(&env, ledger_id, &mint).expect("failed to add mint block");
+
+        // Then burn via authorized burn
+        let burn = BlockBuilder::new(1, GENESIS.as_nanos_since_unix_epoch())
+            .authorized_burn(USER_ACCOUNT, Tokens::from(BURN_AMOUNT), CONTROLLER.0, None)
+            .build();
+        add_block(&env, ledger_id, &burn).expect("failed to add authorized burn block");
+
+        let index_id = install_index_ng(&env, index_init_arg_without_interval(ledger_id));
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+
+        let balance = icrc1_balance_of(&env, index_id, Account::from(Principal::from(USER)));
+        let expected = MINT_AMOUNT - BURN_AMOUNT;
+        assert_eq!(
+            balance, expected,
+            "Expected balance {expected} after authorized burn, got {balance}"
+        );
+    }
+
+    #[test]
+    fn test_authorized_mint_and_burn_sequence() {
+        const CONTROLLER: PrincipalId = PrincipalId::new_user_test_id(99);
+        const USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
+        const USER_2: PrincipalId = PrincipalId::new_user_test_id(2);
+        const ACCOUNT_1: Account = Account {
+            owner: USER_1.0,
+            subaccount: None,
+        };
+        const ACCOUNT_2: Account = Account {
+            owner: USER_2.0,
+            subaccount: None,
+        };
+
+        let env = StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(&env);
+
+        // Authorized mint to user 1
+        let block0 = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
+            .authorized_mint(
+                ACCOUNT_1,
+                Tokens::from(1_000_000u64),
+                CONTROLLER.0,
+                Some("initial supply".to_string()),
+            )
+            .build();
+        add_block(&env, ledger_id, &block0).expect("failed to add block 0");
+
+        // Authorized mint to user 2
+        let block1 = BlockBuilder::new(1, GENESIS.as_nanos_since_unix_epoch())
+            .authorized_mint(ACCOUNT_2, Tokens::from(500_000u64), CONTROLLER.0, None)
+            .build();
+        add_block(&env, ledger_id, &block1).expect("failed to add block 1");
+
+        // Authorized burn from user 1
+        let block2 = BlockBuilder::new(2, GENESIS.as_nanos_since_unix_epoch())
+            .authorized_burn(
+                ACCOUNT_1,
+                Tokens::from(200_000u64),
+                CONTROLLER.0,
+                Some("rebalance".to_string()),
+            )
+            .build();
+        add_block(&env, ledger_id, &block2).expect("failed to add block 2");
+
+        let index_id = install_index_ng(&env, index_init_arg_without_interval(ledger_id));
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+
+        let balance_1 = icrc1_balance_of(&env, index_id, Account::from(Principal::from(USER_1)));
+        let balance_2 = icrc1_balance_of(&env, index_id, Account::from(Principal::from(USER_2)));
+
+        assert_eq!(balance_1, 800_000u64, "User 1 balance mismatch");
+        assert_eq!(balance_2, 500_000u64, "User 2 balance mismatch");
+    }
+}

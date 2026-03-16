@@ -248,6 +248,9 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     mthd,
                 });
             }
+            Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
+                unreachable!("ICRC-152 endpoints not yet implemented")
+            }
         }
 
         tx
