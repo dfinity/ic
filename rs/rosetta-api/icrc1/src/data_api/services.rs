@@ -1234,6 +1234,10 @@ mod test {
                                             caller: _,
                                             mthd: _,
                                         } => None,
+                                        IcrcOperation::AuthorizedMint { to, .. } => Some(to.into()),
+                                        IcrcOperation::AuthorizedBurn { from, .. } => {
+                                            Some(from.into())
+                                        }
                                     };
                                 if search_transactions_request.account_identifier.is_some() {
                                     break;
@@ -1292,6 +1296,22 @@ mod test {
                                         caller: _,
                                         mthd: _,
                                     } => false,
+                                    IcrcOperation::AuthorizedMint { to, .. } => {
+                                        to == search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap()
+                                    }
+                                    IcrcOperation::AuthorizedBurn { from, .. } => {
+                                        from == search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap()
+                                    }
                                 })
                                 .count();
 

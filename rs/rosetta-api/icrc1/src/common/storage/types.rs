@@ -8,6 +8,9 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
+use icrc_ledger_types::icrc122::schema::{
+    BTYPE_122_BURN, BTYPE_122_MINT, OP_152_BURN, OP_152_MINT,
+};
 use icrc_ledger_types::{
     icrc::generic_value::Value,
     icrc1::{account::Account, transfer::Memo},
@@ -138,7 +141,9 @@ impl RosettaBlock {
                 IcrcOperation::Transfer { fee, .. } => fee,
                 IcrcOperation::Approve { fee, .. } => fee,
                 IcrcOperation::Burn { fee, .. } => fee,
-                IcrcOperation::FeeCollector { .. } => None,
+                IcrcOperation::FeeCollector { .. }
+                | IcrcOperation::AuthorizedMint { .. }
+                | IcrcOperation::AuthorizedBurn { .. } => None,
             }))
     }
 
@@ -378,6 +383,18 @@ pub enum IcrcOperation {
         caller: Option<Principal>,
         mthd: Option<String>,
     },
+    AuthorizedMint {
+        to: Account,
+        amount: Nat,
+        caller: Principal,
+        reason: Option<String>,
+    },
+    AuthorizedBurn {
+        from: Account,
+        amount: Nat,
+        caller: Principal,
+        reason: Option<String>,
+    },
 }
 
 impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
@@ -453,6 +470,32 @@ impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
                         fee_collector,
                         caller,
                         mthd,
+                    })
+                }
+                OP_152_MINT | BTYPE_122_MINT => {
+                    let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
+                    let caller: Principal = get_field(&map, FIELD_PREFIX, "caller")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::AuthorizedMint {
+                        to,
+                        amount: amount.ok_or_else(|| {
+                            anyhow!("Missing field 'amt' for AuthorizedMint operation")
+                        })?,
+                        caller,
+                        reason,
+                    })
+                }
+                OP_152_BURN | BTYPE_122_BURN => {
+                    let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
+                    let caller: Principal = get_field(&map, FIELD_PREFIX, "caller")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::AuthorizedBurn {
+                        from,
+                        amount: amount.ok_or_else(|| {
+                            anyhow!("Missing field 'amt' for AuthorizedBurn operation")
+                        })?,
+                        caller,
+                        reason,
                     })
                 }
                 found => {
@@ -552,6 +595,34 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 }
                 if let Some(mthd) = mthd {
                     map.insert("mthd".to_string(), Value::text(mthd));
+                }
+            }
+            Op::AuthorizedMint {
+                to,
+                amount,
+                caller,
+                reason,
+            } => {
+                map.insert("op".to_string(), Value::text(OP_152_MINT));
+                map.insert("to".to_string(), Value::from(to));
+                map.insert("amt".to_string(), Value::Nat(amount));
+                map.insert("caller".to_string(), Value::from(caller));
+                if let Some(reason) = reason {
+                    map.insert("reason".to_string(), Value::text(reason));
+                }
+            }
+            Op::AuthorizedBurn {
+                from,
+                amount,
+                caller,
+                reason,
+            } => {
+                map.insert("op".to_string(), Value::text(OP_152_BURN));
+                map.insert("from".to_string(), Value::from(from));
+                map.insert("amt".to_string(), Value::Nat(amount));
+                map.insert("caller".to_string(), Value::from(caller));
+                if let Some(reason) = reason {
+                    map.insert("reason".to_string(), Value::text(reason));
                 }
             }
         }
@@ -714,6 +785,7 @@ mod tests {
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use icrc_ledger_types::icrc107::schema::SET_FEE_COL_107;
+    use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
     use num_bigint::BigUint;
     use proptest::collection::vec;
     use proptest::prelude::{Just, any};
@@ -821,6 +893,40 @@ mod tests {
             )
     }
 
+    fn arb_authorized_mint() -> impl Strategy<Value = IcrcOperation> {
+        (
+            arb_account(),
+            arb_nat(),
+            arb_principal(),
+            option::of("[a-zA-Z0-9 ]{0,50}".prop_map(String::from)),
+        )
+            .prop_map(
+                |(to, amount, caller, reason)| IcrcOperation::AuthorizedMint {
+                    to,
+                    amount,
+                    caller,
+                    reason,
+                },
+            )
+    }
+
+    fn arb_authorized_burn() -> impl Strategy<Value = IcrcOperation> {
+        (
+            arb_account(),
+            arb_nat(),
+            arb_principal(),
+            option::of("[a-zA-Z0-9 ]{0,50}".prop_map(String::from)),
+        )
+            .prop_map(
+                |(from, amount, caller, reason)| IcrcOperation::AuthorizedBurn {
+                    from,
+                    amount,
+                    caller,
+                    reason,
+                },
+            )
+    }
+
     fn arb_op() -> impl Strategy<Value = IcrcOperation> {
         prop_oneof![
             arb_approve(),
@@ -828,7 +934,18 @@ mod tests {
             arb_mint(),
             arb_transfer(),
             arb_fee_collector(),
+            arb_authorized_mint(),
+            arb_authorized_burn(),
         ]
+    }
+
+    fn btype_for_op(op: &IcrcOperation) -> Option<String> {
+        match op {
+            IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+            IcrcOperation::AuthorizedMint { .. } => Some(BTYPE_122_MINT.to_string()),
+            IcrcOperation::AuthorizedBurn { .. } => Some(BTYPE_122_BURN.to_string()),
+            _ => None,
+        }
     }
 
     fn arb_memo() -> impl Strategy<Value = Memo> {
@@ -864,19 +981,12 @@ mod tests {
                     fee_collector_block_index,
                 )| IcrcBlock {
                     parent_hash,
-                    transaction: transaction.clone(),
+                    btype: btype_for_op(&transaction.operation),
+                    transaction,
                     effective_fee,
                     timestamp,
                     fee_collector,
                     fee_collector_block_index,
-                    btype: match transaction.operation {
-                        IcrcOperation::FeeCollector {
-                            fee_collector: _,
-                            caller: _,
-                            mthd: _,
-                        } => Some(BTYPE_107.to_string()),
-                        _ => None,
-                    },
                 },
             )
     }
@@ -884,10 +994,7 @@ mod tests {
     #[test]
     fn test_operation_value_codec() {
         proptest!(|(op in arb_op().no_shrink())| {
-            let btype = match op {
-                IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
-                _ => None,
-            };
+            let btype = btype_for_op(&op);
             let actual_op = match IcrcOperation::try_from((btype, BTreeMap::from(op.clone()))) {
                 Ok(actual_op) => actual_op,
                 Err(err) => panic!("{err:?}"),
@@ -899,10 +1006,7 @@ mod tests {
     #[test]
     fn test_transaction_value_codec() {
         proptest!(|(tx in arb_transaction().no_shrink())| {
-            let btype = match tx.operation {
-                IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
-                _ => None,
-            };
+            let btype = btype_for_op(&tx.operation);
             let actual_tx = match IcrcTransaction::try_from((btype, Value::from(tx.clone()))) {
                 Ok(actual_tx) => actual_tx,
                 Err(err) => panic!("{err:?}"),
