@@ -829,10 +829,17 @@ impl SubnetSnapshot {
     }
 
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
+        self.raw_subnet_record_at_version(self.registry_version)
+    }
+
+    pub fn raw_subnet_record_at_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> pb_subnet::SubnetRecord {
         self.local_registry
-            .get_subnet_record(self.subnet_id, self.registry_version)
+            .get_subnet_record(self.subnet_id, registry_version)
             .unwrap_result(
-                self.registry_version,
+                registry_version,
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
