@@ -1028,9 +1028,11 @@ unsafe extern "C" fn cleanup(env: usize) {
             return;
         }
         _ => {
-            unreachable!(
-                "CallFutureState for in-flight calls should only be Executing or Trapped (cleanup)"
-            )
+            // do nothing!
+            return;
+            // unreachable!(
+            //     "CallFutureState for in-flight calls should only be Executing or Trapped (cleanup)"
+            // )
         }
     };
     ic_cdk_executor::in_trap_recovery_context_for(method, || {

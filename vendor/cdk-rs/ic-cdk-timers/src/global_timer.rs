@@ -122,7 +122,7 @@ fn do_timer(
                             // Reschedule based on `now`, not `timer_scheduled_time`,
                             // intentionally skipping intermediate executions.
                             reschedule_timer(timers, task_id, now, *interval);
-                            return true; // skip
+                            return true; // skip (caller will decrement to drain stale state)
                         }
                     }
                     // 3. Check serial timer is available
@@ -135,6 +135,11 @@ fn do_timer(
                 false // do not skip
             });
             if skip {
+                // Drain stale concurrent count (e.g. after snapshot restore where in-flight
+                // callbacks are lost). No-op for non-Repeated tasks.
+                TASKS.with_borrow_mut(|tasks| {
+                    tasks.get_mut(task_id).map(|t| t.decrement_concurrent());
+                });
                 return ControlFlow::Continue(());
             }
         }
@@ -302,10 +307,25 @@ fn log_failure(code: u32) {
 /// # Safety
 ///
 /// This function must only be passed to the IC with a pointer from Box::<CallEnv>::into_raw as userdata.
+/// Called when the timer self-call trapped (e.g. panic in the task). We must decrement the same
+/// semaphores as in timer_scope_callback and reschedule the timer so it can run again.
 unsafe extern "C" fn timer_scope_cleanup(env: usize) {
     // SAFETY: This function is only ever called by the IC, and we only ever pass a Box<CallEnv> as userdata.
-    unsafe {
-        drop(Box::from_raw(env as *mut CallEnv));
+    let CallEnv {
+        timer,
+        method_handle: _,
+    } = *unsafe { Box::<CallEnv>::from_raw(env as *mut CallEnv) };
+    state::decrement_all_calls();
+    let task_id = timer.task;
+    TASKS.with_borrow_mut(|tasks| {
+        tasks.get_mut(task_id).map(|t| {
+            t.decrement_concurrent();
+        });
+    });
+    // Reschedule so the timer is retried after a trap (e.g. allocator panic).
+    if TASKS.with_borrow(|tasks| tasks.contains_key(task_id)) {
+        TIMERS.with_borrow_mut(|timers| timers.push(timer));
+        state::update_ic0_timer();
     }
     ic0::debug_print(b"[ic-cdk-timers] internal error: trap in scope callback");
 }
