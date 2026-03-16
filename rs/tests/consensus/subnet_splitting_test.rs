@@ -25,9 +25,6 @@ Success::
 
 end::catalog[] */
 
-use http_body_util::{BodyExt, Full};
-use hyper::{Method, Request, StatusCode, body::Bytes};
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_base_types::SubnetId;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
@@ -57,7 +54,7 @@ use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 use anyhow::{Context, Result};
 use candid::Principal;
 use prost::Message;
-use slog::{Logger, info, warn};
+use slog::{Logger, info};
 use std::{thread, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
@@ -393,17 +390,19 @@ fn wait_until_halting_cup_reached(env: &TestEnv, source_subnet: &SubnetSnapshot,
                 .unwrap()
                 .certification_height;
 
-            if env
+            let has_halting_cup = env
                 .topology_snapshot()
                 .subnets()
                 .find(|subnet| subnet.subnet_id == source_subnet.subnet_id)
                 .expect("The subnet shouldn't have disappeared")
                 .raw_subnet_record_at_version(cup_registry_version)
-                .halt_at_cup_height
-            // Just in case the node is state syncing, we make sure its certified
-            // height is high enough.
-                && certified_height >= cup.height()
-            {
+                .halt_at_cup_height;
+
+            if has_halting_cup && certified_height > cup.height() {
+                panic!("The node should halt according to its CUP but it didn't");
+            }
+
+            if has_halting_cup && certified_height == cup.height() {
                 info!(
                     logger,
                     "Halting CUP has been reached. \
@@ -432,21 +431,19 @@ fn wait_until_halting_cup_reached(env: &TestEnv, source_subnet: &SubnetSnapshot,
 async fn get_cup(node: &IcNodeSnapshot, logger: &Logger) -> anyhow::Result<CatchUpPackage> {
     let url = node.get_public_url();
     let cup_url = format!("{url}_/catch_up_package");
-    let client = Client::builder(TokioExecutor::new()).build_http::<Full<Bytes>>();
-    let request = Request::builder()
-        .method(Method::POST)
-        .header(hyper::header::CONTENT_TYPE, "application/cbor")
-        .uri(&cup_url)
-        .body(Full::from(Bytes::new()))
-        .unwrap();
 
     let send_request = || async {
-        let response = client
-            .request(request.clone())
+        let response = reqwest::ClientBuilder::new()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap()
+            .post(cup_url.clone())
+            .header("Content-Type", "application/cbor")
+            .send()
             .await
             .with_context(|| format!("Failed to send request to {cup_url}"))?;
 
-        if response.status() != StatusCode::OK {
+        if response.status() != reqwest::StatusCode::OK {
             anyhow::bail!(
                 "Failed to send request to {cup_url}. Status: {}",
                 response.status()
@@ -454,18 +451,17 @@ async fn get_cup(node: &IcNodeSnapshot, logger: &Logger) -> anyhow::Result<Catch
         }
 
         response
-            .into_body()
-            .collect()
+            .bytes()
             .await
             .context("Failed to collect response body")
     };
 
-    let response = retry_with_msg_async!("Fetching a CUP", logger, secs(60), secs(5), send_request)
-        .await
-        .context("Failed to fetch CUP")?;
+    let response =
+        retry_with_msg_async!("Fetching a CUP", logger, secs(120), secs(5), send_request)
+            .await
+            .context("Failed to fetch CUP")?;
 
-    let proto =
-        pb::CatchUpPackage::decode(response.to_bytes()).context("Failed to decode the response")?;
+    let proto = pb::CatchUpPackage::decode(response).context("Failed to decode the response")?;
 
     let cup =
         CatchUpPackage::try_from(&proto).context("Failed to convert proto to CatchUpPackage")?;

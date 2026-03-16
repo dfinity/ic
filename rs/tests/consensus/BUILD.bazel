@@ -246,10 +246,8 @@ system_test_nns(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
-        "@crate_index//:http-body-util",
-        "@crate_index//:hyper",
-        "@crate_index//:hyper-util",
         "@crate_index//:prost",
+        "@crate_index//:reqwest",
         "@crate_index//:slog",
     ],
 )
