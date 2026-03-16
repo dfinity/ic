@@ -137,11 +137,10 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
             // This is a dummy call to force the Wasm engine to execute the query.
             #[cfg(target_arch = "wasm32")]
-            let _ = ic_cdk::call::Call::unbounded_wait(
+            let c = ic_cdk::call::Call::unbounded_wait(
                 NODE_REWARDS_CANISTER_ID.get().0,
                 "reset_instructions",
-            )
-            .await;
+            ).await?;
         }
 
         Ok(RewardsCalculatorResults {
