@@ -102,15 +102,12 @@ message ThresholdArguments {
 }
 
 message SignWithThresholdContext {
+  reserved 6, 7;
   state.queues.v1.Request request = 1;
   ThresholdArguments args = 2;
   repeated bytes derivation_path_vec = 3;
   bytes pseudo_random_id = 4;
   uint64 batch_time = 5;
-  reserved 6;
-  reserved "pre_signature_id";
-  reserved 7;
-  reserved "height";
   optional bytes nonce = 8;
 }
 
