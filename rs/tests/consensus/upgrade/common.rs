@@ -314,27 +314,26 @@ async fn upgrade_to(
     );
 
     // Concurrently assert that all orchestrators shut down gracefully
-    let post_boot_cursors =
-        try_join_all(journal_streamers.into_iter().map(|(_node_id, streamer)| {
-            tokio::task::spawn_blocking(move || {
-                streamer.search_and_return_cursors("Orchestrator shut down gracefully")
-            })
-        }))
-        .await
-        .unwrap()
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .expect("Failed to search for log entries")
-        .into_iter()
-        .map(|matches| {
-            matches
-                .into_iter()
-                .map(|(_message, cursor)| cursor)
-                .last()
-                .expect("Not all orchestrators shut down gracefully")
-                .to_string()
+    let post_boot_cursors = try_join_all(journal_streamers.into_values().map(|streamer| {
+        tokio::task::spawn_blocking(move || {
+            streamer.search_and_return_cursors("Orchestrator shut down gracefully")
         })
-        .collect::<Vec<_>>();
+    }))
+    .await
+    .unwrap()
+    .into_iter()
+    .collect::<Result<Vec<_>, _>>()
+    .expect("Failed to search for log entries")
+    .into_iter()
+    .map(|matches| {
+        matches
+            .into_iter()
+            .map(|(_message, cursor)| cursor)
+            .next_back()
+            .expect("Not all orchestrators shut down gracefully")
+            .to_string()
+    })
+    .collect::<Vec<_>>();
     info!(logger, "All orchestrators shut down the tasks gracefully");
 
     for node in &healthy_nodes {
@@ -444,7 +443,7 @@ fn find_latest_computed_root_hashes_from_logs(
                 );
                 hash
             })
-            .last()
+            .next_back()
             .unwrap_or_else(|| {
                 panic!(
                     "No log entry with computed root hash found for node {}",
