@@ -227,7 +227,7 @@ impl SchedulerImpl {
                 as_num_instructions(instructions_before - round_limits.instructions);
 
             let messages = match execute_subnet_message_result_type {
-                ExecuteSubnetMessageResultType::Finished(_) => NumMessages::from(1),
+                ExecuteSubnetMessageResultType::Finished => NumMessages::from(1),
                 ExecuteSubnetMessageResultType::Processing => NumMessages::from(0),
                 ExecuteSubnetMessageResultType::Paused => NumMessages::from(0),
             };
@@ -309,6 +309,8 @@ impl SchedulerImpl {
                     break;
                 }
 
+                // TODO(DSM-108): This appears to be counterproductive (`can_execute_subnet_msg`
+                // would simply skip messages that consume instructions). Remove.
                 if round_limits.instructions_reached() {
                     break;
                 }
@@ -347,7 +349,7 @@ impl SchedulerImpl {
         let round_instructions_executed =
             as_num_instructions(instructions_before - round_limits.instructions);
         let messages = match execute_subnet_message_result_type {
-            ExecuteSubnetMessageResultType::Finished(_) => NumMessages::from(1),
+            ExecuteSubnetMessageResultType::Finished => NumMessages::from(1),
             ExecuteSubnetMessageResultType::Processing => NumMessages::from(0),
             ExecuteSubnetMessageResultType::Paused => NumMessages::from(0),
         };
@@ -799,11 +801,14 @@ impl SchedulerImpl {
                 - result.round_limits.subnet_available_callbacks;
         }
 
-        // Since there are multiple threads, we update the global limit using
-        // the thread that executed the most instructions.
+        // Reduce the instruction limit by the maximum number of instructions executed
+        // by any thread.
         round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
-
+        // Deduct all created callbacks from the available callbacks limit. This is a
+        // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
+        // `subnet_available_memory` will be recomputed at the beginning of the next
+        // iteration.
 
         (
             canisters,
@@ -867,7 +872,6 @@ impl SchedulerImpl {
                 .duration_between_allocation_charges(),
         );
         let mut all_rejects = Vec::new();
-        let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
             if canister.system_state.time_of_last_allocation_charge
                 > threshold_last_allocation_charge
@@ -898,7 +902,6 @@ impl SchedulerImpl {
                 )
                 .is_err()
             {
-                uninstalled_canisters.push(canister.canister_id());
                 all_rejects.push(uninstall_canister(
                     &self.log,
                     canister,
@@ -911,6 +914,7 @@ impl SchedulerImpl {
                 canister.system_state.clear_canister_history();
                 // Burn the remaining balance of the canister.
                 canister.system_state.burn_remaining_balance_for_uninstall();
+                canister.canister_snapshots.delete_snapshots();
 
                 info!(
                     self.log,
@@ -919,12 +923,6 @@ impl SchedulerImpl {
                 );
                 self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
-        }
-
-        // Delete any snapshots associated with the canister
-        // that ran out of cycles.
-        for canister_id in uninstalled_canisters {
-            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1441,6 +1439,8 @@ impl Scheduler for SchedulerImpl {
             // However, we would like to make progress with other subnet
             // messages that do not consume instructions. To allow that, we set
             // the number available instructions to 0 if it is not positive.
+            //
+            // TODO(DSM-108): This appears to do nothing. Remove.
             subnet_round_limits.instructions = subnet_round_limits
                 .instructions
                 .max(RoundInstructions::from(0));
@@ -1906,10 +1906,20 @@ fn execute_canisters_on_thread(
     }
 }
 
-/// Helper function that checks if a subnet message can be executed:
-///     1. A message cannot be executed if it is directed to a canister
-///     with another long-running execution in progress.
-///     2. Install code messages can only be executed sequentially.
+/// Checks whether a subnet message can be executed.
+///
+/// Always execute:
+///  - Responses.
+///  - Calls with invalid method names.
+///  - Calls with no effective canister ID.
+///  - Calls with an effective canister ID, but no matching canister state.
+///
+/// Never execute calls when the canister has a paused execution.
+///
+/// Beyond that, invoke `Ic00MethodPermissions::can_be_executed()` to determine
+/// whether the specific call can be executed, based on factors such as whether
+/// the instruction limit has been reached, there's an ongoing long install code
+/// execution, or the canister has an aborted execution.
 fn can_execute_subnet_msg(
     msg: &SubnetMessage,
     ongoing_long_install_code: bool,
@@ -1917,11 +1927,11 @@ fn can_execute_subnet_msg(
     round_limits: &mut RoundLimits,
 ) -> bool {
     let Some(effective_canister_id) = msg.effective_canister_id() else {
-        // If there is no effective canister ID, we can execute the subnet message.
+        // If there is no effective canister ID, execute the subnet message.
         return true;
     };
     let Some(effective_canister_state) = canister_states.get(&effective_canister_id) else {
-        // If there is no effective canister state, we can execute the subnet message.
+        // If there is no effective canister state, execute the subnet message.
         return true;
     };
     let maybe_method = match msg {
@@ -1930,7 +1940,7 @@ fn can_execute_subnet_msg(
         SubnetMessage::Response { .. } => None,
     };
     let Some(method) = maybe_method else {
-        // If there is no method name, we can execute the subnet message.
+        // If this is a response or the method name is not valid, execute the message.
         return true;
     };
 
@@ -1949,7 +1959,7 @@ fn can_execute_subnet_msg(
 
     if effective_canister_is_paused {
         // If there is a DTS execution in progress, we can't execute the subnet message.
-        // Note, it does NOT include aborted executions.
+        // Note, this does NOT include aborted executions.
         return false;
     }
 

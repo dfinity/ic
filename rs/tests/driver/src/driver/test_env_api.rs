@@ -829,10 +829,17 @@ impl SubnetSnapshot {
     }
 
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
+        self.raw_subnet_record_at_version(self.registry_version)
+    }
+
+    pub fn raw_subnet_record_at_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> pb_subnet::SubnetRecord {
         self.local_registry
-            .get_subnet_record(self.subnet_id, self.registry_version)
+            .get_subnet_record(self.subnet_id, registry_version)
             .unwrap_result(
-                self.registry_version,
+                registry_version,
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
@@ -1125,13 +1132,14 @@ impl IcNodeSnapshot {
     }
 
     fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
-        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
-        // This is a hardcoded rule that is applied regardless of what is in the registry
-        // Hence a change in the registry won't affect this check
+        // This checks that the rule to block access from the ic-http-adapter to
+        // all locally-configured addressess was applied.
+        // This is a hardcoded rule that is applied regardless of what is in the registry.
+        // Hence a change in the registry won't affect this check.
         let script = r#"
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
-            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            RULE_PATTERN="meta skuid $ADAPTER_UID fib daddr type local"
 
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
@@ -2416,6 +2424,27 @@ macro_rules! retry_with_msg_async_quiet {
     };
 }
 
+#[macro_export]
+macro_rules! retry_agent_on_transport_errors {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        $crate::retry_with_msg_async!($msg, $log, $timeout, $backoff, || async {
+            match $f.await {
+                Err(AgentError::TransportError(e)) => Err(anyhow::anyhow!("transport error: {e}")),
+                other => Ok(other),
+            }
+        })
+    };
+    ($msg:expr, $log:expr, $f:expr) => {
+        $crate::retry_agent_on_transport_errors!(
+            $msg,
+            $log,
+            std::time::Duration::from_secs(120),
+            std::time::Duration::from_secs(5),
+            $f
+        )
+    };
+}
+
 pub async fn retry_async<S: AsRef<str>, F, Fut, R>(
     msg: S,
     log: &slog::Logger,
@@ -2831,6 +2860,10 @@ pub fn scp_recv_from(
         || {
             let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
             let size = scp_file_stat.size();
+            info!(
+                log,
+                "scp-ing remote {from_remote:?} of {size:?} B to local {to_local:?} ..."
+            );
             let mut to_file = std::fs::File::create(to_local)?;
             std::io::copy(&mut remote_file, &mut to_file)?;
             remote_file.send_eof()?;

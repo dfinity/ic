@@ -11,6 +11,26 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-13: Proposal 140859
+
+http://dashboard.internetcomputer.org/proposal/140859
+
+## Added
+
+* Add a `total_maturity_disbursements_in_progress_e8s_equivalent` metric (calculated daily).
+* Added a new `do_split_subnet` method interface, the implementation of the method will be done in the next PR.
+* Added `cup_type` field to `CatchUpPackageContents` denoting the type of a `CUP`.
+
+
+# 2026-03-07: Proposal 140776
+
+http://dashboard.internetcomputer.org/proposal/140776
+
+### Fixed
+
+* Fix a bug in create_neuron where a neuron cannot be created with exactly minimum stake.
+
+
 # 2026-02-27: Proposal 140597
 
 http://dashboard.internetcomputer.org/proposal/140597
