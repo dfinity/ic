@@ -58,7 +58,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 7] = [
             repository: "dfinity/internet-identity",
             tag_name_prefix: None,
             filename: "internet_identity_production.wasm.gz",
-            test_filename: Some("internet_identity_dev.wasm.gz"),
+            test_filename: Some("internet_identity_production.wasm.gz"),
             canister_id: IDENTITY_CANISTER_ID,
         },
     ),

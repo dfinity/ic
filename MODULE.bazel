@@ -472,9 +472,9 @@ http_file(
 
 http_file(
     name = "ii_dev_canister",
-    downloaded_file_path = "internet_identity_dev.wasm.gz",
+    downloaded_file_path = "internet_identity_production.wasm.gz",
     sha256 = "2357d822cd451f25c0edab3e45db52ab140a2ac8c4b0170201c78acc5bc11779",
-    url = "https://github.com/dfinity/internet-identity/releases/download/release-2024-05-13/internet_identity_dev.wasm.gz",
+    url = "https://github.com/dfinity/internet-identity/releases/download/release-2024-05-13/internet_identity_production.wasm.gz",
 )
 
 # NNS frontend dapp canister
@@ -1134,7 +1134,7 @@ canisters(
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
         "node-rewards": "node-rewards-canister.wasm.gz",
-        "internet_identity_test": "internet_identity_dev.wasm.gz",
+        "internet_identity_test": "internet_identity_production.wasm.gz",
         "nns_dapp_test": "nns-dapp_test.wasm.gz",
         "sns_aggregator_test": "sns_aggregator_dev.wasm.gz",
         "cycles_ledger": "cycles-ledger.wasm.gz",
