@@ -1,10 +1,11 @@
 [Unit]
-Description=Initialize fstrim metrics
-Before=node_exporter.service
+Description=Discard unused blocks on /var/lib/ic/crypto filesystem
+After=setup-fstrim-tool.service
+Wants=setup-fstrim-tool.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/fstrim_metrics --target /var/lib/ic/crypto --metrics /run/node_exporter/collector_textfile/fstrim.prom --initialize_metrics_only
+ExecStart=/opt/ic/bin/fstrim_tool --target /var/lib/ic/crypto --datadir_target /var/lib/ic/data --metrics /run/node_exporter/collector_textfile/fstrim.prom
 # Allow access to normal & virtualized block devices
 DeviceAllow=block-sd
 DeviceAllow=block-virtblk
@@ -23,6 +24,7 @@ ProtectHostname=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
+ReadOnlyPaths=/var/lib/ic/crypto
 ReadWritePaths=/run/node_exporter/collector_textfile
 RestrictAddressFamilies=AF_UNIX
 RestrictAddressFamilies=~AF_UNIX
@@ -34,5 +36,6 @@ SystemCallErrorNumber=EPERM
 SystemCallFilter=@system-service
 UMask=022
 
-[Install]
-WantedBy=multi-user.target
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2

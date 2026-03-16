@@ -4,12 +4,12 @@ use regex::Regex;
 use std::fs::read_to_string;
 use tempfile::tempdir;
 
-fn new_fstrim_metrics_command() -> Command {
-    match Command::cargo_bin("fstrim_metrics") {
+fn new_fstrim_tool_command() -> Command {
+    match Command::cargo_bin("fstrim_tool") {
         // When in Cargo environment.
         Ok(cmd) => cmd,
         // When in Bazel environment
-        Err(_) => Command::new("rs/ic_os/metrics/fstrim_metrics/fstrim_metrics_bin"),
+        Err(_) => Command::new("rs/ic_os/os_tools/fstrim_tool/fstrim_tool_bin"),
     }
 }
 
@@ -34,7 +34,7 @@ fn initialize_metrics() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
-    new_fstrim_metrics_command()
+    new_fstrim_tool_command()
         .args([
             "--metrics",
             metrics_file
@@ -81,7 +81,7 @@ fn should_fail_but_write_metrics_if_target_not_a_directory() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
-    new_fstrim_metrics_command()
+    new_fstrim_tool_command()
         .args([
             "--metrics",
             metrics_file
@@ -126,7 +126,7 @@ fn should_fail_but_writes_metrics_when_discard_not_supported() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
-    new_fstrim_metrics_command()
+    new_fstrim_tool_command()
         .args([
             "--metrics",
             metrics_file
@@ -176,7 +176,7 @@ fstrim_runs_total 1
 
 #[test]
 fn should_fail_if_arguments_missing() {
-    new_fstrim_metrics_command()
+    new_fstrim_tool_command()
         .assert()
         .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains(

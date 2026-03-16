@@ -26,37 +26,37 @@ MACRO_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "fstrim_metrics",
+    name = "fstrim_tool",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = ["src/main.rs"],
     ),
     aliases = ALIASES,
-    crate_name = "ic_fstrim_metrics",
+    crate_name = "ic_fstrim_tool",
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
 )
 
 rust_binary(
-    name = "fstrim_metrics_bin",
+    name = "fstrim_tool_bin",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":fstrim_metrics"],
+    deps = DEPENDENCIES + [":fstrim_tool"],
 )
 
 rust_test(
-    name = "fstrim_metrics_test",
-    crate = ":fstrim_metrics",
+    name = "fstrim_tool_test",
+    crate = ":fstrim_tool",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite(
-    name = "fstrim_metrics_integration",
+    name = "fstrim_tool_integration",
     srcs = glob(["tests/**/*.rs"]),
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = [":fstrim_metrics_bin"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":fstrim_tool_bin"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

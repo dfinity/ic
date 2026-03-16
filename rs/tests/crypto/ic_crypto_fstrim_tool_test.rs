@@ -1,7 +1,7 @@
 /* tag::catalog[]
-Title:: ic-crypto-fstrim_metrics test
+Title:: ic-crypto-fstrim_tool test
 
-Goal:: Ensure that running the `fstrim_metrics` utility succeeds. A system test is needed, since the
+Goal:: Ensure that running the `fstrim_tool` utility succeeds. A system test is needed, since the
 bazel integration tests run in `linux-sandbox`, and running `/sbin/fstrim` there results in a
 `discard operation not supported` error.
 
@@ -9,28 +9,28 @@ Runbook::
 . Set up a subnet with a single node
 . Wait for the node to start up correctly and be healthy.
 . Verify that the `fstrim.prom` file exists and contains the initial metrics.
-. Attempt to run the systemd service `setup-fstrim-metrics` to initialize the metrics to be served
+. Attempt to run the systemd service `setup-fstrim-tool` to initialize the metrics to be served
   by the `node_exporter`.
-. Verify that the `setup-fstrim-metrics` service invocation succeeded, and that the metrics are
+. Verify that the `setup-fstrim-tool` service invocation succeeded, and that the metrics are
   still in the initialized state.
-. Attempt to run the systemd service `fstrim_metrics` to run `fstrim` and update the metrics.
-. Verify that the `fstrim_metrics` service invocation succeeded and that the metrics were updated
+. Attempt to run the systemd service `fstrim_tool` to run `fstrim` and update the metrics.
+. Verify that the `fstrim_tool` service invocation succeeded and that the metrics were updated
   successfully.
-. Perform another invocation of the `fstrim_metrics` service and verify that the second update of the
+. Perform another invocation of the `fstrim_tool` service and verify that the second update of the
   metrics was also successful.
 
-Success:: The `fstrim_metrics` utility was successfully executed on the `/var/lib/ic/crypto` partition,
+Success:: The `fstrim_tool` utility was successfully executed on the `/var/lib/ic/crypto` partition,
 and the metrics were successfully written to a file from where the `node_exporter` can read them.
 
 Coverage::
 . The discard operation is supported
-. The `fstrim_metrics` service can successfully execute `fstrim` and write the metrics to a file.
+. The `fstrim_tool` service can successfully execute `fstrim` and write the metrics to a file.
 
 
 end::catalog[] */
 
 use anyhow::Result;
-use ic_fstrim_metrics::FsTrimMetrics;
+use ic_fstrim_tool::FsTrimMetrics;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
@@ -121,7 +121,8 @@ fn retrieve_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) -> FsTrimMetr
 }
 
 fn initialize_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) {
-    const INITIALIZE_FSTRIM_METRICS_CMD: &str = "sudo systemctl start setup-fstrim-metrics.service";
+    const INITIALIZE_FSTRIM_METRICS_CMD: &str =
+        "sudo systemctl start setup-fstrim-tool.service";
     info!(
         logger,
         "initializing fstrim metrics using command: {}", INITIALIZE_FSTRIM_METRICS_CMD
@@ -135,14 +136,14 @@ fn initialize_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) {
 }
 
 fn run_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) {
-    const RUN_FSTRIM_METRICS_CMD: &str = "sudo systemctl start fstrim_metrics.service";
+    const RUN_FSTRIM_METRICS_CMD: &str = "sudo systemctl start fstrim_tool.service";
     info!(
         logger,
-        "running fstrim_metrics using command: {}", RUN_FSTRIM_METRICS_CMD
+        "running fstrim_tool using command: {}", RUN_FSTRIM_METRICS_CMD
     );
     let output = node
         .block_on_bash_script(RUN_FSTRIM_METRICS_CMD)
-        .expect("unable to run fstrim_metrics using SSH")
+        .expect("unable to run fstrim_tool using SSH")
         .trim()
         .to_string();
     assert_eq!(output, "");
