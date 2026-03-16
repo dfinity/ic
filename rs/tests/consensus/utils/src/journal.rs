@@ -77,7 +77,7 @@ impl JournalStreamer {
         let mut command = "journalctl -o json --output-fields='MESSAGE,__CURSOR'".to_string();
 
         if !self.journalctl_flags.is_empty() {
-            command.push_str(" ");
+            command.push(' ');
             command.push_str(&Vec::from_iter(self.journalctl_flags.iter().cloned()).join(" "));
         }
 
@@ -97,7 +97,7 @@ impl JournalStreamer {
             .lines()
             .map(|line| {
                 let output: JournalOutput =
-                    serde_json::from_str(&line).expect("Journal output should be valid JSON");
+                    serde_json::from_str(line).expect("Journal output should be valid JSON");
                 (output.message, output.cursor)
             })
             .collect::<Vec<_>>())
