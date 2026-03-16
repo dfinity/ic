@@ -890,7 +890,7 @@ mod test {
         let nns_subnet_id = SUBNET_1;
         setup_nns_pub_key_in_registry(
             &local_store,
-            registry_client.get_latest_version(),
+            registry_client.get_latest_version() + 1.into(),
             nns_subnet_id,
         );
         registry_client.update_to_latest_version();
@@ -898,7 +898,7 @@ mod test {
             let nns_node_id = NODE_1;
             setup_nns_membership_in_registry(
                 &local_store,
-                registry_client.get_latest_version(),
+                registry_client.get_latest_version() + 1.into(),
                 nns_subnet_id,
                 vec![(nns_node_id, endpoint)],
             );
@@ -909,7 +909,7 @@ mod test {
             let api_bn_id = NODE_2;
             setup_api_bns_in_registry(
                 &local_store,
-                registry_client.get_latest_version(),
+                registry_client.get_latest_version() + 1.into(),
                 vec![(api_bn_id, domain)],
             );
         }
@@ -919,7 +919,7 @@ mod test {
         if let Some(node_reward_type) = node_reward_type {
             setup_node_reward_type_in_registry(
                 &local_store,
-                registry_client.get_latest_version(),
+                registry_client.get_latest_version() + 1.into(),
                 own_node_id,
                 node_reward_type,
             );
@@ -940,109 +940,84 @@ mod test {
     // Initialize root subnet, public key and an empty subnet record for the NNS in the registry
     fn setup_nns_pub_key_in_registry(
         local_store: &LocalStoreImpl,
-        from_version: RegistryVersion,
+        version: RegistryVersion,
         nns_subnet_id: SubnetId,
     ) {
-        let mut version = from_version;
-        version += 1.into();
+        let mutations = vec![
+            KeyMutation {
+                key: ROOT_SUBNET_ID_KEY.to_string(),
+                value: Some(ic_types::subnet_id_into_protobuf(nns_subnet_id).encode_to_vec()),
+            },
+            KeyMutation {
+                key: make_crypto_threshold_signing_pubkey_key(nns_subnet_id),
+                value: Some(PbPublicKey::from(create_threshold_sig_public_key(1)).encode_to_vec()),
+            },
+            KeyMutation {
+                key: make_subnet_record_key(nns_subnet_id),
+                value: Some(
+                    SubnetRecord {
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
+                ),
+            },
+        ];
+
         local_store
-            .store(
-                version,
-                vec![KeyMutation {
-                    key: ROOT_SUBNET_ID_KEY.to_string(),
-                    value: Some(ic_types::subnet_id_into_protobuf(nns_subnet_id).encode_to_vec()),
-                }],
-            )
-            .expect("Failed to set root subnet ID");
-        version += 1.into();
-        local_store
-            .store(
-                version,
-                vec![KeyMutation {
-                    key: make_crypto_threshold_signing_pubkey_key(nns_subnet_id),
-                    value: Some(
-                        PbPublicKey::from(create_threshold_sig_public_key(1)).encode_to_vec(),
-                    ),
-                }],
-            )
-            .expect("Failed to set subnet public key");
-        version += 1.into();
-        local_store
-            .store(
-                version,
-                vec![KeyMutation {
-                    key: make_subnet_record_key(nns_subnet_id),
-                    value: Some(
-                        SubnetRecord {
-                            ..Default::default()
-                        }
-                        .encode_to_vec(),
-                    ),
-                }],
-            )
-            .expect("Failed to set subnet record");
+            .store(version, mutations)
+            .expect("Failed to set up NNS pub key and subnet record in registry");
     }
 
     // Initialize NNS membership in the registry
     fn setup_nns_membership_in_registry(
         local_store: &LocalStoreImpl,
-        from_version: RegistryVersion,
+        version: RegistryVersion,
         nns_subnet_id: SubnetId,
         nns_nodes: Vec<(NodeId, ConnectionEndpoint)>,
     ) {
-        let mut version = from_version;
-        for (node_id, http_endpoint) in &nns_nodes {
-            version += 1.into();
-            local_store
-                .store(
-                    version,
-                    vec![KeyMutation {
-                        key: make_node_record_key(*node_id),
-                        value: Some(
-                            NodeRecord {
-                                http: Some(http_endpoint.clone()),
-                                ..Default::default()
-                            }
-                            .encode_to_vec(),
-                        ),
-                    }],
-                )
-                .expect("Failed to set node record");
-        }
-        version += 1.into();
+        let mut mutations = nns_nodes
+            .iter()
+            .map(|(node_id, http_endpoint)| KeyMutation {
+                key: make_node_record_key(*node_id),
+                value: Some(
+                    NodeRecord {
+                        http: Some(http_endpoint.clone()),
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
+                ),
+            })
+            .collect::<Vec<_>>();
+        mutations.push(KeyMutation {
+            key: make_subnet_record_key(nns_subnet_id),
+            value: Some(
+                SubnetRecord {
+                    membership: nns_nodes
+                        .iter()
+                        .map(|(node_id, _)| node_id.get().to_vec())
+                        .collect(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        });
+
         local_store
-            .store(
-                version,
-                vec![KeyMutation {
-                    key: make_subnet_record_key(nns_subnet_id),
-                    value: Some(
-                        SubnetRecord {
-                            membership: nns_nodes
-                                .iter()
-                                .map(|(node_id, _)| node_id.get().to_vec())
-                                .collect(),
-                            ..Default::default()
-                        }
-                        .encode_to_vec(),
-                    ),
-                }],
-            )
-            .expect("Failed to update subnet record with new node");
+            .store(version, mutations)
+            .expect("Failed to set up NNS membership");
     }
 
     // Initialize API BN record and node record in the registry
     fn setup_api_bns_in_registry(
         local_store: &LocalStoreImpl,
-        from_version: RegistryVersion,
+        version: RegistryVersion,
         api_bns: Vec<(NodeId, String)>,
     ) {
-        let mut version = from_version;
-        for (node_id, domain) in &api_bns {
-            version += 1.into();
-            local_store
-                .store(
-                    version,
-                    vec![KeyMutation {
+        let mutations = api_bns
+            .iter()
+            .flat_map(|(node_id, domain)| {
+                [
+                    KeyMutation {
                         key: make_api_boundary_node_record_key(*node_id),
                         value: Some(
                             ApiBoundaryNodeRecord {
@@ -1050,14 +1025,8 @@ mod test {
                             }
                             .encode_to_vec(),
                         ),
-                    }],
-                )
-                .expect("Failed to set API BN record");
-            version += 1.into();
-            local_store
-                .store(
-                    version,
-                    vec![KeyMutation {
+                    },
+                    KeyMutation {
                         key: make_node_record_key(*node_id),
                         value: Some(
                             NodeRecord {
@@ -1066,35 +1035,36 @@ mod test {
                             }
                             .encode_to_vec(),
                         ),
-                    }],
-                )
-                .expect("Failed to set node record");
-        }
+                    },
+                ]
+            })
+            .collect::<Vec<_>>();
+
+        local_store
+            .store(version, mutations)
+            .expect("Failed to set up API BNs in registry");
     }
 
     // Initialize node reward type in the registry
     fn setup_node_reward_type_in_registry(
         local_store: &LocalStoreImpl,
-        from_version: RegistryVersion,
+        version: RegistryVersion,
         node_id: NodeId,
         node_reward_type: NodeRewardType,
     ) {
-        let mut version = from_version;
-        version += 1.into();
+        let mutations = vec![KeyMutation {
+            key: make_node_record_key(node_id),
+            value: Some(
+                NodeRecord {
+                    node_reward_type: Some(node_reward_type as i32),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        }];
+
         local_store
-            .store(
-                version,
-                vec![KeyMutation {
-                    key: make_node_record_key(node_id),
-                    value: Some(
-                        NodeRecord {
-                            node_reward_type: Some(node_reward_type as i32),
-                            ..Default::default()
-                        }
-                        .encode_to_vec(),
-                    ),
-                }],
-            )
+            .store(version, mutations)
             .expect("Failed to set node reward type");
     }
 
