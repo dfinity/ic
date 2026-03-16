@@ -447,39 +447,57 @@ fn test_rate_limit_subnet_admin_updates_per_subnet() {
         )
         .await;
 
-        // Send the update_subnet_admins call via the subnet rental canister...
+        // Install the universal canister in place of the subnet rental canister
         let fake_subnet_rental_canister =
             create_and_install_mock_subnet_rental_canister(&runtime).await;
+        // Since it takes the id reserved for the subnet rental canister, it can
+        // impersonate it
         assert_eq!(
             fake_subnet_rental_canister.canister_id(),
             ic_nns_constants::SUBNET_RENTAL_CANISTER_ID,
         );
 
-        // .. adding up to `MAX_SUSTAINED_SUBNET_ADMINS_PER_DAY` should work
-        let mut expected_subnet_admins = vec![];
+        // Adding and immediately removing up to `MAX_SUSTAINED_SUBNET_ADMINS_PER_DAY` should work
+        let mut expected_subnet_admins = HashSet::new();
         for i in 0..MAX_SUSTAINED_SUBNET_ADMINS_PER_DAY {
-            let new_subnet_admin = user_test_id(100 + i).get();
-            let payload = UpdateSubnetAdminsPayload {
-                subnet_id,
-                operation_type: Some(OperationType::Add(vec![new_subnet_admin])),
-            };
-            assert!(
-                forward_call_via_universal_canister(
-                    &fake_subnet_rental_canister,
-                    &registry,
-                    "update_subnet_admins",
-                    Encode!(&payload).unwrap()
-                )
-                .await
-            );
-
-            expected_subnet_admins.push(PrincipalIdPb::from(new_subnet_admin));
+            if i % 2 == 0 {
+                let new_subnet_admin = user_test_id(100 + i).get();
+                let payload = UpdateSubnetAdminsPayload {
+                    subnet_id,
+                    operation_type: Some(OperationType::Add(vec![new_subnet_admin])),
+                };
+                assert!(
+                    forward_call_via_universal_canister(
+                        &fake_subnet_rental_canister,
+                        &registry,
+                        "update_subnet_admins",
+                        Encode!(&payload).unwrap()
+                    )
+                    .await
+                );
+                expected_subnet_admins.insert(PrincipalIdPb::from(new_subnet_admin));
+            } else {
+                let existing_subnet_admin = user_test_id(100 + i - 1).get();
+                let payload = UpdateSubnetAdminsPayload {
+                    subnet_id,
+                    operation_type: Some(OperationType::Remove(vec![existing_subnet_admin])),
+                };
+                assert!(
+                    forward_call_via_universal_canister(
+                        &fake_subnet_rental_canister,
+                        &registry,
+                        "update_subnet_admins",
+                        Encode!(&payload).unwrap()
+                    )
+                    .await
+                );
+                expected_subnet_admins.remove(&PrincipalIdPb::from(existing_subnet_admin));
+            }
         }
 
+        // Verify the subnet has the expected list of admins.
         let expected_subnet_admins: HashSet<PrincipalIdPb> =
             expected_subnet_admins.into_iter().collect();
-
-        // ... and the new subnet admins list should match the expected.
         let subnet_admins = get_value_or_panic::<SubnetRecord>(
             &registry,
             make_subnet_record_key(subnet_id).as_bytes(),
@@ -490,7 +508,7 @@ fn test_rate_limit_subnet_admin_updates_per_subnet() {
         .collect::<HashSet<PrincipalIdPb>>();
         assert_eq!(subnet_admins, expected_subnet_admins.clone());
 
-        // ... adding an extra subnet admin should fail due to rate limiting.
+        // Making another subnet admin update should fail due to rate limiting.
         let new_subnet_admin = user_test_id(200).get();
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
@@ -506,7 +524,7 @@ fn test_rate_limit_subnet_admin_updates_per_subnet() {
             .await
         );
 
-        // ... and no change should have happened to subnet admins.
+        // No change should have happened to subnet admins since the last call failed.
         let subnet_admins = get_value_or_panic::<SubnetRecord>(
             &registry,
             make_subnet_record_key(subnet_id).as_bytes(),

@@ -45,7 +45,7 @@ pub enum UpdateSubnetAdminsError {
     },
     PrincipalListEmpty,
     UnknownOperationType,
-    SubnetRateLimited {
+    RateLimited {
         subnet_id: SubnetId,
     },
 }
@@ -70,7 +70,7 @@ impl std::fmt::Display for UpdateSubnetAdminsError {
                     "The operation type provided is unknown. Expected one of: Add, Remove, Clear."
                 )
             }
-            UpdateSubnetAdminsError::SubnetRateLimited { subnet_id } => {
+            UpdateSubnetAdminsError::RateLimited { subnet_id } => {
                 write!(
                     f,
                     "Subnet {subnet_id} is being rate limited due to too many subnet admin updates in a \

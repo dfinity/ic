@@ -41,7 +41,7 @@ impl UpdateSubnetAdminsRateLimiter {
                 .try_reserve(now, subnet_id, 1)
                 .map_err(|e| match e {
                     RateLimiterError::NotEnoughCapacity => {
-                        UpdateSubnetAdminsError::SubnetRateLimited { subnet_id }
+                        UpdateSubnetAdminsError::RateLimited { subnet_id }
                     }
                     re => panic!("Unexpected error from subnet rate limiter: {re:?}"),
                 })?;
@@ -78,7 +78,7 @@ mod tests {
         }
 
         // The (`MAX_SUSTAINED_SUBNET_ADMINS_PER_DAY` + 1)-th call should fail.
-        let expected_err = UpdateSubnetAdminsError::SubnetRateLimited { subnet_id };
+        let expected_err = UpdateSubnetAdminsError::RateLimited { subnet_id };
         let response = rate_limiter
             .try_reserve(subnet_id, now)
             .expect_err("Should error out");
