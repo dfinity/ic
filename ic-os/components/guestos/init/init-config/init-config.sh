@@ -51,7 +51,7 @@ trap "umount /mnt/config" EXIT
 
 mkdir -p /run/config/bootstrap
 
-cp -r /mnt/config/* /run/config/bootstrap/
+cp -r /mnt/config/. /run/config/bootstrap/
 
 if [ -f /run/config/bootstrap/config.json ]; then
     cp /run/config/bootstrap/config.json /run/config/config.json
