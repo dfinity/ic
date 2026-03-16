@@ -2132,13 +2132,6 @@ impl CanisterManager {
                 snapshot_id,
             });
         };
-        // Verify the provided `snapshot_id` belongs to this canister.
-        if snapshot.canister_id() != canister_id {
-            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                canister_id,
-                snapshot_id,
-            });
-        }
         Ok(Arc::clone(snapshot))
     }
 
@@ -2158,13 +2151,6 @@ impl CanisterManager {
                 snapshot_id,
             });
         };
-        // Verify the provided `snapshot_id` belongs to this canister.
-        if snapshot.canister_id() != canister_id {
-            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                canister_id,
-                snapshot_id,
-            });
-        }
         Ok(snapshot)
     }
 
@@ -2334,7 +2320,7 @@ impl CanisterManager {
 
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
 
-            if canister_id == snapshot.canister_id() {
+            if canister_id == snapshot_canister_id {
                 new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
                 new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
             } else {
@@ -2449,10 +2435,10 @@ impl CanisterManager {
 
         // The canister ID from which the snapshot was loaded in case
         // it is different from the target canister ID.
-        let from_canister_id = if snapshot.canister_id() == canister_id {
+        let from_canister_id = if snapshot_canister_id == canister_id {
             None
         } else {
-            Some(snapshot.canister_id())
+            Some(snapshot_canister_id)
         };
 
         // Increment canister version.
