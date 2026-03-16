@@ -256,6 +256,10 @@ fn test_self_transfer() {
     });
 }
 
+fn icrc3_test_ledger() -> Vec<u8> {
+    std::fs::read(std::env::var("ICRC3_TEST_LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap()
+}
+
 /// Adds the block to the ledger
 pub async fn add_block(agent: &Arc<Icrc1Agent>, block: &ICRC3Value) -> Result<Nat, String> {
     let result = agent
