@@ -1,0 +1,25 @@
+[package]
+name = "hello-canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "hello-canister"
+path = "src/main.rs"
+
+[lib]
+name = "hello_canister_lib"
+path = "src/lib.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+pocket-ic = { path = "../../../packages/pocket-ic" }
