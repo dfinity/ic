@@ -57,7 +57,7 @@ fn parse_existing_metrics_from_file(metrics_filename: &str) -> Result<Option<FsT
 
 fn write_metrics_using_tmp_file(metrics: &FsTrimMetrics, metrics_filename: &str) -> Result<()> {
     let path = PathBuf::from(metrics_filename);
-    write_string_using_tmp_file(path, metrics.to_p8s_metrics_string().as_str())
+    write_string_using_tmp_file(path, metrics.to_p8s_metrics_string()?.as_str())
         .context("Failed to write metrics to file")
 }
 

@@ -177,7 +177,9 @@ fn update_metrics() {
                 .expect("should update metrics successfully");
             assert_eq!(expected_metrics, updated_metrics);
 
-            let exported_metrics_string = updated_metrics.to_p8s_metrics_string();
+            let exported_metrics_string = updated_metrics
+                .to_p8s_metrics_string()
+                .expect("should serialize metrics successfully");
             let buf_reader = BufReader::new(exported_metrics_string.as_bytes());
             let reimported_updated_metrics = FsTrimMetrics::try_from(buf_reader.lines())
                 .expect("should reimport metrics successfully");
@@ -287,7 +289,9 @@ fn format_metrics_output() {
         total_runs_datadir: 4.0,
     };
 
-    let metrics_str = metrics.to_p8s_metrics_string();
+    let metrics_str = metrics
+        .to_p8s_metrics_string()
+        .expect("should serialize metrics successfully");
     // prometheus sorts metric families alphabetically, so datadir_* precedes last_* precedes runs_*
     let expected_str = "\
 # HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds

@@ -1,4 +1,5 @@
 use super::*;
+use anyhow::Context;
 use prometheus::{Counter, Encoder, Gauge, Registry, TextEncoder};
 use std::io::Lines;
 
@@ -54,36 +55,36 @@ impl FsTrimMetrics {
         Ok(())
     }
 
-    pub fn to_p8s_metrics_string(&self) -> String {
+    pub fn to_p8s_metrics_string(&self) -> Result<String> {
         let registry = Registry::new();
 
         let duration = Gauge::new(
             METRICS_LAST_RUN_DURATION_MILLISECONDS,
             "Duration of last run of fstrim in milliseconds",
         )
-        .expect("failed to create gauge");
+        .context("failed to create duration gauge")?;
         let success = Gauge::new(
             METRICS_LAST_RUN_SUCCESS,
             "Success status of last run of fstrim (success: 1, failure: 0)",
         )
-        .expect("failed to create gauge");
+        .context("failed to create success gauge")?;
         let runs = Counter::new(METRICS_RUNS_TOTAL, "Total number of runs of fstrim")
-            .expect("failed to create counter");
+            .context("failed to create runs counter")?;
         let duration_datadir = Gauge::new(
             METRICS_LAST_RUN_DURATION_MILLISECONDS_DATADIR,
             "Duration of last run of fstrim on datadir in milliseconds",
         )
-        .expect("failed to create gauge");
+        .context("failed to create datadir duration gauge")?;
         let success_datadir = Gauge::new(
             METRICS_LAST_RUN_SUCCESS_DATADIR,
             "Success status of last run of fstrim on datadir (success: 1, failure: 0)",
         )
-        .expect("failed to create gauge");
+        .context("failed to create datadir success gauge")?;
         let runs_datadir = Counter::new(
             METRICS_RUNS_TOTAL_DATADIR,
             "Total number of runs of fstrim on datadir",
         )
-        .expect("failed to create counter");
+        .context("failed to create datadir runs counter")?;
 
         duration.set(self.last_duration_milliseconds);
         success.set(if self.last_run_success { 1.0 } else { 0.0 });
@@ -98,28 +99,28 @@ impl FsTrimMetrics {
 
         registry
             .register(Box::new(duration))
-            .expect("failed to register");
+            .context("failed to register duration gauge")?;
         registry
             .register(Box::new(success))
-            .expect("failed to register");
+            .context("failed to register success gauge")?;
         registry
             .register(Box::new(runs))
-            .expect("failed to register");
+            .context("failed to register runs counter")?;
         registry
             .register(Box::new(duration_datadir))
-            .expect("failed to register");
+            .context("failed to register datadir duration gauge")?;
         registry
             .register(Box::new(success_datadir))
-            .expect("failed to register");
+            .context("failed to register datadir success gauge")?;
         registry
             .register(Box::new(runs_datadir))
-            .expect("failed to register");
+            .context("failed to register datadir runs counter")?;
 
         let mut buf = Vec::new();
         TextEncoder::new()
             .encode(&registry.gather(), &mut buf)
-            .expect("failed to encode metrics");
-        String::from_utf8(buf).expect("metrics output is valid UTF-8")
+            .context("failed to encode metrics")?;
+        String::from_utf8(buf).context("metrics output is not valid UTF-8")
     }
 
     fn are_valid(&self) -> bool {
