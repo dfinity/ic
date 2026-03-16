@@ -988,10 +988,10 @@ unsafe extern "C" fn callback(env: usize) {
             // will find the result — but we have no waker to trigger that poll.
             // Best effort: if the old state had a method handle, run the waker
             // in that context. Otherwise just log and return.
-            ic_cdk::println!(
+            crate::api::debug_print(format!(
                 "[ic-cdk] callback: unexpected CallFutureState variant: {:?}",
                 std::mem::discriminant(&other)
-            );
+            ));
             return;
         }
     };
@@ -1037,10 +1037,10 @@ unsafe extern "C" fn cleanup(env: usize) {
         other => {
             // Unexpected state — log for diagnostics and return.
             // The err_state has already been written by mem::replace.
-            ic_cdk::println!(
+            crate::api::debug_print(format!(
                 "[ic-cdk] cleanup: unexpected CallFutureState variant: {:?}",
                 std::mem::discriminant(&other)
-            );
+            ));
             return;
         }
     };
