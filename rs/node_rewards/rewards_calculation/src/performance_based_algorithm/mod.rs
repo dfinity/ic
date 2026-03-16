@@ -138,7 +138,9 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
             let _ = ic_cdk::call::Call::bounded_wait(
                 ic_cdk::api::canister_self(),
                 "reset_instructions",
-            ).await.unwrap();
+            )
+            .await
+            .unwrap();
         }
 
         Ok(RewardsCalculatorResults {
