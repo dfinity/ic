@@ -9,7 +9,7 @@ fn new_fstrim_tool_command() -> Command {
         // When in Cargo environment.
         Ok(cmd) => cmd,
         // When in Bazel environment
-        Err(_) => Command::new("rs/ic_os/metrics/fstrim_tool/fstrim_tool_bin"),
+        Err(_) => Command::new("rs/ic_os/os_tools/fstrim_tool/fstrim_tool_bin"),
     }
 }
 
@@ -53,16 +53,8 @@ fn initialize_metrics() {
         .success();
 
     let actual = read_to_string(&metrics_file).expect("reading metrics file should succeed");
-    let expected = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
-# TYPE fstrim_last_run_duration_milliseconds gauge
-fstrim_last_run_duration_milliseconds 0
-# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
-# TYPE fstrim_last_run_success gauge
-fstrim_last_run_success 1
-# HELP fstrim_runs_total Total number of runs of fstrim
-# TYPE fstrim_runs_total counter
-fstrim_runs_total 0
-# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+    // prometheus sorts metric families alphabetically: datadir_* < last_* < runs_*
+    let expected = r#"# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
 # TYPE fstrim_datadir_last_run_duration_milliseconds gauge
 fstrim_datadir_last_run_duration_milliseconds 0
 # HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
@@ -71,6 +63,15 @@ fstrim_datadir_last_run_success 1
 # HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
 # TYPE fstrim_datadir_runs_total counter
 fstrim_datadir_runs_total 0
+# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 0
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 0
 "#;
     assert_eq!(actual, expected);
 }
@@ -95,17 +96,9 @@ fn should_fail_but_write_metrics_if_target_not_a_directory() {
         .failure();
 
     let actual = read_to_string(&metrics_file).expect("reading metrics file should succeed");
-    // The command fails, so success=0, runs=1. Datadir not updated => datadir success=1, runs=0
-    let expected = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
-# TYPE fstrim_last_run_duration_milliseconds gauge
-fstrim_last_run_duration_milliseconds 0
-# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
-# TYPE fstrim_last_run_success gauge
-fstrim_last_run_success 0
-# HELP fstrim_runs_total Total number of runs of fstrim
-# TYPE fstrim_runs_total counter
-fstrim_runs_total 1
-# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+    // The command fails, so success=0, runs=1. Datadir not updated => datadir success=1, runs=0.
+    // prometheus sorts metric families alphabetically: datadir_* < last_* < runs_*
+    let expected = r#"# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
 # TYPE fstrim_datadir_last_run_duration_milliseconds gauge
 fstrim_datadir_last_run_duration_milliseconds 0
 # HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
@@ -114,6 +107,15 @@ fstrim_datadir_last_run_success 1
 # HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
 # TYPE fstrim_datadir_runs_total counter
 fstrim_datadir_runs_total 0
+# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 0
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 0
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 1
 "#;
 
     assert_eq!(actual, expected);
@@ -146,17 +148,9 @@ fn should_fail_but_writes_metrics_when_discard_not_supported() {
 
     let actual_raw = read_to_string(&metrics_file).expect("reading metrics file should succeed");
     let actual = normalize_duration_line(&actual_raw);
-    // The tool fails => success=0, runs=1. Datadir not updated => success=1, runs=0
-    let expected_raw = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
-# TYPE fstrim_last_run_duration_milliseconds gauge
-fstrim_last_run_duration_milliseconds 2
-# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
-# TYPE fstrim_last_run_success gauge
-fstrim_last_run_success 0
-# HELP fstrim_runs_total Total number of runs of fstrim
-# TYPE fstrim_runs_total counter
-fstrim_runs_total 1
-# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+    // The tool fails => success=0, runs=1. Datadir not updated => success=1, runs=0.
+    // prometheus sorts metric families alphabetically: datadir_* < last_* < runs_*
+    let expected_raw = r#"# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
 # TYPE fstrim_datadir_last_run_duration_milliseconds gauge
 fstrim_datadir_last_run_duration_milliseconds 0
 # HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
@@ -165,6 +159,15 @@ fstrim_datadir_last_run_success 1
 # HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
 # TYPE fstrim_datadir_runs_total counter
 fstrim_datadir_runs_total 0
+# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 2
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 0
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 1
 "#;
     let expected = normalize_duration_line(expected_raw);
 
