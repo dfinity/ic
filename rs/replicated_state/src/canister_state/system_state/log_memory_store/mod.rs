@@ -130,12 +130,14 @@ impl LogMemoryStore {
     fn save_ring_buffer(&mut self, ring_buffer: RingBuffer) {
         self.maybe_page_map = Some(ring_buffer.to_page_map());
         self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
-        self.persistent_next_idx = self.next_idx(); // Preserve current `next_idx`.
+        // First update page_map and header_cache, then preserve current `next_idx`.
+        self.persistent_next_idx = self.next_idx();
     }
 
     /// Deallocates underlying memory.
     pub fn deallocate(&mut self) {
-        self.persistent_next_idx = self.next_idx(); // Preserve current `next_idx`.
+        // First preserve current `next_idx`, then clear page_map and header_cache.
+        self.persistent_next_idx = self.next_idx();
         self.maybe_page_map = None;
         self.header_cache = OnceLock::new();
     }
