@@ -1,4 +1,5 @@
 use crate::performance_based_algorithm::PerformanceBasedAlgorithmInputProvider;
+use futures::FutureExt;
 use crate::performance_based_algorithm::test_utils::{
     test_node_id, test_provider_id, test_subnet_id,
 };
@@ -222,6 +223,8 @@ fn test_v2_type3_type3dot1_grouped_with_performance_penalty() {
         );
 
     let result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
+        .now_or_never()
+        .unwrap()
         .expect("Calculation should succeed");
 
     assert_eq!(result.algorithm_version, 2);
@@ -349,8 +352,12 @@ fn test_v2_differs_from_v1() {
         );
 
     let v1_result = RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider.clone())
+        .now_or_never()
+        .unwrap()
         .expect("V1 calculation should succeed");
     let v2_result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
+        .now_or_never()
+        .unwrap()
         .expect("V2 calculation should succeed");
 
     assert_eq!(v1_result.algorithm_version, 1);
@@ -436,6 +443,8 @@ fn test_type4_not_in_rewards_table() {
         );
 
     let result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
+        .now_or_never()
+        .unwrap()
         .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
@@ -541,6 +550,8 @@ fn test_type4_explicit_zero_rate() {
         );
 
     let result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
+        .now_or_never()
+        .unwrap()
         .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
@@ -641,6 +652,8 @@ fn test_type4_in_rewards_table() {
         );
 
     let result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
+        .now_or_never()
+        .unwrap()
         .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];

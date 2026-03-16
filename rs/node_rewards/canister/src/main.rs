@@ -2,7 +2,7 @@ use ic_cdk::api::in_replicated_execution;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::registry::RegistryCanister;
-use ic_nervous_system_timer_task::{RecurringSyncTask, TimerTaskMetricsRegistry};
+use ic_nervous_system_timer_task::TimerTaskMetricsRegistry;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::{
@@ -60,7 +60,7 @@ fn post_upgrade() {
 
 pub fn schedule_timers() {
     HourlySyncTask::new(&CANISTER).schedule();
-    GetNodeProvidersRewardsInstructionsExporter::new(&CANISTER).schedule(&METRICS_REGISTRY);
+    GetNodeProvidersRewardsInstructionsExporter::new(&CANISTER).schedule();
 }
 
 fn panic_if_caller_not_governance() {
@@ -83,16 +83,19 @@ async fn get_node_providers_monthly_xdr_rewards(
     NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(&CANISTER, request).await
 }
 
+#[query(hidden = true)]
+fn reset_instructions() {}
+
 #[update]
-fn get_node_providers_rewards(
+async fn get_node_providers_rewards(
     request: GetNodeProvidersRewardsRequest,
 ) -> GetNodeProvidersRewardsResponse {
     panic_if_caller_not_governance();
-    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request)
+    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
 }
 
-#[query]
-fn get_node_providers_rewards_calculation(
+#[query(composite = true)]
+async fn get_node_providers_rewards_calculation(
     request: GetNodeProvidersRewardsCalculationRequest,
 ) -> GetNodeProvidersRewardsCalculationResponse {
     if in_replicated_execution() {
@@ -102,7 +105,7 @@ fn get_node_providers_rewards_calculation(
         );
     }
 
-    NodeRewardsCanister::get_node_providers_rewards_calculation(&CANISTER, request)
+    NodeRewardsCanister::get_node_providers_rewards_calculation(&CANISTER, request).await
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {

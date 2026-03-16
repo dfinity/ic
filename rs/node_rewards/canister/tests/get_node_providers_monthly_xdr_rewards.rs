@@ -95,7 +95,7 @@ async fn get_node_providers_rewards_calculation_is_only_callable_in_nonreplicate
     .unwrap_err();
     assert_eq!(err, "Metrics and registry are not synced up");
 
-    // Replicated update call is not allowed.
+    // Replicated update call is not allowed (composite_query rejects at transport level).
     let err = update_candid::<_, (GetNodeProvidersRewardsCalculationResponse,)>(
         &pocket_ic,
         node_rewards_id,
@@ -103,11 +103,10 @@ async fn get_node_providers_rewards_calculation_is_only_callable_in_nonreplicate
         (request,),
     )
     .await
-    .unwrap()
-    .0
     .unwrap_err();
-    assert_eq!(
-        err,
-        "Replicated execution of this method is not allowed. Use a non-replicated query call."
+    assert!(
+        err.reject_message
+            .contains("Composite query cannot be called in replicated mode"),
+        "Unexpected error: {err:?}"
     );
 }

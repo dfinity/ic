@@ -13,6 +13,8 @@ use itertools::Itertools;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive, Zero};
 use rust_decimal_macros::dec;
+#[cfg(target_arch = "wasm32")]
+use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};
 
@@ -105,7 +107,7 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The maximum rewards reduction for a node.
     const MAX_REWARDS_REDUCTION: Decimal;
 
-    fn calculate_rewards(
+    async fn calculate_rewards(
         from_date: NaiveDate,
         to_date: NaiveDate,
         input_provider: impl PerformanceBasedAlgorithmInputProvider,
@@ -132,6 +134,14 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
                     .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
             }
             daily_results.insert(day, result_for_day);
+
+            // This is a dummy call to force the Wasm engine to execute the query.
+            #[cfg(target_arch = "wasm32")]
+            let _ = ic_cdk::call::Call::unbounded_wait(
+                NODE_REWARDS_CANISTER_ID.get().0,
+                "reset_instructions",
+            )
+            .await;
         }
 
         Ok(RewardsCalculatorResults {

@@ -161,7 +161,7 @@ impl NodeRewardsCanister {
         Ok(())
     }
 
-    fn calculate_rewards(
+    async fn calculate_rewards(
         &self,
         request: GetNodeProvidersRewardsRequest,
     ) -> Result<RewardsCalculatorResults, String> {
@@ -175,10 +175,12 @@ impl NodeRewardsCanister {
         match rewards_calculator_version.version {
             RewardsCalculationV1::VERSION => {
                 RewardsCalculationV1::calculate_rewards(start_day, end_day, self)
+                    .await
                     .map_err(|e| format!("Could not calculate rewards: {e:?}"))
             }
             RewardsCalculationV2::VERSION => {
                 RewardsCalculationV2::calculate_rewards(start_day, end_day, self)
+                    .await
                     .map_err(|e| format!("Could not calculate rewards: {e:?}"))
             }
             _ => Err(format!(
@@ -228,6 +230,13 @@ impl rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithm
 
 // Exposed API Methods
 impl NodeRewardsCanister {
+    /// Returns a `&'static` reference to the canister inside a thread_local RefCell.
+    ///
+    /// `&self` across await points, which is incompatible with RefCell's scoped guard.
+    fn as_ref(canister: &'static LocalKey<RefCell<Self>>) -> &'static Self {
+        unsafe { &*canister.with(|cell| cell.as_ptr()) }
+    }
+
     pub async fn get_node_providers_monthly_xdr_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersMonthlyXdrRewardsRequest,
@@ -297,11 +306,11 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub fn get_node_providers_rewards(
+    pub async fn get_node_providers_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        let result = canister.with_borrow(|canister| canister.calculate_rewards(request))?;
+        let result = Self::as_ref(canister).calculate_rewards(request).await?;
 
         let rewards_xdr_permyriad = result
             .total_rewards_xdr_permyriad
@@ -319,7 +328,7 @@ impl NodeRewardsCanister {
         })
     }
 
-    pub fn get_node_providers_rewards_calculation(
+    pub async fn get_node_providers_rewards_calculation(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsCalculationRequest,
     ) -> GetNodeProvidersRewardsCalculationResponse {
@@ -328,8 +337,9 @@ impl NodeRewardsCanister {
             to_day: request.day,
             algorithm_version: request.algorithm_version,
         };
-        let mut result =
-            canister.with_borrow(|canister| canister.calculate_rewards(request_inner))?;
+        let mut result = Self::as_ref(canister)
+            .calculate_rewards(request_inner)
+            .await?;
 
         let day = NaiveDate::try_from(request.day)?;
         let daily_results = result
