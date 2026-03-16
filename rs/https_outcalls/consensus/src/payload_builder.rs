@@ -367,7 +367,7 @@ impl CanisterHttpPayloadBuilderImpl {
         height: Height,
         payload: &CanisterHttpPayload,
         validation_context: &ValidationContext,
-        delivered_ids: HashSet<CallbackId>,
+        mut delivered_ids: HashSet<CallbackId>,
     ) -> Result<(), PayloadValidationError> {
         // Empty payloads are always valid
         if payload.is_empty() {
@@ -406,9 +406,6 @@ impl CanisterHttpPayloadBuilderImpl {
             .subnet_call_context_manager
             .canister_http_request_contexts;
 
-        // Track all callback ids seen in this payload across all sections to avoid duplicates
-        let mut payload_callback_ids = HashSet::new();
-
         // Validate the timed out calls
         for timeout_id in &payload.timeouts {
             // Get requests
@@ -425,7 +422,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 ));
             }
             // Check for duplicates (already delivered or repeated in this payload)
-            if delivered_ids.contains(timeout_id) || !payload_callback_ids.insert(*timeout_id) {
+            if !delivered_ids.insert(*timeout_id) {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
                     *timeout_id,
                 ));
@@ -453,9 +450,7 @@ impl CanisterHttpPayloadBuilderImpl {
             .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
             // Check that the response is not submitted twice
-            if delivered_ids.contains(&response.content.id)
-                || !payload_callback_ids.insert(response.content.id)
-            {
+            if !delivered_ids.insert(response.content.id) {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
                     response.content.id,
                 ));
@@ -578,8 +573,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 );
             }
             for (callback_id, grouped_shares) in grouped_shares {
-                if delivered_ids.contains(&callback_id) || !payload_callback_ids.insert(callback_id)
-                {
+                if !delivered_ids.insert(callback_id) {
                     return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
                         callback_id,
                     ));
@@ -606,7 +600,7 @@ impl CanisterHttpPayloadBuilderImpl {
         for group in &payload.flexible_responses {
             let callback_id = group.callback_id;
 
-            if delivered_ids.contains(&callback_id) || !payload_callback_ids.insert(callback_id) {
+            if !delivered_ids.insert(callback_id) {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
                     callback_id,
                 ));
