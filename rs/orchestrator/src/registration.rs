@@ -145,7 +145,13 @@ impl NodeRegistration {
 
     // postcondition: we are registered with the NNS
     async fn retry_register_node(&mut self) {
-        let add_node_payload = self.assemble_add_node_message().await;
+        let add_node_payload = loop {
+            if let Ok(v) = self.assemble_add_node_message().await {
+                break v;
+            }
+
+            tokio::time::sleep(Duration::from_secs(10)).await;
+        };
 
         // Will contain information needed for the node operator
         // to approve the add node payload for onboarding.
@@ -266,7 +272,7 @@ impl NodeRegistration {
         Ok(())
     }
 
-    async fn assemble_add_node_message(&self) -> AddNodePayload {
+    async fn assemble_add_node_message(&self) -> anyhow::Result<AddNodePayload> {
         let key_handler = self.key_handler.clone();
         let node_pub_keys =
             tokio::task::spawn_blocking(move || key_handler.current_node_public_keys())
@@ -300,11 +306,11 @@ impl NodeRegistration {
         })
         .await
         .unwrap()
-        .expect("unable to detect IPv6 address");
+        .context("unable to detect IPv6 address")?;
 
         info!(self.log, "IPv6 address detected: {ipv6_address}");
 
-        AddNodePayload {
+        let payload = AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...
             node_signing_pk,
             committee_signing_pk: protobuf_to_vec(
@@ -345,7 +351,9 @@ impl NodeRegistration {
             // The following fields are unused.
             p2p_flow_endpoints: Default::default(), // unused field
             prometheus_metrics_endpoint: Default::default(), // unused field
-        }
+        };
+
+        Ok(payload)
     }
 
     /// Checks if the nodes keys are properly registered and if there are some
