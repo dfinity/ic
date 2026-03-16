@@ -928,7 +928,6 @@ pub fn load_canister_state(
         log_memory_store_data,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
-        canister_state_bits.snapshots_memory_usage,
         canister_state_bits.environment_variables,
         metrics,
     );
