@@ -19,6 +19,7 @@ use ic_registry_keys::{
 };
 use ic_registry_local_store::{LocalStoreImpl, compact_delta_to_changelog};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -275,6 +276,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         chain_key_config: None,
         canister_cycles_cost_schedule: CanisterCyclesCostSchedulePb::Normal as i32,
         subnet_admins: vec![],
+        resource_limits: Default::default(),
         recalled_replica_version_ids: vec![],
     }
 }
@@ -397,6 +399,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
         self.record.subnet_admins = subnet_admins.into_iter().map(PrincipalIdPb::from).collect();
+        self
+    }
+
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.record.resource_limits = Some(resource_limits.into());
         self
     }
 
