@@ -490,7 +490,6 @@ impl InternalState {
             },
         };
 
-        urls.sort();
         Ok(urls)
     }
 }
