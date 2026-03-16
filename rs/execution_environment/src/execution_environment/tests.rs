@@ -1876,7 +1876,6 @@ fn canister_snapshots_after_split() {
             .canister_state(&canister_id_1)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         0
     );
@@ -1885,7 +1884,6 @@ fn canister_snapshots_after_split() {
             .canister_state(&canister_id_2)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         0
     );
@@ -1915,7 +1913,6 @@ fn canister_snapshots_after_split() {
             .canister_state(&canister_id_1)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
     );
@@ -1924,7 +1921,6 @@ fn canister_snapshots_after_split() {
             .canister_state(&canister_id_2)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
     );
@@ -1971,7 +1967,6 @@ fn canister_snapshots_after_split() {
             .canister_state(&canister_id_1)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
     );
@@ -1981,7 +1976,6 @@ fn canister_snapshots_after_split() {
             .canister_state(&canister_id_2)
             .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
     );

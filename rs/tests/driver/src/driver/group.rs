@@ -420,7 +420,7 @@ impl SystemTestSubGroup {
 
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
-    teardown: Option<Box<dyn PotSetupFn>>,
+    teardowns: Vec<Box<dyn PotSetupFn>>,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
@@ -460,7 +460,12 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             setup: Default::default(),
+<<<<<<< HEAD
             teardown: Default::default(),
+=======
+            teardowns: Default::default(),
+            assert_no_replica_restarts: true,
+>>>>>>> master
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
@@ -501,8 +506,8 @@ impl SystemTestGroup {
         self
     }
 
-    pub fn with_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
-        self.teardown = Some(Box::new(teardown));
+    pub fn add_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
+        self.teardowns.push(Box::new(teardown));
         self
     }
 
@@ -759,9 +764,10 @@ impl SystemTestGroup {
             };
 
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
-            .teardown
+            .teardowns
             .into_iter()
-            .map(|teardown| (TEARDOWN_TASK_NAME.to_string(), teardown))
+            .enumerate()
+            .map(|(i, teardown)| (format!("{TEARDOWN_TASK_NAME}_{i}"), teardown))
             .chain(assert_no_metric_errors_fn)
             .map(|(teardown_name, teardown_fn)| {
                 let logger = logger.clone();
