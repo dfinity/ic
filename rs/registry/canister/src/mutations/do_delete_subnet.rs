@@ -59,6 +59,24 @@ impl Registry {
             value: new_subnet_list_record.encode_to_vec(),
         };
 
+        // Remove catch up package.
+        let subnet_dkg_mutation = RegistryMutation {
+            mutation_type: registry_mutation::Type::Delete as i32,
+            key: make_catch_up_package_contents_key(subnet_id)
+                .as_bytes()
+                .to_vec(),
+            value: vec![],
+        };
+
+        // Remove pubkey.
+        let subnet_threshold_signing_pubkey_mutation = RegistryMutation {
+            mutation_type: registry_mutation::Type::Delete as i32,
+            key: make_crypto_threshold_signing_pubkey_key(subnet_id)
+                .as_bytes()
+                .to_vec(),
+            value: vec![],
+        };
+
         // Remove subnet record.
         let remove_subnet_mutation = RegistryMutation {
             mutation_type: registry_mutation::Type::Delete as i32,
@@ -69,7 +87,12 @@ impl Registry {
         // Remove routing table shards.
         let mut remove_from_routing_table_mutations =
             self.remove_subnet_from_routing_table(self.latest_version(), subnet_id_);
-        let mut mutations = vec![subnet_list_mutation, remove_subnet_mutation];
+        let mut mutations = vec![
+            subnet_list_mutation,
+            subnet_dkg_mutation,
+            subnet_threshold_signing_pubkey_mutation,
+            remove_subnet_mutation,
+        ];
         mutations.append(&mut remove_from_routing_table_mutations);
 
         // Check invariants before applying mutations
