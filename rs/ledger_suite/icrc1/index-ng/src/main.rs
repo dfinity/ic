@@ -1,9 +1,9 @@
 #![allow(deprecated)]
 
 // Use wee_alloc for wasm to avoid dlmalloc assertion/heap issues under timer stress
-//#[cfg(target_arch = "wasm32")]
-//#[global_allocator]
-//static GLOBAL: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+#[cfg(target_arch = "wasm32")]
+#[global_allocator]
+static GLOBAL: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
