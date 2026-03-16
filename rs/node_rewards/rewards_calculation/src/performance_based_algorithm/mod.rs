@@ -140,7 +140,8 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
             let c = ic_cdk::call::Call::unbounded_wait(
                 NODE_REWARDS_CANISTER_ID.get().0,
                 "reset_instructions",
-            ).await?;
+            )
+            .await?;
         }
 
         Ok(RewardsCalculatorResults {
