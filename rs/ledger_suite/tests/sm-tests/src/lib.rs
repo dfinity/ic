@@ -74,6 +74,7 @@ use std::{
 
 mod allowances;
 pub mod fee_collector;
+pub mod icrc122_icrc152;
 pub mod icrc_106;
 pub mod metrics;
 

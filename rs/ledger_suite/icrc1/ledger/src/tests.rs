@@ -858,3 +858,111 @@ mod metadata_validation_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod feature_flags_tests {
+    use super::*;
+    use crate::FeatureFlags;
+
+    #[test]
+    fn icrc152_defaults_to_false() {
+        assert!(!FeatureFlags::default().icrc152);
+    }
+
+    #[test]
+    fn feature_flags_default_preserves_icrc2_enabled() {
+        // icrc2 stays true by default (existing behaviour).
+        assert!(FeatureFlags::default().icrc2);
+    }
+
+    #[test]
+    fn icrc152_init_disabled_by_default() {
+        let now = TimeStamp::from_nanos_since_unix_epoch(0);
+        // feature_flags: None → default flags → icrc152 = false.
+        let ledger = Ledger::from_init_args(DummyLogger, default_init_args(), now);
+        assert!(!ledger.feature_flags().icrc152);
+    }
+
+    #[test]
+    fn icrc152_can_be_enabled_at_init() {
+        let now = TimeStamp::from_nanos_since_unix_epoch(0);
+        let args = InitArgs {
+            feature_flags: Some(FeatureFlags {
+                icrc2: true,
+                icrc152: true,
+            }),
+            ..default_init_args()
+        };
+        let ledger = Ledger::from_init_args(DummyLogger, args, now);
+        assert!(ledger.feature_flags().icrc152);
+    }
+
+    #[test]
+    fn icrc152_can_be_enabled_via_upgrade() {
+        let now = TimeStamp::from_nanos_since_unix_epoch(0);
+        let mut ledger = Ledger::from_init_args(DummyLogger, default_init_args(), now);
+        assert!(!ledger.feature_flags().icrc152);
+
+        ledger.upgrade(
+            DummyLogger,
+            UpgradeArgs {
+                feature_flags: Some(FeatureFlags {
+                    icrc2: true,
+                    icrc152: true,
+                }),
+                ..UpgradeArgs::default()
+            },
+        );
+        assert!(ledger.feature_flags().icrc152);
+    }
+
+    #[test]
+    fn icrc152_can_be_disabled_via_upgrade() {
+        let now = TimeStamp::from_nanos_since_unix_epoch(0);
+        let args = InitArgs {
+            feature_flags: Some(FeatureFlags {
+                icrc2: true,
+                icrc152: true,
+            }),
+            ..default_init_args()
+        };
+        let mut ledger = Ledger::from_init_args(DummyLogger, args, now);
+        assert!(ledger.feature_flags().icrc152);
+
+        ledger.upgrade(
+            DummyLogger,
+            UpgradeArgs {
+                feature_flags: Some(FeatureFlags {
+                    icrc2: true,
+                    icrc152: false,
+                }),
+                ..UpgradeArgs::default()
+            },
+        );
+        assert!(!ledger.feature_flags().icrc152);
+    }
+
+    #[test]
+    fn upgrade_without_feature_flags_preserves_icrc152() {
+        let now = TimeStamp::from_nanos_since_unix_epoch(0);
+        let args = InitArgs {
+            feature_flags: Some(FeatureFlags {
+                icrc2: true,
+                icrc152: true,
+            }),
+            ..default_init_args()
+        };
+        let mut ledger = Ledger::from_init_args(DummyLogger, args, now);
+        assert!(ledger.feature_flags().icrc152);
+
+        // Upgrade with no feature_flags → existing value untouched.
+        ledger.upgrade(
+            DummyLogger,
+            UpgradeArgs {
+                feature_flags: None,
+                ..UpgradeArgs::default()
+            },
+        );
+        assert!(ledger.feature_flags().icrc152);
+    }
+}

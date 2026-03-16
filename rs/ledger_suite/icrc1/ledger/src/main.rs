@@ -2,8 +2,8 @@
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
-use candid::Principal;
 use candid::types::number::Nat;
+use candid::{CandidType, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_cdk::api::stable::StableReader;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -67,6 +67,7 @@ use icrc_ledger_types::{
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
 use num_traits::{ToPrimitive, bounds::Bounded};
+use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::{
     cell::RefCell,
@@ -747,7 +748,7 @@ fn archives() -> Vec<ArchiveInfo> {
 
 #[query(name = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
-    let standards = vec![
+    let mut standards = vec![
         StandardRecord {
             name: "ICRC-1".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
@@ -777,6 +778,12 @@ fn supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/ICRC/pull/106".to_string(),
         },
     ];
+    if Access::with_ledger(|l| l.feature_flags().icrc152) {
+        standards.push(StandardRecord {
+            name: "ICRC-152".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-152.md".to_string(),
+        });
+    }
     standards
 }
 
@@ -928,7 +935,7 @@ fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
 fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::SupportedBlockType> {
     use icrc_ledger_types::icrc3::blocks::SupportedBlockType;
 
-    vec![
+    let mut block_types = vec![
         SupportedBlockType {
             block_type: "1burn".to_string(),
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
@@ -954,7 +961,18 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
         },
-    ]
+    ];
+    if Access::with_ledger(|l| l.feature_flags().icrc152) {
+        block_types.push(SupportedBlockType {
+            block_type: "122burn".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-122.md".to_string(),
+        });
+        block_types.push(SupportedBlockType {
+            block_type: "122mint".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-122.md".to_string(),
+        });
+    }
+    block_types
 }
 
 #[query]
@@ -1018,6 +1036,220 @@ fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllow
         max_results,
         ic_cdk::api::time(),
     ))
+}
+
+// ── ICRC-152: privileged supply-change endpoints ─────────────────────────────
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub struct Icrc152MintArgs {
+    pub to: Account,
+    pub amount: Nat,
+    pub created_at_time: Option<u64>,
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub enum Icrc152MintError {
+    Unauthorized(String),
+    InvalidAccount(String),
+    Duplicate { duplicate_of: Nat },
+    GenericError { error_code: Nat, message: String },
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub struct Icrc152BurnArgs {
+    pub from: Account,
+    pub amount: Nat,
+    pub created_at_time: Option<u64>,
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub enum Icrc152BurnError {
+    Unauthorized(String),
+    InvalidAccount(String),
+    InsufficientBalance { balance: Nat },
+    Duplicate { duplicate_of: Nat },
+    GenericError { error_code: Nat, message: String },
+}
+
+#[update]
+async fn icrc152_mint(arg: Icrc152MintArgs) -> Result<Nat, Icrc152MintError> {
+    let caller = ic_cdk::api::caller();
+
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(Icrc152MintError::Unauthorized(
+            "caller is not a controller".to_string(),
+        ));
+    }
+
+    let enabled = Access::with_ledger(|l| l.feature_flags().icrc152);
+    if !enabled {
+        return Err(Icrc152MintError::GenericError {
+            error_code: Nat::from(4u64),
+            message: "ICRC-152 is not enabled on this ledger".to_string(),
+        });
+    }
+
+    if arg.to.owner == Principal::anonymous() {
+        return Err(Icrc152MintError::InvalidAccount(
+            "anonymous account not allowed".to_string(),
+        ));
+    }
+
+    let amount = match Tokens::try_from(arg.amount) {
+        Ok(n) => n,
+        Err(_) => {
+            return Err(Icrc152MintError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "amount too large".to_string(),
+            });
+        }
+    };
+
+    if Tokens::is_zero(&amount) {
+        return Err(Icrc152MintError::GenericError {
+            error_code: Nat::from(0u64),
+            message: "amount must be greater than zero".to_string(),
+        });
+    }
+
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let created_at_time = arg
+            .created_at_time
+            .map(TimeStamp::from_nanos_since_unix_epoch);
+
+        if &arg.to == ledger.minting_account() {
+            return Err(Icrc152MintError::InvalidAccount(
+                "cannot mint to the minting account".to_string(),
+            ));
+        }
+
+        let tx = Transaction {
+            operation: Operation::AuthorizedMint {
+                to: arg.to,
+                amount,
+                caller,
+                reason: arg.reason,
+            },
+            created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+            memo: None,
+        };
+
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|e| match e {
+                CoreTransferError::TxTooOld { .. } => Icrc152MintError::GenericError {
+                    error_code: Nat::from(1u64),
+                    message: "transaction too old".to_string(),
+                },
+                CoreTransferError::TxCreatedInFuture { .. } => Icrc152MintError::GenericError {
+                    error_code: Nat::from(2u64),
+                    message: "transaction created in the future".to_string(),
+                },
+                CoreTransferError::TxDuplicate { duplicate_of } => Icrc152MintError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                e => Icrc152MintError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("{e:?}"),
+                },
+            })?;
+        Ok(block_idx)
+    })?;
+
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+#[update]
+async fn icrc152_burn(arg: Icrc152BurnArgs) -> Result<Nat, Icrc152BurnError> {
+    let caller = ic_cdk::api::caller();
+
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(Icrc152BurnError::Unauthorized(
+            "caller is not a controller".to_string(),
+        ));
+    }
+
+    let enabled = Access::with_ledger(|l| l.feature_flags().icrc152);
+    if !enabled {
+        return Err(Icrc152BurnError::GenericError {
+            error_code: Nat::from(4u64),
+            message: "ICRC-152 is not enabled on this ledger".to_string(),
+        });
+    }
+
+    if arg.from.owner == Principal::anonymous() {
+        return Err(Icrc152BurnError::InvalidAccount(
+            "anonymous account not allowed".to_string(),
+        ));
+    }
+
+    let amount = match Tokens::try_from(arg.amount) {
+        Ok(n) => n,
+        Err(_) => {
+            return Err(Icrc152BurnError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "amount too large".to_string(),
+            });
+        }
+    };
+
+    if Tokens::is_zero(&amount) {
+        return Err(Icrc152BurnError::GenericError {
+            error_code: Nat::from(0u64),
+            message: "amount must be greater than zero".to_string(),
+        });
+    }
+
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let created_at_time = arg
+            .created_at_time
+            .map(TimeStamp::from_nanos_since_unix_epoch);
+
+        let tx = Transaction {
+            operation: Operation::AuthorizedBurn {
+                from: arg.from,
+                amount,
+                caller,
+                reason: arg.reason,
+            },
+            created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+            memo: None,
+        };
+
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|e| match e {
+                CoreTransferError::InsufficientFunds { balance } => {
+                    Icrc152BurnError::InsufficientBalance {
+                        balance: balance.into(),
+                    }
+                }
+                CoreTransferError::TxTooOld { .. } => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(1u64),
+                    message: "transaction too old".to_string(),
+                },
+                CoreTransferError::TxCreatedInFuture { .. } => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(2u64),
+                    message: "transaction created in the future".to_string(),
+                },
+                CoreTransferError::TxDuplicate { duplicate_of } => Icrc152BurnError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                e => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("{e:?}"),
+                },
+            })?;
+        Ok(block_idx)
+    })?;
+
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
 }
 
 candid::export_service!();
