@@ -121,8 +121,7 @@ fn retrieve_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) -> FsTrimMetr
 }
 
 fn initialize_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) {
-    const INITIALIZE_FSTRIM_METRICS_CMD: &str =
-        "sudo systemctl start setup-fstrim-tool.service";
+    const INITIALIZE_FSTRIM_METRICS_CMD: &str = "sudo systemctl start setup-fstrim-tool.service";
     info!(
         logger,
         "initializing fstrim metrics using command: {}", INITIALIZE_FSTRIM_METRICS_CMD
