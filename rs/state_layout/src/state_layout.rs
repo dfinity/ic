@@ -222,8 +222,6 @@ pub struct CanisterStateBits {
 pub struct CanisterSnapshotBits {
     /// The ID of the canister snapshot.
     pub snapshot_id: SnapshotId,
-    /// Identifies the canister to which this snapshot belongs.
-    pub canister_id: CanisterId,
     /// The timestamp indicating the moment the snapshot was captured.
     pub taken_at_timestamp: Time,
     /// The canister version at the time of taking the snapshot.

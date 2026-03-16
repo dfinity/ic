@@ -29,7 +29,7 @@ struct FsTrimArgs {
 pub fn main() -> Result<()> {
     let opts = FsTrimArgs::parse();
 
-    ic_fstrim_tool::fstrim_tool(
+    ic_fstrim_tool::run(
         FSTRIM_COMMAND,
         opts.metrics_filename,
         opts.target,

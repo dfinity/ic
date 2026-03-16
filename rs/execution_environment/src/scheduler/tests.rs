@@ -41,13 +41,11 @@ fn state_sync_clears_paused_execution_registry() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -552,9 +550,7 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_slice: NumInstructions::from(1),
             max_instructions_per_install_code_slice: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     test.advance_to_round(ExecutionRound::new(2));
@@ -637,9 +633,7 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_slice: NumInstructions::from(1),
             max_instructions_per_install_code_slice: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     test.advance_to_round(ExecutionRound::new(2));
@@ -869,6 +863,16 @@ fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
     .unwrap();
 
     *instructions_consumed_per_message.get("0").unwrap()
+}
+
+fn zero_instruction_overhead_config() -> SchedulerConfig {
+    SchedulerConfig {
+        instruction_overhead_per_execution: NumInstructions::from(0),
+        instruction_overhead_per_canister: NumInstructions::from(0),
+        instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+        dirty_page_overhead: NumInstructions::from(0),
+        ..SchedulerConfig::application_subnet()
+    }
 }
 
 pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {

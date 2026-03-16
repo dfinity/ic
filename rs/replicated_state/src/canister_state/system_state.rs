@@ -456,12 +456,6 @@ pub struct SystemState {
     /// Next local snapshot id.
     next_snapshot_id: u64,
 
-    /// Cumulative memory usage of all snapshots that belong to this canister.
-    ///
-    /// This amount contributes to the total `memory_usage` of the canister as
-    /// reported by `CanisterState::memory_usage`.
-    pub snapshots_memory_usage: NumBytes,
-
     /// Environment variables.
     pub environment_variables: EnvironmentVariables,
 }
@@ -638,7 +632,6 @@ impl SystemState {
             log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
-            snapshots_memory_usage: NumBytes::new(0),
         }
     }
 
@@ -673,7 +666,6 @@ impl SystemState {
         log_memory_store_data: Option<PageMap>,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
-        snapshots_memory_usage: NumBytes,
         environment_variables: BTreeMap<String, String>,
         metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
@@ -712,7 +704,6 @@ impl SystemState {
             ),
             wasm_memory_limit,
             next_snapshot_id,
-            snapshots_memory_usage,
             environment_variables: EnvironmentVariables::new(environment_variables),
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
@@ -2409,7 +2400,6 @@ pub mod testing {
             log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
-            snapshots_memory_usage: Default::default(),
             environment_variables: Default::default(),
         };
     }

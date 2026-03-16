@@ -202,6 +202,21 @@ fn composite_query_call_with_side_effects() {
 }
 
 #[test]
+fn composite_query_call_to_the_same_canister() {
+    // In this test we have a single canister that makes a composite self-call.
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let output = test.non_replicated_query(
+        canister_id,
+        "composite_query",
+        wasm().inter_query(canister_id, call_args()).build(),
+    );
+    assert!(matches!(output, Ok(WasmResult::Reply(_))));
+}
+
+#[test]
 fn query_methods_cannot_make_downstream_calls() {
     // In this test we have two canisters A and B.
     // Canister A attempts to call canister B from within a query method.

@@ -4,7 +4,7 @@ Before=node_exporter.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/metrics_tool --metrics /run/node_exporter/collector_textfile/custom_metrics.prom
+ExecStart=/opt/ic/bin/custom_metrics --metrics /run/node_exporter/collector_textfile/custom_metrics.prom
 
 # Disable systemd start and stop logs
 LogLevelMax=1

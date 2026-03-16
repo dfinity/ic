@@ -929,7 +929,6 @@ pub fn load_canister_state(
         log_memory_store_data,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
-        canister_state_bits.snapshots_memory_usage,
         canister_state_bits.environment_variables,
         metrics,
     );
@@ -1069,7 +1068,6 @@ pub fn load_snapshot(
     durations.insert("snapshot_wasm_chunk_store", starting_time.elapsed());
 
     let canister_snapshot = CanisterSnapshot::new(
-        canister_snapshot_bits.canister_id,
         canister_snapshot_bits.source,
         canister_snapshot_bits.taken_at_timestamp,
         canister_snapshot_bits.canister_version,

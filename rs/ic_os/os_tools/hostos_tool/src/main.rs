@@ -14,11 +14,10 @@ use utils::to_cidr;
 mod guestos_alternative;
 use guestos_alternative::{show_guestos_alternative, swap_guestos_alternative};
 
-mod node_gen;
-use node_gen::get_node_gen_metric;
+use ic_os_metrics_utils::write_registry_to_file;
 
-mod prometheus_metric;
-use prometheus_metric::write_single_metric;
+mod node_gen;
+use node_gen::get_node_gen_registry;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -82,7 +81,7 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::SetHardwareGenMetric { output_path }) => {
-            write_single_metric(&get_node_gen_metric(), Path::new(&output_path))
+            write_registry_to_file(&get_node_gen_registry(), Path::new(&output_path))
         }
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
             let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;

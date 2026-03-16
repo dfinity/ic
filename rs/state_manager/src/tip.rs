@@ -1379,7 +1379,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             },
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id(),
-            snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
+            snapshots_memory_usage: canister_state.snapshots_memory_usage(),
             environment_variables: canister_state
                 .system_state
                 .environment_variables
@@ -1412,7 +1412,6 @@ fn serialize_snapshot_protos_to_checkpoint_readwrite(
     snapshot_layout.snapshot().serialize(
         CanisterSnapshotBits {
             snapshot_id: *snapshot_id,
-            canister_id: canister_snapshot.canister_id(),
             taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
             canister_version: canister_snapshot.canister_version(),
             binary_hash: canister_snapshot.canister_module().module_hash().into(),

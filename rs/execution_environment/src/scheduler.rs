@@ -227,7 +227,7 @@ impl SchedulerImpl {
                 as_num_instructions(instructions_before - round_limits.instructions);
 
             let messages = match execute_subnet_message_result_type {
-                ExecuteSubnetMessageResultType::Finished(_) => NumMessages::from(1),
+                ExecuteSubnetMessageResultType::Finished => NumMessages::from(1),
                 ExecuteSubnetMessageResultType::Processing => NumMessages::from(0),
                 ExecuteSubnetMessageResultType::Paused => NumMessages::from(0),
             };
@@ -349,7 +349,7 @@ impl SchedulerImpl {
         let round_instructions_executed =
             as_num_instructions(instructions_before - round_limits.instructions);
         let messages = match execute_subnet_message_result_type {
-            ExecuteSubnetMessageResultType::Finished(_) => NumMessages::from(1),
+            ExecuteSubnetMessageResultType::Finished => NumMessages::from(1),
             ExecuteSubnetMessageResultType::Processing => NumMessages::from(0),
             ExecuteSubnetMessageResultType::Paused => NumMessages::from(0),
         };
@@ -801,11 +801,14 @@ impl SchedulerImpl {
                 - result.round_limits.subnet_available_callbacks;
         }
 
-        // Since there are multiple threads, we update the global limit using
-        // the thread that executed the most instructions.
+        // Reduce the instruction limit by the maximum number of instructions executed
+        // by any thread.
         round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
-
+        // Deduct all created callbacks from the available callbacks limit. This is a
+        // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
+        // `subnet_available_memory` will be recomputed at the beginning of the next
+        // iteration.
 
         (
             canisters,
@@ -869,7 +872,6 @@ impl SchedulerImpl {
                 .duration_between_allocation_charges(),
         );
         let mut all_rejects = Vec::new();
-        let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
             if canister.system_state.time_of_last_allocation_charge
                 > threshold_last_allocation_charge
@@ -900,7 +902,6 @@ impl SchedulerImpl {
                 )
                 .is_err()
             {
-                uninstalled_canisters.push(canister.canister_id());
                 all_rejects.push(uninstall_canister(
                     &self.log,
                     canister,
@@ -913,9 +914,7 @@ impl SchedulerImpl {
                 canister.system_state.clear_canister_history();
                 // Burn the remaining balance of the canister.
                 canister.system_state.burn_remaining_balance_for_uninstall();
-                canister
-                    .canister_snapshots
-                    .delete_snapshots(canister.canister_id());
+                canister.canister_snapshots.delete_snapshots();
 
                 info!(
                     self.log,
