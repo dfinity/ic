@@ -367,7 +367,7 @@ fn valid_keys_from_payload(
             return Err(String::from("idkg_dealing_encryption_pk is empty"));
         }
 
-        Some(pk) => PublicKey::decode(pk).map_err(|e| {
+        Some(pk) => PublicKey::decode(&pk).map_err(|e| {
             format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
         })?,
     };
