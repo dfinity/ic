@@ -1126,13 +1126,13 @@ impl IcNodeSnapshot {
 
     fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
         // This checks that the rule to block access from the ic-http-adapter to
-        // the local addressess (loopback, link-local & ULA) was applied.
+        // all locally-configured addressess was applied.
         // This is a hardcoded rule that is applied regardless of what is in the registry.
         // Hence a change in the registry won't affect this check.
         let script = r#"
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
-            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr { ::1, fc00::/7, fe80::/10 }"
+            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 fib daddr type local"
 
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
