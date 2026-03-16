@@ -2,7 +2,10 @@ use candid::{CandidType, Principal};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
+    make_subnet_list_record_key, make_subnet_record_key,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use ic_types::{PrincipalId, SubnetId};
@@ -17,18 +20,20 @@ pub struct DeleteSubnetPayload {
 }
 
 impl Registry {
-    /// Note: Currently, only CloudEngines can be deleted.
+    /// Note: Currently, only CloudEngine subnets can be deleted.
     ///       Subnet deletion requires changes in the deterministic state machine!
     ///
     /// Deleting a subnet means to:
     /// - Remove its subnet ID from the key `subnet_list`.
     /// - Remove its subnet record.
     /// - Remove all routing table shards that its subnet ID maps to.
-    /// - Remove other traces left in create_subnet, such as key material: TODO.
+    /// - Remove the catch up package.
+    /// - Remove the subnet public key.
     ///
     /// Consumers of `subnet_list`, the subnet record and the routing table assume live subnets.
-    /// Consumers that must take deleted subnets into account do so via old registry versions and
-    /// the `is_deleted` registry endpoint.
+    /// Consumers that must take deleted subnets into account do so via old registry versions (the
+    /// registry client method `get_versioned_value` allows the caller to distinguish between deleted
+    /// and non-existing values via `version ?= 0`).
     pub async fn do_delete_subnet(&mut self, payload: DeleteSubnetPayload) -> Result<(), String> {
         println!("{LOG_PREFIX}do_delete_subnet: {payload:?}");
 
@@ -62,7 +67,7 @@ impl Registry {
         // Remove catch up package.
         let subnet_dkg_mutation = RegistryMutation {
             mutation_type: registry_mutation::Type::Delete as i32,
-            key: make_catch_up_package_contents_key(subnet_id)
+            key: make_catch_up_package_contents_key(subnet_id_)
                 .as_bytes()
                 .to_vec(),
             value: vec![],
@@ -71,7 +76,7 @@ impl Registry {
         // Remove pubkey.
         let subnet_threshold_signing_pubkey_mutation = RegistryMutation {
             mutation_type: registry_mutation::Type::Delete as i32,
-            key: make_crypto_threshold_signing_pubkey_key(subnet_id)
+            key: make_crypto_threshold_signing_pubkey_key(subnet_id_)
                 .as_bytes()
                 .to_vec(),
             value: vec![],
