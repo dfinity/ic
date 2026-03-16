@@ -2,6 +2,7 @@ pub mod recovery_utils;
 mod ui;
 
 use anyhow::{Context, Result};
+use tracing::error;
 use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
@@ -374,7 +375,7 @@ impl GuestOSRecoveryApp {
         let terminal = match ratatui::try_init() {
             Ok(t) => t,
             Err(e) => {
-                println!("\nERROR: Manual Recovery TUI failed to start.\n{e:#}\n");
+                error!("Manual Recovery TUI failed to start: {e:#}");
                 return Err(e.into());
             }
         };

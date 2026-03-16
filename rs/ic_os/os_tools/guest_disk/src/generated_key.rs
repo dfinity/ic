@@ -1,6 +1,7 @@
 use crate::crypt::{activate_crypt_device, format_crypt_device};
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
+use tracing::info;
 use ic_sys::fs::{Clobber, write_atomically_using_tmp_file};
 use std::fs::Permissions;
 use std::io::Write;
@@ -54,7 +55,7 @@ impl GeneratedKeyDiskEncryption<'_> {
                 buf.write_all(&rand_key)
             }) {
                 Ok(_) => {
-                    println!(
+                    info!(
                         "Generated disk encryption key and saved it to {}",
                         self.key_path.display()
                     );

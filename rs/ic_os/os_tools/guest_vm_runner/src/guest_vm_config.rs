@@ -1,6 +1,7 @@
 use crate::GuestVMType;
 use crate::metrics::GuestVmMetrics;
 use anyhow::{Context, Result, ensure};
+use tracing::info;
 use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::hostos::guestos_config::generate_guestos_config;
@@ -66,7 +67,7 @@ pub fn assemble_config_media(
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
     bootstrap_options.build_bootstrap_config_image(media_path)?;
 
-    println!(
+    info!(
         "Assembling config media for GuestOS: {}",
         media_path.display()
     );

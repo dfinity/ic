@@ -3,6 +3,7 @@ mod tests;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
+use tracing::debug;
 use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
@@ -31,6 +32,8 @@ pub enum Args {
 
 #[cfg(target_os = "linux")]
 fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+
     let args = Args::parse();
 
     // TODO: We could replace this with Linux capabilities but this works well for now.
@@ -96,7 +99,7 @@ fn run(
 }
 
 unsafe extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {
-    eprintln!(
+    debug!(
         "libcryptsetup: {}",
         unsafe { CStr::from_ptr(msg) }.to_string_lossy()
     );

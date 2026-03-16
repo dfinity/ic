@@ -5495,6 +5495,8 @@ dependencies = [
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -5623,6 +5625,8 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
  "virt",
 ]
@@ -5640,6 +5644,8 @@ dependencies = [
  "nix 0.24.3",
  "serde",
  "serde_json",
+ "tracing",
+ "tracing-subscriber",
  "utils",
 ]
 
@@ -6033,6 +6039,8 @@ dependencies = [
  "prometheus",
  "regex",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
  "utils",
  "uuid",
 ]
@@ -9725,6 +9733,8 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -17645,6 +17655,7 @@ dependencies = [
  "ratatui",
  "scopeguard",
  "shell-escape",
+ "tracing",
  "tui-textarea",
 ]
 
@@ -22770,6 +22781,8 @@ dependencies = [
  "network",
  "prost 0.13.5",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "url",
  "utils",
 ]

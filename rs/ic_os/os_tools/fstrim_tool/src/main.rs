@@ -27,6 +27,8 @@ struct FsTrimArgs {
 }
 
 pub fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+
     let opts = FsTrimArgs::parse();
 
     ic_fstrim_tool::run(

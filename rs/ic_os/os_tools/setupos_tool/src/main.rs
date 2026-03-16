@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
+use tracing::{debug, info};
 use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -52,6 +53,8 @@ struct SetupOSArgs {
 }
 
 pub fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("ERROR: this only runs on Linux.");
@@ -64,7 +67,7 @@ pub fn main() -> Result<()> {
             let setupos_config: SetupOSConfig =
                 deserialize_config(&opts.setupos_config_object_path)?;
 
-            eprintln!(
+            debug!(
                 "Network settings config: {:?}",
                 &setupos_config.network_settings
             );
@@ -74,7 +77,7 @@ pub fn main() -> Result<()> {
                 setupos_config.icos_settings.deployment_environment,
                 NodeType::SetupOS,
             );
-            eprintln!("Using generated mac {generated_mac}");
+            debug!("Using generated mac {generated_mac}");
 
             generate_network_config(
                 &setupos_config.network_settings,
@@ -86,7 +89,7 @@ pub fn main() -> Result<()> {
             let setupos_config: SetupOSConfig =
                 deserialize_config(&opts.setupos_config_object_path)?;
 
-            eprintln!(
+            debug!(
                 "Network settings config: {:?}",
                 &setupos_config.network_settings
             );
@@ -96,7 +99,7 @@ pub fn main() -> Result<()> {
                 setupos_config.icos_settings.deployment_environment,
                 node_type,
             );
-            eprintln!("Using generated mac address {generated_mac}");
+            debug!("Using generated mac address {generated_mac}");
 
             let Ipv6Config::Deterministic(ipv6_config) =
                 &setupos_config.network_settings.ipv6_config
@@ -136,14 +139,14 @@ fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<
         .trim()
         .to_string();
 
-    eprintln!("Checking if version '{}' is blessed...", current_version);
+    info!("Checking if version '{}' is blessed...", current_version);
 
     let nns_urls: Vec<Url> = config.icos_settings.nns_urls.clone();
     if nns_urls.is_empty() {
         return Err(anyhow!("No NNS URLs configured"));
     }
 
-    eprintln!("Using NNS URLs: {:?}", nns_urls);
+    debug!("Using NNS URLs: {:?}", nns_urls);
 
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| anyhow!("Failed to create tokio runtime: {}", e))?;
@@ -168,7 +171,7 @@ fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<
         .any(|v| v == &current_version);
 
     if is_blessed {
-        eprintln!("Version '{}' is blessed.", current_version);
+        info!("Version '{}' is blessed.", current_version);
         Ok(())
     } else {
         Err(anyhow!(

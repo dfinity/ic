@@ -1,6 +1,7 @@
 use crate::guest_vm_config::vm_resources;
 use anyhow::Context;
 use config_types::HostOSConfig;
+use tracing::{info, warn};
 
 const HUGEPAGE_SIZE_KIB: u64 = 2048; // 2MB hugepages
 const KIB_PER_GIB: u64 = 1024 * 1024;
@@ -21,16 +22,16 @@ pub(crate) fn reserve_hugepages() -> anyhow::Result<()> {
         .icos_settings
         .enable_trusted_execution_environment
     {
-        println!("Skipping hugepage setup: trusted execution environment is enabled");
+        info!("Skipping hugepage setup: trusted execution environment is enabled");
         return Ok(());
     }
 
-    println!("Setting up huge pages");
+    info!("Setting up huge pages");
 
     let vm_memory_gib = vm_resources(&hostos_config).1 as u64;
     let hugepages_needed = vm_memory_gib * KIB_PER_GIB / HUGEPAGE_SIZE_KIB;
 
-    println!(
+    info!(
         "Allocating {vm_memory_gib} GiB as huge pages ({hugepages_needed} pages of {HUGEPAGE_SIZE_KIB} KiB)"
     );
 
@@ -45,15 +46,15 @@ pub(crate) fn reserve_hugepages() -> anyhow::Result<()> {
         .context("Failed to parse nr_hugepages after allocation")?;
 
     if allocated < hugepages_needed {
-        println!(
+        warn!(
             "Allocation failed ({allocated} pages allocated, {hugepages_needed} pages requested)"
         );
-        println!("Resetting hugepages to 0");
+        info!("Resetting hugepages to 0");
         std::fs::write(NR_HUGEPAGES_PATH, "0\n").context("Failed to reset nr_hugepages")?;
         return Ok(());
     }
 
-    println!("Successfully allocated {allocated} huge pages ({vm_memory_gib} GiB)");
+    info!("Successfully allocated {allocated} huge pages ({vm_memory_gib} GiB)");
     Ok(())
 }
 
@@ -68,13 +69,13 @@ pub(crate) fn read_available_hugepages_gib() -> u64 {
                     (free_hugepages * HUGEPAGE_SIZE_KIB) / KIB_PER_GIB
                 }
                 Err(e) => {
-                    eprintln!("Failed to parse hugepages: {e}");
+                    warn!("Failed to parse hugepages: {e}");
                     0
                 }
             }
         }
         Err(e) => {
-            eprintln!("Failed to read hugepages: {e}");
+            warn!("Failed to read hugepages: {e}");
             0
         }
     }

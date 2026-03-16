@@ -1,5 +1,6 @@
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
+use tracing::debug;
 use config_tool::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
@@ -71,6 +72,8 @@ struct HostOSArgs {
 }
 
 pub fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("ERROR: this only runs on Linux.");
@@ -86,7 +89,7 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
             let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 
-            eprintln!(
+            debug!(
                 "Network settings config: {:?}",
                 &hostos_config.network_settings
             );
@@ -106,7 +109,7 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateIpv6Address { node_type }) => {
             let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 
-            eprintln!(
+            debug!(
                 "Network settings config: {:?}",
                 &hostos_config.network_settings
             );
@@ -117,7 +120,7 @@ pub fn main() -> Result<()> {
                 node_type,
             );
 
-            eprintln!("Using generated mac address {generated_mac}");
+            debug!("Using generated mac address {generated_mac}");
 
             let Ipv6Config::Deterministic(ipv6_config) =
                 &hostos_config.network_settings.ipv6_config
@@ -135,7 +138,7 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateMacAddress { node_type }) => {
             let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 
-            eprintln!(
+            debug!(
                 "Network settings config: {:?}",
                 &hostos_config.network_settings
             );
