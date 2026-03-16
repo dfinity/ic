@@ -1,5 +1,5 @@
 {
-  "checksum": "7916d6e421ec3cf26a9dcf8bd2a2bd70bfc0fcb42634a3a5f3c628b91adafdf6",
+  "checksum": "47030910a49b6239c2a52bc1b00f2dfe29d7e6f8ca035238185df8376b985ef6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3154,7 +3154,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/askama_derive/0.15.1/download",
-          "sha256": "8ba5e7259a1580c61571e3116ebaaa01e3c001b2132b17c4cc5c70780ca3e994"
+          "sha256": "8ba5e7259a1580c61571e3116ebaaa01e3c001b2132b17c4cc5c70780ca3e994",
+          "patch_args": [
+            "-p2"
+          ],
+          "patches": [
+            "@@//bazel:askama.patch"
+          ]
         }
       },
       "targets": [
