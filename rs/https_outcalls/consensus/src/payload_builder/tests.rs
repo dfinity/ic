@@ -1801,6 +1801,7 @@ fn flexible_build_filters_duplicate_signers() {
             .map(|e| e.proof.signature.signer)
             .collect();
         assert_eq!(signers.len(), group.responses.len());
+        assert_eq!(group.responses.len(), 2);
     });
 }
 
