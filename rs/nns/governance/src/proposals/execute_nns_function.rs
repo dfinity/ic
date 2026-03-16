@@ -457,6 +457,7 @@ pub enum ValidNnsFunction {
     UnpauseCanisterMigrations,
     SetSubnetOperationalLevel,
     SplitSubnet,
+    DeleteSubnet,
 }
 
 impl ValidNnsFunction {
@@ -586,6 +587,7 @@ impl ValidNnsFunction {
                 (REGISTRY_CANISTER_ID, "set_subnet_operational_level")
             }
             ValidNnsFunction::SplitSubnet => (REGISTRY_CANISTER_ID, "split_subnet"),
+            ValidNnsFunction::DeleteSubnet => (REGISTRY_CANISTER_ID, "delete_subnet"),
         }
     }
 
@@ -615,7 +617,8 @@ impl ValidNnsFunction {
             | ValidNnsFunction::ChangeSubnetTypeAssignment
             | ValidNnsFunction::UpdateSnsWasmSnsSubnetIds
             | ValidNnsFunction::SetSubnetOperationalLevel
-            | ValidNnsFunction::SplitSubnet => Topic::SubnetManagement,
+            | ValidNnsFunction::SplitSubnet
+            | ValidNnsFunction::DeleteSubnet => Topic::SubnetManagement,
 
             ValidNnsFunction::ReviseElectedGuestosVersions
             | ValidNnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
@@ -704,6 +707,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::UnpauseCanisterMigrations => "Unpause Canister Migrations",
             ValidNnsFunction::SetSubnetOperationalLevel => "Set Subnet Operational Level",
             ValidNnsFunction::SplitSubnet => "Split subnet",
+            ValidNnsFunction::DeleteSubnet => "Delete Subnet",
         }
     }
 
@@ -923,6 +927,11 @@ impl ValidNnsFunction {
                 the nodes and canisters specified in the proposal will be moved to the newly \
                 created subnet."
             }
+            ValidNnsFunction::DeleteSubnet => {
+                "Delete a subnet. The subnet record, catch-up package, threshold signing key \
+                and routing table entries are removed from the registry, and the subnet's \
+                nodes become unassigned. Currently limited to CloudEngine subnets."
+            }
         }
     }
 }
@@ -1012,6 +1021,7 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
                 Ok(ValidNnsFunction::SetSubnetOperationalLevel)
             }
             NnsFunction::SplitSubnet => Ok(ValidNnsFunction::SplitSubnet),
+            NnsFunction::DeleteSubnet => Ok(ValidNnsFunction::DeleteSubnet),
 
             // Obsolete functions - based on check_obsolete
             NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {
