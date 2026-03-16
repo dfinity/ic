@@ -338,9 +338,17 @@ impl LedgerSuiteConfig {
             retrieve_blocks_from_ledger_interval_seconds: None,
         });
         let args = Encode!(&index_upgrade_arg).unwrap();
+        // Stop the canister before upgrading to ensure all in-flight
+        // inter-canister calls complete and build_index guards are cleared.
+        state_machine
+            .stop_canister(canister_id)
+            .expect("should successfully stop index canister");
         state_machine
             .upgrade_canister(canister_id, wasm.clone().bytes(), args.clone())
             .expect("should successfully upgrade index canister");
+        state_machine
+            .start_canister(canister_id)
+            .expect("should successfully start index canister");
         println!("Upgraded {} index '{}'", self.canister_name, self.index_id);
     }
 
