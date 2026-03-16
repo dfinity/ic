@@ -124,7 +124,10 @@ impl RingBuffer {
     }
 
     /// Append old records from an iterator without checking `next_idx`.
-    pub fn append_old_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
+    pub fn append_log_iter_unchecked(
+        &mut self,
+        records: impl IntoIterator<Item = CanisterLogRecord>,
+    ) {
         self.append_log_iter_inner(records, false)
     }
 

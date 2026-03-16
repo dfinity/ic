@@ -223,7 +223,7 @@ impl LogMemoryStore {
 
         // Migrate records.
         if let Some(old_buffer) = self.load_ring_buffer() {
-            new_buffer.append_old_log_iter(old_buffer.iter());
+            new_buffer.append_log_iter_unchecked(old_buffer.iter());
         }
 
         // Update of the state.
