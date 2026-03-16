@@ -410,32 +410,27 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
 
 async fn get_supported_standards_from_ledger() -> Vec<String> {
     let ledger_id = with_state(|state| state.ledger_id);
-    log!(
-        P1,
-        "[get_supported_standards_from_ledger]: making the call..."
-    );
+    ic_cdk::println!("[index-ng] [dbg] get_supported_standards_from_ledger: before call to {}", ledger_id);
     let res = ic_cdk::api::call::call::<_, (Vec<StandardRecord>,)>(
         ledger_id,
         "icrc1_supported_standards",
         (),
     )
     .await;
+    ic_cdk::println!("[index-ng] [dbg] get_supported_standards_from_ledger: after call, ok={}", res.is_ok());
     match res {
         Ok((res,)) => {
             let supported_standard_names = res.into_iter().map(|s| s.name).collect::<Vec<_>>();
-            log!(
-                P1,
-                "[get_supported_standards_from_ledger]: ledger {} supports {:?}",
+            ic_cdk::println!(
+                "[index-ng] [dbg] get_supported_standards_from_ledger: ledger {} supports {:?}",
                 ledger_id,
                 supported_standard_names,
             );
             supported_standard_names
         }
         Err((code, msg)) => {
-            // log the error but do not propagate it
-            log!(
-                P0,
-                "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}. Error code: {:?} message: {}",
+            ic_cdk::println!(
+                "[index-ng] [dbg] get_supported_standards_from_ledger: FAILED ledger {}. code: {:?} msg: {}",
                 ledger_id,
                 code,
                 msg
@@ -577,8 +572,10 @@ async fn icrc3_get_blocks_from_archive(
 
 async fn find_get_blocks_method() -> GetBlocksMethod {
     if let Some(get_blocks_method) = CACHE.with(|cache| cache.borrow().get_blocks_method) {
+        ic_cdk::println!("[index-ng] [dbg] find_get_blocks_method: cache hit");
         return get_blocks_method;
     }
+    ic_cdk::println!("[index-ng] [dbg] find_get_blocks_method: cache miss, calling get_supported_standards");
     let standards = get_supported_standards_from_ledger().await;
     let get_blocks_method = if standards.into_iter().any(|standard| standard == "ICRC-3") {
         GetBlocksMethod::ICRC3GetBlocks
@@ -591,17 +588,22 @@ async fn find_get_blocks_method() -> GetBlocksMethod {
 
 pub async fn build_index() -> Option<()> {
     if with_state(|state| state.is_build_index_running) {
+        ic_cdk::println!("[index-ng] [dbg] build_index: skipped (already running)");
         return None;
     }
     mutate_state(|state| {
         state.is_build_index_running = true;
     });
     let _reset_is_build_index_running_flag_guard = guard((), |_| {
+        ic_cdk::println!("[index-ng] [dbg] build_index: guard dropped, clearing is_build_index_running");
         mutate_state(|state| {
             state.is_build_index_running = false;
         });
     });
-    let num_indexed = match find_get_blocks_method().await {
+    ic_cdk::println!("[index-ng] [dbg] build_index: start, calling find_get_blocks_method");
+    let get_blocks_method = find_get_blocks_method().await;
+    ic_cdk::println!("[index-ng] [dbg] build_index: find_get_blocks_method returned");
+    let num_indexed = match get_blocks_method {
         GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await,
         GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await,
     };

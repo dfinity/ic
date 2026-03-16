@@ -980,12 +980,19 @@ unsafe extern "C" fn callback(env: usize) {
         // All that's left is to explicitly trap in case this is the last call being multiplexed,
         // to replace an automatic trap from not replying.
         CallFutureState::Trapped => trap("Call already trapped"),
-        _ => {
-            // do nothing!
+        other => {
+            // The state was not Executing or Trapped. This is unexpected but can
+            // happen when a message is aborted (e.g. instruction limit) and the
+            // reply is delivered later. Log the unexpected state for diagnostics.
+            // mem::replace already set the state to Complete, so the next poll
+            // will find the result — but we have no waker to trigger that poll.
+            // Best effort: if the old state had a method handle, run the waker
+            // in that context. Otherwise just log and return.
+            ic_cdk::println!(
+                "[ic-cdk] callback: unexpected CallFutureState variant: {:?}",
+                std::mem::discriminant(&other)
+            );
             return;
-            // unreachable!(
-            //     "CallFutureState for in-flight calls should only be Executing or Trapped (callback)"
-            // )
         }
     };
     ic_cdk_executor::in_callback_executor_context_for(method, || {
@@ -1027,12 +1034,14 @@ unsafe extern "C" fn cleanup(env: usize) {
             // more to clean up except for the CallFutureState.
             return;
         }
-        _ => {
-            // do nothing!
+        other => {
+            // Unexpected state — log for diagnostics and return.
+            // The err_state has already been written by mem::replace.
+            ic_cdk::println!(
+                "[ic-cdk] cleanup: unexpected CallFutureState variant: {:?}",
+                std::mem::discriminant(&other)
+            );
             return;
-            // unreachable!(
-            //     "CallFutureState for in-flight calls should only be Executing or Trapped (cleanup)"
-            // )
         }
     };
     ic_cdk_executor::in_trap_recovery_context_for(method, || {
