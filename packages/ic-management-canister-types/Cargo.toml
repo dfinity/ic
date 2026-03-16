@@ -9,7 +9,7 @@ documentation = "https://docs.rs/ic-management-canister-types"
 readme = "README.md"
 categories = ["api-bindings", "data-structures"]
 keywords = ["internet-computer", "types", "dfinity", "canister"]
-include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+include = ["src", "Cargo.toml", "CHANGELOG.md", "README.md"]
 license = "Apache-2.0"
 repository = "https://github.com/dfinity/ic"
 
