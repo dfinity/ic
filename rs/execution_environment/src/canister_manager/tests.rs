@@ -55,10 +55,7 @@ use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, Routin
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
-    canister_state::system_state::{
-        CyclesUseCase,
-        wasm_chunk_store::{self, ChunkValidationResult},
-    },
+    canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
         subnet_call_context_manager::InstallCodeCallId, testing::NetworkTopologyTesting,
     },
@@ -91,6 +88,7 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, UserId,
     batch::CanisterCyclesCostSchedule,
+    cycles_use_case::CyclesUseCase,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
     nominal_cycles::NominalCycles,
@@ -314,7 +312,6 @@ fn canister_manager_config(
     rate_limiting_of_instructions: FlagStatus,
 ) -> CanisterMgrConfig {
     CanisterMgrConfig::new(
-        MEMORY_CAPACITY,
         DEFAULT_PROVISIONAL_BALANCE,
         NumSeconds::from(100_000),
         subnet_id,
@@ -2170,7 +2167,7 @@ fn delete_canister_consumed_cycles_observed() {
             .get_consumed_cycles_by_use_case()
             .get(&CyclesUseCase::DeletedCanisters)
             .unwrap(),
-        NominalCycles::from(initial_cycles)
+        NominalCycles::from(initial_cycles.get())
     );
 }
 

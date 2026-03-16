@@ -7,9 +7,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{CanisterIdRecord, IC_00, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    SystemState,
-    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
-    testing::SystemStateTesting,
+    SystemState, canister_state::execution_state::WasmExecutionMode, testing::SystemStateTesting,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -20,6 +18,7 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     batch::CanisterCyclesCostSchedule,

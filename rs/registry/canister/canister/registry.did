@@ -529,6 +529,12 @@ type NodeSshAccess = record {
   public_keys : opt vec text;
 };
 
+type SplitSubnetPayload = record {
+  source_subnet_id: principal;
+  destination_canister_ranges: vec CanisterIdRange;
+  destination_node_ids: vec principal;
+};
+
 type OperationType = variant {
   Add: vec principal;
   Remove: vec principal;
@@ -603,4 +609,5 @@ service : {
   update_subnet_admins : (UpdateSubnetAdminsPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
   swap_node_in_subnet_directly : (SwapNodeInSubnetDirectlyPayload) -> ();
+  split_subnet : (SplitSubnetPayload) -> ();
 };

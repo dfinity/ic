@@ -64,6 +64,10 @@ const SEV_CERTIFICATE_CACHE_DIR: &str = "/boot/config/sev/certificates";
 /// timeout here.
 const GUESTOS_BOOT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
+/// How long to wait for GuestOS to complete its own shutdown after receiving the ACPI power-off
+/// signal before giving up and letting the force-destroy in Drop take over.
+const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+
 /// The GuestOS will log one of these marker texts on the serial output.
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
 const GUESTOS_BOOT_FAILURE_MARKER: &str = "GUESTOS BOOT FAILURE";
@@ -290,6 +294,33 @@ impl VirtualMachine {
         self.libvirt_connect
             .lookup_domain_by_id(self.domain_id)
             .context("Domain no longer exists")
+    }
+
+    /// Sends an ACPI power-off signal to the GuestOS and waits for it to stop cleanly.
+    /// If the GuestOS does not stop within `GRACEFUL_SHUTDOWN_TIMEOUT`, this returns and the
+    /// `Drop` impl will force-destroy the domain as a fallback.
+    async fn shutdown_gracefully(&self) {
+        match self.get_domain() {
+            Ok(domain) => {
+                if let Err(e) = domain.shutdown() {
+                    eprintln!("Failed to send ACPI shutdown signal to GuestOS: {e}");
+                    return;
+                }
+                println!("Sent ACPI shutdown signal to GuestOS, waiting for it to stop...");
+            }
+            Err(e) => {
+                eprintln!("Failed to get domain for graceful shutdown: {e}");
+                return;
+            }
+        }
+
+        match tokio::time::timeout(GRACEFUL_SHUTDOWN_TIMEOUT, self.wait_for_shutdown()).await {
+            Ok(()) => println!("GuestOS shut down gracefully"),
+            Err(_) => eprintln!(
+                "GuestOS did not shut down within {:?}, proceeding with force shutdown",
+                GRACEFUL_SHUTDOWN_TIMEOUT
+            ),
+        }
     }
 
     /// Returns once the VM is no longer running.
@@ -726,7 +757,8 @@ impl GuestVmService {
             biased;
             // Wait for either VM shutdown event or stop signal
             _ = termination_token.cancelled() => {
-                println!("Shutting down VM");
+                println!("Shutting down VM gracefully");
+                vm.shutdown_gracefully().await;
                 Ok(())
             },
             _ = vm.wait_for_shutdown() => {

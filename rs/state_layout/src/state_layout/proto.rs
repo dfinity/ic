@@ -59,6 +59,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
+            snapshot_visibility: pb_canister_state_bits::SnapshotVisibility::from(
+                &item.snapshot_visibility,
+            )
+            .into(),
             log_memory_limit: item.log_memory_limit.get(),
             canister_log_records: item
                 .canister_log
@@ -197,6 +201,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
+            snapshot_visibility: try_from_option_field(
+                value.snapshot_visibility,
+                "CanisterStateBits::snapshot_visibility",
+            )
+            .unwrap_or_default(),
             log_memory_limit: NumBytes::from(value.log_memory_limit),
             canister_log: CanisterLog::new_aggregate(
                 value.next_canister_log_record_idx,
@@ -287,7 +296,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
     fn from(item: CanisterSnapshotBits) -> Self {
         Self {
             snapshot_id: item.snapshot_id.get_local_snapshot_id(),
-            canister_id: Some((item.canister_id).into()),
+            canister_id: Some(item.snapshot_id.get_canister_id().into()),
             taken_at_timestamp: item.taken_at_timestamp.as_nanos_since_unix_epoch(),
             canister_version: item.canister_version,
             binary_hash: item.binary_hash.to_vec(),
@@ -346,7 +355,6 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
         let source = SnapshotSource::try_from(source).unwrap_or_default();
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
-            canister_id,
             taken_at_timestamp: Time::from_nanos_since_unix_epoch(item.taken_at_timestamp),
             canister_version: item.canister_version,
             binary_hash: WasmHash::from(binary_hash),

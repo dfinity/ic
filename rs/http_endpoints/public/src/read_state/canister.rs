@@ -332,6 +332,9 @@ fn verify_paths(
             [b"subnet", _subnet_id, b"public_key"] => {
                 metrics.observe_read_state_path(ENDPOINT, "subnet_public_key");
             }
+            [b"subnet", _subnet_id, b"type"] => {
+                metrics.observe_read_state_path(ENDPOINT, "subnet_type");
+            }
             [b"subnet", _subnet_id, b"node"] => {
                 metrics.observe_read_state_path(ENDPOINT, "subnet_node");
             }
@@ -468,10 +471,7 @@ mod test {
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        CanisterQueues, RefundPool, ReplicatedState, SystemMetadata,
-        canister_snapshots::CanisterSnapshots,
-    };
+    use ic_replicated_state::{CanisterQueues, RefundPool, ReplicatedState, SystemMetadata};
     use ic_test_utilities_state::insert_dummy_canister;
     use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, canister_test_id, user_test_id};
     use ic_types::{batch::RawQueryStats, time::UNIX_EPOCH};
@@ -603,7 +603,6 @@ mod test {
             CanisterQueues::default(),
             RefundPool::default(),
             RawQueryStats::default(),
-            CanisterSnapshots::default(),
         )
     }
 

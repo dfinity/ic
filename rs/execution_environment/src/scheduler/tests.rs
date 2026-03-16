@@ -4,20 +4,20 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::STOP_CANISTER_TIMEOUT_DURATION;
 use ic_config::subnet_config::SchedulerConfig;
+use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{CanisterStatus, metadata_state::testing::NetworkTopologyTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::messages::CallbackId;
+use ic_types::Cycles;
+use ic_types::messages::{CallbackId, Payload, RejectContext};
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
-use ic_types::{ComputeAllocation, Cycles};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use ic00::{CanisterHttpRequestArgs, HttpMethod};
 use proptest::prelude::*;
@@ -33,6 +33,172 @@ mod routing;
 mod scheduling;
 mod subnet_messages;
 mod timers;
+
+#[test]
+fn state_sync_clears_paused_execution_registry() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // Create a canister and hold on to a clean copy of it.
+    let canister = test.create_canister();
+    let clean_canister = test.canister_state(canister).clone();
+
+    // Execute one DTS round to create a paused execution in both the canister's
+    // task queue and the execution environment's paused execution registry.
+    test.send_ingress(canister, ingress(1000));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_paused_execution());
+    assert_eq!(
+        test.scheduler().exec_env.paused_execution_registry_sizes(),
+        (1, 0)
+    );
+
+    // Simulate a state sync replacing the replicated state: replace the canister
+    // state with the clean copy. The registry still holds the orphaned paused
+    // execution entry.
+    test.state_mut().put_canister_state(clean_canister);
+    assert!(!test.canister_state(canister).has_paused_execution());
+
+    // Execute another round. The scheduler detects that no canister has a paused
+    // execution and calls `abandon_paused_executions()` to clear the paused
+    // execution registry.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.scheduler().exec_env.paused_execution_registry_sizes(),
+        (0, 0)
+    );
+
+    // At this point, a new short message should complete immediately.
+    let new_msg = test.send_ingress(canister, ingress(50));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.ingress_error(&new_msg).code(),
+        ErrorCode::CanisterDidNotReply
+    );
+}
+
+#[test]
+fn expired_ingress_messages_are_removed_from_ingress_queues() {
+    let batch_time = Time::from_nanos_since_unix_epoch(u64::MAX / 2);
+    let mut test = SchedulerTestBuilder::new()
+        .with_batch_time(batch_time)
+        .build();
+
+    let canister_id = test.create_canister();
+
+    // Send some ingress messages to a canister. Half of them have expiry times
+    // before the current batch time, half have expiry times after.
+    let canister_ingress_messages = 10;
+    let expiry_time_before = batch_time.saturating_sub(Duration::from_secs(1));
+    let expiry_time_after = batch_time + Duration::from_secs(1);
+    for i in 0..canister_ingress_messages {
+        if i % 2 == 0 {
+            test.send_ingress_with_expiry(canister_id, ingress(1000), expiry_time_before);
+        } else {
+            test.send_ingress_with_expiry(canister_id, ingress(1000), expiry_time_after);
+        }
+    }
+
+    // Send some ingress messages to the subnet. Half of them have expiry times
+    // before the current batch time, half have expiry times after.
+    let subnet_ingress_messages = 6;
+    for i in 0..subnet_ingress_messages {
+        if i % 2 == 0 {
+            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+            test.inject_ingress_to_ic00(Method::CanisterStatus, payload, expiry_time_before);
+        } else {
+            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+            test.inject_ingress_to_ic00(Method::CanisterStatus, payload, expiry_time_after);
+        }
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Ingress queues should be empty, with all messages either expired or executed.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+    assert_eq!(test.subnet_ingress_queue_size(), 0);
+
+    // Verify that half of the messages expired and the other half got executed.
+    assert_eq!(
+        fetch_counter(
+            test.metrics_registry(),
+            "scheduler_expired_ingress_messages_count",
+        )
+        .unwrap() as u64,
+        (canister_ingress_messages / 2) + (subnet_ingress_messages / 2)
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        (canister_ingress_messages / 2) + (subnet_ingress_messages / 2)
+    );
+}
+
+#[test]
+fn consensus_queue_is_emptied() {
+    use ic_management_canister_types_private::{
+        DerivationPath, MasterPublicKeyId, SignWithECDSAArgs,
+    };
+    use ic_types::batch::ConsensusResponse;
+
+    let ecdsa_key_id = make_ecdsa_key_id(0);
+    let master_ecdsa_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    let mut test = SchedulerTestBuilder::new()
+        .with_replica_version(ReplicaVersion::default())
+        .with_chain_keys(vec![master_ecdsa_key_id.clone()])
+        .build();
+
+    let canister_id = test.create_canister();
+
+    let ecdsa_payload = Encode!(&SignWithECDSAArgs {
+        message_hash: [1; 32],
+        derivation_path: DerivationPath::new(Vec::new()),
+        key_id: ecdsa_key_id,
+    })
+    .unwrap();
+
+    // Execute two signing requests.
+    for _ in 0..2 {
+        test.inject_call_to_ic00(
+            Method::SignWithECDSA,
+            ecdsa_payload.clone(),
+            test.ecdsa_signature_fee(),
+            canister_id,
+            InputQueueType::RemoteSubnet,
+        );
+    }
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager now contains two signing contexts.
+    let sign_with_ecdsa_contexts = test.state().signature_request_contexts().clone();
+    assert_eq!(sign_with_ecdsa_contexts.len(), 2);
+
+    // Produce reject responses for both contexts and execute a round.
+    for (callback_id, _) in sign_with_ecdsa_contexts.iter() {
+        let response = ConsensusResponse::new(
+            *callback_id,
+            Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
+        );
+        test.state_mut().consensus_queue.push(response);
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // After the round, the signature request contexts should have completed.
+    assert!(test.state().signature_request_contexts().is_empty());
+}
 
 #[test]
 fn stopping_canisters_are_stopped_when_they_are_ready() {
@@ -276,260 +442,101 @@ fn can_timeout_stop_canister_requests() {
 }
 
 #[test]
-fn expired_ingress_messages_are_removed_from_ingress_queues() {
-    let batch_time = Time::from_nanos_since_unix_epoch(u64::MAX / 2);
-    let mut test = SchedulerTestBuilder::new()
-        .with_batch_time(batch_time)
-        .build();
+fn test_maybe_add_heartbeat_or_global_timer_tasks() {
+    use ExecutionTask as Task;
+    use NextScheduledMethod::*;
 
-    let canister_id = test.create_canister();
+    /// Calls `maybe_add_heartbeat_or_global_timer_tasks` in the given state and
+    /// returns the tasks that were enqueued and the next scheduled method.
+    fn call(
+        has_input: bool,
+        has_heartbeat: bool,
+        has_active_timer: bool,
+        next_scheduled_method: NextScheduledMethod,
+    ) -> (Vec<ExecutionTask>, NextScheduledMethod) {
+        let mut test = SchedulerTestBuilder::new().build();
+        let canister_id = test.create_canister();
+        let canister = test.canister_state_mut(canister_id);
 
-    // Add some ingress messages to a canister's queue.
-    // Half of them are set with expiry time before the
-    // time of the current round while the other half
-    // are set to expire after the current round.
-    let num_ingress_messages_to_canisters = 10;
-    for i in 0..num_ingress_messages_to_canisters {
-        if i % 2 == 0 {
-            test.send_ingress_with_expiry(
-                canister_id,
-                ingress(1000),
-                batch_time.saturating_sub(Duration::from_secs(1)),
-            );
-        } else {
-            test.send_ingress_with_expiry(
-                canister_id,
-                ingress(1000),
-                batch_time + Duration::from_secs(1),
-            );
+        if has_input {
+            canister.push_ingress(Ingress {
+                source: user_test_id(77),
+                receiver: canister_id,
+                effective_canister_id: None,
+                method_name: String::from("test"),
+                method_payload: vec![1_u8],
+                message_id: message_test_id(555),
+                expiry_time: expiry_time_from_now(),
+            });
         }
-    }
-
-    // Add some ingress messages to the subnet's queue.
-    // Half of them are set with expiry time before the
-    // time of the current round while the other half
-    // are set to expire after the current round.
-    let num_ingress_messages_to_subnet: u64 = 20;
-    for i in 0..num_ingress_messages_to_subnet {
-        if i % 2 == 0 {
-            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-            test.inject_ingress_to_ic00(
-                Method::CanisterStatus,
-                payload,
-                batch_time + Duration::from_secs(1),
-            );
-        } else {
-            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-            test.inject_ingress_to_ic00(
-                Method::CanisterStatus,
-                payload,
-                batch_time.saturating_sub(Duration::from_secs(1)),
-            );
+        while canister.get_next_scheduled_method() != next_scheduled_method {
+            canister.inc_next_scheduled_method();
         }
-    }
 
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    // Ingress queues should be empty, messages either expired
-    // or were executed in the round.
-    assert_eq!(test.ingress_queue_size(canister_id), 0);
-    assert_eq!(test.subnet_ingress_queue_size(), 0);
-
-    // Verify that half of the messages expired and the other half got executed.
-    assert_eq!(
-        fetch_counter(
-            test.metrics_registry(),
-            "scheduler_expired_ingress_messages_count",
-        )
-        .unwrap() as u64,
-        (num_ingress_messages_to_canisters / 2) + (num_ingress_messages_to_subnet / 2)
-    );
-    assert_eq!(
-        test.state()
-            .metadata
-            .subnet_metrics
-            .update_transactions_total,
-        (num_ingress_messages_to_canisters / 2) + (num_ingress_messages_to_subnet / 2)
-    );
-}
-
-#[test]
-fn test_is_next_method_added_to_task_queue() {
-    let mut test = SchedulerTestBuilder::new().build();
-
-    let canister = test.create_canister_with(
-        Cycles::new(1_000_000_000_000),
-        ComputeAllocation::zero(),
-        MemoryAllocation::default(),
-        None,
-        None,
-        None,
-    );
-    let has_heartbeat = false;
-    let has_active_timer = false;
-
-    let mut heartbeat_and_timer_canisters = BTreeSet::new();
-    assert!(
-        !test
-            .canister_state(canister)
-            .system_state
-            .queues()
-            .has_input()
-    );
-
-    for _ in 0..3 {
-        // The timer did not reach the deadline and the canister does not have
-        // input, hence no method will be chosen.
-        assert!(!is_next_method_chosen(
-            test.canister_state_mut(canister),
+        let mut heartbeat_and_timer_canisters = BTreeSet::new();
+        maybe_add_heartbeat_or_global_timer_tasks(
+            canister,
             has_heartbeat,
             has_active_timer,
             &mut heartbeat_and_timer_canisters,
-        ));
-        assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
-        test.canister_state_mut(canister)
-            .inc_next_scheduled_method();
+        );
+
+        let mut tasks = Vec::new();
+        while let Some(task) = canister.system_state.task_queue.pop_front() {
+            tasks.push(task);
+        }
+
+        // Iff a task was enqueued, the canister was added to the set.
+        assert!(
+            tasks.is_empty() || heartbeat_and_timer_canisters.contains(&canister_id),
+            "tasks: {tasks:?}, heartbeat_and_timer_canisters: {heartbeat_and_timer_canisters:?}"
+        );
+
+        (tasks, canister.get_next_scheduled_method())
     }
 
-    // Make canister able to schedule both heartbeat and global timer.
-    let has_heartbeat = true;
-    let has_active_timer = true;
-
-    // Set input.
-    test.canister_state_mut(canister)
-        .system_state
-        .queues_mut()
-        .push_ingress(Ingress {
-            source: user_test_id(77),
-            receiver: canister,
-            effective_canister_id: None,
-            method_name: String::from("test"),
-            method_payload: vec![1_u8],
-            message_id: message_test_id(555),
-            expiry_time: expiry_time_from_now(),
-        });
-
-    assert!(
-        test.canister_state(canister)
-            .system_state
-            .queues()
-            .has_input()
-    );
-
-    while test.canister_state(canister).get_next_scheduled_method() != NextScheduledMethod::Message
-    {
-        test.canister_state_mut(canister)
-            .inc_next_scheduled_method();
+    fn inc(mut method: NextScheduledMethod) -> NextScheduledMethod {
+        method.inc();
+        method
     }
 
-    assert!(is_next_method_chosen(
-        test.canister_state_mut(canister),
-        has_heartbeat,
-        has_active_timer,
-        &mut heartbeat_and_timer_canisters,
-    ));
-
-    // Since NextScheduledMethod is Message it is not expected that Heartbeat
-    // and GlobalTimer are added to the queue.
-    assert!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .is_empty()
-    );
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
-
-    while test.canister_state(canister).get_next_scheduled_method()
-        != NextScheduledMethod::Heartbeat
-    {
-        test.canister_state_mut(canister)
-            .inc_next_scheduled_method();
-    }
-
-    // Since NextScheduledMethod is Heartbeat it is expected that Heartbeat
-    // and GlobalTimer are added at the front of the queue.
-    assert!(is_next_method_chosen(
-        test.canister_state_mut(canister),
-        has_heartbeat,
-        has_active_timer,
-        &mut heartbeat_and_timer_canisters,
-    ));
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
+    // With no input, no heartbeat, no active timer, nothing changes.
+    assert_eq!(call(false, false, false, Message), (vec![], Message));
+    assert_eq!(call(false, false, false, Heartbeat), (vec![], Heartbeat));
     assert_eq!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .front(),
-        Some(&ExecutionTask::Heartbeat)
+        call(false, false, false, GlobalTimer),
+        (vec![], GlobalTimer)
     );
 
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .pop_front();
-
+    // With an input but no heartbeat or timer, next method advances past Message.
+    assert_eq!(call(true, false, false, Message), (vec![], inc(Message)));
+    assert_eq!(call(true, false, false, Heartbeat), (vec![], inc(Message)));
     assert_eq!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .front(),
-        Some(&ExecutionTask::GlobalTimer)
+        call(true, false, false, GlobalTimer),
+        (vec![], inc(Message))
     );
 
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .pop_front();
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
-
-    heartbeat_and_timer_canisters = BTreeSet::new();
-
-    while test.canister_state(canister).get_next_scheduled_method()
-        != NextScheduledMethod::GlobalTimer
-    {
-        test.canister_state_mut(canister)
-            .inc_next_scheduled_method();
-    }
-    // Since NextScheduledMethod is GlobalTimer it is expected that GlobalTimer
-    // and Heartbeat are added at the front of the queue.
-    assert!(is_next_method_chosen(
-        test.canister_state_mut(canister),
-        has_heartbeat,
-        has_active_timer,
-        &mut heartbeat_and_timer_canisters,
-    ));
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
+    // With an input and a heartbeat or timer, it depends on the next method.
+    assert_eq!(call(true, true, false, Message), (vec![], inc(Message)));
     assert_eq!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .front(),
-        Some(&ExecutionTask::GlobalTimer)
+        call(true, true, false, Heartbeat),
+        (vec![Task::Heartbeat], inc(Heartbeat))
     );
-
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .pop_front();
-
     assert_eq!(
-        test.canister_state(canister)
-            .system_state
-            .task_queue
-            .front(),
-        Some(&ExecutionTask::Heartbeat)
+        call(true, false, true, GlobalTimer),
+        (vec![Task::GlobalTimer], inc(GlobalTimer))
     );
 
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .pop_front();
-
-    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
+    // With all tree, the next method is always scheduled and advanced past.
+    assert_eq!(call(true, true, true, Message), (vec![], inc(Message)));
+    assert_eq!(
+        call(true, true, true, Heartbeat),
+        (vec![Task::Heartbeat, Task::GlobalTimer], inc(Heartbeat))
+    );
+    assert_eq!(
+        call(true, true, true, GlobalTimer),
+        (vec![Task::GlobalTimer, Task::Heartbeat], inc(GlobalTimer))
+    );
 }
 
 #[test]
@@ -541,7 +548,6 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
             max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
@@ -627,7 +633,6 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
             max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
@@ -709,6 +714,134 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
         0
     );
     assert!(test.state().subnet_queues().has_output());
+}
+
+#[test]
+fn finalization_clears_scheduled_canister_log_delta_sizes() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister_a = test.create_canister();
+    let canister_b = test.create_canister();
+
+    // Populate delta_log_sizes on canister_a's canister_log by appending two
+    // non-empty delta logs.
+    fn append_delta_log(canister: &mut CanisterState, content: &str) -> usize {
+        let mut delta = ic_types::CanisterLog::default_delta();
+        delta.add_record(0, content.as_bytes().to_vec());
+        let size = delta.bytes_used();
+        canister
+            .system_state
+            .canister_log
+            .append_delta_log(&mut delta);
+        size
+    }
+    let size1 = append_delta_log(test.canister_state_mut(canister_a), "hello");
+    let size2 = append_delta_log(test.canister_state_mut(canister_a), "world!");
+
+    // Also append a delta log to canister_b's canister_log.
+    let size3 = append_delta_log(test.canister_state_mut(canister_b), "oops");
+
+    // Both canisters have delta log sizes.
+    fn has_delta_log_sizes(canister: &CanisterState) -> bool {
+        canister.system_state.canister_log.has_delta_log_sizes()
+    }
+    assert!(has_delta_log_sizes(test.canister_state(canister_a)));
+    assert!(has_delta_log_sizes(test.canister_state(canister_b)));
+
+    // Only schedule canister_a. This is not realistic behavior (canister_b would
+    // not have produced logs if it had not been scheduled), but it's useful for
+    // testing.
+    test.send_ingress(canister_a, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // After the round, delta_log_sizes have been cleared for both canisters.
+    assert!(!has_delta_log_sizes(test.canister_state(canister_a)));
+    assert!(!has_delta_log_sizes(test.canister_state(canister_b)));
+
+    // The metric must have recorded all delta sizes we appended.
+    let canister_log_delta_memory_usage = &test.scheduler().metrics.canister_log_delta_memory_usage;
+    assert_eq!(canister_log_delta_memory_usage.get_sample_count(), 3);
+    assert_eq!(
+        canister_log_delta_memory_usage.get_sample_sum() as usize,
+        size1 + size2 + size3
+    );
+}
+
+#[test]
+#[should_panic(expected = "scheduler_canister_invariant_broken")]
+fn check_canister_invariants_detects_wasm_memory_exceeding_limit() {
+    use ic_replicated_state::NumWasmPages;
+
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    // Inflate the canister's wasm memory size beyond `max_wasm_memory_size`
+    // (default 4 GiB = 65536 wasm pages of 64 KiB each).
+    test.canister_state_mut(canister)
+        .execution_state
+        .as_mut()
+        .unwrap()
+        .wasm_memory
+        .size = NumWasmPages::from(65536 + 1);
+
+    // Send a message so the canister is scheduled, then execute a round.
+    // The invariant check during finalization detects the violation and
+    // panics via debug_assert.
+    test.send_ingress(canister, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+}
+
+#[test]
+fn finalization_prunes_expired_ingress_history_entries() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1_000_000);
+    let mut test = SchedulerTestBuilder::new()
+        .with_batch_time(initial_time)
+        .build();
+
+    let canister = test.create_canister();
+
+    // Execute two ingress messages so they reach a terminal state
+    // (Failed / CanisterDidNotReply) and are recorded in the ingress history.
+    let msg_a = test.send_ingress(canister, ingress(1));
+    let msg_b = test.send_ingress(canister, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Both messages should be in a terminal (Failed) state.
+    assert!(matches!(
+        test.ingress_state(&msg_a),
+        IngressState::Failed(_)
+    ));
+    assert!(matches!(
+        test.ingress_state(&msg_b),
+        IngressState::Failed(_)
+    ));
+    // The ingress history should have two entries.
+    assert_eq!(test.state().metadata.ingress_history.len(), 2);
+
+    // Advance time just short of MAX_INGRESS_TTL and execute a round.
+    // The entries must still be present.
+    let before_deadline = initial_time + (ic_limits::MAX_INGRESS_TTL - Duration::from_secs(1));
+    test.set_time(before_deadline);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert!(matches!(
+        test.ingress_state(&msg_a),
+        IngressState::Failed(_)
+    ));
+    assert!(matches!(
+        test.ingress_state(&msg_b),
+        IngressState::Failed(_)
+    ));
+
+    // Advance time past MAX_INGRESS_TTL so the pruning time is exceeded.
+    let after_deadline = initial_time + ic_limits::MAX_INGRESS_TTL + Duration::from_secs(1);
+    test.set_time(after_deadline);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // After pruning, the statuses must be gone (Unknown).
+    assert_eq!(test.ingress_status(&msg_a), IngressStatus::Unknown);
+    assert_eq!(test.ingress_status(&msg_b), IngressStatus::Unknown);
+    // The ingress history should be empty.
+    assert_eq!(test.state().metadata.ingress_history.len(), 0);
 }
 
 fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
