@@ -311,11 +311,11 @@ impl SchedulerTest {
     pub fn send_ingress(&mut self, canister_id: CanisterId, message: TestMessage) -> MessageId {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
-        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let message_id = wasm_executor.push_ingress(
             canister_id,
-            canister,
+            &mut state,
             message,
+            self.user_id,
             Time::from_nanos_since_unix_epoch(u64::MAX / 2),
         );
         self.state = Some(state);
@@ -330,8 +330,8 @@ impl SchedulerTest {
     ) -> MessageId {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
-        let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        let message_id = wasm_executor.push_ingress(canister_id, canister, message, expiry_time);
+        let message_id =
+            wasm_executor.push_ingress(canister_id, &mut state, message, self.user_id, expiry_time);
         self.state = Some(state);
         message_id
     }
@@ -1523,8 +1523,9 @@ impl TestWasmExecutorCore {
     fn push_ingress(
         &mut self,
         canister_id: CanisterId,
-        canister: &mut CanisterState,
+        state: &mut ReplicatedState,
         message: TestMessage,
+        user_id: UserId,
         expiry_time: Time,
     ) -> MessageId {
         let ingress_id = self.next_message_id();
@@ -1535,10 +1536,23 @@ impl TestWasmExecutorCore {
                 .method_name("update")
                 .method_payload(encode_message_id_as_payload(ingress_id))
                 .expiry_time(expiry_time)
+                .sender(user_id)
                 .build(),
             None,
         )
             .into();
+        state.set_ingress_status(
+            ingress.message_id.clone(),
+            IngressStatus::Known {
+                receiver: canister_id.get(),
+                user_id,
+                time: state.time(),
+                state: IngressState::Received,
+            },
+            NumBytes::from(u64::MAX),
+            |_| {},
+        );
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let message_id = ingress.message_id.clone();
         canister.push_ingress(ingress);
         message_id

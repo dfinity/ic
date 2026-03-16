@@ -4,6 +4,7 @@ use super::super::test_utilities::{
     SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions,
 };
 use super::super::*;
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, Method};
@@ -648,7 +649,13 @@ fn dts_update_and_heartbeat() {
     let message_id = test.send_ingress(canister, ingress(300));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // The heartbeat did not give the ingress message a chance to run.
-    assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    assert_matches!(
+        test.ingress_status(&message_id),
+        IngressStatus::Known {
+            state: IngressState::Received,
+            ..
+        }
+    );
 
     test.expect_heartbeat(canister, instructions(100));
     test.execute_round(ExecutionRoundType::OrdinaryRound);

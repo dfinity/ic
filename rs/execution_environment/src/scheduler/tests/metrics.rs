@@ -19,10 +19,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_gauge, fetch_gauge_vec, fetch_histogram_vec_stats, fetch_int_gauge,
-    fetch_int_gauge_vec, metric_vec,
+    HistogramStats, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_histogram_vec_stats,
+    fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
+use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
 use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
@@ -1194,5 +1195,49 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
                 (initial_balance.get() - removed_cycles.get()) as f64
             )
         ]),
+    );
+}
+
+#[test]
+fn canister_ingress_queue_latencies_are_observed() {
+    let t0 = UNIX_EPOCH + Duration::from_secs(1_000);
+    let delta_t = 3;
+    let t1 = t0 + Duration::from_secs(delta_t);
+
+    let mut test = SchedulerTestBuilder::new().build();
+    let a = test.create_canister();
+    let b = test.create_canister();
+
+    // Send 2 ingress messages to canister A, one at `t0` and one at `t1`; and 1 to
+    // canister B at `t1`.
+    test.set_time(t0);
+    let msg_a1 = test.send_ingress(a, ingress(1));
+    test.set_time(t1);
+    let msg_a2 = test.send_ingress(a, ingress(1));
+    let msg_b1 = test.send_ingress(b, ingress(1));
+
+    // Execute all messages, at `t1`.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // All 3 messages produced a response.
+    for msg_id in [msg_a1, msg_a2, msg_b1] {
+        assert_eq!(
+            test.ingress_error(&msg_id).code(),
+            ErrorCode::CanisterDidNotReply
+        );
+    }
+
+    // Canister A: 2 messages with latencies 3s and 0s each → average = 1.5
+    // Canister B: 1 message with latency 0s → average = 0.0
+    // Histogram: 2 observations (one per canister), sum = 1.5
+    assert_eq!(
+        fetch_histogram_stats(
+            test.metrics_registry(),
+            "scheduler_canister_ingress_queue_latencies_seconds",
+        ),
+        Some(HistogramStats {
+            count: 2,
+            sum: (delta_t as f64) / 2.0
+        })
     );
 }
