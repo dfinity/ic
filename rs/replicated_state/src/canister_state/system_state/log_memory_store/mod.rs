@@ -66,7 +66,8 @@ impl LogMemoryStore {
     /// Any attempts to append logs will be silently ignored until the store is
     /// explicitly resized to a non-zero capacity.
     pub fn new(feature_flag: FlagStatus) -> Self {
-        Self::new_inner(feature_flag, None, 0)
+        const DEFAULT_NEXT_IDX: u64 = 0;
+        Self::new_inner(feature_flag, None, DEFAULT_NEXT_IDX)
     }
 
     /// Creates a new store from a checkpoint.

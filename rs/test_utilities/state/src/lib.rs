@@ -358,9 +358,9 @@ impl CanisterStateBuilder {
         system_state.log_visibility = self.log_visibility;
 
         // TODO: double check if it's needed.
-        // system_state
-        //     .log_memory_store
-        //     .resize_for_testing(self.log_memory_limit);
+        system_state
+            .log_memory_store
+            .resize_for_testing(self.log_memory_limit);
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {

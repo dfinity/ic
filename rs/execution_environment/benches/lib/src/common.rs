@@ -114,6 +114,8 @@ where
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
     canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(0));
     canister_state.system_state.freeze_threshold = 0.into();
+    // After canister creation its log memory limit was set to a default value,
+    // and allocated corresponding log_memory_store memory.
     canister_state
         .system_state
         .log_memory_store
