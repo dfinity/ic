@@ -867,10 +867,7 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
             max_instructions_per_message: NumInstructions::from(SLICE),
             max_instructions_per_slice: NumInstructions::from(SLICE),
             max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .with_subnet_memory_capacity(pages_into_bytes(4).get())
         .build();
