@@ -16269,6 +16269,7 @@ dependencies = [
  "ssh2",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]

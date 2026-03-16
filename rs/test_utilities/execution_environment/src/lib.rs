@@ -1638,10 +1638,10 @@ impl ExecutionTest {
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             match execute_subnet_message_result_type {
-                ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
+                ExecuteSubnetMessageResultType::Finished => {
                     // cycles charging proceeds by prepaying for the message instruction limit
-                    // and subsequently refunding based on `message_instructions_used`
-                    // and thus `message_instructions_used` are capped
+                    // and subsequently refunding based on `slice_instructions_used`
+                    // and thus `slice_instructions_used` are capped
                     // at the message instruction limit
                     let capped_slice_instructions_used = std::cmp::min(
                         NumInstructions::from(slice_instructions_used.get() as u64),
@@ -1661,12 +1661,11 @@ impl ExecutionTest {
                         // then no instructions should be used.
                         assert_eq!(capped_slice_instructions_used.get(), 0);
                     }
-                    // For backward compatibility, we only perform the following checks and updates for install code messages.
+                    // For backward compatibility, we only perform stats updates for install code messages.
                     if is_install_code {
-                        assert_eq!(message_instructions_used, capped_slice_instructions_used);
                         self.update_execution_stats(
                             canister_id,
-                            message_instructions_used,
+                            capped_slice_instructions_used,
                             cost_schedule,
                         );
                     }
@@ -1816,7 +1815,7 @@ impl ExecutionTest {
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
                 match execute_subnet_message_result_type {
-                    ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
+                    ExecuteSubnetMessageResultType::Finished => {
                         let paused_subnet_message =
                             self.paused_subnet_messages.remove(&canister_id).unwrap();
                         let instructions_used_before = paused_subnet_message.instructions;
@@ -1824,7 +1823,7 @@ impl ExecutionTest {
                             NumInstructions::from(slice_instructions_used.get() as u64)
                                 + instructions_used_before;
                         // cycles charging proceeds by prepaying for the message instruction limit
-                        // and subsequently refunding based on `message_instructions_used`
+                        // and subsequently refunding based on `instructions_used`
                         // and thus `instructions_used` are capped
                         // at the message instruction limit
                         let capped_instructions_used = std::cmp::min(
@@ -1844,10 +1843,9 @@ impl ExecutionTest {
                             cycles_used_before,
                             capped_instructions_used,
                         );
-                        assert_eq!(message_instructions_used, capped_instructions_used);
                         self.update_execution_stats(
                             canister_id,
-                            message_instructions_used,
+                            capped_instructions_used,
                             cost_schedule,
                         );
                     }

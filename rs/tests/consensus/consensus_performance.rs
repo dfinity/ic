@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
+//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -230,7 +230,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test; TestParameters { message_size: 9_500, rps: 1_000.0 }))
         .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 1.0 }))
         .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 5.0 }))
-        .with_teardown(teardown)
+        .add_teardown(teardown)
         .execute_from_args()?;
     Ok(())
 }
