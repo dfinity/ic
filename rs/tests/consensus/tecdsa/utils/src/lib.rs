@@ -1138,7 +1138,13 @@ pub fn await_pre_signature_stash_size(
                     let Some(sizes) = val.get(metric) else {
                         bail!("Metric {metric} not found in {val:?}");
                     };
-                    assert_eq!(sizes.len(), subnet.nodes().count());
+                    if sizes.len() != subnet.nodes().count() {
+                        bail!(
+                            "Metric {metric} only reported by {} out of {} nodes",
+                            sizes.len(),
+                            subnet.nodes().count()
+                        );
+                    }
                     for size in sizes {
                         if *size != expected_size {
                             bail!(

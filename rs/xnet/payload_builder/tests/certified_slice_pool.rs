@@ -780,7 +780,10 @@ fn pool(
     });
 }
 
-#[test_strategy::proptest]
+// This test creates two `StateManagerFixture`s per case (each spinning up a full
+// `StateManagerImpl` with disk I/O), so we reduce the number of cases to keep
+// the overall load within reasonable bounds.
+#[test_strategy::proptest(ProptestConfig::with_cases(50))]
 fn pool_append_same_slice(
     #[strategy(arb_stream_slice(
         1, // min_size

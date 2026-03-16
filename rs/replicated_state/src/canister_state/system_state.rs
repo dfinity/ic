@@ -43,19 +43,17 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, Time,
+    NumInstructions, PrincipalId, Time, cycles_use_case::CyclesUseCase,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 use std::sync::Arc;
-use strum_macros::EnumIter;
 
 lazy_static! {
     static ref DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS: PrincipalId =
@@ -66,50 +64,6 @@ lazy_static! {
 
 /// Maximum number of canister changes stored in the canister history.
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
-
-/// Enumerates use cases of consumed cycles.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, EnumIter, Serialize)]
-pub enum CyclesUseCase {
-    Memory = 1,
-    ComputeAllocation = 2,
-    IngressInduction = 3,
-    Instructions = 4,
-    RequestAndResponseTransmission = 5,
-    Uninstall = 6,
-    CanisterCreation = 7,
-    ECDSAOutcalls = 8,
-    HTTPOutcalls = 9,
-    DeletedCanisters = 10,
-    NonConsumed = 11,
-    BurnedCycles = 12,
-    SchnorrOutcalls = 13,
-    VetKd = 14,
-    DroppedMessages = 15,
-}
-
-impl CyclesUseCase {
-    /// Returns a string slice representation of the enum variant name for use
-    /// e.g. as a metric label.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Memory => "Memory",
-            Self::ComputeAllocation => "ComputeAllocation",
-            Self::IngressInduction => "IngressInduction",
-            Self::Instructions => "Instructions",
-            Self::RequestAndResponseTransmission => "RequestAndResponseTransmission",
-            Self::Uninstall => "Uninstall",
-            Self::CanisterCreation => "CanisterCreation",
-            Self::ECDSAOutcalls => "ECDSAOutcalls",
-            Self::HTTPOutcalls => "HTTPOutcalls",
-            Self::DeletedCanisters => "DeletedCanisters",
-            Self::NonConsumed => "NonConsumed",
-            Self::BurnedCycles => "BurnedCycles",
-            Self::SchnorrOutcalls => "SchnorrOutcalls",
-            Self::VetKd => "VetKd",
-            Self::DroppedMessages => "DroppedMessages",
-        }
-    }
-}
 
 enum ConsumingCycles {
     Yes,
@@ -1959,7 +1913,7 @@ impl SystemState {
             .entry(use_case)
             .or_insert_with(|| NominalCycles::from(0));
 
-        let nominal_amount = amount.into();
+        let nominal_amount = NominalCycles::from(amount.get());
 
         match consuming_cycles {
             ConsumingCycles::Yes => {

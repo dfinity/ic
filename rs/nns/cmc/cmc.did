@@ -10,8 +10,8 @@ type snapshot_visibility = variant {
   public;
   allowed_viewers : vec principal;
 };
-type environment_variable = record { 
-  name: text; 
+type environment_variable = record {
+  name: text;
   value: text;
 };
 type CanisterSettings = record {

@@ -70,6 +70,8 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
+    /// The payload contains flexible responses, which are not yet supported
+    FlexibleResponsesNotEmpty,
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
 }
