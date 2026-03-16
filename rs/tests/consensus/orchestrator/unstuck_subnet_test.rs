@@ -15,7 +15,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use anyhow::bail;
-use ic_consensus_system_test_utils::journal::find_journal_matches;
+use ic_consensus_system_test_utils::journal::JournalStreamer;
 use ic_consensus_system_test_utils::upgrade::{
     bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
 };
@@ -206,7 +206,9 @@ fn test(test_env: TestEnv) {
 }
 
 fn have_sha_errors(session: &Session) -> bool {
-    find_journal_matches(session, "FileHashMismatchError").is_ok_and(|matches| !matches.is_empty())
+    JournalStreamer::new(session.clone())
+        .search("FileHashMismatchError")
+        .is_ok_and(|matches| !matches.is_empty())
 }
 
 fn main() -> Result<()> {

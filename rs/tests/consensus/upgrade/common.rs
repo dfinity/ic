@@ -15,9 +15,7 @@ end::catalog[] */
 use candid::Principal;
 use futures::future::try_join_all;
 use ic_agent::Agent;
-use ic_consensus_system_test_utils::journal::{
-    Cursor, fetch_journal_cursor, find_journal_matches_after_cursor, stream_journal_for_matches,
-};
+use ic_consensus_system_test_utils::journal::JournalStreamer;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message_with_retries,
 };
@@ -289,11 +287,18 @@ async fn upgrade_to(
     target_version: &ReplicaVersion,
     logger: &Logger,
 ) {
-    let cursors = healthy_nodes
+    let journal_streamers = healthy_nodes
         .iter()
-        .map(|node| fetch_journal_cursor(&node.block_on_ssh_session()?))
-        .collect::<Result<Vec<_>, _>>()
-        .expect("Failed to fetch journal cursors from nodes");
+        .map(|node| {
+            (
+                node.node_id,
+                JournalStreamer::new(node.block_on_ssh_session().unwrap())
+                    .until_reboot()
+                    .from_now()
+                    .expect("Failed to set from cursor to now"),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
 
     info!(
         logger,
@@ -309,14 +314,27 @@ async fn upgrade_to(
     );
 
     // Concurrently assert that all orchestrators shut down gracefully
-    try_join_all(healthy_nodes.iter().map(|node| {
-        let session = node.block_on_ssh_session().unwrap();
-        tokio::task::spawn_blocking(move || {
-            stream_journal_for_matches(&session, "Orchestrator shut down gracefully")
+    let post_boot_cursors =
+        try_join_all(journal_streamers.into_iter().map(|(_node_id, streamer)| {
+            tokio::task::spawn_blocking(move || {
+                streamer.search_and_return_cursors("Orchestrator shut down gracefully")
+            })
+        }))
+        .await
+        .unwrap()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .expect("Failed to search for log entries")
+        .into_iter()
+        .map(|matches| {
+            matches
+                .into_iter()
+                .map(|(_message, cursor)| cursor)
+                .last()
+                .expect("Not all orchestrators shut down gracefully")
+                .to_string()
         })
-    }))
-    .await
-    .expect("Not all orchestrators shut down gracefully");
+        .collect::<Vec<_>>();
     info!(logger, "All orchestrators shut down the tasks gracefully");
 
     for node in &healthy_nodes {
@@ -326,7 +344,16 @@ async fn upgrade_to(
     // Fetch the latest computed root hash from logs of each node
     let state_hashes_from_logs = find_latest_computed_root_hashes_from_logs(
         logger,
-        healthy_nodes.iter().zip(cursors.iter()),
+        healthy_nodes
+            .into_iter()
+            .zip(post_boot_cursors.into_iter())
+            .map(|(node, cursor)| {
+                (
+                    node.node_id,
+                    JournalStreamer::new(node.block_on_ssh_session().unwrap()).until(&cursor),
+                )
+            })
+            .collect(),
     );
     // Find all nodes that logged the same latest computed root hash and pick the most common one
     let mut state_hashes_counts = BTreeMap::new();
@@ -390,20 +417,19 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
 
 /// Finds the latest computed state root hash from the node logs fired after a given cursor.
 /// Returns the last computed root hash found in the logs for every node.
-fn find_latest_computed_root_hashes_from_logs<'a>(
+fn find_latest_computed_root_hashes_from_logs(
     logger: &Logger,
-    cursors: impl IntoIterator<Item = (&'a IcNodeSnapshot, &'a Cursor)>,
+    journal_streamers: BTreeMap<NodeId, JournalStreamer>,
 ) -> BTreeMap<NodeId, String> {
     let computed_root_hash_regex =
         regex::Regex::new(r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\) of state @(\d*)"#)
             .unwrap();
 
     let mut latest_root_hash_per_node = BTreeMap::new();
-    for (node, cursor) in cursors.into_iter() {
-        let session = node.block_on_ssh_session().unwrap();
-        let matches =
-            find_journal_matches_after_cursor(&session, cursor, computed_root_hash_regex.as_str())
-                .expect("Failed to fetch log entries");
+    for (node_id, streamer) in journal_streamers.into_iter() {
+        let matches = streamer
+            .search(computed_root_hash_regex.as_str())
+            .expect("Failed to fetch log entries");
         let last_hash = matches
             .into_iter()
             .map(|entry| {
@@ -414,10 +440,7 @@ fn find_latest_computed_root_hashes_from_logs<'a>(
                 let height = caps.get(2).unwrap().as_str().parse::<u64>().ok().unwrap();
                 info!(
                     logger,
-                    "Found computed root hash log entry for node {} @{}: {}",
-                    node.node_id,
-                    height,
-                    hash
+                    "Found computed root hash log entry for node {} @{}: {}", node_id, height, hash
                 );
                 hash
             })
@@ -425,10 +448,10 @@ fn find_latest_computed_root_hashes_from_logs<'a>(
             .unwrap_or_else(|| {
                 panic!(
                     "No log entry with computed root hash found for node {}",
-                    node.node_id
+                    node_id
                 )
             });
-        latest_root_hash_per_node.insert(node.node_id, last_hash);
+        latest_root_hash_per_node.insert(node_id, last_hash);
     }
 
     latest_root_hash_per_node

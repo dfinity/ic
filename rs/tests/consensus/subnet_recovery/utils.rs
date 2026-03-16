@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use candid::Principal;
 use ic_consensus_system_test_utils::{
-    journal::{fetch_journal_cursor, find_journal_matches_after_cursor},
+    journal::JournalStreamer,
     rw_message::{can_read_msg, cannot_store_msg},
     ssh_access::AuthMean,
 };
@@ -94,8 +94,9 @@ pub fn halt_subnet(
     logger: &Logger,
 ) {
     info!(logger, "Halting subnet {subnet_id}...");
-    let session = subnet_node.block_on_ssh_session().unwrap();
-    let cursor = fetch_journal_cursor(&session).expect("Failed to get journal cursor");
+    let journal_streamer = JournalStreamer::new(subnet_node.block_on_ssh_session().unwrap())
+        .from_now()
+        .expect("Failed to create journal streamer");
 
     AdminStep {
         logger: logger.clone(),
@@ -110,7 +111,7 @@ pub fn halt_subnet(
         secs(120),
         secs(10),
         || {
-            let matches = find_journal_matches_after_cursor(&session, &cursor, "is halted");
+            let matches = journal_streamer.search("is halted");
             if matches.is_ok_and(|m| !m.is_empty()) {
                 Ok(())
             } else {

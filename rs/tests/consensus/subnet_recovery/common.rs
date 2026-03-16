@@ -38,7 +38,7 @@ use anyhow::bail;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
-    journal::{fetch_journal_cursor, find_journal_matches_after_cursor},
+    journal::JournalStreamer,
     node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
     rw_message::{install_nns_and_check_progress, store_message_with_retries},
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
@@ -923,7 +923,9 @@ fn corrupt_latest_cup(
         "Getting journal cursor on node {:?}",
         app_node.get_ip_addr()
     );
-    let cursor = fetch_journal_cursor(&session).expect("Failed to get journal cursor");
+    let journal_streamer = JournalStreamer::new(session.clone())
+        .from_now()
+        .expect("Failed to create journal streamer");
 
     info!(logger, "Reading CUP from node {:?}", app_node.get_ip_addr());
     let (mut channel, _) = session.scp_recv(Path::new(CUP_PATH)).unwrap();
@@ -983,11 +985,7 @@ fn corrupt_latest_cup(
         secs(120),
         secs(10),
         || {
-            let matches = find_journal_matches_after_cursor(
-                &session,
-                &cursor,
-                "Failed to deserialize CatchUpPackage",
-            );
+            let matches = journal_streamer.search("Failed to deserialize CatchUpPackage");
             if matches.is_ok_and(|m| !m.is_empty()) {
                 Ok(())
             } else {

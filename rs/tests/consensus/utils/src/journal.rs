@@ -1,52 +1,105 @@
+use std::collections::BTreeSet;
+
 use crate::ssh_access::execute_bash_command;
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Cursor {
+pub struct JournalStreamer {
+    session: Session,
+    journalctl_flags: BTreeSet<String>,
+    from_cursor: Option<String>,
+    to_cursor: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct JournalOutput {
+    #[serde(alias = "MESSAGE")]
+    message: String,
     #[serde(alias = "__CURSOR")]
-    pub cursor: String,
+    cursor: String,
 }
 
-pub fn fetch_journal_cursor(session: &Session) -> anyhow::Result<Cursor> {
-    let cursor_str = execute_bash_command(
-        &session,
-        "journalctl -n1 -o json --output-fields='__CURSOR'".to_string(),
-    )
-    .map_err(|e| anyhow::anyhow!(e))?;
+impl JournalStreamer {
+    pub fn new(session: Session) -> Self {
+        Self {
+            session,
+            journalctl_flags: BTreeSet::new(),
+            from_cursor: None,
+            to_cursor: None,
+        }
+    }
 
-    Ok(serde_json::from_str(&cursor_str).expect("Journal cursor should be valid JSON"))
-}
+    pub fn max_lines(mut self, max_lines: usize) -> Self {
+        self.journalctl_flags.insert(format!("-n{}", max_lines));
+        self
+    }
 
-pub fn find_journal_matches_after_cursor(
-    session: &Session,
-    cursor: &Cursor,
-    search_string: &str,
-) -> anyhow::Result<Vec<String>> {
-    run_journalctl_command(
-        session,
-        format!(
-            "journalctl --after-cursor='{}' | grep -E '{}'",
-            cursor.cursor, search_string
-        ),
-    )
-}
+    pub fn until_reboot(mut self) -> Self {
+        self.journalctl_flags.insert("-f".to_string());
+        self
+    }
 
-pub fn find_journal_matches(session: &Session, search_string: &str) -> anyhow::Result<Vec<String>> {
-    run_journalctl_command(session, format!("journalctl | grep -E '{}'", search_string))
-}
+    pub fn from(mut self, cursor: &str) -> Self {
+        self.from_cursor = Some(cursor.to_string());
+        self
+    }
 
-pub fn stream_journal_for_matches(
-    session: &Session,
-    search_string: &str,
-) -> anyhow::Result<Vec<String>> {
-    run_journalctl_command(
-        session,
-        format!("journalctl -f | grep -E '{}'", search_string),
-    )
-}
+    pub fn until(mut self, cursor: &str) -> Self {
+        self.to_cursor = Some(cursor.to_string());
+        self
+    }
 
-fn run_journalctl_command(session: &Session, command: String) -> anyhow::Result<Vec<String>> {
-    let output = execute_bash_command(session, command).map_err(|e| anyhow::anyhow!(e))?;
-    Ok(output.lines().map(|line| line.to_string()).collect())
+    pub fn from_now(self) -> anyhow::Result<Self> {
+        let (_message, cursor) = Self::new(self.session.clone())
+            .max_lines(1)
+            .search_and_return_cursors("__CURSOR")?
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No journal entries found"))?;
+
+        Ok(self.from(&cursor))
+    }
+
+    pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {
+        self.search_and_return_cursors(search_regex)
+            .map(|iter| iter.into_iter().map(|(message, _cursor)| message).collect())
+    }
+
+    pub fn search_and_return_cursors(
+        &self,
+        search_regex: &str,
+    ) -> anyhow::Result<Vec<(String, String)>> {
+        assert!(
+            self.from_cursor.is_none() || self.to_cursor.is_none(),
+            "Cannot specify both from and to cursors"
+        );
+
+        let mut command = "journalctl -o json --output-fields='MESSAGE,__CURSOR'".to_string();
+
+        if !self.journalctl_flags.is_empty() {
+            command.push_str(" ");
+            command.push_str(&Vec::from_iter(self.journalctl_flags.iter().cloned()).join(" "));
+        }
+
+        if let Some(from_cursor) = &self.from_cursor {
+            command.push_str(&format!(" --after-cursor='{}'", from_cursor));
+        }
+
+        if let Some(to_cursor) = &self.to_cursor {
+            command.push_str(&format!(" --cursor='{}' --reverse", to_cursor));
+        }
+
+        command.push_str(&format!(" | grep -E '{}'", search_regex));
+
+        let output =
+            execute_bash_command(&self.session, command).map_err(|e| anyhow::anyhow!(e))?;
+        Ok(output
+            .lines()
+            .map(|line| {
+                let output: JournalOutput =
+                    serde_json::from_str(&line).expect("Journal output should be valid JSON");
+                (output.message, output.cursor)
+            })
+            .collect::<Vec<_>>())
+    }
 }
