@@ -2047,7 +2047,7 @@ impl CanisterManager {
 
         // Delete old snapshot identified by `replace_snapshot`.
         if let Some(replace_snapshot) = replace_snapshot {
-            self.remove_snapshot(canister, replace_snapshot, replace_snapshot_size);
+            canister.canister_snapshots.remove(replace_snapshot);
         }
 
         self.cycles_and_memory_usage_updates(
@@ -2080,10 +2080,6 @@ impl CanisterManager {
             .metadata
             .unflushed_checkpoint_ops
             .take_snapshot(canister.canister_id(), snapshot_id);
-        canister.system_state.snapshots_memory_usage = canister
-            .system_state
-            .snapshots_memory_usage
-            .saturating_add(&new_snapshot_size);
 
         let rejects = if uninstall_code {
             let rejects = uninstall_canister(
@@ -2132,13 +2128,6 @@ impl CanisterManager {
                 snapshot_id,
             });
         };
-        // Verify the provided `snapshot_id` belongs to this canister.
-        if snapshot.canister_id() != canister_id {
-            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                canister_id,
-                snapshot_id,
-            });
-        }
         Ok(Arc::clone(snapshot))
     }
 
@@ -2158,13 +2147,6 @@ impl CanisterManager {
                 snapshot_id,
             });
         };
-        // Verify the provided `snapshot_id` belongs to this canister.
-        if snapshot.canister_id() != canister_id {
-            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                canister_id,
-                snapshot_id,
-            });
-        }
         Ok(snapshot)
     }
 
@@ -2334,7 +2316,7 @@ impl CanisterManager {
 
             new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
 
-            if canister_id == snapshot.canister_id() {
+            if canister_id == snapshot_canister_id {
                 new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
                 new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
             } else {
@@ -2449,10 +2431,10 @@ impl CanisterManager {
 
         // The canister ID from which the snapshot was loaded in case
         // it is different from the target canister ID.
-        let from_canister_id = if snapshot.canister_id() == canister_id {
+        let from_canister_id = if snapshot_canister_id == canister_id {
             None
         } else {
-            Some(snapshot.canister_id())
+            Some(snapshot_canister_id)
         };
 
         // Increment canister version.
@@ -2551,7 +2533,7 @@ impl CanisterManager {
             resource_saturation,
         )?;
 
-        self.remove_snapshot(canister, delete_snapshot_id, old_snapshot_size);
+        canister.canister_snapshots.remove(delete_snapshot_id);
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
@@ -2773,7 +2755,7 @@ impl CanisterManager {
 
         // Delete old snapshot identified by `replace_snapshot`.
         if let Some(replace_snapshot) = args.replace_snapshot() {
-            self.remove_snapshot(canister, replace_snapshot, replace_snapshot_size);
+            canister.canister_snapshots.remove(replace_snapshot);
         }
 
         // Create new snapshot.
@@ -2810,10 +2792,6 @@ impl CanisterManager {
         canister
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
-        canister.system_state.snapshots_memory_usage = canister
-            .system_state
-            .snapshots_memory_usage
-            .saturating_add(&new_snapshot_size);
         Ok(snapshot_id)
     }
 
@@ -2964,11 +2942,6 @@ impl CanisterManager {
                         snapshot_id
                     )
                 }
-
-                canister.system_state.snapshots_memory_usage = canister
-                    .system_state
-                    .snapshots_memory_usage
-                    .saturating_add(&chunk_bytes);
             }
         };
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
@@ -2976,28 +2949,6 @@ impl CanisterManager {
         }
 
         Ok(())
-    }
-
-    /// Remove the specified snapshot and increase the subnet's available memory.
-    fn remove_snapshot(
-        &self,
-        canister: &mut CanisterState,
-        snapshot_id: SnapshotId,
-        snapshot_size: NumBytes,
-    ) {
-        // Delete old snapshot identified by `snapshot_id`.
-        canister.canister_snapshots.remove(snapshot_id);
-        canister.system_state.snapshots_memory_usage = canister
-            .system_state
-            .snapshots_memory_usage
-            .get()
-            .saturating_sub(snapshot_size.get())
-            .into();
-        // Confirm that `snapshots_memory_usage` is updated correctly.
-        debug_assert_eq!(
-            canister.system_state.snapshots_memory_usage,
-            canister.canister_snapshots.memory_taken(),
-        );
     }
 
     /// Returns the bytes, cycles and instructions that should be charged for this data upload operation.

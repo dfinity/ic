@@ -335,17 +335,6 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .system_state
             .wasm_chunk_store
     );
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .memory_taken(),
-    );
 
     // Grow the canister's memory before taking another snapshot.
     test.ingress(
@@ -383,18 +372,6 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .unwrap()
             .canister_snapshots
             .contains(&new_snapshot_id)
-    );
-
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .memory_taken(),
     );
 }
 
@@ -1056,18 +1033,6 @@ fn delete_canister_snapshot_succeeds() {
     let subnet_available_memory_after_taking_snapshot =
         test.subnet_available_memory().get_execution_memory() as u64;
 
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .memory_taken(),
-    );
-
     // Deletes canister snapshot successfully.
     let args: DeleteCanisterSnapshotArgs =
         DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
@@ -1085,17 +1050,6 @@ fn delete_canister_snapshot_succeeds() {
             .is_none()
     );
     assert!(test.state().canister_state(&canister_id).is_some());
-
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .memory_taken(),
-    );
 
     assert_gt!(
         subnet_available_memory_after_deleting_snapshot,
