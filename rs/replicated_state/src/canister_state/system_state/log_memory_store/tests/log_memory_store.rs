@@ -21,7 +21,7 @@ fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
 /// Creates a full delta log without exceeding the byte capacity.
 fn make_full_delta(mut next_idx: u64, byte_capacity: usize, content_len: usize) -> CanisterLog {
     let mut delta = CanisterLog::new_delta_with_next_index(next_idx, byte_capacity);
-    let fake_record = make_canister_record(TEST_NEXT_IDX + 0, 0, &"x".repeat(content_len));
+    let fake_record = make_canister_record(TEST_NEXT_IDX, 0, &"x".repeat(content_len));
     let count = delta.byte_capacity() / fake_record.data_size();
     for _ in 0..count {
         delta.add_record(next_idx * 1_000, vec![b'x'; content_len]);
