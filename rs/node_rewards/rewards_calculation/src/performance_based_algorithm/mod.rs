@@ -7,14 +7,14 @@ use crate::performance_based_algorithm::results::{
 use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use chrono::NaiveDate;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+#[cfg(target_arch = "wasm32")]
+use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive, Zero};
 use rust_decimal_macros::dec;
-#[cfg(target_arch = "wasm32")]
-use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};
 

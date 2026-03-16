@@ -1,5 +1,4 @@
 use crate::performance_based_algorithm::PerformanceBasedAlgorithmInputProvider;
-use futures::FutureExt;
 use crate::performance_based_algorithm::results::{DailyNodeFailureRate, DailyNodeRewards};
 use crate::performance_based_algorithm::test_utils::{
     test_node_id, test_provider_id, test_subnet_id,
@@ -7,6 +6,7 @@ use crate::performance_based_algorithm::test_utils::{
 use crate::performance_based_algorithm::v1::RewardsCalculationV1;
 use crate::types::{NodeMetricsDailyRaw, RewardableNode};
 use chrono::NaiveDate;
+use futures::FutureExt;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
