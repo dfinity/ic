@@ -119,7 +119,7 @@ pub async fn preprocess_request(
         arg: arg.map(|x| x.0),
         nonce: content.nonce.map(|x| x.0),
         http_request,
-        paths: content.paths.map(|p| {
+        read_state_paths: content.paths.map(|p| {
             p.into_iter()
                 .map(|v| v.into_iter().map(|b| b.0).collect())
                 .collect()

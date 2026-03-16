@@ -53,7 +53,7 @@ pub struct RequestContext {
     pub http_request: Option<HttpRequest>,
 
     // Filled in for read_state requests
-    pub paths: Option<Vec<Vec<Vec<u8>>>>,
+    pub read_state_paths: Option<Vec<Vec<Vec<u8>>>>,
 }
 
 impl RequestContext {

@@ -83,7 +83,7 @@ impl SubnetReadStateCacheState {
 }
 
 fn build_cache_key(subnet_id: SubnetId, ctx: &RequestContext) -> Option<CacheKey> {
-    let mut paths = ctx.paths.clone()?;
+    let mut paths = ctx.read_state_paths.clone()?;
     paths.sort();
     Some(CacheKey { subnet_id, paths })
 }
@@ -153,7 +153,7 @@ mod tests {
     fn make_request(subnet_id: SubnetId, paths: Vec<Vec<Vec<u8>>>) -> Request<Body> {
         let ctx = Arc::new(RequestContext {
             request_type: RequestType::ReadStateSubnetV2,
-            paths: Some(paths),
+            read_state_paths: Some(paths),
             ..Default::default()
         });
 
@@ -328,7 +328,7 @@ mod tests {
         // Request with no paths in context
         let ctx = Arc::new(RequestContext {
             request_type: RequestType::ReadStateSubnetV2,
-            paths: None,
+            read_state_paths: None,
             ..Default::default()
         });
 
