@@ -145,7 +145,7 @@ fn bytes_to_hex(data: &[u8]) -> String {
 }
 
 fn hex_to_sha256_digest(s: &str) -> [u8; 32] {
-    let mut res = [0u8; 32];
+    let mut res = [0_u8; 32];
     for (i, c) in res.iter_mut().enumerate() {
         *c = (hexdigit_to_u8(s.as_bytes()[2 * i]) << 4) + hexdigit_to_u8(s.as_bytes()[2 * i + 1]);
     }
