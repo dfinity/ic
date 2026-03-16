@@ -3,7 +3,6 @@ name = "ic-management-canister-types"
 version = "0.7.1"
 authors.workspace = true
 edition.workspace = true
-#rust-version.workspace = true
 description = "Types for calling the IC management canister"
 homepage = "https://docs.rs/ic-management-canister-types"
 documentation = "https://docs.rs/ic-management-canister-types"
