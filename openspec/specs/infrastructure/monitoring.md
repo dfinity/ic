@@ -1,6 +1,6 @@
 # Monitoring
 
-**Crates**: `ic-metrics-tool`, `ic-tracing-jaeger-exporter`, `ic-dashboard`
+**Crates**: `ic-metrics-tool`, `ic-custom-metrics`, `ic-os-metrics-utils`, `ic-tracing-jaeger-exporter`, `ic-dashboard`
 
 The monitoring subsystem provides metrics collection, logging, distributed tracing, and CPU profiling capabilities for the Internet Computer replica and its components. It is designed around the Prometheus metrics ecosystem with support for adapter metrics from external processes.
 
