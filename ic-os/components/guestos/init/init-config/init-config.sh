@@ -51,7 +51,6 @@ trap "umount /mnt/config" EXIT
 
 mkdir -p /run/config/bootstrap
 
-echo "Using direct file-based configuration"
 cp -r /mnt/config/* /run/config/bootstrap/
 
 if [ -f /run/config/bootstrap/config.json ]; then
