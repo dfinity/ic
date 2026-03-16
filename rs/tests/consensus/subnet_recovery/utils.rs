@@ -373,7 +373,6 @@ pub mod local {
             admin_key_file,
             test_mode,
             skip_prompts,
-            use_local_binaries,
         } = recovery_args;
 
         // Iterate through all fields of RecoveryArgs and generate the CLI arg for each
@@ -389,15 +388,13 @@ pub mod local {
         );
         let test_mode_cli = bool_cli_arg!(test_mode);
         let skip_prompts_cli = bool_cli_arg!(skip_prompts);
-        let use_local_binaries_cli = bool_cli_arg!(use_local_binaries);
 
         format!(
             r#"{nns_url_cli} \
             {replica_version_cli} \
             {admin_key_file_cli} \
             {test_mode_cli} \
-            {skip_prompts_cli} \
-            {use_local_binaries_cli}"#
+            {skip_prompts_cli}"#
         )
     }
 

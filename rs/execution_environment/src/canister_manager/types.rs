@@ -11,7 +11,7 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState,
-    canister_snapshots::CanisterSnapshotError,
+    canister_state::canister_snapshots::CanisterSnapshotError,
     canister_state::system_state::wasm_chunk_store::{WasmChunkStore, chunk_size},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
@@ -75,7 +75,6 @@ pub(crate) enum StopCanisterResult {
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub(crate) struct CanisterMgrConfig {
-    pub(crate) subnet_memory_capacity: NumBytes,
     pub(crate) default_provisional_cycles_balance: Cycles,
     pub(crate) default_freeze_threshold: NumSeconds,
     pub(crate) compute_capacity: u64,
@@ -99,7 +98,6 @@ pub(crate) struct CanisterMgrConfig {
 impl CanisterMgrConfig {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        subnet_memory_capacity: NumBytes,
         default_provisional_cycles_balance: Cycles,
         default_freeze_threshold: NumSeconds,
         own_subnet_id: SubnetId,
@@ -121,7 +119,6 @@ impl CanisterMgrConfig {
         max_environment_variable_value_length: usize,
     ) -> Self {
         Self {
-            subnet_memory_capacity,
             default_provisional_cycles_balance,
             default_freeze_threshold,
             own_subnet_id,
@@ -419,10 +416,6 @@ pub(crate) enum CanisterManagerError {
         value: NumBytes,
         limit: NumBytes,
     },
-    CanisterSnapshotInvalidOwnership {
-        canister_id: CanisterId,
-        snapshot_id: SnapshotId,
-    },
     CanisterSnapshotNotController {
         sender: PrincipalId,
         canister_id: CanisterId,
@@ -635,12 +628,6 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CanisterHeapDeltaRateLimited { .. } => ErrorHelp::UserError {
                 suggestion: "Try waiting a few seconds before retrying the operation.".to_string(),
                 doc_link: doc_ref("canister-heap-delta-rate-limited"),
-            },
-            CanisterManagerError::CanisterSnapshotInvalidOwnership { .. } => ErrorHelp::UserError {
-                suggestion:
-                    "Use the `list_canister_snapshot` API to see which snapshots are present."
-                        .to_string(),
-                doc_link: doc_ref("canister-snapshot-invalid-ownership"),
             },
             CanisterManagerError::CanisterSnapshotNotController { .. } => {
                 ErrorHelp::UserError {
@@ -1039,15 +1026,6 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterHeapDeltaRateLimited,
                 format!(
                     "Canister {canister_id} is heap delta rate limited: current delta debit is {value}, but limit is {limit}.{additional_help}"
-                ),
-            ),
-            CanisterSnapshotInvalidOwnership {
-                canister_id,
-                snapshot_id,
-            } => Self::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "The snapshot {snapshot_id} does not belong to canister {canister_id}.{additional_help}",
                 ),
             ),
             CanisterSnapshotExecutionStateNotFound { canister_id } => Self::new(

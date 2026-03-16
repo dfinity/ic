@@ -355,45 +355,65 @@ pub(crate) fn validate_controller(
     Ok(())
 }
 
-pub(crate) fn validate_subnet_admin(
-    subnet_admins: &BTreeSet<PrincipalId>,
-    sender: &PrincipalId,
-) -> Result<(), CanisterManagerError> {
-    if !subnet_admins.contains(sender) {
-        return Err(CanisterManagerError::InvalidSubnetAdmin {
-            subnet_admins_expected: subnet_admins.clone(),
-            caller: *sender,
-        });
+pub(crate) fn validate_snapshot_visibility(
+    canister: &CanisterState,
+    caller: &PrincipalId,
+    method_name: &str,
+) -> Result<(), UserError> {
+    if !crate::canister_settings::VisibilitySettings::from(canister.snapshot_visibility())
+        .has_access(caller, canister.controllers())
+    {
+        return Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!("Caller {caller} is not allowed to call {method_name}"),
+        ));
     }
     Ok(())
 }
 
-pub(crate) fn validate_controller_or_subnet_admin(
-    canister: &CanisterState,
+pub(crate) fn validate_subnet_admin(
     subnet_admins: &BTreeSet<PrincipalId>,
     sender: &PrincipalId,
 ) -> Result<(), CanisterManagerError> {
-    if !canister.controllers().contains(sender) && !subnet_admins.contains(sender) {
-        // In case the subnet admins list is empty, return the same error as
-        // the legacy `validate_controller` would to maintain backward compatibility.
-        if subnet_admins.is_empty() {
-            return Err(CanisterManagerError::CanisterInvalidController {
-                canister_id: canister.canister_id(),
-                controllers_expected: canister.system_state.controllers.clone(),
-                controller_provided: *sender,
-            });
+    if subnet_admins.contains(sender) {
+        Ok(())
+    } else {
+        Err(CanisterManagerError::InvalidSubnetAdmin {
+            subnet_admins_expected: subnet_admins.clone(),
+            caller: *sender,
+        })
+    }
+}
+
+pub(crate) fn validate_controller_or_subnet_admin(
+    canister: &CanisterState,
+    subnet_admins: Option<BTreeSet<PrincipalId>>,
+    sender: &PrincipalId,
+) -> Result<(), CanisterManagerError> {
+    if canister.controllers().contains(sender) {
+        Ok(())
+    } else if let Some(subnet_admins) = subnet_admins {
+        if subnet_admins.contains(sender) {
+            Ok(())
         } else {
-            return Err(
+            Err(
                 CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin {
                     canister_id: canister.canister_id(),
                     controllers_expected: canister.system_state.controllers.clone(),
-                    subnet_admins_expected: subnet_admins.clone(),
+                    subnet_admins_expected: subnet_admins,
                     caller: *sender,
                 },
-            );
+            )
         }
+    } else {
+        // If subnet admins are not set, return the same error as
+        // the legacy `validate_controller` would to maintain backward compatibility.
+        Err(CanisterManagerError::CanisterInvalidController {
+            canister_id: canister.canister_id(),
+            controllers_expected: canister.system_state.controllers.clone(),
+            controller_provided: *sender,
+        })
     }
-    Ok(())
 }
 
 /// Unregisters the callback corresponding to the given response.
@@ -684,7 +704,10 @@ mod test {
     use ic_base_types::{CanisterId, NumSeconds};
     use ic_error_types::UserError;
     use ic_logger::{LoggerImpl, ReplicaLogger};
-    use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
+    use ic_replicated_state::{
+        CanisterState, SchedulerState, SystemState,
+        canister_state::canister_snapshots::CanisterSnapshots,
+    };
     use ic_types::messages::{CallbackId, NO_DEADLINE};
     use ic_types::{Cycles, Time};
 
@@ -697,6 +720,7 @@ mod test {
             Cycles::new(1 << 36),
             NumSeconds::from(100_000),
         );
+        let canister_snapshots = CanisterSnapshots::default();
 
         let logger = LoggerImpl::new(&Default::default(), "test".to_string());
         let log = ReplicaLogger::new(logger.root.clone().into());
@@ -706,7 +730,7 @@ mod test {
                 ic_error_types::ErrorCode::CanisterCalledTrap,
                 "",
             )),
-            &CanisterState::new(system_state, None, scheduler_state),
+            &CanisterState::new(system_state, None, scheduler_state, canister_snapshots),
             Time::from_nanos_since_unix_epoch(100),
             ic_replicated_state::CallOrigin::CanisterUpdate(
                 CanisterId::from(123u64),

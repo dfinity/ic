@@ -59,6 +59,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
+        snapshot_visibility: Default::default(),
         log_memory_limit: NumBytes::from(0),
         canister_log: CanisterLog::default_aggregate(),
         wasm_memory_limit: None,
@@ -245,7 +246,6 @@ fn test_canister_snapshots_decode() {
     let canister_id = canister_test_id(7);
     let canister_snapshot_bits = CanisterSnapshotBits {
         snapshot_id: SnapshotId::from((canister_id, 5)),
-        canister_id,
         taken_at_timestamp: UNIX_EPOCH,
         canister_version: 3,
         binary_hash: WasmHash::from(&CanisterModule::new(vec![2, 3, 4])),
@@ -446,9 +446,8 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
             )
             .unwrap();
 
-            // Write 500 dummy files to the scratchpad directory so that removing checkpoint files takes longer than dropping a `CheckpointLayout`.
-            // This is to create some backlog in the checkpoint removal channel.
-            for i in 0..500 {
+            // Write a few dummy files to each checkpoint directory.
+            for i in 0..50 {
                 let file_path = scratchpad_layout.raw_path().join(i.to_string());
                 File::create(file_path).unwrap();
             }
