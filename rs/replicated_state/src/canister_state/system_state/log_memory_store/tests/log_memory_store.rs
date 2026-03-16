@@ -8,7 +8,7 @@ use more_asserts::{assert_gt, assert_le, assert_lt};
 const KIB: usize = 1024;
 const EXPECTED_DATA_CAPACITY_MIN: usize = 4 * KIB;
 const TEST_LOG_MEMORY_LIMIT: usize = 6 * KIB; // Different value from minimal value.
-const TEST_NEXT_IDX: u64 = 0;
+const TEST_NEXT_IDX: u64 = 123;
 
 fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
     CanisterLogRecord {
@@ -21,7 +21,7 @@ fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
 /// Creates a full delta log without exceeding the byte capacity.
 fn make_full_delta(mut next_idx: u64, byte_capacity: usize, content_len: usize) -> CanisterLog {
     let mut delta = CanisterLog::new_delta_with_next_index(next_idx, byte_capacity);
-    let fake_record = make_canister_record(0, 0, &"x".repeat(content_len));
+    let fake_record = make_canister_record(TEST_NEXT_IDX + 0, 0, &"x".repeat(content_len));
     let count = delta.byte_capacity() / fake_record.data_size();
     for _ in 0..count {
         delta.add_record(next_idx * 1_000, vec![b'x'; content_len]);
@@ -676,18 +676,19 @@ fn test_from_checkpoint_feature_disabled() {
 
 #[test]
 fn test_next_idx_preserved_after_deallocate() {
-    let mut store = LogMemoryStore::new(FlagStatus::Enabled);
-    store.resize_for_testing(4096);
+    let log_size = 4096;
+    let mut delta = ic_types::CanisterLog::new_delta_with_next_index(TEST_NEXT_IDX, log_size);
+    delta.add_record(TEST_NEXT_IDX + 1, b"a".to_vec());
+    delta.add_record(TEST_NEXT_IDX + 2, b"b".to_vec());
 
-    let mut delta = ic_types::CanisterLog::default_delta();
-    delta.add_record(1, b"a".to_vec());
-    delta.add_record(2, b"b".to_vec());
+    let mut store = LogMemoryStore::new(FlagStatus::Enabled);
+    store.resize_for_testing(log_size);
     store.append_delta_log(&mut delta);
-    assert_eq!(store.next_idx(), 2);
+    assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
 
     // Setting limit to 0 invokes deallocate()
     store.resize_for_testing(0);
 
     // The next_idx should be preserved even if deallocated
-    assert_eq!(store.next_idx(), 2);
+    assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
 }

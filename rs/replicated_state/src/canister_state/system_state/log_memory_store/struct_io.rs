@@ -367,7 +367,7 @@ impl StructIO {
 mod tests {
     use super::*;
 
-    const TEST_NEXT_IDX: u64 = 0;
+    const TEST_NEXT_IDX: u64 = 123;
 
     #[test]
     fn test_header_roundtrip_serialization() {

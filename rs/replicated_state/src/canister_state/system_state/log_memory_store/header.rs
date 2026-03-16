@@ -105,13 +105,12 @@ impl Header {
 mod tests {
     use super::*;
 
-    const TEST_NEXT_IDX: u64 = 0;
+    const TEST_NEXT_IDX: u64 = 123;
 
     #[test]
     fn new_header_sets_defaults() {
-        let next_idx = 123;
         let capacity = MemorySize::new(1024);
-        let h = Header::new(capacity, next_idx);
+        let h = Header::new(capacity, TEST_NEXT_IDX);
         assert_eq!(h.magic, *b"CLB");
         assert_eq!(h.version, 1);
         assert_eq!(h.index_table_pages, 1);
@@ -120,7 +119,7 @@ mod tests {
         assert_eq!(h.data_head, MemoryPosition::new(0));
         assert_eq!(h.data_tail, MemoryPosition::new(0));
         assert_eq!(h.data_size, MemorySize::new(0));
-        assert_eq!(h.next_idx, next_idx);
+        assert_eq!(h.next_idx, TEST_NEXT_IDX);
         assert_eq!(h.max_timestamp, 0);
     }
 
