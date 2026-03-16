@@ -39,6 +39,7 @@ use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
+use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
     driver::{
@@ -56,7 +57,7 @@ use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 use anyhow::{Context, Result};
 use candid::Principal;
 use prost::Message;
-use slog::{Logger, info};
+use slog::{Logger, info, warn};
 use std::{thread, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
@@ -373,7 +374,7 @@ fn wait_until_halting_cup_reached(env: &TestEnv, source_subnet: &SubnetSnapshot,
         );
 
         loop {
-            let cup = block_on(get_cup(&node)).unwrap();
+            let cup = block_on(get_cup(&node, logger)).expect("Failed to download a CUP");
             let cup_registry_version = cup
                 .content
                 .block
@@ -428,38 +429,43 @@ fn wait_until_halting_cup_reached(env: &TestEnv, source_subnet: &SubnetSnapshot,
     assert_eq!(heights.iter().min(), heights.iter().max());
 }
 
-async fn get_cup(node: &IcNodeSnapshot) -> anyhow::Result<CatchUpPackage> {
+async fn get_cup(node: &IcNodeSnapshot, logger: &Logger) -> anyhow::Result<CatchUpPackage> {
     let url = node.get_public_url();
     let cup_url = format!("{url}_/catch_up_package");
     let client = Client::builder(TokioExecutor::new()).build_http::<Full<Bytes>>();
+    let request = Request::builder()
+        .method(Method::POST)
+        .header(hyper::header::CONTENT_TYPE, "application/cbor")
+        .uri(&cup_url)
+        .body(Full::from(Bytes::new()))
+        .unwrap();
 
-    let res = client
-        .request(
-            Request::builder()
-                .method(Method::POST)
-                .header(hyper::header::CONTENT_TYPE, "application/cbor")
-                .uri(&cup_url)
-                .body(Full::from(Bytes::new()))
-                .unwrap(),
-        )
+    let send_request = || async {
+        let response = client
+            .request(request.clone())
+            .await
+            .with_context(|| format!("Failed to send request to {cup_url}"))?;
+
+        if response.status() != StatusCode::OK {
+            anyhow::bail!(
+                "Failed to send request to {cup_url}. Status: {}",
+                response.status()
+            );
+        }
+
+        response
+            .into_body()
+            .collect()
+            .await
+            .context("Failed to collect response body")
+    };
+
+    let response = retry_with_msg_async!("Fetching a CUP", logger, secs(60), secs(5), send_request)
         .await
-        .with_context(|| format!("Failed to send request to {cup_url}"))?;
-
-    if res.status() != StatusCode::OK {
-        anyhow::bail!(
-            "Failed to send request to {cup_url}. Status: {}",
-            res.status()
-        );
-    }
-
-    let body = res
-        .into_body()
-        .collect()
-        .await
-        .context("Failed to collect response body")?;
+        .context("Failed to fetch CUP")?;
 
     let proto =
-        pb::CatchUpPackage::decode(body.to_bytes()).context("Failed to decode the response")?;
+        pb::CatchUpPackage::decode(response.to_bytes()).context("Failed to decode the response")?;
 
     let cup =
         CatchUpPackage::try_from(&proto).context("Failed to convert proto to CatchUpPackage")?;
