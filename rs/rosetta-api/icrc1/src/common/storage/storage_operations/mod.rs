@@ -458,6 +458,34 @@ pub fn update_account_balances(
                         )?;
                     }
                 }
+                crate::common::storage::types::IcrcOperation::AuthorizedMint {
+                    to,
+                    amount,
+                    caller: _,
+                    reason: _,
+                } => {
+                    credit(
+                        to,
+                        amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                }
+                crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+                    from,
+                    amount,
+                    caller: _,
+                    reason: _,
+                } => {
+                    debit(
+                        from,
+                        amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                }
                 crate::common::storage::types::IcrcOperation::FeeCollector {
                     fee_collector,
                     caller: _,
@@ -595,6 +623,42 @@ pub fn store_blocks(
                 expected_allowance,
                 fee,
                 expires_at,
+            ),
+            crate::common::storage::types::IcrcOperation::AuthorizedMint {
+                to,
+                amount,
+                caller: _,
+                reason: _,
+            } => (
+                "122mint",
+                None,
+                None,
+                Some(to.owner),
+                Some(*to.effective_subaccount()),
+                None,
+                None,
+                amount,
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+                from,
+                amount,
+                caller: _,
+                reason: _,
+            } => (
+                "122burn",
+                Some(from.owner),
+                Some(*from.effective_subaccount()),
+                None,
+                None,
+                None,
+                None,
+                amount,
+                None,
+                None,
+                None,
             ),
             crate::common::storage::types::IcrcOperation::FeeCollector {
                 fee_collector: _,

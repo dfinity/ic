@@ -417,6 +417,11 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     .with_caller(fc_metadata.caller)
                     .with_mthd(fc_metadata.mthd)
             }
+            OperationType::AuthorizedMint | OperationType::AuthorizedBurn => {
+                anyhow::bail!(
+                    "AuthorizedMint and AuthorizedBurn operations cannot be constructed via the Rosetta construction API"
+                )
+            }
         };
     }
     icrc1_operation_builder.build()
@@ -648,6 +653,32 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                     ),
                 ));
             }
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedMint { to, amount, .. } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::AuthorizedMint.to_string(),
+                Some(to.into()),
+                Some(rosetta_core::objects::Amount::new(
+                    BigInt::from(amount.0),
+                    currency,
+                )),
+                None,
+                None,
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedBurn { from, amount, .. } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::AuthorizedBurn.to_string(),
+                Some(from.into()),
+                Some(rosetta_core::objects::Amount::new(
+                    BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
+                    currency,
+                )),
+                None,
+                None,
+            ));
         }
         crate::common::storage::types::IcrcOperation::FeeCollector {
             fee_collector,
