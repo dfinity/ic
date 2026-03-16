@@ -39,7 +39,7 @@ use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
-    rw_message::{install_nns_and_check_progress, store_message},
+    rw_message::{install_nns_and_check_progress, store_message_with_retries},
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
@@ -76,7 +76,7 @@ use std::{
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
 
-const DKG_INTERVAL: u64 = 20;
+const DKG_INTERVAL: u64 = 49;
 const NNS_NODES: usize = 4;
 const APP_NODES: usize = 4;
 const UNASSIGNED_NODES: usize = 4;
@@ -247,7 +247,8 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-enum CupCorruption {
+#[derive(Debug)]
+pub enum CupCorruption {
     NotCorrupted,
     CorruptedWithValidNiDkgId,
     CorruptedIncludingInvalidNiDkgId,
@@ -327,27 +328,16 @@ pub fn test_with_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(env, config);
 }
 
-pub fn test_without_chain_keys(env: TestEnv) {
-    let mut config = TestConfig::new();
-
-    // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
-    // not be able to see the recovery CUP in the registry
-    if env.topology_snapshot().unassigned_nodes().count() > 0 {
-        config = config.with_corrupt_cup(CupCorruption::CorruptedIncludingInvalidNiDkgId);
-    }
+pub fn test_without_chain_keys(env: TestEnv, corrupt_cup: CupCorruption) {
+    let config = TestConfig::new().with_corrupt_cup(corrupt_cup);
     app_subnet_recovery_test(env, config);
 }
 
-pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
-    let mut config = TestConfig::new().with_no_upgrade().with_chain_key();
-
-    // Test the recoverable corrupt CUP case only when recovering an app subnet with chain keys
-    // without upgrade
-    if env.topology_snapshot().unassigned_nodes().count() > 0 {
-        // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
-        // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
-        config = config.with_corrupt_cup(CupCorruption::CorruptedWithValidNiDkgId);
-    }
+pub fn test_no_upgrade_with_chain_keys(env: TestEnv, corrupt_cup: CupCorruption) {
+    let config = TestConfig::new()
+        .with_no_upgrade()
+        .with_chain_key()
+        .with_corrupt_cup(corrupt_cup);
     app_subnet_recovery_test(env, config);
 }
 
@@ -494,7 +484,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     info!(logger, "Ensure app subnet is functional");
     let init_msg = "subnet recovery works!";
-    let app_can_id = store_message(
+    let app_can_id = store_message_with_retries(
         &download_state_node.get_public_url(),
         download_state_node.effective_canister_id(),
         init_msg,
@@ -701,7 +691,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: cfg.local_recovery,
     };
 
     // Unlike during a production recovery using the CLI, here we already know all parameters ahead

@@ -4,7 +4,6 @@ use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{SpanName, SpanStats, measure_span};
 use ic_cdk::trap;
 use ic_cdk::{init, post_upgrade, query};
-use ic_cdk_timers::TimerId;
 use ic_crypto_sha2::Sha256;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
@@ -57,7 +56,8 @@ const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNT_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
-const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
+const MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
+const MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(10);
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -112,8 +112,6 @@ thread_local! {
     /// persistent between upgrades
     static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
 
-    /// The ID of the block sync timer.
-    static TIMER_ID: RefCell<TimerId> = RefCell::new(TimerId::default());
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -136,22 +134,28 @@ struct State {
     /// This fee is used if no fee nor effetive_fee is found in Approve blocks.
     pub last_fee: Option<Tokens>,
 
-    /// The interval for retrieving blocks from the ledger and archive(s) for (re)building the
-    /// index. Lower values will result in a more responsive UI, but higher costs due to increased
-    /// cycle burn for the index, ledger and archive(s).
-    retrieve_blocks_from_ledger_interval: Option<Duration>,
-
     /// The ICRC-107 fee collector. Example values:
     /// - `None` - legacy fee collector is used.
     /// - `Some(None)` - 107 fee collector is enabled but fees are burned.
     /// - `Some(Some(account1))` - 107 fee collector is enabled, `account1` collects the fees.
     fee_collector_107: Option<Option<Account>>,
+
+    /// The minimum interval for retrieving blocks from the ledger.
+    min_retrieve_blocks_from_ledger_interval: Option<Duration>,
+
+    /// The maximum interval for retrieving blocks from the ledger.
+    max_retrieve_blocks_from_ledger_interval: Option<Duration>,
 }
 
 impl State {
-    pub fn retrieve_blocks_from_ledger_interval(&self) -> Duration {
-        self.retrieve_blocks_from_ledger_interval
-            .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL)
+    pub fn min_retrieve_blocks_from_ledger_interval(&self) -> Duration {
+        self.min_retrieve_blocks_from_ledger_interval
+            .unwrap_or(MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL)
+    }
+
+    pub fn max_retrieve_blocks_from_ledger_interval(&self) -> Duration {
+        self.max_retrieve_blocks_from_ledger_interval
+            .unwrap_or(MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL)
     }
 }
 
@@ -166,7 +170,8 @@ impl Default for State {
             last_wait_time: Duration::from_secs(0),
             fee_collectors: Default::default(),
             last_fee: None,
-            retrieve_blocks_from_ledger_interval: None,
+            min_retrieve_blocks_from_ledger_interval: None,
+            max_retrieve_blocks_from_ledger_interval: None,
             fee_collector_107: None,
         }
     }
@@ -315,22 +320,39 @@ fn init(index_arg: Option<IndexArg>) {
     let InitArg {
         ledger_id,
         retrieve_blocks_from_ledger_interval_seconds,
+        min_retrieve_blocks_from_ledger_interval_seconds,
+        max_retrieve_blocks_from_ledger_interval_seconds,
     } = match index_arg {
         Some(IndexArg::Init(arg)) => arg,
         _ => trap("Index initialization must take in input an InitArg argument"),
     };
 
+    let (min_retrieve_blocks_from_ledger_interval, max_retrieve_blocks_from_ledger_interval) =
+        parse_timer_configuration_options(
+            retrieve_blocks_from_ledger_interval_seconds,
+            min_retrieve_blocks_from_ledger_interval_seconds,
+            max_retrieve_blocks_from_ledger_interval_seconds,
+        );
+
+    // validate timer configuration options
+    with_state(|state| {
+        validate_timer_configuration_options(
+            state,
+            min_retrieve_blocks_from_ledger_interval,
+            max_retrieve_blocks_from_ledger_interval,
+        );
+    });
+
     // stable memory initialization
     mutate_state(|state| {
         state.ledger_id = ledger_id;
-        state.retrieve_blocks_from_ledger_interval =
-            retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
+        state.min_retrieve_blocks_from_ledger_interval = min_retrieve_blocks_from_ledger_interval;
+        state.max_retrieve_blocks_from_ledger_interval = max_retrieve_blocks_from_ledger_interval;
+        state.last_wait_time = state.min_retrieve_blocks_from_ledger_interval();
     });
 
     // set the first build_index to be called after init
-    set_build_index_timer(with_state(|state| {
-        state.retrieve_blocks_from_ledger_interval()
-    }));
+    set_build_index_timer(with_state(|state| state.last_wait_time));
 }
 
 // The part of the legacy index (//rs/ledger_suite/icrc1/index) state
@@ -369,16 +391,39 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
             let UpgradeArg {
                 ledger_id,
                 retrieve_blocks_from_ledger_interval_seconds,
+                min_retrieve_blocks_from_ledger_interval_seconds,
+                max_retrieve_blocks_from_ledger_interval_seconds,
             } = upgrade;
+
+            let (
+                min_retrieve_blocks_from_ledger_interval,
+                max_retrieve_blocks_from_ledger_interval,
+            ) = parse_timer_configuration_options(
+                retrieve_blocks_from_ledger_interval_seconds,
+                min_retrieve_blocks_from_ledger_interval_seconds,
+                max_retrieve_blocks_from_ledger_interval_seconds,
+            );
+
+            // validate timer configuration options
+            with_state(|state| {
+                validate_timer_configuration_options(
+                    state,
+                    min_retrieve_blocks_from_ledger_interval,
+                    max_retrieve_blocks_from_ledger_interval,
+                );
+            });
 
             mutate_state(|state| {
                 if let Some(new_value) = ledger_id {
                     state.ledger_id = new_value;
                 }
 
-                if let Some(new_value) = retrieve_blocks_from_ledger_interval_seconds {
-                    state.retrieve_blocks_from_ledger_interval =
-                        Some(Duration::from_secs(new_value));
+                if let Some(new_value) = min_retrieve_blocks_from_ledger_interval {
+                    state.min_retrieve_blocks_from_ledger_interval = Some(new_value);
+                }
+
+                if let Some(new_value) = max_retrieve_blocks_from_ledger_interval {
+                    state.max_retrieve_blocks_from_ledger_interval = Some(new_value);
                 }
             });
         }
@@ -396,10 +441,72 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
         let _maybe_first_key_value = account_data.first_key_value();
     });
 
-    // set the first build_index to be called after init
-    set_build_index_timer(with_state(|state| {
-        state.retrieve_blocks_from_ledger_interval()
-    }));
+    // clamp the last wait time to be within the min and max interval.
+    mutate_state(|state| {
+        state.last_wait_time = state.last_wait_time.clamp(
+            state.min_retrieve_blocks_from_ledger_interval(),
+            state.max_retrieve_blocks_from_ledger_interval(),
+        );
+    });
+
+    // set the first build_index to be called after post_upgrade
+    set_build_index_timer(with_state(|state| state.last_wait_time));
+}
+
+fn parse_timer_configuration_options(
+    retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+    min_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+    max_retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+) -> (Option<Duration>, Option<Duration>) {
+    match (
+        retrieve_blocks_from_ledger_interval_seconds,
+        min_retrieve_blocks_from_ledger_interval_seconds,
+        max_retrieve_blocks_from_ledger_interval_seconds,
+    ) {
+        (Some(_), Some(_), _) | (Some(_), _, Some(_)) => trap(
+            "The retrieve_blocks_from_ledger_interval_seconds field cannot be set together with the min_retrieve_blocks_from_ledger_interval_seconds and max_retrieve_blocks_from_ledger_interval_seconds fields.",
+        ),
+        (Some(retrieve_blocks_from_ledger_interval_seconds), None, None) => (
+            // Maintain the legacy behavior if the deprecated field is set, i.e., set both the min and max interval to the same value.
+            Some(Duration::from_secs(
+                retrieve_blocks_from_ledger_interval_seconds,
+            )),
+            Some(Duration::from_secs(
+                retrieve_blocks_from_ledger_interval_seconds,
+            )),
+        ),
+        (
+            None,
+            min_retrieve_blocks_from_ledger_interval_seconds,
+            max_retrieve_blocks_from_ledger_interval_seconds,
+        ) => (
+            min_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs),
+            max_retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs),
+        ),
+    }
+}
+
+fn validate_timer_configuration_options(
+    state: &State,
+    min_retrieve_blocks_from_ledger_interval_seconds: Option<Duration>,
+    max_retrieve_blocks_from_ledger_interval_seconds: Option<Duration>,
+) {
+    let effective_min = min_retrieve_blocks_from_ledger_interval_seconds
+        .unwrap_or(state.min_retrieve_blocks_from_ledger_interval());
+    let effective_max = max_retrieve_blocks_from_ledger_interval_seconds
+        .unwrap_or(state.max_retrieve_blocks_from_ledger_interval());
+    if effective_min < Duration::from_secs(1) {
+        trap(format!(
+            "The minimum interval for retrieving blocks from the ledger ({:?}) cannot be smaller than 1 second",
+            effective_min
+        ));
+    }
+    if effective_min > effective_max {
+        trap(format!(
+            "The minimum interval for retrieving blocks from the ledger ({:?}) cannot be greater than the maximum interval ({:?})",
+            effective_min, effective_max
+        ));
+    }
 }
 
 async fn get_supported_standards_from_ledger() -> Vec<String> {
@@ -601,23 +708,22 @@ pub async fn build_index() -> Option<()> {
     };
     match num_indexed {
         Ok(num_indexed) => {
-            let retrieve_blocks_from_ledger_interval =
-                with_state(|state| state.retrieve_blocks_from_ledger_interval());
-            log!(
-                P1,
-                "Indexed: {} waiting : {:?}",
-                num_indexed,
-                retrieve_blocks_from_ledger_interval
-            );
+            let wait_time = compute_wait_time(num_indexed);
+            mutate_state(|state| {
+                state.last_wait_time = wait_time;
+            });
+            log!(P1, "Indexed: {} waiting : {:?}", num_indexed, wait_time);
+            set_build_index_timer(wait_time);
         }
         Err(error) => {
             log!(P0, "{}", error.message);
             ic_cdk::eprintln!("{}", error.message);
-            if !error.retriable {
+            if error.retriable {
+                let wait_time = with_state(|state| state.last_wait_time);
+                set_build_index_timer(wait_time);
+            } else {
                 log!(P0, "Stopping the indexing timer.");
                 ic_cdk::eprintln!("Stopping the indexing timer.");
-                let timer_id = TIMER_ID.with(|tid| *tid.borrow());
-                ic_cdk_timers::clear_timer(timer_id);
             }
         }
     };
@@ -725,10 +831,32 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
 }
 
 fn set_build_index_timer(after: Duration) {
-    let timer_id = ic_cdk_timers::set_timer_interval(after, async || {
+    ic_cdk_timers::set_timer(after, async {
         let _ = build_index().await;
     });
-    TIMER_ID.with(|tid| *tid.borrow_mut() = timer_id);
+}
+
+/// Compute the wait time before the next indexing based on the number of
+/// blocks indexed in the last round. If at least one block was indexed,
+/// the wait time is halved (the ledger is likely producing blocks).
+/// If no blocks were indexed, the wait time is doubled (the ledger is
+/// likely idle). The wait time is clamped between
+/// the configured minimum and maximum intervals, falling back to
+/// [MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL] and [MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL].
+fn compute_wait_time(num_indexed: u64) -> Duration {
+    let (last_wait_time, min_interval, max_interval) = with_state(|state| {
+        (
+            state.last_wait_time,
+            state.min_retrieve_blocks_from_ledger_interval(),
+            state.max_retrieve_blocks_from_ledger_interval(),
+        )
+    });
+    let new_wait_time = if num_indexed > 0 {
+        last_wait_time / 2
+    } else {
+        last_wait_time.saturating_mul(2)
+    };
+    new_wait_time.clamp(min_interval, max_interval)
 }
 
 fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), SyncError> {

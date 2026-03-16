@@ -9,25 +9,12 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added an optional field `max_ingress_bytes_per_block` to `CreateSubnetPayload`
-and `UpdateSubnetPayload` which, when present, will set a limit on how big the ingress payload can
-be in blocks produced by the created/updated subnet.
-* A `create_neuron` method to create neurons through staking ICPs using the ICRC2 standard.
-
 ## Changed
-
-* Lowered the maximum page size of list_neurons to 50. The vast majority (> 95%)
-  have no more than 50 neurons, so for them, this has no noticeable impact.
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
-
-* The Bitcoin and Dogecoin Watchdog canisters are now considered "protocol"
-  canisters; thus, proposals to upgrade these canisters now fall into the
-  "Protocol Canister Management" topic, instead of the "Application Canister
-  Management" topic.
 
 ## Security

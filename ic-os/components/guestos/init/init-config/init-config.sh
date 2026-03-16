@@ -8,35 +8,30 @@ source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
 function mount_config_device() {
-    MAX_TRIES=3
     CONFIG_DEVICE="/dev/disk/by-label/CONFIG"
+    TIMEOUT="10"
+    echo "Trigger udev and wait up to ${TIMEOUT} seconds for all events to be handled and exit early if ${CONFIG_DEVICE} appears ..."
+    udevadm trigger --subsystem-match=block --action=add
+    udevadm settle --timeout="${TIMEOUT}" --exit-if-exists="${CONFIG_DEVICE}"
 
-    while [ $MAX_TRIES -gt 0 ]; do
-        echo "Waiting for a ${CONFIG_DEVICE} device for mounting"
+    echo "Checking for ${CONFIG_DEVICE} device"
 
-        # Check if device exists & is a symlink to the real one
-        if [ -L "${CONFIG_DEVICE}" ]; then
-            echo "Found ${CONFIG_DEVICE} device, mounting at /mnt/config"
+    # Check if device exists & is a symlink to the real one
+    if [ -L "${CONFIG_DEVICE}" ]; then
+        echo "Found ${CONFIG_DEVICE} device, mounting at /mnt/config"
 
-            # Ensure that the config device is vfat. If we ever change to another filesystem type, we should ensure
-            # that it only contains regular files and directories (not symlinks, devices, etc.).
-            if mount -t vfat -o ro ${CONFIG_DEVICE} /mnt/config; then
-                echo "Successfully mounted ${CONFIG_DEVICE} device at /mnt/config"
-                return 0
-            else
-                echo "Failed to mount ${CONFIG_DEVICE} device at /mnt/config"
-            fi
-        fi
-
-        MAX_TRIES=$(($MAX_TRIES - 1))
-        if [ $MAX_TRIES == 0 ]; then
-            echo "No ${CONFIG_DEVICE} device found for mounting"
-            return 1
+        # Ensure that the config device is vfat. If we ever change to another filesystem type, we should ensure
+        # that it only contains regular files and directories (not symlinks, devices, etc.).
+        if mount -t vfat -o ro ${CONFIG_DEVICE} /mnt/config; then
+            echo "Successfully mounted ${CONFIG_DEVICE} device at /mnt/config"
+            return 0
         else
-            echo "Retrying to find CONFIG device"
-            sleep 1
+            echo "Failed to mount ${CONFIG_DEVICE} device at /mnt/config"
         fi
-    done
+    fi
+
+    echo "No ${CONFIG_DEVICE} device found for mounting"
+    return 1
 }
 
 # Try config disk first, then run Cloud provisioning if that fails

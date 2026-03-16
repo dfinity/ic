@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The HTTP gateway configuration (used in the `/http_gateway` endpoint and the `http_gateway_config` field of the `/instances/` endpoint)
   takes a new optional field `domain_custom_provider_local_file` specifying a path to a local file that maps custom domain names to canister IDs.
   The file format is one mapping per line: `<domain>:<canister-id>` (e.g., `my-app.example.com:rdmx6-jaaaa-aaaaa-aaadq-cai`).
+- A new cloud engine subnet kind: a new variant in `SubnetKind` and a new field in `SubnetConfigSet` and `ExtendedSubnetConfigSet`.
+- A new optional field to specify subnet admins in `SubnetSpec` and `SubnetConfig`. The field can only be set for cloud engines!
 
 ### Changed
 - All subnets with mainnet canister ranges but the NNS subnet are always created with mainnet subnet IDs.

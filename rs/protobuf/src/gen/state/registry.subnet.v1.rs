@@ -91,6 +91,15 @@ pub struct SubnetRecord {
     /// List of principals that have admin privileges on the subnet.
     #[prost(message, repeated, tag = "31")]
     pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    /// List of replica version IDs that are recalled/blocked for this subnet.
+    /// Nodes in this subnet will not upgrade to any version in this list.
+    /// If the replica_version_id of a subnet points to a broken GuestOS and the subnet is stalled,
+    /// even if we manage to rollback the GuestOS locally, the GuestOS would automatically try
+    /// to upgrade to the broken GuestOS again. We can use this field to prevent that.
+    /// While nodes read the replica_version_id from the registry vesion from the CUP,
+    /// they check the latest registry version for recalled_replica_version_ids.
+    #[prost(string, repeated, tag = "33")]
+    pub recalled_replica_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
@@ -130,12 +139,15 @@ pub struct CatchUpPackageContents {
     pub initial_ni_dkg_transcript_high_threshold:
         ::core::option::Option<InitialNiDkgTranscriptRecord>,
     /// The blockchain height that the CUP should have
+    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
     #[prost(uint64, tag = "3")]
     pub height: u64,
     /// Block time for the CUP's block
+    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
     #[prost(uint64, tag = "4")]
     pub time: u64,
     /// The hash of the state that the subnet should use
+    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
     #[prost(bytes = "vec", tag = "5")]
     pub state_hash: ::prost::alloc::vec::Vec<u8>,
     /// A uri from which data to replace the registry local store should be downloaded
@@ -147,6 +159,49 @@ pub struct CatchUpPackageContents {
     /// / The initial IDkg dealings for boot strapping target chain key subnets.
     #[prost(message, repeated, tag = "8")]
     pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
+    /// / The purpose of the CUP.
+    #[prost(oneof = "catch_up_package_contents::CupType", tags = "9, 10, 11")]
+    pub cup_type: ::core::option::Option<catch_up_package_contents::CupType>,
+}
+/// Nested message and enum types in `CatchUpPackageContents`.
+pub mod catch_up_package_contents {
+    /// / The purpose of the CUP.
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum CupType {
+        /// / Initial CUP used to bootstrap a subnet.
+        #[prost(message, tag = "9")]
+        Genesis(super::GenesisArgs),
+        /// / A CUP used to recover a subnet during a disaster.
+        #[prost(message, tag = "10")]
+        Recovery(super::RecoveryArgs),
+        /// / A CUP used to split a subnet into two.
+        #[prost(message, tag = "11")]
+        SubnetSplitting(super::SubnetSplittingArgs),
+    }
+}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct GenesisArgs {
+    /// Initial height of the subnet
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RecoveryArgs {
+    /// The blockchain height that the CUP should have
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+    /// Block time for the CUP's block
+    #[prost(uint64, tag = "2")]
+    pub time: u64,
+    /// The hash of the state that the subnet should use
+    #[prost(bytes = "vec", tag = "3")]
+    pub state_hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubnetSplittingArgs {
+    /// / The ID of the subnet created by the split.
+    #[prost(message, optional, tag = "1")]
+    pub destination_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryStoreUri {

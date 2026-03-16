@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 use crate::{
-    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled, decoder_config,
+    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled,
+    are_subnet_splitting_proposals_enabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -2711,6 +2712,13 @@ impl Governance {
             ));
         }
 
+        if neuron_state == NeuronState::Dissolved {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Neuron is dissolved.",
+            ));
+        }
+
         if !is_neuron_controlled_by_caller {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
         }
@@ -4844,6 +4852,13 @@ impl Governance {
             ValidNnsFunction::AddOrRemoveDataCenters => {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
+            }
+            ValidNnsFunction::SplitSubnet => {
+                if !are_subnet_splitting_proposals_enabled() {
+                    return Err(invalid_proposal_error(String::from(
+                        "Subnet Splitting proposals not yet enabled",
+                    )));
+                }
             }
             _ => {}
         };
@@ -7812,6 +7827,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
             declining_voting_power_neuron_subset_metrics,
@@ -7876,6 +7892,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             total_staked_e8s_non_self_authenticating_controller,
             total_voting_power_non_self_authenticating_controller,
 

@@ -55,7 +55,6 @@
 //!    the name.
 //!
 mod bitcoin;
-pub mod canister_snapshots;
 pub mod canister_state;
 pub(crate) mod hash;
 pub mod metadata_state;
