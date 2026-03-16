@@ -1132,7 +1132,7 @@ impl IcNodeSnapshot {
         let script = r#"
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
-            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 fib daddr type local"
+            RULE_PATTERN="meta skuid $ADAPTER_UID fib daddr type local"
 
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
