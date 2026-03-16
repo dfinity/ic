@@ -7,8 +7,6 @@ use crate::performance_based_algorithm::results::{
 use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use chrono::NaiveDate;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-#[cfg(target_arch = "wasm32")]
-use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
@@ -137,10 +135,10 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
             // This is a dummy call to force the Wasm engine to execute the query.
             #[cfg(target_arch = "wasm32")]
-            let c = ic_cdk::call::Call::unbounded_wait(
-                NODE_REWARDS_CANISTER_ID.get().0,
+            let _ = ic_cdk::call::Call::bounded_wait(
+                ic_cdk::api::canister_self(),
                 "reset_instructions",
-            ).await?;
+            ).await.unwrap();
         }
 
         Ok(RewardsCalculatorResults {
