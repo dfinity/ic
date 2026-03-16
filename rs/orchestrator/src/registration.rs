@@ -145,12 +145,35 @@ impl NodeRegistration {
 
     // postcondition: we are registered with the NNS
     async fn retry_register_node(&mut self) {
+        // Any changes to the registry are replicated after some delay, so we sleep between attempts
+        // for that amount of time.
+        let sleep_duration = Duration::from_millis(
+            self.node_config
+                .nns_registry_replicator
+                .poll_delay_duration_ms,
+        );
+
         let add_node_payload = loop {
-            if let Ok(v) = self.assemble_add_node_message().await {
-                break v;
+            match self.assemble_add_node_message().await {
+                Ok(v) => break v,
+                Err(e) => {
+                    warn!(
+                        self.log,
+                        "Unable to assemble node payload: '{e:#}', retrying."
+                    );
+
+                    UtilityCommand::notify_host(
+                        format!(
+                            "node-id {}: Unable to assemble node payload: '{e:#}', retrying.",
+                            self.node_id
+                        )
+                        .as_str(),
+                        1,
+                    );
+                }
             }
 
-            tokio::time::sleep(Duration::from_secs(10)).await;
+            tokio::time::sleep(sleep_duration).await;
         };
 
         // Will contain information needed for the node operator
@@ -161,13 +184,6 @@ impl NodeRegistration {
             encode_as_qrcode(self.node_id)
         );
 
-        // Any changes to the registry are replicated after some delay, so we sleep between attempts
-        // for that amount of time.
-        let sleep_duration = Duration::from_millis(
-            self.node_config
-                .nns_registry_replicator
-                .poll_delay_duration_ms,
-        );
         while let Err(e) = self.check_node_registered().await {
             info!(
                 self.log,
