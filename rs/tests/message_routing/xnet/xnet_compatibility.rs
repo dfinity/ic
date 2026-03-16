@@ -69,17 +69,17 @@ fn setup(env: TestEnv) {
         }
         subnet
     }
-    let ic = InternetComputer::new();
-    ic.with_default_vm_resources(VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: None,
-        boot_image_minimal_size_gibibytes: None,
-    })
-    .add_subnet(subnet(SubnetType::System, None))
-    .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
-    .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
-    .setup_and_start(&env)
-    .expect("failed to setup IC under test");
+    InternetComputer::new()
+        .with_default_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes: None,
+        })
+        .add_subnet(subnet(SubnetType::System, None))
+        .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
+        .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet
             .nodes()
