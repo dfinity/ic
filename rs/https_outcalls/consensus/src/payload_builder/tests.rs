@@ -77,8 +77,6 @@ fn default_payload_serializes_to_empty_vec() {
 /// Check that a single well formed request with shares makes it through the block maker
 #[test]
 fn single_request_test() {
-    let context = default_validation_context();
-
     for subnet_size in 1..MAX_SUBNET_SIZE {
         test_config_with_http_feature(
             true,
@@ -101,30 +99,9 @@ fn single_request_test() {
                     );
                 }
 
-                // Build a payload
-                let payload = payload_builder.build_payload(
-                    Height::new(1),
-                    NumBytes::new(4 * 1024 * 1024),
-                    &[],
-                    &context,
-                );
-
-                //  Make sure the response is contained in the payload
-                let parsed_payload =
-                    bytes_to_payload(&payload).expect("Failed to parse the payload");
+                let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
                 assert_eq!(parsed_payload.num_responses(), 1);
                 assert_eq!(parsed_payload.responses[0].content, response);
-
-                assert!(
-                    payload_builder
-                        .validate_payload(
-                            Height::new(1),
-                            &test_proposal_context(&context),
-                            &payload,
-                            &[],
-                        )
-                        .is_ok()
-                );
             },
         );
 
@@ -312,21 +289,7 @@ fn multiple_share_same_source_test() {
                     );
                 }
 
-                let validation_context = ValidationContext {
-                    registry_version: RegistryVersion::new(1),
-                    certified_height: Height::new(0),
-                    time: UNIX_EPOCH + Duration::from_secs(3),
-                };
-
-                // Build a payload
-                let payload = payload_builder.build_payload(
-                    Height::new(1),
-                    NumBytes::new(4 * 1024 * 1024),
-                    &[],
-                    &validation_context,
-                );
-
-                let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+                let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
                 assert_eq!(parsed_payload.num_responses(), 0);
             },
         );
@@ -364,21 +327,7 @@ fn divergence_response_inclusion_test() {
             );
         }
 
-        let validation_context = ValidationContext {
-            registry_version: RegistryVersion::new(1),
-            certified_height: Height::new(0),
-            time: UNIX_EPOCH + Duration::from_secs(3),
-        };
-
-        // Build a payload
-        let payload = payload_builder.build_payload(
-            Height::new(1),
-            NumBytes::new(4 * 1024 * 1024),
-            &[],
-            &validation_context,
-        );
-
-        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+        let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
         assert_eq!(parsed_payload.divergence_responses.len(), 0);
 
         // But that if we actually get divergence, we report it
@@ -399,15 +348,7 @@ fn divergence_response_inclusion_test() {
             );
         }
 
-        // Build a payload
-        let payload = payload_builder.build_payload(
-            Height::new(1),
-            NumBytes::new(4 * 1024 * 1024),
-            &[],
-            &validation_context,
-        );
-
-        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+        let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
         assert_eq!(parsed_payload.divergence_responses.len(), 1);
     });
 }
@@ -432,34 +373,10 @@ fn max_responses() {
                 add_received_shares_to_pool(pool_access.deref_mut(), shares[1..4].to_vec());
             });
 
-        let validation_context = ValidationContext {
-            registry_version: RegistryVersion::new(1),
-            certified_height: Height::new(0),
-            time: UNIX_EPOCH + Duration::from_secs(3),
-        };
-
-        // Build a payload
-        let payload = payload_builder.build_payload(
-            Height::new(1),
-            NumBytes::new(4 * 1024 * 1024),
-            &[],
-            &validation_context,
-        );
-
-        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+        let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
         assert!(
             parsed_payload.num_non_timeout_responses() <= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
         );
-
-        //  Make sure the response is not contained in the payload
-        payload_builder
-            .validate_payload(
-                Height::new(1),
-                &test_proposal_context(&validation_context),
-                &payload,
-                &[],
-            )
-            .unwrap();
     })
 }
 
@@ -928,25 +845,9 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
         }
 
         // ACT
-        let payload = payload_builder.build_payload(
-            Height::new(1),
-            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
-            &[],
-            &default_validation_context(),
-        );
+        let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
 
         // ASSERT
-        payload_builder
-            .validate_payload(
-                Height::from(1),
-                &test_proposal_context(&default_validation_context()),
-                &payload,
-                &[],
-            )
-            .unwrap();
-
-        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
-
         // We should have exactly one response in the payload.
         assert_eq!(
             parsed_payload.responses.len(),
@@ -1017,25 +918,9 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
         }
 
         // ACT
-        let payload = payload_builder.build_payload(
-            Height::new(1),
-            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
-            &[],
-            &default_validation_context(),
-        );
+        let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
 
         // ASSERT
-        payload_builder
-            .validate_payload(
-                Height::from(1),
-                &test_proposal_context(&default_validation_context()),
-                &payload,
-                &[],
-            )
-            .unwrap();
-
-        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
-
         // We should have exactly one response in the payload.
         assert_eq!(
             parsed_payload.responses.len(),
@@ -1103,26 +988,11 @@ fn non_replicated_share_is_ignored_if_content_is_missing() {
         }
 
         // ACT
-        let payload = payload_builder.build_payload(
-            Height::new(1),
-            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
-            &[],
-            &default_validation_context(),
-        );
-
-        // ASSERT
         // The builder will find the valid share, but the subsequent call to
         // `get_response_content_by_hash` will fail, so the payload must be empty.
-        payload_builder
-            .validate_payload(
-                Height::from(1),
-                &test_proposal_context(&default_validation_context()),
-                &payload,
-                &[],
-            )
-            .unwrap();
+        let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
 
-        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+        // ASSERT
         assert_eq!(
             parsed_payload,
             CanisterHttpPayload::default(),
@@ -1740,7 +1610,7 @@ fn flexible_build_excludes_group_below_min_responses() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, pool| {
         // Only 2 shares, but min_responses = 3
         add_flexible_shares_to_pool(&pool, callback_id, 0..2);
-        let parsed = build_and_parse_payload(&pb);
+        let parsed = build_and_validate_and_parse_payload(&pb);
         assert!(parsed.flexible_responses.is_empty());
     });
 }
@@ -1754,7 +1624,7 @@ fn flexible_build_filters_non_committee_signers() {
 
     setup_test_with_flexible_context(num_nodes, cb_id, committee.clone(), 2, 4, |pb, pool| {
         add_flexible_shares_to_pool(&pool, cb_id, 0..4);
-        let parsed = build_and_parse_payload(&pb);
+        let parsed = build_and_validate_and_parse_payload(&pb);
 
         assert_eq!(parsed.flexible_responses.len(), 1);
         let group = &parsed.flexible_responses[0];
@@ -1792,7 +1662,7 @@ fn flexible_build_filters_duplicate_signers() {
             add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
         }
 
-        let parsed = build_and_parse_payload(&pb);
+        let parsed = build_and_validate_and_parse_payload(&pb);
         assert_eq!(parsed.flexible_responses.len(), 1);
         let group = &parsed.flexible_responses[0];
         let signers: BTreeSet<_> = group
@@ -1814,7 +1684,7 @@ fn flexible_build_caps_at_max_responses() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 1, 2, |pb, pool| {
         // All 6 committee members submit shares, but max_responses = 2
         add_flexible_shares_to_pool(&pool, callback_id, 0..num_nodes as u64);
-        let parsed = build_and_parse_payload(&pb);
+        let parsed = build_and_validate_and_parse_payload(&pb);
 
         assert_eq!(parsed.flexible_responses.len(), 1);
         let flexible_responses_len = parsed.flexible_responses[0].responses.len();
@@ -1831,7 +1701,7 @@ fn flexible_build_with_zero_min_and_max_responses() {
 
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 0, 0, |pb, pool| {
         add_flexible_shares_to_pool(&pool, callback_id, 0..num_nodes as u64);
-        let parsed = build_and_parse_payload(&pb);
+        let parsed = build_and_validate_and_parse_payload(&pb);
 
         assert_eq!(parsed.flexible_responses.len(), 1);
         let group = &parsed.flexible_responses[0];
@@ -1863,7 +1733,7 @@ fn flexible_build_mixed_with_regular_responses() {
                 add_received_shares_to_pool(pool_access.deref_mut(), shares[1..num_nodes].to_vec());
             }
 
-            let parsed = build_and_parse_payload(&pb);
+            let parsed = build_and_validate_and_parse_payload(&pb);
 
             assert_eq!(parsed.responses.len(), 1);
             assert_eq!(parsed.responses[0].content.id, regular_cb_id);
@@ -1882,9 +1752,16 @@ fn flexible_build_respects_payload_size_limit() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 1, 4, |pb, pool| {
         add_flexible_shares_to_pool(&pool, callback_id, 0..num_nodes as u64);
 
+        let context = default_validation_context();
         let one_byte = NumBytes::new(1);
-        let payload =
-            pb.build_payload(Height::new(1), one_byte, &[], &default_validation_context());
+        let payload = pb.build_payload(Height::new(1), one_byte, &[], &context);
+        pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&context),
+            &payload,
+            &[],
+        )
+        .expect("built payload must pass validation");
         let parsed = bytes_to_payload(&payload).expect("parse error");
 
         assert!(parsed.flexible_responses.is_empty(),);
@@ -1921,7 +1798,7 @@ fn flexible_build_respects_max_responses_per_block() {
         }
         add_flexible_shares_to_pool(&pool, flex_cb, 0..num_nodes as u64);
 
-        let parsed = build_and_parse_payload(&pb);
+        let parsed = build_and_validate_and_parse_payload(&pb);
 
         assert_eq!(
             parsed.num_non_timeout_responses(),
@@ -1939,27 +1816,13 @@ fn flexible_build_and_validate_round_trip() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, pool| {
         add_flexible_shares_to_pool(&pool, callback_id, 0..num_nodes as u64);
 
-        let payload = pb.build_payload(
-            Height::new(1),
-            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
-            &[],
-            &default_validation_context(),
-        );
+        let parsed = build_and_validate_and_parse_payload(&pb);
 
-        let parsed = bytes_to_payload(&payload).expect("parse error");
         assert_eq!(parsed.flexible_responses.len(), 1);
         let group = &parsed.flexible_responses[0];
         assert_eq!(group.callback_id, callback_id);
         assert!(group.responses.len() >= 2);
         assert!(group.responses.len() <= 4);
-
-        let result = pb.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload,
-            &[],
-        );
-        assert_matches!(result, Ok(_));
     });
 }
 
@@ -2843,12 +2706,21 @@ fn add_flexible_shares_to_pool(
     }
 }
 
-fn build_and_parse_payload(
+fn build_and_validate_and_parse_payload(
     payload_builder: &CanisterHttpPayloadBuilderImpl,
 ) -> CanisterHttpPayload {
+    let context = default_validation_context();
     let max_size = NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64);
-    let payload =
-        payload_builder.build_payload(Height::new(1), max_size, &[], &default_validation_context());
+    let payload = payload_builder.build_payload(Height::new(1), max_size, &[], &context);
+    assert_matches!(
+        payload_builder.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&context),
+            &payload,
+            &[],
+        ),
+        Ok(())
+    );
     bytes_to_payload(&payload).expect("parse error")
 }
 
