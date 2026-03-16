@@ -1,24 +1,18 @@
-#![allow(dead_code)]
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
     utils::https_endpoint_to_url,
 };
+use anyhow::Context as _;
 use attestation::SevAttestationPackage;
 use candid::Encode;
+use config_tool::guestos::{cloud::CloudType, generate_ic_config::get_best_interface_ipv6_address};
 use ic_agent::{
     Agent, Identity,
     export::{Principal, reqwest},
 };
-use ic_config::{
-    Config,
-    http_handler::Config as HttpConfig,
-    initial_ipv4_config::IPv4Config as InitialIPv4Config,
-    message_routing::Config as MsgRoutingConfig,
-    metrics::{Config as MetricsConfig, Exporter},
-    transport::TransportConfig,
-};
+use ic_config::{Config, initial_ipv4_config::IPv4Config as InitialIPv4Config};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key_from_pem_file, threshold_sig_public_key_to_der,
@@ -35,7 +29,6 @@ use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
-use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{NodeId, RegistryVersion, SubnetId, crypto::KeyPurpose, messages::MessageId};
 use idna::domain_to_ascii_strict;
@@ -43,7 +36,7 @@ use prost::Message;
 use qrcode::{QrCode, render::unicode};
 use rand::prelude::*;
 use std::{
-    net::IpAddr,
+    net::Ipv6Addr,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -76,7 +69,6 @@ pub(crate) struct NodeRegistration {
     node_id: NodeId,
     key_handler: Arc<dyn NodeRegistrationCrypto>,
     crypto_tls_config: Arc<dyn TlsConfig>,
-    local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
     display_qr_code: bool,
 }
@@ -92,7 +84,6 @@ impl NodeRegistration {
         node_id: NodeId,
         key_handler: Arc<dyn NodeRegistrationCrypto>,
         crypto_tls_config: Arc<dyn TlsConfig>,
-        local_store: Arc<dyn LocalStore>,
     ) -> Self {
         // If we can open a PEM file under the path specified in the replica config,
         // we use the given node operator private key to register the node.
@@ -121,6 +112,7 @@ impl NodeRegistration {
                 Box::new(Hsm)
             }
         };
+
         Self {
             log,
             node_config,
@@ -129,7 +121,6 @@ impl NodeRegistration {
             node_id,
             key_handler,
             crypto_tls_config,
-            local_store,
             signer,
             // Eventually, this value will be deduced from the `registration` config.
             //
@@ -154,7 +145,36 @@ impl NodeRegistration {
 
     // postcondition: we are registered with the NNS
     async fn retry_register_node(&mut self) {
-        let add_node_payload = self.assemble_add_node_message().await;
+        // Any changes to the registry are replicated after some delay, so we sleep between attempts
+        // for that amount of time.
+        let sleep_duration = Duration::from_millis(
+            self.node_config
+                .nns_registry_replicator
+                .poll_delay_duration_ms,
+        );
+
+        let add_node_payload = loop {
+            match self.assemble_add_node_message().await {
+                Ok(v) => break v,
+                Err(e) => {
+                    warn!(
+                        self.log,
+                        "Unable to assemble node payload: '{e:#}', retrying."
+                    );
+
+                    UtilityCommand::notify_host(
+                        format!(
+                            "node-id {}: Unable to assemble node payload: '{e:#}', retrying.",
+                            self.node_id
+                        )
+                        .as_str(),
+                        1,
+                    );
+                }
+            }
+
+            tokio::time::sleep(sleep_duration).await;
+        };
 
         // Will contain information needed for the node operator
         // to approve the add node payload for onboarding.
@@ -164,13 +184,6 @@ impl NodeRegistration {
             encode_as_qrcode(self.node_id)
         );
 
-        // Any changes to the registry are replicated after some delay, so we sleep between attempts
-        // for that amount of time.
-        let sleep_duration = Duration::from_millis(
-            self.node_config
-                .nns_registry_replicator
-                .poll_delay_duration_ms,
-        );
         while let Err(e) = self.check_node_registered().await {
             info!(
                 self.log,
@@ -275,7 +288,7 @@ impl NodeRegistration {
         Ok(())
     }
 
-    async fn assemble_add_node_message(&self) -> AddNodePayload {
+    async fn assemble_add_node_message(&self) -> anyhow::Result<AddNodePayload> {
         let key_handler = self.key_handler.clone();
         let node_pub_keys =
             tokio::task::spawn_blocking(move || key_handler.current_node_public_keys())
@@ -288,7 +301,32 @@ impl NodeRegistration {
         let node_registration_attestation =
             generate_node_registration_attestation(&self.log, &node_signing_pk);
 
-        AddNodePayload {
+        // Determine the globally reachable IPv6 to publish in registry (http_endpoint / xnet_endpoint)
+        let ipv6_address = tokio::task::spawn_blocking(|| -> Result<Ipv6Addr, anyhow::Error> {
+            let mut addr =
+                get_best_interface_ipv6_address().context("unable to detect IPv6 address")?;
+
+            // If the address is link-local or ULA - then probably we're in a cloud environment - try to discover it.
+            // Of the major clouds this is currently only the case for Azure, which does 1:1 NAT from public to ULL.
+            // Though in the future we might add support for some other cloud that would exhibit the same behaviour.
+            if addr.is_unicast_link_local() || addr.is_unique_local() {
+                addr = CloudType::discover()
+                    .context("unable to discover cloud type")?
+                    .obtain_public_ip()
+                    .context("unable to obtain public IPv6")?
+                    .1
+                    .context("no public IPv6 present")?
+            }
+
+            Ok(addr)
+        })
+        .await
+        .unwrap()
+        .context("unable to detect IPv6 address")?;
+
+        info!(self.log, "IPv6 address detected: {ipv6_address}");
+
+        let payload = AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...
             node_signing_pk,
             committee_signing_pk: protobuf_to_vec(
@@ -301,13 +339,15 @@ impl NodeRegistration {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(
                 node_pub_keys.idkg_dealing_encryption_public_key.unwrap(),
             )),
-            xnet_endpoint: msg_routing_config_to_endpoint(
-                &self.log,
-                &self.node_config.message_routing,
-            )
-            .expect("Invalid endpoints in message routing config."),
-            http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
-                .expect("Invalid endpoints in http handler config."),
+            xnet_endpoint: format!(
+                "[{}]:{}",
+                ipv6_address, self.node_config.message_routing.xnet_port
+            ),
+            http_endpoint: format!(
+                "[{}]:{}",
+                ipv6_address,
+                self.node_config.http_handler.listen_addr.port()
+            ),
             node_registration_attestation,
             public_ipv4_config: process_ipv4_config(
                 &self.log,
@@ -327,7 +367,9 @@ impl NodeRegistration {
             // The following fields are unused.
             p2p_flow_endpoints: Default::default(), // unused field
             prometheus_metrics_endpoint: Default::default(), // unused field
-        }
+        };
+
+        Ok(payload)
     }
 
     /// Checks if the nodes keys are properly registered and if there are some
@@ -743,80 +785,6 @@ pub(crate) fn is_time_to_rotate_in_subnet(
         .all(|ts| now.duration_since(*ts).is_ok_and(|d| d >= gamma))
 }
 
-pub(crate) fn http_config_to_endpoint(
-    log: &ReplicaLogger,
-    http_config: &HttpConfig,
-) -> OrchestratorResult<String> {
-    info!(log, "Reading http config for registration");
-    get_endpoint(
-        log,
-        http_config.listen_addr.ip().to_string(),
-        http_config.listen_addr.port(),
-    )
-}
-
-pub(crate) fn msg_routing_config_to_endpoint(
-    log: &ReplicaLogger,
-    msg_routing_config: &MsgRoutingConfig,
-) -> OrchestratorResult<String> {
-    info!(log, "Reading msg routing config for registration");
-    get_endpoint(
-        log,
-        msg_routing_config.xnet_ip_addr.clone(),
-        msg_routing_config.xnet_port,
-    )
-}
-
-pub(crate) fn transport_config_to_endpoints(
-    log: &ReplicaLogger,
-    transport_config: &TransportConfig,
-) -> OrchestratorResult<Vec<String>> {
-    info!(log, "Reading transport config for registration");
-    let mut flow_endpoints: Vec<String> = vec![];
-
-    flow_endpoints.push(format!(
-        "0,{}",
-        get_endpoint(
-            log,
-            transport_config.node_ip.clone(),
-            transport_config.listening_port
-        )?
-    ));
-    Ok(flow_endpoints)
-}
-
-fn metrics_config_to_endpoint(
-    log: &ReplicaLogger,
-    metrics_config: &MetricsConfig,
-) -> OrchestratorResult<String> {
-    if let Exporter::Http(saddr) = metrics_config.exporter {
-        return get_endpoint(log, saddr.ip().to_string(), saddr.port());
-    }
-
-    Err(OrchestratorError::invalid_configuration_error(
-        "Metrics endpoint is not configured.",
-    ))
-}
-
-fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> OrchestratorResult<String> {
-    let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|err| {
-        OrchestratorError::invalid_configuration_error(format!(
-            "Could not parse IP-address {ip_addr}: {err}"
-        ))
-    })?;
-    if parsed_ip_addr.is_loopback() {
-        warn!(log, "Binding to loopback device!");
-    }
-    if port == 0 {
-        warn!(log, "Binding to port 0");
-    }
-    let ip_addr_str = match parsed_ip_addr {
-        IpAddr::V4(_) => ip_addr,
-        IpAddr::V6(_) => format!("[{ip_addr}]"),
-    };
-    Ok(format!("{ip_addr_str}:{port}"))
-}
-
 fn process_ipv4_config(
     log: &ReplicaLogger,
     ipv4_config: &InitialIPv4Config,
@@ -1019,7 +987,6 @@ fn encode_as_qrcode(node_id: NodeId) -> String {
 mod tests {
     use super::*;
     use ic_sys::utility_command::UtilityCommand;
-    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::PrincipalId;
 
     #[test]
@@ -1062,32 +1029,6 @@ mod tests {
             normalize(&expected),
             normalize(&encoded)
         );
-    }
-
-    #[test]
-    fn default_http_config_endpoint_succeeds() {
-        let http_config = HttpConfig::default();
-
-        with_test_replica_logger(|log| {
-            assert!(http_config_to_endpoint(&log, &http_config).is_ok());
-        });
-    }
-
-    #[test]
-    fn transport_config_endpoints_succeeds() {
-        let transport_config = TransportConfig {
-            node_ip: "::1".to_string(),
-            listening_port: 23,
-            send_queue_size: 1,
-            ..Default::default()
-        };
-
-        with_test_replica_logger(|log| {
-            assert_eq!(
-                transport_config_to_endpoints(&log, &transport_config).unwrap(),
-                vec!["0,[::1]:23".to_string()]
-            )
-        });
     }
 
     #[test]
@@ -1160,7 +1101,6 @@ mod tests {
             ROOT_SUBNET_ID_KEY, make_crypto_node_key, make_node_record_key,
             make_subnet_list_record_key, make_subnet_record_key,
         };
-        use ic_registry_local_store::LocalStoreImpl;
         use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
         use ic_test_utilities_in_memory_logger::{
             InMemoryReplicaLogger, assertions::LogEntriesAssert,
@@ -1439,7 +1379,6 @@ mod tests {
                         .return_const(sign_basic_result);
                 }
 
-                let local_store = Arc::new(LocalStoreImpl::new(temp_dir.as_ref()));
                 let node_config = Config::new(temp_dir.keep());
                 let tls_config = mock_tls_config_called_times(self.expect_tls_config_call_times);
 
@@ -1451,7 +1390,6 @@ mod tests {
                     node_id,
                     Arc::new(key_handler),
                     Arc::new(tls_config),
-                    local_store,
                 );
 
                 Setup {
