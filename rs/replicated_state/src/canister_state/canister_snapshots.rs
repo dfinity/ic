@@ -15,7 +15,7 @@ use ic_management_canister_types_private::{
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     CanisterId, CanisterTimer, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
-    MAX_WASM64_MEMORY_IN_BYTES, NumBytes, PrincipalId, SnapshotId, Time,
+    MAX_WASM64_MEMORY_IN_BYTES, NumBytes, SnapshotId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -453,7 +453,6 @@ pub enum CanisterSnapshotError {
 
 #[derive(Clone, Debug)]
 pub struct ValidatedSnapshotMetadata {
-    canister_id: PrincipalId,
     replace_snapshot: Option<SnapshotId>,
     wasm_module_size: NumBytes,
     exported_globals: Vec<Global>,
@@ -505,7 +504,6 @@ impl ValidatedSnapshotMetadata {
         }
 
         Ok(Self {
-            canister_id: raw.canister_id,
             replace_snapshot: raw.replace_snapshot,
             wasm_module_size: NumBytes::new(raw.wasm_module_size),
             exported_globals: raw.globals,
@@ -529,10 +527,6 @@ impl ValidatedSnapshotMetadata {
             + self.certified_data.len() as u64
             + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
         NumBytes::new(num_bytes)
-    }
-
-    pub fn canister_id(&self) -> PrincipalId {
-        self.canister_id
     }
 
     pub fn replace_snapshot(&self) -> Option<SnapshotId> {
