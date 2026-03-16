@@ -577,7 +577,23 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
                 );
             }
-            for (_, grouped_shares) in grouped_shares {
+            for (callback_id, grouped_shares) in grouped_shares {
+                if delivered_ids.contains(&callback_id) || !payload_callback_ids.insert(callback_id)
+                {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
+                        callback_id,
+                    ));
+                }
+                let context = http_contexts.get(&callback_id).ok_or(
+                    CanisterHttpPayloadValidationError::InvalidArtifact(
+                        InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
+                    ),
+                )?;
+                if !matches!(context.replication, Replication::FullyReplicated) {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
+                    );
+                }
                 if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
                     return invalid_artifact(
                         InvalidCanisterHttpPayloadReason::DivergenceProofDoesNotMeetDivergenceCriteria,

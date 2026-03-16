@@ -728,7 +728,8 @@ fn duplicate_validation() {
 #[test]
 fn divergence_response_validation_test() {
     for subnet_size in 3..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(true, subnet_size, |payload_builder, _| {
+        test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+            inject_request_contexts(&mut payload_builder, fully_replicated_contexts([0]));
             let (_, metadata) = test_response_and_metadata(0);
             let (_, other_metadata) = test_response_and_metadata_with_content(
                 0,
