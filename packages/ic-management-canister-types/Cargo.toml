@@ -1,0 +1,23 @@
+[package]
+name = "ic-management-canister-types"
+version = "0.7.1"
+authors.workspace = true
+edition.workspace = true
+#rust-version.workspace = true
+description = "Types for calling the IC management canister"
+homepage = "https://docs.rs/ic-management-canister-types"
+documentation = "https://docs.rs/ic-management-canister-types"
+readme = "README.md"
+categories = ["api-bindings", "data-structures"]
+keywords = ["internet-computer", "types", "dfinity", "canister"]
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+license = "Apache-2.0"
+repository = "https://github.com/dfinity/ic"
+
+[dependencies]
+candid.workspace = true
+serde.workspace = true
+serde_bytes.workspace = true
+
+[dev-dependencies]
+candid_parser.workspace = true
