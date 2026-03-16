@@ -246,7 +246,6 @@ fn test_canister_snapshots_decode() {
     let canister_id = canister_test_id(7);
     let canister_snapshot_bits = CanisterSnapshotBits {
         snapshot_id: SnapshotId::from((canister_id, 5)),
-        canister_id,
         taken_at_timestamp: UNIX_EPOCH,
         canister_version: 3,
         binary_hash: WasmHash::from(&CanisterModule::new(vec![2, 3, 4])),

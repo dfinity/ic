@@ -411,7 +411,7 @@ impl ReplicatedStateMetrics {
             }
 
             total_canister_snapshots_memory_taken += canister.canister_snapshots.memory_taken();
-            total_canister_snapshots_count += canister.canister_snapshots.count();
+            total_canister_snapshots_count += canister.canister_snapshots.len();
         });
 
         self.old_open_call_contexts

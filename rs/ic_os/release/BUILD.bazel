@@ -3,7 +3,7 @@ load("//publish:defs.bzl", "release_strip_binary")
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 OBJECTS = {
-    "fstrim_tool": "//rs/ic_os/metrics/fstrim_tool:fstrim_tool_bin",
+    "fstrim_tool": "//rs/ic_os/os_tools/fstrim_tool:fstrim_tool_bin",
     "guestos_tool": "//rs/ic_os/os_tools/guestos_tool:guestos_tool",
     "guest_vm_runner": "//rs/ic_os/os_tools/guest_vm_runner",
     "guest_vm_runner_dev": "//rs/ic_os/os_tools/guest_vm_runner:guest_vm_runner_dev",
@@ -17,7 +17,7 @@ OBJECTS = {
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
     "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
     "nss_icos": "//rs/ic_os/networking/nss_icos",
-    "metrics_tool": "//rs/ic_os/metrics/metrics_tool:metrics_tool_bin",
+    "custom_metrics": "//rs/ic_os/metrics/custom_metrics:custom_metrics_bin",
 }
 
 [release_strip_binary(
