@@ -633,7 +633,7 @@ fn dts_update_and_heartbeat() {
     let message_id = test.send_ingress(canister, ingress(300));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // The heartbeat did not give the ingress message a chance to run.
-    assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    assert_eq!(test.ingress_state(&message_id), IngressState::Received);
 
     test.expect_heartbeat(canister, instructions(100));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
