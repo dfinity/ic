@@ -222,6 +222,7 @@ rust_ic_test(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/state_machine_tests",
+        "//rs/test_utilities/metrics",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",

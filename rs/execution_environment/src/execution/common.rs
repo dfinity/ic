@@ -355,6 +355,22 @@ pub(crate) fn validate_controller(
     Ok(())
 }
 
+pub(crate) fn validate_snapshot_visibility(
+    canister: &CanisterState,
+    caller: &PrincipalId,
+    method_name: &str,
+) -> Result<(), UserError> {
+    if !crate::canister_settings::VisibilitySettings::from(canister.snapshot_visibility())
+        .has_access(caller, canister.controllers())
+    {
+        return Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!("Caller {caller} is not allowed to call {method_name}"),
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_subnet_admin(
     subnet_admins: &BTreeSet<PrincipalId>,
     sender: &PrincipalId,
@@ -688,7 +704,10 @@ mod test {
     use ic_base_types::{CanisterId, NumSeconds};
     use ic_error_types::UserError;
     use ic_logger::{LoggerImpl, ReplicaLogger};
-    use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
+    use ic_replicated_state::{
+        CanisterState, SchedulerState, SystemState,
+        canister_state::canister_snapshots::CanisterSnapshots,
+    };
     use ic_types::messages::{CallbackId, NO_DEADLINE};
     use ic_types::{Cycles, Time};
 
@@ -701,6 +720,7 @@ mod test {
             Cycles::new(1 << 36),
             NumSeconds::from(100_000),
         );
+        let canister_snapshots = CanisterSnapshots::default();
 
         let logger = LoggerImpl::new(&Default::default(), "test".to_string());
         let log = ReplicaLogger::new(logger.root.clone().into());
@@ -710,7 +730,7 @@ mod test {
                 ic_error_types::ErrorCode::CanisterCalledTrap,
                 "",
             )),
-            &CanisterState::new(system_state, None, scheduler_state),
+            &CanisterState::new(system_state, None, scheduler_state, canister_snapshots),
             Time::from_nanos_since_unix_epoch(100),
             ic_replicated_state::CallOrigin::CanisterUpdate(
                 CanisterId::from(123u64),

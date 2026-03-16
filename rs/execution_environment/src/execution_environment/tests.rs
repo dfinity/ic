@@ -17,9 +17,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, SystemState,
-    canister_state::{
-        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase,
-    },
+    canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
     metadata_state::subnet_call_context_manager::PreSignatureStash,
     metadata_state::testing::NetworkTopologyTesting,
     testing::{CanisterQueuesTesting, SystemStateTesting},
@@ -31,6 +29,7 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
     batch::CanisterCyclesCostSchedule,
@@ -1874,15 +1873,17 @@ fn canister_snapshots_after_split() {
     // The snapshots do not exist in the replicated state before the requests.
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         0
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         0
     );
@@ -1909,15 +1910,17 @@ fn canister_snapshots_after_split() {
     // Verify the snapshots exist in the replicated state.
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
     );
@@ -1961,32 +1964,20 @@ fn canister_snapshots_after_split() {
 
     assert_eq!(
         state_a
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
-    );
-    assert_eq!(
-        state_a
-            .canister_snapshots
-            .list_snapshots(canister_id_2)
-            .len(),
-        0
     );
 
     assert_eq!(
         state_b
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
-    );
-    assert_eq!(
-        state_b
-            .canister_snapshots
-            .list_snapshots(canister_id_1)
-            .len(),
-        0
     );
 }
 
@@ -3054,15 +3045,15 @@ fn execute_canister_http_request() {
     assert_eq!(http_request_context.request.payment, payment - fee);
 
     assert_eq!(
-        NominalCycles::from(fee),
+        NominalCycles::from(fee.get()),
         test.state()
             .metadata
             .subnet_metrics
-            .consumed_cycles_http_outcalls
+            .get_consumed_cycles_http_outcalls()
     );
 
     assert_eq!(
-        NominalCycles::from(fee),
+        NominalCycles::from(fee.get()),
         *test
             .state()
             .metadata
@@ -3866,7 +3857,7 @@ fn replicated_query_can_burn_cycles() {
         .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
-    assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn));
+    assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn.get()));
 }
 
 #[test]
@@ -4039,12 +4030,12 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that consumed cycles are correct for both use cases.
     assert_eq!(
         transmission_consumption_after_response,
-        NominalCycles::from(transmission_cost)
+        NominalCycles::from(transmission_cost.get())
     );
 
     assert_eq!(
         instruction_consumption_after_response,
-        NominalCycles::from(execution_cost)
+        NominalCycles::from(execution_cost.get())
     );
 
     // Consumed cycles after the response should be smaller than before
@@ -4082,7 +4073,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
-        NominalCycles::from(test.canister_execution_cost(b_id))
+        NominalCycles::from(test.canister_execution_cost(b_id).get())
     );
 }
 
