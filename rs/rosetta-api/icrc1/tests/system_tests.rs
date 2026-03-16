@@ -1098,6 +1098,63 @@ fn test_fee_collector_107() {
     });
 }
 
+#[test]
+fn test_icrc122_authorized_mint_and_burn() {
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder()
+        .with_custom_ledger_wasm(icrc3_test_ledger())
+        .build();
+
+    rt.block_on(async {
+        let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
+
+        let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
+
+        let controller = PrincipalId::new_user_test_id(99);
+        let caller = Principal::from(controller);
+
+        // Mint 1000 tokens to TEST_ACCOUNT via an authorized mint (122mint block)
+        let block0 = BlockBuilder::<Tokens>::new(0, 1000)
+            .authorized_mint(*TEST_ACCOUNT, Tokens::from(1_000u64), caller)
+            .with_reason("initial supply".to_string())
+            .build();
+
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(0u64));
+
+        let rosetta_block =
+            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
+        assert_eq!(rosetta_block, Some(0));
+
+        // Burn 200 tokens from TEST_ACCOUNT via an authorized burn (122burn block)
+        let block1 = BlockBuilder::<Tokens>::new(1, 2000)
+            .with_parent_hash(block0.hash().to_vec())
+            .authorized_burn(*TEST_ACCOUNT, Tokens::from(200u64), caller)
+            .build();
+
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(1u64));
+
+        let rosetta_block =
+            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 1).await;
+        assert_eq!(rosetta_block, Some(1));
+
+        // Verify balance: mint 1000 - burn 200 = 800
+        assert_rosetta_balance(
+            *TEST_ACCOUNT,
+            1,
+            800,
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+        )
+        .await;
+    });
+}
+
 const NUM_BLOCKS: u64 = 6;
 async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64) {
     let mut log_file = NamedTempFile::new().expect("failed to create a temp file");
