@@ -81,8 +81,6 @@ pub struct AuthorizedMint {
     pub amount: Nat,
     pub caller: Principal,
     pub reason: Option<String>,
-    pub memo: Option<Memo>,
-    pub created_at_time: Option<u64>,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -91,8 +89,6 @@ pub struct AuthorizedBurn {
     pub amount: Nat,
     pub caller: Principal,
     pub reason: Option<String>,
-    pub memo: Option<Memo>,
-    pub created_at_time: Option<u64>,
 }
 
 // Representation of a Transaction which supports the Icrc1 Standard functionalities

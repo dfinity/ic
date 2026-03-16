@@ -83,18 +83,14 @@ type AuthorizedMint = record {
   to : Account;
   amount : Tokens;
   caller : principal;
-  reason : opt text;
-  memo : opt vec nat8;
-  created_at_time : opt nat64
+  reason : opt text
 };
 
 type AuthorizedBurn = record {
   from : Account;
   amount : Tokens;
   caller : principal;
-  reason : opt text;
-  memo : opt vec nat8;
-  created_at_time : opt nat64
+  reason : opt text
 };
 
 type FeeCollector = record {

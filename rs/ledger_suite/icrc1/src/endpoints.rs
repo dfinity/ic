@@ -263,8 +263,6 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     amount: amount.into(),
                     caller,
                     reason,
-                    memo,
-                    created_at_time,
                 });
             }
             Operation::AuthorizedBurn {
@@ -279,8 +277,6 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     amount: amount.into(),
                     caller,
                     reason,
-                    memo,
-                    created_at_time,
                 });
             }
         }
