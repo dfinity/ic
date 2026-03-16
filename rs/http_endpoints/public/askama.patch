@@ -1,0 +1,14 @@
+diff --git a/askama_derive/src/generator.rs b/askama_derive/src/generator.rs
+index 37c4fcb8..08f21e0a 100644
+--- a/askama_derive/src/generator.rs
++++ b/askama_derive/src/generator.rs
+@@ -212,6 +212,9 @@ impl<'a, 'h> Generator<'a, 'h> {
+                 const _: &[askama::helpers::core::primitive::u8] =
+                     askama::helpers::core::include_bytes!(#path);
+             ));
++            let cwd = current_dir().unwrap();
++            println!("The current directory is {cwd:?}");
++            println!("The path: '{path}'");
+ 
+             #[cfg(all(feature = "external-sources", feature = "nightly-spans"))]
+             _ctx.resolve_path(&path);
