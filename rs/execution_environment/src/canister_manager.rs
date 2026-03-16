@@ -318,6 +318,7 @@ impl CanisterManager {
     ///     - it cannot be lower than the current canister memory usage.
     ///     - there must be enough available subnet capacity for the change.
     ///     - there must be enough cycles for storage reservation.
+    ///     - there must be enough cycles for resizing log storage.
     ///     - there must be enough cycles to avoid freezing the canister.
     /// - compute allocation:
     ///     - there must be enough available compute capacity for the change.
@@ -493,9 +494,7 @@ impl CanisterManager {
             });
         }
 
-        let log_memory_limit = settings.log_memory_limit().or(Some(NumBytes::new(
-            DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
-        )));
+        let log_memory_limit = settings.log_memory_limit();
         if let Some(requested_limit) = log_memory_limit {
             // User can setup a zero log memory limit to disable logging.
             // But cannot set it higher than the maximum limit.
@@ -504,6 +503,19 @@ impl CanisterManager {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
                     bytes: requested_limit,
                     limit: max_limit,
+                });
+            }
+            // TODO: check balance, assume we passed 'canister_log_memory_usage' to the function.
+            // canister_log_memory_usage is the memory currently used by the log_memory_store,
+            // which when resized has to be read to the heap, re-wrapped into a new size
+            // log ring-buffer and written back to the log_memory_store.
+            // this work must cost cycles linearly to canister_log_memory_usage.
+            let canister_log_resize_cost = canister_log_memory_usage * cost_per_byte;
+            if canister_cycles_balance < canister_log_resize_cost {
+                return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                    memory_allocation: new_memory_allocation,
+                    available: canister_cycles_balance,
+                    threshold: canister_log_resize_cost,
                 });
             }
         }

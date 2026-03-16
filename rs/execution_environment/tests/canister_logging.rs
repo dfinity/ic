@@ -5,7 +5,7 @@ use ic_config::execution_environment::{
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
-use ic_execution_environment::units::KIB;
+use ic_execution_environment::units::{KIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
@@ -13,6 +13,7 @@ use ic_management_canister_types_private::{
     FetchCanisterLogsResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
@@ -20,7 +21,7 @@ use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, 
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{CanisterId, Cycles, NumInstructions, ingress::WasmResult};
-use more_asserts::{assert_le, assert_lt};
+use more_asserts::{assert_gt, assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
 
@@ -143,7 +144,7 @@ fn restart_node(env: StateMachine) -> StateMachine {
     ))
 }
 
-fn fetch_canister_logs(
+fn fetch_canister_logs_query(
     env: &StateMachine,
     sender: PrincipalId,
     canister_id: CanisterId,
@@ -154,6 +155,40 @@ fn fetch_canister_logs(
         "fetch_canister_logs",
         FetchCanisterLogsRequest::new(canister_id).encode(),
     )
+}
+
+fn fetch_canister_logs_intercanister(
+    env: &StateMachine,
+    universal_canister: CanisterId,
+    canister_id: CanisterId,
+    cycles: Cycles,
+) -> Result<WasmResult, UserError> {
+    env.execute_ingress(
+        universal_canister,
+        "update",
+        wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_id).encode())
+                    .on_reject(wasm().reject_message().reject()),
+                cycles,
+            )
+            .build(),
+    )
+}
+
+fn fetch_log_records_intercanister(
+    env: &StateMachine,
+    universal_canister: CanisterId,
+    canister_id: CanisterId,
+    cycles: Cycles,
+) -> Vec<CanisterLogRecord> {
+    let reply = fetch_canister_logs_intercanister(env, universal_canister, canister_id, cycles);
+    FetchCanisterLogsResponse::decode(&get_reply(reply))
+        .unwrap()
+        .canister_log_records
 }
 
 #[test]
@@ -242,7 +277,7 @@ fn test_metrics_for_fetch_canister_logs_via_query_call() {
     let (env, canister_id) = setup_with_controller(user_controller, wat_canister().build_wasm());
 
     assert_eq!(fetch_canister_logs_count(&env), 0);
-    let _ = fetch_canister_logs(&env, user_controller, canister_id);
+    let _ = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(fetch_canister_logs_count(&env), 1);
 }
 
@@ -651,7 +686,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
                 .build(),
             wat_canister().build_wasm(),
         );
-        let actual_result = fetch_canister_logs(&env, sender, canister_id);
+        let actual_result = fetch_canister_logs_query(&env, sender, canister_id);
         assert_eq!(
             actual_result, expected_result,
             "Failed for log_visibility: {log_visibility:?}, sender: {sender}"
@@ -673,7 +708,7 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
     env.advance_time(Duration::from_secs(1));
     let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![(0, timestamp, message.as_bytes().to_vec())])
@@ -694,7 +729,7 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
     env.advance_time(Duration::from_secs(1));
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -718,7 +753,7 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
     env.advance_time(Duration::from_secs(1));
     let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![(0, timestamp, message.as_bytes().to_vec())])
@@ -739,7 +774,7 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
     env.advance_time(Duration::from_secs(1));
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -779,7 +814,7 @@ fn test_canister_log_record_index_increment_for_different_calls() {
     let timestamp_23 = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test2", vec![]);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -825,7 +860,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
     let timestamp_23 = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test2", vec![]);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -851,7 +886,7 @@ fn test_logging_in_trapped_wasm_execution() {
     // Grow stable memory by 1 page (64kb), reading outside of the page should trap.
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![(
@@ -873,7 +908,7 @@ fn test_logging_explicit_canister_trap_without_message() {
     env.advance_time(Duration::from_secs(1));
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![(0, timestamp, "[TRAP]: (no message)".to_string())]
@@ -893,7 +928,7 @@ fn test_logging_explicit_canister_trap_with_message() {
     env.advance_time(Duration::from_secs(1));
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![(0, timestamp, "[TRAP]: some text".to_string())]
@@ -919,7 +954,7 @@ fn test_canister_log_stays_within_limit() {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
         env.tick();
     }
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     let response = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
     // Expect records' total size to be under the limit, excluding the outer vector's static size.
     assert_le!(
@@ -972,7 +1007,7 @@ fn test_logging_trap_in_heartbeat() {
             .build_wasm(),
     );
     let timestamp = env.time();
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -997,7 +1032,7 @@ fn test_logging_trap_in_timer() {
             .build_wasm(),
     );
     let timestamp = env.time();
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1028,7 +1063,7 @@ fn test_deleting_logs_on_reinstall() {
     env.advance_time(TIME_STEP);
 
     // Expect the log record from cansiter version #1.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1059,7 +1094,7 @@ fn test_deleting_logs_on_reinstall() {
     env.advance_time(TIME_STEP);
 
     // Expect only the log records after reinstall.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1094,7 +1129,7 @@ fn test_deleting_logs_on_uninstall() {
     env.stop_canister_as(user_controller, canister_id).unwrap();
 
     // Expect logs to be available.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1114,7 +1149,7 @@ fn test_deleting_logs_on_uninstall() {
     .unwrap();
 
     // Expect logs to be deleted.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![])
@@ -1161,7 +1196,7 @@ fn test_logging_debug_print_persists_over_upgrade() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1202,7 +1237,7 @@ fn test_logging_trap_at_install_start() {
     // Assert install fails due to trap.
     assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterCalledTrap);
 
-    let result = fetch_canister_logs(&env, canister_id.into(), canister_id);
+    let result = fetch_canister_logs_query(&env, canister_id.into(), canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1237,7 +1272,7 @@ fn test_logging_trap_at_install_init() {
     // Assert install fails due to trap.
     assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterCalledTrap);
 
-    let result = fetch_canister_logs(&env, canister_id.into(), canister_id);
+    let result = fetch_canister_logs_query(&env, canister_id.into(), canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1295,7 +1330,7 @@ fn test_logging_trap_in_pre_upgrade() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1354,7 +1389,7 @@ fn test_logging_trap_after_upgrade_in_start() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1418,7 +1453,7 @@ fn test_logging_trap_after_upgrade_in_post_upgrade() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1467,7 +1502,7 @@ fn test_logging_debug_print_over_dts() {
     let _msg_id = env.send_ingress(PrincipalId::new_anonymous(), canister_id, "test", vec![]);
     // Since one slice was processed in `send_ingress` iterate over one slice less.
     for i in 1..number_of_slices {
-        let result = fetch_canister_logs(&env, user_controller, canister_id);
+        let result = fetch_canister_logs_query(&env, user_controller, canister_id);
         assert_eq!(
             FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
             canister_log_response(vec![]),
@@ -1478,7 +1513,7 @@ fn test_logging_debug_print_over_dts() {
     }
 
     // Expect all the log messages after the last slice is processed with the timestamp of the first slice.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1521,7 +1556,7 @@ fn test_logging_trap_over_dts() {
     let _msg_id = env.send_ingress(PrincipalId::new_anonymous(), canister_id, "test", vec![]);
     // Since one slice was processed in `send_ingress` iterate over one slice less.
     for i in 1..number_of_slices {
-        let result = fetch_canister_logs(&env, user_controller, canister_id);
+        let result = fetch_canister_logs_query(&env, user_controller, canister_id);
         assert_eq!(
             FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
             canister_log_response(vec![]),
@@ -1532,7 +1567,7 @@ fn test_logging_trap_over_dts() {
     }
 
     // Expect all the log messages after the last slice is processed with the timestamp of the first slice.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1604,7 +1639,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
         }
     }
     // Expect no log messages right after the checkpoint round, since the message did not finish.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![])
@@ -1615,7 +1650,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
     // Rounds #B0 and further: Afther the checkpoint process the message again through all the slices.
     let timestamp_after_checkpoint = system_time_to_nanos(env.time());
     for i in 0..number_of_slices {
-        let result = fetch_canister_logs(&env, user_controller, canister_id);
+        let result = fetch_canister_logs_query(&env, user_controller, canister_id);
         assert_eq!(
             FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
             canister_log_response(vec![]),
@@ -1630,7 +1665,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
     env.advance_time(TIME_STEP);
 
     // Expect all the log messages after the last slice is processed with the timestamp of the first slice.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1738,7 +1773,7 @@ fn test_canister_log_on_reply() {
         (number_of_slices - 1) * round_time_increment
     );
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1803,7 +1838,7 @@ fn test_canister_log_on_cleanup() {
         (number_of_slices - 1) * round_time_increment
     );
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1900,7 +1935,7 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
     let (env, canister_id) = setup_with_controller(controller, wasm.clone());
     // Populate logs.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let reply = fetch_canister_logs_query(&env, controller, canister_id);
     let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
     // Assert non-empty logs.
     assert_eq!(response.canister_log_records.len(), 1);
@@ -1912,7 +1947,7 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
     let _ = env.reinstall_canister(canister_id, wasm, vec![]);
 
     // Logs should be cleared.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let reply = fetch_canister_logs_query(&env, controller, canister_id);
     let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
     assert_eq!(response.canister_log_records.len(), 0);
     // Log memory limit should be preserved.
@@ -1967,7 +2002,7 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let reply = fetch_canister_logs_query(&env, controller, canister_id);
     let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
     assert_eq!(response.canister_log_records.len(), 3);
 
@@ -1982,82 +2017,189 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
 
     // After uninstall code.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let reply = fetch_canister_logs_query(&env, controller, canister_id);
     let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
     // Expect zero, because log memory store is deallocated.
     assert_eq!(response.canister_log_records.len(), 0);
 }
 
+fn update_settings_duration_sum(env: &StateMachine) -> f64 {
+    fetch_histogram_vec_stats(
+        env.metrics_registry(),
+        "execution_subnet_message_duration_seconds",
+    )
+    .get(&labels(&[
+        ("method_name", "ic00_update_settings"),
+        ("outcome", "finished"),
+        ("status", "success"),
+        ("speed", "fast"),
+    ]))
+    .map_or(0.0, |s| s.sum)
+}
+
+/*
+TODO: remove debug code
+
+$ ./ci/container/container-run.sh
+$ bazel test \
+  //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_canister_resize_up_preserves_logs
+
+*/
 #[test]
 fn test_canister_resize_up_preserves_logs() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    let controller = PrincipalId::new_anonymous();
-    let wasm = wat_canister()
-        .update("test", wat_fn().debug_print(b"hello"))
-        .build_wasm();
-    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+    let log_memory_limit = 2 * MIB;
+    let log_records_per_call = 10_000;
+    const LOG_MESSAGE_LEN: usize = 0;
 
-    // Before resizing.
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_before = response.canister_log_records;
-    assert_eq!(logs_before.len(), 3);
+    // Create canister and install wasm.
+    let env = setup_env();
+    let main_controller = PrincipalId::new_anonymous();
+    let universal_canister = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let cycles = Cycles::new(20_813_000_000);
 
-    // Resize up.
-    let new_memory_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT + 1000) as u64;
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller, universal_canister.get()])
+            .with_log_memory_limit(log_memory_limit - 1) // Initial log memory limit is smaller.
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update(
+                "generate_logs",
+                wat_fn().repeat(
+                    log_records_per_call as u32,
+                    wat_fn().debug_print(&[b'a'; LOG_MESSAGE_LEN]),
+                ),
+            )
+            .build_wasm(),
+    );
+
+    // Fill all log memory store.
+    let calls = 1 + log_memory_limit as usize
+        / (log_records_per_call * LogMemoryStore::estimate_record_size(LOG_MESSAGE_LEN));
+    for _ in 0..calls {
+        let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
+    }
+    let logs_before =
+        fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
+
+    // Resize log memory store.
+    let balance_before = env.cycle_balance(canister_id);
+    let start = std::time::Instant::now();
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(new_memory_limit)
+            .with_log_memory_limit(log_memory_limit)
             .build(),
     );
+    println!("ABC update_settings duration: {:?}", start.elapsed());
+    let balance_after = env.cycle_balance(canister_id);
+    assert_gt!(balance_before, balance_after);
+    println!("ABC resize cost: {}", balance_before - balance_after);
 
     // After resizing.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_after = response.canister_log_records;
-    assert_eq!(logs_after.len(), 3);
+    let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
+    assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
+
+/*
+TODO: remove debug code
+
+$ ./ci/container/container-run.sh
+$ bazel test \
+  //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_canister_resize_down_preserves_logs
+
+*/
 
 #[test]
 fn test_canister_resize_down_preserves_logs() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    let controller = PrincipalId::new_anonymous();
-    let wasm = wat_canister()
-        .update("test", wat_fn().debug_print(b"hello"))
-        .build_wasm();
-    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+    let log_memory_limit = 2 * MIB;
+    let log_records_per_call = 10_000;
+    const LOG_MESSAGE_LEN: usize = 0;
 
-    // Before resizing.
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_before = response.canister_log_records;
-    assert_eq!(logs_before.len(), 3);
+    // Create canister and install wasm.
+    let env = setup_env();
+    let main_controller = PrincipalId::new_anonymous();
+    let universal_canister = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let cycles = Cycles::new(20_813_000_000);
 
-    // Resize down.
-    let new_memory_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT - 1000) as u64;
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller, universal_canister.get()])
+            .with_log_memory_limit(log_memory_limit) // Initial log memory limit is larger.
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update(
+                "generate_logs",
+                wat_fn().repeat(
+                    log_records_per_call as u32,
+                    wat_fn().debug_print(&[b'a'; LOG_MESSAGE_LEN]),
+                ),
+            )
+            .build_wasm(),
+    );
+
+    // Fill all log memory store.
+    let calls = 1 + log_memory_limit as usize
+        / (log_records_per_call * LogMemoryStore::estimate_record_size(LOG_MESSAGE_LEN));
+    for _ in 0..calls {
+        let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
+    }
+    let logs_before =
+        fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
+
+    // Snapshot metrics BEFORE the resize.
+    let sum_before = update_settings_duration_sum(&env);
+
+    // Resize log memory store.
+    let balance_before = env.cycle_balance(canister_id);
+    let start = std::time::Instant::now();
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(new_memory_limit)
+            .with_log_memory_limit(log_memory_limit - 1)
             .build(),
     );
+    println!("ABC update_settings duration: {:?}", start.elapsed());
+    let balance_after = env.cycle_balance(canister_id);
+    assert_gt!(balance_before, balance_after);
+    println!("ABC resize cost: {}", balance_before - balance_after);
+
+    // Snapshot metrics AFTER the resize.
+    let sum_after = update_settings_duration_sum(&env);
+    let resize_duration_seconds = sum_after - sum_before;
+    println!("ABC Resize update_settings duration: {resize_duration_seconds:.6}s");
 
     // After resizing.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_after = response.canister_log_records;
-    assert_eq!(logs_after.len(), 3);
+    let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
+    assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
