@@ -126,6 +126,15 @@ type CreateSubnetResponse = variant {
   Err: text;
 };
 
+type DeleteSubnetPayload = record {
+  subnet_id : principal;
+};
+
+type DeleteSubnetResponse = variant {
+  Ok;
+  Err: text;
+};
+
 type CanisterCyclesCostSchedule = variant {
   Normal;
   Free;
