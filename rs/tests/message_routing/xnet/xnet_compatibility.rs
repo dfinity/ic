@@ -30,7 +30,7 @@ use ic_consensus_system_test_utils::upgrade::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, get_guestos_img_version,
@@ -69,8 +69,13 @@ fn setup(env: TestEnv) {
         }
         subnet
     }
-    let ic = InternetComputer::new();
-    ic.add_subnet(subnet(SubnetType::System, None))
+    InternetComputer::new()
+        .with_default_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes: None,
+        })
+        .add_subnet(subnet(SubnetType::System, None))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
         .setup_and_start(&env)

@@ -7,7 +7,66 @@ use super::super::*;
 use super::zero_instruction_messages;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_replicated_state::testing::CanisterQueuesTesting;
+use ic_replicated_state::{NumWasmPages, num_bytes_try_from};
 use proptest::prelude::*;
+
+#[test]
+fn round_instructions_limit_depends_on_slice_instructions() {
+    // The instruction budget for canister execution is:
+    //   budget = max_instructions_per_round
+    //          - max(max_instructions_per_slice, max_instructions_per_install_code_slice)
+    //          + 1
+    //
+    // This ensures that the total instructions consumed never exceed
+    // `max_instructions_per_round` even if a new execution starts just before
+    // the budget hits zero and then uses a full slice.
+    //
+    // Verify that a larger max instructions per slice or install code slice reduces
+    // the effective budget and therefore the number of messages executed.
+    fn execute_round(slice: u64, install_code_slice: u64) -> usize {
+        let config = SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_query_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(slice),
+            max_instructions_per_install_code_slice: NumInstructions::from(install_code_slice),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        };
+
+        let mut test = SchedulerTestBuilder::new()
+            .with_scheduler_config(config)
+            .build();
+        let canister = test.create_canister();
+        for _ in 0..15 {
+            test.send_ingress(canister, ingress(100));
+        }
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        // Return the number of messages executed.
+        15 - test.ingress_queue_size(canister)
+    }
+
+    // --- Scenario A: install_code_slice == slice (100) ---
+    // budget = 1000 - max(100, 100) + 1 = 901
+    // With 100-instruction messages the thread can execute:
+    //   9 messages (budget 901 → 1), then the 10th starts (budget 1 > 0)
+    //   and overshoots to -99. Total = 10 messages.
+    assert_eq!(execute_round(100, 100), 10);
+
+    // --- Scenario B: slice raised to 500 ---
+    // budget = 1000 - max(500, 100) + 1 = 501
+    // 5 messages (budget 501 → 1), 6th overshoots to -99. Total = 6 messages.
+    assert_eq!(execute_round(500, 100), 6);
+
+    // --- Scenario C: install_code_slice raised to 500 ---
+    // budget = 1000 - max(100, 500) + 1 = 501
+    // 5 messages (budget 501 → 1), 6th overshoots to -99. Total = 6 messages.
+    assert_eq!(execute_round(100, 500), 6);
+}
 
 /// This test ensures that inner_loop() breaks out of the loop when the loop
 /// consumes max_instructions_per_round.
@@ -541,6 +600,89 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
+/// At the end of each inner-loop iteration the scheduler deducts
+/// `instruction_overhead_per_canister_for_finalization * num_canisters`
+/// from the instruction budget.  With a cross-canister call pattern that
+/// normally produces 3 inner-loop iterations (call → response → callback),
+/// a large-enough overhead must prevent the callback iteration from running.
+#[test]
+fn finalization_overhead_per_canister_reduces_instruction_budget() {
+    const SLICE: u64 = 10;
+    const SLICE_INSTRUCTIONS: NumInstructions = NumInstructions::new(SLICE);
+
+    /// Tests the scheduling and execution of two active canisters (canister0 and
+    /// canister1) and one inactive canister. Ignoring overhead it should execute 3
+    /// iterations:
+    ///
+    ///  * Iteration 1: canister0 ingress  (10 instructions)
+    ///  * Iteration 2: canister1 call     (10 instructions, inducted from iter 1)
+    ///  * Iteration 3: canister0 callback (10 instructions, inducted from iter 2)
+    ///
+    /// ```text
+    /// budget = max_instructions_per_round - max_instructions_per_slice + 1
+    ///        = 80 - 10 + 1 = 71
+    /// ```
+    fn test_sequence(finalization_overhead: NumInstructions, expected_iterations: u64) {
+        let config = SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: SLICE_INSTRUCTIONS * 8,
+            max_instructions_per_message: SLICE_INSTRUCTIONS,
+            max_instructions_per_slice: SLICE_INSTRUCTIONS,
+            max_instructions_per_install_code_slice: SLICE_INSTRUCTIONS,
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: finalization_overhead,
+            ..SchedulerConfig::application_subnet()
+        };
+
+        let mut test = SchedulerTestBuilder::new()
+            .with_scheduler_config(config)
+            .build();
+        let canister0 = test.create_canister();
+        let canister1 = test.create_canister();
+        test.send_ingress(
+            canister0,
+            ingress(SLICE).call(other_side(canister1, SLICE), on_response(SLICE)),
+        );
+        let _canister2 = test.create_canister();
+
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        let metrics = &test.scheduler().metrics;
+        assert_eq!(
+            metrics
+                .inner_loop_consumed_non_zero_instructions_count
+                .get(),
+            expected_iterations,
+        );
+        assert_eq!(
+            metrics.inner_round_loop_consumed_max_instructions.get(),
+            if expected_iterations == 3 { 0 } else { 1 }
+        );
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_metrics
+                .update_transactions_total,
+            expected_iterations
+        );
+    }
+
+    // Baseline: without overhead, the inner loop runs 3 iterations:
+    //  * Iteration 1: 71 → 61 (exec) → 61 (overhead)
+    //  * Iteration 2: 61 → 51 (exec) → 51 (overhead)
+    //  * Iteration 3: 51 → 41 (exec) → 41 (overhead)
+    test_sequence(NumInstructions::from(0), 3);
+
+    // With overhead = 10 and 3 canisters, the overhead per iteration is 30:
+    //  * Iteration 1: 71 → 61 (exec) → 31 (overhead)
+    //  * Iteration 2: 31 → 21 (exec) → -9 (overhead)
+    //  * Iteration 3: budget ≤ 0 → break
+    //
+    // Only 2 iterations execute.
+    test_sequence(SLICE_INSTRUCTIONS, 2);
+}
+
 fn scheduled_heap_delta_limit_corner_values() -> BoxedStrategy<u64> {
     prop_oneof!(Just(0), Just(5), Just(10), Just(100), Just(u64::MAX)).boxed()
 }
@@ -658,4 +800,84 @@ fn scheduled_heap_delta_limit_scaling() {
     assert_eq!(8, scheduled_limit(45, 50, 9, 10, 5));
     assert_eq!(10, scheduled_limit(50, 50, 9, 10, 5));
     assert_eq!(10, scheduled_limit(55, 50, 9, 10, 5));
+}
+
+/// The scheduler recomputes `subnet_available_memory` from the replicated
+/// state at the start of every inner-loop iteration after the first. This
+/// test verifies that the refresh works correctly for the
+/// `guaranteed_response_message_memory` component:
+///
+/// * Two canisters A and B, with `scheduler_cores = 2` (one canister per
+///   core). Subnet memory capacity is set to 4 pages.
+///
+/// * 2 ingress messages are sent to A. Each ingress allocates 1 page, then
+///   makes one call to A and one call to B (2 pages allocated, 2 available).
+///
+/// * The two available pages are distributed to the 2 cores, 1 page each.
+///
+/// * In iteration 2, the 4 downstream calls (2 on A, 2 on B) each attempt to
+///   allocate 1 page. With only 1 page of available memory per core — enough
+///   for only the first call to each canister, the second call fails with
+///   `OutOfMemory` and gets rolled back.
+///
+/// Without the refresh, each core would still see the stale beginning-of-round
+/// value of 2 available pages per core (4 total), executing both downstream
+/// calls and exceeding the 4 page capacity.
+#[test]
+fn subnet_available_memory_is_refreshed_between_iterations() {
+    const SLICE: u64 = 10;
+    fn pages_into_bytes(pages: usize) -> NumBytes {
+        num_bytes_try_from(NumWasmPages::new(pages)).unwrap()
+    }
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            // Just enough instructions for 2 iterations of 2 messages each.
+            max_instructions_per_round: NumInstructions::from(SLICE * 4),
+            max_instructions_per_message: NumInstructions::from(SLICE),
+            max_instructions_per_slice: NumInstructions::from(SLICE),
+            max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_subnet_memory_capacity(pages_into_bytes(4).get())
+        .build();
+
+    let a = test.create_canister();
+    let b = test.create_canister();
+
+    for _ in 0..2 {
+        // Each ingress, A allocates 1 page, then calls A and B.
+        // In each of these calls, the callee tries to allocate 1 page.
+        test.send_ingress(
+            a,
+            ingress(SLICE)
+                .allocate_pages(1)
+                .call(other_side(a, SLICE).allocate_pages(1), on_response(SLICE))
+                .call(other_side(b, SLICE).allocate_pages(1), on_response(SLICE)),
+        );
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The inner loop should have run exactly 2 iterations:
+    //   iter 1 — A processes 2 ingress (20 instr on core 0)
+    //   iter 2 — A processes 2 calls, B processes 2 calls (20 instr per core)
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(
+        metrics
+            .inner_loop_consumed_non_zero_instructions_count
+            .get(),
+        2
+    );
+
+    // 6 messages executed in total: 2 ingress + 4 calls (2 succeed, 2 fail).
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 6.0);
+
+    // 3 pages allocated by A, 1 page allocated by B.
+    assert_eq!(test.canister_state(a).memory_usage(), pages_into_bytes(3));
+    assert_eq!(test.canister_state(b).memory_usage(), pages_into_bytes(1));
 }

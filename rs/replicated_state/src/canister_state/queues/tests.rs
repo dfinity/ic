@@ -2,6 +2,7 @@ use super::input_schedule::testing::InputScheduleTesting;
 use super::message_pool::{MessageStats, REQUEST_LIFETIME};
 use super::testing::new_canister_output_queues_for_test;
 use super::*;
+use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::testing::FakeDropMessageMetrics;
 use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
 use assert_matches::assert_matches;
@@ -1242,7 +1243,7 @@ fn test_split_input_schedules() {
     let system_state =
         SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
     let local_canisters = btreemap! {
-        other_1 => Arc::new(CanisterState::new(system_state, None, SchedulerState::default()))
+        other_1 => Arc::new(CanisterState::new(system_state, None, SchedulerState::default(), CanisterSnapshots::default()))
     };
 
     // Act.
@@ -3556,7 +3557,8 @@ fn time_out_messages_pushes_correct_reject_responses() {
                 Cycles::new(1 << 36),
                 NumSeconds::from(100_000),
             );
-            Arc::new(CanisterState::new(system_state, None, scheduler_state))
+            let canister_snapshots = CanisterSnapshots::default();
+            Arc::new(CanisterState::new(system_state, None, scheduler_state, canister_snapshots))
         }
     };
 

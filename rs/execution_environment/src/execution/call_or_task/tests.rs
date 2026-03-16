@@ -3,7 +3,6 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     CallOrigin,
@@ -12,6 +11,7 @@ use ic_replicated_state::{
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
 use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumBytes, NumInstructions, NumOsPages};
@@ -181,7 +181,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(700);
 
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),

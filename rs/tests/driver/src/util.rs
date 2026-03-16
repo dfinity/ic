@@ -82,7 +82,7 @@ pub mod delegations;
 
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
-pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
+pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(40);
 pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(40);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
@@ -1537,7 +1537,6 @@ pub fn escape_for_wat(id: &Principal) -> String {
 
 pub fn get_config() -> ConfigOptional {
     let template = generate_ic_config::IcConfigTemplate {
-        ipv6_address: "::".to_string(),
         ipv6_prefix: "::/64".to_string(),
         ipv4_address: "".to_string(),
         ipv4_gateway: "".to_string(),

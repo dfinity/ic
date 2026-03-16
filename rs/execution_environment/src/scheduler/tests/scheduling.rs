@@ -316,7 +316,7 @@ fn scheduler_long_execution_progress_across_checkpoints() {
 
     // Penalize canister for a long execution.
     let message_id = test.send_ingress(penalized_long_id, ingress(message_instructions));
-    assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    assert_eq!(test.ingress_state(&message_id), IngressState::Received);
     for i in 0..message_instructions / slice_instructions {
         // Without short executions, all idle canister will be equally executed.
         if let Some(canister_id) = canister_ids.get(i as usize % num_canisters) {
@@ -324,14 +324,7 @@ fn scheduler_long_execution_progress_across_checkpoints() {
         }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
-    assert_matches!(
-        test.ingress_status(&message_id),
-        IngressStatus::Known {
-            // Canister did not reply.
-            state: IngressState::Failed(_),
-            ..
-        }
-    );
+    assert_matches!(test.ingress_state(&message_id), IngressState::Failed(_));
     // Assert penalized canister accumulated priority is lower.
     let penalized = test.state().canister_priority(&penalized_long_id);
     let other = test.state().canister_priority(&other_long_id);
