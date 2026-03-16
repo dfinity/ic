@@ -356,9 +356,11 @@ impl CanisterStateBuilder {
         system_state.certified_data = self.certified_data;
         system_state.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
         system_state.log_visibility = self.log_visibility;
-        system_state
-            .log_memory_store
-            .resize_for_testing(self.log_memory_limit);
+
+        // TODO: double check if it's needed.
+        // system_state
+        //     .log_memory_store
+        //     .resize_for_testing(self.log_memory_limit);
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
