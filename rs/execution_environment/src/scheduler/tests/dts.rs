@@ -4,7 +4,7 @@ use super::super::test_utilities::{
     SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions,
 };
 use super::super::*;
-use assert_matches::assert_matches;
+use super::zero_instruction_overhead_config;
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, Method};
@@ -19,14 +19,11 @@ fn dts_long_execution_completes() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -95,14 +92,11 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -162,14 +156,11 @@ fn dts_long_execution_runs_out_of_instructions() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -202,15 +193,12 @@ fn complete_concurrent_long_executions(
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
             max_paused_executions: num_canisters,
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -303,7 +291,6 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
             scheduler_cores,
             max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
-            max_instructions_per_query_message: max_instructions_per_slice.into(),
             max_paused_executions: num_canisters,
             ..SchedulerConfig::application_subnet()
         })
@@ -366,7 +353,6 @@ fn filter_after_long_executions() {
         .with_scheduler_config(SchedulerConfig {
             max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
-            max_instructions_per_query_message: max_instructions_per_slice.into(),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -401,15 +387,12 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(160),
             max_instructions_per_message: NumInstructions::from(40),
-            max_instructions_per_query_message: NumInstructions::from(10),
             max_instructions_per_slice: NumInstructions::from(10),
             max_instructions_per_install_code: NumInstructions::new(40),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -524,12 +507,10 @@ fn dts_resume_install_code_after_abort() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_install_code: NumInstructions::new(1000),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -577,14 +558,11 @@ fn dts_resume_long_execution_after_abort() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -646,14 +624,11 @@ fn dts_update_and_heartbeat() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(300),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(200),
             max_instructions_per_slice: NumInstructions::from(200),
             max_instructions_per_install_code_slice: NumInstructions::from(200),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -669,13 +644,7 @@ fn dts_update_and_heartbeat() {
     let message_id = test.send_ingress(canister, ingress(300));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // The heartbeat did not give the ingress message a chance to run.
-    assert_matches!(
-        test.ingress_status(&message_id),
-        IngressStatus::Known {
-            state: IngressState::Received,
-            ..
-        }
-    );
+    assert_eq!(test.ingress_state(&message_id), IngressState::Received);
 
     test.expect_heartbeat(canister, instructions(100));
     test.execute_round(ExecutionRoundType::OrdinaryRound);

@@ -2,6 +2,7 @@
 
 use super::super::test_utilities::{SchedulerTestBuilder, ingress};
 use super::super::*;
+use super::zero_instruction_overhead_config;
 use crate::scheduler::test_utilities::{on_response, other_side};
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::{
@@ -76,14 +77,10 @@ fn charging_for_message_memory_works() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::from(1),
             max_instructions_per_slice: NumInstructions::new(1),
             max_instructions_per_install_code_slice: NumInstructions::new(1),
             max_instructions_per_round: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 

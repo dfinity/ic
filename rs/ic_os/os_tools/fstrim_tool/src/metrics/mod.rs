@@ -1,4 +1,6 @@
 use super::*;
+use anyhow::Context;
+use prometheus::{Counter, Encoder, Gauge, Registry, TextEncoder};
 use std::io::Lines;
 
 #[cfg(test)]
@@ -53,40 +55,72 @@ impl FsTrimMetrics {
         Ok(())
     }
 
-    pub fn to_p8s_metrics_string(&self) -> String {
-        let fstrim_last_run_duration_milliseconds = to_go_f64(self.last_duration_milliseconds);
-        let fstrim_last_run_success = if self.last_run_success { "1" } else { "0" };
-        let fstrim_runs_total = to_go_f64(self.total_runs);
+    pub fn to_p8s_metrics_string(&self) -> Result<String> {
+        let registry = Registry::new();
 
-        let fstrim_datadir_last_run_duration_milliseconds =
-            to_go_f64(self.last_duration_milliseconds_datadir);
-        let fstrim_datadir_last_run_success = if self.last_run_success_datadir {
-            "1"
-        } else {
-            "0"
-        };
-        let fstrim_datadir_runs_total = to_go_f64(self.total_runs_datadir);
-
-        format!(
-            "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
-            # TYPE fstrim_last_run_duration_milliseconds gauge\n\
-            fstrim_last_run_duration_milliseconds {fstrim_last_run_duration_milliseconds}\n\
-            # HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)\n\
-            # TYPE fstrim_last_run_success gauge\n\
-            fstrim_last_run_success {fstrim_last_run_success}\n\
-            # HELP fstrim_runs_total Total number of runs of fstrim\n\
-            # TYPE fstrim_runs_total counter\n\
-            fstrim_runs_total {fstrim_runs_total}\n\
-            # HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds\n\
-            # TYPE fstrim_datadir_last_run_duration_milliseconds gauge\n\
-            fstrim_datadir_last_run_duration_milliseconds {fstrim_datadir_last_run_duration_milliseconds}\n\
-            # HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)\n\
-            # TYPE fstrim_datadir_last_run_success gauge\n\
-            fstrim_datadir_last_run_success {fstrim_datadir_last_run_success}\n\
-            # HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir\n\
-            # TYPE fstrim_datadir_runs_total counter\n\
-            fstrim_datadir_runs_total {fstrim_datadir_runs_total}\n"
+        let duration = Gauge::new(
+            METRICS_LAST_RUN_DURATION_MILLISECONDS,
+            "Duration of last run of fstrim in milliseconds",
         )
+        .context("failed to create duration gauge")?;
+        let success = Gauge::new(
+            METRICS_LAST_RUN_SUCCESS,
+            "Success status of last run of fstrim (success: 1, failure: 0)",
+        )
+        .context("failed to create success gauge")?;
+        let runs = Counter::new(METRICS_RUNS_TOTAL, "Total number of runs of fstrim")
+            .context("failed to create runs counter")?;
+        let duration_datadir = Gauge::new(
+            METRICS_LAST_RUN_DURATION_MILLISECONDS_DATADIR,
+            "Duration of last run of fstrim on datadir in milliseconds",
+        )
+        .context("failed to create datadir duration gauge")?;
+        let success_datadir = Gauge::new(
+            METRICS_LAST_RUN_SUCCESS_DATADIR,
+            "Success status of last run of fstrim on datadir (success: 1, failure: 0)",
+        )
+        .context("failed to create datadir success gauge")?;
+        let runs_datadir = Counter::new(
+            METRICS_RUNS_TOTAL_DATADIR,
+            "Total number of runs of fstrim on datadir",
+        )
+        .context("failed to create datadir runs counter")?;
+
+        duration.set(self.last_duration_milliseconds);
+        success.set(if self.last_run_success { 1.0 } else { 0.0 });
+        runs.inc_by(self.total_runs);
+        duration_datadir.set(self.last_duration_milliseconds_datadir);
+        success_datadir.set(if self.last_run_success_datadir {
+            1.0
+        } else {
+            0.0
+        });
+        runs_datadir.inc_by(self.total_runs_datadir);
+
+        registry
+            .register(Box::new(duration))
+            .context("failed to register duration gauge")?;
+        registry
+            .register(Box::new(success))
+            .context("failed to register success gauge")?;
+        registry
+            .register(Box::new(runs))
+            .context("failed to register runs counter")?;
+        registry
+            .register(Box::new(duration_datadir))
+            .context("failed to register datadir duration gauge")?;
+        registry
+            .register(Box::new(success_datadir))
+            .context("failed to register datadir success gauge")?;
+        registry
+            .register(Box::new(runs_datadir))
+            .context("failed to register datadir runs counter")?;
+
+        let mut buf = Vec::new();
+        TextEncoder::new()
+            .encode(&registry.gather(), &mut buf)
+            .context("failed to encode metrics")?;
+        String::from_utf8(buf).context("metrics output is not valid UTF-8")
     }
 
     fn are_valid(&self) -> bool {
@@ -94,20 +128,6 @@ impl FsTrimMetrics {
             && is_f64_finite_and_0_or_larger(self.last_duration_milliseconds)
             && is_f64_finite_and_0_or_larger(self.total_runs_datadir)
             && is_f64_finite_and_0_or_larger(self.last_duration_milliseconds_datadir)
-    }
-}
-
-fn to_go_f64(value: f64) -> String {
-    if value.is_nan() {
-        "NaN".to_string()
-    } else if value.is_infinite() {
-        if value.is_sign_positive() {
-            "+Inf".to_string()
-        } else {
-            "-Inf".to_string()
-        }
-    } else {
-        value.to_string()
     }
 }
 

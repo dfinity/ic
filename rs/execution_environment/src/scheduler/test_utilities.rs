@@ -543,7 +543,7 @@ impl SchedulerTest {
             .core
             .lock()
             .unwrap()
-            .system_task_count(&canister_id)
+            .system_task_count(canister_id)
     }
 
     pub fn execute_round(&mut self, round_type: ExecutionRoundType) {
