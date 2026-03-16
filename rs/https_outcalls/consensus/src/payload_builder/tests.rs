@@ -63,6 +63,10 @@ use std::{
 /// The maximum subnet size up to which we will check the functionality of the canister http feature.
 const MAX_SUBNET_SIZE: usize = 40;
 
+/// Byte budget used in tests, intentionally larger than [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`]
+/// so that test payloads are never truncated due to size limits.
+const TEST_MAX_PAYLOAD_BYTES: NumBytes = NumBytes::new(2 * MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64);
+
 #[test]
 fn default_payload_serializes_to_empty_vec() {
     assert!(
@@ -215,7 +219,7 @@ fn multiple_payload_test() {
                     divergence_responses: vec![],
                     flexible_responses: vec![],
                 };
-                let past_payload = payload_to_bytes(past_payload, NumBytes::new(4 * 1024 * 1024));
+                let past_payload = payload_to_bytes(past_payload, TEST_MAX_PAYLOAD_BYTES);
 
                 let past_payloads = vec![PastPayload {
                     height: Height::from(0),
@@ -233,7 +237,7 @@ fn multiple_payload_test() {
                 // Build a payload
                 let payload = payload_builder.build_payload(
                     Height::new(1),
-                    NumBytes::new(4 * 1024 * 1024),
+                    TEST_MAX_PAYLOAD_BYTES,
                     &past_payloads,
                     &validation_context,
                 );
@@ -408,7 +412,7 @@ fn timeouts_bypass_max_responses_per_block() {
 
             let payload = payload_builder.build_payload(
                 Height::new(1),
-                NumBytes::new(4 * 1024 * 1024),
+                TEST_MAX_PAYLOAD_BYTES,
                 &[],
                 &validation_context,
             );
@@ -456,7 +460,7 @@ fn divergence_responses_count_toward_max_responses() {
         let result = payload_builder.validate_payload(
             Height::from(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024)),
+            &payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES),
             &[],
         );
 
@@ -610,7 +614,7 @@ fn duplicate_validation() {
             divergence_responses: vec![],
             flexible_responses: vec![],
         };
-        let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+        let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let past_payloads = vec![PastPayload {
             height: Height::new(1),
             time: UNIX_EPOCH,
@@ -665,7 +669,7 @@ fn divergence_response_validation_test() {
                 }],
                 flexible_responses: vec![],
             };
-            let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+            let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
@@ -686,7 +690,7 @@ fn divergence_response_validation_test() {
                 }],
                 flexible_responses: vec![],
             };
-            let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+            let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
@@ -724,7 +728,7 @@ fn divergence_response_validation_test() {
                 }],
                 flexible_responses: vec![],
             };
-            let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+            let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
             let validation_result = payload_builder.validate_payload(
                 Height::from(1),
@@ -1040,7 +1044,7 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
             responses: vec![proof],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
         // ACT & ASSERT
         let validation_result = payload_builder.validate_payload(
@@ -1094,7 +1098,7 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
             responses: vec![proof],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
         // ACT
         let validation_result = payload_builder.validate_payload(
@@ -1161,7 +1165,7 @@ fn validate_payload_fails_for_response_with_no_signatures() {
             responses: vec![proof],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
         // ACT
         let validation_result = payload_builder.validate_payload(
@@ -1241,7 +1245,7 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
             responses: vec![proof],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
         // ACT
         let validation_result = payload_builder.validate_payload(
@@ -1322,7 +1326,7 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
             responses: vec![proof.clone(), proof], // Duplicate the proof
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
         // ACT
         let validation_result = payload_builder.validate_payload(
@@ -1591,7 +1595,7 @@ where
             flexible_responses: vec![],
         };
 
-        let payload = payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024));
+        let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         payload_builder.validate_payload(
             Height::from(1),
             &test_proposal_context(validation_context),
@@ -2724,5 +2728,5 @@ fn build_and_validate_and_parse_payload(
 }
 
 fn payload_to_bytes_max_4mb(payload: CanisterHttpPayload) -> Vec<u8> {
-    payload_to_bytes(payload, NumBytes::new(4 * 1024 * 1024))
+    payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES)
 }
