@@ -1224,7 +1224,8 @@ impl IcNodeSnapshot {
                     "The metric `{name}` on node {} exceeded the maximum allowed value: \
                     {} > {max_value}. \
                     If this is expected to happen in the test, \
-                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")` or \
+                    with `update_orchestrator_metrics_to_check(\"{name}\", $max_value)`",
                     self.node_id,
                     value[0],
                 );
