@@ -270,7 +270,10 @@ async fn install_cketh_ledger(runtime: &Runtime, minter: Principal) -> LedgerCan
         InitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
             .with_minting_account(minter)
             .with_transfer_fee(2_000_000_000_000_u64)
-            .with_feature_flags(FeatureFlags { icrc2: true })
+            .with_feature_flags(FeatureFlags {
+                icrc2: true,
+                icrc152: false,
+            })
             .with_fee_collector_account(Account {
                 owner: minter,
                 subaccount: Some([
