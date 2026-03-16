@@ -363,13 +363,13 @@ fn valid_keys_from_payload(
     // TODO(NNS1-1197): Refactor when nodes are provisioned for threshold ECDSA subnets
     let idkg_dealing_encryption_pk = match payload.idkg_dealing_encryption_pk {
         None => return Err(String::from("idkg_dealing_encryption_pk is missing")),
-        Some(pk) if pk.is_empty() => return Err(String::from("idkg_dealing_encryption_pk is empty")),
-
-        Some(pk) => {
-            PublicKey::decode(pk).map_err(|e| {
-                format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
-            })?
+        Some(pk) if pk.is_empty() => {
+            return Err(String::from("idkg_dealing_encryption_pk is empty"));
         }
+
+        Some(pk) => PublicKey::decode(pk).map_err(|e| {
+            format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
+        })?,
     };
 
     // 3. get the node id from the node_signing_pk
