@@ -829,10 +829,17 @@ impl SubnetSnapshot {
     }
 
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
+        self.raw_subnet_record_at_version(self.registry_version)
+    }
+
+    pub fn raw_subnet_record_at_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> pb_subnet::SubnetRecord {
         self.local_registry
-            .get_subnet_record(self.subnet_id, self.registry_version)
+            .get_subnet_record(self.subnet_id, registry_version)
             .unwrap_result(
-                self.registry_version,
+                registry_version,
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
@@ -2413,6 +2420,27 @@ macro_rules! retry_with_msg_async_quiet {
             $timeout,
             $backoff,
             $f,
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! retry_agent_on_transport_errors {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        $crate::retry_with_msg_async!($msg, $log, $timeout, $backoff, || async {
+            match $f.await {
+                Err(AgentError::TransportError(e)) => Err(anyhow::anyhow!("transport error: {e}")),
+                other => Ok(other),
+            }
+        })
+    };
+    ($msg:expr, $log:expr, $f:expr) => {
+        $crate::retry_agent_on_transport_errors!(
+            $msg,
+            $log,
+            std::time::Duration::from_secs(120),
+            std::time::Duration::from_secs(5),
+            $f
         )
     };
 }

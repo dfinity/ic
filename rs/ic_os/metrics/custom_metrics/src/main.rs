@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use prometheus::{Encoder, IntGaugeVec, Opts, Registry, TextEncoder};
-
+use ic_os_metrics_utils::write_registry_to_file;
+use prometheus::{IntGauge, Opts, Registry};
 use std::fs::File;
-use std::io::{self, BufRead, BufWriter, Write};
+use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 
 const INTERRUPT_FILTER: &str = "TLB shootdowns";
@@ -50,31 +50,16 @@ pub fn main() -> Result<()> {
     let tlb_shootdowns = get_sum_tlb_shootdowns()?;
 
     let registry = Registry::new();
-    let gauge = IntGaugeVec::new(
-        Opts::new(TLB_SHOOTDOWN_METRIC_NAME, TLB_SHOOTDOWN_METRIC_ANNOTATION),
-        &[],
-    )
+    let gauge = IntGauge::with_opts(Opts::new(
+        TLB_SHOOTDOWN_METRIC_NAME,
+        TLB_SHOOTDOWN_METRIC_ANNOTATION,
+    ))
     .context("Failed to create gauge")?;
+    gauge.set(tlb_shootdowns);
 
     registry
-        .register(Box::new(gauge.clone()))
+        .register(Box::new(gauge))
         .context("Failed to register gauge")?;
 
-    // Set the metric value
-    gauge.with_label_values::<&str>(&[]).set(tlb_shootdowns);
-
-    // Write metrics to file
-    let mut file = BufWriter::new(File::create(&opts.metrics_filename).with_context(|| {
-        format!(
-            "Failed to create metrics file: {}",
-            opts.metrics_filename.display()
-        )
-    })?);
-    TextEncoder::new()
-        .encode(&registry.gather(), &mut file)
-        .context("Failed to encode metrics")?;
-
-    file.flush().context("Failed to flush metrics file")?;
-
-    Ok(())
+    write_registry_to_file(&registry, &opts.metrics_filename)
 }

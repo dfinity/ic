@@ -72,9 +72,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release-build: ${{ steps.config.outputs.release-build }}
-      diff_only: ${{ steps.config.outputs.diff_only }}
+      diff-only: ${{ steps.config.outputs.diff-only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
-      full_macos_build: ${{ steps.config.outputs.full_macos_build }}
     steps:
       - name: Infer build config
         id: config
@@ -127,13 +126,6 @@ jobs:
               skip_long_tests="true"
           fi
 
-          if [[ $release_build == 'true' ]] || [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL') }}' == 'true' ]]; then
-              full_macos_build="true"
-          else
-              full_macos_build="false"
-          fi
-
-
           if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
               skip_buf_checks="true"
           else
@@ -147,17 +139,13 @@ jobs:
           echo "release-build=$release_build" >> "$GITHUB_OUTPUT"
           echo "| \`release-build\` | \`$release_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
-          echo "diff_only: $diff_only"
-          echo "diff_only=$diff_only" >> "$GITHUB_OUTPUT"
-          echo "| \`diff_only\` | \`$diff_only\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "diff-only: $diff_only"
+          echo "diff-only=$diff_only" >> "$GITHUB_OUTPUT"
+          echo "| \`diff-only\` | \`$diff_only\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "skip_long_tests: $skip_long_tests"
           echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
           echo "| \`skip_long_tests\` | \`$skip_long_tests\` |" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "full_macos_build: $full_macos_build"
-          echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
-          echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "skip_buf_checks: $skip_buf_checks"
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
@@ -225,7 +213,7 @@ jobs:
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
             fi
-            if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
               targets_args+=(
                 '--base=${{ github.event.pull_request.base.sha }}'
                 '--head=${{ github.event.pull_request.head.sha }}'
@@ -497,21 +485,16 @@ jobs:
           run: |
             set -euo pipefail
 
-            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
-            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
-            BASE_SHA='${{ github.event.pull_request.base.sha }}'
-            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
-
             cd "$CI_PROJECT_DIR"
 
             # run full release build on "protected" branches
-            if [[ "$RELEASE_BUILD" == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
                 ci/container/build-ic.sh -i -c -b
                 exit 0
             fi
 
             # run full non-release build if not asked to diff
-            if ! [ "$DIFF_ONLY" == 'true' ]; then
+            if [[ '${{ needs.config.outputs.diff-only }}' != 'true' ]]; then
                 ci/container/build-ic.sh -i -c -b --no-release
                 exit 0
             fi
@@ -519,11 +502,10 @@ jobs:
             # otherwise, infer targets to build
             target_pattern_file=$(mktemp)
             trap "rm $target_pattern_file" INT TERM EXIT
-            targets_args=()
-            commit_range_arg=""
-            if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
-            fi
+            targets_args=(
+              "--base=${{ github.event.pull_request.base.sha }}"
+              "--head=${{ github.event.pull_request.head.sha }}"
+            )
             ci/scripts/targets.py build "${targets_args[@]}" >"$target_pattern_file"
             num_targets=$(wc <"$target_pattern_file" -l)
             echo "Considering $num_targets targets ..."
