@@ -3,11 +3,11 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 rust_binary(
-    name = "metrics_tool_bin",
+    name = "custom_metrics_bin",
     srcs = ["src/main.rs"],
     deps = [
         # Keep sorted.
-        "//rs/sys",
+        "//rs/ic_os/metrics/utils:metrics_utils",
         "@crate_index//:anyhow",
         "@crate_index//:clap",
         "@crate_index//:prometheus",
