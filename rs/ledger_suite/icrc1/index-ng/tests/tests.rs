@@ -33,7 +33,10 @@ use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::{
+    AuthorizedBurn as TxAuthorizedBurn, AuthorizedMint as TxAuthorizedMint, Mint, Transaction,
+    Transfer,
+};
 use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
@@ -619,6 +622,18 @@ fn assert_tx_eq(tx1: &Transaction, tx2: &Transaction) {
         assert_eq!(transfer1.from, transfer2.from, "from");
         assert_eq!(transfer1.memo, transfer2.memo, "memo");
         assert_eq!(transfer1.to, transfer2.to, "to");
+    } else if let Some(am1) = &tx1.authorized_mint {
+        let am2 = tx2.authorized_mint.as_ref().unwrap();
+        assert_eq!(am1.to, am2.to, "to");
+        assert_eq!(am1.amount, am2.amount, "amount");
+        assert_eq!(am1.caller, am2.caller, "caller");
+        assert_eq!(am1.reason, am2.reason, "reason");
+    } else if let Some(ab1) = &tx1.authorized_burn {
+        let ab2 = tx2.authorized_burn.as_ref().unwrap();
+        assert_eq!(ab1.from, ab2.from, "from");
+        assert_eq!(ab1.amount, ab2.amount, "amount");
+        assert_eq!(ab1.caller, ab2.caller, "caller");
+        assert_eq!(ab1.reason, ab2.reason, "reason");
     } else {
         panic!("Something is wrong with tx1: {:?}", tx1);
     }
@@ -969,6 +984,8 @@ fn test_get_account_transactions_pagination() {
                     approve: None,
                     timestamp: 0,
                     fee_collector: None,
+                    authorized_mint: None,
+                    authorized_burn: None,
                 },
                 transaction,
             );
@@ -2072,5 +2089,87 @@ mod icrc122_authorized_blocks {
 
         assert_eq!(balance_1, 800_000u64, "User 1 balance mismatch");
         assert_eq!(balance_2, 500_000u64, "User 2 balance mismatch");
+    }
+
+    #[test]
+    fn test_get_account_transactions_authorized_mint_and_burn() {
+        const CONTROLLER: PrincipalId = PrincipalId::new_user_test_id(99);
+        const USER: PrincipalId = PrincipalId::new_user_test_id(1);
+        const USER_ACCOUNT: Account = Account {
+            owner: USER.0,
+            subaccount: None,
+        };
+        const MINT_AMOUNT: u64 = 5_000_000;
+        const BURN_AMOUNT: u64 = 1_000_000;
+
+        let env = StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(&env);
+
+        // Add an authorized mint
+        let block0 = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
+            .authorized_mint(
+                USER_ACCOUNT,
+                Tokens::from(MINT_AMOUNT),
+                CONTROLLER.0,
+                Some("initial supply".to_string()),
+            )
+            .build();
+        add_block(&env, ledger_id, &block0).expect("failed to add authorized mint block");
+
+        // Add an authorized burn
+        let block1 = BlockBuilder::new(1, GENESIS.as_nanos_since_unix_epoch())
+            .authorized_burn(
+                USER_ACCOUNT,
+                Tokens::from(BURN_AMOUNT),
+                CONTROLLER.0,
+                Some("remove tokens".to_string()),
+            )
+            .build();
+        add_block(&env, ledger_id, &block1).expect("failed to add authorized burn block");
+
+        let index_id = install_index_ng(&env, index_init_arg_without_interval(ledger_id));
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+
+        // Verify get_account_transactions returns the authorized transactions
+        let txs = get_account_transactions(&env, index_id, USER_ACCOUNT, None, u64::MAX);
+
+        // Transactions are returned most-recent first
+        let expected_tx0 = TransactionWithId {
+            id: 0u8.into(),
+            transaction: Transaction::authorized_mint(
+                TxAuthorizedMint {
+                    to: USER_ACCOUNT,
+                    amount: MINT_AMOUNT.into(),
+                    caller: CONTROLLER.0,
+                    reason: Some("initial supply".to_string()),
+                    memo: None,
+                    created_at_time: None,
+                },
+                0,
+            ),
+        };
+        let expected_tx1 = TransactionWithId {
+            id: 1u8.into(),
+            transaction: Transaction::authorized_burn(
+                TxAuthorizedBurn {
+                    from: USER_ACCOUNT,
+                    amount: BURN_AMOUNT.into(),
+                    caller: CONTROLLER.0,
+                    reason: Some("remove tokens".to_string()),
+                    memo: None,
+                    created_at_time: None,
+                },
+                0,
+            ),
+        };
+
+        assert_txs_with_id_eq(txs.transactions, vec![expected_tx1, expected_tx0]);
+
+        // Verify balance is correct
+        assert_eq!(
+            txs.balance,
+            Nat::from(MINT_AMOUNT - BURN_AMOUNT),
+            "balance mismatch"
+        );
     }
 }

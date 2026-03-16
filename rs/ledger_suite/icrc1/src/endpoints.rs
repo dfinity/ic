@@ -7,7 +7,8 @@ use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc3::transactions::{
-    Approve, Burn, FeeCollector, Mint, TRANSACTION_APPROVE, TRANSACTION_BURN,
+    Approve, AuthorizedBurn, AuthorizedMint, Burn, FeeCollector, Mint, TRANSACTION_APPROVE,
+    TRANSACTION_AUTHORIZED_BURN, TRANSACTION_AUTHORIZED_MINT, TRANSACTION_BURN,
     TRANSACTION_FEE_COLLECTOR, TRANSACTION_MINT, TRANSACTION_TRANSFER, Transaction, Transfer,
 };
 use serde::Deserialize;
@@ -163,6 +164,8 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             transfer: None,
             approve: None,
             fee_collector: None,
+            authorized_mint: None,
+            authorized_burn: None,
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;
@@ -248,8 +251,37 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     mthd,
                 });
             }
-            Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
-                unreachable!("ICRC-152 endpoints not yet implemented")
+            Operation::AuthorizedMint {
+                to,
+                amount,
+                caller,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_AUTHORIZED_MINT.to_string();
+                tx.authorized_mint = Some(AuthorizedMint {
+                    to,
+                    amount: amount.into(),
+                    caller,
+                    reason,
+                    memo,
+                    created_at_time,
+                });
+            }
+            Operation::AuthorizedBurn {
+                from,
+                amount,
+                caller,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_AUTHORIZED_BURN.to_string();
+                tx.authorized_burn = Some(AuthorizedBurn {
+                    from,
+                    amount: amount.into(),
+                    caller,
+                    reason,
+                    memo,
+                    created_at_time,
+                });
             }
         }
 
