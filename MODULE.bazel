@@ -471,10 +471,10 @@ http_file(
 # Internet Identity canister (test build)
 
 http_file(
-    name = "ii_dev_canister",
+    name = "internet_identity_backend",
     downloaded_file_path = "internet_identity_production.wasm.gz",
-    sha256 = "2357d822cd451f25c0edab3e45db52ab140a2ac8c4b0170201c78acc5bc11779",
-    url = "https://github.com/dfinity/internet-identity/releases/download/release-2024-05-13/internet_identity_production.wasm.gz",
+    sha256 = "448f2c0370124da72e22b3b4462edd50a5a7be52f564311721fbc2798c70f643",
+    url = "https://github.com/dfinity/internet-identity/releases/download/release-2026-03-13/internet_identity_production.wasm.gz",
 )
 
 # NNS frontend dapp canister

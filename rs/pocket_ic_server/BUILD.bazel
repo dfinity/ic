@@ -340,13 +340,13 @@ rust_test(
         aliases = {},
         data = [
             ":pocket-ic-server",
-            "@ii_dev_canister//file",
+            "@internet_identity_backend//file",
             "@mozilla_root_ca_store//file",
         ],
         env = {
             "RUST_TEST_THREADS": "2",
             "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-            "II_WASM": "$(rootpath @ii_dev_canister//file)",
+            "II_WASM": "$(rootpath @internet_identity_backend//file)",
             "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         },
         tags = [

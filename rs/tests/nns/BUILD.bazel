@@ -14,7 +14,7 @@ system_test_nns(
     ],
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-        "II_WASM_PATH": "@ii_dev_canister//file",
+        "II_WASM_PATH": "@internet_identity_backend//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
