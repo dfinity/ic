@@ -95,6 +95,8 @@ enum Command {
     /// Only allocates hugepages when trusted execution environment (SEV-SNP) is disabled in
     /// the config.
     ReserveHugepages,
+
+    SevStatus,
 }
 
 #[derive(Parser)]
@@ -115,6 +117,15 @@ pub async fn main() -> Result<()> {
     match args.command {
         Command::ReserveHugepages => reserve_hugepages(),
         Command::Run { vm_type } => run(vm_type).await,
+        Command::SevStatus => {
+            let mut firmware =
+                sev::firmware::host::Firmware::open().context("Failed to open SEV firmware")?;
+            let status = firmware
+                .snp_platform_status()
+                .context("Failed to get SEV-SNP platform status")?;
+            println!("SEV-SNP platform status: {:?}", status);
+            Ok(())
+        }
     }
 }
 

@@ -2,13 +2,17 @@ use crate::{Args, Partition, crypt_name, run};
 use anyhow::Result;
 use config_types::{GuestOSConfig, ICOSSettings};
 use guest_disk::crypt::{
-    KeyslotMetadata, activate_crypt_device, check_encryption_key, deactivate_crypt_device,
-    format_crypt_device, open_luks2_device, read_keyslot_metadata, write_keyslot_metadata,
+    KeyslotMetadata, SevMetadata, activate_crypt_device, check_encryption_key,
+    deactivate_crypt_device, format_crypt_device, open_luks2_device, read_keyslot_metadata,
+    write_keyslot_metadata,
 };
 use guest_disk::sev::can_open_store;
+use hex;
 use ic_device::device_mapping::{Bytes, TempDevice};
 use libcryptsetup_rs::consts::flags::CryptActivate;
+use sev::Generation;
 use sev::firmware::host::TcbVersion;
+use sev::parser::ByteParser;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::MockSevGuestFirmwareBuilder;
 use std::fs;
@@ -44,7 +48,7 @@ impl<'a> TestFixture<'a> {
         let guestos_config = Self::create_guestos_config(enable_trusted_execution_environment);
         let sev_firmware_builder = MockSevGuestFirmwareBuilder::new()
             .with_derived_key(Some([0; 32]))
-            .with_launch_tcb(TcbVersion::new(None, 1, 2, 3, 4));
+            .with_launch_tcb(Self::default_launch_tcb());
 
         Self {
             device,
@@ -55,6 +59,18 @@ impl<'a> TestFixture<'a> {
             _temp_dir: temp_dir,
             _guard: guard,
         }
+    }
+
+    fn default_launch_tcb() -> TcbVersion {
+        TcbVersion::new(None, 1, 2, 3, 4)
+    }
+
+    fn default_launch_tcb_as_u64() -> u64 {
+        u64::from_le_bytes(
+            Self::default_launch_tcb()
+                .to_bytes_with(Generation::Milan)
+                .unwrap(),
+        )
     }
 
     fn enable_sev(&mut self) {
@@ -315,7 +331,7 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         Key::DiskEncryptionKey {
             device_path: &fixture.device.path().unwrap(),
         },
-        None,
+        TestFixture::default_launch_tcb_as_u64(),
     )
     .unwrap();
 
@@ -341,7 +357,7 @@ fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
             Key::DiskEncryptionKey {
                 device_path: &fixture.device.path().unwrap(),
             },
-            None,
+            TestFixture::default_launch_tcb_as_u64(),
         )
         .unwrap()
         .as_bytes(),
@@ -351,7 +367,13 @@ fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
     let mut crypt_device = open_luks2_device(&fixture.device.path().unwrap()).unwrap();
     write_keyslot_metadata(
         &mut crypt_device,
-        &KeyslotMetadata::new_sev(keyslot, &[42; 48], 42),
+        &KeyslotMetadata::new_sev(
+            keyslot,
+            SevMetadata {
+                launch_measurement_hex: hex::encode([42u8; 48]),
+                tcb_version: 42,
+            },
+        ),
     )
     .unwrap();
 
@@ -464,7 +486,7 @@ fn test_can_open_store_with_derived_key_when_previous_key_fails() {
         Key::DiskEncryptionKey {
             device_path: &fixture.device.path().unwrap(),
         },
-        None,
+        TestFixture::default_launch_tcb_as_u64(),
     )
     .unwrap();
 
@@ -473,7 +495,13 @@ fn test_can_open_store_with_derived_key_when_previous_key_fails() {
 
     write_keyslot_metadata(
         &mut open_luks2_device(&fixture.device.path().unwrap()).unwrap(),
-        &KeyslotMetadata::new_sev(keyslot, &[42; 48], 42),
+        &KeyslotMetadata::new_sev(
+            keyslot,
+            SevMetadata {
+                launch_measurement_hex: hex::encode([42u8; 48]),
+                tcb_version: 42,
+            },
+        ),
     )
     .unwrap();
 

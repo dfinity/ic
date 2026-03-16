@@ -42,14 +42,12 @@ pub struct SevMetadata {
 }
 
 impl KeyslotMetadata {
-    pub fn new_sev(keyslot: u32, launch_measurement: &[u8; 48], tcb_version: u64) -> Self {
+    /// Creates a new token associating `keyslot` with `sev_metadata`.
+    pub fn new_sev(keyslot: u32, sev_metadata: SevMetadata) -> Self {
         Self {
             token_type: IC_KEY_TOKEN_TYPE.to_string(),
             keyslots: vec![keyslot.to_string()],
-            sev_metadata: SevMetadata {
-                launch_measurement_hex: hex::encode(launch_measurement),
-                tcb_version,
-            },
+            sev_metadata,
         }
     }
 

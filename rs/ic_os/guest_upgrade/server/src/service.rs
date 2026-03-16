@@ -144,6 +144,12 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         let mut sev_firmware = self.sev_firmware_factory.deref()()
             .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e:?}")))?;
 
+        // let mut encryption = SevDiskEncryption {
+        //     sev_firmware,
+        //     previous_key_path: Path::new(self.my_public_key),
+        //     guest_vm_type: GuestVMType::Default,
+        // };
+
         Ok(Response::new(GetDiskEncryptionKeyResponse {
             key: Some(
                 derive_key_from_sev_measurement(
@@ -151,7 +157,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
                     Key::DiskEncryptionKey {
                         device_path: Path::new(STORE_DEVICE),
                     },
-                    None,
+                    todo!(),
                 )
                 .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?
                 .into_bytes(),

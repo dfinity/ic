@@ -17,6 +17,7 @@ use ic_protobuf::registry::replica_version::v1::{
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::{add_blessed_replica_versions, add_replica_version_record};
+use sev_guest::firmware::SevGuestFirmware;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
@@ -163,6 +164,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                         .sign_attestation_reports
                         .then_some(fake_attestation_report_signer.clone()),
                 )
+                .with_launch_tcb(TcbVersion::new(None, 1, 0, 0, 0))
                 .with_measurement(config.server_measurement),
             client_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.client_chip_id)
@@ -255,12 +257,12 @@ impl DiskEncryptionKeyExchangeTestFixture {
         let key_content =
             std::fs::read_to_string(self.previous_key.path()).expect("Failed to read previous key");
 
+        let mut server_sev_firmware = self.server_sev_firmware.clone();
         let expected_key = derive_key_from_sev_measurement(
-            &mut self.server_sev_firmware.clone(),
+            &mut server_sev_firmware,
             Key::DiskEncryptionKey {
                 device_path: Path::new(STORE_DEVICE),
             },
-            None,
         )
         .unwrap();
 

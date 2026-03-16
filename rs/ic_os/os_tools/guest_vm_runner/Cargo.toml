@@ -27,6 +27,7 @@ mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 regex = { workspace = true }
+sev = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }

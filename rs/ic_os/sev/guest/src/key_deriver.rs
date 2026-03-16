@@ -14,28 +14,18 @@ use std::path::Path;
 /// The key is in base64 format (useful e.g., if the key must be entered manually).
 ///
 /// `tcb_version` specifies the TCB version (as a raw `u64`) to use for key derivation.
-/// When `None`, the committed TCB version is read from the attestation report and used.
-/// When `Some(v)`, the key is derived using the specified TCB version
-/// (which must be ≤ the current platform TCB version).
+/// The `tcb_version` must be ≤ the current platform TCB version. Callers must remember the
+/// `tcb_version` they use for the key derivation in order to retrieve the same key later.
+///
+/// The recommended approach is using the launch TCB version when deriving the key for the first
+/// time. This ensures the key cannot be recovered using an older firmware version (defense against
+/// downgrade attacks). Upon firmware upgrade, it's recommended to derive a new key using the new
+/// launch TCB version and rotate the key to the newly derived key.
 pub fn derive_key_from_sev_measurement(
     sev_firmware: &mut dyn SevGuestFirmware,
     key: Key,
-    tcb_version: Option<u64>,
+    tcb_version: u64,
 ) -> Result<String> {
-    let tcb_version = match tcb_version {
-        Some(v) => v,
-        None => {
-            let report_bytes = sev_firmware
-                .get_report(Some(1), None, Some(0))
-                .context("Failed to get attestation report to determine committed TCB version")?;
-            let report = AttestationReport::from_bytes(&report_bytes)
-                .context("Failed to parse attestation report")?;
-            report
-                .launch_tcb_as_u64()
-                .context("Failed to get launch TCB version")?
-        }
-    };
-
     let mut field_select = GuestFieldSelect::default();
     field_select.set_measurement(true);
     field_select.set_tcb_version(true);
@@ -96,7 +86,13 @@ mod tests {
             .returning(|_, _, _| Ok(make_report_bytes()));
         mock_sev_guest_firmware
             .expect_get_derived_key()
-            .returning(|_, _| Ok([42; 32]));
+            .returning(|version, derived_key| {
+                assert_eq!(version, Some(1));
+                assert_eq!(derived_key.tcb_version, 123456);
+                assert!(derived_key.guest_field_select.get_measurement());
+                assert!(derived_key.guest_field_select.get_tcb_version());
+                Ok([42; 32])
+            });
 
         assert_eq!(
             derive_key_from_sev_measurement(
@@ -104,7 +100,7 @@ mod tests {
                 Key::DiskEncryptionKey {
                     device_path: Path::new("/dev/vda8")
                 },
-                None,
+                123456,
             )
             .unwrap(),
             // This value does not have any particular meaning, but it should not change
@@ -130,7 +126,7 @@ mod tests {
                     Key::DiskEncryptionKey {
                         device_path: Path::new(&format!("/dev/vda{i}")),
                     },
-                    None,
+                    123456,
                 )
                 .unwrap()
             })

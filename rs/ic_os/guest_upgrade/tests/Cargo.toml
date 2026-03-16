@@ -18,6 +18,7 @@ ic-registry-client-fake = { path = "../../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-test-utilities-registry = { path = "../../../test_utilities/registry" }
 rustls = { workspace = true }
+sev = { workspace = true }
 sev_guest = { path = "../../sev/guest" }
 sev_guest_testing = { path = "../../sev/guest/testing" }
 tempfile = { workspace = true }
