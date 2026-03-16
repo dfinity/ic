@@ -61,11 +61,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
-        // The replica is restarted when the orchestrator observes the recovery CUP in the registry
-        .update_orchestrator_metrics_to_check(
-            "orchestrator_replica_process_start_attempts_total",
-            2,
-        )
+        // The replica binary is "broken" and restarted by the orchestrator multiple times
+        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
         .execute_from_args()?;
     Ok(())
 }
