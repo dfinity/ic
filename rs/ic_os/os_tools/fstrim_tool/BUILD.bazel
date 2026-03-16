@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/sys",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:prometheus",
 ]
 
 DEV_DEPENDENCIES = [
@@ -33,7 +34,6 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_fstrim_tool",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO: is this really needed?
     visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
 )
