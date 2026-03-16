@@ -33,10 +33,7 @@ use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-use icrc_ledger_types::icrc3::transactions::{
-    AuthorizedBurn as TxAuthorizedBurn, AuthorizedMint as TxAuthorizedMint, Mint, Transaction,
-    Transfer,
-};
+use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
@@ -1961,6 +1958,9 @@ mod icrc122_authorized_blocks {
     use ic_icrc1_ledger::Tokens;
     use ic_icrc1_test_utils::icrc3::BlockBuilder;
     use ic_types::time::GENESIS;
+    use icrc_ledger_types::icrc3::transactions::{
+        AuthorizedBurn as TxAuthorizedBurn, AuthorizedMint as TxAuthorizedMint,
+    };
 
     #[test]
     fn test_authorized_mint_credits_account() {
