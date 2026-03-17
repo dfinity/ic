@@ -144,12 +144,14 @@ pub fn test(env: TestEnv) {
 
 #[derive(CandidType, Serialize)]
 enum StaticCaptchaTrigger {
+    #[allow(dead_code)]
     CaptchaEnabled,
     CaptchaDisabled,
 }
 
 #[derive(CandidType, Serialize)]
 enum CaptchaTrigger {
+    #[allow(dead_code)]
     Dynamic,
     Static(StaticCaptchaTrigger),
 }
@@ -162,7 +164,7 @@ struct CaptchaConfig {
 
 #[derive(CandidType, Serialize)]
 struct InternetIdentityInit {
-    pub capture_config: Option<CaptchaConfig>,
+    pub captcha_config: Option<CaptchaConfig>,
 }
 
 fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
@@ -170,7 +172,7 @@ fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
         &env::var("II_BACKEND_WASM_PATH").expect("II_BACKEND_WASM_PATH not set"),
         Some(
             candid::encode_one(&InternetIdentityInit {
-                capture_config: Some(CaptchaConfig {
+                captcha_config: Some(CaptchaConfig {
                     max_unsolved_captchas: 50,
                     captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
                 }),
