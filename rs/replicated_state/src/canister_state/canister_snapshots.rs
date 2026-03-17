@@ -144,6 +144,8 @@ impl CanisterSnapshots {
         self.memory_usage
     }
 
+    /// Checks that the sum of the memory usage of all canister snapshots is equal
+    /// to the pre-computed value stored directly in this struct.
     pub fn check_invariants(&self) -> Result<(), String> {
         // The running sum of the memory usage of all canister snapshots should
         // be the same as the one computed by iterating over all snapshots.
