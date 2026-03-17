@@ -343,7 +343,8 @@ impl BatchPayloadSectionBuilder {
                 let size = NumBytes::new(chain_key.len() as u64);
 
                 // Check validation as safety measure
-                match builder.validate_payload(height, proposal_context, &chain_key, &past_payloads) {
+                match builder.validate_payload(height, proposal_context, &chain_key, &past_payloads)
+                {
                     Ok(()) => {
                         payload.chain_key = chain_key;
                         size

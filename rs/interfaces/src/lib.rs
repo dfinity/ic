@@ -5,6 +5,7 @@
 pub mod batch_payload;
 pub mod canister_http;
 pub mod certification;
+pub mod chain_key;
 pub mod consensus;
 pub mod consensus_pool;
 pub mod crypto;
@@ -19,7 +20,6 @@ pub mod query_stats;
 pub mod self_validating_payload;
 pub mod time_source;
 pub mod validation;
-pub mod chain_key;
 
 // Note [Associated Types in Interfaces]
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

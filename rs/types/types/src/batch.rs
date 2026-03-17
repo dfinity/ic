@@ -2,10 +2,10 @@
 //! Consensus and Message Routing.
 
 mod canister_http;
+mod chain_key;
 mod execution_environment;
 mod ingress;
 mod self_validating;
-mod chain_key;
 mod xnet;
 
 pub use self::{
@@ -13,16 +13,16 @@ pub use self::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
+    chain_key::{
+        ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, bytes_to_chain_key_payload,
+        chain_key_payload_to_bytes,
+    },
     execution_environment::{
         CanisterCyclesCostSchedule, CanisterQueryStats, LocalQueryStats, QueryStats,
         QueryStatsPayload, RawQueryStats, TotalQueryStats,
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
-    chain_key::{
-        ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, bytes_to_chain_key_payload,
-        chain_key_payload_to_bytes,
-    },
     xnet::XNetPayload,
 };
 use crate::{
