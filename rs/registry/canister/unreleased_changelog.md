@@ -9,9 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
-* Adding support for recalling replica versions for subnets.
-
 ## Changed
+
+* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
 
 ## Deprecated
 

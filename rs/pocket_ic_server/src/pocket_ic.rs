@@ -1,7 +1,7 @@
 use crate::external_canister_types::{
     CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
     InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
-    RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
+    OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -69,7 +69,7 @@ use ic_management_canister_types_private::{
     CanisterSnapshotDataKind, CanisterSnapshotDataOffset, EcdsaCurve, EcdsaKeyId, LogVisibilityV2,
     MasterPublicKeyId, Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
-    ReadCanisterSnapshotMetadataResponse, SchnorrAlgorithm, SchnorrKeyId,
+    ReadCanisterSnapshotMetadataResponse, SchnorrAlgorithm, SchnorrKeyId, SnapshotVisibility,
     UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
@@ -1146,6 +1146,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(REGISTRY_CANISTER_ID.get()),
@@ -1229,6 +1230,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_MINTING_CANISTER_ID.get()),
@@ -1399,6 +1401,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(LEDGER_CANISTER_ID.get()),
@@ -1480,6 +1483,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(LEDGER_INDEX_CANISTER_ID.get()),
@@ -1559,6 +1563,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_LEDGER_CANISTER_ID.get()),
@@ -1623,6 +1628,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_LEDGER_INDEX_CANISTER_ID.get()),
@@ -1634,7 +1640,10 @@ impl PocketIcSubnets {
             // Install the cycles ledger index.
             let cycles_ledger_index_init_arg = CyclesLedgerIndexInitArg {
                 ledger_id: CYCLES_LEDGER_CANISTER_ID.into(),
+                #[allow(deprecated)]
                 retrieve_blocks_from_ledger_interval_seconds: None,
+                min_retrieve_blocks_from_ledger_interval_seconds: None,
+                max_retrieve_blocks_from_ledger_interval_seconds: None,
             };
             let cycles_ledger_index_arg = CyclesLedgerIndexArg::Init(cycles_ledger_index_init_arg);
             ii_subnet
@@ -1690,6 +1699,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(4_294_967_296_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(GOVERNANCE_CANISTER_ID.get()),
@@ -1767,6 +1777,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(ROOT_CANISTER_ID.get()),
@@ -1834,6 +1845,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_WASM_CANISTER_ID.get()),
@@ -1932,6 +1944,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = sns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_AGGREGATOR_CANISTER_ID.get()),
@@ -2005,6 +2018,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(IDENTITY_CANISTER_ID.get()),
@@ -2105,6 +2119,7 @@ impl PocketIcSubnets {
                   auth_uri: "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
                   auth_scope: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
                   fedcm_uri: Some("".to_string()),
+                  email_verification: Some(OpenIdEmailVerification::Google),
                 }])
             } else {
                 None
@@ -2129,6 +2144,8 @@ impl PocketIcSubnets {
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
+                backend_canister_id: None,
+                backend_origin: None,
             });
             ii_subnet
                 .state_machine
@@ -2182,6 +2199,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(NNS_UI_CANISTER_ID.get()),
@@ -2279,6 +2297,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(2_000_000_000_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
                 Some(BITCOIN_TESTNET_CANISTER_ID.get()),
@@ -2353,6 +2372,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
                 Some(DOGECOIN_CANISTER_ID.get()),
@@ -2419,6 +2439,7 @@ impl PocketIcSubnets {
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
+                snapshot_visibility: Some(SnapshotVisibility::Controllers),
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(MIGRATION_CANISTER_ID.get()),
@@ -2994,21 +3015,20 @@ impl PocketIc {
             subnet_configs.push(subnet_config_internal);
         }
 
-        let default_effective_canister_id = subnet_configs
-            .iter()
-            .find(|config| config.subnet_kind == SubnetKind::Application)
-            .unwrap_or_else(|| {
-                subnet_configs
-                    .iter()
-                    .find(|config| config.subnet_kind == SubnetKind::VerifiedApplication)
-                    .unwrap_or_else(|| {
-                        subnet_configs
-                            .iter()
-                            .find(|config| config.subnet_kind == SubnetKind::System)
-                            .unwrap_or_else(|| subnet_configs.first().unwrap())
-                    })
-            })
-            .default_effective_canister_id();
+        let default_effective_canister_id = [
+            SubnetKind::Application,
+            SubnetKind::CloudEngine,
+            SubnetKind::VerifiedApplication,
+            SubnetKind::System,
+        ]
+        .iter()
+        .find_map(|kind| {
+            subnet_configs
+                .iter()
+                .find(|config| config.subnet_kind == *kind)
+        })
+        .unwrap_or_else(|| subnet_configs.first().unwrap())
+        .default_effective_canister_id();
 
         subnets.persist_topology(default_effective_canister_id);
 
@@ -4726,8 +4746,10 @@ impl Operation for CanisterReadStateRequest {
                 });
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
+                let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let svc = CanisterReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
+                    metrics,
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
@@ -4805,7 +4827,9 @@ impl Operation for SubnetReadStateRequest {
                     .expect(
                         "The NNS subnet should already exist if we are already executing requests",
                     );
+                let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let svc = SubnetReadStateServiceBuilder::builder(
+                    metrics,
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
                     nns_subnet_id,

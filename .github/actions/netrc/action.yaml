@@ -14,6 +14,7 @@ runs:
         echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
         echo "Current GitHub API rate limits:"
 
-        # Show how close we are to the limits
-        curl -s --netrc https://api.github.com/rate_limit | \
-          jq -r '.resources.core | "Rate limit remaining: \(.remaining)/\(.limit) (resets at \(.reset | strftime("%Y-%m-%d %H:%M:%S %Z")))"'
+        # Show how close we are to the limits (ignore errors from curl or invalid JSON)
+        curl -sf --netrc https://api.github.com/rate_limit 2>/dev/null | \
+          jq -r '.resources.core | "Rate limit remaining: \(.remaining)/\(.limit) (resets at \(.reset | strftime("%Y-%m-%d %H:%M:%S %Z")))"' 2>/dev/null \
+          || echo "Could not retrieve rate limit information"

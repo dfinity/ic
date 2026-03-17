@@ -34,7 +34,6 @@ component_files = {
     # misc
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
-    Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
@@ -51,6 +50,7 @@ component_files = {
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
 
     # monitoring
+    Label("monitoring/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("monitoring/hostos/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
     Label("monitoring/hostos/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
     Label("monitoring/hostos/monitor-guestos.timer"): "/etc/systemd/system/monitor-guestos.timer",

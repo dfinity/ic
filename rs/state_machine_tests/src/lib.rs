@@ -60,10 +60,11 @@ use ic_logger::replica_logger::test_logger;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    InstallCodeArgs, MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
-    ReadCanisterSnapshotMetadataResponse, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse,
+    InstallCodeArgs, ListCanisterSnapshotArgs, ListCanisterSnapshotResponse, MasterPublicKeyId,
+    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -117,7 +118,7 @@ use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
     canister_state::{
         NextExecution, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
-        system_state::{CanisterHistory, CyclesUseCase},
+        canister_snapshots::CanisterSnapshots, system_state::CanisterHistory,
     },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
@@ -134,6 +135,7 @@ use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_types::cycles_use_case::CyclesUseCase;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
     CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Cycles,
@@ -3245,6 +3247,7 @@ impl StateMachine {
         let mut canister_state = ic_state_manager::checkpoint::load_canister_state(
             &tip_canister_layout,
             &canister_id,
+            CanisterSnapshots::default(),
             ic_types::Height::new(0),
             self.state_manager.get_fd_factory(),
             &StrictCheckpointLoadingMetrics,
@@ -3915,6 +3918,14 @@ impl StateMachine {
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
         let sender = self.get_controller(&args.get_canister_id());
+        self.read_canister_snapshot_metadata_as(args, sender)
+    }
+
+    pub fn read_canister_snapshot_metadata_as(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+        sender: PrincipalId,
+    ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3934,6 +3945,14 @@ impl StateMachine {
         args: &ReadCanisterSnapshotDataArgs,
     ) -> Result<ReadCanisterSnapshotDataResponse, UserError> {
         let sender = self.get_controller(&args.get_canister_id());
+        self.read_canister_snapshot_data_as(args, sender)
+    }
+
+    pub fn read_canister_snapshot_data_as(
+        &self,
+        args: &ReadCanisterSnapshotDataArgs,
+        sender: PrincipalId,
+    ) -> Result<ReadCanisterSnapshotDataResponse, UserError> {
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3944,6 +3963,35 @@ impl StateMachine {
             WasmResult::Reply(data) => ReadCanisterSnapshotDataResponse::decode(&data),
             WasmResult::Reject(reason) => {
                 panic!("read_canister_snapshot_data call rejected: {reason}")
+            }
+        })?
+    }
+
+    /// List canister snapshots.
+    pub fn list_canister_snapshots(
+        &self,
+        args: ListCanisterSnapshotArgs,
+    ) -> Result<ListCanisterSnapshotResponse, UserError> {
+        let sender = self.get_controller(&args.get_canister_id());
+        self.list_canister_snapshots_as(args, sender)
+    }
+
+    /// List canister snapshots.
+    pub fn list_canister_snapshots_as(
+        &self,
+        args: ListCanisterSnapshotArgs,
+        sender: PrincipalId,
+    ) -> Result<ListCanisterSnapshotResponse, UserError> {
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ListCanisterSnapshots,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => ListCanisterSnapshotResponse::decode(&data),
+            WasmResult::Reject(reason) => {
+                panic!("list_canister_snapshots call rejected: {reason}")
             }
         })?
     }

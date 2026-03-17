@@ -1,8 +1,7 @@
 use crate::GuestVMType;
 use anyhow::{Context, Result};
-use prometheus::{Encoder, IntGaugeVec, Opts, Registry, TextEncoder};
-use std::fs::File;
-use std::io::{BufWriter, Write};
+use ic_os_metrics_utils::write_registry_to_file;
+use prometheus::{IntGaugeVec, Opts, Registry};
 use std::path::PathBuf;
 
 /// Metrics for the guest VM runner service
@@ -57,32 +56,13 @@ impl GuestVmMetrics {
         })
     }
 
-    /// Writes all metrics to the metrics file
-    fn write_to_file(&self) -> Result<()> {
-        let mut file =
-            BufWriter::new(File::create(&self.metrics_file_path).with_context(|| {
-                format!(
-                    "Failed to create metrics file: {}",
-                    self.metrics_file_path.display()
-                )
-            })?);
-
-        TextEncoder::new()
-            .encode(&self.registry.gather(), &mut file)
-            .context("Failed to encode metrics")?;
-
-        file.flush().context("Failed to flush metrics file")?;
-
-        Ok(())
-    }
-
     /// Sets the service start metric
     pub fn set_service_start(&self, vm_type: GuestVMType, success: bool) {
         self.service_start
             .with_label_values(&[vm_type.as_ref()])
             .set(if success { 1 } else { 0 });
 
-        if let Err(e) = self.write_to_file() {
+        if let Err(e) = write_registry_to_file(&self.registry, &self.metrics_file_path) {
             eprintln!("Failed to write metrics to file: {e}");
         }
     }
@@ -93,7 +73,7 @@ impl GuestVmMetrics {
             .with_label_values(&[vm_type.as_ref()])
             .set(if enabled { 1 } else { 0 });
 
-        if let Err(e) = self.write_to_file() {
+        if let Err(e) = write_registry_to_file(&self.registry, &self.metrics_file_path) {
             eprintln!("Failed to write metrics to file: {e}");
         }
     }
