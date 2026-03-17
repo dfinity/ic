@@ -1489,6 +1489,17 @@ fn load_canister_snapshot_succeeds() {
     // Load an existing snapshot.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
 
+    // Verify that the snapshot still exists,
+    // i.e., loading a snapshot should not consume it.
+    assert_eq!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .len(),
+        1
+    );
+
     // Verify chunk store contains data.
     assert!(
         test.state()

@@ -2,11 +2,10 @@
 
 set -euo pipefail
 
-RUFF_PATH="$(readlink "$ruff_path")"
-REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
-cd "$REPO_PATH"
+RUFF="$(realpath "$RUFF")"
+cd "${BUILD_WORKSPACE_DIRECTORY:?Expected to run from bazel}"
 
-if ! "$RUFF_PATH" check . -q || ! "$RUFF_PATH" format . --check -q; then
+if ! "$RUFF" check . || ! "$RUFF" format . --check; then
     cat >&2 <<EOF
 
 [-] Linting Python files failed

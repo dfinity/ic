@@ -236,7 +236,6 @@ fn respect_max_paused_executions(
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
             max_paused_executions,
@@ -411,8 +410,14 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     // 1 slice and no messages executed.
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     let metrics = test.scheduler().metrics.as_ref();
-    assert_eq!(metrics.round_subnet_queue.slices.get_sample_sum(), 1.0);
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 0.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
+        1.0
+    );
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        0.0
+    );
 
     // Add a second canister with a short install code message.
     let canister_2 = test.create_canister();
@@ -431,7 +436,10 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
     let metrics = test.scheduler().metrics.as_ref();
     // First slice executed as a regular subnet message, second as a long install.
-    assert_eq!(metrics.round_subnet_queue.slices.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
+        1.0
+    );
     assert_eq!(
         metrics
             .round_advance_long_install_code
@@ -441,7 +449,10 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     );
     // Only the two slices were executed.
     assert_eq!(metrics.round.slices.get_sample_sum(), 2.0);
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 0.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        0.0
+    );
 
     let state_metrics = &test.scheduler().state_metrics;
     // 2 rounds because the first canister was paused twice.
@@ -459,8 +470,14 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     assert!(!test.canister_state(canister_2).has_paused_install_code());
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     let metrics = test.scheduler().metrics.as_ref();
-    assert_eq!(metrics.round_subnet_queue.slices.get_sample_sum(), 2.0);
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
+        2.0
+    );
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        1.0
+    );
     assert_eq!(
         metrics
             .round_advance_long_install_code
@@ -551,18 +568,38 @@ fn dts_resume_long_execution_after_abort() {
         })
         .build();
 
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
     let canister = test.create_canister();
     let message_id = test.send_ingress(canister, ingress(1000));
 
+    /// Returns the last executed round and whether the canister was fully executed.
+    fn execution_stats(test: &SchedulerTest, canister: CanisterId) -> (u64, bool) {
+        (
+            test.canister_state(canister)
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .last_executed_round
+                .get(),
+            test.was_fully_executed(canister),
+        )
+    }
+
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert!(test.canister_state(canister).has_paused_execution());
+    assert_eq!(execution_stats(&test, canister), (1, true));
+
     test.execute_round(ExecutionRoundType::CheckpointRound);
     assert!(!test.canister_state(canister).has_paused_execution());
     assert!(test.canister_state(canister).has_aborted_execution());
+    assert_eq!(execution_stats(&test, canister), (2, true));
 
-    for _ in 0..10 {
+    for i in 0..10 {
         assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_round(ExecutionRoundType::OrdinaryRound);
+        assert_eq!(execution_stats(&test, canister), (i + 3, true));
     }
     assert_eq!(
         test.ingress_error(&message_id).code(),
