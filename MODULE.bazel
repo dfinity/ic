@@ -468,26 +468,6 @@ http_file(
     url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_293100_308099_auxpow_parsed.csv",
 )
 
-# Internet Identity backend canister
-# TODO: The asset internet_identity_production.wasm.gz will soon be renamed to internet_identity_backend.wasm.gz.
-# TODO: Once that happens, we should update downloaded_file_path and url fields accordingly.
-
-http_file(
-    name = "internet_identity_backend",
-    downloaded_file_path = "internet_identity_production.wasm.gz",
-    sha256 = "448f2c0370124da72e22b3b4462edd50a5a7be52f564311721fbc2798c70f643",
-    url = "https://github.com/dfinity/internet-identity/releases/download/release-2026-03-13/internet_identity_production.wasm.gz",
-)
-
-# Internet Identity frontend canister
-
-http_file(
-    name = "internet_identity_frontend",
-    downloaded_file_path = "internet_identity_frontend.wasm.gz",
-    sha256 = "f1e53c9f0799425e5bd18768d9b48108b7ac246983a149f8aee3d47394f4d653",
-    url = "https://github.com/dfinity/internet-identity/releases/download/release-2026-03-16/internet_identity_frontend.wasm.gz",
-)
-
 # NNS frontend dapp canister
 
 http_file(
