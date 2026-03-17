@@ -8,7 +8,7 @@ use anyhow::{Context, Error, Result, bail};
 use config_tool::guestos::{cloud::CloudType, network::get_best_interface_name};
 use config_types::GuestOSConfig;
 use nix::{sys::signal::Signal::SIGTERM, unistd::Pid};
-use tracing::{info, warn};
+use tracing::{info};
 
 /// Assigns IPv4 DHCP address to the interface and unassigns it when dropped
 #[derive(Debug)]
