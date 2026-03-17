@@ -562,8 +562,12 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 3.0);
-    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 10.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        3.0
+    );
+    // 3 subnet messages + 10 input messages
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 13.0);
 
     assert_eq!(
         test.state()
@@ -884,8 +888,8 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
         .with_subnet_memory_capacity(pages_into_bytes(4).get())
         .build();
 
-    let a = test.create_canister();
-    let b = test.create_canister();
+    let a = test.create_canister_without_log_memory();
+    let b = test.create_canister_without_log_memory();
 
     for _ in 0..2 {
         // Each ingress, A allocates 1 page, then calls A and B.
