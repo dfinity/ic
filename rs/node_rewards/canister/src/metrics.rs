@@ -1,6 +1,7 @@
 use crate::KeyRange;
 use crate::chrono_utils::{first_unix_timestamp_nanoseconds, last_unix_timestamp_nanoseconds};
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
+use crate::storage::VM;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, SubnetId};
@@ -11,11 +12,12 @@ use itertools::Itertools;
 use rewards_calculation::types::{NodeMetricsDailyRaw, UnixTsNanos};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
+use std::thread::LocalKey;
 
 pub type RetryCount = u64;
 
 #[async_trait]
-pub trait ManagementCanisterClient {
+pub trait ManagementCanisterClient: Send + Sync {
     async fn node_metrics_history(
         &self,
         args: &NodeMetricsHistoryArgs,
@@ -37,20 +39,15 @@ impl ManagementCanisterClient for ICCanisterClient {
     }
 }
 
-pub struct MetricsManager<Memory>
-where
-    Memory: ic_stable_structures::Memory,
-{
+pub struct MetricsManager {
     pub(crate) client: Box<dyn ManagementCanisterClient>,
     pub(crate) subnets_metrics:
-        RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
-    pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
+        &'static LocalKey<RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, VM>>>,
+    pub(crate) last_timestamp_per_subnet:
+        &'static LocalKey<RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, VM>>>,
 }
 
-impl<Memory> MetricsManager<Memory>
-where
-    Memory: ic_stable_structures::Memory + 'static,
-{
+impl MetricsManager {
     /// Fetches subnets metrics for the specified subnets from their last stored timestamp.
     async fn fetch_subnets_metrics(
         &self,
@@ -82,11 +79,13 @@ where
         subnets
             .into_iter()
             .map(|subnet| {
-                let last_timestamp = self
-                    .last_timestamp_per_subnet
-                    .borrow()
-                    .get(&subnet.into())
-                    .unwrap_or_default();
+                let last_timestamp =
+                    self.last_timestamp_per_subnet
+                        .with_borrow(|last_timestamp_per_subnet| {
+                            last_timestamp_per_subnet
+                                .get(&subnet.into())
+                                .unwrap_or_default()
+                        });
 
                 (subnet, last_timestamp)
             })
@@ -112,27 +111,31 @@ where
                     if let Some(last_timestamp) =
                         subnet_update.last().map(|metrics| metrics.timestamp_nanos)
                     {
-                        self.last_timestamp_per_subnet
-                            .borrow_mut()
-                            .insert(subnet_id.into(), last_timestamp);
+                        self.last_timestamp_per_subnet.with_borrow_mut(
+                            |last_timestamp_per_subnet| {
+                                last_timestamp_per_subnet.insert(subnet_id.into(), last_timestamp)
+                            },
+                        );
 
                         for NodeMetricsHistoryRecord {
                             timestamp_nanos,
                             node_metrics,
                         } in subnet_update
                         {
-                            self.subnets_metrics.borrow_mut().insert(
-                                SubnetMetricsKey {
-                                    timestamp_nanos,
-                                    subnet_id: Some(subnet_id.get()),
-                                },
-                                SubnetMetricsValue {
-                                    nodes_metrics: node_metrics
-                                        .into_iter()
-                                        .map(|m| m.into())
-                                        .collect(),
-                                },
-                            );
+                            self.subnets_metrics.with_borrow_mut(|subnets_metrics| {
+                                subnets_metrics.insert(
+                                    SubnetMetricsKey {
+                                        timestamp_nanos,
+                                        subnet_id: Some(subnet_id.get()),
+                                    },
+                                    SubnetMetricsValue {
+                                        nodes_metrics: node_metrics
+                                            .into_iter()
+                                            .map(|m| m.into())
+                                            .collect(),
+                                    },
+                                )
+                            });
                         }
 
                         let date =
@@ -189,15 +192,16 @@ where
             ..SubnetMetricsKey::max_key()
         };
 
-        let mut subnets_metrics_by_date: BTreeMap<NaiveDate, _> = self
-            .subnets_metrics
-            .borrow()
-            .range(first_key..=last_key)
-            .into_group_map_by(|(k, _)| {
-                DateTime::from_timestamp_nanos(k.timestamp_nanos as i64).date_naive()
-            })
-            .into_iter()
-            .collect();
+        let mut subnets_metrics_by_date: BTreeMap<NaiveDate, _> =
+            self.subnets_metrics.with_borrow(|subnets_metrics| {
+                subnets_metrics
+                    .range(first_key..=last_key)
+                    .into_group_map_by(|(k, _)| {
+                        DateTime::from_timestamp_nanos(k.timestamp_nanos as i64).date_naive()
+                    })
+                    .into_iter()
+                    .collect()
+            });
 
         let mut initial_total_metrics: HashMap<_, _> = HashMap::new();
         if let Some((stored_date, _)) = subnets_metrics_by_date.first_key_value()

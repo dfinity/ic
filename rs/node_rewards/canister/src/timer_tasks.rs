@@ -7,7 +7,7 @@ use futures::FutureExt;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::futures::spawn;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nervous_system_timer_task::{RecurringSyncTask, set_timer};
+use ic_nervous_system_timer_task::{RecurringAsyncTask, RecurringSyncTask, set_timer};
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::providers_rewards::GetNodeProvidersRewardsRequest;
 use std::cell::RefCell;
@@ -22,43 +22,6 @@ const SECS_PER_HOUR: u64 = 3600;
 const SYNC_OFFSET: u64 = 5 * 60; // 5 minutes in seconds
 
 const RETRY_FAILED_SYNC_SECS: u64 = 5 * 60; // 5 minutes in seconds
-
-fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        spawn(future);
-    }
-    // This is needed for tests
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        future
-            .now_or_never()
-            .expect("Future could not execute in non-WASM environment");
-    }
-}
-
-#[async_trait(?Send)]
-pub trait RecurringAsyncTaskNonSend: Sized + 'static {
-    async fn execute(self) -> (Duration, Self);
-    fn initial_delay(&self) -> Duration;
-
-    fn schedule_with_delay(self, delay: Duration) {
-        set_timer(delay, async move {
-            spawn_in_canister_env(async move {
-                let (new_delay, new_task) = self.execute().await;
-
-                new_task.schedule_with_delay(new_delay);
-            });
-        });
-    }
-
-    fn schedule(self) {
-        let initial_delay = self.initial_delay();
-        self.schedule_with_delay(initial_delay);
-    }
-
-    const NAME: &'static str;
-}
 
 #[derive(Copy, Clone)]
 pub struct HourlySyncTask {
@@ -85,9 +48,8 @@ impl HourlySyncTask {
     }
 }
 
-// TODO: Make this task Send once MetricsManager and StableCanisterRegistryClient are Send.
-#[async_trait(?Send)]
-impl RecurringAsyncTaskNonSend for HourlySyncTask {
+#[async_trait]
+impl RecurringAsyncTask for HourlySyncTask {
     async fn execute(self) -> (Duration, Self) {
         let instruction_counter = telemetry::InstructionCounter::default();
         telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
