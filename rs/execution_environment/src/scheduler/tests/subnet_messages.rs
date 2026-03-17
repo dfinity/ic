@@ -2,6 +2,7 @@
 
 use super::super::test_utilities::{SchedulerTest, SchedulerTestBuilder, ingress};
 use super::super::*;
+use super::zero_instruction_overhead_config;
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, EmptyBlob, Method, Payload as _};
@@ -20,12 +21,9 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(instructions_per_slice),
             max_instructions_per_message: NumInstructions::from(instructions_per_slice * 100),
-            max_instructions_per_query_message: NumInstructions::new(instructions_per_slice),
             max_instructions_per_slice: NumInstructions::from(instructions_per_slice),
             max_instructions_per_install_code_slice: NumInstructions::from(instructions_per_slice),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -108,19 +106,7 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
 
 #[test]
 fn test_drain_subnet_messages_no_long_running_canisters() {
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(100),
-            max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
-            max_instructions_per_slice: NumInstructions::from(1),
-            max_instructions_per_install_code_slice: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
-        })
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let add_messages = |test: &mut SchedulerTest, input_type: InputQueueType| {
         for id in 0..2 {
@@ -158,12 +144,9 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(instructions_per_slice),
             max_instructions_per_message: NumInstructions::from(instructions_per_slice * 100),
-            max_instructions_per_query_message: NumInstructions::new(instructions_per_slice),
             max_instructions_per_slice: NumInstructions::from(instructions_per_slice),
             max_instructions_per_install_code_slice: NumInstructions::from(instructions_per_slice),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -197,17 +180,6 @@ fn scheduler_executes_postponed_raw_rand_requests() {
     let canister_id = canister_test_id(2);
     let mut test = SchedulerTestBuilder::new()
         .with_subnet_type(SubnetType::Application)
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(100),
-            max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
-            max_instructions_per_slice: NumInstructions::from(1),
-            max_instructions_per_install_code_slice: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
         .build();
     test.advance_to_round(ExecutionRound::new(2));
     let last_round = test.last_round();

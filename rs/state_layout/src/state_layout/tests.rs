@@ -246,7 +246,6 @@ fn test_canister_snapshots_decode() {
     let canister_id = canister_test_id(7);
     let canister_snapshot_bits = CanisterSnapshotBits {
         snapshot_id: SnapshotId::from((canister_id, 5)),
-        canister_id,
         taken_at_timestamp: UNIX_EPOCH,
         canister_version: 3,
         binary_hash: WasmHash::from(&CanisterModule::new(vec![2, 3, 4])),
@@ -1280,18 +1279,7 @@ mod mainnet_compatibility_tests {
         #[test]
         #[ignore]
         fn serialize() {
-            let mut canister_state_bits = make_task_queue_and_status();
-
-            // Backward compatibility hack: the old version did not use `with_callback()`,
-            // so it was not bumping `next_callback_id`. Temporarily reset it to 0.
-            //
-            // TODO(DSM-95): Drop in next release.
-            if let CanisterStatus::Running {
-                call_context_manager,
-            } = &mut canister_state_bits.status
-            {
-                call_context_manager.set_next_callback_id(0);
-            }
+            let canister_state_bits = make_task_queue_and_status();
 
             let proto_state_bits: pb_canister_state_bits::CanisterStateBits =
                 canister_state_bits.into();
