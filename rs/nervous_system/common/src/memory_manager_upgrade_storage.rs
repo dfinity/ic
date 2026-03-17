@@ -493,7 +493,7 @@ mod test {
         // specifically, we try to advance past one buffer size (100).
         let memory = VectorMemory::default();
 
-        let mut vec: Vec<_> = (0u8..=255).collect();
+        let mut vec: Vec<_> = (0_u8..=255).collect();
         let mut size = vec.len().to_le_bytes().to_vec();
 
         memory.borrow_mut().append(&mut size);
@@ -516,7 +516,7 @@ mod test {
     fn test_size_aware_reader_should_panic_when_advancing_past_end() {
         let memory = VectorMemory::default();
 
-        let mut vec = [1u8; 1000].to_vec();
+        let mut vec = [1_u8; 1000].to_vec();
         let mut size = vec.len().to_le_bytes().to_vec();
 
         memory.borrow_mut().append(&mut size);
