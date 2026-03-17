@@ -2,7 +2,7 @@ use anyhow::{Error, Result};
 use arc_swap::ArcSwapOption;
 use std::fmt::Debug;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::warn;
 use virt::sys::virDomainState;
 
 /// Facade trait for operations on a libvirt domain.

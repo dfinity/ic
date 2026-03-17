@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tracing::{debug, warn};
+use tracing::warn;
 
 pub use metrics::FsTrimMetrics;
 
