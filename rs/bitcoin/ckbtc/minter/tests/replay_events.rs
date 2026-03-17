@@ -14,7 +14,7 @@ use ic_ckbtc_minter::state::eventlog::{
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::{ECDSAPublicKey, Network};
 use std::cmp::Reverse;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -93,6 +93,30 @@ static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
         .expect("Failed to replay events")
 });
 static TESTNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Testnet.deserialize());
+
+#[tokio::test]
+async fn should_replay_events_and_retain_pending_requests() {
+    Mainnet.retrieve_and_store_events_if_env().await;
+
+    let state = &MAINNET_STATE;
+    state
+        .check_invariants()
+        .expect("Failed to check invariants");
+
+    println!(
+        "pending retrieve_btc_request = {:?}",
+        state.pending_retrieve_btc_requests
+    );
+
+    let block_indices = state
+        .pending_retrieve_btc_requests
+        .iter()
+        .map(|request| request.block_index)
+        .collect::<BTreeSet<_>>();
+    assert!(block_indices.contains(&3459007));
+    assert!(block_indices.contains(&3459009));
+    assert!(block_indices.contains(&3459013));
+}
 
 #[tokio::test]
 async fn should_replay_events_for_mainnet() {
