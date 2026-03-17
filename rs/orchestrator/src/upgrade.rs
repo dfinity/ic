@@ -3335,7 +3335,7 @@ mod tests {
         let mut registry_client = MockFakeRegistryClient::new();
         registry_client
             .expect_get_versioned_value()
-            .times(2)
+            .once()
             .return_const(Ok(RegistryVersionedRecord {
                 key: make_subnet_record_key(subnet_id),
                 version: RegistryVersion::new(1),
