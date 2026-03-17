@@ -139,7 +139,7 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
     }
 
     #[cfg(test)]
-    async fn calculate_rewards(
+    fn calculate_rewards(
         from_day: NaiveDate,
         to_day: NaiveDate,
         input_provider: impl PerformanceBasedAlgorithmInputProvider,
