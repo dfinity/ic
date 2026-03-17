@@ -33,6 +33,8 @@ pub struct LogMemoryStore {
     #[validate_eq(CompareWithValidateEq)]
     maybe_page_map: Option<PageMap>,
 
+    persistent_next_idx: u64,
+
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
     #[validate_eq(Ignore)]
     header_cache: OnceLock<Option<Header>>,
@@ -68,6 +70,7 @@ impl LogMemoryStore {
             } else {
                 None
             },
+            persistent_next_idx: 0, // TODO: remove debug code.
             header_cache: OnceLock::new(),
             delta_log_sizes: VecDeque::new(),
         }
@@ -291,6 +294,7 @@ impl Clone for LogMemoryStore {
             // PageMap is a persistent data structure, so clone is cheap and creates
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),
+            persistent_next_idx: self.persistent_next_idx,
             delta_log_sizes: self.delta_log_sizes.clone(),
             // OnceLock is not Clone, so we must manually clone the state.
             header_cache: match self.header_cache.get() {
@@ -306,6 +310,7 @@ impl PartialEq for LogMemoryStore {
         // header_cache is a transient cache and should not be compared.
         self.feature_flag == other.feature_flag
             && self.maybe_page_map == other.maybe_page_map
+            && self.persistent_next_idx == other.persistent_next_idx
             && self.delta_log_sizes == other.delta_log_sizes
     }
 }
