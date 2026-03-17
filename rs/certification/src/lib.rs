@@ -312,6 +312,7 @@ pub fn verify_delegation_certificate(
     struct SubnetView {
         canister_ranges: Option<Blob>,
         public_key: Blob,
+        #[allow(unused)] // will be checked later
         r#type: Option<String>, // added in V25 certifications
     }
 
