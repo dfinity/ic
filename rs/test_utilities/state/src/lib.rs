@@ -363,7 +363,7 @@ impl CanisterStateBuilder {
         system_state.compute_allocation = self.compute_allocation;
         system_state.certified_data = self.certified_data;
         system_state.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
-        // Allocate log memory store according lot log_memory_limit.
+        // Allocate log memory store according to log_memory_limit.
         system_state
             .log_memory_store
             .resize_for_testing(self.log_memory_limit);
