@@ -345,7 +345,7 @@ impl NodeRewardsCanister {
         })
     }
 
-    pub async fn get_node_providers_rewards_calculation(
+    pub fn get_node_providers_rewards_calculation(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsCalculationRequest,
     ) -> GetNodeProvidersRewardsCalculationResponse {

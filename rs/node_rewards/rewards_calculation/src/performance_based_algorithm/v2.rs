@@ -1,5 +1,5 @@
 use crate::AlgorithmVersion;
-use crate::performance_based_algorithm::results::{DailyResults, RewardsCalculatorResults};
+use crate::performance_based_algorithm::results::DailyResults;
 use crate::performance_based_algorithm::{
     PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInputProvider,
 };

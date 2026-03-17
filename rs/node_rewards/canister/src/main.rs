@@ -94,8 +94,8 @@ async fn get_node_providers_rewards(
     NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
 }
 
-#[query(composite = true)]
-async fn get_node_providers_rewards_calculation(
+#[query]
+fn get_node_providers_rewards_calculation(
     request: GetNodeProvidersRewardsCalculationRequest,
 ) -> GetNodeProvidersRewardsCalculationResponse {
     if in_replicated_execution() {
@@ -105,7 +105,7 @@ async fn get_node_providers_rewards_calculation(
         );
     }
 
-    NodeRewardsCanister::get_node_providers_rewards_calculation(&CANISTER, request).await
+    NodeRewardsCanister::get_node_providers_rewards_calculation(&CANISTER, request)
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {

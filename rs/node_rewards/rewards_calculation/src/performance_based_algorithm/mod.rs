@@ -2,8 +2,10 @@ use crate::AlgorithmVersion;
 use crate::REWARDS_TABLE_DAYS;
 use crate::performance_based_algorithm::results::{
     DailyNodeFailureRate, DailyNodeProviderRewards, DailyNodeRewards, DailyResults,
-    NodeMetricsDaily, NodeTypeRegionBaseRewards, RewardsCalculatorResults, Type3RegionBaseRewards,
+    NodeMetricsDaily, NodeTypeRegionBaseRewards, Type3RegionBaseRewards,
 };
+#[cfg(test)]
+use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use chrono::NaiveDate;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
@@ -133,6 +135,41 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
         Ok(DailyResults {
             subnets_failure_rate,
             provider_results: results_per_provider,
+        })
+    }
+
+    #[cfg(test)]
+    async fn calculate_rewards(
+        from_day: NaiveDate,
+        to_day: NaiveDate,
+        input_provider: impl PerformanceBasedAlgorithmInputProvider,
+    ) -> Result<RewardsCalculatorResults, String> {
+        if from_day > to_day {
+            return Err("from_day must be before to_day".to_string());
+        }
+
+        let mut total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64> = BTreeMap::new();
+        let mut daily_results = BTreeMap::new();
+
+        for day in from_day.iter_days().take_while(|d| *d <= to_day) {
+            let result_for_day = Self::calculate_rewards_for_date(&input_provider, &day)?;
+
+            for (provider_id, provider_rewards) in &result_for_day.provider_results {
+                total_rewards_xdr_permyriad
+                    .entry(*provider_id)
+                    .and_modify(|total| {
+                        *total += provider_rewards.total_adjusted_rewards_xdr_permyriad
+                    })
+                    .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
+            }
+
+            daily_results.insert(day, result_for_day);
+        }
+
+        Ok(RewardsCalculatorResults {
+            algorithm_version: Self::VERSION,
+            total_rewards_xdr_permyriad,
+            daily_results,
         })
     }
 
