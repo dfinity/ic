@@ -159,18 +159,16 @@ mod tests {
         SubnetId::from(PrincipalId::new_subnet_test_id(n))
     }
 
-    fn setup_app(
-        ttl: Duration,
-        max_entries: u64,
-    ) -> (
-        Router,
-        Arc<SubnetReadStateCacheState>,
-    ) {
+    fn setup_app(ttl: Duration, max_entries: u64) -> (Router, Arc<SubnetReadStateCacheState>) {
         let registry = Registry::new_custom(None, None).unwrap();
         let state = Arc::new(SubnetReadStateCacheState::new(ttl, max_entries, &registry));
-        let app = Router::new().route("/", post(dummy_handler)).layer(
-            middleware::from_fn_with_state(state.clone(), subnet_read_state_cache_middleware),
-        );
+        let app =
+            Router::new()
+                .route("/", post(dummy_handler))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    subnet_read_state_cache_middleware,
+                ));
 
         (app, state)
     }
