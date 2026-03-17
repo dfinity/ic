@@ -257,7 +257,7 @@ impl ChainKeyPayloadBuilderImpl {
                     match self.crypto.combine_encrypted_key_shares(shares, &args) {
                         Ok(key) => {
                             self.metrics
-                                .payload_metrics_inc("chain_key_agreement_completed", &key_id);
+                                .payload_metrics_inc("vetkd_agreement_completed", &key_id);
                             let result = VetKdDeriveKeyResult {
                                 encrypted_key: key.encrypted_key,
                             };
