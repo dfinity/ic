@@ -1,6 +1,6 @@
 use crate::LIMITER_REJECT_COUNT;
 use candid::CandidType;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,

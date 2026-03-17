@@ -3,7 +3,8 @@ use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config
 use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_types::{CanisterId, Cycles, PrincipalId};
+use ic_types::{CanisterId, PrincipalId};
+use ic_types_cycles::Cycles;
 use regex_lite::RegexBuilder;
 
 const B: u128 = 1_000 * 1_000 * 1_000;
