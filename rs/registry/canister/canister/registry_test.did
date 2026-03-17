@@ -126,6 +126,15 @@ type CreateSubnetResponse = variant {
   Err: text;
 };
 
+type DeleteSubnetPayload = record {
+  subnet_id : principal;
+};
+
+type DeleteSubnetResponse = variant {
+  Ok;
+  Err: text;
+};
+
 type CanisterCyclesCostSchedule = variant {
   Normal;
   Free;
@@ -549,6 +558,7 @@ service : {
   clear_provisional_whitelist : () -> ();
   complete_canister_migration : (CompleteCanisterMigrationPayload) -> ();
   create_subnet : (CreateSubnetPayload) -> (CreateSubnetResponse);
+  delete_subnet : (DeleteSubnetPayload) -> (DeleteSubnetResponse);
   deploy_guestos_to_all_subnet_nodes : (
     DeployGuestosToAllSubnetNodesPayload
   ) -> ();
