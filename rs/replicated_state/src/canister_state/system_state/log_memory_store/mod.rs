@@ -33,6 +33,8 @@ pub struct LogMemoryStore {
     #[validate_eq(CompareWithValidateEq)]
     maybe_page_map: Option<PageMap>,
 
+    // TODO: DO NOT SUBMIT! Remove debug code.
+    #[allow(dead_code)]
     persistent_next_idx: u64,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
