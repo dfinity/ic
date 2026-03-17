@@ -221,6 +221,19 @@ impl SchedulerTest {
         )
     }
 
+    pub fn create_canister_without_log_memory(&mut self) -> CanisterId {
+        self.create_canister_with_controller(
+            self.initial_canister_cycles,
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            Some(NumBytes::from(0)),
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
         use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
         self.scheduler.cycles_account_manager.execution_cost(
@@ -241,6 +254,7 @@ impl SchedulerTest {
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
+        log_memory_limit: Option<NumBytes>,
         system_task: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
         status: Option<CanisterStatusType>,
@@ -253,7 +267,7 @@ impl SchedulerTest {
         let time_of_last_allocation_charge =
             time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
         let controller = controller.unwrap_or(self.user_id.get());
-        let mut canister_state = CanisterStateBuilder::new()
+        let mut builder = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
             .with_cycles(cycles)
             .with_controller(controller)
@@ -262,8 +276,11 @@ impl SchedulerTest {
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
             .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
-            .with_status(status.unwrap_or(CanisterStatusType::Running))
-            .build();
+            .with_status(status.unwrap_or(CanisterStatusType::Running));
+        if let Some(limit) = log_memory_limit {
+            builder = builder.with_log_memory_limit(limit.get() as usize);
+        }
+        let mut canister_state = builder.build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
             wasm_executor
@@ -300,6 +317,7 @@ impl SchedulerTest {
             cycles,
             compute_allocation,
             memory_allocation,
+            None,
             system_task,
             time_of_last_allocation_charge,
             status,

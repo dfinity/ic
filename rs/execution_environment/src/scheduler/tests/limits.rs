@@ -888,8 +888,8 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
         .with_subnet_memory_capacity(pages_into_bytes(4).get())
         .build();
 
-    let a = test.create_canister();
-    let b = test.create_canister();
+    let a = test.create_canister_without_log_memory();
+    let b = test.create_canister_without_log_memory();
 
     for _ in 0..2 {
         // Each ingress, A allocates 1 page, then calls A and B.
