@@ -528,7 +528,7 @@ pub async fn install_bitcoin_canister_with_network(
     logger: &Logger,
     network: ic_btc_interface::Network,
 ) -> CanisterId {
-    use ic_btc_interface::{Fees, Flag, Network, CanisterArg, InitConfig};
+    use ic_btc_interface::{CanisterArg, Fees, Flag, InitConfig, Network};
     info!(&logger, "Installing bitcoin canister ...");
     let canister_id = match network {
         Network::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
@@ -579,7 +579,7 @@ pub async fn install_bitcoin_canister_with_network(
 }
 
 pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
-    use ic_doge_interface::{Fees, Flag, Network, InitConfig, CanisterArg};
+    use ic_doge_interface::{CanisterArg, Fees, Flag, InitConfig, Network};
     info!(&logger, "Installing dogecoin canister ...");
     let canister_id = DOGECOIN_MAINNET_CANISTER_ID;
     let mut dogecoin_canister =

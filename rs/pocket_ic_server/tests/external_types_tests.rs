@@ -2,13 +2,13 @@ use candid::CandidType;
 use candid::types::subtype::equal;
 use candid_parser::utils::{CandidSource, instantiate_candid};
 use flate2::read::GzDecoder;
+use ic_btc_interface::CanisterArg as BitcoinCanisterArg;
+use ic_doge_interface::CanisterArg as DogecoinCanisterArg;
 use pocket_ic_server::external_canister_types::{
     /*CyclesLedgerArgs, */ InternetIdentityInit, NnsDappCanisterArguments, SnsAggregatorConfig,
 };
 use std::io::Read;
 use walrus::{IdsToIndices, Module};
-use ic_btc_interface::CanisterArg as BitcoinCanisterArg;
-use ic_doge_interface::CanisterArg as DogecoinCanisterArg;
 
 fn check_init_arg<T: CandidType>(gzipped_canister_wasm: &[u8]) {
     let mut decoder = GzDecoder::new(gzipped_canister_wasm);
