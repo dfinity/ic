@@ -151,6 +151,7 @@ fn can_record_metrics_for_a_round() {
             None,
             None,
             None,
+            None,
         );
         for _ in 0..5 {
             test.send_ingress(canister, ingress(instructions));
@@ -251,11 +252,13 @@ fn prepay_failures_counted() {
         None,
         None,
         None,
+        None,
     );
     let canister_without_cycles = test.create_canister_with(
         Cycles::new(10),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
+        None,
         None,
         None,
         None,
@@ -1081,6 +1084,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         None,
         None,
         None,
+        None,
     );
 
     let removed_cycles = Cycles::from(1000u128);
@@ -1112,6 +1116,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         initial_balance,
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
+        None,
         None,
         None,
         Some(CanisterStatusType::Stopped),

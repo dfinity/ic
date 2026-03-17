@@ -620,6 +620,7 @@ fn dts_update_and_heartbeat() {
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
+        None,
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,

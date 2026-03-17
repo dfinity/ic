@@ -218,6 +218,19 @@ impl SchedulerTest {
             None,
             None,
             None,
+            None,
+        )
+    }
+
+    pub fn create_canister_without_log_memory(&mut self) -> CanisterId {
+        self.create_canister_with(
+            self.initial_canister_cycles,
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            Some(NumBytes::from(0)),
+            None,
+            None,
+            None,
         )
     }
 
@@ -241,6 +254,7 @@ impl SchedulerTest {
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
+        log_memory_limit: Option<NumBytes>,
         system_task: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
         status: Option<CanisterStatusType>,
@@ -263,6 +277,10 @@ impl SchedulerTest {
             .with_freezing_threshold(100)
             .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
             .with_status(status.unwrap_or(CanisterStatusType::Running))
+            .pipe(|b| match log_memory_limit {
+                Some(limit) => b.with_log_memory_limit(limit.get() as usize),
+                None => b,
+            })
             .build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
@@ -292,6 +310,7 @@ impl SchedulerTest {
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
+        log_memory_limit: Option<NumBytes>,
         system_task: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
         status: Option<CanisterStatusType>,
@@ -300,6 +319,7 @@ impl SchedulerTest {
             cycles,
             compute_allocation,
             memory_allocation,
+            log_memory_limit,
             system_task,
             time_of_last_allocation_charge,
             status,
