@@ -59,7 +59,7 @@ proptest! {
         let init_args = InitArgsBuilder::for_tests()
             .with_minting_account(MINTER_IDENTITY.clone().sender().unwrap())
             .with_transfer_fee(DEFAULT_TRANSFER_FEE)
-            .with_feature_flags(FeatureFlags {icrc2:true})
+            .with_feature_flags(FeatureFlags { icrc2: true, icrc152: false })
             .with_archive_options(ArchiveOptions {
                 // Create archive after every ten blocks
                 trigger_threshold: 10,
@@ -177,7 +177,10 @@ fn test_self_transfer() {
     let init_args = InitArgsBuilder::for_tests()
         .with_minting_account(MINTER_IDENTITY.clone().sender().unwrap())
         .with_transfer_fee(DEFAULT_TRANSFER_FEE)
-        .with_feature_flags(FeatureFlags { icrc2: true })
+        .with_feature_flags(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        })
         .with_initial_balance(account, Nat::from(100_000_000_u64))
         .build();
 
