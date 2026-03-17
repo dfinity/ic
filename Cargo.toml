@@ -535,6 +535,7 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/tools/add-integer-type-suffix-separator",
 ]
 
 resolver = "2"

@@ -1,0 +1,13 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+rust_binary(
+    name = "add-integer-type-suffix-separator",
+    srcs = ["src/main.rs"],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:proc-macro2",
+        "@crate_index//:regex",
+        "@crate_index//:syn",
+        "@crate_index//:walkdir",
+    ],
+)

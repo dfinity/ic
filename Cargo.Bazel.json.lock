@@ -1,5 +1,5 @@
 {
-  "checksum": "7916d6e421ec3cf26a9dcf8bd2a2bd70bfc0fcb42634a3a5f3c628b91adafdf6",
+  "checksum": "c3a595708a861983a925edc76a253beddea414eab5619f7c98177461451a2e41",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -59491,7 +59491,8 @@
         "crate_features": {
           "common": [
             "default",
-            "proc-macro"
+            "proc-macro",
+            "span-locations"
           ],
           "selects": {}
         },

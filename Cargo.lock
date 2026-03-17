@@ -233,6 +233,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "add-integer-type-suffix-separator"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "regex",
+ "syn 2.0.117",
+ "walkdir",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
