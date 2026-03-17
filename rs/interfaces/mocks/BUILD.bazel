@@ -10,6 +10,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//rs/crypto/interfaces/sig_verification",
         "//rs/interfaces",
         "//rs/protobuf",
         "//rs/types/types",

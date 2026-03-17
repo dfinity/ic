@@ -3,16 +3,18 @@ use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_management_canister_types_private::VetKdKeyId;
 use ic_protobuf::registry::crypto::v1::AlgorithmId;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord};
 use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::{
-    CanisterCyclesCostSchedule, CatchUpPackageContents, InitialNiDkgTranscriptRecord,
-    SubnetListRecord, SubnetRecord,
+    CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
+    InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
 };
-use ic_protobuf::types::v1::master_public_key_id::KeyId;
+use ic_protobuf::types::v1::{PrincipalId as PrincipalIdPb, master_public_key_id::KeyId};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
+    make_blessed_replica_versions_key, make_catch_up_package_contents_key,
+    make_crypto_threshold_signing_pubkey_key, make_replica_version_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_local_store::{LocalStoreImpl, compact_delta_to_changelog};
@@ -20,6 +22,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use ic_types::{
@@ -78,6 +81,42 @@ pub fn setup_registry_non_final(
         Arc::clone(&registry_data_provider) as Arc<_>
     ));
     (registry_data_provider, registry)
+}
+
+/// Add blessed replica versions to the registry.
+pub fn add_blessed_replica_versions(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    version: u64,
+    blessed_version_ids: &[&str],
+) {
+    let registry_version = RegistryVersion::from(version);
+    let blessed_versions = BlessedReplicaVersions {
+        blessed_version_ids: blessed_version_ids.iter().map(|x| x.to_string()).collect(),
+    };
+    registry_data_provider
+        .add(
+            &make_blessed_replica_versions_key(),
+            registry_version,
+            Some(blessed_versions),
+        )
+        .expect("Failed to add blessed replica versions.");
+}
+
+/// Add a replica version record to the registry.
+pub fn add_replica_version_record(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    version: u64,
+    replica_version_id: &str,
+    record: ReplicaVersionRecord,
+) {
+    let registry_version = RegistryVersion::from(version);
+    registry_data_provider
+        .add(
+            &make_replica_version_key(replica_version_id),
+            registry_version,
+            Some(record),
+        )
+        .expect("Failed to add replica version record.");
 }
 
 pub fn insert_initial_dkg_transcript(
@@ -234,8 +273,9 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
-        canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedulePb::Normal as i32,
         subnet_admins: vec![],
+        recalled_replica_version_ids: vec![],
     }
 }
 
@@ -346,6 +386,25 @@ impl SubnetRecordBuilder {
 
     pub fn with_dkg_dealings_per_block(mut self, dkg_dealings_per_block: u64) -> Self {
         self.record.dkg_dealings_per_block = dkg_dealings_per_block;
+        self
+    }
+
+    pub fn with_cost_schedule(mut self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        self.record.canister_cycles_cost_schedule =
+            i32::from(CanisterCyclesCostSchedulePb::from(cost_schedule));
+        self
+    }
+
+    pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
+        self.record.subnet_admins = subnet_admins.into_iter().map(PrincipalIdPb::from).collect();
+        self
+    }
+
+    pub fn with_recalled_replica_version_ids(
+        mut self,
+        recalled_replica_version_ids: &[String],
+    ) -> Self {
+        self.record.recalled_replica_version_ids = recalled_replica_version_ids.to_vec();
         self
     }
 

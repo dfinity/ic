@@ -33,6 +33,8 @@ pub struct SubnetTopology {
         tag = "7"
     )]
     pub canister_cycles_cost_schedule: i32,
+    #[prost(message, repeated, tag = "8")]
+    pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -154,10 +156,6 @@ pub struct SignWithThresholdContext {
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
-    #[prost(uint64, optional, tag = "6")]
-    pub pre_signature_id: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "7")]
-    pub height: ::core::option::Option<u64>,
     #[prost(bytes = "vec", optional, tag = "8")]
     pub nonce: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }

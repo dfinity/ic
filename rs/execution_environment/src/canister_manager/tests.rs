@@ -55,10 +55,7 @@ use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, Routin
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
-    canister_state::system_state::{
-        CyclesUseCase,
-        wasm_chunk_store::{self, ChunkValidationResult},
-    },
+    canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
         subnet_call_context_manager::InstallCodeCallId, testing::NetworkTopologyTesting,
     },
@@ -91,6 +88,7 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, UserId,
     batch::CanisterCyclesCostSchedule,
+    cycles_use_case::CyclesUseCase,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
     nominal_cycles::NominalCycles,
@@ -314,7 +312,6 @@ fn canister_manager_config(
     rate_limiting_of_instructions: FlagStatus,
 ) -> CanisterMgrConfig {
     CanisterMgrConfig::new(
-        MEMORY_CAPACITY,
         DEFAULT_PROVISIONAL_BALANCE,
         NumSeconds::from(100_000),
         subnet_id,
@@ -464,13 +461,19 @@ fn install_code(
 
 fn with_setup<F>(f: F)
 where
-    F: FnOnce(CanisterManager, ReplicatedState, SubnetId),
+    F: FnOnce(CanisterManager, ReplicatedState, SubnetId, Option<BTreeSet<PrincipalId>>),
 {
     let subnet_id = subnet_test_id(1);
     let canister_manager = CanisterManagerBuilder::default()
         .with_subnet_id(subnet_id)
         .build();
-    f(canister_manager, initial_state(subnet_id, false), subnet_id)
+    let subnet_admins = None;
+    f(
+        canister_manager,
+        initial_state(subnet_id, false),
+        subnet_id,
+        subnet_admins,
+    );
 }
 
 #[test]
@@ -953,7 +956,7 @@ fn stop_a_running_canister() {
 
 #[test]
 fn stop_a_stopped_canister() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, mut state, _, subnet_admins| {
         let sender = user_test_id(1);
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
@@ -971,7 +974,7 @@ fn stop_a_stopped_canister() {
             call_id: Some(StopCanisterCallId::new(0)),
         };
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state),
+            canister_manager.stop_canister(canister_id, stop_context, &mut state, subnet_admins),
             StopCanisterResult::AlreadyStopped {
                 cycles_to_return: Cycles::zero()
             }
@@ -987,7 +990,7 @@ fn stop_a_stopped_canister() {
 
 #[test]
 fn stop_a_stopped_canister_from_another_canister() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, mut state, _, subnet_admins| {
         let controller = canister_test_id(1);
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister_with_controller(canister_id, controller.get());
@@ -1008,7 +1011,7 @@ fn stop_a_stopped_canister_from_another_canister() {
             deadline: NO_DEADLINE,
         };
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state),
+            canister_manager.stop_canister(canister_id, stop_context, &mut state, subnet_admins),
             StopCanisterResult::AlreadyStopped {
                 cycles_to_return: Cycles::from(cycles)
             }
@@ -1023,7 +1026,7 @@ fn stop_a_stopped_canister_from_another_canister() {
 }
 
 #[test]
-fn stop_a_canister_with_incorrect_controller() {
+fn stop_a_canister_with_incorrect_controller_fails() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
@@ -1035,7 +1038,14 @@ fn stop_a_canister_with_incorrect_controller() {
     );
 
     // Switch the user so the stop request comes from a non-controller.
-    test.set_user_id(user_test_id(42));
+    let test_user = user_test_id(42);
+    test.set_user_id(test_user);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(test_user.get_ref())
+    );
 
     let err = test
         .subnet_message(
@@ -1075,13 +1085,20 @@ fn stop_a_non_existing_canister() {
 }
 
 #[test]
-fn start_a_canister_with_incorrect_controller() {
+fn start_a_canister_with_incorrect_controller_fails() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
     // Switch the user so the start request comes from a non-controller.
-    test.set_user_id(user_test_id(42));
+    let test_user = user_test_id(42);
+    test.set_user_id(test_user);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(test_user.get_ref())
+    );
 
     let err = test
         .subnet_message(
@@ -1309,7 +1326,7 @@ fn canister_only_accept_calls_if_running() {
 
 #[test]
 fn start_a_stopped_canister_succeeds() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, mut state, _, subnet_admins| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
@@ -1323,7 +1340,9 @@ fn start_a_stopped_canister_succeeds() {
 
         // Start the canister.
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        canister_manager.start_canister(sender, canister).unwrap();
+        canister_manager
+            .start_canister(sender, canister, subnet_admins)
+            .unwrap();
 
         // Canister should now be running.
         assert_eq!(
@@ -1335,7 +1354,7 @@ fn start_a_stopped_canister_succeeds() {
 
 #[test]
 fn start_a_stopping_canister_with_no_stop_contexts() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, mut state, _, subnet_admins| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopping_canister(canister_id);
@@ -1344,7 +1363,7 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         assert_eq!(
-            canister_manager.start_canister(sender, canister),
+            canister_manager.start_canister(sender, canister, subnet_admins),
             Ok(Vec::new())
         );
     });
@@ -1352,7 +1371,7 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
 
 #[test]
 fn start_a_stopping_canister_with_stop_contexts() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, mut state, _, subnet_admins| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let mut canister = get_stopping_canister(canister_id);
@@ -1367,20 +1386,27 @@ fn start_a_stopping_canister_with_stop_contexts() {
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         assert_eq!(
-            canister_manager.start_canister(sender, canister),
+            canister_manager.start_canister(sender, canister, subnet_admins),
             Ok(vec![stop_context])
         );
     });
 }
 
 #[test]
-fn get_canister_status_with_incorrect_controller() {
+fn get_canister_status_with_incorrect_controller_fails() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
     // Switch the user so the canister_status request comes from a non-controller.
-    test.set_user_id(user_test_id(42));
+    let test_user = user_test_id(42);
+    test.set_user_id(test_user);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(test_user.get_ref())
+    );
 
     let err = test.canister_status(canister_id).unwrap_err();
 
@@ -1563,7 +1589,7 @@ fn canister_status_module_hash() {
 
 #[test]
 fn get_canister_status_of_stopped_canister() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, mut state, _, subnet_admins| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
@@ -1577,6 +1603,7 @@ fn get_canister_status_of_stopped_canister() {
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
                 false,
+                subnet_admins.clone(),
             )
             .unwrap();
         assert_eq!(status_res.status(), CanisterStatusType::Stopped);
@@ -1590,6 +1617,7 @@ fn get_canister_status_of_stopped_canister() {
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
                 true,
+                subnet_admins,
             )
             .unwrap();
         assert!(status_res.ready_for_migration());
@@ -1598,7 +1626,7 @@ fn get_canister_status_of_stopped_canister() {
 
 #[test]
 fn get_canister_status_of_stopping_canister() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, mut state, _, subnet_admins| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopping_canister(canister_id);
@@ -1612,6 +1640,7 @@ fn get_canister_status_of_stopping_canister() {
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
                 false,
+                subnet_admins,
             )
             .unwrap()
             .status();
@@ -1814,7 +1843,14 @@ fn delete_canister_with_incorrect_controller_fails() {
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
     // Switch the user to attempt to delete the canister with a non-controller.
-    test.set_user_id(user_test_id(42));
+    let test_user = user_test_id(42);
+    test.set_user_id(test_user);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(test_user.get_ref())
+    );
 
     let err = test.delete_canister(canister_id).unwrap_err();
 
@@ -2102,6 +2138,15 @@ fn delete_canister_consumed_cycles_observed() {
     let initial_cycles = Cycles::new(5_000_000_000_000);
     let canister_id = test.create_canister(initial_cycles);
 
+    // Reserve some cycles as if the canister performed some
+    // large memory allocation.
+    // If the canister gets deleted all of the remaining cycles
+    // in its main as well as reserved balance would be lost.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .reserve_cycles(initial_cycles / 2u64)
+        .unwrap();
+
     // Stop and delete the canister.
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
@@ -2122,7 +2167,7 @@ fn delete_canister_consumed_cycles_observed() {
             .get_consumed_cycles_by_use_case()
             .get(&CyclesUseCase::DeletedCanisters)
             .unwrap(),
-        NominalCycles::from(initial_cycles)
+        NominalCycles::from(initial_cycles.get())
     );
 }
 
@@ -2216,7 +2261,7 @@ fn add_cycles_sender_in_whitelist() {
 
 #[test]
 fn add_cycles_sender_not_in_whitelist() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, mut state, _, _| {
         let canister_id = canister_test_id(0);
         let canister = get_running_canister(canister_id);
         let sender = canister_test_id(1).get();
@@ -2395,7 +2440,6 @@ fn failed_upgrade_hooks_consume_instructions() {
         let canister_id = canister_manager
             .create_canister(
                 canister_change_origin_from_principal(&sender),
-                subnet_id,
                 *INITIAL_CYCLES,
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
@@ -2538,7 +2582,6 @@ fn failed_install_hooks_consume_instructions() {
         let canister_id = canister_manager
             .create_canister(
                 canister_change_origin_from_principal(&sender),
-                subnet_id,
                 *INITIAL_CYCLES,
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
@@ -2624,7 +2667,6 @@ fn install_code_respects_instruction_limit() {
     let canister_id = canister_manager
         .create_canister(
             canister_change_origin_from_principal(&sender),
-            subnet_id,
             *INITIAL_CYCLES,
             CanisterSettings::default(),
             MAX_NUMBER_OF_CANISTERS,
@@ -3037,6 +3079,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             &mut state,
             &mut round_limits,
             &no_op_counter,
+            None,
         )
         .unwrap();
 
@@ -3369,6 +3412,60 @@ fn fails_when_keeping_main_memory_without_enhanced_orthogonal_persistence() {
             "Invalid upgrade option: The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence."
         );
     }
+}
+
+#[test]
+fn instructions_for_compilation_of_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let classical_persistence = r#"
+    (module
+        (memory 1)
+    )
+    "#;
+    let classical_persistence_wasm = wat::parse_str(classical_persistence).unwrap();
+
+    let orthogonal_persistence = r#"
+    (module
+        (memory 1)
+        (@custom "icp:private enhanced-orthogonal-persistence" "")
+    )
+    "#;
+    let orthogonal_persistence_wasm = wat::parse_str(orthogonal_persistence).unwrap();
+
+    // Make sure both classical and orthogonal persistence WASM are in compilation cache.
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, classical_persistence_wasm.clone())
+        .unwrap();
+    test.reinstall_canister(canister_id, orthogonal_persistence_wasm.clone())
+        .unwrap();
+
+    let original_execution_cost = test.canister_execution_cost(canister_id);
+    test.upgrade_canister_v2(
+        canister_id,
+        orthogonal_persistence_wasm.clone(),
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap();
+    let successful_execution_cost =
+        test.canister_execution_cost(canister_id) - original_execution_cost;
+
+    let original_execution_cost = test.canister_execution_cost(canister_id);
+    test.upgrade_canister_v2(
+        canister_id,
+        classical_persistence_wasm,
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap_err();
+    let failed_execution_cost = test.canister_execution_cost(canister_id) - original_execution_cost;
+
+    assert_eq!(successful_execution_cost, failed_execution_cost);
 }
 
 #[test]
@@ -4877,7 +4974,14 @@ fn uninstall_code_with_wrong_controller_fails() {
     let canister_id = test.create_canister(CYCLES);
 
     // Switch user id so the request comes from a non-controller.
-    test.set_user_id(user_test_id(42));
+    let test_user = user_test_id(42);
+    test.set_user_id(test_user);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(test_user.get_ref())
+    );
 
     let err = test.uninstall_code(canister_id).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
@@ -5299,11 +5403,10 @@ fn upload_chunk_charges_canister_cycles() {
         chunk: vec![42; 10],
     }
     .encode();
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(canister_id),
     );
     let _hash = test
         .subnet_message("upload_chunk", payload.clone())
@@ -5344,11 +5447,10 @@ fn upload_chunk_charges_if_failing() {
     let canister_id = test.create_canister(CYCLES);
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(canister_id),
     );
     // Verify we are in the expected restricted state (1022 KiB available).
     assert_eq!(
@@ -7145,6 +7247,101 @@ fn create_canister_free() {
 }
 
 #[test]
+fn create_canister_as_subnet_admin_succeeds_on_free_cost_schedule() {
+    let subnet_admin = user_test_id(1);
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    test.set_user_id(subnet_admin);
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+    let result = test.subnet_message(Method::CreateCanister, create_canister_args.encode());
+    let reply = get_reply(result);
+    let canister_id = Decode!(reply.as_slice(), CanisterIdRecord)
+        .unwrap()
+        .get_canister_id();
+
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles()
+            .get(),
+        0
+    );
+    assert_eq!(canister.system_state.balance(), Cycles::new(0));
+}
+
+#[test]
+fn create_canister_as_subnet_admin_fails_on_normal_cost_schedule() {
+    let subnet_admin = user_test_id(1);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    test.set_user_id(subnet_admin);
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+    let err = test
+        .subnet_message(Method::CreateCanister, create_canister_args.encode())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains("create_canister cannot be called by a user")
+    );
+}
+
+#[test]
+fn create_canister_as_non_subnet_admin_fails() {
+    let subnet_admin = user_test_id(1);
+    let test_user = user_test_id(2);
+    for subnet_admins in [vec![subnet_admin.get()], vec![]] {
+        for (cost_schedule, expected_err_code, expected_err_desc) in [
+            (
+                CanisterCyclesCostSchedule::Normal,
+                ErrorCode::CanisterContractViolation,
+                "create_canister cannot be called by a user",
+            ),
+            (
+                CanisterCyclesCostSchedule::Free,
+                ErrorCode::InvalidSubnetAdmin,
+                "Only the subnet admins can perform certain actions",
+            ),
+        ] {
+            let mut test = ExecutionTestBuilder::new()
+                .with_cost_schedule(cost_schedule)
+                .with_subnet_admins(subnet_admins.clone())
+                .build();
+
+            test.set_user_id(test_user);
+
+            let create_canister_args = CreateCanisterArgs {
+                settings: None,
+                sender_canister_version: None,
+            };
+            let err = test
+                .subnet_message(Method::CreateCanister, create_canister_args.encode())
+                .unwrap_err();
+            assert_eq!(err.code(), expected_err_code);
+            assert!(err.description().contains(expected_err_desc));
+        }
+    }
+}
+
+#[test]
 fn create_canister_with_cycles_sender_in_whitelist() {
     let subnet_id = subnet_test_id(1);
     let subnet_type = SubnetType::Application;
@@ -8003,4 +8200,208 @@ fn set_heap_and_stable_memory_during_reinstall() {
     .unwrap();
 
     check_data(&mut test, canister_id);
+}
+
+fn assert_subnet_admin_actions_can_be_performed(mut test: ExecutionTest, canister_id: CanisterId) {
+    // Canister can be stopped...
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+
+    // ...started again...
+    test.start_canister(canister_id).unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
+
+    // ...status can be checked...
+    let status = test.canister_status(canister_id).unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Running);
+
+    // ...code can be uninstalled...
+    test.uninstall_code(canister_id).unwrap();
+    assert_eq!(test.canister_state(canister_id).execution_state, None);
+
+    // ...and finally can be deleted.
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    test.delete_canister(canister_id).unwrap();
+    assert_eq!(test.state().canister_state(&canister_id), None);
+}
+
+#[test]
+fn non_subnet_admin_cannot_perform_subnet_admin_actions_on_canister_but_controllers_can() {
+    let controller = user_test_id(1);
+    let subnet_admin = user_test_id(2);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    // Create canister with specific controller who's not a subnet admin.
+    test.set_user_id(controller);
+    let canister_id = test.universal_canister().unwrap();
+    assert!(
+        !test
+            .state()
+            .get_own_subnet_admins()
+            .unwrap()
+            .contains(controller.get_ref())
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
+
+    assert_subnet_admin_actions_can_be_performed(test, canister_id);
+}
+
+#[test]
+fn non_controller_and_non_subnet_admin_cannot_perform_subnet_admin_actions_on_canister() {
+    let controller = user_test_id(1);
+    let subnet_admin = user_test_id(2);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    // Create canister with specific controller.
+    test.set_user_id(controller);
+    let canister_id = test.universal_canister().unwrap();
+
+    // Switch user id so the request comes from a user who's neither
+    // a controller nor a subnet admin.
+    let test_user = user_test_id(42);
+    test.set_user_id(test_user);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(test_user.get_ref())
+    );
+    assert!(
+        !test
+            .state()
+            .get_own_subnet_admins()
+            .unwrap()
+            .contains(test_user.get_ref())
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
+
+    // Canister cannot be stopped...
+    let err = test
+        .subnet_message(
+            Method::StopCanister,
+            CanisterIdRecord::from(canister_id).encode(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+
+    // ...or cannot be started...
+    let err = test.start_canister(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+
+    // ...or status cannot be checked...
+    let err = test.canister_status(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+
+    // ...or code be uninstalled...
+    let err = test.uninstall_code(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+
+    // ...and finally cannot be deleted.
+    let err = test.delete_canister(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+}
+
+#[test]
+fn subnet_admin_can_perform_actions_on_canister() {
+    let subnet_admin = user_test_id(42);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    // Switch user id so the request comes from the subnet admin
+    // who should not be a controller.
+    test.set_user_id(subnet_admin);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(subnet_admin.get_ref())
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
+
+    assert_subnet_admin_actions_can_be_performed(test, canister_id);
+}
+
+#[test]
+fn subnet_admin_cannot_install_code() {
+    let subnet_admin = user_test_id(42);
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    // Switch user id so the request comes from the subnet admin
+    // who should not be a controller.
+    test.set_user_id(subnet_admin);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(subnet_admin.get_ref())
+    );
+
+    let err = test
+        .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
 }
