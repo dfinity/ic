@@ -21,7 +21,7 @@ from the node directly, fetching the cache statistics. Finally, check that the c
 end::catalog[] */
 
 use anyhow::Result;
-use candid::{CandidType, Principal};
+use candid::Principal;
 use core::ops::RangeInclusive;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};

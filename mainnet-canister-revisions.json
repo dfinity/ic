@@ -80,7 +80,7 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "640fecd6d70a5c22dda0615b2c73390abfb4648014e39d8557fa92bb37752425",
+    "sha256": "448f2c0370124da72e22b3b4462edd50a5a7be52f564311721fbc2798c70f643",
     "tag": "release-2026-03-13"
   },
   "ledger": {

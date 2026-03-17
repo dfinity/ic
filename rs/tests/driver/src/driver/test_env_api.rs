@@ -1085,14 +1085,14 @@ impl IcNodeSnapshot {
         .expect("Could not install canister");
     }
 
-    pub fn create_and_install_canister_with_arg_and_cycles(
+    pub fn create_and_install_canister_with_effetive_id_with_arg_and_cycles(
         &self,
         name: &str,
         arg: Option<Vec<u8>>,
         cycles_amount: Option<u128>,
+        effective_canister_id: Principal,
     ) -> Principal {
         let canister_bytes = load_wasm(name);
-        let effective_canister_id = self.effective_canister_id();
 
         self.with_default_agent(move |agent| async move {
             // Create a canister.
@@ -1117,6 +1117,21 @@ impl IcNodeSnapshot {
             Ok::<_, String>(canister_id)
         })
         .expect("Could not install canister")
+    }
+
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
+        let effective_canister_id = self.effective_canister_id();
+        self.create_and_install_canister_with_effetive_id_with_arg_and_cycles(
+            name,
+            arg,
+            cycles_amount,
+            effective_canister_id.0,
+        )
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {

@@ -18,6 +18,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::nns::set_authorized_subnetwork_list;
 use ic_system_test_driver::sns_client::add_subnet_to_sns_deploy_whitelist;
+use ic_system_test_driver::util::delegations::build_internet_identity_backend_install_arg;
 use ic_system_test_driver::util::{block_on, create_canister, install_canister, runtime_from_url};
 use icp_ledger::AccountIdentifier;
 use serde::{Deserialize, Serialize};
@@ -118,39 +119,51 @@ struct InternetIdentityFrontendInitArgs {
     dev_csp: Option<bool>,
 }
 
-fn install_ii_canisters(env: &TestEnv, node: &IcNodeSnapshot) -> (Principal, Principal) {
+fn install_ii_canisters(
+    env: &TestEnv,
+    node: &IcNodeSnapshot,
+    ic_gateway_domain: String,
+) -> (Principal, Principal) {
     let backend_canister_id = node.create_and_install_canister_with_arg(
         &env::var("II_BACKEND_WASM_PATH").expect("II_BACKEND_WASM_PATH not set"),
-        None,
+        Some(build_internet_identity_backend_install_arg()),
     );
 
-    let network_url = node.get_public_url().host_str().unwrap().to_string();
+    // Create the II frontend canister first to get its canister ID
+    let agent = node.build_default_agent();
+    let frontend_canister_id =
+        block_on(async { create_canister(&agent, node.effective_canister_id()).await });
 
-    let frontend_canister_id = node.create_and_install_canister_with_arg(
-        &env::var("II_FRONTEND_WASM_PATH").expect("II_FRONTEND_WASM_PATH not set"),
-        Some(
-            candid::encode_one(InternetIdentityFrontendInitArgs {
-                backend_canister_id,
-                backend_origin: format!("http://{}.{}", backend_canister_id.to_text(), network_url),
-                related_origins: Some(vec![format!(
-                    "http://{}.{}",
-                    // The canister ID of the II frontend canister that will be deployed
-                    // can be obtained deterministically in most testing scenarios.
-                    node.effective_canister_id().0.to_text(),
-                    network_url
-                )]),
-                fetch_root_key: Some(true),
-                dev_csp: Some(true),
-            })
-            .unwrap(),
-        ),
-    );
-    info!(
-        env.logger(),
-        "II backend canister with id={backend_canister_id} and frontend with \
-         id={frontend_canister_id} installed on subnet with id={}",
-        node.subnet_id().unwrap()
-    );
+    let frontend_wasm =
+        load_wasm(env::var("II_FRONTEND_WASM_PATH").expect("II_FRONTEND_WASM_PATH not set"));
+    let frontend_arg = candid::encode_one(InternetIdentityFrontendInitArgs {
+        backend_canister_id,
+        backend_origin: format!("https://{backend_canister_id}.{ic_gateway_domain}"),
+        related_origins: Some(vec![format!(
+            "https://{frontend_canister_id}.{ic_gateway_domain}",
+        )]),
+        fetch_root_key: Some(true),
+        dev_csp: Some(true),
+    })
+    .unwrap();
+
+    let logger = env.logger();
+    let subnet_id = node.subnet_id().unwrap();
+    block_on(async move {
+        install_canister(
+            &agent,
+            frontend_canister_id,
+            frontend_wasm.as_slice(),
+            frontend_arg,
+        )
+        .await;
+        info!(
+            logger,
+            "II backend canister with id={backend_canister_id} and frontend with \
+             id={frontend_canister_id} installed on subnet with id={}",
+            subnet_id
+        );
+    });
     (backend_canister_id, frontend_canister_id)
 }
 
@@ -168,7 +181,7 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     // deploy the II canister
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let (_, ii_canister_id) = install_ii_canisters(env, &nns_node);
+    let (_, ii_canister_id) = install_ii_canisters(env, &nns_node, ic_gateway_domain);
 
     // create the NNS dapp canister so that its canister ID is allocated
     // and the Subnet Rental Canister gets its mainnet canister ID in the next step
