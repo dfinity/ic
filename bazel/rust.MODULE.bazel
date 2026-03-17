@@ -500,8 +500,8 @@ crate.spec(
     version = "^0.3.31",
 )
 crate.spec(
-    package = "get_if_addrs",
-    version = "^0.5.3",
+    package = "getifs",
+    version = "^0.4.0",
 )
 crate.spec(
     features = [
