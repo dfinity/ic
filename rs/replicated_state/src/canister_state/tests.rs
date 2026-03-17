@@ -906,10 +906,10 @@ fn update_balance_and_consumed_cycles_correctly() {
 #[test]
 fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-    let cycles_to_consume = Cycles::from(1000u128);
+    let cycles_to_consume = Cycles::from(1000_u128);
     system_state.remove_cycles(cycles_to_consume, CyclesUseCase::Memory);
 
-    let cycles_to_add = Cycles::from(100u128);
+    let cycles_to_add = Cycles::from(100_u128);
     system_state.add_cycles(cycles_to_add, CyclesUseCase::Memory);
     assert_eq!(
         system_state.balance(),
@@ -1227,7 +1227,7 @@ fn drops_aborted_canister_install_after_split() {
         .enqueue(ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
             call_id: InstallCodeCallId::new(0),
-            prepaid_execution_cycles: Cycles::from(0u128),
+            prepaid_execution_cycles: Cycles::from(0_u128),
         });
 
     // Expected canister state is identical, minus the `AbortedInstallCode` task.
@@ -1247,7 +1247,7 @@ fn reverts_stopping_status_after_split() {
         CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
         false,
-        Cycles::from(0u128),
+        Cycles::from(0_u128),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     ));

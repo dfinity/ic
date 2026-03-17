@@ -182,7 +182,7 @@ mod tests {
             let mut wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::from(2));
             wasm_memory
                 .page_map
-                .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::from(1), &[0_u8; PAGE_SIZE])]);
             let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),

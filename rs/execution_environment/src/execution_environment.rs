@@ -3246,7 +3246,7 @@ impl ExecutionEnvironment {
             Ok(settings) => match settings.get_set_of_node_ids() {
                 Err(err) => Err(err),
                 Ok(nodes_in_target_subnet) => {
-                    let mut target_id = [0u8; 32];
+                    let mut target_id = [0_u8; 32];
                     rng.fill_bytes(&mut target_id);
 
                     info!(
@@ -3493,7 +3493,7 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let mut pseudo_random_id = [0u8; 32];
+        let mut pseudo_random_id = [0_u8; 32];
         rng.fill_bytes(&mut pseudo_random_id);
 
         state.metadata.subnet_call_context_manager.push_context(
@@ -3523,7 +3523,7 @@ impl ExecutionEnvironment {
             &args.key_id,
         )?;
 
-        let mut target_id = [0u8; 32];
+        let mut target_id = [0_u8; 32];
         rng.fill_bytes(&mut target_id);
 
         let nodes = args.get_set_of_nodes()?;

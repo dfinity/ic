@@ -46,7 +46,7 @@ fn setup_ucan_and_try_mint128(node: IcNodeSnapshot) -> (AgentError, u128, u128, 
             .update(&canister_id, "update")
             .with_arg(
                 wasm()
-                    .mint_cycles128(Cycles::from(10_000_000_000u128))
+                    .mint_cycles128(Cycles::from(10_000_000_000_u128))
                     .reply_data_append()
                     .reply()
                     .build(),
@@ -87,7 +87,7 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
         let canister_a = UniversalCanister::new_with_cycles_with_retries(
             &agent,
             nns_node.effective_canister_id(),
-            CYCLES_LIMIT_PER_CANISTER * 3u64,
+            CYCLES_LIMIT_PER_CANISTER * 3_u64,
             &logger,
         )
         .await;

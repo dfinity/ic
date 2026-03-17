@@ -360,13 +360,13 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     state.put_canister_state(new_canister_state_with_execution(
         CANISTER_2,
         CANISTER_0.get(),
-        INITIAL_CYCLES * 2usize,
+        INITIAL_CYCLES * 2_usize,
         NumSeconds::from(200_000),
     ));
     state.put_canister_state(new_canister_state_with_execution(
         CANISTER_3,
         CANISTER_0.get(),
-        INITIAL_CYCLES * 3usize,
+        INITIAL_CYCLES * 3_usize,
         NumSeconds::from(300_000),
     ));
     state.metadata.ingress_history.insert(
@@ -381,7 +381,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
             )),
         },
         UNIX_EPOCH,
-        (1u64 << 30).into(),
+        (1_u64 << 30).into(),
         |_| {},
     );
     state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();

@@ -234,7 +234,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     let state_100_custom_sections = {
-        let mut state = get_initial_state(/*num_canisters=*/ 100u64, 0);
+        let mut state = get_initial_state(/*num_canisters=*/ 100_u64, 0);
         state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         assert_eq!(state.canister_states().len(), 100);
         for canister in state.canisters_iter_mut() {

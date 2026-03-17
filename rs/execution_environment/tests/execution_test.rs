@@ -668,7 +668,7 @@ fn can_query_cycle_balance_and_top_up_canisters() {
             .bytes()[..]
     );
 
-    const AMOUNT: u128 = 1_000_000u128;
+    const AMOUNT: u128 = 1_000_000_u128;
 
     assert_eq!(AMOUNT, env.add_cycles(canister_id, AMOUNT));
 
@@ -705,7 +705,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
             INITIAL_CYCLES_BALANCE,
             Some(
                 CanisterSettingsArgsBuilder::new()
-                    .with_memory_allocation(20u64 * MIB + 1)
+                    .with_memory_allocation(20_u64 * MIB + 1)
                     .build(),
             ),
         )
@@ -719,7 +719,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
         INITIAL_CYCLES_BALANCE,
         Some(
             CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(20u64 * MIB)
+                .with_memory_allocation(20_u64 * MIB)
                 .build(),
         ),
     )
@@ -1111,7 +1111,7 @@ fn subnet_memory_reservation_works() {
     );
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -1134,7 +1134,7 @@ fn subnet_memory_reservation_works() {
                         .message_payload()
                         .append_and_reply(),
                 ),
-            Cycles::from(2000u128),
+            Cycles::from(2000_u128),
         )
         .build();
 
@@ -1168,7 +1168,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
     );
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -1192,7 +1192,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
                         .message_payload()
                         .append_and_reply(),
                 ),
-            Cycles::from(2000u128),
+            Cycles::from(2000_u128),
         )
         .build();
 

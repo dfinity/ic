@@ -164,7 +164,7 @@ fn test_decode_large_compressed_module() {
 fn test_decode_large_compressed_module_with_tweaked_size() {
     let mut contents = compressed_test_contents("zeros.gz");
     let n = contents.len();
-    contents[n - 4..n].copy_from_slice(&100u32.to_le_bytes());
+    contents[n - 4..n].copy_from_slice(&100_u32.to_le_bytes());
     decode_wasm(default_max_size(), Arc::new(contents)).unwrap();
 }
 

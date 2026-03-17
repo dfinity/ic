@@ -2931,7 +2931,7 @@ impl StateMachine {
     ) -> Height {
         let batch_number = self.message_routing.expected_batch_height();
 
-        let mut seed = [0u8; 32];
+        let mut seed = [0_u8; 32];
         // use the batch number to seed randomness
         seed[..8].copy_from_slice(batch_number.get().to_le_bytes().as_slice());
 

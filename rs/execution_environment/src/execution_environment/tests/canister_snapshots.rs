@@ -827,7 +827,7 @@ fn take_snapshot_with_maximal_chunk_store() {
     // The chunk store may have no more than 100 entries.
     // If this test fails, the wasm chunk store size or the
     // max number of stored chunks may have changed.
-    for i in 0..100u32 {
+    for i in 0..100_u32 {
         let chunk = i.to_be_bytes().to_vec();
         let upload_args = UploadChunkArgs {
             canister_id: canister_id.into(),
@@ -1165,7 +1165,7 @@ fn list_canister_snapshot_succeeds() {
 fn load_canister_snapshot_decode_round_trip() {
     let canister_id = canister_test_id(4);
     let snapshot_id = SnapshotId::from((canister_id, 6));
-    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5u64));
+    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5_u64));
     let encoded_args = args.encode();
     assert_eq!(
         args,
