@@ -14,12 +14,13 @@ use ic_test_utilities_types::messages::ResponseBuilder;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::NO_DEADLINE;
 use ic_types::{
-    CanisterId, Cycles, Time,
+    CanisterId, Time,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, MessageId},
 };
 use ic_types::{ComputeAllocation, MemoryAllocation};
 use ic_types::{NumInstructions, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_lt};
 
