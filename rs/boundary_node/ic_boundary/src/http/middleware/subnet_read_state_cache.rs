@@ -135,6 +135,9 @@ mod tests {
 
     use crate::{http::RequestType, routes::RequestContext};
 
+    const DEFAULT_TTL: Duration = Duration::from_secs(60);
+    const DEFAULT_MAX_ENTRIES: u64 = 100;
+
     fn make_request(subnet_id: SubnetId, paths: ReadStatePaths) -> Request<Body> {
         let ctx = Arc::new(RequestContext {
             request_type: RequestType::ReadStateSubnetV2,
@@ -156,22 +159,25 @@ mod tests {
         SubnetId::from(PrincipalId::new_subnet_test_id(n))
     }
 
+    fn setup_app(
+        ttl: Duration,
+        max_entries: u64,
+    ) -> (
+        Router,
+        Arc<SubnetReadStateCacheState>,
+    ) {
+        let registry = Registry::new_custom(None, None).unwrap();
+        let state = Arc::new(SubnetReadStateCacheState::new(ttl, max_entries, &registry));
+        let app = Router::new().route("/", post(dummy_handler)).layer(
+            middleware::from_fn_with_state(state.clone(), subnet_read_state_cache_middleware),
+        );
+
+        (app, state)
+    }
+
     #[tokio::test]
     async fn test_cache_hit_and_miss() {
-        let registry = Registry::new_custom(None, None).unwrap();
-        let state = Arc::new(SubnetReadStateCacheState::new(
-            Duration::from_secs(60),
-            100,
-            &registry,
-        ));
-
-        let mut app =
-            Router::new()
-                .route("/", post(dummy_handler))
-                .layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    subnet_read_state_cache_middleware,
-                ));
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
 
         let subnet = test_subnet_id(1);
         let paths = vec![vec![b"time".to_vec()]];
@@ -203,20 +209,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_different_paths_are_separate_entries() {
-        let registry = Registry::new_custom(None, None).unwrap();
-        let state = Arc::new(SubnetReadStateCacheState::new(
-            Duration::from_secs(60),
-            100,
-            &registry,
-        ));
-
-        let mut app =
-            Router::new()
-                .route("/", post(dummy_handler))
-                .layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    subnet_read_state_cache_middleware,
-                ));
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
 
         let subnet = test_subnet_id(1);
 
@@ -234,20 +227,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_different_subnets_are_separate_entries() {
-        let registry = Registry::new_custom(None, None).unwrap();
-        let state = Arc::new(SubnetReadStateCacheState::new(
-            Duration::from_secs(60),
-            100,
-            &registry,
-        ));
-
-        let mut app =
-            Router::new()
-                .route("/", post(dummy_handler))
-                .layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    subnet_read_state_cache_middleware,
-                ));
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
 
         let paths = vec![vec![b"time".to_vec()]];
 
@@ -265,20 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_path_order_does_not_matter() {
-        let registry = Registry::new_custom(None, None).unwrap();
-        let state = Arc::new(SubnetReadStateCacheState::new(
-            Duration::from_secs(60),
-            100,
-            &registry,
-        ));
-
-        let mut app =
-            Router::new()
-                .route("/", post(dummy_handler))
-                .layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    subnet_read_state_cache_middleware,
-                ));
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
 
         let subnet = test_subnet_id(1);
 
@@ -295,20 +262,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_paths_bypasses_cache() {
-        let registry = Registry::new_custom(None, None).unwrap();
-        let state = Arc::new(SubnetReadStateCacheState::new(
-            Duration::from_secs(60),
-            100,
-            &registry,
-        ));
-
-        let mut app =
-            Router::new()
-                .route("/", post(dummy_handler))
-                .layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    subnet_read_state_cache_middleware,
-                ));
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
 
         // Request with no paths in context
         let ctx = Arc::new(RequestContext {
@@ -329,20 +283,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ttl_expiration() {
-        let registry = Registry::new_custom(None, None).unwrap();
-        let state = Arc::new(SubnetReadStateCacheState::new(
-            Duration::from_millis(50),
-            100,
-            &registry,
-        ));
-
-        let mut app =
-            Router::new()
-                .route("/", post(dummy_handler))
-                .layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    subnet_read_state_cache_middleware,
-                ));
+        let (mut app, state) = setup_app(Duration::from_millis(50), DEFAULT_MAX_ENTRIES);
 
         let subnet = test_subnet_id(1);
         let paths = vec![vec![b"time".to_vec()]];
