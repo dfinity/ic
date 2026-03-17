@@ -149,10 +149,10 @@ bazel_bes() {
 # Add the original arguments back
 bazel_args+=( "$@" )
 
-log bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+log bazel "$bazel_command" "${bazel_args[@]}"
 
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
-    bazel_bes "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+    bazel_bes "$bazel_command" "${bazel_args[@]}"
 else
-    bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+    bazel "$bazel_command" "${bazel_args[@]}"
 fi
