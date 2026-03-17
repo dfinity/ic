@@ -73,7 +73,7 @@ use ic_types::{
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterCall, CanisterTask, CertificateDelegationMetadata,
+        CallbackId, CanisterCall, CanisterMessage, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
         QuerySource, RequestOrResponse, Response, SubnetMessage, extract_effective_canister_id,
     },
@@ -590,6 +590,18 @@ impl ExecutionTest {
             execution_memory,
             self.subnet_available_memory
                 .get_guaranteed_response_message_memory(),
+            self.subnet_available_memory
+                .get_wasm_custom_sections_memory(),
+        );
+    }
+
+    fn set_available_guaranteed_response_message_memory(
+        &mut self,
+        guaranteed_response_message_memory: i64,
+    ) {
+        self.subnet_available_memory = SubnetAvailableMemory::new_for_testing(
+            self.subnet_available_memory.get_execution_memory(),
+            guaranteed_response_message_memory,
             self.subnet_available_memory
                 .get_wasm_custom_sections_memory(),
         );
@@ -1353,6 +1365,30 @@ impl ExecutionTest {
         let canister = state.take_canister_state(&canister_id).unwrap();
         let mut canister = Arc::unwrap_or_clone(canister);
         let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let mut subnet_available_guaranteed_response_memory = self
+            .subnet_available_memory
+            .get_guaranteed_response_message_memory();
+        let response_arc = Arc::new(response);
+        let res = canister
+            .push_input(
+                RequestOrResponse::Response(response_arc.clone()),
+                &mut subnet_available_guaranteed_response_memory,
+                state.metadata.own_subnet_type,
+                InputQueueType::LocalSubnet,
+            )
+            .unwrap();
+        assert!(res, "Response should be successfully inducted");
+        let input = canister.pop_input().unwrap();
+        self.set_available_guaranteed_response_message_memory(
+            subnet_available_guaranteed_response_memory,
+        );
+        let callback = match input {
+            CanisterMessage::Response { response, callback } => {
+                assert_eq!(response, response_arc);
+                callback
+            }
+            _ => panic!("Unexpected input popped from canister queues: {:?}", input),
+        };
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1360,17 +1396,9 @@ impl ExecutionTest {
             compute_allocation_used,
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
-        let callback = canister
-            .system_state
-            .unregister_callback(response.originator_reply_callback)
-            .unwrap()
-            .unwrap();
-        canister
-            .system_state
-            .release_reserved_response_slot_for_testing(&response);
         let result = self.exec_env.execute_canister_response(
             canister,
-            Arc::new(response),
+            response_arc,
             callback,
             self.instruction_limits.clone(),
             UNIX_EPOCH,
