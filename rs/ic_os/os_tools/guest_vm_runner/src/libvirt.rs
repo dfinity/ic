@@ -149,7 +149,7 @@ impl LibvirtConnectionWithReconnect {
         let result = self.call_with_conn(&f);
         match result {
             Err(ref e) if Self::is_connection_error(e) => {
-                info!("Libvirt connection is invalid, recreating and retrying");
+                warn!("Libvirt connection is invalid, recreating and retrying");
                 // Discard the cached connection so the next call will invoke the factory.
                 self.connection.store(None);
                 self.call_with_conn(f)

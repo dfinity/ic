@@ -46,7 +46,7 @@ pub(crate) fn reserve_hugepages() -> anyhow::Result<()> {
         .context("Failed to parse nr_hugepages after allocation")?;
 
     if allocated < hugepages_needed {
-        warn!(
+        info!(
             "Allocation failed ({allocated} pages allocated, {hugepages_needed} pages requested)"
         );
         info!("Resetting hugepages to 0");

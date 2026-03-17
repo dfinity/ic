@@ -263,7 +263,7 @@ impl VirtualMachine {
             });
 
             if domain_active {
-                info!("Existing domain '{vm_domain_name}' is active, attempting to destroy it");
+                warn!("Existing domain '{vm_domain_name}' is active, attempting to destroy it");
                 if let Err(err) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
                     warn!("destroy_flags failed: {err}");
                 }
@@ -351,10 +351,10 @@ impl VirtualMachine {
                     break;
                 }
                 Ok((VIR_DOMAIN_SHUTDOWN, reason)) => {
-                    info!("VM shutting down, reason: {reason}");
+                    warn!("VM shutting down, reason: {reason}");
                 }
                 Ok((state, reason)) => {
-                    info!("VM is in state {state}, reason: {reason}");
+                    warn!("VM is in state {state}, reason: {reason}");
                 }
                 Err(e) => {
                     warn!("Failed to get domain state: {e}");

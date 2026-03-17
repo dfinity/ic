@@ -73,7 +73,7 @@ pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConf
         match get_best_interface_name() {
             Ok(v) => break v,
             Err(e) => {
-                warn!("unable to choose interface: {e:#}");
+                info!("unable to choose interface: {e:#}");
                 retries -= 1;
                 if retries == 0 {
                     bail!("unable to choose interface: retries exhausted");

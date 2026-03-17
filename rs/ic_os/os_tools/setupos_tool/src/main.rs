@@ -73,7 +73,7 @@ pub fn main() -> Result<()> {
             let setupos_config: SetupOSConfig =
                 deserialize_config(&opts.setupos_config_object_path)?;
 
-            debug!(
+            warn!(
                 "Network settings config: {:?}",
                 &setupos_config.network_settings
             );
@@ -83,7 +83,7 @@ pub fn main() -> Result<()> {
                 setupos_config.icos_settings.deployment_environment,
                 NodeType::SetupOS,
             );
-            debug!("Using generated mac {generated_mac}");
+            warn!("Using generated mac {generated_mac}");
 
             generate_network_config(
                 &setupos_config.network_settings,
@@ -95,7 +95,7 @@ pub fn main() -> Result<()> {
             let setupos_config: SetupOSConfig =
                 deserialize_config(&opts.setupos_config_object_path)?;
 
-            debug!(
+            warn!(
                 "Network settings config: {:?}",
                 &setupos_config.network_settings
             );
@@ -105,7 +105,7 @@ pub fn main() -> Result<()> {
                 setupos_config.icos_settings.deployment_environment,
                 node_type,
             );
-            debug!("Using generated mac address {generated_mac}");
+            warn!("Using generated mac address {generated_mac}");
 
             let Ipv6Config::Deterministic(ipv6_config) =
                 &setupos_config.network_settings.ipv6_config
@@ -152,7 +152,7 @@ fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<
         return Err(anyhow!("No NNS URLs configured"));
     }
 
-    debug!("Using NNS URLs: {:?}", nns_urls);
+    info!("Using NNS URLs: {:?}", nns_urls);
 
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| anyhow!("Failed to create tokio runtime: {}", e))?;

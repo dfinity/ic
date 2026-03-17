@@ -74,7 +74,7 @@ fn update_metrics(
             Some(FsTrimMetrics::default())
         })
         .unwrap_or_else(|| {
-            debug!("no existing metrics found");
+            warn!("no existing metrics found");
             FsTrimMetrics::default()
         });
 

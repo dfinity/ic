@@ -3,7 +3,7 @@ use prometheus::{GaugeVec, Opts, Registry};
 use regex::Regex;
 use std::fmt;
 use std::fs;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum HardwareGen {
@@ -60,7 +60,7 @@ fn get_cpu_model_string() -> Result<String> {
 
 fn get_node_gen() -> Result<HardwareGen> {
     let cpu_model_line = get_cpu_model_string()?;
-    debug!("Found CPU model: {cpu_model_line}");
+    info!("Found CPU model: {cpu_model_line}");
     parse_hardware_gen(&cpu_model_line)
 }
 
