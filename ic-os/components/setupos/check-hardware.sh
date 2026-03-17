@@ -136,11 +136,11 @@ function verify_model_and_capabilities_for_all_sockets() {
     local required_capabilities=("$@")
 
     verify_model_for_all_sockets "${cpu_json}" "${required_model}"
-    log_and_halt_installation_on_error "$?" "One or more CPU's model does NOT meet requirements"
+    log_and_halt_installation_on_error "$?" "One or more CPU's model does NOT meet system requirements"
 
     for capability_name in "${required_capabilities[@]}"; do
         verify_capability_for_all_sockets "${cpu_json}" "${capability_name}"
-        log_and_halt_installation_on_error "$?" "CPU capabilities does NOT meet requirements"
+        log_and_halt_installation_on_error "$?" "CPU capabilities do NOT meet system requirements"
     done
 }
 
