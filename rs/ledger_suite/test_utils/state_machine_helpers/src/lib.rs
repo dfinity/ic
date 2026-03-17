@@ -214,7 +214,7 @@ pub fn generate_transactions(
         });
     }
     // Mint
-    let mut minted = 0usize;
+    let mut minted = 0_usize;
     println!("minting");
     for to in &accounts {
         send_transfer(
@@ -401,7 +401,7 @@ pub fn get_all_ledger_and_archive_blocks<Tokens: TokensType>(
     for archived in res.archived_blocks {
         let mut remaining = archived.length.clone();
         let mut next_archived_txid = archived.start.clone();
-        while remaining > 0u32 {
+        while remaining > 0_u32 {
             let req = GetTransactionsRequest {
                 start: next_archived_txid.clone(),
                 length: remaining.clone(),

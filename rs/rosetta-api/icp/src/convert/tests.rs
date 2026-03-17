@@ -67,7 +67,7 @@ impl OperationBuilder {
 }
 
 fn test_account(n: u64) -> AccountIdentifier {
-    let mut hash = [0u8; 28];
+    let mut hash = [0_u8; 28];
     hash[0..8].copy_from_slice(&n.to_be_bytes());
     AccountIdentifier { hash }
 }
@@ -274,7 +274,7 @@ fn from_account_ai_to_ai_test() {
     // Only Account, with subaccount
     let account = Account {
         owner: PrincipalId::new_user_test_id(1).0,
-        subaccount: Some([2u8; 32]),
+        subaccount: Some([2_u8; 32]),
     };
     let result = from_account_or_account_identifier(Some(to_nns_account(account)), None)
         .unwrap()
