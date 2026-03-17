@@ -7,7 +7,7 @@ use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use prost::Message;
-use tracing::{warn, info};
+use tracing::{info, warn};
 use url::Url;
 
 use config_tool::{DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, deserialize_config};
