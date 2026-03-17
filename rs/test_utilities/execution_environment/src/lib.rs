@@ -1379,9 +1379,6 @@ impl ExecutionTest {
             .unwrap();
         assert!(res, "Response should be successfully inducted");
         let input = canister.pop_input().unwrap();
-        self.set_available_guaranteed_response_message_memory(
-            subnet_available_guaranteed_response_memory,
-        );
         let callback = match input {
             CanisterMessage::Response { response, callback } => {
                 assert_eq!(response, response_arc);
@@ -1389,6 +1386,9 @@ impl ExecutionTest {
             }
             _ => panic!("Unexpected input popped from canister queues: {:?}", input),
         };
+        self.set_available_guaranteed_response_message_memory(
+            subnet_available_guaranteed_response_memory,
+        );
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
