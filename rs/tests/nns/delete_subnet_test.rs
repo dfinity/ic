@@ -31,12 +31,8 @@ const DKG_INTERVAL_LENGTH: u64 = 29;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        // Currently, the orchestrator does not handle subnet deletion gracefully, so this test can experience
-        // node restarts. However, this
-        // - is ok because it can only affect deleted subnets,
-        // - which is unreachable code at the moment, because there is no governance code making the call,
-        // - and will be fixed in a follow-up PR.
-        // TODO: DSM-111
+        // Currently, the orchestrator/replica does not handle subnet deletion gracefully, so this test can experience
+        // node restarts. However, this is ok because it can only affect the nodes of a deleted subnet.
         .without_assert_no_replica_restarts()
         .with_setup(setup)
         .add_test(systest!(test))
