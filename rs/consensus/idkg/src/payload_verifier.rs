@@ -1025,6 +1025,7 @@ mod test {
         };
 
         // Only the first context has a completed signature so far
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         let mut signature_builder = TestThresholdSignatureBuilder::new();
         signature_builder.signatures.insert(
             ids[0],
@@ -1040,6 +1041,7 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
+            thread_pool.as_ref(),
         );
         // First signature should now be in "unreported" agreement
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
@@ -1066,6 +1068,7 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
+            thread_pool.as_ref(),
         );
         // First signature should now be reported, second unreported.
         assert_eq!(idkg_payload.signature_agreements.len(), 2);

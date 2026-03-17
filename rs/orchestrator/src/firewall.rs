@@ -943,7 +943,6 @@ mod tests {
     /// Returns the `ic.json5` config filled with some dummy values.
     fn get_config() -> ConfigOptional {
         let template = generate_ic_config::IcConfigTemplate {
-            ipv6_address: "::".to_string(),
             ipv6_prefix: "::/64".to_string(),
             ipv4_address: "".to_string(),
             ipv4_gateway: "".to_string(),

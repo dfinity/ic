@@ -1,7 +1,7 @@
 //! This module implements the IDKG payload builder.
 use crate::{
     metrics::{CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING, IDkgPayloadMetrics},
-    pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl},
+    pre_signer::IDkgTranscriptBuilder,
     signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl},
     utils::{InvalidChainCacheError, block_chain_reader, get_idkg_chain_key_config_if_enabled},
 };
@@ -26,13 +26,12 @@ use ic_types::{
             MasterKeyTranscript, TranscriptAttributes,
         },
     },
-    crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings},
+    crypto::canister_threshold_sig::idkg::{
+        IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings, SignedIDkgDealing,
+    },
     messages::CallbackId,
 };
-use rayon::{
-    ThreadPool,
-    iter::{IntoParallelIterator, ParallelIterator},
-};
+use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Deref,
@@ -460,6 +459,24 @@ fn is_time_to_reshare_key_transcript(
     Ok(false)
 }
 
+struct PoolTranscriptBuilder<'a> {
+    idkg_pool: &'a dyn IDkgPool,
+}
+
+impl<'a> IDkgTranscriptBuilder for PoolTranscriptBuilder<'a> {
+    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+        self.idkg_pool.transcripts().get(&transcript_id).cloned()
+    }
+
+    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
+        self.idkg_pool
+            .validated()
+            .signed_dealings_by_transcript_id(&transcript_id)
+            .map(|(_, signed_dealing)| signed_dealing)
+            .collect()
+    }
+}
+
 /// Creates an IDKG batch payload.
 pub fn create_data_payload(
     subnet_id: SubnetId,
@@ -510,20 +527,12 @@ pub fn create_data_payload(
         log,
     )?;
     let idkg_pool = idkg_pool.read().unwrap();
+    let idkg_pool = idkg_pool.deref();
 
-    let signature_builder = ThresholdSignatureBuilderImpl::new(
-        crypto,
-        idkg_pool.deref(),
-        idkg_payload_metrics,
-        log.clone(),
-    );
-    let transcript_builder = IDkgTranscriptBuilderImpl::new(
-        &block_reader,
-        crypto,
-        idkg_pool.deref(),
-        idkg_payload_metrics,
-        log.clone(),
-    );
+    let signature_builder =
+        ThresholdSignatureBuilderImpl::new(crypto, idkg_pool, idkg_payload_metrics, log.clone());
+    let transcript_builder = PoolTranscriptBuilder { idkg_pool };
+
     let new_payload = create_data_payload_helper(
         subnet_id,
         context,
@@ -685,23 +694,16 @@ pub(crate) fn create_data_payload_helper_2(
         idkg_payload,
         valid_keys,
         idkg_payload_metrics,
+        thread_pool,
     );
 
-    let inputs = idkg_payload
-        .iter_pre_sig_transcript_configs_in_creation()
-        .collect::<Vec<_>>();
-    let transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript> = thread_pool.install(|| {
-        inputs
-            .into_par_iter()
-            .filter_map(|params_ref| {
-                transcript_builder.get_completed_transcript(params_ref.transcript_id)
-            })
-            .map(|t| (t.transcript_id, t))
-            .collect()
-    });
-
     let new_transcripts = [
-        pre_signatures::update_pre_signatures_in_creation(idkg_payload, transcripts, height, log)?,
+        pre_signatures::update_pre_signatures_in_creation(
+            idkg_payload,
+            transcript_builder,
+            height,
+            log,
+        )?,
         key_transcript::update_next_key_transcripts(
             receivers,
             next_interval_registry_version,
@@ -1014,6 +1016,7 @@ mod tests {
         assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
 
         let signature_builder = TestThresholdSignatureBuilder::new();
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         signatures::update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -1021,6 +1024,7 @@ mod tests {
             &mut idkg_payload,
             &BTreeSet::from([key_id.clone()]),
             None,
+            thread_pool.as_ref(),
         );
 
         // The expired context with matched pre-signature should receive a reject response
@@ -1087,6 +1091,7 @@ mod tests {
         assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
 
         let signature_builder = TestThresholdSignatureBuilder::new();
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         signatures::update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -1094,6 +1099,7 @@ mod tests {
             &mut idkg_payload,
             &BTreeSet::from([valid_key_id.clone()]),
             None,
+            thread_pool.as_ref(),
         );
 
         // The contexts with invalid key should receive a reject response
@@ -1230,7 +1236,7 @@ mod tests {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
             let mut expected_transcripts = BTreeSet::new();
-            let mut transcripts = BTreeMap::new();
+            let transcript_builder = TestIDkgTranscriptBuilder::new();
             let mut add_expected_transcripts = |trancript_refs: Vec<idkg::TranscriptRef>| {
                 for transcript_ref in trancript_refs {
                     expected_transcripts.insert(transcript_ref.transcript_id);
@@ -1340,14 +1346,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcripts.insert(config_ref.transcript_id, transcript.clone());
+            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                transcripts,
+                &transcript_builder,
                 parent_block_height,
                 &no_op_logger(),
             )
@@ -1489,7 +1495,7 @@ mod tests {
             let mut rng = reproducible_rng();
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let mut transcripts = BTreeMap::new();
+            let transcript_builder = TestIDkgTranscriptBuilder::new();
             // Create a summary block with transcripts
             let summary_height = Height::new(5);
             let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
@@ -1599,14 +1605,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcripts.insert(config_ref.transcript_id, transcript.clone());
+            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                transcripts,
+                &transcript_builder,
                 parent_block_height,
                 &no_op_logger(),
             )

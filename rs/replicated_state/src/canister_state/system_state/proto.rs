@@ -2,59 +2,6 @@ use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 
-impl From<CyclesUseCase> for pb::CyclesUseCase {
-    fn from(item: CyclesUseCase) -> Self {
-        match item {
-            CyclesUseCase::Memory => pb::CyclesUseCase::Memory,
-            CyclesUseCase::ComputeAllocation => pb::CyclesUseCase::ComputeAllocation,
-            CyclesUseCase::IngressInduction => pb::CyclesUseCase::IngressInduction,
-            CyclesUseCase::Instructions => pb::CyclesUseCase::Instructions,
-            CyclesUseCase::RequestAndResponseTransmission => {
-                pb::CyclesUseCase::RequestAndResponseTransmission
-            }
-            CyclesUseCase::Uninstall => pb::CyclesUseCase::Uninstall,
-            CyclesUseCase::CanisterCreation => pb::CyclesUseCase::CanisterCreation,
-            CyclesUseCase::ECDSAOutcalls => pb::CyclesUseCase::EcdsaOutcalls,
-            CyclesUseCase::HTTPOutcalls => pb::CyclesUseCase::HttpOutcalls,
-            CyclesUseCase::DeletedCanisters => pb::CyclesUseCase::DeletedCanisters,
-            CyclesUseCase::NonConsumed => pb::CyclesUseCase::NonConsumed,
-            CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
-            CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
-            CyclesUseCase::VetKd => pb::CyclesUseCase::VetKd,
-            CyclesUseCase::DroppedMessages => pb::CyclesUseCase::DroppedMessages,
-        }
-    }
-}
-
-impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb::CyclesUseCase) -> Result<Self, Self::Error> {
-        match item {
-            pb::CyclesUseCase::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "CyclesUseCase",
-                err: format!("Unexpected value of cycles use case: {item:?}"),
-            }),
-            pb::CyclesUseCase::Memory => Ok(Self::Memory),
-            pb::CyclesUseCase::ComputeAllocation => Ok(Self::ComputeAllocation),
-            pb::CyclesUseCase::IngressInduction => Ok(Self::IngressInduction),
-            pb::CyclesUseCase::Instructions => Ok(Self::Instructions),
-            pb::CyclesUseCase::RequestAndResponseTransmission => {
-                Ok(Self::RequestAndResponseTransmission)
-            }
-            pb::CyclesUseCase::Uninstall => Ok(Self::Uninstall),
-            pb::CyclesUseCase::CanisterCreation => Ok(Self::CanisterCreation),
-            pb::CyclesUseCase::EcdsaOutcalls => Ok(Self::ECDSAOutcalls),
-            pb::CyclesUseCase::HttpOutcalls => Ok(Self::HTTPOutcalls),
-            pb::CyclesUseCase::DeletedCanisters => Ok(Self::DeletedCanisters),
-            pb::CyclesUseCase::NonConsumed => Ok(Self::NonConsumed),
-            pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
-            pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
-            pb::CyclesUseCase::VetKd => Ok(Self::VetKd),
-            pb::CyclesUseCase::DroppedMessages => Ok(Self::DroppedMessages),
-        }
-    }
-}
-
 impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     fn from(item: &CanisterStatus) -> Self {
         match item {
@@ -180,15 +127,10 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
     }
 }
 
-// TODO(DSM-95): Drop the `ccm` parameter in the next replica release.
-// It is only needed for backward compatible decoding of the legacy
-// `ExecutionTask::Response` variant, which has no callback.
-impl TryFrom<(pb::ExecutionTask, &mut CallContextManager)> for ExecutionTask {
+impl TryFrom<pb::ExecutionTask> for ExecutionTask {
     type Error = ProxyDecodeError;
 
-    fn try_from(
-        (value, ccm): (pb::ExecutionTask, &mut CallContextManager),
-    ) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ExecutionTask) -> Result<Self, Self::Error> {
         let task = value
             .task
             .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
@@ -204,16 +146,6 @@ impl TryFrom<(pb::ExecutionTask, &mut CallContextManager)> for ExecutionTask {
                     PbInput::Request(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Request(Arc::new(v.try_into()?)),
                     ),
-                    PbInput::Response(v) => {
-                        let response = Response::try_from(v)?;
-                        let callback = ccm
-                            .unregister_callback(response.originator_reply_callback)
-                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?;
-                        CanisterMessageOrTask::Message(CanisterMessage::Response {
-                            response: Arc::new(response),
-                            callback,
-                        })
-                    }
                     PbInput::AbortedResponse(v) => {
                         let response = v
                             .response

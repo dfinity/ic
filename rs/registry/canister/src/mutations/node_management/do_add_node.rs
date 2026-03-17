@@ -11,6 +11,7 @@ use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeRewardType},
+    replica_version::v1::ReplicaVersionRecord,
 };
 use idna::domain_to_ascii_strict;
 use std::fmt::Display;
@@ -30,7 +31,7 @@ use crate::mutations::node_management::{
 use crate::rate_limits::{commit_add_node_capacity, try_reserve_add_node_capacity};
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::{AddNodePayload, NodeRegistrationAttestationCustomData};
-use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
+use ic_registry_keys::{NODE_REWARDS_TABLE_KEY, make_replica_version_key};
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
 
@@ -276,6 +277,26 @@ impl Registry {
 
         Ok(Some(chip_id))
     }
+
+    pub fn get_all_blessed_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
+        let version = self.latest_version();
+        self.get_blessed_replica_version_ids()
+            .iter()
+            .filter_map(|version_id| {
+                self.get(make_replica_version_key(version_id).as_bytes(), version)
+                    .and_then(|reg_value| {
+                        ReplicaVersionRecord::decode(reg_value.value.as_slice())
+                            .ok()?
+                            .guest_launch_measurements
+                    })
+            })
+            .flat_map(|glm| {
+                glm.guest_launch_measurements
+                    .into_iter()
+                    .map(|m| m.measurement)
+            })
+            .collect()
+    }
 }
 
 // try to convert input string into NodeRewardType enum
@@ -290,6 +311,7 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
         "type3" => NodeRewardType::Type3,
         "type3.1" => NodeRewardType::Type3dot1,
         "type1.1" => NodeRewardType::Type1dot1,
+        "type4" => NodeRewardType::Type4,
         _ => return Err(format!("Invalid node type: {type_string}")),
     })
 }
@@ -324,12 +346,6 @@ fn valid_keys_from_payload(
     if payload.transport_tls_cert.is_empty() {
         return Err(String::from("transport_tls_cert is empty"));
     };
-    // TODO(NNS1-1197): Refactor this when nodes are provisioned for threshold ECDSA subnets
-    if let Some(idkg_dealing_encryption_pk) = &payload.idkg_dealing_encryption_pk
-        && idkg_dealing_encryption_pk.is_empty()
-    {
-        return Err(String::from("idkg_dealing_encryption_pk is empty"));
-    };
 
     // 2. get the keys for verification -- for that, we need to create
     // NodePublicKeys first
@@ -343,15 +359,18 @@ fn valid_keys_from_payload(
         .map_err(|e| {
             format!("ni_dkg_dealing_encryption_pk is not in the expected format: {e:?}")
         })?;
+
     // TODO(NNS1-1197): Refactor when nodes are provisioned for threshold ECDSA subnets
-    let idkg_dealing_encryption_pk =
-        if let Some(idkg_de_pk_bytes) = &payload.idkg_dealing_encryption_pk {
-            Some(PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {
-                format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
-            })?)
-        } else {
-            None
-        };
+    let idkg_dealing_encryption_pk = match &payload.idkg_dealing_encryption_pk {
+        None => return Err(String::from("idkg_dealing_encryption_pk is missing")),
+        Some(pk) if pk.is_empty() => {
+            return Err(String::from("idkg_dealing_encryption_pk is empty"));
+        }
+
+        Some(pk) => PublicKey::decode(&pk[..]).map_err(|e| {
+            format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
+        })?,
+    };
 
     // 3. get the node id from the node_signing_pk
     let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk)
@@ -363,7 +382,7 @@ fn valid_keys_from_payload(
         committee_signing_public_key: Some(committee_signing_pk),
         tls_certificate: Some(tls_certificate),
         dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_pk),
-        idkg_dealing_encryption_public_key: idkg_dealing_encryption_pk,
+        idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_pk),
     };
 
     // 5. validate the keys and the node_id

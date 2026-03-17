@@ -18,7 +18,7 @@ use ic_protobuf::state::{
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_snapshots::CanisterSnapshot;
+use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshot;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
 use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
 use ic_replicated_state::page_map::{
@@ -565,7 +565,7 @@ fn tip_to_checkpoint_and_switch<'a>(
 /// Switches `tip` to the most recent checkpoint file provided by `layout`.
 ///
 /// Preconditions:
-/// 1) `tip` and `layout` mut have exactly the same set of canisters.
+/// 1) `tip` and `layout` must have the exact same set of canisters.
 /// 2) The page deltas must be empty in `tip`
 /// 3) The memory sizes must match.
 fn switch_to_checkpoint(
@@ -574,6 +574,8 @@ fn switch_to_checkpoint(
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
     for tip_canister in tip.canisters_iter_mut() {
+        let tip_canister = Arc::make_mut(tip_canister);
+        let tip_canister_id = tip_canister.canister_id();
         let canister_layout = layout.canister(&tip_canister.canister_id()).unwrap();
         tip_canister
             .system_state
@@ -587,6 +589,20 @@ fn switch_to_checkpoint(
                 )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
             );
+        if let Some(page_map) = tip_canister
+            .system_state
+            .log_memory_store
+            .maybe_page_map_mut()
+        {
+            page_map.switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(canister_layout.log_memory_store()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+            );
+        }
 
         if let Some(tip_execution) = tip_canister.execution_state.as_mut() {
             tip_execution.wasm_memory.page_map.switch_to_checkpoint(
@@ -605,88 +621,27 @@ fn switch_to_checkpoint(
                 )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
             );
-        }
-    }
 
-    for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
-        let new_snapshot = Arc::make_mut(tip_snapshot);
-        let snapshot_layout = layout.snapshot(tip_id).unwrap();
-
-        new_snapshot
-            .chunk_store_mut()
-            .page_map_mut()
-            .switch_to_checkpoint(
-                &PageMap::open(
-                    Box::new(snapshot_layout.wasm_chunk_store()),
-                    layout.height(),
-                    Arc::clone(fd_factory),
-                )
-                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
-            );
-
-        new_snapshot
-            .execution_snapshot_mut()
-            .wasm_memory
-            .page_map
-            .switch_to_checkpoint(
-                &PageMap::open(
-                    Box::new(snapshot_layout.vmemory_0()),
-                    layout.height(),
-                    Arc::clone(fd_factory),
-                )
-                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
-            );
-        new_snapshot
-            .execution_snapshot_mut()
-            .stable_memory
-            .page_map
-            .switch_to_checkpoint(
-                &PageMap::open(
-                    Box::new(snapshot_layout.stable_memory()),
-                    layout.height(),
-                    Arc::clone(fd_factory),
-                )
-                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
-            );
-
-        let new_snapshot_wasm_binary = &new_snapshot.execution_snapshot().wasm_binary;
-        let wasm_binary = snapshot_layout
-            .wasm()
-            .lazy_load_with_module_hash(
-                new_snapshot_wasm_binary.module_hash().into(),
-                Some(new_snapshot_wasm_binary.len()),
-            )
-            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
-        debug_assert_eq!(
-            wasm_binary.module_loading_status(),
-            ModuleLoadingStatus::FileNotLoaded
-        );
-        new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
-    }
-
-    for tip_canister in tip.canisters_iter_mut() {
-        let tip_id = tip_canister.canister_id();
-        if let Some(tip_state) = &mut tip_canister.execution_state {
-            let canister_layout = layout.canister(&tip_id).unwrap();
+            let canister_layout = layout.canister(&tip_canister_id).unwrap();
 
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
-            let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
-            let tip_state_wasm_binary = &tip_state.wasm_binary.binary;
+            let embedder_cache = Arc::clone(&tip_execution.wasm_binary.embedder_cache);
+            let tip_execution_wasm_binary = &tip_execution.wasm_binary.binary;
             let wasm_binary = canister_layout
                 .wasm()
                 .lazy_load_with_module_hash(
-                    tip_state_wasm_binary.module_hash().into(),
-                    Some(tip_state_wasm_binary.len()),
+                    tip_execution_wasm_binary.module_hash().into(),
+                    Some(tip_execution_wasm_binary.len()),
                 )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
             debug_assert_eq!(
-                tip_state.wasm_binary.binary.as_slice(),
+                tip_execution.wasm_binary.binary.as_slice(),
                 canister_layout
                     .wasm()
                     .lazy_load_with_module_hash(
-                        tip_state.wasm_binary.binary.module_hash().into(),
-                        Some(tip_state_wasm_binary.len())
+                        tip_execution.wasm_binary.binary.module_hash().into(),
+                        Some(tip_execution_wasm_binary.len())
                     )
                     .unwrap()
                     .as_slice()
@@ -696,7 +651,7 @@ fn switch_to_checkpoint(
                 wasm_binary.module_loading_status(),
                 ModuleLoadingStatus::FileNotLoaded
             );
-            tip_state.wasm_binary = Arc::new(
+            tip_execution.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
                     binary: wasm_binary,
                     embedder_cache,
@@ -705,10 +660,67 @@ fn switch_to_checkpoint(
 
             // Reset the sandbox state to force full synchronization on the next message
             // execution because the checkpoint file of `tip` has changed.
-            tip_state.wasm_memory.sandbox_memory = SandboxMemory::new();
-            tip_state.stable_memory.sandbox_memory = SandboxMemory::new();
+            tip_execution.wasm_memory.sandbox_memory = SandboxMemory::new();
+            tip_execution.stable_memory.sandbox_memory = SandboxMemory::new();
+        }
+
+        for (tip_snapshot_id, tip_snapshot) in tip_canister.canister_snapshots.iter_mut() {
+            let new_snapshot: &mut CanisterSnapshot = Arc::make_mut(tip_snapshot);
+            let snapshot_layout = layout.snapshot(tip_snapshot_id).unwrap();
+
+            new_snapshot
+                .chunk_store_mut()
+                .page_map_mut()
+                .switch_to_checkpoint(
+                    &PageMap::open(
+                        Box::new(snapshot_layout.wasm_chunk_store()),
+                        layout.height(),
+                        Arc::clone(fd_factory),
+                    )
+                    .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+                );
+
+            new_snapshot
+                .execution_snapshot_mut()
+                .wasm_memory
+                .page_map
+                .switch_to_checkpoint(
+                    &PageMap::open(
+                        Box::new(snapshot_layout.vmemory_0()),
+                        layout.height(),
+                        Arc::clone(fd_factory),
+                    )
+                    .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+                );
+            new_snapshot
+                .execution_snapshot_mut()
+                .stable_memory
+                .page_map
+                .switch_to_checkpoint(
+                    &PageMap::open(
+                        Box::new(snapshot_layout.stable_memory()),
+                        layout.height(),
+                        Arc::clone(fd_factory),
+                    )
+                    .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+                );
+
+            let new_snapshot_wasm_binary = &new_snapshot.execution_snapshot().wasm_binary;
+            let wasm_binary = snapshot_layout
+                .wasm()
+                .lazy_load_with_module_hash(
+                    new_snapshot_wasm_binary.module_hash().into(),
+                    Some(new_snapshot_wasm_binary.len()),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+            debug_assert_eq!(
+                wasm_binary.module_loading_status(),
+                ModuleLoadingStatus::FileNotLoaded
+            );
+            new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
         }
     }
+
     Ok(())
 }
 
@@ -769,6 +781,7 @@ fn backup<T>(
         &canister_layout.wasm_chunk_store(),
         &snapshot_layout.wasm_chunk_store(),
     )?;
+    // no need to copy log_memory_store as it is not in snapshot.
 
     WasmFile::hardlink_file(&canister_layout.wasm(), &snapshot_layout.wasm())?;
 
@@ -1107,24 +1120,16 @@ fn serialize_protos_to_checkpoint_readwrite(
             canister_state,
             state.canister_priority(&canister_state.canister_id()),
             checkpoint_readwrite,
-        )
-    });
-
-    for result in results.into_iter() {
-        result?;
-    }
-
-    let results = parallel_map(
-        thread_pool,
-        state.canister_snapshots.iter(),
-        |canister_snapshot| {
+        )?;
+        for canister_snapshot in canister_state.canister_snapshots.iter() {
             serialize_snapshot_protos_to_checkpoint_readwrite(
                 canister_snapshot.0,
                 canister_snapshot.1,
                 checkpoint_readwrite,
-            )
-        },
-    );
+            )?
+        }
+        Ok::<_, CheckpointError>(())
+    });
 
     for result in results.into_iter() {
         result?;
@@ -1141,23 +1146,18 @@ fn serialize_wasm_binaries_and_pagemaps(
     metrics: &StorageMetrics,
 ) -> Result<(), CheckpointError> {
     parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_wasm_binary_and_pagemaps(canister_state, tip, metrics, lsmt_config)
-    })
-    .into_iter()
-    .try_for_each(identity)?;
-    parallel_map(
-        thread_pool,
-        state.canister_snapshots.iter(),
-        |(snapshot_id, snapshot)| {
+        serialize_canister_wasm_binary_and_pagemaps(canister_state, tip, metrics, lsmt_config)?;
+        for (snapshot_id, snapshot) in canister_state.canister_snapshots.iter() {
             serialize_snapshot_wasm_binary_and_pagemaps(
                 snapshot_id,
                 snapshot,
                 tip,
                 metrics,
                 lsmt_config,
-            )
-        },
-    )
+            )?;
+        }
+        Ok::<_, CheckpointError>(())
+    })
     .into_iter()
     .try_for_each(identity)
 }
@@ -1223,6 +1223,21 @@ fn serialize_canister_wasm_binary_and_pagemaps(
             lsmt_config,
             metrics,
         )?;
+    if let Some(page_map) = canister_state
+        .system_state
+        .log_memory_store
+        .maybe_page_map()
+    {
+        page_map.persist_delta(
+            &canister_layout.log_memory_store(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
+    } else {
+        // If no log memory store delete files.
+        canister_layout.log_memory_store().delete_files()?;
+    }
     Ok(())
 }
 
@@ -1282,6 +1297,11 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             next_scheduled_method: execution_state.next_scheduled_method,
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });
+
+    let load_metrics_bits = canister_state
+        .system_state
+        .canister_metrics()
+        .load_metrics();
 
     canister_layout.canister().serialize(
         CanisterStateBits {
@@ -1348,16 +1368,27 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .clone(),
             total_query_stats: canister_state.system_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
-            log_memory_limit: canister_state.system_state.log_memory_limit,
+            snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
+            log_memory_limit: canister_state.log_memory_limit(),
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id(),
-            snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
+            snapshots_memory_usage: canister_state.snapshots_memory_usage(),
             environment_variables: canister_state
                 .system_state
                 .environment_variables
                 .clone()
                 .into(),
+            instructions_executed: canister_state
+                .system_state
+                .canister_metrics()
+                .instructions_executed(),
+            ingress_messages_executed: load_metrics_bits.ingress_messages_executed(),
+            remote_subnet_messages_executed: load_metrics_bits.remote_subnet_messages_executed(),
+            local_subnet_messages_executed: load_metrics_bits.local_subnet_messages_executed(),
+            http_outcalls_executed: load_metrics_bits.http_outcalls_executed(),
+            heartbeats_and_global_timers_executed: load_metrics_bits
+                .heartbeats_and_global_timers_executed(),
         }
         .into(),
     )?;
@@ -1375,7 +1406,6 @@ fn serialize_snapshot_protos_to_checkpoint_readwrite(
     snapshot_layout.snapshot().serialize(
         CanisterSnapshotBits {
             snapshot_id: *snapshot_id,
-            canister_id: canister_snapshot.canister_id(),
             taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
             canister_version: canister_snapshot.canister_version(),
             binary_hash: canister_snapshot.canister_module().module_hash().into(),
@@ -1683,6 +1713,7 @@ mod test {
 
             let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {
                 certifications_metadata: Default::default(),
+                certifications: Default::default(),
                 states_metadata: Default::default(),
                 snapshots: Default::default(),
                 last_advertised: Height::new(0),

@@ -9,9 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
-* Invariant about cycles cost schedule and subnet types allowing only application subnets to be put on "Free" schedule.
-
 ## Changed
+
+* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
 
 ## Deprecated
 

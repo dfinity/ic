@@ -41,6 +41,9 @@ pub struct IngressMessageSettings {
     /// Maximum number of bytes per message. This is a hard cap, which means
     /// ingress messages greater than the limit will be dropped.
     pub max_ingress_bytes_per_message: usize,
+    /// Maximum number of ingress bytes per block. This is a hard cap, which means
+    /// blocks will never have more than this number of ingress bytes.
+    pub max_ingress_bytes_per_block: usize,
     /// Maximum number of messages per block. This is a hard cap, which means
     /// blocks will never have more than this number of messages.
     pub max_ingress_messages_per_block: usize,
@@ -245,20 +248,24 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         )
     }
 
+    /// Returns subnet record entries related to ingress messages.
+    /// When [`SubnetRecord::max_ingress_bytes_per_block`] is not provided (i.e. it's set to 0), we
+    /// will use the default value defined in [`ic_limits::MAX_INGRESS_BYTES_PER_BLOCK`].
     fn get_ingress_message_settings(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<IngressMessageSettings> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        Ok(
-            deserialize_registry_value::<SubnetRecord>(bytes)?.map(|subnet| {
-                IngressMessageSettings {
-                    max_ingress_bytes_per_message: subnet.max_ingress_bytes_per_message as usize,
-                    max_ingress_messages_per_block: subnet.max_ingress_messages_per_block as usize,
-                }
-            }),
-        )
+        let maybe_subnet_record = deserialize_registry_value::<SubnetRecord>(bytes)?;
+        Ok(maybe_subnet_record.map(|subnet| IngressMessageSettings {
+            max_ingress_bytes_per_message: subnet.max_ingress_bytes_per_message as usize,
+            max_ingress_messages_per_block: subnet.max_ingress_messages_per_block as usize,
+            max_ingress_bytes_per_block: match subnet.max_ingress_bytes_per_block {
+                0 => ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
+                max_ingress_bytes_per_block @ 1.. => max_ingress_bytes_per_block,
+            } as usize,
+        }))
     }
 
     fn get_features(

@@ -71,7 +71,6 @@ def component_files(mode):
         # misc
         Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
         Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
-        Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
         Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
         Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
         Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
@@ -89,12 +88,13 @@ def component_files(mode):
         Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
 
         # monitoring
+        Label("monitoring/metrics.sh"): "/opt/ic/bin/metrics.sh",
         Label("monitoring/guestos/ipv4-connectivity-check/ipv4-connectivity-check.sh"): "/opt/ic/bin/ipv4-connectivity-check.sh",
         Label("monitoring/guestos/ipv4-connectivity-check/ipv4-connectivity-check.service"): "/etc/systemd/system/ipv4-connectivity-check.service",
         Label("monitoring/guestos/ipv4-connectivity-check/ipv4-connectivity-check.timer"): "/etc/systemd/system/ipv4-connectivity-check.timer",
         Label("monitoring/guestos/fstrim/fstrim_tool.service"): "/etc/systemd/system/fstrim_tool.service",
         Label("monitoring/guestos/fstrim/fstrim_tool.timer"): "/etc/systemd/system/fstrim_tool.timer",
-        Label("monitoring/guestos/fstrim/setup-fstrim-metrics.service"): "/etc/systemd/system/setup-fstrim-metrics.service",
+        Label("monitoring/guestos/fstrim/setup-fstrim-tool.service"): "/etc/systemd/system/setup-fstrim-tool.service",
         Label("monitoring/guestos/nft-exporter/nft-exporter.service"): "/etc/systemd/system/nft-exporter.service",
         Label("monitoring/guestos/nft-exporter/nft-exporter.timer"): "/etc/systemd/system/nft-exporter.timer",
         Label("monitoring/guestos/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
@@ -104,8 +104,8 @@ def component_files(mode):
         Label("monitoring/guestos/boot-metrics/boot-metrics.timer"): "/etc/systemd/system/boot-metrics.timer",
         Label("monitoring/guestos/boot-logging/log-boot-failure.service"): "/etc/systemd/system/log-boot-failure.service",
         Label("monitoring/guestos/boot-logging/log-boot-success.service"): "/etc/systemd/system/log-boot-success.service",
-        Label("monitoring/guestos/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
-        Label("monitoring/guestos/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
+        Label("monitoring/guestos/custom_metrics.service"): "/etc/systemd/system/custom_metrics.service",
+        Label("monitoring/guestos/custom_metrics.timer"): "/etc/systemd/system/custom_metrics.timer",
         Label("monitoring/node_exporter/node_exporter.crt"): "/etc/node_exporter/node_exporter.crt",
         Label("monitoring/node_exporter/node_exporter.key"): "/etc/node_exporter/node_exporter.key",
         Label("monitoring/node_exporter/web.yml"): "/etc/node_exporter/web.yml",

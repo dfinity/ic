@@ -2,15 +2,21 @@
 
 use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_config::crypto::CryptoConfig;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_management_canister_types::{
     HttpRequestResult, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord,
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
+use ic_registry_canister_api::AddNodePayload;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
+use ic_types::ReplicaVersion;
+use maplit::btreemap;
 use pocket_ic::common::rest::{
     CreateInstanceResponse, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
     IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig,
@@ -18,10 +24,11 @@ use pocket_ic::common::rest::{
 use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
     PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, SubnetBlockmakers, TickConfigs,
-    start_server, update_candid_as,
+    Time, start_server, update_candid_as,
 };
 use prost::Message;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use registry_canister::mutations::do_create_subnet::{CreateSubnetPayload, NewSubnet};
 use registry_canister::mutations::do_remove_node_operators::{
     NodeOperatorPrincipals, RemoveNodeOperatorsPayload,
 };
@@ -35,7 +42,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread::JoinHandle,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tempfile::TempDir;
 
@@ -439,6 +446,7 @@ fn payload_too_large() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
@@ -643,4 +651,109 @@ fn test_registry_sync() {
 
     // The latest registry version in both PocketIC and the registry canister should increase by one.
     check_registry_versions(&pocket_ic, initial_registry_version + 3);
+}
+
+fn prepare_add_node_payload(
+    node_sequence_number: u8,
+    node_reward_type: NodeRewardType,
+) -> AddNodePayload {
+    // As the registry canister checks for validity of keys, we need to generate them first
+    let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+    let node_public_keys =
+        generate_node_keys_once(&config, None).expect("error generating node public keys");
+    // Create payload message
+    let node_signing_pk = node_public_keys.node_signing_key().encode_to_vec();
+    let committee_signing_pk = node_public_keys.committee_signing_key().encode_to_vec();
+    let ni_dkg_dealing_encryption_pk = node_public_keys
+        .dkg_dealing_encryption_key()
+        .encode_to_vec();
+    let transport_tls_cert = node_public_keys.tls_certificate().encode_to_vec();
+    let idkg_dealing_encryption_pk = node_public_keys
+        .idkg_dealing_encryption_key()
+        .encode_to_vec();
+    // Create the payload
+    AddNodePayload {
+        node_signing_pk,
+        committee_signing_pk,
+        ni_dkg_dealing_encryption_pk,
+        transport_tls_cert,
+        idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
+        xnet_endpoint: format!("128.0.{node_sequence_number}.100:1234"),
+        http_endpoint: format!("128.0.{node_sequence_number}.100:4321"),
+        node_registration_attestation: None,
+        public_ipv4_config: None,
+        domain: Some("api-example.com".to_string()),
+        p2p_flow_endpoints: Default::default(),
+        prometheus_metrics_endpoint: Default::default(),
+        node_reward_type: Some(node_reward_type.to_string()),
+    }
+}
+
+#[test]
+fn create_subnet_in_registry_canister() {
+    let icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_icp_features(icp_features)
+        .build();
+
+    // TLS certificates for the node record are generated with current time
+    let current_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    pic.set_time(Time::from_nanos_since_unix_epoch(current_time as u64));
+
+    let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+    let governance_canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+
+    // Add a node operator (every node must have a node operator)
+    let node_operator = Principal::from_slice(&[42; 29]);
+    let add_node_operator_payload = AddNodeOperatorPayload {
+        node_operator_principal_id: Some(PrincipalId(node_operator)),
+        node_provider_principal_id: Some(PrincipalId(node_operator)),
+        max_rewardable_nodes: Some(btreemap! { "type1".to_string() => 1 }),
+        ..Default::default()
+    };
+    update_candid_as::<_, ()>(
+        &pic,
+        registry_canister_id,
+        governance_canister_id,
+        "add_node_operator",
+        (add_node_operator_payload,),
+    )
+    .unwrap();
+
+    // Add a node (every subnet must have a node)
+    let add_node_payload = prepare_add_node_payload(1, NodeRewardType::Type1);
+    let node_id = update_candid_as::<_, (Principal,)>(
+        &pic,
+        registry_canister_id,
+        node_operator,
+        "add_node",
+        (add_node_payload,),
+    )
+    .unwrap()
+    .0;
+
+    // Add a subnet
+    let node_ids = vec![NodeId::new(PrincipalId(node_id))];
+    let create_subnet_payload = CreateSubnetPayload {
+        node_ids,
+        replica_version_id: ReplicaVersion::default().to_string(),
+        ..Default::default()
+    };
+    update_candid_as::<_, (Result<NewSubnet, String>,)>(
+        &pic,
+        registry_canister_id,
+        governance_canister_id,
+        "create_subnet",
+        (create_subnet_payload,),
+    )
+    .unwrap()
+    .0
+    .unwrap();
 }

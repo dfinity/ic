@@ -40,7 +40,7 @@ use std::str::FromStr;
 use strum::{Display, EnumString};
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.12.1";
+pub const CONFIG_VERSION: &str = "1.13.0";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
@@ -49,6 +49,9 @@ pub static RESERVED_FIELD_PATHS: &[&str] = &[
     "hostos_settings.vm_cpu",
     "hostos_settings.vm_memory",
     "hostos_settings.vm_nr_of_vcpus",
+    "guestos_settings.inject_ic_crypto",
+    "guestos_settings.inject_ic_state",
+    "guestos_settings.inject_ic_registry_local_store",
 ];
 
 /// Type of the operating system
@@ -156,11 +159,11 @@ pub struct ICOSSettings {
     /// wrapper from the `ic_sev` crate, as this cannot be faked by a malicious HostOS.
     #[serde(default)]
     pub enable_trusted_execution_environment: bool,
-    /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
+    /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`, `recovery`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`
     /// is transferred to `~admin/.ssh/authorized_keys` on the target system.
-    /// backup and readonly can only be modified via an NNS proposal
+    /// `backup`, `readonly` and `recovery` can only be modified via an NNS proposal
     /// and are in place for subnet recovery or issue debugging purposes.
     /// use_ssh_authorized_keys triggers the use of the ssh keys directory
     pub use_ssh_authorized_keys: bool,
@@ -215,20 +218,6 @@ pub struct GuestOSUpgradeConfig {
 /// GuestOS-specific settings.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSSettings {
-    /// Externally generated cryptographic keys.
-    /// Must be a directory with contents matching the internal representation of the ic_crypto directory.
-    /// When given, this provides the private keys of the node.
-    /// If not given, the node will generate its own private/public key pair.
-    #[serde(default)]
-    pub inject_ic_crypto: bool,
-    #[serde(default)]
-    pub inject_ic_state: bool,
-    /// Initial registry state.
-    /// Must be a directory with contents matching the internal representation of the ic_registry_local_store.
-    /// When given, this provides the initial state of the registry.
-    /// If not given, the node will fetch (initial) registry state from the NNS.
-    #[serde(default)]
-    pub inject_ic_registry_local_store: bool,
     pub guestos_dev_settings: GuestOSDevSettings,
 }
 
@@ -366,9 +355,6 @@ mod tests {
                 "icos_dev_settings": {}
             },
             "guestos_settings": {
-                "inject_ic_crypto": false,
-                "inject_ic_state": false,
-                "inject_ic_registry_local_store": false,
                 "recovery_hash": None::<String>,
                 "guestos_dev_settings": {}
             },

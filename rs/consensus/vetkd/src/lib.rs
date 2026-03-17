@@ -625,6 +625,9 @@ mod tests {
     /// The maximum payload size during tests
     const MAX_SIZE: NumBytes = NumBytes::new(1024);
 
+    /// The default number of threads to use during tests
+    const NUM_THREADS: usize = 16;
+
     #[test]
     fn test_into_messages() {
         let agreements = make_vetkd_agreements(0, 1, 2);
@@ -669,7 +672,26 @@ mod tests {
         shares: Vec<IDkgMessage>,
         run: impl FnOnce(VetKdPayloadBuilderImpl) -> T,
     ) -> T {
-        test_payload_builder_ext(config, true, contexts, shares, CERTIFIED_HEIGHT, true, run)
+        test_payload_builder_with_num_threads(config, contexts, shares, NUM_THREADS, run)
+    }
+
+    fn test_payload_builder_with_num_threads<T>(
+        config: Option<ChainKeyConfig>,
+        contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
+        shares: Vec<IDkgMessage>,
+        num_threads: usize,
+        run: impl FnOnce(VetKdPayloadBuilderImpl) -> T,
+    ) -> T {
+        test_payload_builder_ext(
+            config,
+            true,
+            contexts,
+            shares,
+            CERTIFIED_HEIGHT,
+            true,
+            num_threads,
+            run,
+        )
     }
 
     fn test_payload_builder_ext<T>(
@@ -679,6 +701,7 @@ mod tests {
         shares: Vec<IDkgMessage>,
         certified_height: Height,
         finalize_last_summary: bool,
+        num_threads: usize,
         run: impl FnOnce(VetKdPayloadBuilderImpl) -> T,
     ) -> T {
         let committee = (0..4).map(|id| node_test_id(id as u64)).collect::<Vec<_>>();
@@ -768,7 +791,12 @@ mod tests {
                 pool.get_cache(),
                 crypto,
                 state_manager,
-                Arc::new(ThreadPoolBuilder::new().num_threads(16).build().unwrap()),
+                Arc::new(
+                    ThreadPoolBuilder::new()
+                        .num_threads(num_threads)
+                        .build()
+                        .unwrap(),
+                ),
                 subnet_id,
                 registry,
                 &MetricsRegistry::new(),
@@ -822,6 +850,7 @@ mod tests {
             shares,
             CERTIFIED_HEIGHT,
             finalize_last_summary,
+            NUM_THREADS,
             |builder| {
                 let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
 
@@ -1036,7 +1065,7 @@ mod tests {
             proposer: node_test_id(0),
             validation_context: &VALIDATION_CONTEXT,
         };
-        test_payload_builder(Some(config), contexts, shares, |builder| {
+        test_payload_builder_with_num_threads(Some(config), contexts, shares, 1, |builder| {
             // Payload with agreements for IDKG contexts should be rejected
             let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
@@ -1191,6 +1220,7 @@ mod tests {
             shares,
             validation_context.certified_height,
             finalize_last_summary,
+            NUM_THREADS,
             |builder| {
                 let serialized_payload =
                     build_and_validate(&builder, MAX_SIZE, &[], &validation_context);
@@ -1316,6 +1346,7 @@ mod tests {
             vec![],
             height,
             true,
+            NUM_THREADS,
             |builder| {
                 let (keys, expiry) = builder.get_enabled_keys_and_expiry(HEIGHT, now).unwrap();
                 assert!(keys.is_empty());

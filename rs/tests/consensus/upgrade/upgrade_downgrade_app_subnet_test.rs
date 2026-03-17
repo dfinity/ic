@@ -35,7 +35,7 @@ use ic_types::Height;
 use slog::info;
 
 const SCHNORR_MSG_SIZE_BYTES: usize = 32;
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(35 * 60);
