@@ -1386,7 +1386,10 @@ impl ExecutionTest {
                 assert_eq!(response, response_arc);
                 callback
             }
-            _ => panic!("Unexpected input popped from canister queues: {:?}", input),
+            _ => panic!(
+                "Unexpected input popped from canister queues (there should be no messages in the canister queues before calling `execute_response`): {:?}",
+                input
+            ),
         };
         self.set_available_guaranteed_response_message_memory(
             subnet_available_guaranteed_response_memory,
