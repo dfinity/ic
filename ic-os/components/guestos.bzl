@@ -4,16 +4,12 @@ Enumerate every component file dependency for GuestOS
 
 load(":defs.bzl", "OS_TYPE_DEST")
 
-# OS-type marker file for GuestOS. Exposed at module level so other .bzl files
-# can reference it without duplicating the label/destination.
-OS_TYPE_FILE = {
-    Label("upgrade/systemd-generators/os-type-guestos"): OS_TYPE_DEST,
-}
-
 def component_files(mode):
     return {
         # environment
         Label("guestos/environment/90-sev-status.sh"): "/etc/systemd/system-environment-generators/90-sev-status.sh",
+        # OS-type marker file, this can be used to identify the OS
+        Label("upgrade/systemd-generators/os-type-guestos"): OS_TYPE_DEST,
 
         # early-boot
         Label("early-boot/relabel-machine-id/relabel-machine-id-guestos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
@@ -192,4 +188,4 @@ def component_files(mode):
         Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
         Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
         Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",
-    } | OS_TYPE_FILE
+    }
