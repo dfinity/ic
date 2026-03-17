@@ -1,6 +1,6 @@
 # Core Types
 
-**Crates**: `ic-limits`, `ic-management-canister-types`
+**Crates**: `ic-limits`, `ic-management-canister-types`, `ic-types-cycles`
 
 ## Requirements
 
