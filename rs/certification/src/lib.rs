@@ -312,6 +312,7 @@ pub fn verify_delegation_certificate(
     struct SubnetView {
         canister_ranges: Option<Blob>,
         public_key: Blob,
+        r#type: Option<String>, // added in V25 certifications
     }
 
     type TreeCanisterRanges = BTreeMap<CanisterId, Blob>;
