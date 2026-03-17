@@ -2099,11 +2099,6 @@ impl SystemState {
             "Cycles lost or duplicated: before = {balance_before}, after = {balance_after}",
         );
     }
-
-    pub fn release_reserved_response_slot_for_testing(&mut self, response: &Response) {
-        self.queues
-            .release_reserved_response_slot_for_testing(response);
-    }
 }
 
 /// Implements memory limits verification for pushing a canister-to-canister
