@@ -239,14 +239,6 @@ impl CanisterStateBuilder {
         Self::default()
     }
 
-    /// A helper function to apply a transformation to the builder.
-    pub fn pipe<F>(self, f: F) -> Self
-    where
-        F: FnOnce(Self) -> Self,
-    {
-        f(self)
-    }
-
     pub fn with_canister_id(mut self, canister_id: CanisterId) -> Self {
         self.canister_id = canister_id;
         self

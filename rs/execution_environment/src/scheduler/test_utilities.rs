@@ -267,7 +267,7 @@ impl SchedulerTest {
         let time_of_last_allocation_charge =
             time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
         let controller = controller.unwrap_or(self.user_id.get());
-        let mut canister_state = CanisterStateBuilder::new()
+        let mut builder = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
             .with_cycles(cycles)
             .with_controller(controller)
@@ -276,12 +276,11 @@ impl SchedulerTest {
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
             .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
-            .with_status(status.unwrap_or(CanisterStatusType::Running))
-            .pipe(|b| match log_memory_limit {
-                Some(limit) => b.with_log_memory_limit(limit.get() as usize),
-                None => b,
-            })
-            .build();
+            .with_status(status.unwrap_or(CanisterStatusType::Running));
+        if let Some(limit) = log_memory_limit {
+            builder = builder.with_log_memory_limit(limit.get() as usize);
+        }
+        let mut canister_state = builder.build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
             wasm_executor
