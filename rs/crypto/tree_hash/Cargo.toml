@@ -6,6 +6,8 @@ edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
+# THIS SHOULD NOT BE MERGED. THIS IS JUST A TEST.
+
 [dependencies]
 ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../sha2" }
