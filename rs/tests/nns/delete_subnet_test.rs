@@ -8,11 +8,8 @@ end::catalog[] */
 use anyhow::Result;
 use candid::{CandidType, Decode, Encode, Principal};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_registry_transport::update;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -20,11 +17,10 @@ use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
     install_registry_canister_with_testnet_topology,
 };
-use ic_system_test_driver::nns::{get_subnet_from_registry, get_subnet_list_from_registry};
+use ic_system_test_driver::nns::get_subnet_list_from_registry;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
 use ic_types::{Height, RegistryVersion, SubnetId};
-use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use std::collections::BTreeSet;
 use std::time::Duration;
