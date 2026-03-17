@@ -32,7 +32,7 @@ enum DataSource {
     Registry,
 }
 
-/// The role of the node in the IC, i.e., whether it's acting as a replica or a boundary node.
+/// The role of the node in the IC, i.e., whether it is acting as a replica or a boundary node.
 enum Role {
     AssignedReplica(SubnetId),
     UnassignedReplica,
@@ -176,8 +176,8 @@ impl Firewall {
             .unwrap_or_else(|| vec![registry_version])
     }
 
-    // Get the node reward type of this node from the registry, and default to `Unspecified` if it's
-    // not found or there's an error.
+    // Get the node reward type of this node from the registry, and default to `Unspecified` if it
+    // is not found or there is an error.
     fn get_defaulting_node_reward_type(
         &self,
         node_id: NodeId,
@@ -1238,7 +1238,7 @@ mod tests {
     /// Sets up the registry with:
     /// 1) a few node records - one for the specified node + ones with different reward types,
     /// 2) a few subnet records - one system subnet, one application subnet, one cloud engine,
-    ///    optionally one for the specified node if it's an assigned replica,
+    ///    optionally one for the specified node if it is an assigned replica,
     /// 3) a bunch of firewall rules,
     ///    and returns a registry client.
     fn set_up_registry(
