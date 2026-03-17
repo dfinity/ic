@@ -8,6 +8,8 @@ name = "add-integer-type-suffix-separator"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1"
+lazy_static = "1"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 regex = "1"
 syn = { version = "2", features = ["full", "visit"] }

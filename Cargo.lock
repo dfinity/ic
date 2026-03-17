@@ -236,6 +236,8 @@ dependencies = [
 name = "add-integer-type-suffix-separator"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "lazy_static",
  "proc-macro2",
  "regex",
  "syn 2.0.117",

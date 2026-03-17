@@ -5,6 +5,8 @@ rust_binary(
     srcs = ["src/main.rs"],
     deps = [
         # Keep sorted.
+        "@crate_index//:anyhow",
+        "@crate_index//:lazy_static",
         "@crate_index//:proc-macro2",
         "@crate_index//:regex",
         "@crate_index//:syn",

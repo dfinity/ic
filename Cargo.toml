@@ -532,10 +532,10 @@ members = [
     "rs/validator/http_request_test_utils",
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
+    "rs/tools/add-integer-type-suffix-separator",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
-    "rs/tools/add-integer-type-suffix-separator",
 ]
 
 resolver = "2"
