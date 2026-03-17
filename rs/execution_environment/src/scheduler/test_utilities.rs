@@ -218,16 +218,16 @@ impl SchedulerTest {
             None,
             None,
             None,
-            None,
         )
     }
 
     pub fn create_canister_without_log_memory(&mut self) -> CanisterId {
-        self.create_canister_with(
+        self.create_canister_with_controller(
             self.initial_canister_cycles,
             ComputeAllocation::zero(),
             MemoryAllocation::default(),
             Some(NumBytes::from(0)),
+            None,
             None,
             None,
             None,
@@ -310,7 +310,6 @@ impl SchedulerTest {
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
-        log_memory_limit: Option<NumBytes>,
         system_task: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
         status: Option<CanisterStatusType>,
@@ -319,7 +318,7 @@ impl SchedulerTest {
             cycles,
             compute_allocation,
             memory_allocation,
-            log_memory_limit,
+            None,
             system_task,
             time_of_last_allocation_charge,
             status,
