@@ -1365,10 +1365,12 @@ impl ExecutionTest {
         let canister = state.take_canister_state(&canister_id).unwrap();
         let mut canister = Arc::unwrap_or_clone(canister);
         let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let response_arc = Arc::new(response);
+        // We push and then immediately pop the response from the canister queues
+        // to ensure all invariants on the canister (system) state are preserved.
         let mut subnet_available_guaranteed_response_memory = self
             .subnet_available_memory
             .get_guaranteed_response_message_memory();
-        let response_arc = Arc::new(response);
         let res = canister
             .push_input(
                 RequestOrResponse::Response(response_arc.clone()),
