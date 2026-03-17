@@ -2128,7 +2128,7 @@ impl PocketIcSubnets {
             } else {
                 None
             };
-            let internet_identity_test_args = Some(InternetIdentityInit {
+            let internet_identity_backend_args = Some(InternetIdentityInit {
                 assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
                 archive_config: None,             // DIFFERENT FROM ICP MAINNET
                 canister_creation_cycles_cost: Some(0),
@@ -2157,7 +2157,7 @@ impl PocketIcSubnets {
                     canister_id,
                     CanisterInstallMode::Install,
                     INTERNET_IDENTITY_BACKEND_CANISTER_WASM.to_vec(),
-                    Encode!(&internet_identity_test_args).unwrap(),
+                    Encode!(&internet_identity_backend_args).unwrap(),
                 )
                 .unwrap();
         }
