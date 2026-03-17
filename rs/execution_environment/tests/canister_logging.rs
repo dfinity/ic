@@ -930,7 +930,7 @@ fn test_canister_log_stays_within_limit() {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
         env.tick();
     }
-    let canister_log_records = fetch_log_records(&env, controller, canister_id);
+    let canister_log_records = fetch_log_records(&env, user_controller, canister_id);
     // Expect records' total size to be under the limit, excluding the outer vector's static size.
     assert_le!(
         canister_log_records
