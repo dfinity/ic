@@ -1,6 +1,7 @@
 """
 Enumerate every component file dependency for SetupOS
 """
+
 load(":defs.bzl", "OS_TYPE_DEST")
 
 component_files = {

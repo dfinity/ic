@@ -5,7 +5,7 @@ Enumerate every component file dependency for HostOS
 load(":defs.bzl", "OS_TYPE_DEST")
 
 component_files = {
-     # OS-type marker file, this can be used to identify the OS
+    # OS-type marker file, this can be used to identify the OS
     Label("upgrade/systemd-generators/os-type-hostos"): OS_TYPE_DEST,
 
     # hostos components
