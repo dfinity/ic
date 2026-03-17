@@ -32,6 +32,8 @@ struct MockCanister {
 struct CanisterSettings {
     log_memory_limit: Option<NumBytes>,
 
+    /// Temporary field to allow `..Default::default()` syntax and prevent clippy lints.
+    /// Remove once a second legitimate field is added to `CanisterSettings`.
     #[allow(dead_code)]
     some_other_field: Option<u64>,
 }
