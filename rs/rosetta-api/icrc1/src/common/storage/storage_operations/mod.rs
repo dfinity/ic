@@ -465,6 +465,30 @@ pub fn update_account_balances(
                 } => {
                     current_fee_collector_107 = Some(fee_collector);
                 }
+                crate::common::storage::types::IcrcOperation::AuthorizedMint {
+                    to, amount, ..
+                } => {
+                    credit(
+                        to,
+                        amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                }
+                crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+                    from,
+                    amount,
+                    ..
+                } => {
+                    debit(
+                        from,
+                        amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                }
             }
         }
 
@@ -609,6 +633,34 @@ pub fn store_blocks(
                 None,
                 None,
                 Nat::from(0u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::AuthorizedMint { to, amount, .. } => (
+                "152mint",
+                None,
+                None,
+                Some(to.owner),
+                Some(*to.effective_subaccount()),
+                None,
+                None,
+                amount,
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+                from, amount, ..
+            } => (
+                "152burn",
+                Some(from.owner),
+                Some(*from.effective_subaccount()),
+                None,
+                None,
+                None,
+                None,
+                amount,
                 None,
                 None,
                 None,

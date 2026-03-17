@@ -275,6 +275,10 @@ pub fn build_icrc1_ledger_canister_method_args(
         crate::common::storage::types::IcrcOperation::FeeCollector { .. } => {
             bail!("FeeCollector Operation not supported")
         }
+        crate::common::storage::types::IcrcOperation::AuthorizedMint { .. }
+        | crate::common::storage::types::IcrcOperation::AuthorizedBurn { .. } => {
+            bail!("AuthorizedMint/AuthorizedBurn operations not supported in construction API")
+        }
     }
     .context("Unable to encode canister method args")
 }
@@ -303,6 +307,10 @@ fn extract_caller_principal_from_icrc1_ledger_operation(
         }
         crate::common::storage::types::IcrcOperation::FeeCollector { .. } => {
             bail!("FeeCollector Operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedMint { .. }
+        | crate::common::storage::types::IcrcOperation::AuthorizedBurn { .. } => {
+            bail!("AuthorizedMint/AuthorizedBurn operations not supported in construction API")
         }
     })
 }
