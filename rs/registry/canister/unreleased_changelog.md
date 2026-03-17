@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
+
 ## Deprecated
 
 ## Removed
