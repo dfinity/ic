@@ -65,7 +65,7 @@ pub const WASM_VALID_SYSTEM_FUNCTIONS: [&str; 7] = [
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
-pub const MAX_WASM_FUNCTION_NAME_LENGTH: usize = 50 * 1024 * 1024;
+pub const MAX_WASM_FUNCTION_NAME_LENGTH: usize = 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -1243,7 +1243,7 @@ fn validate_global_section(module: &Module, max_globals: usize) -> Result<(), Wa
 
 // Checks that no more than `max_functions` are defined in the
 // module and all function names are less than MAX_WASM_FUNCTION_NAME_LENGTH
-// characters.
+// bytes.
 fn validate_function_section(
     module: &Module,
     max_functions: usize,
@@ -1263,15 +1263,20 @@ fn validate_function_section(
             allowed: max_functions,
         });
     }
-
+    // We only need to look at local functions, since `validate_import_section`
+    // already checks and only allows a fixed set of valid imports.
     for id in local_indexes {
         if let Some(name) = module.functions.get_name(id)
             && name.len() > MAX_WASM_FUNCTION_NAME_LENGTH
         {
+            let limit = std::cmp::min(name.len(), 100);
+            let truncated_name: String = name.chars().take(limit).collect();
+            let truncated_name = format!("{truncated_name}...");
             return Err(WasmValidationError::FunctionNameTooLarge {
                 index: *id as usize,
                 size: name.len(),
                 allowed: MAX_WASM_FUNCTION_NAME_LENGTH,
+                name: truncated_name,
             });
         }
     }

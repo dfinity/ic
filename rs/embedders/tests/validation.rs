@@ -1473,7 +1473,8 @@ fn wasm_with_long_func_name_is_invalid() {
         Err(WasmValidationError::FunctionNameTooLarge {
             index: 0,
             size: MAX_WASM_FUNCTION_NAME_LENGTH + 10,
-            allowed: MAX_WASM_FUNCTION_NAME_LENGTH
+            allowed: MAX_WASM_FUNCTION_NAME_LENGTH,
+            name: format!("{}...", "A".repeat(100)),
         })
     );
 }

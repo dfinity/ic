@@ -138,6 +138,7 @@ pub enum WasmValidationError {
         index: usize,
         size: usize,
         allowed: usize,
+        name: String,
     },
     /// The code section is too large.
     CodeSectionTooLarge {
@@ -256,10 +257,11 @@ impl std::fmt::Display for WasmValidationError {
                 index,
                 size,
                 allowed,
+                name,
             } => write!(
                 f,
                 "Wasm module contains a function at index {index} \
-                    of name of size {size} that exceeds the maximum allowed size of {allowed}.",
+                    with name '{name}' of size {size} bytes that exceeds the maximum allowed size of {allowed} bytes.",
             ),
             Self::CodeSectionTooLarge { size, allowed } => write!(
                 f,
@@ -296,8 +298,7 @@ impl AsErrorHelp for WasmValidationError {
             | WasmValidationError::InvalidCustomSection(_)
             | WasmValidationError::InvalidGlobalSection(_)
             | WasmValidationError::UnsupportedWasmInstruction { .. }
-            | WasmValidationError::TooManyCustomSections { .. }
-            | WasmValidationError::FunctionNameTooLarge { .. } => ErrorHelp::ToolchainError,
+            | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
             WasmValidationError::DuplicateExport { name } => ErrorHelp::UserError {
                 suggestion: format!(
                     "Try defining different versions of the function for each \
@@ -334,6 +335,10 @@ impl AsErrorHelp for WasmValidationError {
                 smaller functions."
                     .to_string(),
                 doc_link: doc_ref("wasm-module-function-too-large"),
+            },
+            WasmValidationError::FunctionNameTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try using shorter function names.".to_string(),
+                doc_link: doc_ref("wasm-module-function-name-too-large"),
             },
             WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "Try shrinking the module code section using tools like \
