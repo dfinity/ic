@@ -677,6 +677,7 @@ pub struct SubnetSpec {
     state_config: SubnetStateConfig,
     instruction_config: SubnetInstructionConfig,
     subnet_admins: Option<Vec<RawPrincipalId>>,
+    #[serde(default)]
     cost_schedule: CanisterCyclesCostSchedule,
 }
 
