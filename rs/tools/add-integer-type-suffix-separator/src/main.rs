@@ -1,9 +1,6 @@
-use std::fs;
-use std::ops::Range;
-use std::path::Path;
-use std::process::ExitCode;
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::{fs, ops::Range, path::Path, process::ExitCode};
 use syn::{LitInt, visit::Visit as SynVisit};
 use walkdir::WalkDir;
 
@@ -31,8 +28,8 @@ fn list_integer_literals(rust_code: &str) -> syn::Result<Vec<(Range<usize>, &str
         .map(|location| {
             let snippet = &rust_code[location.clone()];
             (location, snippet)
-    })
-    .collect();
+        })
+        .collect();
 
     Ok(result)
 }
@@ -117,7 +114,7 @@ impl Report {
 
         self.broken_literal_count += fix_count;
         if fix_count > 0 {
-            eprintln!("Fixed {path}: {fix_count} literals");
+            eprintln!("Fixed {fix_count} literals in {path}");
             self.modified_file_count += 1;
         }
     }
