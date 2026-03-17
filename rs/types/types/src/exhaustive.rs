@@ -1,7 +1,7 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::artifact::IngressMessageId;
-use crate::batch::VetKdAgreement;
+use crate::batch::ChainKeyAgreement;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
@@ -1011,7 +1011,7 @@ impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
     }
 }
 
-impl HasId<CallbackId> for VetKdAgreement {}
+impl HasId<CallbackId> for ChainKeyAgreement {}
 impl HasId<IngressMessageId> for SignedRequestBytes {}
 impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
 impl HasId<PseudoRandomId> for CompletedSignature {}
