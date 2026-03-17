@@ -87,7 +87,7 @@ enum Commands {
 
         /// The git commit hash of the currently deployed canister
         #[arg(long)]
-        from: GitCommitHash,
+        from: Option<GitCommitHash>,
 
         /// The git commit hash at which the canister should be reinstalled
         #[arg(long)]
@@ -252,7 +252,10 @@ async fn main() {
 
                 let mut git_repo = GitRepository::clone(git_repo_url);
                 let dashboard = DashboardClient::new();
-                let release_notes = git_repo.release_notes_batch(&canisters, &from, &to);
+                let mut release_notes = vec![];
+                if let Some(ref from) = from {
+                    release_notes = git_repo.release_notes_batch(&canisters, from, &to);
+                }
                 git_repo.checkout(&to);
                 let install_args: Vec<_> = git_repo.encode_args_batch(&canisters, args.clone());
                 let canister_ids: Vec<_> =
@@ -275,7 +278,7 @@ async fn main() {
                         canister_id: canister_ids[index],
                         last_proposal_id: last_proposal_ids[index],
                         install_args: install_args[index].clone(),
-                        release_notes: release_notes[index].clone(),
+                        release_notes: release_notes.get(index).cloned(),
                         build_artifact_command: canister.build_artifact_as_str(),
                     };
 

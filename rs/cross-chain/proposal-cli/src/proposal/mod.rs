@@ -46,7 +46,7 @@ pub struct ReinstallProposalTemplate {
     pub canister_id: Principal,
     pub last_proposal_id: Option<u64>,
     pub install_args: UpgradeArgs,
-    pub release_notes: ReleaseNotes,
+    pub release_notes: Option<ReleaseNotes>,
     pub build_artifact_command: String,
 }
 

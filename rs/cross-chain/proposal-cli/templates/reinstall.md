@@ -22,12 +22,16 @@ Forum discussion: {{canister.forum_discussion()}}
 TODO: THIS MUST BE FILLED OUT
 
 
+{% match release_notes -%}
+{% when Some with (notes) -%}
 ## Release Notes
 
 ```
-{{release_notes}}
+{{notes}}
  ```
 
+{% when None -%}
+{% endmatch -%}
 ## Install args
 
 ```
