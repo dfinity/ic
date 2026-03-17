@@ -7,9 +7,8 @@ use candid_utils::{
 };
 use clap::Parser;
 use core::convert::From;
-use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelection};
+use cycles_minting_canister::{CanisterSettings, CreateCanister, SubnetSelection};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_management_canister_types_private::BoundedVec;
 use ic_nervous_system_agent::{
     CallCanisters, Request, management_canister,
     sns::{self, Sns, governance::SubmittedProposal, root::SnsCanisters},
@@ -234,8 +233,8 @@ pub async fn create_extension_canister<C: CallCanisters>(
         agent,
         cycles_amount,
         subnet_selection,
-        Some(CanisterSettingsArgs {
-            controllers: Some(BoundedVec::new(controllers)),
+        Some(CanisterSettings {
+            controllers: Some(controllers.into_iter().map(|p| p.0).collect()),
             ..Default::default()
         }),
     )
@@ -494,7 +493,7 @@ pub async fn cycles_ledger_create_canister<C: CallCanisters>(
     agent: &C,
     cycles_amount: u128,
     subnet_selection: Option<SubnetSelection>,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<CanisterSettings>,
 ) -> Result<CreateCanisterSuccess, CreateCanisterError> {
     let request = CreateCanisterArgs {
         from_subaccount: None,
