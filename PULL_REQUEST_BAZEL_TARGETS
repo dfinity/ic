@@ -43,8 +43,8 @@
 # the check-pull-request-bazel-targets job on CI.
 
 *.sh        //pre-commit:shfmt-check
-*.py        //pre-commit:ruff-lint
-*.proto     //pre-commit:protobuf-format-check
+*.py        //pre-commit:ruff-check
+*.proto     //pre-commit:buf-check
             //pre-commit:buf-breaking
 
 mainnet-icos-revisions.json
