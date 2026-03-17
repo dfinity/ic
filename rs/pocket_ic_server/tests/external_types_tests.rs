@@ -61,7 +61,7 @@ fn cycles_ledger_candid_equality() {
 */
 
 #[test]
-fn internet_identity_candid_equality() {
+fn internet_identity_backend_candid_equality() {
     const INTERNET_IDENTITY_BACKEND_CANISTER_WASM: &[u8] =
         include_bytes!(env!("INTERNET_IDENTITY_BACKEND_CANISTER_WASM_PATH"));
 

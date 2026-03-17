@@ -1,5 +1,5 @@
 use crate::common::{send_signal_to_pic, start_server, start_server_helper};
-use candid::{Encode, Principal};
+use candid::{CandidType, Encode, Principal};
 use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
@@ -11,6 +11,7 @@ use reqwest::Url;
 use reqwest::blocking::Client;
 use reqwest::header;
 use reqwest::{Client as NonblockingClient, StatusCode};
+use serde::Serialize;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
@@ -18,24 +19,75 @@ use tempfile::NamedTempFile;
 
 mod common;
 
+#[derive(CandidType, Serialize)]
+struct InternetIdentityFrontendInitArgs {
+    backend_canister_id: Principal,
+    backend_origin: String,
+    related_origins: Option<Vec<String>>,
+    fetch_root_key: Option<bool>,
+    dev_csp: Option<bool>,
+}
+
 fn deploy_ii(pic: &PocketIc) -> Principal {
-    let canister_id = pic.create_canister();
+    // Deploy II backend.
+    let backend_id = pic.create_canister();
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 2_000_000_000_000);
-    let arg = Encode!(&()).unwrap();
-    pic.install_canister(canister_id, ii_wasm, arg, None);
-    canister_id
+    pic.add_cycles(backend_id, 2_000_000_000_000);
+    pic.install_canister(backend_id, ii_wasm, Encode!(&()).unwrap(), None);
+
+    // Deploy II frontend.
+    let frontend_id = pic.create_canister();
+    let frontend_path = std::env::var_os("II_FRONTEND_WASM")
+        .expect("Missing II_FRONTEND_WASM (path to II frontend wasm) in env.");
+    let frontend_wasm =
+        std::fs::read(frontend_path).expect("Could not read II frontend wasm file.");
+    pic.add_cycles(frontend_id, 2_000_000_000_000);
+    // The backend_origin omits the port because the HTTP gateway hasn't been
+    // created yet at this point. It's only used by the frontend for browser-side
+    // redirects to the backend, which these tests don't exercise.
+    let frontend_arg = Encode!(&InternetIdentityFrontendInitArgs {
+        backend_canister_id: backend_id,
+        backend_origin: format!("http://{backend_id}.localhost"),
+        related_origins: None,
+        fetch_root_key: Some(true),
+        dev_csp: Some(true),
+    })
+    .unwrap();
+    pic.install_canister(frontend_id, frontend_wasm, frontend_arg, None);
+    frontend_id
 }
 
 async fn deploy_ii_async(pic: &pocket_ic::nonblocking::PocketIc) -> Principal {
-    let canister_id = pic.create_canister().await;
+    // Deploy II backend.
+    let backend_id = pic.create_canister().await;
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 2_000_000_000_000).await;
-    let arg = Encode!(&()).unwrap();
-    pic.install_canister(canister_id, ii_wasm, arg, None).await;
-    canister_id
+    pic.add_cycles(backend_id, 2_000_000_000_000).await;
+    pic.install_canister(backend_id, ii_wasm, Encode!(&()).unwrap(), None)
+        .await;
+
+    // Deploy II frontend.
+    let frontend_id = pic.create_canister().await;
+    let frontend_path = std::env::var_os("II_FRONTEND_WASM")
+        .expect("Missing II_FRONTEND_WASM (path to II frontend wasm) in env.");
+    let frontend_wasm =
+        std::fs::read(frontend_path).expect("Could not read II frontend wasm file.");
+    pic.add_cycles(frontend_id, 2_000_000_000_000).await;
+    // The backend_origin omits the port because the HTTP gateway hasn't been
+    // created yet at this point. It's only used by the frontend for browser-side
+    // redirects to the backend, which these tests don't exercise.
+    let frontend_arg = Encode!(&InternetIdentityFrontendInitArgs {
+        backend_canister_id: backend_id,
+        backend_origin: format!("http://{backend_id}.localhost"),
+        related_origins: None,
+        fetch_root_key: Some(true),
+        dev_csp: Some(true),
+    })
+    .unwrap();
+    pic.install_canister(frontend_id, frontend_wasm, frontend_arg, None)
+        .await;
+    frontend_id
 }
 
 // Test the server endpoint to list HTTP gateways and the following HTTP gateway endpoints:
@@ -436,7 +488,7 @@ fn test_unresponsive_gateway_backend() {
     let paths = vec![
         "_/dashboard".to_string(),
         "api/v2/status".to_string(),
-        format!("favicon.ico?canisterId={}", canister_id),
+        format!("?canisterId={}", canister_id),
     ];
     for path in &paths {
         let resp = client.get(endpoint.join(path).unwrap()).send().unwrap();
