@@ -16,7 +16,8 @@ use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallContextId, RequestMetadata};
 use ic_types::methods::{FuncRef, WasmMethod};
-use ic_types::{Cycles, NumInstructions, Time};
+use ic_types::{NumInstructions, Time};
+use ic_types_cycles::Cycles;
 use prometheus::IntCounter;
 
 // Execute non replicated query.

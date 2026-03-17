@@ -9,7 +9,8 @@ use ic_crypto_utils_threshold_sig_der::{
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};
-use ic_types::{CanisterId, Cycles, PrincipalId};
+use ic_types::{CanisterId, PrincipalId};
+use ic_types_cycles::Cycles;
 use serde::Serialize;
 use std::io::{Read, Write, stdin, stdout};
 

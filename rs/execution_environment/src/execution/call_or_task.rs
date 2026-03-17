@@ -28,7 +28,8 @@ use ic_types::messages::{
     CanisterTask, RequestMetadata,
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
+use ic_types::{CanisterTimer, NumBytes, NumInstructions, Time};
+use ic_types_cycles::Cycles;
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
