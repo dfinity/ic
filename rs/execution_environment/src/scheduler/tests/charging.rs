@@ -1,9 +1,10 @@
 //! Tests for resource use charging.
 
-use super::super::test_utilities::{SchedulerTestBuilder, ingress};
+use super::super::test_utilities::{
+    SchedulerTest, SchedulerTestBuilder, ingress, on_response, other_side,
+};
 use super::super::*;
 use super::zero_instruction_overhead_config;
-use crate::scheduler::test_utilities::{on_response, other_side};
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::{
     Method, Payload as _, TakeCanisterSnapshotArgs, UninstallCodeArgs,
@@ -421,27 +422,36 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
 }
 
 #[test]
-fn dont_charge_allocations_for_long_running_canisters() {
-    let mut test = SchedulerTestBuilder::new().build();
-    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    let initial_cycles = 10_000_000;
+fn dont_charge_allocations_for_paused_canisters() {
+    const SLICE: u64 = 10;
+    const T0: Time = Time::from_nanos_since_unix_epoch(1_000_000_000);
+    const INITIAL_CYCLES: Cycles = Cycles::new(10_000_000);
+    const MEMORY_ALLOCATION: NumBytes = NumBytes::new(1 << 30);
 
-    let canister = test.create_canister_with(
-        Cycles::new(initial_cycles),
-        ComputeAllocation::zero(),
-        MemoryAllocation::from(NumBytes::from(1 << 30)),
-        None,
-        Some(initial_time),
-        None,
-    );
-    let paused_canister = test.create_canister_with(
-        Cycles::new(initial_cycles),
-        ComputeAllocation::zero(),
-        MemoryAllocation::from(NumBytes::from(1 << 30)),
-        None,
-        Some(initial_time),
-        None,
-    );
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            max_instructions_per_round: NumInstructions::from(SLICE),
+            max_instructions_per_message: NumInstructions::from(SLICE * 10),
+            max_instructions_per_slice: NumInstructions::from(SLICE),
+            max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
+            ..zero_instruction_overhead_config()
+        })
+        .build();
+
+    let mut create_canister_with_memory_allocation = || -> CanisterId {
+        test.create_canister_with(
+            INITIAL_CYCLES,
+            ComputeAllocation::zero(),
+            MemoryAllocation::from(MEMORY_ALLOCATION),
+            None,
+            Some(T0),
+            None,
+        )
+    };
+    let canister = create_canister_with_memory_allocation();
+    let paused_canister = create_canister_with_memory_allocation();
+    let paused_install_canister = create_canister_with_memory_allocation();
+
     test.canister_state_mut(paused_canister)
         .system_state
         .task_queue
@@ -449,30 +459,48 @@ fn dont_charge_allocations_for_long_running_canisters() {
             id: PausedExecutionId(0),
             input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
         });
-
-    assert!(test.canister_state(paused_canister).has_paused_execution());
-    assert!(!test.canister_state(canister).has_paused_execution());
-
-    let paused_canister_balance_before =
-        test.canister_state(paused_canister).system_state.balance();
-    let canister_balance_before = test.canister_state(canister).system_state.balance();
+    test.canister_state_mut(paused_install_canister)
+        .system_state
+        .task_queue
+        .enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
 
     let duration_between_allocation_charges = test
         .scheduler()
         .cycles_account_manager
         .duration_between_allocation_charges();
-    test.set_time(initial_time + duration_between_allocation_charges);
+    test.set_time(T0 + duration_between_allocation_charges);
 
     test.charge_for_resource_allocations();
-    // Balance has not changed for canister that has long running execution.
-    assert_eq!(
-        test.canister_state(paused_canister).system_state.balance(),
-        paused_canister_balance_before
-    );
-    // Balance has changed for this canister.
-    assert_eq!(
-        test.canister_state(canister).system_state.balance(),
-        canister_balance_before
-            - test.memory_cost(NumBytes::from(1 << 30), duration_between_allocation_charges)
-    );
+
+    fn assert_balance_change(test: &SchedulerTest, canister: CanisterId, duration: Duration) {
+        assert_eq!(
+            test.canister_state(canister).system_state.balance(),
+            INITIAL_CYCLES - test.memory_cost(MEMORY_ALLOCATION, duration)
+        );
+    }
+    // Balance has changed for the canister with no paused execution.
+    assert_balance_change(&test, canister, duration_between_allocation_charges);
+    // Balance has not changed for the canisters with paused execution/install code.
+    assert_balance_change(&test, paused_canister, Duration::from_secs(0));
+    assert_balance_change(&test, paused_install_canister, Duration::from_secs(0));
+
+    // One second later, the two long executions complete.
+    let duration_plus_one_second = duration_between_allocation_charges + Duration::from_secs(1);
+    test.set_time(T0 + duration_plus_one_second);
+    test.canister_state_mut(paused_canister)
+        .system_state
+        .task_queue
+        .pop_front();
+    test.canister_state_mut(paused_install_canister)
+        .system_state
+        .task_queue
+        .pop_front();
+
+    test.charge_for_resource_allocations();
+
+    // The balance has not changed for the canister that was already charged.
+    assert_balance_change(&test, canister, duration_between_allocation_charges);
+    // The balance has changed for the canisters with paused execution/install code.
+    assert_balance_change(&test, paused_canister, duration_plus_one_second);
+    assert_balance_change(&test, paused_install_canister, duration_plus_one_second);
 }
