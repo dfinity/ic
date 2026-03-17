@@ -1,8 +1,4 @@
-use std::{
-    hash::{Hash, Hasher},
-    sync::Arc,
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     body::Body,
@@ -20,26 +16,11 @@ use crate::{
     routes::RequestContext,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct CacheKey {
     subnet_id: SubnetId,
     paths: Vec<Vec<Vec<u8>>>,
 }
-
-impl Hash for CacheKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.subnet_id.hash(state);
-        self.paths.hash(state);
-    }
-}
-
-impl PartialEq for CacheKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.subnet_id == other.subnet_id && self.paths == other.paths
-    }
-}
-
-impl Eq for CacheKey {}
 
 #[derive(Clone)]
 struct CachedResponse {
