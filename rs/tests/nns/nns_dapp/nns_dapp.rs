@@ -108,6 +108,50 @@ pub fn install_sns_aggregator(
     })
 }
 
+/// See https://github.com/dfinity/internet-identity/releases/download/release-2026-03-16/internet_identity_frontend.did
+#[derive(CandidType, Serialize)]
+struct InternetIdentityFrontendInitArgs {
+    backend_canister_id: Principal,
+    backend_origin: String,
+    related_origins: Option<Vec<String>>,
+    fetch_root_key: Option<bool>,
+    dev_csp: Option<bool>,
+}
+
+fn install_ii_canisters(env: &TestEnv, node: &IcNodeSnapshot) -> (Principal, Principal) {
+    let backend_canister_id = node.create_and_install_canister_with_arg(
+        &env::var("II_BACKEND_WASM_PATH").expect("II_BACKEND_WASM_PATH not set"),
+        None,
+    );
+
+    let network_url = node.get_public_url().host_str().unwrap();
+
+    let frontend_canister_id = node.create_and_install_canister_with_arg(
+        &env::var("II_FRONTEND_WASM_PATH").expect("II_FRONTEND_WASM_PATH not set"),
+        Some(
+            candid::encode_one(InternetIdentityFrontendInitArgs {
+                backend_canister_id,
+                backend_origin: format!("http://{}.{}", backend_canister_id.to_text(), network_url),
+                related_origins: Some(vec![format!(
+                    "http://{}.{}",
+                    frontend_canister_id.to_text(),
+                    network_url
+                )]),
+                fetch_root_key: Some(true),
+                dev_csp: Some(true),
+            })
+            .unwrap(),
+        ),
+    );
+    info!(
+        env.logger(),
+        "II backend canister with id={backend_canister_id} and frontend with \
+         id={frontend_canister_id} installed on subnet with id={}",
+        node.subnet_id().unwrap()
+    );
+    (backend_canister_id, frontend_canister_id)
+}
+
 /// Installs II, NNS dapp, and Subnet Rental Canister.
 /// The Subnet Rental Canister is installed since otherwise
 /// the canister ID of the ckETH ledger (required by the NNS dapp)
@@ -122,8 +166,7 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     // deploy the II canister
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let ii_canister_id =
-        nns_node.create_and_install_canister_with_arg(&env::var("II_WASM_PATH").unwrap(), None);
+    let (_, ii_canister_id) = install_ii_canisters(env, &nns_node);
 
     // create the NNS dapp canister so that its canister ID is allocated
     // and the Subnet Rental Canister gets its mainnet canister ID in the next step

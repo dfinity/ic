@@ -21,7 +21,7 @@ from the node directly, fetching the cache statistics. Finally, check that the c
 end::catalog[] */
 
 use anyhow::Result;
-use candid::Principal;
+use candid::{CandidType, Principal};
 use core::ops::RangeInclusive;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
@@ -41,6 +41,7 @@ use ic_system_test_driver::util::{
 };
 use ic_types::messages::Blob;
 use rand::Rng;
+use serde::Serialize;
 use serde_bytes::ByteBuf;
 use slog::info;
 use std::env;
@@ -141,10 +142,41 @@ pub fn test(env: TestEnv) {
     });
 }
 
+#[derive(CandidType, Serialize)]
+enum StaticCaptchaTrigger {
+    CaptchaEnabled,
+    CaptchaDisabled,
+}
+
+#[derive(CandidType, Serialize)]
+enum CaptchaTrigger {
+    Dynamic,
+    Static(StaticCaptchaTrigger),
+}
+
+#[derive(CandidType, Serialize)]
+struct CaptchaConfig {
+    pub max_unsolved_captchas: u64,
+    pub captcha_trigger: CaptchaTrigger,
+}
+
+#[derive(CandidType, Serialize)]
+struct InternetIdentityInit {
+    pub capture_config: Option<CaptchaConfig>,
+}
+
 fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
     let ii_canister_id = ii_node.create_and_install_canister_with_arg(
-        &env::var("II_WASM_PATH").expect("II_WASM_PATH not set"),
-        None,
+        &env::var("II_BACKEND_WASM_PATH").expect("II_BACKEND_WASM_PATH not set"),
+        Some(
+            candid::encode_one(&InternetIdentityInit {
+                capture_config: Some(CaptchaConfig {
+                    max_unsolved_captchas: 50,
+                    captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
+                }),
+            })
+            .unwrap(),
+        ),
     );
     info!(
         env.logger(),

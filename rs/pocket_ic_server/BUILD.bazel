@@ -341,12 +341,14 @@ rust_test(
         data = [
             ":pocket-ic-server",
             "@internet_identity_backend//file",
+            "@internet_identity_frontend//file",
             "@mozilla_root_ca_store//file",
         ],
         env = {
             "RUST_TEST_THREADS": "2",
             "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
             "II_WASM": "$(rootpath @internet_identity_backend//file)",
+            "II_FRONTEND_WASM": "$(rootpath @internet_identity_frontend//file)",
             "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         },
         tags = [
