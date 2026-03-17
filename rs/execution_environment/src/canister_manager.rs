@@ -1609,25 +1609,20 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<UploadChunkResult, (CanisterManagerError, Cycles)> {
+    ) -> Result<UploadChunkResult, (CanisterManagerError, NumInstructions, Cycles)> {
         // Allow the canister itself to perform this operation.
         if sender != canister.canister_id().into() {
-            validate_controller(canister, &sender).map_err(|err| (err, Cycles::zero()))?
+            validate_controller(canister, &sender)
+                .map_err(|err| (err, NumInstructions::new(0), Cycles::zero()))?
         }
 
         // Charge for the upload. We charge before checking if the chunk has already been uploaded
         // since that check involves hash computation that we also want to charge for.
         let instructions = self.config.upload_wasm_chunk_instructions;
-        // For the `upload_chunk` operation, it does not matter if this is a Wasm64 or Wasm32 module
-        // since the number of instructions charged depends on a constant fee
-        // and Wasm64 does not bring any additional overhead for this operation.
-        // The only overhead is during execution time.
-        let execution_mode = WasmExecutionMode::Wasm32;
-        let cycles = self.cycles_account_manager.execution_cost(
+        let cycles = self.cycles_account_manager.management_canister_cost(
             instructions,
             subnet_size,
             cost_schedule,
-            execution_mode,
         );
         self.cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
@@ -1642,6 +1637,7 @@ impl CanisterManager {
                     CanisterManagerError::WasmChunkStoreError {
                         message: format!("Error charging for 'upload_chunk': {err}"),
                     },
+                    NumInstructions::new(0),
                     Cycles::zero(),
                 )
             })?;
@@ -1664,6 +1660,7 @@ impl CanisterManager {
             ChunkValidationResult::ValidationError(err) => {
                 return Err((
                     CanisterManagerError::WasmChunkStoreError { message: err },
+                    instructions,
                     cycles,
                 ));
             }
@@ -1683,6 +1680,7 @@ impl CanisterManager {
                         self.config.heap_delta_rate_limit
                     ),
                 },
+                instructions,
                 cycles,
             ));
         }
@@ -1700,7 +1698,7 @@ impl CanisterManager {
                 memory_usage,
                 resource_saturation,
             )
-            .map_err(|err| (err, cycles))?;
+            .map_err(|err| (err, instructions, cycles))?;
         self.cycles_and_memory_usage_updates(
             subnet_size,
             cost_schedule,

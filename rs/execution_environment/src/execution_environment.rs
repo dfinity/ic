@@ -529,7 +529,7 @@ impl ExecutionEnvironment {
                 Vec<ExecEnvResponse>,
                 Vec<StopCanisterContext>,
             ),
-            (UserError, Cycles),
+            (UserError, NumInstructions, Cycles),
         >,
     {
         let cost_schedule = state.get_own_cost_schedule();
@@ -557,9 +557,10 @@ impl ExecutionEnvironment {
                     self.reject_stop_requests(canister_id, stop_contexts, state);
                     Ok(bytes)
                 }
-                Err((err, cycles)) => {
+                Err((err, instructions, cycles)) => {
                     let memory_usage = clean_canister.memory_usage();
                     let message_memory_usage = clean_canister.message_memory_usage();
+                    round_limits.instructions -= as_round_instructions(instructions);
                     let res = self.cycles_account_manager.consume_cycles(
                                     &mut clean_canister.system_state,
                                     memory_usage,
@@ -905,7 +906,7 @@ impl ExecutionEnvironment {
                                     vec![],
                                 )
                             })
-                            .map_err(|err| (err.into(), Cycles::zero()))
+                            .map_err(|err| (err.into(), NumInstructions::new(0), Cycles::zero()))
                     };
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
                     let time = state.time();
@@ -966,7 +967,7 @@ impl ExecutionEnvironment {
                                     vec![],
                                 )
                             })
-                            .map_err(|err| (err, Cycles::zero()))
+                            .map_err(|err| (err, NumInstructions::new(0), Cycles::zero()))
                         };
                         let result = match CanisterSettings::try_from(args.settings) {
                             Err(err) => Err(err.into()),
@@ -1118,7 +1119,7 @@ impl ExecutionEnvironment {
                                     stop_contexts,
                                 )
                             })
-                            .map_err(|err| (err.into(), Cycles::zero()))
+                            .map_err(|err| (err.into(), NumInstructions::new(0), Cycles::zero()))
                     };
                     self.execute_mgmt_operation_on_canister(
                         canister_id,
@@ -1643,7 +1644,9 @@ impl ExecutionEnvironment {
                                         vec![],
                                     )
                                 })
-                                .map_err(|err| (err.into(), Cycles::zero()))
+                                .map_err(|err| {
+                                    (err.into(), NumInstructions::new(0), Cycles::zero())
+                                })
                         };
                     let sender = *msg.sender();
                     let cycles = args.to_u128();
@@ -2688,7 +2691,7 @@ impl ExecutionEnvironment {
                             )
                         },
                     )
-                    .map_err(|(err, cycles)| (err.into(), cycles))
+                    .map_err(|(err, instructions, cycles)| (err.into(), instructions, cycles))
             };
         self.execute_mgmt_operation_on_canister(
             canister_id,
@@ -2739,7 +2742,7 @@ impl ExecutionEnvironment {
                         vec![],
                     )
                 })
-                .map_err(|err| (err.into(), Cycles::zero()))
+                .map_err(|err| (err.into(), NumInstructions::new(0), Cycles::zero()))
         };
         self.execute_mgmt_operation_on_canister(
             canister_id,
