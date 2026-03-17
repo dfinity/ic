@@ -12,7 +12,7 @@ use nix::unistd::getuid;
 use sev_guest::firmware::SevGuestFirmware;
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
-use tracing::debug;
+use tracing::warn;
 
 #[derive(clap::Parser)]
 pub enum Args {
@@ -105,7 +105,7 @@ fn run(
 }
 
 unsafe extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {
-    debug!(
+    warn!(
         "libcryptsetup: {}",
         unsafe { CStr::from_ptr(msg) }.to_string_lossy()
     );
