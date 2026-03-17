@@ -1,7 +1,7 @@
 ---
 name: canhelp
 description: Display a human-readable summary of a canister's interface given its mainnet canister ID. Like --help but for canisters.
-allowed-tools: Bash(icp canister metadata:*), Read, Grep, Glob
+allowed-tools: Bash(./scripts/fetch-candid.sh *), Read, Grep, Glob
 argument-hint: <canister-id>
 ---
 
@@ -9,12 +9,15 @@ Given the canister ID in `$ARGUMENTS`, fetch and summarize its Candid interface.
 
 ## Steps
 
-1. Fetch the Candid interface from mainnet using `icp`:
+1. Fetch the Candid interface by running the fetch script from the skill's base directory:
    ```
-   icp canister metadata $ARGUMENTS candid:service --network ic
+   ./scripts/fetch-candid.sh $ARGUMENTS
    ```
+   The script outputs the path to the downloaded `.did` file.
 
-2. Present the output as a readable summary with the following structure:
+2. Read the file using the `Read` tool.
+
+3. Present the output as a readable summary with the following structure:
 
    **Canister `<canister-id>`**
 
