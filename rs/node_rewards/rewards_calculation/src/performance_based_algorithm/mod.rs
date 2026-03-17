@@ -105,52 +105,7 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The maximum rewards reduction for a node.
     const MAX_REWARDS_REDUCTION: Decimal;
 
-    async fn calculate_rewards(
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        input_provider: impl PerformanceBasedAlgorithmInputProvider,
-    ) -> Result<RewardsCalculatorResults, String> {
-        if from_date > to_date {
-            return Err("from_day must be before to_day".to_string());
-        }
-
-        let reward_period = from_date.iter_days().take_while(|d| *d <= to_date);
-        let mut total_rewards_xdr_permyriad = BTreeMap::new();
-        let mut daily_results = BTreeMap::new();
-
-        // Process each day in the reward period
-        for day in reward_period {
-            let result_for_day = Self::calculate_daily_rewards(&input_provider, &day)?;
-
-            // Accumulate total rewards per provider across all days
-            for (provider_id, provider_rewards) in &result_for_day.provider_results {
-                total_rewards_xdr_permyriad
-                    .entry(*provider_id)
-                    .and_modify(|total| {
-                        *total += provider_rewards.total_adjusted_rewards_xdr_permyriad
-                    })
-                    .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
-            }
-            daily_results.insert(day, result_for_day);
-
-            // This is a dummy call to force the Wasm engine to execute the query.
-            #[cfg(target_arch = "wasm32")]
-            let _ = ic_cdk::call::Call::bounded_wait(
-                ic_cdk::api::canister_self(),
-                "reset_instructions",
-            )
-            .await
-            .unwrap();
-        }
-
-        Ok(RewardsCalculatorResults {
-            algorithm_version: Self::VERSION,
-            total_rewards_xdr_permyriad,
-            daily_results,
-        })
-    }
-
-    fn calculate_daily_rewards(
+    fn calculate_rewards_for_date(
         data_provider: &impl PerformanceBasedAlgorithmInputProvider,
         date: &NaiveDate,
     ) -> Result<DailyResults, String> {
