@@ -1,4 +1,4 @@
-use crate::performance_based_algorithm::PerformanceBasedAlgorithmInputProvider;
+use crate::performance_based_algorithm::{PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInputProvider};
 use crate::performance_based_algorithm::results::{DailyNodeFailureRate, DailyNodeRewards};
 use crate::performance_based_algorithm::test_utils::{
     test_node_id, test_provider_id, test_subnet_id,
