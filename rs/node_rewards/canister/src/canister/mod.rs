@@ -353,6 +353,7 @@ impl NodeRewardsCanister {
         request: GetNodeProvidersRewardsCalculationRequest,
     ) -> GetNodeProvidersRewardsCalculationResponse {
         let date = NaiveDate::try_from(request.day)?;
+        canister.with_borrow(|c| c.validate_reward_period(date, date))?;
         let daily_results = canister
             .with_borrow(|canister| {
                 canister.calculate_rewards_for_date(&date, request.algorithm_version)
