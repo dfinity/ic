@@ -513,6 +513,7 @@ members = [
     "rs/tree_deserializer",
     "rs/types/base_types",
     "rs/types/base_types/protobuf_generator",
+    "rs/types/cycles",
     "rs/types/exhaustive_derive",
     "rs/types/management_canister_types",
     "rs/types/types",
@@ -659,7 +660,7 @@ flate2 = "1.0.31"
 fs_extra = "1.2.0"
 futures = "0.3.31"
 futures-util = "0.3.31"
-get_if_addrs = "0.5.3"
+getifs = "0.4.0"
 getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
 gpt = "4.1"

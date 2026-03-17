@@ -27,13 +27,13 @@ use ic_replicated_state::{
     canister_state::DEFAULT_QUEUE_CAPACITY, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumInstructions, Time,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
     methods::Callback,
     time::CoarseTime,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase};
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -1483,14 +1483,14 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{NetworkTopology, SystemState};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
-    use ic_types::cycles_use_case::CyclesUseCase;
     use ic_types::{
-        CanisterTimer, ComputeAllocation, Cycles, MAX_DELTA_LOG_MEMORY_LIMIT, MemoryAllocation,
-        NumBytes, NumInstructions, Time,
+        CanisterTimer, ComputeAllocation, MAX_DELTA_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes,
+        NumInstructions, Time,
         batch::CanisterCyclesCostSchedule,
         messages::{NO_DEADLINE, RequestMetadata},
         time::CoarseTime,
     };
+    use ic_types_cycles::{Cycles, CyclesUseCase};
 
     use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};
     use crate::wasmtime_embedder::system_api::cycles_balance_change::CyclesBalanceChange;

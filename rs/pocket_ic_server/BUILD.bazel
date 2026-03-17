@@ -52,6 +52,7 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_machine_tests",
     "//rs/state_manager",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/validator/ingress_message",

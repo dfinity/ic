@@ -107,6 +107,7 @@ system_test(
         "//rs/rust_canisters/on_wire",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/cycles_minting",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
