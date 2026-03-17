@@ -56,6 +56,9 @@ ignored_repo_components = [
     "misc/console-getty@/hostos-prod/override.conf",
     "misc/serial-getty@/guestos-dev/override.conf",
     "misc/serial-getty@/guestos-prod/override.conf",
+    "guestos/ic-replica.service.d/dev/override.conf",
+    "guestos/misc/sysctl.d/coredump.conf",
+    "guestos/misc/coredump.conf",
     "hostos/misc/grub-upgrader/grub-upgrader.sh",
     "hostos/misc/grub-upgrader/grub-upgrader.service",
 ]

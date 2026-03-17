@@ -18,6 +18,9 @@ openssh-client
 gdb
 strace
 
+# coredump collection for crash analysis
+systemd-coredump
+
 # useful for SELinux development
 setools
 

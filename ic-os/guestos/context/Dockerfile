@@ -254,6 +254,15 @@ FROM output_prod as output_dev
 
 USER root:root
 
+# TODO: remove before undrafting PR:
+# Install dev-only packages not yet in the base image.
+# --force-confold keeps our pre-installed /etc/systemd/coredump.conf
+# instead of prompting about the package's default version.
+RUN apt-get -y update && \
+    apt-get -y --no-install-recommends -o Dpkg::Options::="--force-confold" install \
+    systemd-coredump \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Set a root password if specified
 ARG ROOT_PASSWORD=
 RUN \

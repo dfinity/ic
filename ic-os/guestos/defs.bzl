@@ -102,6 +102,13 @@ def image_deps(mode, malicious = False):
             Label("//ic-os/components:misc/serial-getty@/guestos-dev/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
         })
 
+        # Enable coredumps for ic-replica (orchestrator + replica)
+        deps["component_files"].update({
+            Label("//ic-os/components:guestos/ic-replica.service.d/dev/override.conf"): "/etc/systemd/system/ic-replica.service.d/override.conf",
+            Label("//ic-os/components:guestos/misc/sysctl.d/coredump.conf"): "/etc/sysctl.d/coredump.conf",
+            Label("//ic-os/components:guestos/misc/coredump.conf"): "/etc/systemd/coredump.conf",
+        })
+
         # Dev config tool
         deps["rootfs"].pop("//rs/ic_os/release:config_tool", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_tool_dev": "/opt/ic/bin/config_tool:0755"})

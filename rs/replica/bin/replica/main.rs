@@ -292,6 +292,12 @@ fn main() -> io::Result<()> {
 
     info!(logger, "Constructed IC stack");
 
+    // Trigger a real SIGSEGV via null pointer dereference.
+    unsafe {
+        let ptr: *const u8 = std::ptr::null();
+        std::ptr::read_volatile(ptr);
+    }
+
     std::thread::sleep(Duration::from_millis(5000));
 
     if config.malicious_behavior.maliciously_seg_fault() {
