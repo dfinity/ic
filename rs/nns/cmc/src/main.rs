@@ -32,7 +32,8 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types_cycles::Cycles;
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, DEFAULT_TRANSFER_FEE, Memo, Operation,
     SendArgs, Subaccount, Tokens, Transaction,

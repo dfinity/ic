@@ -1,7 +1,7 @@
 use crate::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_protobuf::types::v1::RejectCode as pbRejectCode;
 use ic_types::{
-    CanisterId, Cycles, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
+    CanisterId, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{
         CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata,
@@ -10,6 +10,7 @@ use ic_types::{
     time::{CoarseTime, UNIX_EPOCH},
     xnet::StreamIndex,
 };
+use ic_types_cycles::Cycles;
 use proptest::prelude::*;
 use std::{convert::TryInto, time::Duration};
 use strum::IntoEnumIterator;
