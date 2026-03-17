@@ -3311,7 +3311,7 @@ mod tests {
         let mut registry_client = MockFakeRegistryClient::new();
         registry_client
             .expect_get_versioned_value()
-            .once()
+            .times(2)
             .return_const(Ok(RegistryVersionedRecord {
                 key: make_subnet_record_key(subnet_id),
                 version: RegistryVersion::new(0),
@@ -3319,6 +3319,30 @@ mod tests {
             }));
 
         assert!(node_is_in_subnet_at_version(
+            &registry_client,
+            node_id,
+            subnet_id,
+            version
+        ))
+    }
+
+    #[test]
+    fn test_do_not_stay_in_subnet_on_subnet_deleted() {
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let version = 10;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+        registry_client
+            .expect_get_versioned_value()
+            .times(2)
+            .return_const(Ok(RegistryVersionedRecord {
+                key: make_subnet_record_key(subnet_id),
+                version: RegistryVersion::new(1),
+                value: None,
+            }));
+
+        assert!(!node_is_in_subnet_at_version(
             &registry_client,
             node_id,
             subnet_id,
@@ -3335,7 +3359,7 @@ mod tests {
         let mut registry_client = MockFakeRegistryClient::new();
         registry_client
             .expect_get_versioned_value()
-            .once()
+            .times(2)
             .return_const(Err(RegistryClientError::VersionNotAvailable {
                 version: RegistryVersion::new(version),
             }));
