@@ -1,11 +1,17 @@
+use ic_crypto_test_utils_ni_dkg::dummy_dealing;
 use ic_interfaces_state_manager::Labeled;
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     ReshareChainKeyContext, SetupInitialDkgContext, SubnetCallContext,
 };
 use ic_test_utilities::state_manager::RefMockStateManager;
+use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
-use ic_types::{Height, RegistryVersion, crypto::threshold_sig::ni_dkg::NiDkgTargetId};
+use ic_types::{
+    Height, RegistryVersion,
+    consensus::dkg::{DealingContent, Message},
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId},
+};
 use std::sync::Arc;
 
 pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
@@ -74,4 +80,9 @@ pub(super) fn complement_state_manager_with_reshare_chain_key_request(
     if let Some(times) = times {
         expectation.times(times);
     }
+}
+
+pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> Message {
+    let content = DealingContent::new(dummy_dealing(node_idx as u8), dkg_id);
+    Message::fake(content, node_test_id(node_idx))
 }

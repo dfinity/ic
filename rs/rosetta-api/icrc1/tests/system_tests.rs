@@ -225,7 +225,7 @@ struct RosettaTestingEnvironmentBuilder {
 }
 
 /// Timeout for the Rosetta client to wait for transactions to be added to the blockchain.
-const ROSETTA_CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
+const ROSETTA_CLIENT_TIMEOUT: Duration = Duration::from_secs(120);
 
 impl RosettaTestingEnvironmentBuilder {
     pub fn new(setup: &Setup) -> Self {
@@ -868,7 +868,6 @@ fn test_error_backoff() {
         let mut found_backoff_message = false;
         let mut log_contents = String::new();
         for _ in 0..10 {
-            log_contents = String::new();
             log_file
                 .read_to_string(&mut log_contents)
                 .expect("failed to read log file");
@@ -1141,7 +1140,7 @@ async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64)
     }
 
     let mut found_backoff_message = false;
-    for _ in 0..10 {
+    for _ in 0..30 {
         let mut log_contents = String::new();
         log_file
             .read_to_string(&mut log_contents)

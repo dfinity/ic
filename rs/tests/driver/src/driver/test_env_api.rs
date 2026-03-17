@@ -161,7 +161,10 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
-use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{self, NnsCanisters},
+};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
@@ -215,8 +218,12 @@ pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
-// It usually takes below 60 secs to install nns canisters.
-const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+// NNS canister installation involves sequential canister creation at specific
+// IDs followed by parallel installation and controller setup. With ~12
+// canisters being created sequentially (~5s each) plus parallel installation
+// and controller setting, this typically takes 120-180s but can exceed 160s
+// under load.
+const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(300);
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -226,6 +233,9 @@ const FW_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
+
+pub(crate) const REPLICA_METRICS_PORT: u16 = 9090;
+pub(crate) const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
@@ -819,10 +829,17 @@ impl SubnetSnapshot {
     }
 
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
+        self.raw_subnet_record_at_version(self.registry_version)
+    }
+
+    pub fn raw_subnet_record_at_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> pb_subnet::SubnetRecord {
         self.local_registry
-            .get_subnet_record(self.subnet_id, self.registry_version)
+            .get_subnet_record(self.subnet_id, registry_version)
             .unwrap_result(
-                self.registry_version,
+                registry_version,
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
@@ -1115,13 +1132,14 @@ impl IcNodeSnapshot {
     }
 
     fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
-        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
-        // This is a hardcoded rule that is applied regardless of what is in the registry
-        // Hence a change in the registry won't affect this check
+        // This checks that the rule to block access from the ic-http-adapter to
+        // all locally-configured addressess was applied.
+        // This is a hardcoded rule that is applied regardless of what is in the registry.
+        // Hence a change in the registry won't affect this check.
         let script = r#"
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
-            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            RULE_PATTERN="meta skuid $ADAPTER_UID fib daddr type local"
 
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
@@ -1178,13 +1196,19 @@ impl IcNodeSnapshot {
         ))
     }
 
-    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>) {
+    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>, port: u16) {
+        if metrics_to_check.is_empty() {
+            return;
+        }
+
         block_on(async {
-            let replica_metrics_fetcher =
-                MetricsFetcher::new(std::iter::once(self.clone()), metrics_to_check);
-            let replica_metrics_result = replica_metrics_fetcher.fetch::<u64>().await;
-            let replica_metrics = match replica_metrics_result {
-                Ok(replica_metrics) => replica_metrics,
+            let metrics_fetcher = MetricsFetcher::new_with_port(
+                std::iter::once(self.clone()),
+                metrics_to_check,
+                port,
+            );
+            let metrics = match metrics_fetcher.fetch::<u64>().await {
+                Ok(metrics) => metrics,
                 Err(e) => {
                     info!(
                         self.env.logger(),
@@ -1194,11 +1218,11 @@ impl IcNodeSnapshot {
                 }
             };
             assert!(
-                !replica_metrics.is_empty(),
-                "No error counters were found in replica metrics for node {}",
+                !metrics.is_empty(),
+                "No error counters were found in metrics for node {} on port {port}",
                 self.node_id
             );
-            for (name, value) in replica_metrics {
+            for (name, value) in metrics {
                 assert_eq!(
                     value[0], 0,
                     "The metric `{name}` on node {} has non-zero value. \
@@ -1216,7 +1240,7 @@ impl IcNodeSnapshot {
             let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
                 std::iter::once(self.clone()),
                 vec![orchestrator_metric_name.to_string()],
-                9091,
+                ORCHESTRATOR_METRICS_PORT,
             );
             let orchestrator_metrics_result = orchestrator_metrics_fetcher.fetch::<u64>().await;
             let orchestrator_metrics = match orchestrator_metrics_result {
@@ -1734,7 +1758,7 @@ impl HasMetricsUrl for IcNodeSnapshot {
         let node_record = self.raw_node_record();
         node_record.http.map(|me| {
             let mut url = IcNodeSnapshot::http_endpoint_to_url(&me);
-            let _ = url.set_port(Some(9090));
+            let _ = url.set_port(Some(REPLICA_METRICS_PORT));
             url
         })
     }
@@ -2096,6 +2120,56 @@ impl NnsInstallationBuilder {
     }
 }
 
+/// Installs the registry canister on the NNS subnet, initializing it with the testnet's topology.
+///
+/// An optional `customize` closure allows additional registry init parameters to be set. Any mutations
+/// will be added _after_ the initial mutations.
+pub fn install_registry_canister_with_testnet_topology(
+    env: &TestEnv,
+    customize: Option<impl FnOnce(&mut RegistryCanisterInitPayloadBuilder)>,
+) {
+    let node = env.get_first_healthy_nns_node_snapshot();
+    let url = node.get_public_url();
+    let prep_dir = env
+        .prep_dir(&node.ic_name())
+        .expect("Prep Dir does not exist");
+
+    let registry_local_store = prep_dir.registry_local_store_path();
+    let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
+
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    for mutation in initial_mutations {
+        builder.push_init_mutate_request(mutation);
+    }
+    if let Some(f) = customize {
+        f(&mut builder)
+    }
+
+    let registry_init_payload = builder.build();
+
+    let agent = InternalAgent::new(
+        url,
+        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+    );
+    let runtime = Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: REGISTRY_CANISTER_ID.into(),
+    });
+
+    block_on(async {
+        let mut canister = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Failed to create registry canister");
+        assert_eq!(
+            canister.canister_id(),
+            REGISTRY_CANISTER_ID,
+            "Failed to create registry canister at expected ID 0. Call this method before creating any other canisters."
+        );
+        itest_helpers::install_registry_canister(&mut canister, registry_init_payload).await;
+    });
+}
+
 pub trait HasRegistryVersion {
     fn get_registry_version(&self) -> RegistryVersion;
 }
@@ -2346,6 +2420,27 @@ macro_rules! retry_with_msg_async_quiet {
             $timeout,
             $backoff,
             $f,
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! retry_agent_on_transport_errors {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        $crate::retry_with_msg_async!($msg, $log, $timeout, $backoff, || async {
+            match $f.await {
+                Err(AgentError::TransportError(e)) => Err(anyhow::anyhow!("transport error: {e}")),
+                other => Ok(other),
+            }
+        })
+    };
+    ($msg:expr, $log:expr, $f:expr) => {
+        $crate::retry_agent_on_transport_errors!(
+            $msg,
+            $log,
+            std::time::Duration::from_secs(120),
+            std::time::Duration::from_secs(5),
+            $f
         )
     };
 }
@@ -2765,6 +2860,10 @@ pub fn scp_recv_from(
         || {
             let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
             let size = scp_file_stat.size();
+            info!(
+                log,
+                "scp-ing remote {from_remote:?} of {size:?} B to local {to_local:?} ..."
+            );
             let mut to_file = std::fs::File::create(to_local)?;
             std::io::copy(&mut remote_file, &mut to_file)?;
             remote_file.send_eof()?;

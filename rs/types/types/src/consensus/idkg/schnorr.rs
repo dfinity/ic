@@ -82,20 +82,19 @@ impl From<&TranscriptInCreation> for pb::TranscriptInCreation {
     }
 }
 
-impl TryFrom<&pb::TranscriptInCreation> for TranscriptInCreation {
+impl TryFrom<pb::TranscriptInCreation> for TranscriptInCreation {
     type Error = ProxyDecodeError;
-    fn try_from(pre_signature: &pb::TranscriptInCreation) -> Result<Self, Self::Error> {
+    fn try_from(pre_signature: pb::TranscriptInCreation) -> Result<Self, Self::Error> {
         let key_id: SchnorrKeyId =
-            try_from_option_field(pre_signature.key_id.clone(), "TranscriptInCreation::key_id")?;
+            try_from_option_field(pre_signature.key_id, "TranscriptInCreation::key_id")?;
 
         let blinder_unmasked_config: RandomUnmaskedTranscriptParams = try_from_option_field(
-            pre_signature.blinder_unmasked_config.as_ref(),
+            pre_signature.blinder_unmasked_config,
             "TranscriptInCreation::blinder_unmasked_config",
         )?;
 
         let blinder_unmasked: Option<UnmaskedTranscript> = pre_signature
             .blinder_unmasked
-            .as_ref()
             .map(|transcript| transcript.try_into())
             .transpose()?;
 
@@ -173,21 +172,21 @@ impl From<&PreSignatureTranscriptRef> for pb::PreSignatureTranscriptRef {
     }
 }
 
-impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
+impl TryFrom<pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
     type Error = ProxyDecodeError;
-    fn try_from(pre_signature: &pb::PreSignatureTranscriptRef) -> Result<Self, Self::Error> {
+    fn try_from(pre_signature: pb::PreSignatureTranscriptRef) -> Result<Self, Self::Error> {
         let key_id: SchnorrKeyId = try_from_option_field(
-            pre_signature.key_id.clone(),
+            pre_signature.key_id,
             "PreSignatureTranscriptRef::pre_signature::key_id",
         )?;
 
         let blinder_unmasked_ref: UnmaskedTranscript = try_from_option_field(
-            pre_signature.blinder_unmasked_ref.as_ref(),
+            pre_signature.blinder_unmasked_ref,
             "PreSignatureTranscriptRef::pre_signature::blinder_unmasked_ref",
         )?;
 
         let key_unmasked_ref: UnmaskedTranscript = try_from_option_field(
-            pre_signature.key_unmasked_ref.as_ref(),
+            pre_signature.key_unmasked_ref,
             "PreSignatureTranscriptRef::pre_signature::key_unmasked_ref",
         )?;
 

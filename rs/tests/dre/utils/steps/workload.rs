@@ -182,40 +182,45 @@ async fn test_api_boundary_node(
 
     info!(
         logger,
-        "api/v2/query - issue a query call (read the current counter value)"
+        "api/v3/query - issue a query call (read the current counter value, expecting {index})"
     );
-    let read_result = retry_with_msg_async!(
+    retry_with_msg_async!(
         format!("query call on canister={counter_canister_id}"),
         &logger,
         CANISTER_RETRY_TIMEOUT,
         CANISTER_RETRY_BACKOFF,
         || async {
             let read_result = bn_agent.query(&counter_canister_id, "read").call().await;
-            if let Ok(bytes) = read_result {
-                Ok(bytes)
-            } else {
-                bail!(
-                    "querying the counter canister ({counter_canister_id}) failed, err: {:?}",
-                    read_result.unwrap_err()
-                )
+            match read_result {
+                Ok(bytes) => {
+                    let counter = u32::from_le_bytes(
+                        bytes
+                            .as_slice()
+                            .try_into()
+                            .expect("slice with incorrect length"),
+                    );
+                    if counter == index {
+                        Ok(())
+                    } else {
+                        bail!(
+                            "counter value mismatch: expected {index}, got {counter} (query may be stale)"
+                        )
+                    }
+                }
+                Err(err) => {
+                    bail!(
+                        "querying the counter canister ({counter_canister_id}) failed, err: {err:?}"
+                    )
+                }
             }
         }
     )
     .await
     .expect("querying the counter canister ({counter_canister_id}) failed after {max_attempts} attempts");
 
-    let counter = u32::from_le_bytes(
-        read_result
-            .as_slice()
-            .try_into()
-            .expect("slice with incorrect length"),
-    );
-
-    assert_eq!(counter, index);
-
     info!(
         logger,
-        "api/v3/call - issue an update call (increase the counter value)"
+        "api/v4/call - issue an update call (increase the counter value)"
     );
     retry_with_msg_async!(
         format!("update call on canister={counter_canister_id}"),

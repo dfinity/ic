@@ -294,6 +294,8 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         original.compilation_cost_handling,
     );
 
+    helper.charge_for_compilation(instructions_from_compilation);
+
     let main_memory_handling = match determine_main_memory_handling(
         context.mode,
         &helper.canister().execution_state,
@@ -318,11 +320,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         main_memory_handling,
     };
 
-    if let Err(err) = helper.replace_execution_state_and_allocations(
-        instructions_from_compilation,
-        result,
-        memory_handling,
-    ) {
+    if let Err(err) = helper.replace_execution_state_and_allocations(result, memory_handling) {
         let instructions_left = helper.instructions_left();
         return finish_err(
             clean_canister,
@@ -865,7 +863,11 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        (self.original.message, self.original.call_id, Cycles::zero())
+        (
+            self.original.message,
+            self.original.call_id,
+            self.original.prepaid_execution_cycles,
+        )
     }
 }
 

@@ -195,6 +195,7 @@ fn main() -> Result<()> {
             nodes.to_owned(),
             replica_version.clone(),
             valid_args.max_ingress_bytes_per_message,
+            /*max_ingress_bytes_per_block=*/ None,
             /*max_ingress_messages_per_block=*/ None,
             valid_args.max_block_payload_size,
             /*unit_delay=*/ None,

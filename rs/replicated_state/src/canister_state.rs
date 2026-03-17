@@ -1,12 +1,16 @@
+pub mod canister_snapshots;
 pub mod execution_state;
 pub(crate) mod queues;
 pub mod system_state;
 #[cfg(test)]
 mod tests;
 
-use self::execution_state::{NextScheduledMethod, WasmExecutionMode};
-use self::queues::CanisterOutputQueuesIterator;
-use self::system_state::{ExecutionTask, SystemState};
+use crate::canister_state::canister_snapshots::CanisterSnapshots;
+use crate::canister_state::execution_state::{NextScheduledMethod, WasmExecutionMode};
+use crate::canister_state::queues::CanisterOutputQueuesIterator;
+use crate::canister_state::system_state::{
+    ExecutionTask, SystemState, log_memory_store::LogMemoryStore,
+};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
@@ -15,6 +19,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
+    SnapshotVisibility,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response};
@@ -71,6 +76,10 @@ pub struct CanisterState {
     /// See `SchedulerState` for documentation.
     #[validate_eq(CompareWithValidateEq)]
     pub scheduler_state: SchedulerState,
+
+    /// Manages the canister snapshots.
+    #[validate_eq(CompareWithValidateEq)]
+    pub canister_snapshots: CanisterSnapshots,
 }
 
 impl CanisterState {
@@ -78,11 +87,13 @@ impl CanisterState {
         system_state: SystemState,
         execution_state: Option<ExecutionState>,
         scheduler_state: SchedulerState,
+        canister_snapshots: CanisterSnapshots,
     ) -> Self {
         Self {
             system_state,
             execution_state,
             scheduler_state,
+            canister_snapshots,
         }
     }
 
@@ -96,6 +107,10 @@ impl CanisterState {
 
     pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.system_state.log_visibility
+    }
+
+    pub fn snapshot_visibility(&self) -> &SnapshotVisibility {
+        &self.system_state.snapshot_visibility
     }
 
     /// Returns the difference in time since the canister was last charged for resource allocations.
@@ -152,17 +167,20 @@ impl CanisterState {
 
     /// Returns what the canister is going to execute next.
     pub fn next_execution(&self) -> NextExecution {
-        let next_task = self.system_state.task_queue.front();
-        match (next_task, self.has_input()) {
-            (None, false) => NextExecution::None,
-            (None, true) => NextExecution::StartNew,
-            (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::GlobalTimer), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::OnLowWasmMemory), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::AbortedExecution { .. }), _)
-            | (Some(ExecutionTask::PausedExecution { .. }), _) => NextExecution::ContinueLong,
-            (Some(ExecutionTask::AbortedInstallCode { .. }), _)
-            | (Some(ExecutionTask::PausedInstallCode(..)), _) => NextExecution::ContinueInstallCode,
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory) => NextExecution::StartNew,
+
+            Some(ExecutionTask::AbortedExecution { .. })
+            | Some(ExecutionTask::PausedExecution { .. }) => NextExecution::ContinueLong,
+
+            Some(ExecutionTask::AbortedInstallCode { .. })
+            | Some(ExecutionTask::PausedInstallCode(..)) => NextExecution::ContinueInstallCode,
+
+            None if self.has_input() => NextExecution::StartNew,
+
+            None => NextExecution::None,
         }
     }
 
@@ -313,14 +331,16 @@ impl CanisterState {
             }
         }
 
-        self.system_state.check_invariants()
+        self.system_state.check_invariants()?;
+
+        self.canister_snapshots.check_invariants()
     }
 
     /// The amount of memory currently being used by the canister.
     ///
     /// This includes execution memory (heap, stable, globals, Wasm),
-    /// canister history memory, wasm chunk storage and snapshots that
-    /// belong to this canister.
+    /// canister history memory, wasm chunk storage, log storage
+    /// and snapshots that belong to this canister.
     ///
     /// This amount is used to periodically charge the canister for the memory
     /// resources it consumes and can be used to calculate the canister's
@@ -329,6 +349,7 @@ impl CanisterState {
         self.execution_memory_usage()
             + self.canister_history_memory_usage()
             + self.wasm_chunk_store_memory_usage()
+            + self.log_memory_store_memory_usage()
             + self.snapshots_memory_usage()
     }
 
@@ -395,8 +416,18 @@ impl CanisterState {
         self.system_state.wasm_chunk_store.memory_usage()
     }
 
+    /// Returns the memory limit of the log memory store in bytes.
+    pub fn log_memory_limit(&self) -> NumBytes {
+        NumBytes::new(self.system_state.log_memory_store.byte_capacity() as u64)
+    }
+
+    /// Returns the memory usage of the log memory store in bytes.
+    pub fn log_memory_store_memory_usage(&self) -> NumBytes {
+        NumBytes::new(self.system_state.log_memory_store.memory_usage() as u64)
+    }
+
     pub fn snapshots_memory_usage(&self) -> NumBytes {
-        self.system_state.snapshots_memory_usage
+        self.canister_snapshots.memory_taken()
     }
 
     /// Returns the snapshot size estimation in bytes based on the current canister's state.
@@ -516,6 +547,7 @@ impl CanisterState {
             system_state,
             execution_state: _,
             scheduler_state: _,
+            canister_snapshots: _,
         } = self;
 
         system_state.drop_in_progress_management_calls_after_split();
@@ -524,11 +556,19 @@ impl CanisterState {
     /// Clears the canister log.
     pub fn clear_log(&mut self) {
         self.system_state.canister_log.clear();
+        self.system_state.log_memory_store.clear();
+    }
+
+    /// Removes the canister log.
+    pub fn remove_log(&mut self) {
+        self.system_state.canister_log.clear();
+        self.system_state.log_memory_store.deallocate();
     }
 
     /// Sets the new canister log.
-    pub fn set_log(&mut self, other: CanisterLog) {
-        self.system_state.canister_log = other;
+    pub fn set_log(&mut self, (canister_log, log_memory_store): (CanisterLog, LogMemoryStore)) {
+        self.system_state.canister_log = canister_log;
+        self.system_state.log_memory_store = log_memory_store;
     }
 
     /// Returns the cumulative amount of heap delta represented by this canister's state.
@@ -542,9 +582,22 @@ impl CanisterState {
     }
 
     /// Updates status of `OnLowWasmMemory` hook.
-    pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
-        self.system_state
-            .update_on_low_wasm_memory_hook_status(self.wasm_memory_usage());
+    pub fn update_on_low_wasm_memory_hook_condition(self: &mut Arc<Self>) {
+        let wasm_memory_usage = self.wasm_memory_usage();
+        let hook_condition = self
+            .system_state
+            .is_low_wasm_memory_hook_condition_satisfied(wasm_memory_usage);
+        // Only `make_mut` if the hook condition has changed.
+        if !self
+            .system_state
+            .task_queue
+            .peek_hook_status()
+            .is_consistent_with(hook_condition)
+        {
+            Arc::make_mut(self)
+                .system_state
+                .update_on_low_wasm_memory_hook_status(wasm_memory_usage);
+        }
     }
 
     /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.

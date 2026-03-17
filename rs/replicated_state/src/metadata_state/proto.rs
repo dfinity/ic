@@ -130,6 +130,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
             canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
                 item.cost_schedule,
             )),
+            subnet_admins: item.subnet_admins.iter().map(|sa| (*sa).into()).collect(),
         }
     }
 }
@@ -156,6 +157,10 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 },
             )?,
         );
+        let mut subnet_admins = BTreeSet::new();
+        for subnet_admin in item.subnet_admins {
+            subnet_admins.insert(PrincipalId::try_from(subnet_admin)?);
+        }
 
         Ok(Self {
             public_key: item.public_key,
@@ -170,6 +175,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .unwrap_or_default(),
             chain_keys_held,
             cost_schedule,
+            subnet_admins,
         })
     }
 }

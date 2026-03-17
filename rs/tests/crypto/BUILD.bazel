@@ -12,7 +12,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/ic_os/metrics/fstrim_tool",
+    "//rs/ic_os/os_tools/fstrim_tool",
     "//rs/registry/subnet_type",
     "//rs/tests/consensus/utils",
     "//rs/tests/driver:ic-system-test-driver",
@@ -80,6 +80,11 @@ system_test(
 
 system_test(
     name = "ingress_verification_test",
+    # TODO(CRP-2975): Remove `manual` tag once flakiness is resolved.
+    tags = [
+        "long_test",
+        "manual",
+    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )

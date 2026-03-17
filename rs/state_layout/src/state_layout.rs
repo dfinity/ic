@@ -1,7 +1,7 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
-    Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
+    Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource, SnapshotVisibility,
 };
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::state::{
@@ -13,13 +13,12 @@ use ic_replicated_state::{
     CanisterStatus, ExportedFunctions, NumWasmPages,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{
-            CanisterHistory, CyclesUseCase, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata,
-        },
+        system_state::{CanisterHistory, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata},
     },
     page_map::{Shard, StorageLayout, StorageResult},
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
+use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles,
     ExecutionRound, Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId,
@@ -77,6 +76,7 @@ pub const OVERLAY: &str = "overlay";
 pub const VMEMORY_0: &str = "vmemory_0";
 pub const STABLE_MEMORY: &str = "stable_memory";
 pub const WASM_CHUNK_STORE: &str = "wasm_chunk_store";
+pub const LOG_MEMORY_STORE: &str = "log_memory_store";
 pub const BIN_FILE: &str = "bin";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
@@ -195,10 +195,17 @@ pub struct CanisterStateBits {
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub instructions_executed: NumInstructions,
+    pub ingress_messages_executed: u64,
+    pub remote_subnet_messages_executed: u64,
+    pub local_subnet_messages_executed: u64,
+    pub http_outcalls_executed: u64,
+    pub heartbeats_and_global_timers_executed: u64,
     pub canister_history: CanisterHistory,
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
+    pub snapshot_visibility: SnapshotVisibility,
     pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
@@ -214,8 +221,6 @@ pub struct CanisterStateBits {
 pub struct CanisterSnapshotBits {
     /// The ID of the canister snapshot.
     pub snapshot_id: SnapshotId,
-    /// Identifies the canister to which this snapshot belongs.
-    pub canister_id: CanisterId,
     /// The timestamp indicating the moment the snapshot was captured.
     pub taken_at_timestamp: Time,
     /// The canister version at the time of taking the snapshot.
@@ -320,7 +325,8 @@ struct CheckpointRefData {
 /// │      │       ├── software.wasm
 /// │      │       ├── stable_memory.bin
 /// │      │       ├── vmemory_0.bin
-/// │      │       └── wasm_chunk_store.bin
+/// │      │       ├── wasm_chunk_store.bin
+/// │      │       └── log_memory_store.bin
 /// │      ├── snapshots
 /// │      │   └── <hex(canister_id)>
 /// │      │       └──  <hex(snapshot_id)>
@@ -2330,6 +2336,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
             self.vmemory_0(),
             self.stable_memory(),
             self.wasm_chunk_store(),
+            self.log_memory_store(),
         ]
         .into_iter()
         {
@@ -2362,6 +2369,15 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
             name_stem: WASM_CHUNK_STORE.into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
+    }
+
+    pub fn log_memory_store(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.canister_root.clone(),
+            name_stem: LOG_MEMORY_STORE.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2420,6 +2436,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             self.vmemory_0(),
             self.stable_memory(),
             self.wasm_chunk_store(),
+            // log_memory_store is not included in canister snapshots.
         ]
         .into_iter()
         {
@@ -2456,6 +2473,8 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             _checkpoint: self.checkpoint.clone(),
         }
     }
+
+    // log_memory_store is not included in canister snapshots.
 }
 
 impl<P> SnapshotLayout<P>

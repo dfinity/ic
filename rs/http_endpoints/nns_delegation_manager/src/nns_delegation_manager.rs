@@ -923,9 +923,10 @@ mod tests {
         // The initial delegation should be fetched immediately.
         reader.receiver.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
-        // has passed.
+        // has passed. We use a timeout of 2x the interval to give enough margin for the
+        // time it takes to fetch the delegation (TLS handshake, HTTP request, etc.).
         assert!(
-            timeout(DELEGATION_UPDATE_INTERVAL, reader.receiver.changed())
+            timeout(DELEGATION_UPDATE_INTERVAL * 2, reader.receiver.changed())
                 .await
                 .is_ok()
         );

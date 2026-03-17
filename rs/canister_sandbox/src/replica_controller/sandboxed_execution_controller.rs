@@ -1503,6 +1503,8 @@ impl SandboxedExecutionController {
         &self,
         backends: &mut HashMap<CanisterId, Backend>,
         available_memory: F,
+        sandbox_processes_to_evict: usize,
+        sandbox_processes_rss_to_evict: NumBytes,
     ) where
         F: Fn() -> Option<NumBytes>,
     {
@@ -1510,7 +1512,7 @@ impl SandboxedExecutionController {
         if active_sandboxes > self.max_sandbox_count {
             // The number of sandboxes is exceeded.
             // Reduce the number of active sandboxes regardless of their RSS.
-            let max_active_sandboxes = active_sandboxes.saturating_sub(SANDBOX_PROCESSES_TO_EVICT);
+            let max_active_sandboxes = active_sandboxes.saturating_sub(sandbox_processes_to_evict);
             let max_sandboxes_rss = u64::MAX.into();
 
             evict_sandbox_processes(
@@ -1533,7 +1535,7 @@ impl SandboxedExecutionController {
                 // Reduce the RSS of sandboxes, regardless of their number.
                 let max_active_sandboxes = backends.len();
                 let max_sandboxes_rss =
-                    total_sandboxes_rss.saturating_sub(&SANDBOX_PROCESSES_RSS_TO_EVICT);
+                    total_sandboxes_rss.saturating_sub(&sandbox_processes_rss_to_evict);
 
                 evict_sandbox_processes(
                     backends,
@@ -1591,13 +1593,23 @@ impl SandboxedExecutionController {
                     };
                 }
                 // The number of active sandboxes is increasing, so trigger the eviction.
-                self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
+                self.trigger_sandbox_eviction(
+                    &mut guard,
+                    Self::available_memory_wrapper,
+                    SANDBOX_PROCESSES_TO_EVICT,
+                    SANDBOX_PROCESSES_RSS_TO_EVICT,
+                );
                 return sandbox_process;
             }
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
-        self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
+        self.trigger_sandbox_eviction(
+            &mut guard,
+            Self::available_memory_wrapper,
+            SANDBOX_PROCESSES_TO_EVICT,
+            SANDBOX_PROCESSES_RSS_TO_EVICT,
+        );
 
         // No sandbox process found for this canister. Start a new one and register it.
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
@@ -2381,7 +2393,8 @@ mod tests {
 
     #[test]
     fn sandbox_eviction_is_triggered_by_count() {
-        let active = SANDBOX_PROCESSES_TO_EVICT * 2;
+        let processes_to_evict = 10;
+        let active = processes_to_evict * 2;
         let evicted = 3;
         let empty = 2;
         let (mut controller, _dir, _path) =
@@ -2398,7 +2411,12 @@ mod tests {
         controller.max_sandboxes_rss = NumBytes::from(u64::MAX);
         {
             let mut guard = controller.backends.lock().unwrap();
-            controller.trigger_sandbox_eviction(&mut guard, || None);
+            controller.trigger_sandbox_eviction(
+                &mut guard,
+                || None,
+                processes_to_evict,
+                SANDBOX_PROCESSES_RSS_TO_EVICT,
+            );
         }
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
         // No eviction should be triggered.
@@ -2410,21 +2428,25 @@ mod tests {
         controller.max_sandbox_count = active - 1;
         {
             let mut guard = controller.backends.lock().unwrap();
-            controller.trigger_sandbox_eviction(&mut guard, || None);
+            controller.trigger_sandbox_eviction(
+                &mut guard,
+                || None,
+                processes_to_evict,
+                SANDBOX_PROCESSES_RSS_TO_EVICT,
+            );
         }
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
         // A batch of active sandboxes should be evicted.
-        assert_eq!(
-            active - SANDBOX_PROCESSES_TO_EVICT,
-            partitioned_backends.0.len()
-        );
-        assert_eq!(SANDBOX_PROCESSES_TO_EVICT, partitioned_backends.1.len());
+        assert_eq!(active - processes_to_evict, partitioned_backends.0.len());
+        assert_eq!(processes_to_evict, partitioned_backends.1.len());
         assert_eq!(0, partitioned_backends.2.len());
     }
 
     #[test]
     fn sandbox_eviction_is_triggered_by_rss() {
-        let active = SANDBOX_PROCESSES_TO_EVICT * 2;
+        let processes_to_evict = 20;
+        let rss_to_evict = NumBytes::new(50 * 1024 * 1024);
+        let active = processes_to_evict * 2;
         let evicted = 3;
         let empty = 2;
         let (mut controller, _dir, _path) =
@@ -2442,7 +2464,12 @@ mod tests {
             NumBytes::from(active as u64 * DEFAULT_SANDBOX_PROCESS_RSS.get());
         {
             let mut guard = controller.backends.lock().unwrap();
-            controller.trigger_sandbox_eviction(&mut guard, || None);
+            controller.trigger_sandbox_eviction(
+                &mut guard,
+                || None,
+                processes_to_evict,
+                rss_to_evict,
+            );
         }
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
         // No eviction should be triggered.
@@ -2455,16 +2482,21 @@ mod tests {
             NumBytes::from((active as u64 - 1) * DEFAULT_SANDBOX_PROCESS_RSS.get());
         {
             let mut guard = controller.backends.lock().unwrap();
-            controller.trigger_sandbox_eviction(&mut guard, || None);
+            controller.trigger_sandbox_eviction(
+                &mut guard,
+                || None,
+                processes_to_evict,
+                rss_to_evict,
+            );
         }
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
         // A batch of active sandboxes should be evicted.
         assert_eq!(
-            active - 1 - (SANDBOX_PROCESSES_RSS_TO_EVICT / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
+            active - (rss_to_evict / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
             partitioned_backends.0.len()
         );
         assert_eq!(
-            1 + (SANDBOX_PROCESSES_RSS_TO_EVICT / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
+            (rss_to_evict / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
             partitioned_backends.1.len()
         );
         assert_eq!(0, partitioned_backends.2.len());
@@ -2472,7 +2504,9 @@ mod tests {
 
     #[test]
     fn sandbox_eviction_is_triggered_by_available_memory() {
-        let active = SANDBOX_PROCESSES_TO_EVICT * 2;
+        let processes_to_evict = 20;
+        let rss_to_evict = NumBytes::new(50 * 1024 * 1024);
+        let active = processes_to_evict * 2;
         let evicted = 3;
         let empty = 2;
         let (mut controller, _dir, _path) =
@@ -2492,7 +2526,12 @@ mod tests {
         let available_memory = || Some(DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES);
         {
             let mut guard = controller.backends.lock().unwrap();
-            controller.trigger_sandbox_eviction(&mut guard, available_memory);
+            controller.trigger_sandbox_eviction(
+                &mut guard,
+                available_memory,
+                processes_to_evict,
+                rss_to_evict,
+            );
         }
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
         // No eviction should be triggered.
@@ -2504,16 +2543,21 @@ mod tests {
         let available_memory = || Some(DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES - 1.into());
         {
             let mut guard = controller.backends.lock().unwrap();
-            controller.trigger_sandbox_eviction(&mut guard, available_memory);
+            controller.trigger_sandbox_eviction(
+                &mut guard,
+                available_memory,
+                processes_to_evict,
+                rss_to_evict,
+            );
         }
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
         // A batch of active sandboxes should be evicted.
         assert_eq!(
-            active - 1 - (SANDBOX_PROCESSES_RSS_TO_EVICT / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
+            active - (rss_to_evict / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
             partitioned_backends.0.len()
         );
         assert_eq!(
-            1 + (SANDBOX_PROCESSES_RSS_TO_EVICT / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
+            (rss_to_evict / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
             partitioned_backends.1.len()
         );
         assert_eq!(0, partitioned_backends.2.len());

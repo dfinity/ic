@@ -12,8 +12,10 @@ pub use data_size::*;
 pub use http::{
     ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, BoundedHttpHeaders, CanisterHttpRequestArgs,
     CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION,
-    FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod, PRICING_VERSION_LEGACY,
-    PRICING_VERSION_PAY_AS_YOU_GO, TransformArgs, TransformContext, TransformFunc,
+    FlexibleCanisterHttpRequestArgs, FlexibleHttpGlobalError, FlexibleHttpNodeDetail,
+    FlexibleHttpNodeError, FlexibleHttpRequestErr, FlexibleHttpRequestResult, HttpHeader,
+    HttpMethod, HttpRequestResourceReport, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
+    ReplicationCounts, ResourceUsage, TransformArgs, TransformContext, TransformFunc,
 };
 use ic_base_types::{
     CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
@@ -1231,8 +1233,7 @@ impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
                                     .get()
                                     .iter()
                                     .map(|c| (*c).into())
-                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
-                                    .clone(),
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
                             },
                         ),
                     ),
@@ -1277,6 +1278,96 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
     }
 }
 
+/// Snapshot visibility for a canister.
+/// ```text
+/// variant {
+///    controllers;
+///    public;
+///    allowed_viewers : vec principal;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, EnumIter)]
+pub enum SnapshotVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    #[serde(rename = "public")]
+    Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(BoundedAllowedViewers),
+}
+
+impl Payload<'_> for SnapshotVisibility {}
+
+impl From<&SnapshotVisibility> for pb_canister_state_bits::SnapshotVisibility {
+    fn from(item: &SnapshotVisibility) -> Self {
+        match item {
+            SnapshotVisibility::Controllers => pb_canister_state_bits::SnapshotVisibility {
+                snapshot_visibility: Some(
+                    pb_canister_state_bits::snapshot_visibility::SnapshotVisibility::Controllers(1),
+                ),
+            },
+            SnapshotVisibility::Public => pb_canister_state_bits::SnapshotVisibility {
+                snapshot_visibility: Some(
+                    pb_canister_state_bits::snapshot_visibility::SnapshotVisibility::Public(2),
+                ),
+            },
+            SnapshotVisibility::AllowedViewers(principals) => {
+                pb_canister_state_bits::SnapshotVisibility {
+                    snapshot_visibility: Some(
+                        pb_canister_state_bits::snapshot_visibility::SnapshotVisibility::AllowedViewers(
+                            pb_canister_state_bits::SnapshotVisibilityAllowedViewers {
+                                principals: principals
+                                    .get()
+                                    .iter()
+                                    .map(|c| (*c).into())
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
+                            },
+                        ),
+                    ),
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<pb_canister_state_bits::SnapshotVisibility> for SnapshotVisibility {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_canister_state_bits::SnapshotVisibility) -> Result<Self, Self::Error> {
+        let Some(snapshot_visibility) = item.snapshot_visibility else {
+            return Err(ProxyDecodeError::MissingField(
+                "SnapshotVisibility::snapshot_visibility",
+            ));
+        };
+        match snapshot_visibility {
+            pb_canister_state_bits::snapshot_visibility::SnapshotVisibility::Controllers(_) => {
+                Ok(Self::Controllers)
+            }
+            pb_canister_state_bits::snapshot_visibility::SnapshotVisibility::Public(_) => {
+                Ok(Self::Public)
+            }
+            pb_canister_state_bits::snapshot_visibility::SnapshotVisibility::AllowedViewers(
+                data,
+            ) => {
+                let principals = data
+                    .principals
+                    .iter()
+                    .map(|p| {
+                        PrincipalId::try_from(p.raw.clone()).map_err(|e| {
+                            ProxyDecodeError::ValueOutOfRange {
+                                typ: "PrincipalId",
+                                err: e.to_string(),
+                            }
+                        })
+                    })
+                    .collect::<Result<Vec<PrincipalId>, _>>()?;
+                Ok(Self::AllowedViewers(BoundedAllowedViewers::new(principals)))
+            }
+        }
+    }
+}
+
 /// Struct used for encoding/decoding
 /// ```text
 /// record {
@@ -1302,6 +1393,7 @@ pub struct DefiniteCanisterSettingsArgs {
     freezing_threshold: candid::Nat,
     reserved_cycles_limit: candid::Nat,
     log_visibility: LogVisibilityV2,
+    snapshot_visibility: SnapshotVisibility,
     log_memory_limit: candid::Nat,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
@@ -1317,6 +1409,7 @@ impl DefiniteCanisterSettingsArgs {
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
         log_visibility: LogVisibilityV2,
+        snapshot_visibility: SnapshotVisibility,
         log_memory_limit: u64,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
@@ -1340,6 +1433,7 @@ impl DefiniteCanisterSettingsArgs {
             freezing_threshold: candid::Nat::from(freezing_threshold),
             reserved_cycles_limit,
             log_visibility,
+            snapshot_visibility,
             log_memory_limit: candid::Nat::from(log_memory_limit),
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
@@ -1357,6 +1451,10 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.log_visibility
+    }
+
+    pub fn snapshot_visibility(&self) -> &SnapshotVisibility {
+        &self.snapshot_visibility
     }
 
     pub fn log_memory_limit(&self) -> candid::Nat {
@@ -1460,6 +1558,7 @@ pub struct MemoryMetrics {
     canister_history_size: candid::Nat,
     wasm_chunk_store_size: candid::Nat,
     snapshots_size: candid::Nat,
+    log_memory_store_size: candid::Nat,
 }
 
 impl CanisterStatusResultV2 {
@@ -1480,12 +1579,14 @@ impl CanisterStatusResultV2 {
         canister_history_size: NumBytes,
         wasm_chunk_store_size: NumBytes,
         snapshots_size: NumBytes,
+        log_memory_store_size: NumBytes,
         cycles: u128,
         compute_allocation: u64,
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
         log_visibility: LogVisibilityV2,
+        snapshot_visibility: SnapshotVisibility,
         log_memory_limit: u64,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
@@ -1513,6 +1614,7 @@ impl CanisterStatusResultV2 {
                 canister_history_size: candid::Nat::from(canister_history_size.get()),
                 wasm_chunk_store_size: candid::Nat::from(wasm_chunk_store_size.get()),
                 snapshots_size: candid::Nat::from(snapshots_size.get()),
+                log_memory_store_size: candid::Nat::from(log_memory_store_size.get()),
             },
             cycles: candid::Nat::from(cycles),
             // the following is spec 0.12/0.13 compat;
@@ -1526,6 +1628,7 @@ impl CanisterStatusResultV2 {
                 freezing_threshold,
                 reserved_cycles_limit,
                 log_visibility,
+                snapshot_visibility,
                 log_memory_limit,
                 wasm_memory_limit,
                 wasm_memory_threshold,
@@ -1618,6 +1721,16 @@ impl CanisterStatusResultV2 {
 
     pub fn snapshots_size(&self) -> NumBytes {
         NumBytes::from(self.memory_metrics.snapshots_size.0.to_u64().unwrap())
+    }
+
+    pub fn log_memory_store_size(&self) -> NumBytes {
+        NumBytes::from(
+            self.memory_metrics
+                .log_memory_store_size
+                .0
+                .to_u64()
+                .unwrap(),
+        )
     }
 
     pub fn cycles(&self) -> u128 {
@@ -2258,6 +2371,7 @@ pub struct CanisterSettingsArgs {
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibilityV2>,
+    pub snapshot_visibility: Option<SnapshotVisibility>,
     pub log_memory_limit: Option<candid::Nat>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
@@ -2277,6 +2391,7 @@ impl CanisterSettingsArgs {
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
+            snapshot_visibility: None,
             log_memory_limit: None,
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
@@ -2293,6 +2408,7 @@ pub struct CanisterSettingsArgsBuilder {
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
     log_visibility: Option<LogVisibilityV2>,
+    snapshot_visibility: Option<SnapshotVisibility>,
     log_memory_limit: Option<candid::Nat>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
@@ -2313,6 +2429,7 @@ impl CanisterSettingsArgsBuilder {
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
+            snapshot_visibility: self.snapshot_visibility,
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
@@ -2394,6 +2511,14 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
+            ..self
+        }
+    }
+
+    /// Sets the snapshot visibility.
+    pub fn with_snapshot_visibility(self, snapshot_visibility: SnapshotVisibility) -> Self {
+        Self {
+            snapshot_visibility: Some(snapshot_visibility),
             ..self
         }
     }
@@ -4131,6 +4256,10 @@ impl ListCanisterSnapshotArgs {
 }
 
 impl Payload<'_> for ListCanisterSnapshotArgs {}
+
+pub type ListCanisterSnapshotResponse = Vec<CanisterSnapshotResponse>;
+
+impl Payload<'_> for ListCanisterSnapshotResponse {}
 
 /// An enum representing the possible values of a global variable.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, EnumIter, CandidType)]

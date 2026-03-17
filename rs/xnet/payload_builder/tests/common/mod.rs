@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use ic_config::state_manager::Config;
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::certification::Verifier;
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_state_manager::*;
@@ -91,7 +92,7 @@ impl StateManagerFixture {
 
         height.inc_assign();
         self.state_manager
-            .commit_and_certify(state, height, CertificationScope::Metadata, None);
+            .commit_and_certify(state, CertificationScope::Metadata, None);
         certify_height(&self.state_manager, height);
         self.certified_height = height;
 
@@ -174,6 +175,7 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
 
     let certification = Certification {
         height: h,
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),

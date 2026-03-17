@@ -33,10 +33,19 @@ impl Strippable for ConsensusMessage {
 
         match self {
             // We only strip data blocks.
-            ConsensusMessage::BlockProposal(ref block_proposal)
+            ConsensusMessage::BlockProposal(block_proposal)
                 if block_proposal.as_ref().payload.payload_type()
                     == ic_types::consensus::PayloadType::Data =>
             {
+                let DataPayload {
+                    batch: BatchPayload { ingress, .. },
+                    idkg,
+                    ..
+                } = block_proposal.content.as_ref().payload.as_ref().as_data();
+
+                let stripped_ingress_payload = ingress.strip();
+                let stripped_idkg_dealings = idkg.strip();
+
                 let mut proto = pb::BlockProposal::from(block_proposal);
 
                 if let Some(block) = proto.value.as_mut() {
@@ -52,17 +61,11 @@ impl Strippable for ConsensusMessage {
                     }
                 }
 
-                let DataPayload {
-                    batch: BatchPayload { ingress, .. },
-                    idkg,
-                    ..
-                } = block_proposal.content.as_ref().payload.as_ref().as_data();
-
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
                     pruned_block_proposal_proto: proto,
                     unstripped_consensus_message_id,
-                    stripped_ingress_payload: ingress.strip(),
-                    stripped_idkg_dealings: idkg.strip(),
+                    stripped_ingress_payload,
+                    stripped_idkg_dealings,
                 })
             }
             msg => MaybeStrippedConsensusMessage::Unstripped(msg),

@@ -27,7 +27,7 @@ use crate::{
         },
         crypto_hash,
     },
-    node_id_into_protobuf, node_id_try_from_option,
+    node_id_into_protobuf, node_id_try_from_option, node_id_try_from_protobuf,
 };
 use common::SignatureScheme;
 use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_option};
@@ -416,21 +416,21 @@ impl From<&UnmaskedTranscriptWithAttributes> for pb::UnmaskedTranscriptWithAttri
     }
 }
 
-impl TryFrom<&pb::UnmaskedTranscriptWithAttributes> for UnmaskedTranscriptWithAttributes {
+impl TryFrom<pb::UnmaskedTranscriptWithAttributes> for UnmaskedTranscriptWithAttributes {
     type Error = ProxyDecodeError;
     fn try_from(
-        transcript_with_attrs: &pb::UnmaskedTranscriptWithAttributes,
+        transcript_with_attrs: pb::UnmaskedTranscriptWithAttributes,
     ) -> Result<Self, Self::Error> {
         let attributes = try_from_option_field(
-            transcript_with_attrs.attributes.as_ref(),
+            transcript_with_attrs.attributes,
             "UnmaskedTranscriptWithAttributes::attributes",
         )?;
         let unmasked = pb::UnmaskedTranscript {
-            transcript_ref: transcript_with_attrs.transcript_ref.clone(),
+            transcript_ref: transcript_with_attrs.transcript_ref,
         };
         Ok(UnmaskedTranscriptWithAttributes::new(
             attributes,
-            (&unmasked).try_into()?,
+            unmasked.try_into()?,
         ))
     }
 }
@@ -617,14 +617,11 @@ impl TryFrom<pb::MasterKeyTranscript> for MasterKeyTranscript {
     fn try_from(proto: pb::MasterKeyTranscript) -> Result<Self, Self::Error> {
         let current = proto
             .current
-            .as_ref()
             .map(UnmaskedTranscriptWithAttributes::try_from)
             .transpose()?;
 
-        let next_in_creation = try_from_option_field(
-            proto.next_in_creation.as_ref(),
-            "KeyTranscript::next_in_creation",
-        )?;
+        let next_in_creation =
+            try_from_option_field(proto.next_in_creation, "KeyTranscript::next_in_creation")?;
 
         let master_key_id: MasterPublicKeyId =
             try_from_option_field(proto.master_key_id, "KeyTranscript::master_key_id")?;
@@ -635,14 +632,6 @@ impl TryFrom<pb::MasterKeyTranscript> for MasterKeyTranscript {
             next_in_creation,
             master_key_id,
         })
-    }
-}
-
-impl TryFrom<&pb::MasterKeyTranscript> for MasterKeyTranscript {
-    type Error = ProxyDecodeError;
-
-    fn try_from(transcript: &pb::MasterKeyTranscript) -> Result<Self, Self::Error> {
-        Self::try_from(transcript.clone())
     }
 }
 
@@ -718,26 +707,26 @@ impl From<&KeyTranscriptCreation> for pb::KeyTranscriptCreation {
     }
 }
 
-impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
+impl TryFrom<pb::KeyTranscriptCreation> for KeyTranscriptCreation {
     type Error = ProxyDecodeError;
-    fn try_from(proto: &pb::KeyTranscriptCreation) -> Result<Self, Self::Error> {
+    fn try_from(proto: pb::KeyTranscriptCreation) -> Result<Self, Self::Error> {
         if proto.state == (pb::KeyTranscriptCreationState::BeginUnspecified as i32) {
             Ok(KeyTranscriptCreation::Begin)
         } else if proto.state == (pb::KeyTranscriptCreationState::RandomTranscriptParams as i32) {
             Ok(KeyTranscriptCreation::RandomTranscriptParams(
-                try_from_option_field(proto.random.as_ref(), "KeyTranscriptCreation::random")?,
+                try_from_option_field(proto.random, "KeyTranscriptCreation::random")?,
             ))
         } else if proto.state == (pb::KeyTranscriptCreationState::ReshareOfMaskedParams as i32) {
             Ok(KeyTranscriptCreation::ReshareOfMaskedParams(
                 try_from_option_field(
-                    proto.reshare_of_masked.as_ref(),
+                    proto.reshare_of_masked,
                     "KeyTranscriptCreation::reshare_of_masked",
                 )?,
             ))
         } else if proto.state == (pb::KeyTranscriptCreationState::ReshareOfUnmaskedParams as i32) {
             Ok(KeyTranscriptCreation::ReshareOfUnmaskedParams(
                 try_from_option_field(
-                    proto.reshare_of_unmasked.as_ref(),
+                    proto.reshare_of_unmasked,
                     "KeyTranscriptCreation::reshare_of_unmasked",
                 )?,
             ))
@@ -745,11 +734,11 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
             == (pb::KeyTranscriptCreationState::XnetReshareOfUnmaskedParams as i32)
         {
             let initial_dealings: InitialIDkgDealings = try_from_option_field(
-                proto.xnet_reshare_initial_dealings.as_ref(),
+                proto.xnet_reshare_initial_dealings,
                 "KeyTranscriptCreation::xnet_reshare_initial_dealings",
             )?;
             let xnet_param_unmasked = try_from_option_field(
-                proto.xnet_reshare_of_unmasked.as_ref(),
+                proto.xnet_reshare_of_unmasked,
                 "KeyTranscriptCreation::xnet_reshare_of_unmasked",
             )?;
             Ok(KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
@@ -758,7 +747,7 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
             )))
         } else if proto.state == (pb::KeyTranscriptCreationState::Created as i32) {
             Ok(KeyTranscriptCreation::Created(try_from_option_field(
-                proto.created.as_ref(),
+                proto.created,
                 "KeyTranscriptCreation::created",
             )?))
         } else {
@@ -795,19 +784,17 @@ impl From<&IDkgReshareRequest> for pb::IDkgReshareRequest {
     }
 }
 
-impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
+impl TryFrom<pb::IDkgReshareRequest> for IDkgReshareRequest {
     type Error = ProxyDecodeError;
-    fn try_from(request: &pb::IDkgReshareRequest) -> Result<Self, Self::Error> {
+    fn try_from(request: pb::IDkgReshareRequest) -> Result<Self, Self::Error> {
         let receiving_node_ids = request
             .receiving_node_ids
-            .iter()
-            .map(|node| node_id_try_from_option(Some(node.clone())))
+            .into_iter()
+            .map(node_id_try_from_protobuf)
             .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
 
-        let master_key_id: MasterPublicKeyId = try_from_option_field(
-            request.master_key_id.clone(),
-            "IDkgReshareRequest::master_key_id",
-        )?;
+        let master_key_id: MasterPublicKeyId =
+            try_from_option_field(request.master_key_id, "IDkgReshareRequest::master_key_id")?;
         let master_key_id = master_key_id.try_into().map_err(ProxyDecodeError::Other)?;
 
         Ok(Self {
@@ -1458,10 +1445,7 @@ impl TryFrom<pb::EcdsaSigShare> for EcdsaSigShare {
     fn try_from(value: pb::EcdsaSigShare) -> Result<Self, Self::Error> {
         Ok(Self {
             signer_id: node_id_try_from_option(value.signer_id)?,
-            request_id: try_from_option_field(
-                value.request_id.as_ref(),
-                "EcdsaSigShare::request_id",
-            )?,
+            request_id: try_from_option_field(value.request_id, "EcdsaSigShare::request_id")?,
             share: ThresholdEcdsaSigShare {
                 sig_share_raw: value.sig_share_raw,
             },
@@ -1507,10 +1491,7 @@ impl TryFrom<pb::SchnorrSigShare> for SchnorrSigShare {
     fn try_from(value: pb::SchnorrSigShare) -> Result<Self, Self::Error> {
         Ok(Self {
             signer_id: node_id_try_from_option(value.signer_id)?,
-            request_id: try_from_option_field(
-                value.request_id.as_ref(),
-                "SchnorrSigShare::request_id",
-            )?,
+            request_id: try_from_option_field(value.request_id, "SchnorrSigShare::request_id")?,
             share: ThresholdSchnorrSigShare {
                 sig_share_raw: value.sig_share_raw,
             },
@@ -1557,10 +1538,7 @@ impl TryFrom<pb::VetKdKeyShare> for VetKdKeyShare {
     fn try_from(value: pb::VetKdKeyShare) -> Result<Self, Self::Error> {
         Ok(Self {
             signer_id: node_id_try_from_option(value.signer_id)?,
-            request_id: try_from_option_field(
-                value.request_id.as_ref(),
-                "VetKdKeyShare::request_id",
-            )?,
+            request_id: try_from_option_field(value.request_id, "VetKdKeyShare::request_id")?,
             share: VetKdEncryptedKeyShare {
                 encrypted_key_share: VetKdEncryptedKeyShareContent(value.encrypted_key_share),
                 node_signature: value.node_signature,
@@ -1936,19 +1914,19 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
     }
 }
 
-impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
+impl TryFrom<pb::IDkgPayload> for IDkgPayload {
     type Error = ProxyDecodeError;
-    fn try_from(payload: &pb::IDkgPayload) -> Result<Self, Self::Error> {
+    fn try_from(payload: pb::IDkgPayload) -> Result<Self, Self::Error> {
         let mut key_transcripts = BTreeMap::new();
 
-        for key_transcript_proto in &payload.key_transcripts {
+        for key_transcript_proto in payload.key_transcripts {
             let key_transcript = MasterKeyTranscript::try_from(key_transcript_proto)?;
 
             key_transcripts.insert(key_transcript.key_id(), key_transcript);
         }
 
         let mut signature_agreements = BTreeMap::new();
-        for completed_signature in &payload.signature_agreements {
+        for completed_signature in payload.signature_agreements {
             let pseudo_random_id = {
                 if completed_signature.pseudo_random_id.len() != 32 {
                     return Err(ProxyDecodeError::Other(
@@ -1961,8 +1939,8 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
                 x
             };
 
-            let signature = if let Some(unreported) = &completed_signature.unreported {
-                let response = crate::batch::ConsensusResponse::try_from(unreported.clone())?;
+            let signature = if let Some(unreported) = completed_signature.unreported {
+                let response = crate::batch::ConsensusResponse::try_from(unreported)?;
                 CompletedSignature::Unreported(response)
             } else {
                 CompletedSignature::ReportedToExecution
@@ -1973,10 +1951,10 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
 
         // available_pre_signatures
         let mut available_pre_signatures = BTreeMap::new();
-        for available_pre_signature in &payload.available_pre_signatures {
+        for available_pre_signature in payload.available_pre_signatures {
             let pre_signature_id = PreSigId(available_pre_signature.pre_signature_id);
             let pre_signature: PreSignatureRef = try_from_option_field(
-                available_pre_signature.pre_signature.as_ref(),
+                available_pre_signature.pre_signature,
                 "IDkgPayload::available_pre_signature::pre_signature",
             )?;
             available_pre_signatures.insert(pre_signature_id, pre_signature);
@@ -1984,17 +1962,17 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
 
         // pre_signatures_in_creation
         let mut pre_signatures_in_creation = BTreeMap::new();
-        for pre_signature_in_creation in &payload.pre_signatures_in_creation {
+        for pre_signature_in_creation in payload.pre_signatures_in_creation {
             let pre_signature_id = PreSigId(pre_signature_in_creation.pre_signature_id);
             let pre_signature: PreSignatureInCreation = try_from_option_field(
-                pre_signature_in_creation.pre_signature.as_ref(),
+                pre_signature_in_creation.pre_signature,
                 "IDkgPayload::pre_signature_in_creation::pre_signature",
             )?;
             pre_signatures_in_creation.insert(pre_signature_id, pre_signature);
         }
 
         let next_unused_transcript_id: IDkgTranscriptId = try_from_option_field(
-            payload.next_unused_transcript_id.as_ref(),
+            payload.next_unused_transcript_id,
             "IDkgPayload::next_unused_transcript_id",
         )?;
 
@@ -2005,7 +1983,7 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
 
         // idkg_transcripts
         let mut idkg_transcripts = BTreeMap::new();
-        for proto in &payload.idkg_transcripts {
+        for proto in payload.idkg_transcripts {
             let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
                 ProxyDecodeError::Other(format!(
                     "IDkgPayload:: Failed to convert transcript: {err:?}"
@@ -2017,28 +1995,24 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
 
         // ongoing_xnet_reshares
         let mut ongoing_xnet_reshares = BTreeMap::new();
-        for reshare in &payload.ongoing_xnet_reshares {
+        for reshare in payload.ongoing_xnet_reshares {
             let request: IDkgReshareRequest =
-                try_from_option_field(reshare.request.as_ref(), "IDkgPayload::reshare::request")?;
+                try_from_option_field(reshare.request, "IDkgPayload::reshare::request")?;
 
-            let transcript: ReshareOfUnmaskedParams = try_from_option_field(
-                reshare.transcript.as_ref(),
-                "IDkgPayload::reshare::transcript",
-            )?;
+            let transcript: ReshareOfUnmaskedParams =
+                try_from_option_field(reshare.transcript, "IDkgPayload::reshare::transcript")?;
             ongoing_xnet_reshares.insert(request, transcript);
         }
 
         // xnet_reshare_agreements
         let mut xnet_reshare_agreements = BTreeMap::new();
-        for agreement in &payload.xnet_reshare_agreements {
-            let request: IDkgReshareRequest = try_from_option_field(
-                agreement.request.as_ref(),
-                "IDkgPayload::agreement::request",
-            )?;
+        for agreement in payload.xnet_reshare_agreements {
+            let request: IDkgReshareRequest =
+                try_from_option_field(agreement.request, "IDkgPayload::agreement::request")?;
 
-            let completed = match &agreement.initial_dealings {
+            let completed = match agreement.initial_dealings {
                 Some(response) => {
-                    let unreported = response.clone().try_into().map_err(|err| {
+                    let unreported = response.try_into().map_err(|err| {
                         ProxyDecodeError::Other(format!(
                             "IDkgPayload:: failed to convert initial dealing: {err:?}"
                         ))

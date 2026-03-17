@@ -16,7 +16,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, id::ni_dkg_target_id},
     },
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
-    node_id_into_protobuf, node_id_try_from_option,
+    node_id_into_protobuf, node_id_try_from_protobuf,
 };
 use phantom_newtype::Id;
 use std::{
@@ -592,7 +592,6 @@ pub struct SignWithThresholdContext {
     pub derivation_path: Arc<Vec<Vec<u8>>>,
     pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
     pub batch_time: Time,
-    pub matched_pre_signature: Option<(PreSigId, Height)>,
     pub nonce: Option<[u8; NONCE_SIZE]>,
 }
 

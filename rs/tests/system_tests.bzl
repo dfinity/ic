@@ -2,7 +2,6 @@
 Rules for system-tests.
 """
 
-load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
@@ -23,7 +22,6 @@ def system_test(
         runtime_deps = {},
         tags = [],
         test_timeout = "long",
-        flaky = False,
         enable_metrics = False,
         prometheus_vm_required_host_features = [],
         prometheus_vm_resources = default_vm_resources,
@@ -53,7 +51,6 @@ def system_test(
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
-      flaky: rerun in case of failure (up to 3 times).
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
       prometheus_vm_resources: a structure describing the required resources of the PrometheusVm. For example:
@@ -225,7 +222,6 @@ def system_test(
         tags = tags + (["manual"] if "colocate" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
-        flaky = flaky,
         visibility = visibility,
     )
 
@@ -253,7 +249,6 @@ def system_test(
         tags = tags + (["manual"] if not "colocate" in tags else []) + additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
-        flaky = flaky,
         visibility = visibility,
     )
     return struct(test_driver_target = test_driver_target)
@@ -405,11 +400,11 @@ def oci_tar(name, image, repo_tags = []):
 
     basename = name.removesuffix(".tar")
 
-    name_image = basename + "_image"
+    tarball = basename + "_tarball"
 
     # First load the image
     oci_load(
-        name = name_image,
+        name = tarball,
         image = image,
         repo_tags = repo_tags,
         target_compatible_with = [
@@ -418,22 +413,10 @@ def oci_tar(name, image, repo_tags = []):
     )
 
     # create the tarball
-    name_tarballdir = basename + "_tarballdir"
     native.filegroup(
-        name = name_tarballdir,
-        srcs = [":" + name_image],
+        name = name,
+        srcs = [":" + tarball],
         output_group = "tarball",
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-        tags = ["manual"],
-    )
-
-    # Copy the tarball out so we can reference the file by 'name'
-    copy_file(
-        name = basename + "_tar",
-        src = ":" + name_tarballdir,
-        out = name,
         target_compatible_with = [
             "@platforms//os:linux",
         ],

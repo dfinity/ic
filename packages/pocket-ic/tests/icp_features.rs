@@ -171,6 +171,7 @@ fn nns_ui_requires_other_icp_features() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let icp_features = IcpFeatures {
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
@@ -190,6 +191,7 @@ fn test_ii_nns_ui() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
@@ -225,6 +227,7 @@ fn test_no_canister_http_without_auto_progress() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
@@ -626,8 +629,9 @@ fn test_cycles_ledger() {
                 .0;
         assert_eq!(balance, expected_balance);
 
-        // The cycles ledger index only syncs with the cycles ledger once per second.
-        pic.advance_time(Duration::from_secs(1));
+        // The cycles ledger index employs a backoff algorithm, and may, by default, only sync with
+        // the cycles ledger every 10 seconds if the ledger transaction rate is low.
+        pic.advance_time(Duration::from_secs(10));
         pic.tick();
 
         // Check balance via cycles ledger index.
