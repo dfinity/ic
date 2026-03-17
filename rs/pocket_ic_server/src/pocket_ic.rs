@@ -212,8 +212,8 @@ const SNS_LEDGER_INDEX_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_LEDGER_INDEX_CANISTER_WASM_PATH"));
 const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
-const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
-    include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_BACKEND_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_BACKEND_CANISTER_WASM_PATH"));
 const NNS_DAPP_TEST_CANISTER_WASM: &[u8] = include_bytes!(env!("NNS_DAPP_TEST_CANISTER_WASM_PATH"));
 const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
     include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
@@ -2152,7 +2152,7 @@ impl PocketIcSubnets {
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
-                    INTERNET_IDENTITY_TEST_CANISTER_WASM.to_vec(),
+                    INTERNET_IDENTITY_BACKEND_CANISTER_WASM.to_vec(),
                     Encode!(&internet_identity_test_args).unwrap(),
                 )
                 .unwrap();

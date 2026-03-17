@@ -53,7 +53,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 7] = [
         },
     ),
     (
-        "internet_identity_test",
+        "internet_identity_backend",
         ExternalCanisterInfo {
             repository: "dfinity/internet-identity",
             tag_name_prefix: None,

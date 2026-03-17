@@ -1145,7 +1145,7 @@ canisters(
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
         "node-rewards": "node-rewards-canister.wasm.gz",
-        "internet_identity_test": "internet_identity_production.wasm.gz",
+        "internet_identity_backend": "internet_identity_production.wasm.gz",
         "nns_dapp_test": "nns-dapp_test.wasm.gz",
         "sns_aggregator_test": "sns_aggregator_dev.wasm.gz",
         "cycles_ledger": "cycles-ledger.wasm.gz",
@@ -1158,7 +1158,7 @@ canisters(
     path = "//:mainnet-canister-revisions.json",
     repositories = {
         "cycles_ledger": "dfinity/cycles-ledger",
-        "internet_identity_test": "dfinity/internet-identity",
+        "internet_identity_backend": "dfinity/internet-identity",
         "nns_dapp_test": "dfinity/nns-dapp",
         "sns_aggregator_test": "dfinity/nns-dapp",
         "bitcoin_testnet": "dfinity/bitcoin-canister",

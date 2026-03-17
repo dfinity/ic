@@ -62,10 +62,10 @@ fn cycles_ledger_candid_equality() {
 
 #[test]
 fn internet_identity_candid_equality() {
-    const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
-        include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
+    const INTERNET_IDENTITY_BACKEND_CANISTER_WASM: &[u8] =
+        include_bytes!(env!("INTERNET_IDENTITY_BACKEND_CANISTER_WASM_PATH"));
 
-    check_init_arg::<Option<InternetIdentityInit>>(INTERNET_IDENTITY_TEST_CANISTER_WASM);
+    check_init_arg::<Option<InternetIdentityInit>>(INTERNET_IDENTITY_BACKEND_CANISTER_WASM);
 }
 
 #[test]

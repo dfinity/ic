@@ -79,9 +79,9 @@
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
-  "internet_identity_test": {
+  "internet_identity_backend": {
     "sha256": "640fecd6d70a5c22dda0615b2c73390abfb4648014e39d8557fa92bb37752425",
-    "tag": "release-2026-03-06"
+    "tag": "release-2026-03-13"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
