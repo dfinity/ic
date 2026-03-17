@@ -432,6 +432,7 @@ fn scheduler_maintains_canister_order() {
             None,
             None,
             None,
+            None,
         );
         // The last canister does not have any messages.
         if i != 4 {
@@ -516,6 +517,7 @@ fn construct_scheduler_for_prop_test(
             Cycles::new(1_000_000_000_000_000_000),
             ca,
             MemoryAllocation::default(),
+            None,
             if heartbeat {
                 Some(SystemMethod::CanisterHeartbeat)
             } else {
@@ -1236,6 +1238,7 @@ fn frozen_canisters_are_fully_executed() {
             None,
             None,
             None,
+            None,
         );
         test.send_ingress(frozen_canister_id, ingress(slice * 10));
         canisters.push(frozen_canister_id);
@@ -1245,6 +1248,7 @@ fn frozen_canisters_are_fully_executed() {
             Cycles::new(1_000_000),
             ComputeAllocation::zero(),
             MemoryAllocation::default(),
+            None,
             Some(SystemMethod::CanisterHeartbeat),
             None,
             None,

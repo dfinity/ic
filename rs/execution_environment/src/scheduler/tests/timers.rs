@@ -21,6 +21,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
+        None,
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
