@@ -82,7 +82,7 @@ impl Process for ReplicaProcess {
     }
 
     fn get_env(&self) -> HashMap<String, String> {
-        HashMap::new()
+        HashMap::from([("RUST_BACKTRACE".to_string(), "1".to_string())])
     }
 }
 
