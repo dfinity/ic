@@ -21,11 +21,12 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    Cycles, Height,
+    Height,
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,
     xnet::StreamIndex,
 };
+use ic_types_cycles::Cycles;
 use maplit::btreemap;
 use std::sync::Arc;
 

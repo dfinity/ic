@@ -10,7 +10,7 @@ use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, H
 use ic_system_test_driver::systest;
 use ic_system_test_driver::types::CreateCanisterResult;
 use ic_system_test_driver::util::{UniversalCanister, assert_reject, block_on};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallInterface, UNIVERSAL_CANISTER_WASM, call_args, management, wasm};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;

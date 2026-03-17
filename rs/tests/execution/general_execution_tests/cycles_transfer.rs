@@ -9,7 +9,7 @@ use ic_system_test_driver::{
     },
     util::*,
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 
 pub fn can_transfer_cycles_from_a_canister_to_another(env: TestEnv) {

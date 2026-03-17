@@ -9,7 +9,8 @@ use dfn_protobuf::{ProtoBuf, ToProto};
 
 use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types_cycles::Cycles;
 use ic_xrc_types::ExchangeRate;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount, Tokens,

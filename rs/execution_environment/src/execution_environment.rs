@@ -62,10 +62,9 @@ use ic_replicated_state::{
         StopCanisterCall, SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
 };
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
-    ReplicaVersion, SubnetId, Time,
+    CanisterId, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion, ReplicaVersion,
+    SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     consensus::idkg::IDkgMasterPublicKeyId,
@@ -82,9 +81,9 @@ use ic_types::{
         extract_effective_canister_id,
     },
     methods::{Callback, SystemMethod},
-    nominal_cycles::NominalCycles,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;

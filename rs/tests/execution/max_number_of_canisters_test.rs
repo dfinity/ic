@@ -9,7 +9,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{management, wasm};
 use ic_utils::interfaces::ManagementCanister;
 

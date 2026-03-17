@@ -11,6 +11,7 @@ canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
+ic-types-cycles = { path = "../../../types/cycles" }
 ic-types = { path = "../../../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }

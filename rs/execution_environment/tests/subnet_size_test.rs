@@ -17,9 +17,8 @@ use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, SignedIngress};
-use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
-};
+use ic_types::{CanisterId, ComputeAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId};
+use ic_types_cycles::Cycles;
 use more_asserts::assert_lt;
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};

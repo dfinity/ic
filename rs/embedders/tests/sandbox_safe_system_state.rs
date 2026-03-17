@@ -22,12 +22,11 @@ use ic_test_utilities_types::ids::{
 };
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::batch::CanisterCyclesCostSchedule;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE};
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::UNIX_EPOCH;
-use ic_types::{ComputeAllocation, Cycles, NumInstructions};
+use ic_types::{ComputeAllocation, NumInstructions};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::convert::From;

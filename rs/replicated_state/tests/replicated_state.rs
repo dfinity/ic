@@ -39,7 +39,8 @@ use ic_types::messages::{
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
-use ic_types::{CountBytes, Cycles, MemoryAllocation, SnapshotId, Time};
+use ic_types::{CountBytes, MemoryAllocation, SnapshotId, Time};
+use ic_types_cycles::Cycles;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};

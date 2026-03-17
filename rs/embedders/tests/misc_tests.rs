@@ -10,10 +10,11 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
-    Cycles, NumBytes, PrincipalId,
+    NumBytes, PrincipalId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::sync::Arc;
 use wirm::{Module, wasmparser::ExternalKind};

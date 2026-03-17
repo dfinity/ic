@@ -29,9 +29,8 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
+    CanisterId, CountBytes, PrincipalId, RegistryVersion,
     batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpMethod, Transform},
     consensus::idkg::IDkgMasterPublicKeyId,
@@ -40,9 +39,9 @@ use ic_types::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
         RequestOrResponse, Response,
     },
-    nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;

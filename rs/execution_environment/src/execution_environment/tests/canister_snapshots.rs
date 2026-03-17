@@ -30,12 +30,13 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
-    CanisterId, Cycles, NumInstructions, SnapshotId,
+    CanisterId, NumInstructions, SnapshotId,
     batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
@@ -1488,6 +1489,17 @@ fn load_canister_snapshot_succeeds() {
 
     // Load an existing snapshot.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
+
+    // Verify that the snapshot still exists,
+    // i.e., loading a snapshot should not consume it.
+    assert_eq!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .len(),
+        1
+    );
 
     // Verify chunk store contains data.
     assert!(

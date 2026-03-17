@@ -22,7 +22,8 @@ use ic_types::messages::{
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
-use ic_types::{CanisterId, SubnetId, nominal_cycles::NominalCycles};
+use ic_types::{CanisterId, SubnetId};
+use ic_types_cycles::NominalCycles;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};

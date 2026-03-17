@@ -90,16 +90,15 @@ mod tests {
         canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-    use ic_types::cycles_use_case::CyclesUseCase;
     use ic_types::{
-        CanisterId, CryptoHashOfPartialState, Cycles, Height, Time,
+        CanisterId, CryptoHashOfPartialState, Height, Time,
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
         messages::{NO_DEADLINE, Refund, RequestMetadata},
-        nominal_cycles::NominalCycles,
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
     };
+    use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::{BTreeMap, BTreeSet};

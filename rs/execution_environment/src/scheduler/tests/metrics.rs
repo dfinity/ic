@@ -28,12 +28,11 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;

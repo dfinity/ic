@@ -38,7 +38,7 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
+    CanisterId, ComputeAllocation, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
     PrincipalId, Time,
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
@@ -47,6 +47,7 @@ use ic_types::{
     batch::CanisterCyclesCostSchedule,
     messages::{CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
 };
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
