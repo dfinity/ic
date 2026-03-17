@@ -122,7 +122,7 @@ struct InternetIdentityFrontendInitArgs {
 fn install_ii_canisters(
     env: &TestEnv,
     node: &IcNodeSnapshot,
-    ic_gateway_domain: String,
+    ic_gateway_domain: &str,
 ) -> (Principal, Principal) {
     let backend_canister_id = node.create_and_install_canister_with_arg(
         &env::var("II_BACKEND_WASM_PATH").expect("II_BACKEND_WASM_PATH not set"),
@@ -181,7 +181,7 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     // deploy the II canister
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let (_, ii_canister_id) = install_ii_canisters(env, &nns_node, ic_gateway_domain);
+    let (_, ii_canister_id) = install_ii_canisters(env, &nns_node, &ic_gateway_domain);
 
     // create the NNS dapp canister so that its canister ID is allocated
     // and the Subnet Rental Canister gets its mainnet canister ID in the next step
