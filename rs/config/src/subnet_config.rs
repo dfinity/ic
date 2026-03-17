@@ -474,8 +474,8 @@ impl CyclesAccountManagerConfig {
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
             ingress_byte_reception_fee: Cycles::new(2_000),
-            // 5.6 SDR per GiB per year => 5.6e12 Cycles per year
-            gib_storage_per_second_fee: Cycles::new(177_800),
+            // 7.84 SDR per GiB per year => 7.84e12 Cycles per year
+            gib_storage_per_second_fee: Cycles::new(248_920),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,

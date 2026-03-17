@@ -22,7 +22,7 @@ fn deploy_ii(pic: &PocketIc) -> Principal {
     let canister_id = pic.create_canister();
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 2_000_000_000_000);
+    pic.add_cycles(canister_id, 2_800_000_000_000);
     let arg = Encode!(&()).unwrap();
     pic.install_canister(canister_id, ii_wasm, arg, None);
     canister_id
@@ -32,7 +32,7 @@ async fn deploy_ii_async(pic: &pocket_ic::nonblocking::PocketIc) -> Principal {
     let canister_id = pic.create_canister().await;
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 2_000_000_000_000).await;
+    pic.add_cycles(canister_id, 2_800_000_000_000).await;
     let arg = Encode!(&()).unwrap();
     pic.install_canister(canister_id, ii_wasm, arg, None).await;
     canister_id
