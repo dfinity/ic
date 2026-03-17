@@ -16,10 +16,14 @@ use crate::{
     routes::RequestContext,
 };
 
+type ReadStateLabel = Vec<u8>;
+type ReadStatePath = Vec<ReadStateLabel>;
+type ReadStatePaths = Vec<ReadStatePath>;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct CacheKey {
     subnet_id: SubnetId,
-    paths: Vec<Vec<Vec<u8>>>,
+    paths: ReadStatePaths,
 }
 
 #[derive(Clone)]
@@ -131,7 +135,7 @@ mod tests {
 
     use crate::{http::RequestType, routes::RequestContext};
 
-    fn make_request(subnet_id: SubnetId, paths: Vec<Vec<Vec<u8>>>) -> Request<Body> {
+    fn make_request(subnet_id: SubnetId, paths: ReadStatePaths) -> Request<Body> {
         let ctx = Arc::new(RequestContext {
             request_type: RequestType::ReadStateSubnetV2,
             read_state_paths: Some(paths),
