@@ -112,13 +112,8 @@ impl FractionalDeveloperVotingPower {
             return Err("Error: swap_distribution.total_e8 must be greater than or equal to swap_distribution.initial_swap_amount_e8s".to_string());
         }
 
-        let total_developer_e8s = match Self::get_total_distributions(&developer_distribution.developer_neurons) {
-            Ok(total) => total,
-            Err(_) => return Err("Error: The sum of all developer allocated tokens overflowed and is an invalid distribution".to_string()),
-        };
-
-        if total_developer_e8s > swap_distribution.total_e8s {
-            return Err("Error: The sum of all developer allocated tokens must be less than or equal to swap_distribution.total_e8s".to_string());
+        if Self::get_total_distributions(&developer_distribution.developer_neurons).is_err() {
+            return Err("Error: The sum of all developer allocated tokens overflowed and is an invalid distribution".to_string());
         }
 
         Ok(())
@@ -881,8 +876,6 @@ mod test {
                 .is_ok()
         );
 
-        // The sum of the distributions being greater than swap_distribution.total_e8s should fail
-        // validation
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![
                 NeuronDistribution {
@@ -900,7 +893,7 @@ mod test {
         assert!(
             initial_token_distribution
                 .validate(&nervous_system_parameters)
-                .is_err()
+                .is_ok()
         );
 
         // Reset to a valid developer_distribution
