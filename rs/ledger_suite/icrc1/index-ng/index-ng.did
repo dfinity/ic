@@ -73,8 +73,24 @@ type Transaction = record {
   mint : opt Mint;
   approve : opt Approve;
   fee_collector : opt FeeCollector;
+  authorized_mint : opt AuthorizedMint;
+  authorized_burn : opt AuthorizedBurn;
   timestamp : nat64;
   transfer : opt Transfer
+};
+
+type AuthorizedMint = record {
+  to : Account;
+  amount : Tokens;
+  caller : principal;
+  reason : opt text
+};
+
+type AuthorizedBurn = record {
+  from : Account;
+  amount : Tokens;
+  caller : principal;
+  reason : opt text
 };
 
 type FeeCollector = record {

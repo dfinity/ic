@@ -243,10 +243,14 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Burn { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                Operation::FeeCollector { .. } => None,
+                Operation::FeeCollector { .. }
+                | Operation::AuthorizedMint { .. }
+                | Operation::AuthorizedBurn { .. } => None,
             };
             let btype = match transaction.operation {
                 Operation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                Operation::AuthorizedMint { .. } => Some("122mint".to_string()),
+                Operation::AuthorizedBurn { .. } => Some("122burn".to_string()),
                 _ => None,
             };
 
@@ -607,6 +611,12 @@ impl TransactionsAndBalances {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
+            Operation::AuthorizedMint { to, amount, .. } => {
+                self.credit(to, amount.get_e8s());
+            }
+            Operation::AuthorizedBurn { from, amount, .. } => {
+                self.debit(from, amount.get_e8s());
+            }
         };
         self.transactions.push(tx);
 
@@ -636,6 +646,12 @@ impl TransactionsAndBalances {
             }
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
+            }
+            Operation::AuthorizedMint { to, .. } => {
+                self.check_and_update_account_validity(*to, default_fee);
+            }
+            Operation::AuthorizedBurn { from, .. } => {
+                self.check_and_update_account_validity(*from, default_fee);
             }
         }
     }

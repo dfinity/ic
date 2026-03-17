@@ -149,6 +149,40 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         }
     }
 
+    /// Create an authorized mint (ICRC-152) block
+    pub fn authorized_mint(
+        self,
+        to: Account,
+        amount: Tokens,
+        caller: Principal,
+        reason: Option<String>,
+    ) -> AuthorizedMintBuilder<Tokens> {
+        AuthorizedMintBuilder {
+            builder: self.with_btype("122mint".to_string()),
+            to,
+            amount,
+            caller,
+            reason,
+        }
+    }
+
+    /// Create an authorized burn (ICRC-152) block
+    pub fn authorized_burn(
+        self,
+        from: Account,
+        amount: Tokens,
+        caller: Principal,
+        reason: Option<String>,
+    ) -> AuthorizedBurnBuilder<Tokens> {
+        AuthorizedBurnBuilder {
+            builder: self.with_btype("122burn".to_string()),
+            from,
+            amount,
+            caller,
+            reason,
+        }
+    }
+
     /// Create a block with a custom transaction
     pub fn custom_transaction(self) -> CustomTxBuilder<Tokens> {
         CustomTxBuilder {
@@ -378,6 +412,60 @@ impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
             tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd.to_string()));
         }
         self.builder.build_with_operation(None, tx_fields)
+    }
+}
+
+/// Builder for authorized mint (ICRC-152) operations
+pub struct AuthorizedMintBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    to: Account,
+    amount: Tokens,
+    caller: Principal,
+    reason: Option<String>,
+}
+
+impl<Tokens: TokensType> AuthorizedMintBuilder<Tokens> {
+    /// Build the authorized mint block
+    pub fn build(self) -> ICRC3Value {
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("to".to_string(), account_to_icrc3_value(&self.to));
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
+        tx_fields.insert(
+            "caller".to_string(),
+            ICRC3Value::Blob(ByteBuf::from(self.caller.as_slice())),
+        );
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        self.builder
+            .build_with_operation(Some("152mint"), tx_fields)
+    }
+}
+
+/// Builder for authorized burn (ICRC-152) operations
+pub struct AuthorizedBurnBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    from: Account,
+    amount: Tokens,
+    caller: Principal,
+    reason: Option<String>,
+}
+
+impl<Tokens: TokensType> AuthorizedBurnBuilder<Tokens> {
+    /// Build the authorized burn block
+    pub fn build(self) -> ICRC3Value {
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("from".to_string(), account_to_icrc3_value(&self.from));
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
+        tx_fields.insert(
+            "caller".to_string(),
+            ICRC3Value::Blob(ByteBuf::from(self.caller.as_slice())),
+        );
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        self.builder
+            .build_with_operation(Some("152burn"), tx_fields)
     }
 }
 

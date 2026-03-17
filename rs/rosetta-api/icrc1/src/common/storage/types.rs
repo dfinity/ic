@@ -676,6 +676,9 @@ where
                 caller,
                 mthd,
             },
+            Op::AuthorizedMint { .. } | Op::AuthorizedBurn { .. } => {
+                panic!("AuthorizedMint/AuthorizedBurn not yet supported in IcrcOperation")
+            }
         }
     }
 }
