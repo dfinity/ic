@@ -22,9 +22,9 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_replicated_state::{
     CanisterState, metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
-use ic_types::Cycles;
 use ic_types::messages::{CanisterCall, RequestMetadata};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types_cycles::Cycles;
 
 /// Installs a new code in canister. The algorithm consists of five stages:
 /// - Stage 0: validate input.
