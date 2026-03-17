@@ -197,6 +197,9 @@ impl RecurringAsyncTaskNonSend for GetNodeProvidersRewardsInstructionsExporter {
     fn initial_delay(&self) -> Duration {
         Duration::from_secs(0)
     }
+    fn recovery_delay(&self) -> Duration {
+        Duration::from_secs(RETRY_FAILED_SYNC_SECS)
+    }
     const NAME: &'static str = "get_node_providers_rewards_metrics";
 }
 

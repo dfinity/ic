@@ -2,6 +2,7 @@ use crate::chrono_utils::last_unix_timestamp_nanoseconds;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{NaiveDateStorable, VM};
+use candid::Principal;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
@@ -225,12 +226,6 @@ impl rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithm
 
 // Exposed API Methods
 impl NodeRewardsCanister {
-    /// Returns a `&'static` reference to the canister inside a thread_local RefCell.
-    ///
-    /// `&self` across await points, which is incompatible with RefCell's scoped guard.
-    fn as_ref(canister: &'static LocalKey<RefCell<Self>>) -> &'static Self {
-        unsafe { &*canister.with(|cell| cell.as_ptr()) }
-    }
 
     pub async fn get_node_providers_monthly_xdr_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
@@ -307,11 +302,11 @@ impl NodeRewardsCanister {
     ) -> GetNodeProvidersRewardsResponse {
         let from_date = NaiveDate::try_from(request.from_day)?;
         let to_date = NaiveDate::try_from(request.to_day)?;
-        Self::as_ref(canister).validate_reward_period(from_date, to_date)?;
+        canister.with_borrow(|c| c.validate_reward_period(from_date, to_date))?;
+
+        let mut rewards_per_node_provider: BTreeMap<Principal, u64> = BTreeMap::new();
 
         let algorithm_version = request.algorithm_version.unwrap_or_default();
-        let mut total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64> = BTreeMap::new();
-
         for day in from_date.iter_days().take_while(|d| *d <= to_date) {
             let result_for_day = canister
                 .with_borrow(|canister| {
@@ -320,8 +315,8 @@ impl NodeRewardsCanister {
                 .map_err(|e| format!("Could not calculate rewards: {e:?}"))?;
 
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
-                total_rewards_xdr_permyriad
-                    .entry(*provider_id)
+                rewards_per_node_provider
+                    .entry(provider_id.0)
                     .and_modify(|total| {
                         *total += provider_rewards.total_adjusted_rewards_xdr_permyriad
                     })
@@ -337,14 +332,9 @@ impl NodeRewardsCanister {
             .unwrap();
         }
 
-        let rewards_xdr_permyriad = total_rewards_xdr_permyriad
-            .into_iter()
-            .map(|(k, v)| (k.0, v))
-            .collect();
-
         Ok(NodeProvidersRewards {
             algorithm_version,
-            rewards_xdr_permyriad,
+            rewards_xdr_permyriad: rewards_per_node_provider,
         })
     }
 
