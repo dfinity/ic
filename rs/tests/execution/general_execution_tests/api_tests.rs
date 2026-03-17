@@ -10,7 +10,7 @@ use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::util::*;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use slog::Logger;
 

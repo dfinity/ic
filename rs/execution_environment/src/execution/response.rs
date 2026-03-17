@@ -19,8 +19,6 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, error, info};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
-use ic_types::Cycles;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
@@ -28,6 +26,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
+use ic_types_cycles::{Cycles, CyclesUseCase};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 

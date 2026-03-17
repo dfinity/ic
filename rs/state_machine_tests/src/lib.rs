@@ -135,11 +135,10 @@ use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_types::cycles_use_case::CyclesUseCase;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
-    CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Cycles,
-    Height, NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
+    CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height,
+    NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
     SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
@@ -173,12 +172,12 @@ use ic_types::{
         HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource, RejectContext,
         RequestOrResponse, Response, SignedIngress, extract_effective_canister_id,
     },
-    nominal_cycles::NominalCycles,
     signature::ThresholdSignature,
     state_manager::StateManagerResult,
     time::{GENESIS, Time},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
     RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,

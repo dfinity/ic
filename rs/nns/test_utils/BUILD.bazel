@@ -53,6 +53,7 @@ BASE_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",
