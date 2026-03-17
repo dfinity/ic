@@ -360,8 +360,8 @@ http_file(
 http_file(
     name = "doge_canister",
     downloaded_file_path = "ic-doge-canister.wasm.gz",
-    sha256 = "5d61d0fbccca7bb7e86b9c914a36c2cacbf4c01dcaee9c4fae04b54bfca4802c",
-    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2026-02-06/ic-doge-canister.wasm.gz",
+    sha256 = "1fe3ce73e9422a0a3e0444ea7b5a615d2b36c4b940d3cbcfe9e3d5c6cdc32494",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2026-03-12/ic-doge-canister.wasm.gz",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test
