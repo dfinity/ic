@@ -156,6 +156,17 @@ fn fetch_canister_logs(
     )
 }
 
+fn fetch_log_records(
+    env: &StateMachine,
+    sender: PrincipalId,
+    canister_id: CanisterId,
+) -> Vec<CanisterLogRecord> {
+    let reply = fetch_canister_logs(env, sender, canister_id);
+    FetchCanisterLogsResponse::decode(&get_reply(reply))
+        .unwrap()
+        .canister_log_records
+}
+
 #[test]
 fn test_fetch_canister_logs_via_replicated_ingress() {
     // Test fetch_canister_logs call fails for non-canister replicated ingress call.
@@ -919,12 +930,10 @@ fn test_canister_log_stays_within_limit() {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
         env.tick();
     }
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
+    let canister_log_records = fetch_log_records(&env, controller, canister_id);
     // Expect records' total size to be under the limit, excluding the outer vector's static size.
     assert_le!(
-        response
-            .canister_log_records
+        canister_log_records
             .iter()
             .map(|r| r.data_size())
             .sum::<usize>(),
@@ -1900,10 +1909,9 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
     let (env, canister_id) = setup_with_controller(controller, wasm.clone());
     // Populate logs.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    let logs_before = fetch_log_records(&env, controller, canister_id);
     // Assert non-empty logs.
-    assert_eq!(response.canister_log_records.len(), 1);
+    assert_eq!(logs_before.len(), 1);
 
     let status = env.canister_status(canister_id).unwrap().unwrap();
     assert_eq!(status.log_memory_store_size().get(), expected_memory_usage);
@@ -1912,9 +1920,8 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
     let _ = env.reinstall_canister(canister_id, wasm, vec![]);
 
     // Logs should be cleared.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    assert_eq!(response.canister_log_records.len(), 0);
+    let logs_after = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_after.len(), 0);
     // Log memory limit should be preserved.
     let status = env.canister_status(canister_id).unwrap().unwrap();
     assert_eq!(status.log_memory_store_size().get(), expected_memory_usage);
@@ -1967,9 +1974,8 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    assert_eq!(response.canister_log_records.len(), 3);
+    let logs_before = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_before.len(), 3);
 
     // Do uninstall code and install again.
     let _ = env.uninstall_code(canister_id).unwrap();
@@ -1982,10 +1988,9 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
 
     // After uninstall code.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    let logs_after = fetch_log_records(&env, controller, canister_id);
     // Expect zero, because log memory store is deallocated.
-    assert_eq!(response.canister_log_records.len(), 0);
+    assert_eq!(logs_after.len(), 0);
 }
 
 #[test]
@@ -2003,9 +2008,7 @@ fn test_canister_resize_up_preserves_logs() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_before = response.canister_log_records;
+    let logs_before = fetch_log_records(&env, controller, canister_id);
     assert_eq!(logs_before.len(), 3);
 
     // Resize up.
@@ -2018,9 +2021,7 @@ fn test_canister_resize_up_preserves_logs() {
     );
 
     // After resizing.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_after = response.canister_log_records;
+    let logs_after = fetch_log_records(&env, controller, canister_id);
     assert_eq!(logs_after.len(), 3);
     assert_eq!(logs_before, logs_after);
 }
@@ -2040,9 +2041,7 @@ fn test_canister_resize_down_preserves_logs() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_before = response.canister_log_records;
+    let logs_before = fetch_log_records(&env, controller, canister_id);
     assert_eq!(logs_before.len(), 3);
 
     // Resize down.
@@ -2055,9 +2054,7 @@ fn test_canister_resize_down_preserves_logs() {
     );
 
     // After resizing.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_after = response.canister_log_records;
+    let logs_after = fetch_log_records(&env, controller, canister_id);
     assert_eq!(logs_after.len(), 3);
     assert_eq!(logs_before, logs_after);
 }
