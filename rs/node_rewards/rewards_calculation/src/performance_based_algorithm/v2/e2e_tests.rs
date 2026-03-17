@@ -4,9 +4,6 @@ use crate::performance_based_algorithm::test_utils::{
     test_node_id, test_provider_id, test_subnet_id,
 };
 use crate::performance_based_algorithm::v2::RewardsCalculationV2;
-use crate::performance_based_algorithm::{
-    PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInputProvider,
-};
 use crate::types::{NodeMetricsDailyRaw, RewardableNode};
 use chrono::NaiveDate;
 use ic_base_types::{PrincipalId, SubnetId};
