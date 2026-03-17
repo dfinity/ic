@@ -6,11 +6,7 @@
 # CI only tests bazel targets which have modified inputs
 # and excludes tests tagged as 'long_test'.
 #
-# This is problematic for targets that don't explicitly depend
-# on modified inputs like the shell format check //pre-commit:shfmt-check
-# for example which implicitly depends on the whole workspace.
-#
-# Furthermore, from experience we know that modifications to certain
+# From experience we know that modifications to certain
 # files or directories have a high risk of breaking certain long_tests.
 # In those cases folks have traditionally labelled their PRs with CI_ALL_BAZEL_TARGETS
 # to run *all* long_tests. This however is often overkill and often forgotten.
@@ -41,11 +37,6 @@
 # Run `ci/scripts/targets.py check` to see the matches for every pattern
 # and to check the correctness of this file. This is also run automatically by
 # the check-pull-request-bazel-targets job on CI.
-
-*.sh        //pre-commit:shfmt-check
-*.py        //pre-commit:ruff-check
-*.proto     //pre-commit:buf-check
-            //pre-commit:buf-breaking
 
 mainnet-icos-revisions.json
   //rs/tests/consensus/backup:backup_manager_downgrade_test_colocate
