@@ -99,7 +99,7 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-ic-xrc-types = "1.0.0"
+ic-xrc-types = { workspace = true }
 itertools = { workspace = true }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
