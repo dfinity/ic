@@ -7,15 +7,19 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
+use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_ckbtc_minter::state::CkBtcMinterState;
 use ic_ckbtc_minter::state::eventlog::{
     CkBtcEventLogger, CkBtcMinterEvent, EventLogger, EventType,
 };
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::{ECDSAPublicKey, Network};
+use icrc_ledger_types::icrc1::account::Account;
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
+use std::iter::once;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::LazyLock;
 
 pub mod mock {
@@ -93,6 +97,84 @@ static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
         .expect("Failed to replay events")
 });
 static TESTNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Testnet.deserialize());
+
+#[tokio::test]
+async fn should_replay_events_for_testing() {
+    Mainnet.retrieve_and_store_events_if_env().await;
+
+    let initial_txid = "91bb46443799335076fbcd117f2295c7499d02dd3a59c22a531d31591114b303"
+        .parse()
+        .unwrap();
+    let initial_outpoint = OutPoint {
+        txid: initial_txid,
+        vout: 5,
+    };
+    let initial_utxo = Utxo {
+        outpoint: initial_outpoint.clone(),
+        value: 841_171,
+        height: 940_504,
+    };
+    let initial_deposit_account = Account {
+        owner: Principal::from_text("ztwhb-qiaaa-aaaaj-azw7a-cai").unwrap(),
+        subaccount: Some(
+            hex::decode("000000ee9dfa4cd65257c66d0878a0688bd068c7f0fe5f8864f58c9f533d1702")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+    };
+    let sent_txid =
+        Txid::from_str("c61fde25eeffe494f93876d7cfd17ad6b2a84a3e5f68c3b40fd8f7e6e586665f").unwrap();
+
+    let mut reached_sent_tx_c61f = false;
+    let state = CkBtcEventLogger
+        .replay::<SkipCheckInvariantsImpl>(
+            MAINNET_EVENTS
+                .events
+                .iter()
+                .take_while(|event| {
+                    if reached_sent_tx_c61f {
+                        false
+                    } else {
+                        match event.payload {
+                            EventType::SentBtcTransaction { txid, .. } if txid == sent_txid => {
+                                reached_sent_tx_c61f = true;
+                                true //include this SentBtcTransaction to the replay
+                            }
+                            _ => true,
+                        }
+                    }
+                })
+                .cloned(),
+        )
+        .unwrap();
+
+    assert!(reached_sent_tx_c61f);
+
+    let sent_tx = state
+        .submitted_transactions
+        .iter()
+        .find(|tx| tx.txid == sent_txid)
+        .unwrap();
+    assert_eq!(sent_tx.used_utxos.len(), 3);
+    assert_eq!(sent_tx.used_utxos.get(1), Some(&initial_utxo));
+    assert_eq!(
+        state.outpoint_account.get(&initial_outpoint),
+        Some(&initial_deposit_account)
+    );
+    assert_eq!(
+        state
+            .available_utxos
+            .iter()
+            .find(|utxo| utxo.outpoint == initial_outpoint),
+        None
+    );
+    assert_eq!(
+        state.utxos_state_addresses.get(&initial_deposit_account),
+        Some(&once(initial_utxo).collect())
+    );
+    assert_eq!(state.finalized_utxos.get(&initial_deposit_account), None);
+}
 
 #[tokio::test]
 async fn should_replay_events_for_mainnet() {
