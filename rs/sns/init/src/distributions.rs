@@ -109,7 +109,7 @@ impl FractionalDeveloperVotingPower {
         }
 
         if swap_distribution.total_e8s < swap_distribution.initial_swap_amount_e8s {
-            return Err("Error: swap_distribution.total_e8 must be greater than or equal to swap_distribution.initial_swap_amount_e8s".to_string());
+            return Err("Error: swap_distribution.total_e8s must be greater than or equal to swap_distribution.initial_swap_amount_e8s".to_string());
         }
 
         if Self::get_total_distributions(&developer_distribution.developer_neurons).is_err() {

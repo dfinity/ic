@@ -250,10 +250,8 @@ message SnsInitPayload {
 // multiplier will approach 1.0. The following preconditions must be met for
 // it to be a valid distribution:
 //    - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
-//    - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
 //    - swap_distribution.initial_swap_amount_e8s > 0
 //    - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
-//    - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
 message FractionalDeveloperVotingPower {
   // The developer bucket.
   DeveloperDistribution developer_distribution = 1;
