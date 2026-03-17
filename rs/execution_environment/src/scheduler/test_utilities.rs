@@ -317,6 +317,7 @@ impl SchedulerTest {
             cycles,
             compute_allocation,
             memory_allocation,
+            None,
             system_task,
             time_of_last_allocation_charge,
             status,
