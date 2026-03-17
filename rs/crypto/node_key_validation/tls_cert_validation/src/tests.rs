@@ -361,7 +361,7 @@ fn find_needle_in_haystack(needle: &[u8], haystack: &[u8]) -> Option<usize> {
 fn invalidate_ed25519_pubkey(key: &mut Vec<u8>) {
     assert_eq!(key.len(), 32);
 
-    let mut key_arr = [0u8; 32];
+    let mut key_arr = [0_u8; 32];
     key_arr.copy_from_slice(key);
 
     use curve25519_dalek::edwards::CompressedEdwardsY;

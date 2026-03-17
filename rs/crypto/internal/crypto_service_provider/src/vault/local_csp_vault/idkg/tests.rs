@@ -1769,7 +1769,7 @@ mod idkg_load_transcript_with_openings {
             let openings = if self.use_empty_openings {
                 BTreeMap::new()
             } else {
-                BTreeMap::from([(0u32, BTreeMap::from([(0u32, opening.clone())]))])
+                BTreeMap::from([(0_u32, BTreeMap::from([(0_u32, opening.clone())]))])
             };
 
             let loader_vault: Box<dyn IDkgProtocolCspVault> =

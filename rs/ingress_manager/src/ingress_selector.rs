@@ -1622,7 +1622,7 @@ pub(crate) mod tests {
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(1))
                             // No cycles
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),
@@ -1675,7 +1675,7 @@ pub(crate) mod tests {
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(0))
                             // Not enough cycles
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),
@@ -1884,7 +1884,7 @@ pub(crate) mod tests {
                     .with_canister(
                         CanisterStateBuilder::new()
                             .with_canister_id(canister_test_id(2))
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),
