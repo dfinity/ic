@@ -71,7 +71,7 @@ use std::{collections::BTreeSet, time::Duration};
 
 use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 
-use super::SchedulerImpl;
+use super::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
@@ -592,7 +592,7 @@ impl SchedulerTest {
         );
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
-                self.scheduler.config.max_instructions_per_round / 16,
+                self.scheduler.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
             ),
             subnet_available_memory: self
                 .scheduler
