@@ -117,7 +117,6 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
                 None,
                 None,
                 None,
-                None,
             );
             let arg = Encode!(&CanisterIdRecord::from(local_canister)).unwrap();
             test.inject_call_to_ic00(

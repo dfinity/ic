@@ -369,7 +369,6 @@ fn max_canisters_per_round() {
                 None,
                 None,
                 None,
-                None,
             );
             test.send_ingress(canister_id, ingress(10));
         }
