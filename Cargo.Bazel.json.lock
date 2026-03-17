@@ -1,5 +1,5 @@
 {
-  "checksum": "35ad69c5c23b0f4ac4ca8dbbc485404e1a5db158aec4c8d6b8ad73c19a14b1f6",
+  "checksum": "44e98b5024008d08a718976a531124825ad5b75326e588a9726cc593d1ea1d64",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21747,7 +21747,7 @@
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-btc-interface 0.3.0",
+              "id": "ic-btc-interface 0.4.0",
               "target": "ic_btc_interface"
             },
             {
@@ -21803,7 +21803,7 @@
               "target": "ic_custom_domains_canister_client"
             },
             {
-              "id": "ic-doge-interface 0.1.0",
+              "id": "ic-doge-interface 0.3.0",
               "target": "ic_doge_interface"
             },
             {
@@ -35281,14 +35281,14 @@
       ],
       "license_file": null
     },
-    "ic-btc-interface 0.3.0": {
+    "ic-btc-interface 0.4.0": {
       "name": "ic-btc-interface",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "package_url": "https://github.com/dfinity/bitcoin-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-btc-interface/0.3.0/download",
-          "sha256": "4209c650d166815b01336cbbab6310f44895a0fa6571a952b6a84097e5fd87ae"
+          "url": "https://static.crates.io/crates/ic-btc-interface/0.4.0/download",
+          "sha256": "7b07cca9319498684a7477a77a66d87377ecd698b5465a3b8523484fcca16bff"
         }
       },
       "targets": [
@@ -35332,7 +35332,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.0"
+        "version": "0.4.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36605,14 +36605,14 @@
       ],
       "license_file": null
     },
-    "ic-doge-interface 0.1.0": {
+    "ic-doge-interface 0.3.0": {
       "name": "ic-doge-interface",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "package_url": "https://github.com/dfinity/dogecoin-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-doge-interface/0.1.0/download",
-          "sha256": "b36c851b8fc6ec45666e3a912c8b22878e4f12f6d1d9f7033a153c7684903829"
+          "url": "https://static.crates.io/crates/ic-doge-interface/0.3.0/download",
+          "sha256": "b6d9bf312c324521ce174560c002e90aef179bf16befb46c62bdffbccff8f14b"
         }
       },
       "targets": [
@@ -36656,7 +36656,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.0"
+        "version": "0.3.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -98704,7 +98704,7 @@
     "ic-agent 0.45.0",
     "ic-bn-lib 0.1.15",
     "ic-bn-lib-common 0.1.4",
-    "ic-btc-interface 0.3.0",
+    "ic-btc-interface 0.4.0",
     "ic-canister-log 0.2.0",
     "ic-canister-runtime 0.2.0",
     "ic-canister-sig-creation 1.3.0",
@@ -98718,7 +98718,7 @@
     "ic-custom-domains-backend 0.1.4",
     "ic-custom-domains-base 0.1.4",
     "ic-custom-domains-canister-client 0.1.4",
-    "ic-doge-interface 0.1.0",
+    "ic-doge-interface 0.3.0",
     "ic-gateway 0.2.0",
     "ic-http-certification 3.1.0",
     "ic-identity-hsm 0.45.0",
