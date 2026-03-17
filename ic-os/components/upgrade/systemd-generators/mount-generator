@@ -23,7 +23,7 @@
 # than setting up a compiled binary (for now).
 
 UNIT_DIR="$1"
-OS_TYPE=$(cat /etc/ic/os-type)
+OS_TYPE=$(cat /opt/ic/share/os-type)
 
 function get_boot_arg_value() {
     local ARGNAME="$1"
