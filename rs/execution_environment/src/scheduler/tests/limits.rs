@@ -562,8 +562,12 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 3.0);
-    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 10.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        3.0
+    );
+    // 3 subnet messages + 10 input messages
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 13.0);
 
     assert_eq!(
         test.state()
@@ -777,6 +781,72 @@ fn scheduled_heap_delta_limit_scaling() {
     assert_eq!(10, scheduled_limit(55, 50, 9, 10, 5));
 }
 
+#[test]
+fn heap_delta_is_summed_across_threads() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    let a = test.create_canister();
+    let b = test.create_canister();
+
+    // Each canister runs on a separate thread and dirties a different number
+    // of pages so we can distinguish them in the sum.
+    test.send_ingress(a, ingress(10).dirty_pages(3));
+    test.send_ingress(b, ingress(10).dirty_pages(5));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(test.ingress_queue_size(a), 0);
+    assert_eq!(test.ingress_queue_size(b), 0);
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate,
+        NumBytes::new(ic_sys::PAGE_SIZE as u64) * 8, // 3 + 5 pages
+    );
+}
+
+#[test]
+fn later_canister_on_thread_is_skipped_when_heap_delta_per_iteration_is_exceeded() {
+    let page_size = NumBytes::new(ic_sys::PAGE_SIZE as u64);
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_heap_delta_per_iteration: page_size,
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // With 3 canisters and 2 cores, at least one core gets 2 canisters.
+    // Each canister has a message that dirties 2 pages. Because the
+    // per-iteration heap delta limit is 1 page, the first canister on each
+    // core exceeds the limit. The second canister sharing a core is then
+    // skipped by the outer loop in `execute_canisters_on_thread`.
+    let a = test.create_canister();
+    let b = test.create_canister();
+    let c = test.create_canister();
+    test.send_ingress(a, ingress(10).dirty_pages(2));
+    test.send_ingress(b, ingress(10).dirty_pages(2));
+    test.send_ingress(c, ingress(10).dirty_pages(2));
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Two canisters execute (one per core); the third is skipped.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        2
+    );
+    assert_eq!(
+        test.ingress_queue_size(a) + test.ingress_queue_size(b) + test.ingress_queue_size(c),
+        1,
+        "exactly one canister should still have its message queued"
+    );
+}
+
 /// The scheduler recomputes `subnet_available_memory` from the replicated
 /// state at the start of every inner-loop iteration after the first. This
 /// test verifies that the refresh works correctly for the
@@ -813,16 +883,13 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
             max_instructions_per_message: NumInstructions::from(SLICE),
             max_instructions_per_slice: NumInstructions::from(SLICE),
             max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .with_subnet_memory_capacity(pages_into_bytes(4).get())
         .build();
 
-    let a = test.create_canister();
-    let b = test.create_canister();
+    let a = test.create_canister_without_log_memory();
+    let b = test.create_canister_without_log_memory();
 
     for _ in 0..2 {
         // Each ingress, A allocates 1 page, then calls A and B.
