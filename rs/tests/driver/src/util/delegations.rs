@@ -15,6 +15,7 @@ use ic_types::messages::{
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_utils::interfaces::ManagementCanister;
 use reqwest::{Client, Response};
+use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -335,6 +336,41 @@ pub enum IdRegFinishError {
     StorageError(String),
 }
 
+#[derive(CandidType, Serialize)]
+enum StaticCaptchaTrigger {
+    #[allow(dead_code)]
+    CaptchaEnabled,
+    CaptchaDisabled,
+}
+
+#[derive(CandidType, Serialize)]
+enum CaptchaTrigger {
+    #[allow(dead_code)]
+    Dynamic,
+    Static(StaticCaptchaTrigger),
+}
+
+#[derive(CandidType, Serialize)]
+struct CaptchaConfig {
+    pub max_unsolved_captchas: u64,
+    pub captcha_trigger: CaptchaTrigger,
+}
+
+#[derive(CandidType, Serialize)]
+struct InternetIdentityInit {
+    pub captcha_config: Option<CaptchaConfig>,
+}
+
+pub fn build_internet_identity_backend_install_arg() -> Vec<u8> {
+    candid::encode_one(&InternetIdentityInit {
+        captcha_config: Some(CaptchaConfig {
+            max_unsolved_captchas: 50,
+            captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
+        }),
+    })
+    .unwrap()
+}
+
 pub async fn register_user(
     agent: &Agent,
     public_key: Vec<u8>,
@@ -355,8 +391,8 @@ pub async fn register_user(
     } = result.expect("identity_registration_start failed")
     else {
         panic!(
-            "Expected the next step to be Finish, but got CheckCaptcha with captcha.\
-             make sure to initialize internet_identity_backend with CaptchaDisabled for tests.",
+            "Expected the next step to be Finish, but got CheckCaptcha with captcha. \
+             Make sure to initialize internet_identity_backend with CaptchaDisabled for tests.",
         );
     };
 

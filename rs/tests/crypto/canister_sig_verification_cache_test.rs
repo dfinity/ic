@@ -41,7 +41,6 @@ use ic_system_test_driver::util::{
 };
 use ic_types::messages::Blob;
 use rand::Rng;
-use serde::Serialize;
 use serde_bytes::ByteBuf;
 use slog::info;
 use std::env;
@@ -142,43 +141,10 @@ pub fn test(env: TestEnv) {
     });
 }
 
-#[derive(CandidType, Serialize)]
-enum StaticCaptchaTrigger {
-    #[allow(dead_code)]
-    CaptchaEnabled,
-    CaptchaDisabled,
-}
-
-#[derive(CandidType, Serialize)]
-enum CaptchaTrigger {
-    #[allow(dead_code)]
-    Dynamic,
-    Static(StaticCaptchaTrigger),
-}
-
-#[derive(CandidType, Serialize)]
-struct CaptchaConfig {
-    pub max_unsolved_captchas: u64,
-    pub captcha_trigger: CaptchaTrigger,
-}
-
-#[derive(CandidType, Serialize)]
-struct InternetIdentityInit {
-    pub captcha_config: Option<CaptchaConfig>,
-}
-
 fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
     let ii_canister_id = ii_node.create_and_install_canister_with_arg(
         &env::var("II_BACKEND_WASM_PATH").expect("II_BACKEND_WASM_PATH not set"),
-        Some(
-            candid::encode_one(&InternetIdentityInit {
-                captcha_config: Some(CaptchaConfig {
-                    max_unsolved_captchas: 50,
-                    captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
-                }),
-            })
-            .unwrap(),
-        ),
+        Some(build_internet_identity_backend_install_arg()),
     );
     info!(
         env.logger(),

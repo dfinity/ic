@@ -124,7 +124,7 @@ fn install_ii_canisters(env: &TestEnv, node: &IcNodeSnapshot) -> (Principal, Pri
         None,
     );
 
-    let network_url = node.get_public_url().host_str().unwrap();
+    let network_url = node.get_public_url().host_str().unwrap().to_string();
 
     let frontend_canister_id = node.create_and_install_canister_with_arg(
         &env::var("II_FRONTEND_WASM_PATH").expect("II_FRONTEND_WASM_PATH not set"),
@@ -134,7 +134,9 @@ fn install_ii_canisters(env: &TestEnv, node: &IcNodeSnapshot) -> (Principal, Pri
                 backend_origin: format!("http://{}.{}", backend_canister_id.to_text(), network_url),
                 related_origins: Some(vec![format!(
                     "http://{}.{}",
-                    frontend_canister_id.to_text(),
+                    // The canister ID of the II frontend canister that will be deployed
+                    // can be obtained deterministically in most testing scenarios.
+                    node.effective_canister_id().0.to_text(),
                     network_url
                 )]),
                 fetch_root_key: Some(true),
