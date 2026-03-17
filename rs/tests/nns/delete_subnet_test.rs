@@ -64,7 +64,8 @@ pub fn setup(env: TestEnv) {
         )
         .add_subnet(
             Subnet::fast(SubnetType::CloudEngine, NUM_ENGINE_NODES)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH))
+                .with_cost_schedule(ic_types::batch::CanisterCyclesCostSchedule::Free),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
