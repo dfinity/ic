@@ -50,14 +50,14 @@ impl SubnetReadStateCacheState {
             "Number of cache hits for subnet read_state requests",
             registry
         )
-        .unwrap();
+        .expect("failed to register subnet read_state cache hits metric");
 
         let misses = register_int_counter_with_registry!(
             "subnet_read_state_cache_misses_total",
             "Number of cache misses for subnet read_state requests",
             registry
         )
-        .unwrap();
+        .expect("failed to register subnet read_state cache misses metric");
 
         Self {
             cache,
@@ -95,7 +95,7 @@ pub async fn subnet_read_state_cache_middleware(
         return Ok(Response::builder()
             .status(cached.status)
             .body(Body::from(cached.body))
-            .unwrap());
+            .expect("failed to build cached subnet read_state response"));
     }
 
     state.misses.inc();
