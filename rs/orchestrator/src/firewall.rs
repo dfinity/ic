@@ -374,7 +374,7 @@ impl Firewall {
 
         // Depending on whether the node is a system or app API boundary node, get the IPs of all
         // system subnet or application subnet nodes
-        let whitelisted_node_ips: BTreeSet<IpAddr> = match self
+        let whitelisted_socks_ips: BTreeSet<IpAddr> = match self
             .registry
             .is_system_api_boundary_node(self.node_id, registry_version)
         {
@@ -430,7 +430,7 @@ impl Firewall {
 
         // Then split it to v4 and v6 separately
         let (whitelisted_ipv4s, whitelisted_ipv6s) =
-            split_ips_by_address_family(&whitelisted_node_ips);
+            split_ips_by_address_family(&whitelisted_socks_ips);
         info!(
             self.logger,
             "Whitelisting node IP addresses ({} v4 and {} v6) for the SOCKS proxy on the firewall",
