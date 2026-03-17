@@ -226,7 +226,6 @@ impl rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithm
 
 // Exposed API Methods
 impl NodeRewardsCanister {
-
     pub async fn get_node_providers_monthly_xdr_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersMonthlyXdrRewardsRequest,
