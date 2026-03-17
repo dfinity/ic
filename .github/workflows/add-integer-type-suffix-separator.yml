@@ -1,0 +1,77 @@
+name: Add Integer Type Suffix Separator
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**.rs'
+  merge_group:
+
+jobs:
+  add-type-suffix-separator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dsherret/install-action@v1
+        with:
+          deno: false
+          rust-toolchain: "1.93.1"
+
+      - name: Build add-integer-type-suffix-separator
+        run: cargo build --release -p add-integer-type-suffix-separator
+
+      - name: Run fixer
+        id: fixer
+        run: |
+          OUTPUT=$(./target/release/add-integer-type-suffix-separator /ic/rs 2>&1)
+          echo "$OUTPUT"
+          # Check if any files were modified
+          if git diff --quiet; then
+            echo "no-changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "no-changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Report violations (PR)
+        if: github.event_name == 'pull_request' && steps.fixer.outputs.no-changes == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const diff = require('child_process').execSync('git diff HEAD', { encoding: 'utf8' });
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ⚠️ Integer Type Suffix Separator Violations Detected\n\nTo fix locally, run:\n\n\`\`\`bash\ncargo run -p add-integer-type-suffix-separator -- rs/\n\`\`\`\n\nThen commit and push your changes.\n\n### Violations:\n\n\`\`\`diff\n${diff}\n\`\`\``
+            });
+
+      - name: Fail if violations found
+        if: steps.fixer.outputs.no-changes == 'false'
+        run: |
+          echo "❌ Integer type suffix separator violations found"
+          echo "Run locally: cargo run -p add-integer-type-suffix-separator -- rs/"
+          git diff
+          exit 1
+
+  post-required-check-status-add-integer-type-suffix-separator:
+    name: Add Integer Type Suffix Separator Required Check Status
+    runs-on: ubuntu-latest
+    needs: [add-type-suffix-separator]
+    if: (success() || failure()) && ( github.event_name == 'pull_request' || github.event_name == 'merge_group' )
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/post-commit-status
+        with:
+          commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          run-result: ${{ needs.add-type-suffix-separator.result }}
+          name: add-integer-type-suffix-separator-status
