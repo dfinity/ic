@@ -502,7 +502,7 @@ enum NnsFunction {
   // Delete a subnet. The subnet record, catch-up package, threshold signing key
   // and routing table entries are removed from the registry, and the subnet's
   // nodes become unassigned.
-  // Currently limited to CloudEngine subnets. 
+  // Currently limited to CloudEngine subnets.
   NNS_FUNCTION_DELETE_SUBNET = 57;
 }
 
