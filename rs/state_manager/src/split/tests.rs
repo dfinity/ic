@@ -33,12 +33,13 @@ use ic_test_utilities_types::{
 };
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{
-    Cycles, Height,
+    Height,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::MessageId,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use std::{path::Path, sync::Arc, time::Duration};
 use tempfile::TempDir;
 
