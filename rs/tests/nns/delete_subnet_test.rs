@@ -127,14 +127,6 @@ pub fn test(env: TestEnv) {
         let governance_canister =
             UniversalCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
 
-        // Give the engine a free cost schedule.
-        make_schedule_free(
-            &engine_subnet.subnet_id,
-            &registry_client,
-            &governance_canister,
-        )
-        .await;
-
         // Install a canister each on the engine subnet and on the app subnet.
         let _canister_eng =
             UniversalCanister::new(&engine_agent, engine_node.effective_canister_id()).await;
@@ -217,31 +209,6 @@ async fn try_delete_subnet<'a>(
     } else {
         Decode!(&result_bytes, Result<(), String>).unwrap().unwrap();
     }
-}
-
-async fn make_schedule_free(
-    subnet_id: &SubnetId,
-    registry_client: &RegistryCanister,
-    governance_canister: &UniversalCanister<'_>,
-) {
-    use ic_registry_keys::make_subnet_record_key;
-    let mut subnet_record = get_subnet_from_registry(registry_client, *subnet_id).await;
-    subnet_record.canister_cycles_cost_schedule = CanisterCyclesCostSchedule::Free as i32;
-    let mutation_request = RegistryAtomicMutateRequest {
-        mutations: vec![update(
-            make_subnet_record_key(*subnet_id).as_bytes(),
-            subnet_record.encode_to_vec(),
-        )],
-        preconditions: vec![],
-    };
-    governance_canister
-        .forward_to(
-            &Principal::from(REGISTRY_CANISTER_ID),
-            "atomic_mutate",
-            mutation_request.encode_to_vec(),
-        )
-        .await
-        .expect("atomic_mutate failed");
 }
 
 #[derive(CandidType)]
