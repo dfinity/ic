@@ -1,11 +1,11 @@
 use crate::AlgorithmVersion;
 use crate::REWARDS_TABLE_DAYS;
+#[cfg(test)]
+use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::performance_based_algorithm::results::{
     DailyNodeFailureRate, DailyNodeProviderRewards, DailyNodeRewards, DailyResults,
     NodeMetricsDaily, NodeTypeRegionBaseRewards, Type3RegionBaseRewards,
 };
-#[cfg(test)]
-use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use chrono::NaiveDate;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
