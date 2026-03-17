@@ -14,11 +14,11 @@ use pocket_ic::{
     DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
     PocketIcState, RejectCode, StartServerParams, Time,
     common::rest::{
-        AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
-        CanisterIdRange, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayDetails,
-        HttpsConfig, IcpFeatures, IcpFeaturesConfig, InitialTime, InstanceConfig,
-        InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
-        SubnetConfigSet, SubnetKind, SubnetSpec,
+        AutoProgressConfig, BlobCompression, CanisterCyclesCostSchedule, CanisterHttpReply,
+        CanisterHttpResponse, CanisterIdRange, CreateInstanceResponse, ExtendedSubnetConfigSet,
+        HttpGatewayDetails, HttpsConfig, IcpFeatures, IcpFeaturesConfig, InitialTime,
+        InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal,
+        RawMessageId, SubnetConfigSet, SubnetKind, SubnetSpec,
     },
     nonblocking::PocketIc as PocketIcAsync,
     query_candid, start_server, update_candid,
@@ -3287,21 +3287,10 @@ fn mainnet_nns_subnet_id() {
     );
 }
 
-#[tokio::test]
-async fn cloud_engine_with_subnet_admins() {
-    // Create a PocketIC instance with a single (cloud) engine.
-    let admin = Principal::anonymous();
-    let subnet_spec = SubnetSpec::default().with_subnet_admins(vec![admin]);
-    let config = ExtendedSubnetConfigSet {
-        cloud_engine: vec![subnet_spec],
-        ..Default::default()
-    };
-    let mut pic = PocketIcBuilder::new_with_config(config).build_async().await;
-
-    // Derive the engine's subnet ID and an effective canister ID for canister creation.
+async fn rental_subnet_or_cloud_engine_test(pic: &mut PocketIcAsync, subnet_id: Principal) {
+    // Derive an effective canister ID for canister creation.
     let topology = pic.topology().await;
-    let cloud_engine = topology.get_cloud_engines()[0];
-    let config = topology.subnet_configs.get(&cloud_engine).unwrap();
+    let config = topology.subnet_configs.get(&subnet_id).unwrap();
     let effective_canister_id: Principal = config.canister_ranges[0].start.clone().into();
 
     // Create an IC agent to interact with the (live) PocketIC instance.
@@ -3309,7 +3298,7 @@ async fn cloud_engine_with_subnet_admins() {
     let agent = Agent::builder().with_url(url).build().unwrap();
     agent.fetch_root_key().await.unwrap();
 
-    // Create a canister on the engine via the IC agent.
+    // Create a canister on the respective subnet via the IC agent.
     let mgr = ManagementCanister::create(&agent);
     let canister_id: Principal = mgr
         .create_canister()
@@ -3318,21 +3307,107 @@ async fn cloud_engine_with_subnet_admins() {
         .unwrap()
         .0;
 
-    // Check that the canister has been deployed to the engine
+    // Check that the canister has been deployed to the respective subnet
     // and has zero balance.
-    assert_eq!(topology.get_subnet(canister_id).unwrap(), cloud_engine);
+    assert_eq!(topology.get_subnet(canister_id).unwrap(), subnet_id);
     assert_eq!(pic.cycle_balance(canister_id).await, 0);
 
-    // The canister can be installed on an engine even if it has zero balance.
+    // The canister can be installed on the subnet even if it has zero balance.
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None)
         .await;
+}
+
+#[tokio::test]
+async fn rental_subnet_with_subnet_admins() {
+    // Create a PocketIC instance with a single rental subnet.
+    let admin = Principal::anonymous();
+    let subnet_spec = SubnetSpec::default()
+        .with_subnet_admins(vec![admin])
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free);
+    let config = ExtendedSubnetConfigSet {
+        application: vec![subnet_spec],
+        ..Default::default()
+    };
+    let mut pic = PocketIcBuilder::new_with_config(config).build_async().await;
+
+    // Derive the rental subnet's subnet ID.
+    let topology = pic.topology().await;
+    let rental_subnet = topology.get_app_subnets()[0];
+
+    // Run the test.
+    rental_subnet_or_cloud_engine_test(&mut pic, rental_subnet).await;
+}
+
+#[tokio::test]
+async fn cloud_engine_with_subnet_admins() {
+    // Create a PocketIC instance with a single (cloud) engine.
+    let admin = Principal::anonymous();
+    let subnet_spec = SubnetSpec::default()
+        .with_subnet_admins(vec![admin])
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free);
+    let config = ExtendedSubnetConfigSet {
+        cloud_engine: vec![subnet_spec],
+        ..Default::default()
+    };
+    let mut pic = PocketIcBuilder::new_with_config(config).build_async().await;
+
+    // Derive the engine's subnet ID.
+    let topology = pic.topology().await;
+    let cloud_engine = topology.get_cloud_engines()[0];
+
+    // Run the test.
+    rental_subnet_or_cloud_engine_test(&mut pic, cloud_engine).await;
+}
+
+#[test]
+#[should_panic(
+    expected = "Subnet admins can only be specified for subnet of kind `Application` or `CloudEngine`"
+)]
+fn subnet_admins_on_nns() {
+    // Creating the NNS subnet with subnet admins set (even to an empty list) should fail.
+    let subnet_spec = SubnetSpec::default().with_subnet_admins(vec![]);
+    let config = ExtendedSubnetConfigSet {
+        nns: Some(subnet_spec),
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new_with_config(config).build();
+}
+
+#[test]
+#[should_panic(
+    expected = "Non-default cost schedule can only be specified for subnet of kind `Application` or `CloudEngine`"
+)]
+fn free_cost_schedule_on_nns() {
+    // Creating the NNS subnet with free cost schedule should fail.
+    let subnet_spec = SubnetSpec::default().with_cost_schedule(CanisterCyclesCostSchedule::Free);
+    let config = ExtendedSubnetConfigSet {
+        nns: Some(subnet_spec),
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new_with_config(config).build();
+}
+
+#[test]
+#[should_panic(
+    expected = "Subnet admins can only be specified for subnet with cost schedule of kind `Free`"
+)]
+fn subnet_admins_on_default_cost_schedule() {
+    // Creating a subnet with subnet admins set (even to an empty list) on a default cost schedule should fail.
+    let subnet_spec = SubnetSpec::default().with_subnet_admins(vec![]);
+    let config = ExtendedSubnetConfigSet {
+        application: vec![subnet_spec],
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new_with_config(config).build();
 }
 
 #[test]
 fn cloud_engine_default_effective_canister_id() {
     // Create a PocketIC instance with a single (cloud) engine and NNS subnet.
     let admin = Principal::anonymous();
-    let subnet_spec = SubnetSpec::default().with_subnet_admins(vec![admin]);
+    let subnet_spec = SubnetSpec::default()
+        .with_subnet_admins(vec![admin])
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free);
     let config = ExtendedSubnetConfigSet {
         nns: Some(SubnetSpec::default()),
         cloud_engine: vec![subnet_spec],
