@@ -39,7 +39,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers,
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
-use ic_types::{Cycles, ExecutionRound, Height};
+use ic_types::{ExecutionRound, Height};
+use ic_types_cycles::Cycles;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -1041,7 +1042,6 @@ fn sign_with_threshold_context_roundtrip() {
                     derivation_path: Arc::new(vec![]),
                     pseudo_random_id: [1; 32],
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: None,
                     nonce: Some([3; 32]),
                 },
             );

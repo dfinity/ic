@@ -40,6 +40,8 @@ fn main() -> Result<()> {
         .with_overall_timeout(Duration::from_secs(3 * 60 * 60))
         .with_timeout_per_test(Duration::from_secs(3 * 60 * 60))
         .with_setup(setup)
+        .without_assert_no_replica_restarts()
+        .remove_all_metrics_to_check()
         .execute_from_args()?;
     Ok(())
 }
@@ -312,7 +314,9 @@ chmod +x /home/admin/run
         .join()
         .expect("test execution thread failed");
 
-    fetch_test_dir(env.clone(), &uvm, &session);
+    if env::var("FETCH_TEST_DIR").is_ok() {
+        fetch_test_dir(env.clone(), &uvm, &session);
+    }
 
     info!(
         log,

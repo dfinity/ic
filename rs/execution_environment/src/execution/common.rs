@@ -31,7 +31,8 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::time::CoarseTime;
-use ic_types::{Cycles, NumInstructions, PrincipalId, Time, UserId};
+use ic_types::{NumInstructions, PrincipalId, Time, UserId};
+use ic_types_cycles::Cycles;
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
@@ -351,6 +352,22 @@ pub(crate) fn validate_controller(
             controllers_expected: canister.system_state.controllers.clone(),
             controller_provided: *controller,
         });
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_snapshot_visibility(
+    canister: &CanisterState,
+    caller: &PrincipalId,
+    method_name: &str,
+) -> Result<(), UserError> {
+    if !crate::canister_settings::VisibilitySettings::from(canister.snapshot_visibility())
+        .has_access(caller, canister.controllers())
+    {
+        return Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!("Caller {caller} is not allowed to call {method_name}"),
+        ));
     }
     Ok(())
 }
@@ -692,8 +709,9 @@ mod test {
         CanisterState, SchedulerState, SystemState,
         canister_state::canister_snapshots::CanisterSnapshots,
     };
+    use ic_types::Time;
     use ic_types::messages::{CallbackId, NO_DEADLINE};
-    use ic_types::{Cycles, Time};
+    use ic_types_cycles::Cycles;
 
     #[test]
     fn test_wasm_result_to_query_response_refunds_correctly() {

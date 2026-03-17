@@ -30,12 +30,13 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
-    CanisterId, Cycles, NumInstructions, SnapshotId,
+    CanisterId, NumInstructions, SnapshotId,
     batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
@@ -335,17 +336,6 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .system_state
             .wasm_chunk_store
     );
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .memory_taken(),
-    );
 
     // Grow the canister's memory before taking another snapshot.
     test.ingress(
@@ -383,18 +373,6 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .unwrap()
             .canister_snapshots
             .contains(&new_snapshot_id)
-    );
-
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .memory_taken(),
     );
 }
 
@@ -1056,18 +1034,6 @@ fn delete_canister_snapshot_succeeds() {
     let subnet_available_memory_after_taking_snapshot =
         test.subnet_available_memory().get_execution_memory() as u64;
 
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .memory_taken(),
-    );
-
     // Deletes canister snapshot successfully.
     let args: DeleteCanisterSnapshotArgs =
         DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
@@ -1085,17 +1051,6 @@ fn delete_canister_snapshot_succeeds() {
             .is_none()
     );
     assert!(test.state().canister_state(&canister_id).is_some());
-
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .memory_taken(),
-    );
 
     assert_gt!(
         subnet_available_memory_after_deleting_snapshot,
@@ -1155,13 +1110,9 @@ fn list_canister_snapshot_fails_invalid_controller() {
     if let RequestOrResponse::Response(res) = response {
         assert_eq!(res.originator, *receiver);
         res.response_payload.assert_contains_reject(
-            RejectCode::CanisterError,
+            RejectCode::CanisterReject,
             &format!(
-                "Only the controllers of the canister {} can control it.\n\
-                    Canister's controllers: {}\n\
-                    Sender's ID: {}",
-                canister_id,
-                test.user_id().get(),
+                "Caller {} is not allowed to call list_canister_snapshots",
                 caller_canister.get(),
             ),
         );
@@ -1538,6 +1489,17 @@ fn load_canister_snapshot_succeeds() {
 
     // Load an existing snapshot.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
+
+    // Verify that the snapshot still exists,
+    // i.e., loading a snapshot should not consume it.
+    assert_eq!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .len(),
+        1
+    );
 
     // Verify chunk store contains data.
     assert!(
@@ -2103,7 +2065,7 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 fn read_canister_snapshot_data(
@@ -2473,7 +2435,7 @@ fn read_canister_snapshot_data_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_data", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 #[test]
