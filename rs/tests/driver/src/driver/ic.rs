@@ -16,6 +16,7 @@ use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
@@ -487,6 +488,7 @@ pub struct Subnet {
     // NOTE: Some values in this config, like the http port,
     // are overwritten in `update_and_write_node_config`.
     pub subnet_type: SubnetType,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
     pub max_instructions_per_message: Option<u64>,
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
@@ -522,6 +524,7 @@ impl Subnet {
             features: None,
             max_number_of_canisters: None,
             subnet_type,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
@@ -707,6 +710,11 @@ impl Subnet {
         self
     }
 
+    pub fn with_cost_schedule(mut self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        self.canister_cycles_cost_schedule = cost_schedule;
+        self
+    }
+
     pub fn halted(mut self) -> Self {
         self.running_state = SubnetRunningState::Halted;
         self
@@ -789,6 +797,7 @@ impl Default for Subnet {
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             subnet_type: SubnetType::System,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,

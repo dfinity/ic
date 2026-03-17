@@ -8,11 +8,8 @@ end::catalog[] */
 use anyhow::Result;
 use candid::{CandidType, Decode, Encode, Principal};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_registry_transport::update;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -20,11 +17,10 @@ use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
     install_registry_canister_with_testnet_topology,
 };
-use ic_system_test_driver::nns::{get_subnet_from_registry, get_subnet_list_from_registry};
+use ic_system_test_driver::nns::get_subnet_list_from_registry;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
 use ic_types::{Height, RegistryVersion, SubnetId};
-use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use std::collections::BTreeSet;
 use std::time::Duration;
@@ -35,12 +31,8 @@ const DKG_INTERVAL_LENGTH: u64 = 29;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        // Currently, the orchestrator does not handle subnet deletion gracefully, so this test can experience
-        // node restarts. However, this
-        // - is ok because it can only affect deleted subnets,
-        // - which is unreachable code at the moment, because there is no governance code making the call,
-        // - and will be fixed in a follow-up PR.
-        // TODO: DSM-111
+        // Currently, the orchestrator/replica does not handle subnet deletion gracefully, so this test can experience
+        // node restarts. However, this is ok because it can only affect the nodes of a deleted subnet.
         .without_assert_no_replica_restarts()
         .with_setup(setup)
         .add_test(systest!(test))
@@ -64,7 +56,8 @@ pub fn setup(env: TestEnv) {
         )
         .add_subnet(
             Subnet::fast(SubnetType::CloudEngine, NUM_ENGINE_NODES)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH))
+                .with_cost_schedule(ic_types::batch::CanisterCyclesCostSchedule::Free),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -125,14 +118,6 @@ pub fn test(env: TestEnv) {
         // Install a universal canister with the governance canister's canister ID
         let governance_canister =
             UniversalCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
-
-        // Give the engine a free cost schedule.
-        make_schedule_free(
-            &engine_subnet.subnet_id,
-            &registry_client,
-            &governance_canister,
-        )
-        .await;
 
         // Install a canister each on the engine subnet and on the app subnet.
         let _canister_eng =
@@ -216,31 +201,6 @@ async fn try_delete_subnet<'a>(
     } else {
         Decode!(&result_bytes, Result<(), String>).unwrap().unwrap();
     }
-}
-
-async fn make_schedule_free(
-    subnet_id: &SubnetId,
-    registry_client: &RegistryCanister,
-    governance_canister: &UniversalCanister<'_>,
-) {
-    use ic_registry_keys::make_subnet_record_key;
-    let mut subnet_record = get_subnet_from_registry(registry_client, *subnet_id).await;
-    subnet_record.canister_cycles_cost_schedule = CanisterCyclesCostSchedule::Free as i32;
-    let mutation_request = RegistryAtomicMutateRequest {
-        mutations: vec![update(
-            make_subnet_record_key(*subnet_id).as_bytes(),
-            subnet_record.encode_to_vec(),
-        )],
-        preconditions: vec![],
-    };
-    governance_canister
-        .forward_to(
-            &Principal::from(REGISTRY_CANISTER_ID),
-            "atomic_mutate",
-            mutation_request.encode_to_vec(),
-        )
-        .await
-        .expect("atomic_mutate failed");
 }
 
 #[derive(CandidType)]

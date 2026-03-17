@@ -9,7 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+* Subnet deletion endpoint. Limited to CloudEngine subnets. 
+
 ## Changed
+
+* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
 
 ## Deprecated
 

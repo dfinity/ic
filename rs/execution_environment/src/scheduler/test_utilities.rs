@@ -38,9 +38,11 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
+    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, NumWasmPages,
+    ReplicatedState,
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
     metadata_state::testing::NetworkTopologyTesting,
+    num_bytes_try_from,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
@@ -185,6 +187,13 @@ impl SchedulerTest {
         &self.scheduler
     }
 
+    pub fn was_fully_executed(&self, canister_id: CanisterId) -> bool {
+        self.state()
+            .canister_priority(&canister_id)
+            .last_full_execution_round
+            == self.last_round()
+    }
+
     pub fn xnet_canister_id(&self) -> CanisterId {
         self.xnet_canister_id
     }
@@ -212,6 +221,19 @@ impl SchedulerTest {
         )
     }
 
+    pub fn create_canister_without_log_memory(&mut self) -> CanisterId {
+        self.create_canister_with_controller(
+            self.initial_canister_cycles,
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            Some(NumBytes::from(0)),
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
         use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
         self.scheduler.cycles_account_manager.execution_cost(
@@ -232,6 +254,7 @@ impl SchedulerTest {
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
+        log_memory_limit: Option<NumBytes>,
         system_task: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
         status: Option<CanisterStatusType>,
@@ -244,7 +267,7 @@ impl SchedulerTest {
         let time_of_last_allocation_charge =
             time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
         let controller = controller.unwrap_or(self.user_id.get());
-        let mut canister_state = CanisterStateBuilder::new()
+        let mut builder = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
             .with_cycles(cycles)
             .with_controller(controller)
@@ -253,8 +276,11 @@ impl SchedulerTest {
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
             .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
-            .with_status(status.unwrap_or(CanisterStatusType::Running))
-            .build();
+            .with_status(status.unwrap_or(CanisterStatusType::Running));
+        if let Some(limit) = log_memory_limit {
+            builder = builder.with_log_memory_limit(limit.get() as usize);
+        }
+        let mut canister_state = builder.build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
             wasm_executor
@@ -291,6 +317,7 @@ impl SchedulerTest {
             cycles,
             compute_allocation,
             memory_allocation,
+            None,
             system_task,
             time_of_last_allocation_charge,
             status,
@@ -301,11 +328,11 @@ impl SchedulerTest {
     pub fn send_ingress(&mut self, canister_id: CanisterId, message: TestMessage) -> MessageId {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
-        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let message_id = wasm_executor.push_ingress(
             canister_id,
-            canister,
+            &mut state,
             message,
+            self.user_id,
             Time::from_nanos_since_unix_epoch(u64::MAX / 2),
         );
         self.state = Some(state);
@@ -320,8 +347,8 @@ impl SchedulerTest {
     ) -> MessageId {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
-        let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        let message_id = wasm_executor.push_ingress(canister_id, canister, message, expiry_time);
+        let message_id =
+            wasm_executor.push_ingress(canister_id, &mut state, message, self.user_id, expiry_time);
         self.state = Some(state);
         message_id
     }
@@ -526,6 +553,16 @@ impl SchedulerTest {
         wasm_executor.push_system_task(canister_id, system_task);
     }
 
+    /// Returns the number of heartbeat or global timer tasks not yet executed by
+    /// the given canister.
+    pub fn system_task_count(&self, canister_id: &CanisterId) -> usize {
+        self.wasm_executor
+            .core
+            .lock()
+            .unwrap()
+            .system_task_count(canister_id)
+    }
+
     pub fn execute_round(&mut self, round_type: ExecutionRoundType) {
         let state = self.state.take().unwrap();
         let state = self.scheduler.execute_round(
@@ -583,7 +620,7 @@ impl SchedulerTest {
             compute_allocation_used,
             subnet_memory_reservation: self.scheduler.exec_env.scaled_subnet_memory_reservation(),
         };
-        let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
+        let measurements = MeasurementScope::root(&self.scheduler.metrics.round_inner_subnet_queue);
         self.scheduler.drain_subnet_queues(
             state,
             &mut csprng,
@@ -698,6 +735,7 @@ pub(crate) struct SchedulerTestBuilder {
     scheduler_config: SchedulerConfig,
     hypervisor_config: HypervisorConfig,
     initial_canister_cycles: Cycles,
+    subnet_memory_capacity: u64,
     subnet_guaranteed_response_message_memory: u64,
     subnet_callback_soft_limit: usize,
     canister_guaranteed_callback_quota: usize,
@@ -727,6 +765,7 @@ impl Default for SchedulerTestBuilder {
             scheduler_config,
             hypervisor_config: config.embedders_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
+            subnet_memory_capacity: config.subnet_memory_capacity.get(),
             subnet_guaranteed_response_message_memory: config
                 .guaranteed_response_message_memory_capacity
                 .get(),
@@ -757,6 +796,13 @@ impl SchedulerTestBuilder {
         Self {
             subnet_type,
             scheduler_config,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_memory_capacity(self, subnet_memory_capacity: u64) -> Self {
+        Self {
+            subnet_memory_capacity,
             ..self
         }
     }
@@ -879,7 +925,9 @@ impl SchedulerTestBuilder {
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.batch_time = self.batch_time;
 
-        let subnet_config = SubnetConfig::new(self.subnet_type);
+        let mut subnet_config = SubnetConfig::new(self.subnet_type);
+        subnet_config.scheduler_config = self.scheduler_config.clone();
+
         for key_id in &self.master_public_key_ids {
             state
                 .metadata
@@ -938,9 +986,12 @@ impl SchedulerTestBuilder {
         };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
-            guaranteed_response_message_memory_capacity: NumBytes::from(
+            subnet_memory_capacity: NumBytes::new(self.subnet_memory_capacity),
+            guaranteed_response_message_memory_capacity: NumBytes::new(
                 self.subnet_guaranteed_response_message_memory,
             ),
+            // Keep it simple, no memory reservation for responses.
+            subnet_memory_reservation: NumBytes::new(0),
             subnet_callback_soft_limit: self.subnet_callback_soft_limit,
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
             rate_limiting_of_instructions,
@@ -1015,20 +1066,29 @@ impl SchedulerTestBuilder {
 ///   that uses 5 instructions and calls a canister with id `callee`.
 ///   The called message uses 3 instructions. The response handler  uses
 ///   8 instructions.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct TestMessage {
     /// The canister id is optional and is inferred from the context if not
     /// provided.
     canister: Option<CanisterId>,
     /// The number of instructions that execution of this message will use.
     instructions: NumInstructions,
-    /// The number of 4KiB pages that execution of this message will writes to.
+    /// The number of Wasm pages that execution of this message will allocate.
+    allocate_pages: NumWasmPages,
+    /// The number of 4KiB pages that execution of this message will write to.
     dirty_pages: usize,
     /// The outgoing calls that will be produced by execution of this message.
     calls: Vec<TestCall>,
 }
 
 impl TestMessage {
+    pub fn allocate_pages(self, allocate_pages: usize) -> TestMessage {
+        Self {
+            allocate_pages: NumWasmPages::new(allocate_pages),
+            ..self
+        }
+    }
+
     pub fn dirty_pages(self, dirty_pages: usize) -> TestMessage {
         Self {
             dirty_pages,
@@ -1070,10 +1130,8 @@ pub(crate) enum TestInstallCode {
 /// needed and will be specified by the function that enqueues the ingress.
 pub(crate) fn ingress(instructions: u64) -> TestMessage {
     TestMessage {
-        canister: None,
         instructions: NumInstructions::from(instructions),
-        dirty_pages: 0,
-        calls: vec![],
+        ..Default::default()
     }
 }
 
@@ -1082,8 +1140,7 @@ pub(crate) fn other_side(callee: CanisterId, instructions: u64) -> TestMessage {
     TestMessage {
         canister: Some(callee),
         instructions: NumInstructions::from(instructions),
-        dirty_pages: 0,
-        calls: vec![],
+        ..Default::default()
     }
 }
 
@@ -1091,10 +1148,8 @@ pub(crate) fn other_side(callee: CanisterId, instructions: u64) -> TestMessage {
 /// Note that the canister id is not needed and is inferred from the context.
 pub(crate) fn on_response(instructions: u64) -> TestMessage {
     TestMessage {
-        canister: None,
         instructions: NumInstructions::from(instructions),
-        dirty_pages: 0,
-        calls: vec![],
+        ..Default::default()
     }
 }
 
@@ -1102,10 +1157,8 @@ pub(crate) fn on_response(instructions: u64) -> TestMessage {
 /// `post_upgrade` of an install code message.
 pub(crate) fn instructions(instructions: u64) -> TestMessage {
     TestMessage {
-        canister: None,
         instructions: NumInstructions::from(instructions),
-        dirty_pages: 0,
-        calls: vec![],
+        ..Default::default()
     }
 }
 
@@ -1262,9 +1315,11 @@ impl TestWasmExecutorCore {
             paused.canister_current_message_memory_usage,
         );
 
+        let mut wasm_memory = execution_state.wasm_memory.clone();
+        wasm_memory.size += message.allocate_pages;
         let execution_state_changes = ExecutionStateChanges {
             globals: execution_state.exported_globals.clone(),
-            wasm_memory: execution_state.wasm_memory.clone(),
+            wasm_memory,
             stable_memory: execution_state.stable_memory.clone(),
         };
 
@@ -1279,7 +1334,7 @@ impl TestWasmExecutorCore {
         };
         let output = WasmExecutionOutput {
             wasm_result: Ok(None),
-            allocated_bytes: NumBytes::from(0),
+            allocated_bytes: num_bytes_try_from(message.allocate_pages).unwrap(),
             allocated_guaranteed_response_message_bytes: NumBytes::from(0),
             new_memory_usage: None,
             new_message_memory_usage: None,
@@ -1485,8 +1540,9 @@ impl TestWasmExecutorCore {
     fn push_ingress(
         &mut self,
         canister_id: CanisterId,
-        canister: &mut CanisterState,
+        state: &mut ReplicatedState,
         message: TestMessage,
+        user_id: UserId,
         expiry_time: Time,
     ) -> MessageId {
         let ingress_id = self.next_message_id();
@@ -1497,10 +1553,23 @@ impl TestWasmExecutorCore {
                 .method_name("update")
                 .method_payload(encode_message_id_as_payload(ingress_id))
                 .expiry_time(expiry_time)
+                .sender(user_id)
                 .build(),
             None,
         )
             .into();
+        state.set_ingress_status(
+            ingress.message_id.clone(),
+            IngressStatus::Known {
+                receiver: canister_id.get(),
+                user_id,
+                time: state.time(),
+                state: IngressState::Received,
+            },
+            NumBytes::from(u64::MAX),
+            |_| {},
+        );
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let message_id = ingress.message_id.clone();
         canister.push_ingress(ingress);
         message_id
@@ -1517,6 +1586,13 @@ impl TestWasmExecutorCore {
             .entry(canister_id)
             .or_default()
             .push_back(system_task);
+    }
+
+    fn system_task_count(&self, canister_id: &CanisterId) -> usize {
+        self.system_tasks
+            .get(canister_id)
+            .map(|tasks| tasks.len())
+            .unwrap_or_default()
     }
 
     fn next_message_id(&mut self) -> u32 {
