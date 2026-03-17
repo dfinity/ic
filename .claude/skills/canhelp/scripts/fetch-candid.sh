@@ -9,5 +9,5 @@ fi
 CANISTER_ID="${1:?Usage: fetch-candid.sh <canister-id>}"
 OUT="/tmp/candid_${CANISTER_ID}.did"
 
-icp canister metadata "$CANISTER_ID" candid:service --network ic > "$OUT"
+icp canister metadata "$CANISTER_ID" candid:service --network ic >"$OUT"
 echo "$OUT"

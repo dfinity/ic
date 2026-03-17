@@ -24,4 +24,4 @@ if not entries:
     sys.exit(1)
 for e in entries:
     print(f\"{e['canister_id']}  {e.get('name', 'N/A')}\")
-" <<< "$RESPONSE"
+" <<<"$RESPONSE"
