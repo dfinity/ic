@@ -28,7 +28,7 @@ pub trait FirewallRegistry {
 
     fn get_subnet_node_ids_of_types(
         &self,
-        subnet_types: impl IntoIterator<Item = SubnetType>,
+        subnet_types: Vec<SubnetType>,
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<NodeId>>;
 
@@ -62,22 +62,20 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
     /// endpoints used for core protocol services (p2p, xnet, api).
     fn get_subnet_node_ids_of_types(
         &self,
-        subnet_types: impl IntoIterator<Item = SubnetType>,
+        subnet_types: Vec<SubnetType>,
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<NodeId>> {
-        let subnet_ids = subnet_types
-            .into_iter()
-            .map(|subnet_id| {
-                self.get_subnet_ids_of_type(subnet_id, version)
-                    .map(Option::unwrap_or_default)
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
+        let Some(all_subnet_ids) = self.get_subnet_ids(version)? else {
+            return Ok(None);
+        };
 
-        let node_ids = subnet_ids
+        let node_ids = all_subnet_ids
             .into_iter()
+            .filter(|subnet_id| {
+                subnet_types.iter().any(|target_type| {
+                    self.get_subnet_type(*subnet_id, version) == Ok(Some(*target_type))
+                })
+            })
             .map(|subnet_id| {
                 self.get_node_ids_on_subnet(subnet_id, version)
                     .map(Option::unwrap_or_default)

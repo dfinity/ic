@@ -383,7 +383,7 @@ impl Firewall {
                 .flat_map(|registry_version| {
                     let system_node_ids = self.registry
                         .get_subnet_node_ids_of_types(
-                            [SubnetType::System],
+                            vec![SubnetType::System],
                             registry_version,
                         )
                         .inspect_err(|err| {
@@ -404,7 +404,7 @@ impl Firewall {
                 .flat_map(|registry_version| {
                     let app_node_ids = self.registry
                         .get_subnet_node_ids_of_types(
-                            [SubnetType::Application, SubnetType::VerifiedApplication],
+                            vec![SubnetType::Application, SubnetType::VerifiedApplication],
                             registry_version,
                         )
                         .inspect_err(|err| {
