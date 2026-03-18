@@ -60,6 +60,7 @@ async fn expected_stream_indices() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
+            SubnetType::Application,
             &MetricsRegistry::new(),
             log,
         );
@@ -409,6 +410,7 @@ async fn validate_slice_invalid_signature() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
+            SubnetType::Application,
             &MetricsRegistry::new(),
             log,
         );
@@ -752,6 +754,7 @@ fn get_xnet_payload_builder_for_test(
         tokio::runtime::Handle::current(),
         LOCAL_NODE,
         LOCAL_SUBNET,
+        SubnetType::Application,
         &MetricsRegistry::new(),
         log,
     )

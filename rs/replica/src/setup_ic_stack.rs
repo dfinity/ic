@@ -246,6 +246,7 @@ pub fn construct_ic_stack(
         rt_handle_xnet.clone(),
         node_id,
         subnet_id,
+        subnet_type,
         metrics_registry,
         log.clone(),
     ));

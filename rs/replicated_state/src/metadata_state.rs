@@ -181,6 +181,25 @@ pub struct SystemMetadata {
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 }
 
+/// Determines which subnets [`NetworkTopology::route`] may resolve to.
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+pub enum RoutingFilter {
+    /// No restriction — every known subnet is routable.
+    #[default]
+    Any,
+    /// Only subnet IDs in the set are routable.
+    WhiteList(BTreeSet<SubnetId>),
+}
+
+impl RoutingFilter {
+    fn allows(&self, subnet_id: &SubnetId) -> bool {
+        match self {
+            RoutingFilter::Any => true,
+            RoutingFilter::WhiteList(set) => set.contains(subnet_id),
+        }
+    }
+}
+
 /// Full description of the IC network toplogy.
 ///
 /// Contains [`Arc`] references, so it is only safe to serialize for read-only
@@ -205,6 +224,9 @@ pub struct NetworkTopology {
 
     /// The ID of the canister to forward bitcoin mainnet requests to.
     pub bitcoin_mainnet_canister_id: Option<CanisterId>,
+
+    /// Controls which subnets `route()` is allowed to resolve to.
+    pub routing_filter: RoutingFilter,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -232,6 +254,7 @@ impl Default for NetworkTopology {
             chain_key_enabled_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
+            routing_filter: RoutingFilter::Any,
         }
     }
 }
@@ -246,6 +269,7 @@ impl NetworkTopology {
         chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
         bitcoin_testnet_canister_id: Option<CanisterId>,
         bitcoin_mainnet_canister_id: Option<CanisterId>,
+        routing_filter: RoutingFilter,
     ) -> Self {
         Self {
             subnets,
@@ -255,6 +279,7 @@ impl NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
+            routing_filter,
         }
     }
 
@@ -283,10 +308,16 @@ impl NetworkTopology {
     }
 
     /// Find the subnet for `principal_id`. The input can either be a canister id, or a subnet id.
+    ///
+    /// The resolved subnet is checked against the [`RoutingFilter`]: if the
+    /// filter does not allow the subnet, `None` is returned.
     pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
         let as_subnet_id = SubnetId::from(principal_id);
         if self.subnets.contains_key(&as_subnet_id) {
-            return Some(as_subnet_id);
+            return self
+                .routing_filter
+                .allows(&as_subnet_id)
+                .then_some(as_subnet_id);
         }
 
         // If the `principal_id` was not a subnet, it must be a `CanisterId` (otherwise
@@ -295,7 +326,8 @@ impl NetworkTopology {
             Ok(canister_id) => self
                 .routing_table
                 .lookup_entry(canister_id)
-                .map(|(_range, subnet_id)| subnet_id),
+                .map(|(_range, subnet_id)| subnet_id)
+                .filter(|subnet_id| self.routing_filter.allows(subnet_id)),
             // Cannot route to any subnet as we couldn't convert to a `CanisterId`.
             Err(_) => None,
         }

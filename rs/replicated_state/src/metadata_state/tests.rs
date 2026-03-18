@@ -1101,6 +1101,55 @@ fn network_topology_ecdsa_subnets() {
     );
 }
 
+#[test]
+fn network_topology_route_filtered_by_whitelist() {
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2);
+    let subnet_c = subnet_test_id(3);
+
+    // Build a routing table that maps canister ranges to subnets.
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0u64), end: CanisterId::from(99u64) } => subnet_a,
+            CanisterIdRange { start: CanisterId::from(100u64), end: CanisterId::from(199u64) } => subnet_b,
+        })
+        .unwrap(),
+    );
+
+    // Whitelist only allows subnet_a; subnet_b and subnet_c are excluded.
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            subnet_a => SubnetTopology::default(),
+            subnet_b => SubnetTopology::default(),
+            subnet_c => SubnetTopology::default(),
+        },
+        routing_table,
+        canister_migrations: Arc::new(CanisterMigrations::default()),
+        nns_subnet_id: subnet_test_id(42),
+        routing_filter: RoutingFilter::WhiteList([subnet_a].into_iter().collect()),
+        ..Default::default()
+    };
+
+    // --- Canister ID routing ---
+
+    // Canister on subnet_a: allowed by whitelist.
+    assert_eq!(
+        network_topology.route(canister_test_id(50).get()),
+        Some(subnet_a),
+    );
+    // Canister on subnet_b: blocked by whitelist.
+    assert_eq!(network_topology.route(canister_test_id(150).get()), None,);
+
+    // --- Subnet ID routing ---
+
+    // subnet_a is in the whitelist and in `subnets`.
+    assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a),);
+    // subnet_b is in `subnets` but NOT in the whitelist.
+    assert_eq!(network_topology.route(subnet_b.get()), None,);
+    // subnet_c is in `subnets` but NOT in the whitelist.
+    assert_eq!(network_topology.route(subnet_c.get()), None,);
+}
+
 /// Test fixture that will produce an ingress status of type completed or failed,
 /// depending on whether `i % 2 == 0` (completed) or not (failed). Both statuses
 /// will have the same payload size.

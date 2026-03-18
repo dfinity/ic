@@ -34,6 +34,7 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
@@ -277,6 +278,9 @@ pub struct XNetPayloadBuilderImpl {
     /// A deterministic pseudo-random number generator.
     deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
 
+    /// The own subnet type.
+    subnet_type: SubnetType,
+
     metrics: Arc<XNetPayloadBuilderMetrics>,
 
     log: ReplicaLogger,
@@ -331,6 +335,7 @@ impl XNetPayloadBuilderImpl {
         runtime_handle: runtime::Handle,
         node_id: NodeId,
         subnet_id: SubnetId,
+        subnet_type: SubnetType,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
@@ -376,6 +381,7 @@ impl XNetPayloadBuilderImpl {
             None,
             slice_pool,
             refill_task_handle,
+            subnet_type,
             metrics,
             log,
         )
@@ -392,6 +398,7 @@ impl XNetPayloadBuilderImpl {
         slice_byte_size_min_override: Option<usize>,
         slice_pool: Box<dyn XNetSlicePool>,
         refill_task_handle: RefillTaskHandle,
+        subnet_type: SubnetType,
         metrics: Arc<XNetPayloadBuilderMetrics>,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
@@ -404,6 +411,7 @@ impl XNetPayloadBuilderImpl {
             slice_pool,
             refill_task_handle,
             count_bytes_fn: certified_slice_count_bytes,
+            subnet_type,
             metrics,
             log,
         }
@@ -480,11 +488,22 @@ impl XNetPayloadBuilderImpl {
         state: &ReplicatedState,
         past_payloads: &[&XNetPayload],
     ) -> Result<BTreeMap<SubnetId, ExpectedIndices>, Error> {
-        let subnet_ids = self
+        let all_subnet_ids = self
             .registry
             .get_subnet_ids(validation_context.registry_version)
             .map_err(Error::RegistryGetSubnetsFailed)?
             .unwrap_or_default();
+
+        let subnet_ids: Vec<_> = all_subnet_ids
+            .into_iter()
+            .filter(|subnet_id| {
+                self.registry
+                    .get_subnet_type(*subnet_id, validation_context.registry_version)
+                    .is_ok_and(|maybe_t| {
+                        maybe_t.is_some_and(|t| t != SubnetType::CloudEngine.into())
+                    })
+            })
+            .collect();
 
         let expected_indices = subnet_ids
             .into_iter()
@@ -1140,6 +1159,11 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         byte_limit: NumBytes,
     ) -> (XNetPayload, NumBytes) {
         let since = Instant::now();
+
+        if self.subnet_type == SubnetType::CloudEngine {
+            return (XNetPayload::default(), 0.into());
+        }
+
         let payload =
             match self.get_xnet_payload_impl(validation_context, past_payloads, byte_limit) {
                 Ok((payload, byte_size)) => {
@@ -1171,6 +1195,15 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         past_payloads: &[&XNetPayload],
     ) -> Result<NumBytes, XNetPayloadValidationError> {
         let since = Instant::now();
+
+        if self.subnet_type == SubnetType::CloudEngine && !payload.stream_slices.is_empty() {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidXNetPayload::InvalidSlice(
+                    "CloudEngine subnets do not accept XNet payloads".to_string(),
+                ),
+            ));
+        }
+
         let state = match self
             .state_manager
             .get_state_at(validation_context.certified_height)
@@ -1187,6 +1220,19 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         let mut new_stream_positions = Vec::new();
         let mut payload_byte_size = 0;
         for (subnet_id, certified_slice) in payload.stream_slices.iter() {
+            if self
+                .registry
+                .get_subnet_type(*subnet_id, validation_context.registry_version)
+                .is_ok_and(|maybe_t| maybe_t.is_some_and(|t| t == SubnetType::CloudEngine.into()))
+            {
+                return Err(ValidationError::InvalidArtifact(
+                    InvalidXNetPayload::InvalidSlice(format!(
+                        "Slice from CloudEngine subnet {}",
+                        subnet_id
+                    )),
+                ));
+            }
+
             let expected = self.expected_indices_for_stream(*subnet_id, &state, past_payloads);
             match self.validate_slice(
                 *subnet_id,

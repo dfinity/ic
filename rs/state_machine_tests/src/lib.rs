@@ -1619,6 +1619,7 @@ impl StateMachineBuilder {
             None,
             xnet_slice_pool_impl,
             refill_task_handle,
+            SubnetType::Application,
             metrics,
             sm.replica_logger.clone(),
         ));

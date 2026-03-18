@@ -17904,9 +17904,12 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "canister-test",
+ "ic-agent",
+ "ic-error-types 0.2.0",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-universal-canister",
  "ic_consensus_system_test_utils",
  "slog",
  "systest-message-routing-common",

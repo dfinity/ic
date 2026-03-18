@@ -55,6 +55,11 @@ message NetworkTopology {
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
+  RoutingWhitelist routing_whitelist = 9;
+}
+
+message RoutingWhitelist {
+  repeated types.v1.SubnetId subnet_ids = 1;
 }
 
 message SetupInitialDkgContext {

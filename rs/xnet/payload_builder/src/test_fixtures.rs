@@ -245,7 +245,17 @@ pub(crate) fn get_validation_context_for_test() -> ValidationContext {
 /// expected index or else 0).
 pub(crate) fn get_registry_and_urls_for_test(
     subnet_count: u8,
+    expected_indices: BTreeMap<SubnetId, ExpectedIndices>,
+) -> (Arc<FakeRegistryClient>, Vec<String>) {
+    get_registry_and_urls_for_test_with_subnet_types(subnet_count, expected_indices, btreemap![])
+}
+
+/// Like `get_registry_and_urls_for_test`, but with configurable subnet types.
+/// Subnets not present in `subnet_types` default to `SubnetType::Application`.
+pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
+    subnet_count: u8,
     mut expected_indices: BTreeMap<SubnetId, ExpectedIndices>,
+    subnet_types: BTreeMap<SubnetId, SubnetType>,
 ) -> (Arc<FakeRegistryClient>, Vec<String>) {
     let mut urls = vec![];
     let mut subnets: Vec<Vec<u8>> = vec![];
@@ -273,6 +283,9 @@ pub(crate) fn get_registry_and_urls_for_test(
         subnets.push(subnet_id.get().into_vec());
 
         let mut subnet_record = test_subnet_record();
+        if let Some(&subnet_type) = subnet_types.get(&subnet_id) {
+            subnet_record.subnet_type = i32::from(subnet_type);
+        }
         subnet_record.membership = vec![node_id.get().into_vec()];
 
         // Set node to subnet assignment.

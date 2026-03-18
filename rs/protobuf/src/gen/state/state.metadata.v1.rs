@@ -71,6 +71,13 @@ pub struct NetworkTopology {
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
     pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
+    #[prost(message, optional, tag = "9")]
+    pub routing_whitelist: ::core::option::Option<RoutingWhitelist>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RoutingWhitelist {
+    #[prost(message, repeated, tag = "1")]
+    pub subnet_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {

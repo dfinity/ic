@@ -51,6 +51,12 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
+            routing_whitelist: match &item.routing_filter {
+                RoutingFilter::Any => None,
+                RoutingFilter::WhiteList(set) => Some(pb_metadata::RoutingWhitelist {
+                    subnet_ids: set.iter().map(|id| subnet_id_into_protobuf(*id)).collect(),
+                }),
+            },
         }
     }
 }
@@ -109,6 +115,16 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
+            routing_filter: match item.routing_whitelist {
+                None => RoutingFilter::Any,
+                Some(wl) => {
+                    let mut set = BTreeSet::new();
+                    for subnet_id in wl.subnet_ids {
+                        set.insert(subnet_id_try_from_protobuf(subnet_id)?);
+                    }
+                    RoutingFilter::WhiteList(set)
+                }
+            },
         })
     }
 }
