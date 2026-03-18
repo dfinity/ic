@@ -5,6 +5,8 @@ name: Update mainnet canister versions file
 # version of the canister being up to date.  If it is disabled, tests might succeed that ought to fail.  Please do not
 # disable without consulting (or minimally informing) the team(s) maintaining the NNS and SNS (currently Governance).
 
+# test
+
 on:
   schedule:
     - cron: "0 */2 * * *"
