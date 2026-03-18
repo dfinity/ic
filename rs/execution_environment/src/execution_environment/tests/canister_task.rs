@@ -473,7 +473,7 @@ fn global_timer_can_be_reactivated_in_canister_global_timer_method() {
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
-    for i in 1..20u64 {
+    for i in 1..20_u64 {
         // In every third execution, NextScheduledMethod is Message, hence in such
         // executions only the message will be executed.
         // While in the other executions, NextScheduledMethod is either GlobalTimer

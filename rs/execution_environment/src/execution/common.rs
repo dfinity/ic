@@ -718,7 +718,7 @@ mod test {
         let scheduler_state = SchedulerState::default();
         let system_state = SystemState::new_running_for_testing(
             CanisterId::from_u64(42),
-            CanisterId::from(100u64).into(),
+            CanisterId::from(100_u64).into(),
             Cycles::new(1 << 36),
             NumSeconds::from(100_000),
         );
@@ -735,13 +735,13 @@ mod test {
             &CanisterState::new(system_state, None, scheduler_state, canister_snapshots),
             Time::from_nanos_since_unix_epoch(100),
             ic_replicated_state::CallOrigin::CanisterUpdate(
-                CanisterId::from(123u64),
+                CanisterId::from(123_u64),
                 CallbackId::new(2),
                 NO_DEADLINE,
                 String::from(""),
             ),
             &log,
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         );
 
         if let ExecutionResponse::Request(response) = response {
