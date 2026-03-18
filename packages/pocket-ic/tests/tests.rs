@@ -3287,7 +3287,37 @@ fn mainnet_nns_subnet_id() {
     );
 }
 
-async fn rental_subnet_or_cloud_engine_test(pic: &mut PocketIcAsync, subnet_id: Principal) {
+/// Used to enumerate subnets with the "free" cost schedule in subnet admins tests.
+enum FreeSubnet {
+    RentalSubnet,
+    CloudEngine,
+}
+
+async fn test_subnet_admins(free_subnet: FreeSubnet) {
+    // Create a PocketIC instance with a single subnet on the "free" cost schedule.
+    let admin = Principal::anonymous();
+    let subnet_spec = SubnetSpec::default()
+        .with_subnet_admins(vec![admin])
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free);
+    let config = match free_subnet {
+        FreeSubnet::RentalSubnet => ExtendedSubnetConfigSet {
+            application: vec![subnet_spec],
+            ..Default::default()
+        },
+        FreeSubnet::CloudEngine => ExtendedSubnetConfigSet {
+            cloud_engine: vec![subnet_spec],
+            ..Default::default()
+        },
+    };
+    let mut pic = PocketIcBuilder::new_with_config(config).build_async().await;
+
+    // Derive the subnet ID.
+    let topology = pic.topology().await;
+    let subnet_id = match free_subnet {
+        FreeSubnet::RentalSubnet => topology.get_app_subnets()[0],
+        FreeSubnet::CloudEngine => topology.get_cloud_engines()[0],
+    };
+
     // Derive an effective canister ID for canister creation.
     let topology = pic.topology().await;
     let config = topology.subnet_configs.get(&subnet_id).unwrap();
@@ -3319,44 +3349,12 @@ async fn rental_subnet_or_cloud_engine_test(pic: &mut PocketIcAsync, subnet_id: 
 
 #[tokio::test]
 async fn rental_subnet_with_subnet_admins() {
-    // Create a PocketIC instance with a single rental subnet.
-    let admin = Principal::anonymous();
-    let subnet_spec = SubnetSpec::default()
-        .with_subnet_admins(vec![admin])
-        .with_cost_schedule(CanisterCyclesCostSchedule::Free);
-    let config = ExtendedSubnetConfigSet {
-        application: vec![subnet_spec],
-        ..Default::default()
-    };
-    let mut pic = PocketIcBuilder::new_with_config(config).build_async().await;
-
-    // Derive the rental subnet's subnet ID.
-    let topology = pic.topology().await;
-    let rental_subnet = topology.get_app_subnets()[0];
-
-    // Run the test.
-    rental_subnet_or_cloud_engine_test(&mut pic, rental_subnet).await;
+    test_subnet_admins(FreeSubnet::RentalSubnet).await;
 }
 
 #[tokio::test]
 async fn cloud_engine_with_subnet_admins() {
-    // Create a PocketIC instance with a single (cloud) engine.
-    let admin = Principal::anonymous();
-    let subnet_spec = SubnetSpec::default()
-        .with_subnet_admins(vec![admin])
-        .with_cost_schedule(CanisterCyclesCostSchedule::Free);
-    let config = ExtendedSubnetConfigSet {
-        cloud_engine: vec![subnet_spec],
-        ..Default::default()
-    };
-    let mut pic = PocketIcBuilder::new_with_config(config).build_async().await;
-
-    // Derive the engine's subnet ID.
-    let topology = pic.topology().await;
-    let cloud_engine = topology.get_cloud_engines()[0];
-
-    // Run the test.
-    rental_subnet_or_cloud_engine_test(&mut pic, cloud_engine).await;
+    test_subnet_admins(FreeSubnet::CloudEngine).await;
 }
 
 #[test]
