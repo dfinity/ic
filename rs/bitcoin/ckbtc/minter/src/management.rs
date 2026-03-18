@@ -178,6 +178,13 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
     for utxo in &utxos {
         if response.tip_height.saturating_sub(utxo.height) + 1 < min_confirmations {
+            canlog::log!(
+                crate::logs::Priority::Info,
+                "Violation in min_confirmations: get_utxos({:?}) returned utxo {:?} while tip_height = {}",
+                request,
+                utxo,
+                response.tip_height
+            );
             crate::metrics::GET_UTXOS_MIN_CONFIRMATIONS_VIOLATIONS
                 .with(|cell| cell.set(cell.get() + 1));
         }
