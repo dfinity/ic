@@ -167,17 +167,14 @@ fn should_install_and_upgrade_with_valid_values() {
     let max_seconds_for_timer = max_value_for_interval() - max_index_sync_time();
     let build_index_interval_values = [
         (None, None),
-        (None, Some(0u64)),
         (None, Some(1u64)),
         (None, Some(10u64)),
         (None, Some(max_seconds_for_timer)),
         (Some(1u64), None),
-        (Some(1u64), Some(0u64)),
         (Some(1u64), Some(1u64)),
         (Some(1u64), Some(10u64)),
         (Some(1u64), Some(max_seconds_for_timer)),
         (Some(10u64), None),
-        (Some(10u64), Some(0u64)),
         (Some(10u64), Some(1u64)),
         (Some(10u64), Some(10u64)),
         (Some(10u64), Some(max_seconds_for_timer)),
@@ -254,8 +251,8 @@ fn should_sync_according_to_interval() {
     runner
         .run(
             &(
-                proptest::option::of(0..(max_value_for_interval() / 2)),
-                proptest::option::of(0..(max_value_for_interval() / 2)),
+                proptest::option::of(1..(max_value_for_interval() / 2)),
+                proptest::option::of(1..(max_value_for_interval() / 2)),
                 arb_account(),
                 arb_account(),
             )

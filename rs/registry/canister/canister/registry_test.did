@@ -505,6 +505,11 @@ type SetSubnetOperationalLevelPayload = record {
   // Similar to ssh_read_only_access, except that this targets one node at a
   // time, not all the nodes in the subnet.
   ssh_node_state_write_access : opt vec NodeSshAccess;
+
+  // Replica version IDs to recall for this subnet. If specified, these versions
+  // will replace the subnet's recalled_replica_version_ids list, preventing
+  // the subnet from upgrading to these versions.
+  recalled_replica_version_ids : opt vec text;
 };
 
 type NodeSshAccess = record {
@@ -513,6 +518,24 @@ type NodeSshAccess = record {
 
   // Doesn't make sense without this. (opt for future compatibility.)
   public_keys : opt vec text;
+};
+
+type SplitSubnetPayload = record {
+  source_subnet_id: principal;
+  destination_canister_ranges: vec CanisterIdRange;
+  destination_node_ids: vec principal;
+};
+
+type OperationType = variant {
+  Add: vec principal;
+  Remove: vec principal;
+  Clear: record {};
+};
+
+type UpdateSubnetAdminsPayload = record {
+  subnet_id: principal;
+  // opt for future compatibility when removing operation types.
+  operation_type: opt OperationType;
 };
 
 service : {
@@ -573,6 +596,8 @@ service : {
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
   ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
+  update_subnet_admins : (UpdateSubnetAdminsPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
   swap_node_in_subnet_directly : (SwapNodeInSubnetDirectlyPayload) -> ();
+  split_subnet : (SplitSubnetPayload) -> ();
 };

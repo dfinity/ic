@@ -1,0 +1,39 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "cycles",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_types_cycles",
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:strum_macros",
+    ],
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//packages/ic-heap-bytes",
+        "//rs/protobuf",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+        "@crate_index//:strum",
+        "@crate_index//:thousands",
+    ],
+)
+
+rust_test(
+    name = "cycles_test",
+    crate = ":cycles",
+    deps = [],
+)
+
+rust_doc(
+    name = "cycles_doc",
+    crate = ":cycles",
+)
+
+rust_doc_test(
+    name = "cycles_doc_test",
+    crate = ":cycles",
+)

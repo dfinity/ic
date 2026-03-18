@@ -17,6 +17,8 @@ pub mod units;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
+pub use canister_manager::types::WasmSource;
+pub use canister_manager::wasm_execution_mode;
 use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
     CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,
@@ -343,7 +345,6 @@ fn setup_execution_helper(
         ic_query_stats::init_query_stats(logger.clone(), &config, metrics_registry);
 
     let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
-        config.subnet_memory_capacity,
         config.default_provisional_cycles_balance,
         config.default_freeze_threshold,
         own_subnet_id,

@@ -95,6 +95,15 @@ message SubnetRecord {
   // List of principals that have admin privileges on the subnet.
   repeated types.v1.PrincipalId subnet_admins = 31;
 
+  // List of replica version IDs that are recalled/blocked for this subnet.
+  // Nodes in this subnet will not upgrade to any version in this list.
+  // If the replica_version_id of a subnet points to a broken GuestOS and the subnet is stalled,
+  // even if we manage to rollback the GuestOS locally, the GuestOS would automatically try
+  // to upgrade to the broken GuestOS again. We can use this field to prevent that.
+  // While nodes read the replica_version_id from the registry vesion from the CUP,
+  // they check the latest registry version for recalled_replica_version_ids.
+  repeated string recalled_replica_version_ids = 33;
+
   reserved 1, 2, 4, 6, 13, 20, 21, 22, 27;
   reserved "ic_version_id";
   reserved "initial_dkg_transcript";
@@ -130,12 +139,15 @@ message CatchUpPackageContents {
   InitialNiDkgTranscriptRecord initial_ni_dkg_transcript_high_threshold = 2;
 
   // The blockchain height that the CUP should have
+  // TODO(CON-1671): deprecate this field in favor of `cup_type`
   uint64 height = 3;
 
   // Block time for the CUP's block
+  // TODO(CON-1671): deprecate this field in favor of `cup_type`
   uint64 time = 4;
 
   // The hash of the state that the subnet should use
+  // TODO(CON-1671): deprecate this field in favor of `cup_type`
   bytes state_hash = 5;
 
   // A uri from which data to replace the registry local store should be downloaded
@@ -146,6 +158,35 @@ message CatchUpPackageContents {
 
   /// The initial IDkg dealings for boot strapping target chain key subnets.
   repeated ChainKeyInitialization chain_key_initializations = 8;
+
+  /// The purpose of the CUP.
+  oneof cup_type {
+    /// Initial CUP used to bootstrap a subnet.
+    GenesisArgs genesis = 9;
+    /// A CUP used to recover a subnet during a disaster.
+    RecoveryArgs recovery = 10;
+    /// A CUP used to split a subnet into two.
+    SubnetSplittingArgs subnet_splitting = 11;
+  }
+}
+
+message GenesisArgs {
+  // Initial height of the subnet
+  uint64 height = 1;
+}
+
+message RecoveryArgs {
+  // The blockchain height that the CUP should have
+  uint64 height = 1;
+  // Block time for the CUP's block
+  uint64 time = 2;
+  // The hash of the state that the subnet should use
+  bytes state_hash = 3;
+}
+
+message SubnetSplittingArgs {
+  /// The ID of the subnet created by the split.
+  types.v1.SubnetId destination_subnet_id = 1;
 }
 
 message RegistryStoreUri {

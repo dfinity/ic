@@ -125,7 +125,7 @@ fn set_up_centralized<R: Rng>(
         ))
         .expect("Could not add neuron");
 
-    for _ in 1u64..=num_neurons {
+    for _ in 1_u64..=num_neurons {
         let neuron = make_neuron(
             rng.next_u64(),
             PrincipalId::new_user_test_id(rng.next_u64()),
@@ -191,7 +191,7 @@ fn set_up_single_vote<R: Rng>(
         .add_neuron(neuron)
         .expect("Could not add neuron");
 
-    for _ in 2u64..=num_neurons {
+    for _ in 2_u64..=num_neurons {
         let neuron_id = rng.next_u64();
         let neuron = make_neuron(
             neuron_id,
@@ -227,11 +227,11 @@ fn set_up_chain<R: Rng>(
     );
 
     let num_half_followees = num_followees / 2;
-    let neuron_ids: Vec<NeuronIdProto> = (0u64..num_neurons)
+    let neuron_ids: Vec<NeuronIdProto> = (0_u64..num_neurons)
         .map(|_| NeuronIdProto { id: rng.next_u64() })
         .collect();
 
-    let not_voting_neuron_ids = (0u64..num_half_followees)
+    let not_voting_neuron_ids = (0_u64..num_half_followees)
         .map(|i| neuron_ids[i as usize])
         .collect::<Vec<_>>();
 

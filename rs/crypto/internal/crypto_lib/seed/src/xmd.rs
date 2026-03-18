@@ -66,7 +66,7 @@ pub fn xmd<const N: usize, H: XmdHashFunctionWithSizeCheck<N>>(msg: &[u8], dst: 
     #[allow(clippy::let_unit_value)]
     let _ = H::XMD_CAN_PRODUCE_THIS_OUTPUT;
 
-    let mut out = [0u8; N];
+    let mut out = [0_u8; N];
 
     if dst.len() >= 256 {
         let mut state = H::new();

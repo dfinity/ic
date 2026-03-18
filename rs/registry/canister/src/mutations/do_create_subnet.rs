@@ -13,7 +13,8 @@ use ic_protobuf::{
         node::v1::NodeRecord,
         subnet::v1::{
             CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-            ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+            ChainKeyConfig as ChainKeyConfigPb, GenesisArgs, SubnetFeatures as SubnetFeaturesPb,
+            SubnetRecord, catch_up_package_contents::CupType,
         },
     },
     types::v1::PrincipalId as PrincipalIdPb,
@@ -108,7 +109,12 @@ impl Registry {
                 response.high_threshold_transcript_record,
             ),
             chain_key_initializations,
-            ..Default::default()
+            cup_type: Some(CupType::Genesis(GenesisArgs { height: 0 })),
+            height: 0,
+            time: 0,
+            state_hash: vec![],
+            registry_store_uri: None,
+            ecdsa_initializations: vec![],
         };
 
         let new_subnet_dkg = RegistryMutation {
@@ -558,12 +564,15 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .map(CanisterCyclesCostSchedulePb::from)
                 .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
                 as i32,
+
             subnet_admins: val
                 .subnet_admins
                 .unwrap_or_default()
                 .into_iter()
                 .map(PrincipalIdPb::from)
                 .collect(),
+
+            recalled_replica_version_ids: vec![],
         }
     }
 }

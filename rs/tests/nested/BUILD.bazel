@@ -106,7 +106,7 @@ system_test_nns(
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 # on SEV-enabled nodes
 # This test requires manually injecting the baremetal configuration
-# ict test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(cat zh2-dll01.ini)"
+# ict test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current_sev",

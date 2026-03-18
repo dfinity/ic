@@ -217,8 +217,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         "ledger",
         "lifeline",
         "migration",
-        "node-rewards",
         "registry",
+        "node-rewards",
         "root",
         "sns-wasm",
     ]
@@ -239,6 +239,17 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     if nns_canister_upgrade_sequence == "all" {
         nns_canister_upgrade_sequence = all_canisters;
+    }
+
+    // TODO: The node-rewards canister must always be upgraded because its test WASM
+    // simulates management canister calls for blockmaker statistics, which are not
+    // possible in state_machine tests (only the NNS subnet is present). Without this
+    // forced upgrade, the canister would run production code that fails in this environment.
+    if !nns_canister_upgrade_sequence
+        .split(',')
+        .any(|canister_name| canister_name == "node-rewards")
+    {
+        nns_canister_upgrade_sequence.push_str(",node-rewards");
     }
 
     let mut nns_canister_upgrade_sequence = nns_canister_upgrade_sequence
