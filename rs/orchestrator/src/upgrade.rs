@@ -1482,13 +1482,13 @@ mod tests {
         let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
         // Start the replica process if the test scenario indicates so.
         // Retry on ETXTBSY: parallel rstest threads run in the same process. When one thread
-        // calls Command::spawn() (fork+exec), the child inherits writable fds from other
-        // threads that are inside create_binary's File::create(). The kernel returns ETXTBSY
-        // if any fd with write access to the binary's inode is still open. The inherited fds
-        // are closed once the child's exec() triggers O_CLOEXEC, so a brief retry resolves it.
+        // calls Command::spawn() (fork+exec), the kernel returns ETXTBSY if any fd with write
+        // access to the binary's inode is still open. This happens because another thread is
+        // concurrently inside create_binary's File::create(). Retries work because the
+        // conflicting writable handle in the other thread eventually closes.
         if test_scenario.was_replica_process_started_previously() {
-            let mut retries = 0;
-            loop {
+            const MAX_ATTEMPTS: u32 = 50;
+            for attempt in 1..=MAX_ATTEMPTS {
                 match replica_process.lock().unwrap().start(ReplicaProcess {
                     version: current_replica_version.clone(),
                     binary: ic_binary_dir.join("replica").display().to_string(),
@@ -1496,9 +1496,9 @@ mod tests {
                 }) {
                     Ok(()) => break,
                     Err(e)
-                        if e.kind() == std::io::ErrorKind::ExecutableFileBusy && retries < 50 =>
+                        if e.kind() == std::io::ErrorKind::ExecutableFileBusy
+                            && attempt < MAX_ATTEMPTS =>
                     {
-                        retries += 1;
                         std::thread::sleep(std::time::Duration::from_millis(100));
                     }
                     Err(e) => panic!("Failed to start replica process: {e}"),
