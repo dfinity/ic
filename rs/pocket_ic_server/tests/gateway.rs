@@ -84,7 +84,7 @@ async fn deploy_ii_async(pic: &pocket_ic::nonblocking::PocketIc) -> Principal {
     })
     .unwrap();
 
-    pic.add_cycles(canister_id, 2_800_000_000_000).await;
+    pic.add_cycles(frontend_id, 2_800_000_000_000).await;
     pic.install_canister(frontend_id, frontend_wasm, frontend_arg, None)
         .await;
 
