@@ -19154,7 +19154,6 @@ dependencies = [
  "ic-types",
  "idna",
  "indoc 1.0.9",
- "libc",
  "mockall",
  "nix 0.24.3",
  "pem",
