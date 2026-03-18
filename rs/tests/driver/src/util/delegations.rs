@@ -1,6 +1,7 @@
 use crate::util::{expiry_time, sign_query, sign_update};
 
 use super::sign_read_state;
+use anyhow::{Context, bail};
 use candid::{CandidType, Deserialize, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
@@ -16,9 +17,11 @@ use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_utils::interfaces::ManagementCanister;
 use reqwest::{Client, Response};
 use serde_bytes::ByteBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-pub const UPDATE_POLLING_TIMEOUT: Duration = Duration::from_secs(10);
+pub const UPDATE_POLLING_TIMEOUT: Duration = Duration::from_secs(60);
+pub const UPDATE_POLLING_BACKOFF: Duration = Duration::from_millis(500);
+
 /// user ids start with 10000 and increase by 1 for each new user
 pub const USER_NUMBER_OFFSET: u64 = 10_000;
 
@@ -122,6 +125,7 @@ pub struct AgentWithDelegation<'a> {
     pub signed_delegation: SignedDelegation,
     pub delegation_identity: &'a BasicIdentity,
     pub polling_timeout: Duration,
+    pub log: slog::Logger,
 }
 
 impl AgentWithDelegation<'_> {
@@ -130,7 +134,7 @@ impl AgentWithDelegation<'_> {
         method: &str,
         canister_id: &Principal,
         body: Vec<u8>,
-    ) -> Response {
+    ) -> anyhow::Result<Response> {
         let client = Client::new();
         client
             .post(format!(
@@ -143,7 +147,7 @@ impl AgentWithDelegation<'_> {
             .body(body)
             .send()
             .await
-            .unwrap()
+            .context(format!("failed to send {method} request to {canister_id}"))
     }
 
     fn sender(&self) -> Blob {
@@ -154,7 +158,12 @@ impl AgentWithDelegation<'_> {
         )
     }
 
-    pub async fn update(&self, canister_id: &Principal, method_name: &str, arg: Blob) -> MessageId {
+    pub async fn update(
+        &self,
+        canister_id: &Principal,
+        method_name: &str,
+        arg: Blob,
+    ) -> anyhow::Result<MessageId> {
         let update = HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: method_name.to_string(),
@@ -179,8 +188,11 @@ impl AgentWithDelegation<'_> {
             sender_sig: Some(Blob(signature.signature.unwrap())),
         };
         let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-        let _ = self.send_http_request("call", canister_id, body).await;
-        request_id
+        let _ = self
+            .send_http_request("call", canister_id, body)
+            .await
+            .context("failed to send update call")?;
+        Ok(request_id)
     }
 
     pub async fn query(
@@ -188,7 +200,7 @@ impl AgentWithDelegation<'_> {
         canister_id: &Principal,
         method_name: &str,
         arg: Blob,
-    ) -> HttpQueryResponse {
+    ) -> anyhow::Result<HttpQueryResponse> {
         let content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: Blob(canister_id.as_slice().to_vec()),
@@ -213,9 +225,15 @@ impl AgentWithDelegation<'_> {
             sender_sig: Some(Blob(signature.signature.unwrap())),
         };
         let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-        let response = self.send_http_request("query", canister_id, body).await;
-        let response_bytes = response.bytes().await.unwrap();
-        serde_cbor::from_slice(&response_bytes).unwrap()
+        let response = self
+            .send_http_request("query", canister_id, body)
+            .await
+            .context("failed to send query request")?;
+        let response_bytes = response
+            .bytes()
+            .await
+            .context("failed to read query response bytes")?;
+        serde_cbor::from_slice(&response_bytes).context("failed to deserialize query response")
     }
 
     pub async fn update_and_wait(
@@ -224,7 +242,10 @@ impl AgentWithDelegation<'_> {
         method_name: &str,
         arg: Blob,
     ) -> Result<Vec<u8>, String> {
-        let request_id = self.update(canister_id, method_name, arg.clone()).await;
+        let request_id = self
+            .update(canister_id, method_name, arg.clone())
+            .await
+            .map_err(|e| e.to_string())?;
         let content = HttpReadStateContent::ReadState {
             read_state: HttpReadState {
                 sender: self.sender(),
@@ -250,45 +271,90 @@ impl AgentWithDelegation<'_> {
             )]),
         };
         let body = serde_cbor::ser::to_vec(&read_state_envelope).unwrap();
-        let path = {
-            let p1: &[u8] = b"request_status";
-            let p2: &[u8] = request_id.as_bytes();
-            let p3: &[u8] = b"reply";
-            vec![p1, p2, p3]
-        };
-        let start = Instant::now();
-        let read_state: Vec<u8> = loop {
-            if start.elapsed() > self.polling_timeout {
-                return Err(format!(
-                    "Polling timeout of {} ms was reached",
-                    self.polling_timeout.as_millis()
-                ));
+        let status_path: Vec<&[u8]> = vec![b"request_status", request_id.as_bytes(), b"status"];
+        let reply_path: Vec<&[u8]> = vec![b"request_status", request_id.as_bytes(), b"reply"];
+        let reject_message_path: Vec<&[u8]> =
+            vec![b"request_status", request_id.as_bytes(), b"reject_message"];
+        // The closure returns anyhow::Result<Result<Vec<u8>, String>>:
+        //   - bail!(...) → triggers retry (non-terminal)
+        //   - Ok(Err(...)) → terminal failure, stops retrying immediately
+        //   - Ok(Ok(...)) → success
+        let read_state_result: Result<Vec<u8>, String> = crate::retry_with_msg_async!(
+            "update_and_wait read_state polling",
+            &self.log,
+            self.polling_timeout,
+            UPDATE_POLLING_BACKOFF,
+            || async {
+                let response = self
+                    .send_http_request("read_state", canister_id, body.clone())
+                    .await
+                    .context("failed to send read_state request")?;
+                let read_state_body = response.bytes().await.context("failed to read read_state response bytes")?;
+                let response_bytes: HttpReadStateResponse =
+                    serde_cbor::from_slice(&read_state_body).context("failed to deserialize HttpReadStateResponse")?;
+                let certificate: Certificate =
+                    serde_cbor::from_slice(&response_bytes.certificate).context("failed to deserialize Certificate")?;
+                let tree = &certificate.tree;
+
+                // First, check the status path to determine the request state.
+                let status_str = match tree.lookup(&status_path) {
+                    ic_crypto_tree_hash::LookupStatus::Found(
+                        ic_crypto_tree_hash::MixedHashTree::Leaf(s),
+                    ) => String::from_utf8(s.clone()).context("request status should be valid utf8")?,
+                    ic_crypto_tree_hash::LookupStatus::Absent
+                    | ic_crypto_tree_hash::LookupStatus::Unknown => {
+                        bail!("Request status not yet available, keep polling")
+                    }
+                    ic_crypto_tree_hash::LookupStatus::Found(_) => {
+                        return Ok(Err(format!(
+                            "Update call to {canister_id}/{method_name} (request_id={request_id}): \
+                             unexpected non-leaf node at request status path"
+                        )));
+                    }
+                };
+
+                match status_str.as_str() {
+                    "replied" => {
+                        // Read the reply payload.
+                        match tree.lookup(&reply_path) {
+                            ic_crypto_tree_hash::LookupStatus::Found(
+                                ic_crypto_tree_hash::MixedHashTree::Leaf(y),
+                            ) => Ok(Ok(y.clone())),
+                            _ => Ok(Err(format!(
+                                "Update call to {canister_id}/{method_name} (request_id={request_id}): \
+                                 status is 'replied' but reply leaf is missing or malformed"
+                            ))),
+                        }
+                    }
+                    "rejected" => {
+                        let message = match tree.lookup(&reject_message_path) {
+                            ic_crypto_tree_hash::LookupStatus::Found(
+                                ic_crypto_tree_hash::MixedHashTree::Leaf(m),
+                            ) => String::from_utf8_lossy(m).to_string(),
+                            _ => "no message".to_string(),
+                        };
+                        Ok(Err(format!(
+                            "Update call to {canister_id}/{method_name} (request_id={request_id}) \
+                             was rejected with message: {message}"
+                        )))
+                    }
+                    "done" => Ok(Err(format!(
+                        "Update call to {canister_id}/{method_name} (request_id={request_id}) \
+                         reached terminal state 'done' without a reply"
+                    ))),
+                    "pruned" => Ok(Err(format!(
+                        "Update call to {canister_id}/{method_name} (request_id={request_id}) \
+                         reached terminal state 'pruned': reply/reject data has been pruned"
+                    ))),
+                    _ => {
+                        bail!("Request status is '{status_str}', keep polling")
+                    }
+                }
             }
-            let response = self
-                .send_http_request("read_state", canister_id, body.clone())
-                .await;
-            let read_state_body = response.bytes().await.unwrap();
-            let response_bytes: HttpReadStateResponse =
-                serde_cbor::from_slice(&read_state_body).unwrap();
-            let certificate: Certificate =
-                serde_cbor::from_slice(&response_bytes.certificate).unwrap();
-            let lookup_status = certificate.tree.lookup(&path);
-            match lookup_status {
-                ic_crypto_tree_hash::LookupStatus::Found(x) => match x {
-                    ic_crypto_tree_hash::MixedHashTree::Leaf(y) => break y.clone(),
-                    _ => panic!("Unexpected result from the read_state tree hash structure"),
-                },
-                ic_crypto_tree_hash::LookupStatus::Absent => {
-                    // If request is absent, keep polling
-                    continue;
-                }
-                ic_crypto_tree_hash::LookupStatus::Unknown => {
-                    // If request is unknown, keep polling
-                    continue;
-                }
-            };
-        };
-        Ok(read_state)
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        read_state_result
     }
 }
 

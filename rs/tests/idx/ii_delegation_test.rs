@@ -10,14 +10,11 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::delegations::*;
-use ic_system_test_driver::util::{
-    agent_with_identity, assert_canister_counter_with_retries, block_on, random_ed25519_identity,
-};
+use ic_system_test_driver::util::{agent_with_identity, block_on, random_ed25519_identity};
 use ic_types::messages::{Blob, HttpQueryResponse};
 use ic_universal_canister::wasm;
 use slog::info;
 use std::env;
-use std::time::Duration;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -106,37 +103,42 @@ pub fn test(env: TestEnv) {
         signed_delegation,
         delegation_identity: &delegation_identity,
         polling_timeout: UPDATE_POLLING_TIMEOUT,
+        log: log.clone(),
     };
     info!(
         log,
         "Making an update call on counter canister with delegation (increment counter)"
     );
-    let _ = block_on(app_agent_with_delegation.update(&counter_canister_id, "write", Blob(vec![])));
+    block_on(app_agent_with_delegation.update_and_wait(
+        &counter_canister_id,
+        "write",
+        Blob(vec![]),
+    ))
+    .expect("Update call on counter canister failed");
     info!(
         log,
         "Making a query call on counter canister with delegation (read counter)"
     );
     let query_response =
-        block_on(app_agent_with_delegation.query(&counter_canister_id, "read", Blob(vec![])));
+        block_on(app_agent_with_delegation.query(&counter_canister_id, "read", Blob(vec![])))
+            .expect("Query call on counter canister failed");
     match query_response {
-        HttpQueryResponse::Replied { .. } => (),
+        HttpQueryResponse::Replied { reply } => {
+            let counter = u32::from_le_bytes(
+                reply
+                    .arg
+                    .as_slice()
+                    .try_into()
+                    .expect("slice with incorrect length"),
+            );
+            assert_eq!(counter, 1, "Counter canister should have value 1");
+        }
         HttpQueryResponse::Rejected {
             error_code,
             reject_message,
             ..
         } => panic!("Query call was rejected: code={error_code}, message={reject_message}"),
     }
-    info!(log, "Asserting canister counter has value=1");
-    let app_agent = app_node.build_default_agent();
-    block_on(assert_canister_counter_with_retries(
-        &log,
-        &app_agent,
-        &counter_canister_id,
-        vec![],
-        1,
-        10,
-        Duration::from_secs(1),
-    ));
     let expected_principal = Principal::self_authenticating(&ii_derived_public_key);
     info!(
         log,
@@ -148,7 +150,8 @@ pub fn test(env: TestEnv) {
             &ucan_id,
             "query",
             Blob(wasm().caller().append_and_reply().build()),
-        ));
+        ))
+        .expect("Query call on ucan canister failed");
         match response {
             HttpQueryResponse::Replied { reply } => Principal::from_slice(reply.arg.as_ref()),
             HttpQueryResponse::Rejected { reject_message, .. } => {
