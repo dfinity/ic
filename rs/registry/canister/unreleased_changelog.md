@@ -9,6 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
+* Rate limit the number of subnet admin updates that can happen for a subnet.
 * Subnet deletion endpoint. Limited to CloudEngine subnets. 
 
 ## Changed

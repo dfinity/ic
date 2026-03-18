@@ -145,14 +145,15 @@ mod tests {
     use ic_replicated_state::{NetworkTopology, NumWasmPages, PageIndex, PageMap};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
-        CanisterTimer, ComputeAllocation, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
-        MemoryAllocation, NumBytes, NumInstructions,
+        CanisterTimer, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
+        NumBytes, NumInstructions,
         batch::CanisterCyclesCostSchedule,
         ingress::WasmResult,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
         time::Time,
     };
+    use ic_types_cycles::Cycles;
     use ic_wasm_types::BinaryEncodedWasm;
     use mockall::*;
     use std::sync::{Arc, Condvar, Mutex};

@@ -242,9 +242,9 @@ fn canister_post_upgrade() {
     println!("{LOG_PREFIX}canister_post_upgrade");
     // call stable_storage APIs and get registry instance in canister context
     // Look for MemoryManager magic bytes
-    let mut magic_bytes = [0u8; 3];
+    let mut magic_bytes = [0_u8; 3];
     stable64_read(&mut magic_bytes, 0, 3);
-    let mut mgr_version_byte = [0u8; 1];
+    let mut mgr_version_byte = [0_u8; 1];
     stable64_read(&mut mgr_version_byte, 3, 1);
 
     let registry_storage: RegistryCanisterStableStorage =

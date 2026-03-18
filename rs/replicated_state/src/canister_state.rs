@@ -331,7 +331,9 @@ impl CanisterState {
             }
         }
 
-        self.system_state.check_invariants()
+        self.system_state.check_invariants()?;
+
+        self.canister_snapshots.check_invariants()
     }
 
     /// The amount of memory currently being used by the canister.
