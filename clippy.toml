@@ -1,16 +1,3 @@
-# The right way is 42_u64, not 42u64.
-#
-# This merely tells clippy which style we wish people would use. Despite this
-# setting, the current version of clippy does NOT warn (let alone block) when
-# people disrespect this convention. However, in a future version of clippy,
-# the effect of this line is that when a clippy command includes
-# `--deny clippy::literal_suffix`, it will require people to do the right thing
-# (per this setting). Until then, our clippy commands in scripts and configuration
-# files (e.g. rust-lint.sh and .bazelrc.build) include
-# `-D clippy::unseparated_literal_suffix` to enforce the right way to write
-# integer literals with type suffixes.
-literal-suffix-style = "separated"
-
 too-many-arguments-threshold = 12
 allow-expect-in-tests = true
 allow-unwrap-in-tests = true
