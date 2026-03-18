@@ -1499,7 +1499,7 @@ mod tests {
                         if e.kind() == std::io::ErrorKind::ExecutableFileBusy
                             && attempt < MAX_ATTEMPTS =>
                     {
-                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                     }
                     Err(e) => panic!("Failed to start replica process: {e}"),
                 }
