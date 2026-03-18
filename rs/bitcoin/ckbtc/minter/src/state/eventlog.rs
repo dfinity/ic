@@ -386,7 +386,7 @@ impl EventLogger for CkBtcEventLogger {
                         .into_iter()
                         .filter(|utxo| {
                             if received_utxos.contains(utxo) {
-                                state.checked_utxos.remove(&utxo);
+                                state.checked_utxos.remove(utxo);
                                 dup_received.insert(utxo.clone());
                                 false
                             } else {
