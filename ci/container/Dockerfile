@@ -6,14 +6,14 @@ ENV TZ=UTC
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # copy/write config files
-ARG PACKAGE_FILE=ci/container/files/packages.common
-COPY ${PACKAGE_FILE} /tmp/
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
 RUN echo "[storage]\nrootless_storage_path=\"/tmp/containers\"" > /etc/containers/storage.conf
 # marker for scripts to check if they are running in this container
 RUN touch /home/ubuntu/.ic-build-container
 
+ARG PACKAGE_FILE=ci/container/files/packages.common
+COPY ${PACKAGE_FILE} /tmp/
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
@@ -110,7 +110,6 @@ WORKDIR /
 # Use buildifier (uid 1001) if /entrypoint.sh is overriden
 # In GitHub that is the case and we need 1001 and we set it via ARG.
 ARG CI_USER="root"
-USER $CI_USER
 CMD ["/bin/bash"]
 
 FROM base as build
@@ -122,11 +121,9 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_CI_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_CI_FILE)"
 
-FROM base as dev
+USER $CI_USER
 
-# Temporarily switch to root to install development packages.
-# We will switch back to the non-root user at the end of this stage.
-USER root
+FROM base as dev
 
 # Install additional packages for development but not needed on CI:
 ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
