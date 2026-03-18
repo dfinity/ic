@@ -321,8 +321,10 @@ fn test_get_node_providers_rewards() {
         to_day: to.into(),
         algorithm_version: None,
     };
-    let result_endpoint =
-        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone());
+    let result_endpoint = futures_util::FutureExt::now_or_never(
+        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone()),
+    )
+    .expect("Future should resolve immediately in test");
 
     let expected = NodeProvidersRewards {
         algorithm_version: RewardsCalculationAlgorithmVersion { version: 2 },

@@ -19,3 +19,6 @@ rust_decimal = "1.37.1"
 rust_decimal_macros = "1.37.1"
 chrono = { workspace = true }
 serde = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }

@@ -4,6 +4,8 @@ use crate::registry_querier::RegistryQuerier;
 use crate::storage::{NaiveDateStorable, VM};
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
+#[cfg(target_arch = "wasm32")]
+use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -15,6 +17,9 @@ use ic_node_rewards_canister_api::provider_rewards_calculation::{
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
+};
+use ic_node_rewards_canister_api::rewardable_nodes::{
+    GetRewardableNodesRequest, GetRewardableNodesResponse, RewardableNodeApi, RewardableNodesResult,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
@@ -160,40 +165,22 @@ impl NodeRewardsCanister {
 
         Ok(())
     }
+}
 
-    fn calculate_rewards(
-        &self,
-        request: GetNodeProvidersRewardsRequest,
-    ) -> Result<RewardsCalculatorResults, String> {
-        let start_day = NaiveDate::try_from(request.from_day)?;
-        let end_day = NaiveDate::try_from(request.to_day)?;
-        self.validate_reward_period(start_day, end_day)?;
-
-        // Default to currently used algorithm
-        let rewards_calculator_version = request.algorithm_version.unwrap_or_default();
-
-        match rewards_calculator_version.version {
-            RewardsCalculationV1::VERSION => {
-                RewardsCalculationV1::calculate_rewards(start_day, end_day, self)
-                    .map_err(|e| format!("Could not calculate rewards: {e:?}"))
-            }
-            RewardsCalculationV2::VERSION => {
-                RewardsCalculationV2::calculate_rewards(start_day, end_day, self)
-                    .map_err(|e| format!("Could not calculate rewards: {e:?}"))
-            }
-            _ => Err(format!(
-                "Rewards Calculation Version: {rewards_calculator_version:?} is not supported"
-            )),
-        }
-    }
+/// Input provider that doesn't hold a RefCell borrow, so it can be used across
+/// await points. Reads metrics and rewards table from owned references, and
+/// fetches rewardable nodes via a self-call to split registry reads across
+/// multiple instruction budgets.
+pub struct CanisterInputProvider {
+    registry_client: Arc<dyn CanisterRegistryClient>,
+    metrics_manager: Rc<MetricsManager<VM>>,
 }
 
 impl rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithmInputProvider
-    for &NodeRewardsCanister
+    for CanisterInputProvider
 {
     fn get_rewards_table(&self, date: &NaiveDate) -> Result<NodeRewardsTable, String> {
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
-
         let version = registry_querier
             .version_for_timestamp_nanoseconds(last_unix_timestamp_nanoseconds(date))
             .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
@@ -214,15 +201,86 @@ impl rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithm
         Ok(metrics)
     }
 
-    fn get_rewardable_nodes(
+    #[cfg(target_arch = "wasm32")]
+    async fn get_rewardable_nodes(
         &self,
         date: &NaiveDate,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String> {
-        let registry_client = self.get_registry_client();
-        let registry_querier = RegistryQuerier::new(registry_client.clone());
+        let canister_id = ic_cdk::api::canister_self();
+        let req = GetRewardableNodesRequest {
+            day: DateUtc::from(*date),
+        };
+
+        let response: GetRewardableNodesResponse =
+            ic_cdk::call::Call::unbounded_wait(canister_id, "get_rewardable_nodes")
+                .with_arg(&req)
+                .await
+                .map_err(|e| {
+                    format!(
+                        "Self-call to get_rewardable_nodes failed for {}: {:?}",
+                        date.format("%Y-%m-%d"),
+                        e
+                    )
+                })?
+                .candid()
+                .map_err(|e| {
+                    format!(
+                        "Failed to decode get_rewardable_nodes response for {}: {:?}",
+                        date.format("%Y-%m-%d"),
+                        e
+                    )
+                })?;
+
+        let result = response?;
+
+        result
+            .rewardable_nodes
+            .into_iter()
+            .map(|(principal, api_nodes)| {
+                let provider_id = PrincipalId::from(principal);
+                let nodes: Result<Vec<RewardableNode>, String> = api_nodes
+                    .into_iter()
+                    .map(RewardableNode::try_from)
+                    .collect();
+                nodes.map(|n| (provider_id, n))
+            })
+            .collect()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn get_rewardable_nodes(
+        &self,
+        date: &NaiveDate,
+    ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String> {
+        let registry_querier = RegistryQuerier::new(self.registry_client.clone());
         registry_querier
             .get_rewardable_nodes_per_provider(date, None)
             .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))
+    }
+}
+
+async fn calculate_rewards(
+    input_provider: CanisterInputProvider,
+    request: GetNodeProvidersRewardsRequest,
+    start_day: NaiveDate,
+    end_day: NaiveDate,
+) -> Result<RewardsCalculatorResults, String> {
+    let rewards_calculator_version = request.algorithm_version.unwrap_or_default();
+
+    match rewards_calculator_version.version {
+        RewardsCalculationV1::VERSION => {
+            RewardsCalculationV1::calculate_rewards(start_day, end_day, input_provider)
+                .await
+                .map_err(|e| format!("Could not calculate rewards: {e:?}"))
+        }
+        RewardsCalculationV2::VERSION => {
+            RewardsCalculationV2::calculate_rewards(start_day, end_day, input_provider)
+                .await
+                .map_err(|e| format!("Could not calculate rewards: {e:?}"))
+        }
+        _ => Err(format!(
+            "Rewards Calculation Version: {rewards_calculator_version:?} is not supported"
+        )),
     }
 }
 
@@ -297,11 +355,25 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub fn get_node_providers_rewards(
+    pub async fn get_node_providers_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        let result = canister.with_borrow(|canister| canister.calculate_rewards(request))?;
+        let (input_provider, start_day, end_day) = canister.with_borrow(|c| {
+            let start_day = NaiveDate::try_from(request.from_day)?;
+            let end_day = NaiveDate::try_from(request.to_day)?;
+            c.validate_reward_period(start_day, end_day)?;
+            Ok::<_, String>((
+                CanisterInputProvider {
+                    registry_client: c.registry_client.clone(),
+                    metrics_manager: c.metrics_manager.clone(),
+                },
+                start_day,
+                end_day,
+            ))
+        })?;
+
+        let result = calculate_rewards(input_provider, request, start_day, end_day).await?;
 
         let rewards_xdr_permyriad = result
             .total_rewards_xdr_permyriad
@@ -319,7 +391,7 @@ impl NodeRewardsCanister {
         })
     }
 
-    pub fn get_node_providers_rewards_calculation(
+    pub async fn get_node_providers_rewards_calculation(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsCalculationRequest,
     ) -> GetNodeProvidersRewardsCalculationResponse {
@@ -328,15 +400,49 @@ impl NodeRewardsCanister {
             to_day: request.day,
             algorithm_version: request.algorithm_version,
         };
-        let mut result =
-            canister.with_borrow(|canister| canister.calculate_rewards(request_inner))?;
 
-        let day = NaiveDate::try_from(request.day)?;
+        let (input_provider, day) = canister.with_borrow(|c| {
+            let day = NaiveDate::try_from(request.day)?;
+            c.validate_reward_period(day, day)?;
+            Ok::<_, String>((
+                CanisterInputProvider {
+                    registry_client: c.registry_client.clone(),
+                    metrics_manager: c.metrics_manager.clone(),
+                },
+                day,
+            ))
+        })?;
+
+        let mut result = calculate_rewards(input_provider, request_inner, day, day).await?;
+
         let daily_results = result
             .daily_results
             .remove(&day)
             .ok_or("Could not find daily results for the requested day")?;
         DailyResults::try_from(daily_results)
+    }
+
+    pub fn get_rewardable_nodes(
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+        request: GetRewardableNodesRequest,
+    ) -> GetRewardableNodesResponse {
+        let day = NaiveDate::try_from(request.day)?;
+        let rewardable_nodes = canister.with_borrow(|canister| {
+            let registry_querier = RegistryQuerier::new(canister.registry_client.clone());
+            registry_querier
+                .get_rewardable_nodes_per_provider(&day, None)
+                .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))
+        })?;
+
+        let rewardable_nodes = rewardable_nodes
+            .into_iter()
+            .map(|(provider_id, nodes)| {
+                let api_nodes = nodes.into_iter().map(RewardableNodeApi::from).collect();
+                (provider_id.0, api_nodes)
+            })
+            .collect();
+
+        Ok(RewardableNodesResult { rewardable_nodes })
     }
 }
 

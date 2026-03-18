@@ -119,7 +119,7 @@ impl PerformanceBasedAlgorithmInputProvider for FakeInputProvider {
             .ok_or_else(|| format!("No metrics found for day {day}"))
     }
 
-    fn get_rewardable_nodes(
+    async fn get_rewardable_nodes(
         &self,
         day: &NaiveDate,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String> {
@@ -221,8 +221,12 @@ fn test_v2_type3_type3dot1_grouped_with_performance_penalty() {
             ],
         );
 
-    let result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
-        .expect("Calculation should succeed");
+    let result = futures::executor::block_on(RewardsCalculationV2::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     assert_eq!(result.algorithm_version, 2);
 
@@ -348,10 +352,18 @@ fn test_v2_differs_from_v1() {
             ],
         );
 
-    let v1_result = RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider.clone())
-        .expect("V1 calculation should succeed");
-    let v2_result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
-        .expect("V2 calculation should succeed");
+    let v1_result = futures::executor::block_on(RewardsCalculationV1::calculate_rewards(
+        day,
+        day,
+        fake_input_provider.clone(),
+    ))
+    .expect("V1 calculation should succeed");
+    let v2_result = futures::executor::block_on(RewardsCalculationV2::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("V2 calculation should succeed");
 
     assert_eq!(v1_result.algorithm_version, 1);
     assert_eq!(v2_result.algorithm_version, 2);
@@ -435,8 +447,12 @@ fn test_type4_not_in_rewards_table() {
             }],
         );
 
-    let result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
-        .expect("Calculation should succeed");
+    let result = futures::executor::block_on(RewardsCalculationV2::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];
@@ -540,8 +556,12 @@ fn test_type4_explicit_zero_rate() {
             ],
         );
 
-    let result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
-        .expect("Calculation should succeed");
+    let result = futures::executor::block_on(RewardsCalculationV2::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];
@@ -640,8 +660,12 @@ fn test_type4_in_rewards_table() {
             ],
         );
 
-    let result = RewardsCalculationV2::calculate_rewards(day, day, fake_input_provider)
-        .expect("Calculation should succeed");
+    let result = futures::executor::block_on(RewardsCalculationV2::calculate_rewards(
+        day,
+        day,
+        fake_input_provider,
+    ))
+    .expect("Calculation should succeed");
 
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];

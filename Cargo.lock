@@ -21525,6 +21525,7 @@ name = "rewards-calculation"
 version = "0.9.0"
 dependencies = [
  "chrono",
+ "futures",
  "ic-base-types",
  "ic-protobuf",
  "itertools 0.12.1",

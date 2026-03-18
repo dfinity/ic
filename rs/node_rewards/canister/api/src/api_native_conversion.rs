@@ -2,7 +2,11 @@ use crate::provider_rewards_calculation::{
     DailyNodeFailureRate, DailyNodeProviderRewards, DailyNodeRewards, DailyResults,
     NodeMetricsDaily, NodeTypeRegionBaseRewards, Type3RegionBaseRewards,
 };
+use crate::rewardable_nodes::RewardableNodeApi;
+use ic_base_types::{NodeId, PrincipalId};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use rewards_calculation::performance_based_algorithm::results as native_types;
+use rewards_calculation::types::RewardableNode;
 use rust_decimal::prelude::ToPrimitive;
 use std::convert::TryFrom;
 
@@ -195,6 +199,39 @@ impl TryFrom<native_types::DailyResults> for DailyResults {
                 .into_iter()
                 .map(|(k, v)| DailyNodeProviderRewards::try_from(v).map(|v| (k, v)))
                 .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+// RewardableNode conversions
+impl From<RewardableNode> for RewardableNodeApi {
+    fn from(src: RewardableNode) -> Self {
+        Self {
+            node_id: Some(src.node_id.get().0),
+            region: Some(src.region),
+            node_reward_type: Some(src.node_reward_type as i32),
+            dc_id: Some(src.dc_id),
+        }
+    }
+}
+
+impl TryFrom<RewardableNodeApi> for RewardableNode {
+    type Error = String;
+
+    fn try_from(src: RewardableNodeApi) -> Result<Self, Self::Error> {
+        let node_id_principal = src.node_id.ok_or("node_id is missing")?;
+        let region = src.region.ok_or("region is missing")?;
+        let node_reward_type_i32 = src.node_reward_type.ok_or("node_reward_type is missing")?;
+        let dc_id = src.dc_id.ok_or("dc_id is missing")?;
+
+        let node_reward_type = NodeRewardType::try_from(node_reward_type_i32)
+            .map_err(|_| format!("Invalid node_reward_type: {node_reward_type_i32}"))?;
+
+        Ok(Self {
+            node_id: NodeId::from(PrincipalId::from(node_id_principal)),
+            region,
+            node_reward_type,
+            dc_id,
         })
     }
 }
