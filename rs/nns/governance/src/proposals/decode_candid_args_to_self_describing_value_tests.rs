@@ -39,7 +39,7 @@ fn test_decode_candid_args_to_self_describing_value_simple_record() {
 
     let arg = MyRecord {
         name: "Alice".to_string(),
-        age: Nat::from(30u64),
+        age: Nat::from(30_u64),
     };
     let encoded = Encode!(&arg).unwrap();
 
@@ -81,7 +81,7 @@ fn test_decode_candid_args_to_self_describing_value_nat() {
         }
     "#;
 
-    let arg = Nat::from(42u64);
+    let arg = Nat::from(42_u64);
     let encoded = Encode!(&arg).unwrap();
 
     assert_candid_converts_to(
@@ -119,7 +119,7 @@ fn test_decode_candid_args_to_self_describing_value_opt_some() {
         }
     "#;
 
-    let arg = Some(Nat::from(42u64));
+    let arg = Some(Nat::from(42_u64));
     let encoded = Encode!(&arg).unwrap();
 
     assert_candid_converts_to(
@@ -196,7 +196,7 @@ fn test_decode_candid_args_to_self_describing_value_variant() {
     );
 
     // Test variant with value
-    let arg = Status::Pending(Nat::from(42u64));
+    let arg = Status::Pending(Nat::from(42_u64));
     let encoded = Encode!(&arg).unwrap();
     assert_candid_converts_to(
         schema,
@@ -292,7 +292,7 @@ fn test_decode_candid_args_to_self_describing_value_multiple_args_error() {
     "#;
 
     let arg1 = "hello";
-    let arg2 = Nat::from(42u64);
+    let arg2 = Nat::from(42_u64);
     let encoded = Encode!(&arg1, &arg2).unwrap();
 
     let result = decode_candid_args_to_self_describing_value(schema, "multi_args", &encoded);

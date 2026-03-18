@@ -1,7 +1,7 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::artifact::IngressMessageId;
-use crate::batch::VetKdAgreement;
+use crate::batch::ChainKeyAgreement;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
@@ -51,6 +51,7 @@ use ic_management_canister_types_private::{
     VetKdKeyId,
 };
 use ic_protobuf::types::v1 as pb;
+use ic_types_cycles::Cycles;
 use phantom_newtype::{AmountOf, Id};
 use prost::Message;
 use rand::{CryptoRng, RngCore};
@@ -493,6 +494,15 @@ impl ExhaustiveSet for CatchUpShareContent {
         <CatchUpContent>::exhaustive_set(rng)
             .iter()
             .map(|cup| cup.into())
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for Cycles {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <u128>::exhaustive_set(rng)
+            .into_iter()
+            .map(Cycles::from)
             .collect()
     }
 }
@@ -1011,7 +1021,7 @@ impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
     }
 }
 
-impl HasId<CallbackId> for VetKdAgreement {}
+impl HasId<CallbackId> for ChainKeyAgreement {}
 impl HasId<IngressMessageId> for SignedRequestBytes {}
 impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
 impl HasId<PseudoRandomId> for CompletedSignature {}

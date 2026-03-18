@@ -86,8 +86,8 @@ fn empty_page_map_returns_zeroed_pages() {
 #[test]
 fn can_update_a_page_map() {
     let mut page_map = PageMap::new_for_testing();
-    let ones = [1u8; PAGE_SIZE];
-    let twos = [2u8; PAGE_SIZE];
+    let ones = [1_u8; PAGE_SIZE];
+    let twos = [2_u8; PAGE_SIZE];
 
     let delta = [(PageIndex::new(1), &ones), (PageIndex::new(2), &twos)];
 
@@ -106,8 +106,8 @@ fn can_update_a_page_map() {
 #[test]
 fn new_delta_wins_on_update() {
     let mut page_map = PageMap::new_for_testing();
-    let page_1 = [1u8; PAGE_SIZE];
-    let page_2 = [2u8; PAGE_SIZE];
+    let page_1 = [1_u8; PAGE_SIZE];
+    let page_2 = [2_u8; PAGE_SIZE];
 
     let pages_1 = &[(PageIndex::new(1), &page_1)];
     let pages_2 = &[(PageIndex::new(1), &page_2)];
@@ -164,7 +164,7 @@ fn persisted_map_is_equivalent_to_the_original() {
         .tempdir()
         .unwrap();
 
-    let base_page = [42u8; PAGE_SIZE];
+    let base_page = [42_u8; PAGE_SIZE];
     let base_data = vec![&base_page; 50];
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
     let mut pagemap = persist_check_eq_and_load(
@@ -182,12 +182,12 @@ fn persisted_map_is_equivalent_to_the_original() {
     let mut pagemap = persist_check_eq_and_load(
         &mut pagemap,
         &[
-            (PageIndex::new(1), [1u8; PAGE_SIZE]),
-            (PageIndex::new(3), [3u8; PAGE_SIZE]),
-            (PageIndex::new(4), [4u8; PAGE_SIZE]),
-            (PageIndex::new(60), [60u8; PAGE_SIZE]),
-            (PageIndex::new(63), [63u8; PAGE_SIZE]),
-            (PageIndex::new(100), [100u8; PAGE_SIZE]),
+            (PageIndex::new(1), [1_u8; PAGE_SIZE]),
+            (PageIndex::new(3), [3_u8; PAGE_SIZE]),
+            (PageIndex::new(4), [4_u8; PAGE_SIZE]),
+            (PageIndex::new(60), [60_u8; PAGE_SIZE]),
+            (PageIndex::new(63), [63_u8; PAGE_SIZE]),
+            (PageIndex::new(100), [100_u8; PAGE_SIZE]),
         ],
         &metrics,
         Height::new(1),
@@ -196,7 +196,7 @@ fn persisted_map_is_equivalent_to_the_original() {
 
     let mut pagemap = persist_check_eq_and_load(
         &mut pagemap,
-        &[(PageIndex::new(1), [255u8; PAGE_SIZE])],
+        &[(PageIndex::new(1), [255_u8; PAGE_SIZE])],
         &metrics,
         Height::new(2),
         &tmp,
@@ -204,14 +204,14 @@ fn persisted_map_is_equivalent_to_the_original() {
     // Check that it's possible to serialize without reloading.
     persist_check_eq_and_load(
         &mut pagemap,
-        &[(PageIndex::new(104), [104u8; PAGE_SIZE])],
+        &[(PageIndex::new(104), [104_u8; PAGE_SIZE])],
         &metrics,
         Height::new(3),
         &tmp,
     );
     let pagemap = persist_check_eq_and_load(
         &mut pagemap,
-        &[(PageIndex::new(103), [103u8; PAGE_SIZE])],
+        &[(PageIndex::new(103), [103_u8; PAGE_SIZE])],
         &metrics,
         Height::new(4),
         &tmp,
@@ -274,8 +274,8 @@ fn can_load_a_page_map_without_files() {
 
 #[test]
 fn can_use_buffer_to_modify_page_map() {
-    let page_1 = [1u8; PAGE_SIZE];
-    let page_3 = [3u8; PAGE_SIZE];
+    let page_1 = [1_u8; PAGE_SIZE];
+    let page_3 = [3_u8; PAGE_SIZE];
     let pages = &[(PageIndex::new(1), &page_1), (PageIndex::new(3), &page_3)];
     let mut page_map = PageMap::new_for_testing();
     page_map.update(pages);
@@ -325,9 +325,9 @@ fn serialize_page_map() {
     let serialized_page_map = duplicate_file_descriptors(replica.serialize());
     let mut sandbox = PageMap::deserialize(serialized_page_map, &page_allocator_registry).unwrap();
     // The sandbox process allocates new pages.
-    let page_1 = [1u8; PAGE_SIZE];
-    let page_3 = [3u8; PAGE_SIZE];
-    let page_7 = [7u8; PAGE_SIZE];
+    let page_1 = [1_u8; PAGE_SIZE];
+    let page_3 = [3_u8; PAGE_SIZE];
+    let page_7 = [7_u8; PAGE_SIZE];
     let pages = &[(PageIndex::new(1), &page_1), (PageIndex::new(3), &page_3)];
     sandbox.update(pages);
     sandbox.strip_unflushed_delta();
@@ -437,7 +437,7 @@ fn get_memory_instructions_returns_deltas() {
         .prefix("checkpoints")
         .tempdir()
         .unwrap();
-    let pages = &[(PageIndex::new(1), &[1u8; PAGE_SIZE])];
+    let pages = &[(PageIndex::new(1), &[1_u8; PAGE_SIZE])];
     page_map.update(pages);
 
     assert_eq!(
@@ -495,9 +495,9 @@ fn get_memory_instructions_returns_deltas() {
     );
 
     let pages = &[
-        (PageIndex::new(3), &[1u8; PAGE_SIZE]),
-        (PageIndex::new(5), &[1u8; PAGE_SIZE]),
-        (PageIndex::new(20), &[1u8; PAGE_SIZE]),
+        (PageIndex::new(3), &[1_u8; PAGE_SIZE]),
+        (PageIndex::new(5), &[1_u8; PAGE_SIZE]),
+        (PageIndex::new(20), &[1_u8; PAGE_SIZE]),
     ];
     page_map.update(pages);
 
@@ -527,7 +527,7 @@ fn get_memory_instructions_returns_deltas() {
 fn get_memory_instructions_respects_min_range() {
     let mut page_map = PageMap::new_for_testing();
     let pages: Vec<_> = (10..20)
-        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .map(|i| (PageIndex::new(i), &[1_u8; PAGE_SIZE]))
         .collect();
     page_map.update(&pages);
 
@@ -571,12 +571,12 @@ fn get_memory_instructions_returns_max_range_on_empty_map() {
 fn get_memory_instructions_grows_left_and_right() {
     let mut page_map = PageMap::new_for_testing();
     let pages: Vec<_> = (10..20)
-        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .map(|i| (PageIndex::new(i), &[1_u8; PAGE_SIZE]))
         .collect();
     page_map.update(&pages);
     let pages = &[
-        (PageIndex::new(5), &[1u8; PAGE_SIZE]),
-        (PageIndex::new(35), &[1u8; PAGE_SIZE]),
+        (PageIndex::new(5), &[1_u8; PAGE_SIZE]),
+        (PageIndex::new(35), &[1_u8; PAGE_SIZE]),
     ];
     page_map.update(pages);
 
@@ -608,7 +608,7 @@ fn get_memory_instructions_ignores_base_file() {
     let mut page_map = PageMap::new_for_testing();
     // Consecutive pages, so that they get treated like a base file.
     let pages: Vec<_> = (10..20)
-        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .map(|i| (PageIndex::new(i), &[1_u8; PAGE_SIZE]))
         .collect();
     page_map.update(&pages);
     page_map
@@ -659,7 +659,7 @@ fn get_memory_instructions_stops_at_instructions_outside_min_range() {
     let mut page_map = PageMap::new_for_testing();
     // Consecutive pages, so that they get treated like a base file.
     let pages: Vec<_> = (10..20)
-        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .map(|i| (PageIndex::new(i), &[1_u8; PAGE_SIZE]))
         .collect();
     page_map.update(&pages);
     page_map
@@ -734,7 +734,7 @@ fn get_memory_instructions_extends_mmap_past_min_range() {
     let mut page_map = PageMap::new_for_testing();
     // Consecutive pages, so that they get treated like a base file.
     let pages: Vec<_> = (10..20)
-        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .map(|i| (PageIndex::new(i), &[1_u8; PAGE_SIZE]))
         .collect();
     page_map.update(&pages);
     page_map
@@ -743,7 +743,7 @@ fn get_memory_instructions_extends_mmap_past_min_range() {
     page_map.strip_unflushed_delta();
 
     let pages: Vec<_> = (15..40)
-        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .map(|i| (PageIndex::new(i), &[1_u8; PAGE_SIZE]))
         .collect();
     page_map.update(&pages);
     page_map

@@ -278,7 +278,9 @@ pub struct RawCycles {
     pub cycles: u128,
 }
 
-#[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
+#[derive(
+    Clone, Serialize, Hash, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema,
+)]
 pub struct RawPrincipalId {
     // raw bytes of the principal
     #[serde(deserialize_with = "base64::deserialize")]
@@ -458,6 +460,7 @@ pub mod base64 {
 pub enum SubnetKind {
     Application,
     Bitcoin,
+    CloudEngine,
     Fiduciary,
     II,
     NNS,
@@ -477,6 +480,7 @@ pub struct SubnetConfigSet {
     pub bitcoin: bool,
     pub system: usize,
     pub application: usize,
+    pub cloud_engine: usize,
     pub verified_application: usize,
 }
 
@@ -484,6 +488,7 @@ impl SubnetConfigSet {
     pub fn validate(&self) -> Result<(), String> {
         if self.system > 0
             || self.application > 0
+            || self.cloud_engine > 0
             || self.verified_application > 0
             || self.nns
             || self.sns
@@ -507,6 +512,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
             bitcoin,
             system,
             application,
+            cloud_engine,
             verified_application,
         }: SubnetConfigSet,
     ) -> Self {
@@ -538,6 +544,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
             },
             system: vec![SubnetSpec::default(); system],
             application: vec![SubnetSpec::default(); application],
+            cloud_engine: vec![SubnetSpec::default(); cloud_engine],
             verified_application: vec![SubnetSpec::default(); verified_application],
         }
     }
@@ -660,6 +667,7 @@ pub struct ExtendedSubnetConfigSet {
     pub bitcoin: Option<SubnetSpec>,
     pub system: Vec<SubnetSpec>,
     pub application: Vec<SubnetSpec>,
+    pub cloud_engine: Vec<SubnetSpec>,
     pub verified_application: Vec<SubnetSpec>,
 }
 
@@ -668,6 +676,7 @@ pub struct ExtendedSubnetConfigSet {
 pub struct SubnetSpec {
     state_config: SubnetStateConfig,
     instruction_config: SubnetInstructionConfig,
+    subnet_admins: Option<Vec<RawPrincipalId>>,
 }
 
 impl SubnetSpec {
@@ -696,6 +705,22 @@ impl SubnetSpec {
             SubnetStateConfig::FromBlobStore(..) => false,
         }
     }
+
+    pub fn with_subnet_admins(mut self, subnet_admins: Vec<Principal>) -> SubnetSpec {
+        self.subnet_admins = Some(
+            subnet_admins
+                .into_iter()
+                .map(RawPrincipalId::from)
+                .collect(),
+        );
+        self
+    }
+
+    pub fn get_subnet_admins(&self) -> Option<Vec<Principal>> {
+        self.subnet_admins
+            .clone()
+            .map(|subnet_admins| subnet_admins.into_iter().map(Principal::from).collect())
+    }
 }
 
 impl Default for SubnetSpec {
@@ -703,6 +728,7 @@ impl Default for SubnetSpec {
         Self {
             state_config: SubnetStateConfig::New,
             instruction_config: SubnetInstructionConfig::Production,
+            subnet_admins: None,
         }
     }
 }
@@ -764,18 +790,36 @@ impl ExtendedSubnetConfigSet {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if !self.system.is_empty()
-            || !self.application.is_empty()
-            || !self.verified_application.is_empty()
-            || self.nns.is_some()
-            || self.sns.is_some()
-            || self.ii.is_some()
-            || self.fiduciary.is_some()
-            || self.bitcoin.is_some()
+        let all_but_cloud_engine = self
+            .nns
+            .iter()
+            .chain(&self.sns)
+            .chain(&self.ii)
+            .chain(&self.fiduciary)
+            .chain(&self.bitcoin)
+            .chain(&self.system)
+            .chain(&self.application)
+            .chain(&self.verified_application);
+
+        // 1. Check for invalid admins using a clone of the iterator (to prevent its consumption).
+        if all_but_cloud_engine
+            .clone()
+            .any(|spec| spec.subnet_admins.is_some())
         {
-            return Ok(());
+            return Err(
+                "Subnet admins can only be specified for subnet of kind `CloudEngine`".into(),
+            );
         }
-        Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned())
+
+        // 2. Check for existence across everything (again cloning the iterator to prevent its consumption)
+        let has_any =
+            all_but_cloud_engine.clone().next().is_some() || !self.cloud_engine.is_empty();
+
+        if !has_any {
+            return Err("ExtendedSubnetConfigSet must contain at least one subnet".into());
+        }
+
+        Ok(())
     }
 
     pub fn try_with_icp_features(mut self, icp_features: &IcpFeatures) -> Result<Self, String> {
@@ -848,6 +892,7 @@ impl ExtendedSubnetConfigSet {
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct SubnetConfig {
     pub subnet_kind: SubnetKind,
+    pub subnet_admins: Option<Vec<RawPrincipalId>>,
     pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
@@ -890,6 +935,10 @@ impl Topology {
 
     pub fn get_app_subnets(&self) -> Vec<SubnetId> {
         self.find_subnets(SubnetKind::Application, None)
+    }
+
+    pub fn get_cloud_engines(&self) -> Vec<SubnetId> {
+        self.find_subnets(SubnetKind::CloudEngine, None)
     }
 
     pub fn get_verified_app_subnets(&self) -> Vec<SubnetId> {

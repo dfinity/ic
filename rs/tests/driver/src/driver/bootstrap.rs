@@ -555,7 +555,6 @@ fn create_guestos_config_for_node(
         mgmt_mac,
         deployment_environment,
         nns_urls,
-        use_node_operator_private_key: false,
         node_operator_private_key: None,
         enable_trusted_execution_environment: false,
         use_ssh_authorized_keys: true,
@@ -585,9 +584,6 @@ fn create_guestos_config_for_node(
     };
 
     let guestos_settings = GuestOSSettings {
-        inject_ic_crypto: false,
-        inject_ic_state: false,
-        inject_ic_registry_local_store: false,
         guestos_dev_settings,
     };
 

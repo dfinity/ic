@@ -31,7 +31,7 @@ use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
+    CanisterId, NumInstructions, NumMessages, NumSlices, Time,
     batch::{CanisterCyclesCostSchedule, QueryStats},
     ingress::WasmResult,
     messages::{
@@ -40,6 +40,7 @@ use ic_types::{
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
 };
+use ic_types_cycles::Cycles;
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},

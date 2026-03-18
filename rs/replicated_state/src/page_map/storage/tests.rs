@@ -749,7 +749,7 @@ fn no_back_to_back_ranges() {
     let path = &tempdir.path().join("000000_vmemory_0.overlay");
     {
         let mut f = File::create(path).unwrap();
-        f.write_all(&[0u8; 2 * PAGE_SIZE]).unwrap();
+        f.write_all(&[0_u8; 2 * PAGE_SIZE]).unwrap();
         // 0..1
         f.write_all(&u64::to_le_bytes(0)).unwrap();
         f.write_all(&u64::to_le_bytes(0)).unwrap();

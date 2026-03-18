@@ -90,6 +90,13 @@ pub struct CaptchaConfig {
 }
 
 #[derive(CandidType)]
+pub enum OpenIdEmailVerification {
+    Unknown,
+    Google,
+    Microsoft,
+}
+
+#[derive(CandidType)]
 pub struct OpenIdConfig {
     pub name: String,
     pub logo: String,
@@ -99,6 +106,7 @@ pub struct OpenIdConfig {
     pub auth_uri: String,
     pub auth_scope: Vec<String>,
     pub fedcm_uri: Option<String>,
+    pub email_verification: Option<OpenIdEmailVerification>,
 }
 
 #[allow(dead_code)]
@@ -132,6 +140,8 @@ pub struct InternetIdentityInit {
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
+    pub backend_canister_id: Option<Principal>,
+    pub backend_origin: Option<String>,
 }
 
 /* Bitcoin canister */

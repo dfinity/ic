@@ -56,15 +56,6 @@ pub struct CanisterHttpPayloadBuilderMetrics {
     /// The number of shares which are not timed out or have ineligible registry
     /// versions.
     pub active_shares: IntGauge,
-    /// The number of unique responses
-    pub unique_responses: IntGauge,
-    /// The number of unique responses which are includable in the latest
-    /// attempt to create a block for which there are shares in the pool. In
-    /// particular, these responses have met the threshold for inclusion.
-    pub unique_includable_responses: IntGauge,
-    /// The number of timeouts that have met the threshold for inclusion in
-    /// the block.
-    pub included_timeouts: IntGauge,
 }
 
 impl CanisterHttpPayloadBuilderMetrics {
@@ -85,18 +76,6 @@ impl CanisterHttpPayloadBuilderMetrics {
                 "canister_http_total_active_validated_shares",
                 "The total number of validated shares that are not timed out or made with invalid registry version."
             ),
-            unique_responses: metrics_registry.int_gauge(
-                "canister_http_unique_responses",
-                "The total number of unique responses that are currently active"
-            ),
-            unique_includable_responses: metrics_registry.int_gauge(
-                "canister_http_unique_includable_responses",
-                "The total number of unique responses that could be included in a block"
-            ),
-            included_timeouts: metrics_registry.int_gauge(
-                "canister_http_unique_timeouts",
-                "The number of timeouts that could be included in a block"
-            )
         }
     }
 }

@@ -4,6 +4,7 @@ use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle};
 use std::path::Path;
+use tracing::{info, warn};
 
 /// Number of bytes to use for the LUKS2 volume key
 const VOLUME_KEY_BYTES: usize = 512 / 8; // 512 bits
@@ -54,7 +55,7 @@ pub fn deactivate_crypt_device(crypt_name: &str) -> Result<()> {
 pub fn format_crypt_device(device_path: &Path, encryption_key: &[u8]) -> Result<CryptDevice> {
     let mut crypt_device =
         CryptInit::init(device_path).context("Failed to initialize cryptographic device")?;
-    println!(
+    info!(
         "Formatting {} with LUKS2 and initializing it with an encryption key",
         device_path.display()
     );
@@ -144,13 +145,13 @@ pub fn destroy_key_slots_except(
         {
             match crypt_device.keyslot_handle().destroy(key_slot) {
                 Ok(_) => {
-                    println!("Destroyed old key slot {key_slot}");
+                    info!("Destroyed old key slot {key_slot}");
                 }
                 Err(err) => {
                     // It's not a critical error if we fail to destroy a key slot, but it's a
                     // security risk, so we should log it. We panic in debug builds.
                     debug_assert!(false, "Failed to remove old keyslot {key_slot}: {err:?}",);
-                    eprintln!("Failed to remove old keyslot {key_slot}: {err:?}",)
+                    warn!("Failed to remove old keyslot {key_slot}: {err:?}",)
                 }
             }
         }

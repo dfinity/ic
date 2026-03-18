@@ -629,8 +629,9 @@ fn test_cycles_ledger() {
                 .0;
         assert_eq!(balance, expected_balance);
 
-        // The cycles ledger index only syncs with the cycles ledger once per second.
-        pic.advance_time(Duration::from_secs(1));
+        // The cycles ledger index employs a backoff algorithm, and may, by default, only sync with
+        // the cycles ledger every 10 seconds if the ledger transaction rate is low.
+        pic.advance_time(Duration::from_secs(10));
         pic.tick();
 
         // Check balance via cycles ledger index.

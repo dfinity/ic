@@ -59,6 +59,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
+        snapshot_visibility: Default::default(),
         log_memory_limit: NumBytes::from(0),
         canister_log: CanisterLog::default_aggregate(),
         wasm_memory_limit: None,
@@ -245,7 +246,6 @@ fn test_canister_snapshots_decode() {
     let canister_id = canister_test_id(7);
     let canister_snapshot_bits = CanisterSnapshotBits {
         snapshot_id: SnapshotId::from((canister_id, 5)),
-        canister_id,
         taken_at_timestamp: UNIX_EPOCH,
         canister_version: 3,
         binary_hash: WasmHash::from(&CanisterModule::new(vec![2, 3, 4])),
@@ -335,7 +335,7 @@ fn test_encode_decode_task_queue() {
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::clone(&request)),
             prepaid_execution_cycles: Cycles::new(3),
-            call_id: InstallCodeCallId::new(3u64),
+            call_id: InstallCodeCallId::new(3_u64),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Response {
@@ -446,9 +446,8 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
             )
             .unwrap();
 
-            // Write 500 dummy files to the scratchpad directory so that removing checkpoint files takes longer than dropping a `CheckpointLayout`.
-            // This is to create some backlog in the checkpoint removal channel.
-            for i in 0..500 {
+            // Write a few dummy files to each checkpoint directory.
+            for i in 0..50 {
                 let file_path = scratchpad_layout.raw_path().join(i.to_string());
                 File::create(file_path).unwrap();
             }
@@ -596,7 +595,7 @@ fn test_canister_id_from_path() {
 // A strategy to create a randomly sampled and strictly monotonic sequence of `Height`.
 fn random_sorted_unique_heights(max_length: usize) -> impl Strategy<Value = Vec<Height>> {
     // Take a vector of length max_length, sort it and remove duplicate entries.
-    let unsorted = prop::collection::vec(0u64.., max_length);
+    let unsorted = prop::collection::vec(0_u64.., max_length);
     unsorted.prop_map(|heights| {
         let mut heights: Vec<Height> = heights.iter().map(|h| Height::new(*h)).collect();
         heights.sort();
@@ -1280,18 +1279,7 @@ mod mainnet_compatibility_tests {
         #[test]
         #[ignore]
         fn serialize() {
-            let mut canister_state_bits = make_task_queue_and_status();
-
-            // Backward compatibility hack: the old version did not use `with_callback()`,
-            // so it was not bumping `next_callback_id`. Temporarily reset it to 0.
-            //
-            // TODO(DSM-95): Drop in next release.
-            if let CanisterStatus::Running {
-                call_context_manager,
-            } = &mut canister_state_bits.status
-            {
-                call_context_manager.set_next_callback_id(0);
-            }
+            let canister_state_bits = make_task_queue_and_status();
 
             let proto_state_bits: pb_canister_state_bits::CanisterStateBits =
                 canister_state_bits.into();

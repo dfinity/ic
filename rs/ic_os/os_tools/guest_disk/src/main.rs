@@ -12,6 +12,7 @@ use nix::unistd::getuid;
 use sev_guest::firmware::SevGuestFirmware;
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 #[derive(clap::Parser)]
 pub enum Args {
@@ -31,6 +32,14 @@ pub enum Args {
 
 #[cfg(target_os = "linux")]
 fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .without_time()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
     let args = Args::parse();
 
     // TODO: We could replace this with Linux capabilities but this works well for now.
@@ -96,7 +105,7 @@ fn run(
 }
 
 unsafe extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {
-    eprintln!(
+    warn!(
         "libcryptsetup: {}",
         unsafe { CStr::from_ptr(msg) }.to_string_lossy()
     );

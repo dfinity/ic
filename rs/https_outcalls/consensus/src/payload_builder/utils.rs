@@ -1,14 +1,21 @@
-use ic_interfaces::canister_http::InvalidCanisterHttpPayloadReason;
+use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
-    NodeId, RegistryVersion,
-    batch::ValidationContext,
+    CountBytes, NodeId, NumBytes, RegistryVersion,
+    batch::{
+        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses, ValidationContext,
+    },
     canister_http::{
-        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus,
     },
     crypto::crypto_hash,
     messages::CallbackId,
+    signature::BasicSignature,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    mem::size_of,
+};
 
 /// Checks whether the response is consistent
 ///
@@ -145,4 +152,130 @@ pub(crate) fn group_shares_by_callback_id<
             .push(share);
     }
     map
+}
+
+/// Finds a fully-replicated HTTP outcall response ready for consensus.
+///
+/// Iterates over response shares grouped by metadata, looking for one where
+/// at least `threshold` distinct replicas produced the same response hash.
+/// If found, returns the metadata, collected signatures, and response body.
+pub(crate) fn find_fully_replicated_response(
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
+    threshold: usize,
+    pool_access: &dyn CanisterHttpPool,
+) -> Option<(
+    CanisterHttpResponseMetadata,
+    BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
+    CanisterHttpResponse,
+)> {
+    grouped_shares.iter().find_map(|(metadata, shares)| {
+        let signers: BTreeSet<_> = shares.iter().map(|share| share.signature.signer).collect();
+        if signers.len() >= threshold {
+            pool_access
+                .get_response_content_by_hash(&metadata.content_hash)
+                .map(|content| {
+                    (
+                        metadata.clone(),
+                        shares.iter().map(|share| share.signature.clone()).collect(),
+                        content,
+                    )
+                })
+        } else {
+            None
+        }
+    })
+}
+
+/// Finds a non-replicated HTTP outcall response from the designated node.
+///
+/// Looks through the grouped shares for one signed by `designated_node_id`.
+/// If found, returns the metadata, the single signature, and response body.
+pub(crate) fn find_non_replicated_response(
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
+    designated_node_id: &NodeId,
+    pool_access: &dyn CanisterHttpPool,
+) -> Option<(
+    CanisterHttpResponseMetadata,
+    BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
+    CanisterHttpResponse,
+)> {
+    grouped_shares.iter().find_map(|(metadata, shares)| {
+        shares
+            .iter()
+            .find(|share| share.signature.signer == *designated_node_id)
+            .and_then(|correct_share| {
+                pool_access
+                    .get_response_content_by_hash(&metadata.content_hash)
+                    .map(|content| {
+                        (
+                            metadata.clone(),
+                            BTreeSet::from([correct_share.signature.clone()]),
+                            content,
+                        )
+                    })
+            })
+    })
+}
+
+/// Collects distinct HTTP outcall responses from flexible committee members.
+///
+/// Gathers up to `max_responses` individually-signed `(response, share)` pairs
+/// from unique committee members, skipping any that would exceed `max_payload_size`.
+/// Returns the group and its accumulated byte size if at least `min_responses`
+/// were collected.
+pub(crate) fn find_flexible_responses(
+    callback_id: CallbackId,
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
+    committee: &BTreeSet<NodeId>,
+    min_responses: u32,
+    max_responses: u32,
+    accumulated_size: usize,
+    max_payload_size: NumBytes,
+    pool_access: &dyn CanisterHttpPool,
+) -> Option<(FlexibleCanisterHttpResponses, usize)> {
+    let mut flexible_responses = Vec::new();
+    let mut flexible_responses_size = size_of::<CallbackId>();
+    let mut signers = BTreeSet::new();
+
+    'outer: for (metadata, shares) in grouped_shares {
+        for share in shares {
+            if flexible_responses.len() >= max_responses as usize {
+                break 'outer;
+            }
+            if !committee.contains(&share.signature.signer)
+                || !signers.insert(share.signature.signer)
+            {
+                continue;
+            }
+            if let Some(http_response) =
+                pool_access.get_response_content_by_hash(&metadata.content_hash)
+            {
+                let response = FlexibleCanisterHttpResponseWithProof {
+                    response: http_response,
+                    proof: (*share).clone(),
+                };
+                let response_size = response.count_bytes();
+                let new_total = NumBytes::new(
+                    (accumulated_size + flexible_responses_size + response_size) as u64,
+                );
+                if new_total >= max_payload_size {
+                    continue;
+                }
+                flexible_responses_size += response_size;
+                flexible_responses.push(response);
+            }
+        }
+    }
+
+    if flexible_responses.len() >= min_responses as usize {
+        Some((
+            FlexibleCanisterHttpResponses {
+                callback_id,
+                responses: flexible_responses,
+            },
+            flexible_responses_size,
+        ))
+    } else {
+        None
+    }
 }
