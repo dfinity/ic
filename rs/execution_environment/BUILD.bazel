@@ -225,6 +225,7 @@ rust_ic_test(
         "//rs/replicated_state",
         "//rs/state_machine_tests",
         "//rs/test_utilities/metrics",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
