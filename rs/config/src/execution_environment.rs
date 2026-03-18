@@ -32,7 +32,7 @@ pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = if LOG_MEMORY_STORE_FEATURE_ENABL
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
 /// capacity, then the subnet is never considered to have high usage.
-const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(750 * GIB);
+const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(7500 * GIB);
 
 /// This is the upper limit on how much logical storage canisters can request to
 /// be store on a given subnet.
