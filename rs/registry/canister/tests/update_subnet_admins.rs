@@ -421,6 +421,7 @@ fn test_rate_limit_subnet_admin_updates_per_subnet() {
                             subnet_type: SubnetType::Application.into(),
                             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Free.into(),
                             subnet_admins: vec![],
+                            resource_limits: Default::default(),
                             // Set the rest of the fields to some dummy values.
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
