@@ -931,6 +931,7 @@ impl SchedulerImpl {
                     NumBytes::from(0),
                     responses,
                     vec![],
+                    None,
                 ))
             };
             if let Err(e) = self.exec_env.execute_mgmt_operation_on_canister(

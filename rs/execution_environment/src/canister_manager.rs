@@ -1973,6 +1973,8 @@ impl CanisterManager {
     /// while the `canister` is taken out of `ReplicatedState`.
     ///
     /// If the new snapshot cannot be created, an appropriate error will be returned.
+    #[allow(clippy::result_large_err)]
+    #[allow(clippy::type_complexity)]
     pub(crate) fn take_canister_snapshot(
         &self,
         subnet_size: usize,
@@ -1980,28 +1982,36 @@ impl CanisterManager {
         canister: &mut CanisterState,
         replace_snapshot: Option<SnapshotId>,
         uninstall_code: bool,
-        state: &mut ReplicatedState,
+        time: Time,
+        cost_schedule: CanisterCyclesCostSchedule,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<(CanisterSnapshotResponse, Vec<Response>), CanisterManagerError> {
+    ) -> Result<
+        (CanisterSnapshotResponse, Vec<Response>, NumBytes),
+        (CanisterManagerError, NumInstructions, Cycles),
+    > {
         let sender = origin.origin();
-        let time = state.time();
 
         // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+        validate_controller(canister, &sender)
+            .map_err(|err| (err, NumInstructions::new(0), Cycles::zero()))?;
 
         let replace_snapshot_size = match replace_snapshot {
-            Some(replace_snapshot_id) => self.get_snapshot(canister, replace_snapshot_id)?.size(),
+            Some(replace_snapshot_id) => self
+                .get_snapshot(canister, replace_snapshot_id)
+                .map_err(|err| (err, NumInstructions::new(0), Cycles::zero()))?
+                .size(),
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.
                 if canister.canister_snapshots.len()
                     >= self.config.max_number_of_snapshots_per_canister
                 {
-                    return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
+                    let err = CanisterManagerError::CanisterSnapshotLimitExceeded {
                         canister_id: canister.canister_id(),
                         limit: self.config.max_number_of_snapshots_per_canister,
-                    });
+                    };
+                    return Err((err, NumInstructions::new(0), Cycles::zero()));
                 }
                 NumBytes::new(0)
             }
@@ -2010,11 +2020,12 @@ impl CanisterManager {
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
-            return Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
+            let err = CanisterManagerError::CanisterHeapDeltaRateLimited {
                 canister_id: canister.canister_id(),
                 value: canister.scheduler_state.heap_delta_debit,
                 limit: self.config.heap_delta_rate_limit,
-            });
+            };
+            return Err((err, NumInstructions::new(0), Cycles::zero()));
         }
 
         let uninstalled_canister_size = if uninstall_code {
@@ -2038,21 +2049,28 @@ impl CanisterManager {
             .config
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
-        let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
-            subnet_size,
-            state.get_own_cost_schedule(),
-            canister,
-            sender,
-            instructions,
-            round_limits,
-            new_memory_usage,
-            old_memory_usage,
-            resource_saturation,
-        )?;
+        let validated_cycles_and_memory_usage = self
+            .cycles_and_memory_usage_checks(
+                subnet_size,
+                cost_schedule,
+                canister,
+                sender,
+                instructions,
+                round_limits,
+                new_memory_usage,
+                old_memory_usage,
+                resource_saturation,
+            )
+            .map_err(|err| (err, NumInstructions::new(0), Cycles::zero()))?;
 
         // Create new snapshot.
-        let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
-            .map_err(CanisterManagerError::from)?;
+        let new_snapshot = CanisterSnapshot::from_canister(canister, time).map_err(|err| {
+            (
+                err.into(),
+                instructions,
+                validated_cycles_and_memory_usage.cycles_for_instructions,
+            )
+        })?;
 
         // Delete old snapshot identified by `replace_snapshot`.
         if let Some(replace_snapshot) = replace_snapshot {
@@ -2061,7 +2079,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             canister,
             sender,
             round_limits,
@@ -2075,20 +2093,13 @@ impl CanisterManager {
                 .heap_delta_debit
                 .saturating_add(&new_snapshot.heap_delta());
         }
-        state.metadata.heap_delta_estimate = state
-            .metadata
-            .heap_delta_estimate
-            .saturating_add(&new_snapshot.heap_delta());
+        let heap_delta_increase = new_snapshot.heap_delta();
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
         canister
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
-        state
-            .metadata
-            .unflushed_checkpoint_ops
-            .take_snapshot(canister.canister_id(), snapshot_id);
 
         let rejects = if uninstall_code {
             let rejects = uninstall_canister(
@@ -2114,10 +2125,11 @@ impl CanisterManager {
         Ok((
             CanisterSnapshotResponse::new(
                 &snapshot_id,
-                state.time().as_nanos_since_unix_epoch(),
+                time.as_nanos_since_unix_epoch(),
                 new_snapshot_size,
             ),
             rejects,
+            heap_delta_increase,
         ))
     }
 

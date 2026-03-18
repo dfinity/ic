@@ -57,6 +57,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
     canister_state::{NextExecution, system_state::PausedExecutionId},
+    metadata_state::UnflushedCheckpointOp,
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash,
         ReshareChainKeyContext, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
@@ -527,6 +528,7 @@ impl ExecutionEnvironment {
                 NumBytes,
                 Vec<ExecEnvResponse>,
                 Vec<StopCanisterContext>,
+                Option<UnflushedCheckpointOp>,
             ),
             (UserError, NumInstructions, Cycles),
         >,
@@ -542,10 +544,17 @@ impl ExecutionEnvironment {
                     heap_delta_increase,
                     responses,
                     stop_contexts,
+                    unflushed_checkpoint_op,
                 )) => {
                     state.put_canister_state(new_canister);
                     *round_limits = new_round_limits;
                     state.metadata.heap_delta_estimate += heap_delta_increase;
+                    if let Some(unflushed_checkpoint_op) = unflushed_checkpoint_op {
+                        state
+                            .metadata
+                            .unflushed_checkpoint_ops
+                            .push(unflushed_checkpoint_op);
+                    }
                     crate::util::process_responses(
                         responses,
                         state,
@@ -903,6 +912,7 @@ impl ExecutionEnvironment {
                                     NumBytes::from(0),
                                     responses,
                                     vec![],
+                                    None,
                                 )
                             })
                             .map_err(|err| (err.into(), NumInstructions::new(0), Cycles::zero()))
@@ -964,6 +974,7 @@ impl ExecutionEnvironment {
                                     NumBytes::from(0),
                                     vec![],
                                     vec![],
+                                    None,
                                 )
                             })
                             .map_err(|err| (err, NumInstructions::new(0), Cycles::zero()))
@@ -1116,6 +1127,7 @@ impl ExecutionEnvironment {
                                     NumBytes::from(0),
                                     vec![],
                                     stop_contexts,
+                                    None,
                                 )
                             })
                             .map_err(|err| (err.into(), NumInstructions::new(0), Cycles::zero()))
@@ -1641,6 +1653,7 @@ impl ExecutionEnvironment {
                                         NumBytes::from(0),
                                         vec![],
                                         vec![],
+                                        None,
                                     )
                                 })
                                 .map_err(|err| {
@@ -1890,6 +1903,7 @@ impl ExecutionEnvironment {
                         args,
                         registry_settings.subnet_size,
                         round_limits,
+                        registry_settings,
                     );
                     ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
@@ -2502,6 +2516,7 @@ impl ExecutionEnvironment {
                 NumBytes::from(0),
                 vec![],
                 vec![],
+                None,
             ))
         };
         let res = self.execute_mgmt_operation_on_canister(
@@ -2618,6 +2633,7 @@ impl ExecutionEnvironment {
                 NumBytes::from(0),
                 vec![],
                 vec![],
+                None,
             ))
         };
         let res = self.execute_mgmt_operation_on_canister(
@@ -2687,6 +2703,7 @@ impl ExecutionEnvironment {
                                 heap_delta_increase,
                                 vec![],
                                 vec![],
+                                None,
                             )
                         },
                     )
@@ -2739,6 +2756,7 @@ impl ExecutionEnvironment {
                         NumBytes::from(0),
                         vec![],
                         vec![],
+                        None,
                     )
                 })
                 .map_err(|err| (err.into(), NumInstructions::new(0), Cycles::zero()))
@@ -2779,49 +2797,71 @@ impl ExecutionEnvironment {
         args: TakeCanisterSnapshotArgs,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
+        registry_settings: &RegistryExecutionSettings,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
-        // Take canister out.
-        let mut canister = match state.take_canister_state(&canister_id) {
-            None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
-            }
-            Some(canister) => canister,
-        };
-
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
         let uninstall_code = args.uninstall_code().unwrap_or_default();
-        let result = self.canister_manager.take_canister_snapshot(
+        let time = state.time();
+        let cost_schedule = state.get_own_cost_schedule();
+        let op = |mut canister,
+                  mut round_limits,
+                  (
             subnet_size,
             origin,
-            Arc::make_mut(&mut canister),
             replace_snapshot,
             uninstall_code,
+            time,
+            cost_schedule,
+            resource_saturation,
+        )| {
+            self.canister_manager
+                .take_canister_snapshot(
+                    subnet_size,
+                    origin,
+                    &mut canister,
+                    replace_snapshot,
+                    uninstall_code,
+                    time,
+                    cost_schedule,
+                    &mut round_limits,
+                    &resource_saturation,
+                )
+                .map(|(snapshot, responses, heap_delta_increase)| {
+                    let checkpoint_op = UnflushedCheckpointOp::TakeSnapshot(
+                        canister.canister_id(),
+                        snapshot.snapshot_id(),
+                    );
+                    (
+                        canister,
+                        round_limits,
+                        snapshot.encode(),
+                        heap_delta_increase,
+                        responses,
+                        vec![],
+                        Some(checkpoint_op),
+                    )
+                })
+                .map_err(|(err, instructions, cycles)| (err.into(), instructions, cycles))
+        };
+        self.execute_mgmt_operation_on_canister(
+            canister_id,
+            op,
+            (
+                subnet_size,
+                origin,
+                replace_snapshot,
+                uninstall_code,
+                time,
+                cost_schedule,
+                resource_saturation,
+            ),
             state,
             round_limits,
-            &resource_saturation,
-        );
-        // Put canister back.
-        state.put_canister_state(canister);
-
-        match result {
-            Ok((response, rejects)) => {
-                crate::util::process_responses(
-                    rejects,
-                    state,
-                    Arc::clone(&self.ingress_history_writer),
-                    self.log.clone(),
-                    self.canister_not_found_error(),
-                );
-                Ok(response.encode())
-            }
-            Err(err) => Err(err.into()),
-        }
+            registry_settings,
+        )
     }
 
     /// Loads a canister snapshot onto an existing canister.
