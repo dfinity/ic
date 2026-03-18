@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The field can only be set for application subnets and cloud engines on a "free" cost schedule (see below)!
 - A new field to specify subnet cost schedule in `SubnetSpec` and `SubnetConfig`.
   The field can only be set to a non-default value for application subnets and cloud engines!
+  Moreover, the field has to be set to the "free" cost schedule on cloud engines!
 
 ### Changed
 - All subnets with mainnet canister ranges but the NNS subnet are always created with mainnet subnet IDs.
