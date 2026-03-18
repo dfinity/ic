@@ -658,7 +658,6 @@ fn abort_paused_executions_keeps_highest_priority() {
             // Enough cores to (start) executing all canisters in one round.
             scheduler_cores: 4,
             max_instructions_per_round: NumInstructions::from(SLICE),
-            max_instructions_per_message: NumInstructions::from(SLICE * 10),
             max_instructions_per_slice: NumInstructions::from(SLICE),
             max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
             max_paused_executions: 2,
