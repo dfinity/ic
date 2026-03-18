@@ -1,5 +1,5 @@
 //! This module provides the component responsible for generating and validating
-//! payloads relevant to chain key.
+//! payloads relevant to the chain key feature.
 
 use crate::metrics::ChainKeyPayloadBuilderMetrics;
 use crate::utils::{
@@ -58,14 +58,15 @@ mod utils;
 
 const EMPTY_VEC_REF: &Vec<u8> = &vec![];
 
-/// In addition to a timeout, we expire VetKD request contexts that were created more than one entire
-/// DKG interval ago. VetKD NiDkgTranscripts are reshared during every interval. However, it is
-/// important that for any given request, we use the same transcript to create, validate and
-/// combine vetKD shares. Consequently, once the NiDkgTranscript that was paired with a request
-/// context disappears from the summary block, the outstanding request should be rejected.
+/// In addition to a timeout which applies to all keys, we expire request contexts for chain keys
+/// using NI-DKG (e.g., vetKD), that were created more than one entire DKG interval ago.
+/// NiDkgTranscripts are reshared during every interval. However, it is important that for any
+/// given request, we use the same transcript to create, validate and combine the shares.
+/// Consequently, once the NiDkgTranscript that was paired with a request context disappears
+/// from the summary block, the outstanding request should be rejected.
 ///
-/// VetKD request contexts are paired with the summary's "next transcript", if such a transcript
-/// exists, otherwise the "current transcript" is used.
+/// Request contexts for chain keys using NI-DKG (e.g., vetKD) are paired with the summary's
+/// "next transcript", if such a transcript exists, otherwise the "current transcript" is used.
 /// This guarantees that the transcript will exist for at least one DKG interval starting with the
 /// creation of the context: If it was a "next transcript", then it will still exist as a "current
 /// transcript" in the subsequent interval. If it was a "current transcript", then this implies
