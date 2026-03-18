@@ -316,7 +316,7 @@ mod benches {
             // NOTE: Those benchmarks reflect the performance of the minter on **mainnet**.
             // Changing the number of available of UTXOs is unavoidable when updating the retrieved mainnet events used for testing,
             // so that fluctuations in performance is acceptable, but large degradation would indicate a regression.
-            assert_eq!(s.available_utxos.len(), 7_636);
+            assert_eq!(s.available_utxos.len(), 7_639);
         });
         let fee_estimator = state::read_state(|s| IC_CANISTER_RUNTIME.fee_estimator(s));
 
