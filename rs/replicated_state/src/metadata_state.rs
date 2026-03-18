@@ -163,6 +163,7 @@ pub struct SystemMetadata {
     ///
     /// Each time a canister is installed, its Wasm is inserted and the set is
     /// cleared at each checkpoint.
+    // TODO: wrap in Arc!!!
     pub expected_compiled_wasms: BTreeSet<WasmHash>,
 
     /// Responses to `BitcoinGetSuccessors` can be larger than the max inter-canister

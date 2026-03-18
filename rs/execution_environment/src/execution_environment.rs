@@ -1923,12 +1923,12 @@ impl ExecutionEnvironment {
                     let canister_id = args.get_canister_id();
                     let result = self.load_canister_snapshot(
                         registry_settings.subnet_size,
-                        *msg.sender(),
                         &mut state,
                         args,
                         round_limits,
                         instruction_limits,
                         origin,
+                        registry_settings,
                     );
                     ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
@@ -2868,52 +2868,98 @@ impl ExecutionEnvironment {
     fn load_canister_snapshot(
         &self,
         subnet_size: usize,
-        sender: PrincipalId,
         state: &mut ReplicatedState,
         args: LoadCanisterSnapshotArgs,
         round_limits: &mut RoundLimits,
         instruction_limits: InstructionLimits,
         origin: CanisterChangeOrigin,
+        registry_settings: &RegistryExecutionSettings,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
-        // Take canister out.
-        let mut old_canister = match state.take_canister_state(&canister_id) {
-            None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
-            }
-            Some(canister) => canister,
-        };
 
         let snapshot_id = args.snapshot_id();
+
+        let snapshot_canister_id = snapshot_id.get_canister_id();
+        let snapshot_canister: Arc<CanisterState> =
+            match state.canister_state_arc(&snapshot_canister_id) {
+                Some(snapshot_canister) => snapshot_canister,
+                None => {
+                    let err = CanisterManagerError::CanisterSnapshotNotFound {
+                        canister_id: snapshot_canister_id,
+                        snapshot_id,
+                    };
+                    return Err(err.into());
+                }
+            };
+
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
-        let result = self.canister_manager.load_canister_snapshot(
+        let time = state.time();
+        let cost_schedule = state.get_own_cost_schedule();
+
+        let op = |mut canister,
+                  mut round_limits,
+                  (
             subnet_size,
-            sender,
-            Arc::make_mut(&mut old_canister),
+            snapshot_canister,
             snapshot_id,
-            state,
-            round_limits,
+            time,
+            cost_schedule,
             instruction_limits,
             origin,
-            &resource_saturation,
-            &self.metrics,
-        );
-
-        match result {
-            Ok(new_canister) => {
-                state.put_canister_state(new_canister);
-                Ok(EmptyBlob.encode())
-            }
-            Err(err) => {
-                // Could not load the canister snapshot, thus put back old state.
-                state.put_canister_state(old_canister);
-                Err(err.into())
-            }
-        }
+            resource_saturation,
+            expected_compiled_wasms,
+            metrics,
+        )| {
+            self.canister_manager
+                .load_canister_snapshot(
+                    subnet_size,
+                    &mut canister,
+                    snapshot_canister,
+                    snapshot_id,
+                    time,
+                    cost_schedule,
+                    &mut round_limits,
+                    instruction_limits,
+                    origin,
+                    &resource_saturation,
+                    expected_compiled_wasms,
+                    metrics,
+                )
+                .map(|heap_delta_increase| {
+                    let checkpoint_op =
+                        UnflushedCheckpointOp::LoadSnapshot(canister.canister_id(), snapshot_id);
+                    (
+                        canister,
+                        round_limits,
+                        EmptyBlob.encode(),
+                        heap_delta_increase,
+                        vec![],
+                        vec![],
+                        Some(checkpoint_op),
+                    )
+                })
+                .map_err(|(err, instructions, cycles)| (err.into(), instructions, cycles))
+        };
+        self.execute_mgmt_operation_on_canister(
+            canister_id,
+            op,
+            (
+                subnet_size,
+                snapshot_canister,
+                snapshot_id,
+                time,
+                cost_schedule,
+                instruction_limits,
+                origin,
+                resource_saturation,
+                state.metadata.expected_compiled_wasms.clone(),
+                &self.metrics,
+            ),
+            state,
+            round_limits,
+            registry_settings,
+        )
     }
 
     /// Lists the snapshots belonging to the specified canister.
