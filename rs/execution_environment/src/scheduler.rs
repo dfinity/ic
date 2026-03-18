@@ -309,12 +309,6 @@ impl SchedulerImpl {
                     // some instructions still remaining in the round.
                     break;
                 }
-
-                // TODO(DSM-108): This appears to be counterproductive (`can_execute_subnet_msg`
-                // would simply skip messages that consume instructions). Remove.
-                if round_limits.instructions_reached() {
-                    break;
-                }
             }
         }
         state
