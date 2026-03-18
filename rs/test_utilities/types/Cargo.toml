@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-ed25519 = { path = "../../../packages/ic-ed25519" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 rand = { workspace = true }

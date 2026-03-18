@@ -24,14 +24,14 @@ fn test_skipping_quota() {
         // the skipping quota is set to 10_000 by `ic-cdk` macros
         let skipped: Vec<u8> = vec![42; 9_042];
         let res: Result<Result<NeuronInfo, GovernanceError>, String> = canister
-            .query_("get_full_neuron", candid, (0u64, Some(skipped)))
+            .query_("get_full_neuron", candid, (0_u64, Some(skipped)))
             .await;
         let _ = res.unwrap();
 
         // but the next one is rejected
         let skipped: Vec<u8> = vec![42; 10_042];
         let res: Result<Result<NeuronInfo, GovernanceError>, String> = canister
-            .query_("get_full_neuron", candid, (0u64, Some(skipped)))
+            .query_("get_full_neuron", candid, (0_u64, Some(skipped)))
             .await;
         let err = res.unwrap_err();
         let expected_err = "Skipping cost exceeds the limit";

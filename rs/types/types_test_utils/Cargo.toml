@@ -9,5 +9,6 @@ documentation.workspace = true
 [dependencies]
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../types" }
+ic-types-cycles = { path = "../cycles" }
 proptest = { workspace = true }
 strum = { workspace = true }

@@ -43,7 +43,7 @@ pub(crate) enum BatchPayloadSectionBuilder {
     SelfValidating(Arc<dyn SelfValidatingPayloadBuilder>),
     CanisterHttp(Arc<dyn BatchPayloadBuilder>),
     QueryStats(Arc<dyn BatchPayloadBuilder>),
-    VetKd(Arc<dyn BatchPayloadBuilder>),
+    ChainKey(Arc<dyn BatchPayloadBuilder>),
 }
 
 impl BatchPayloadSectionBuilder {
@@ -93,7 +93,7 @@ impl BatchPayloadSectionBuilder {
             Self::SelfValidating(_) => "self_validating",
             Self::CanisterHttp(_) => "canister_http",
             Self::QueryStats(_) => "query_stats",
-            Self::VetKd(_) => "vetkd",
+            Self::ChainKey(_) => "chain_key",
         }
     }
 
@@ -324,40 +324,41 @@ impl BatchPayloadSectionBuilder {
                     }
                 }
             }
-            Self::VetKd(builder) => {
+            Self::ChainKey(builder) => {
                 let past_payloads: Vec<PastPayload> =
                     filter_past_payloads(past_payloads, |_, _, payload| {
                         if payload.is_summary() {
                             None
                         } else {
-                            Some(&payload.as_ref().as_data().batch.vetkd)
+                            Some(&payload.as_ref().as_data().batch.chain_key)
                         }
                     });
 
-                let vetkd = builder.build_payload(
+                let chain_key = builder.build_payload(
                     height,
                     max_size,
                     &past_payloads,
                     proposal_context.validation_context,
                 );
-                let size = NumBytes::new(vetkd.len() as u64);
+                let size = NumBytes::new(chain_key.len() as u64);
 
                 // Check validation as safety measure
-                match builder.validate_payload(height, proposal_context, &vetkd, &past_payloads) {
+                match builder.validate_payload(height, proposal_context, &chain_key, &past_payloads)
+                {
                     Ok(()) => {
-                        payload.vetkd = vetkd;
+                        payload.chain_key = chain_key;
                         size
                     }
                     Err(err) => {
                         error!(
                             logger,
-                            "VetKd payload did not pass validation, this is a bug, {:?} @{}",
+                            "chain_key payload did not pass validation, this is a bug, {:?} @{}",
                             err,
                             CRITICAL_ERROR_VALIDATION_NOT_PASSED
                         );
 
                         metrics.critical_error_validation_not_passed.inc();
-                        payload.vetkd = vec![];
+                        payload.chain_key = vec![];
                         NumBytes::new(0)
                     }
                 }
@@ -452,24 +453,24 @@ impl BatchPayloadSectionBuilder {
 
                 Ok(NumBytes::new(payload.query_stats.len() as u64))
             }
-            Self::VetKd(builder) => {
+            Self::ChainKey(builder) => {
                 let past_payloads: Vec<PastPayload> =
                     filter_past_payloads(past_payloads, |_, _, payload| {
                         if payload.is_summary() {
                             None
                         } else {
-                            Some(&payload.as_ref().as_data().batch.vetkd)
+                            Some(&payload.as_ref().as_data().batch.chain_key)
                         }
                     });
 
                 builder.validate_payload(
                     height,
                     proposal_context,
-                    &payload.vetkd,
+                    &payload.chain_key,
                     &past_payloads,
                 )?;
 
-                Ok(NumBytes::new(payload.vetkd.len() as u64))
+                Ok(NumBytes::new(payload.chain_key.len() as u64))
             }
         }
     }

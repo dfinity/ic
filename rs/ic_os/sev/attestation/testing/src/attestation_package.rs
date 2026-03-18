@@ -100,8 +100,8 @@ mod tests {
         let sev_attestation_package: SevAttestationPackage =
             ParsedSevAttestationPackageBuilder::new()
                 .with_custom_data(&custom_data)
-                .with_measurement([21u8; 48])
-                .with_chip_id([33u8; 64])
+                .with_measurement([21_u8; 48])
+                .with_chip_id([33_u8; 64])
                 .build()
                 .into();
 
@@ -109,8 +109,8 @@ mod tests {
             sev_attestation_package,
             SevRootCertificateVerification::TestOnlySkipVerification,
         )
-        .verify_measurement(&[[21u8; 48]])
-        .verify_chip_id(&[[33u8; 64]])
+        .verify_measurement(&[[21_u8; 48]])
+        .verify_chip_id(&[[33_u8; 64]])
         .verify_custom_data(&custom_data)
         .expect("Attestation package is invalid");
     }

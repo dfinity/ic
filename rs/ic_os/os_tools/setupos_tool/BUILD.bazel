@@ -16,6 +16,8 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:prost",
     "@crate_index//:tokio",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
     "@crate_index//:url",
 ]
 

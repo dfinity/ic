@@ -16,7 +16,7 @@ use rand::{CryptoRng, Rng};
 /// Generate a G1 point that is not in the prime-order subgroup (has torsion).
 /// Used to test that malformed inputs are properly rejected.
 fn non_torsion_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Affine {
-    let mut buf = [0u8; G1Affine::BYTES];
+    let mut buf = [0_u8; G1Affine::BYTES];
 
     loop {
         rng.fill_bytes(&mut buf);
@@ -35,7 +35,7 @@ fn non_torsion_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Affine {
 /// Generate a G2 point that is not in the prime-order subgroup (has torsion).
 /// Used to test that malformed inputs are properly rejected.
 fn non_torsion_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Affine {
-    let mut buf = [0u8; G2Affine::BYTES];
+    let mut buf = [0_u8; G2Affine::BYTES];
 
     loop {
         rng.fill_bytes(&mut buf);

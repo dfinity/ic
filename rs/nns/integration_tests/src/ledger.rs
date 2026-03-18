@@ -76,7 +76,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
 
             // Stake a neuron by transferring to a subaccount of the neurons
             // canister and claiming the neuron on the governance canister..
-            let nonce = 12345u64;
+            let nonce = 12345_u64;
             let to_subaccount =
                 ledger::compute_neuron_staking_subaccount(user.get_principal_id(), nonce);
 
@@ -253,7 +253,7 @@ fn test_stake_and_disburse_neuron_with_account() {
 
             // Stake a neuron by transferring to a subaccount of the neurons
             // canister and notifying the canister of the transfer.
-            let nonce = 12345u64;
+            let nonce = 12345_u64;
             let to_subaccount =
                 ledger::compute_neuron_staking_subaccount(user.get_principal_id(), nonce);
 

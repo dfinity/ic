@@ -17,6 +17,8 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:sev",
     "@crate_index//:tempfile",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
 ]
 
 DEV_DEPENDENCIES = [

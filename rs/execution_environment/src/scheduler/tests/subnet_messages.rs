@@ -1,12 +1,17 @@
 //! Tests for subnet message execution.
 
-use super::super::test_utilities::{SchedulerTest, SchedulerTestBuilder, ingress};
+use super::super::test_utilities::{
+    SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions,
+};
 use super::super::*;
 use super::zero_instruction_overhead_config;
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_management_canister_types_private::{CanisterIdRecord, EmptyBlob, Method, Payload as _};
+use ic_management_canister_types_private::{
+    CanisterIdRecord, EmptyBlob, FetchCanisterLogsRequest, Method, Payload as _,
+};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::testing::{CanisterQueuesTesting, ReplicatedStateTesting};
 use ic_test_utilities_metrics::{HistogramStats, fetch_histogram_vec_stats, labels};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -238,4 +243,173 @@ fn scheduler_executes_postponed_raw_rand_requests() {
         .get(&labels(&[("phase", "raw_rand")])),
         Some(&HistogramStats { count: 1, sum: 0.0 })
     );
+}
+
+/// `drain_subnet_queues` skips the input queues with subnet calls that count
+/// toward the round limit, after the instruction limit was reached.
+#[test]
+fn drain_subnet_queues_skips_heavy_subnet_calls_when_instructions_reached() {
+    const SLICE: u64 = 100;
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            max_instructions_per_round: NumInstructions::from(SLICE),
+            max_instructions_per_message: NumInstructions::from(SLICE),
+            max_instructions_per_slice: NumInstructions::from(SLICE),
+            max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
+            ..zero_instruction_overhead_config()
+        })
+        .build();
+
+    let canister = test.create_canister();
+
+    let xnet_canister_id = test.xnet_canister_id();
+    let remote_canister_1 = canister_test_id(169);
+    let remote_canister_2 = canister_test_id(2197);
+
+    // CanisterStatus — counts_toward_round_limit: false.
+    fn inject_canister_status_call(
+        test: &mut SchedulerTest,
+        caller: CanisterId,
+        target: CanisterId,
+    ) {
+        test.inject_call_to_ic00(
+            Method::CanisterStatus,
+            CanisterIdRecord::from(target).encode(),
+            Cycles::zero(),
+            caller,
+            InputQueueType::RemoteSubnet,
+        );
+    }
+
+    // Two management canister calls from `xnet_canister_id`.
+    //
+    // The `InstallCode` counts toward the round limit, but gets executed while the
+    // `100 / 16` instruction budget is fully available. It consumes the entire
+    // budget, so no other messages that count toward the round limit get executed.
+    // The `CanisterStatus` does not count toward the round limit, so it gets
+    // executed regardless of the instruction budget.
+    let install_code = TestInstallCode::Reinstall {
+        init: instructions(SLICE / SUBNET_MESSAGES_LIMIT_FRACTION + 1),
+    };
+    test.inject_install_code_call_to_ic00(canister, install_code);
+    inject_canister_status_call(&mut test, xnet_canister_id, canister);
+
+    // Two calls from `remote_canister_1`.
+    //
+    // The `FetchCanisterLogs` counts toward the round limit, so the whole input
+    // queue gets skipped. The `CanisterStatus` does not count toward the round
+    // limit but never gets executed because the queue got skipped.
+    test.inject_call_to_ic00(
+        Method::FetchCanisterLogs,
+        FetchCanisterLogsRequest::new(canister).encode(),
+        Cycles::zero(),
+        remote_canister_1,
+        InputQueueType::RemoteSubnet,
+    );
+    // CanisterStatus — counts_toward_round_limit: false.
+    inject_canister_status_call(&mut test, remote_canister_1, canister);
+
+    // Two calls from `remote_canister_2`.
+    //
+    // Neither counts toward the round limit, so both should get executed.
+    inject_canister_status_call(&mut test, remote_canister_2, canister);
+    inject_canister_status_call(&mut test, remote_canister_2, canister);
+
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 6);
+
+    let mut new_state = test.drain_subnet_messages();
+
+    // NOTE: For now, we also have a `break` that triggers when the instruction
+    // limit is reached, so `drain_subnet_messages()` bails out immediately after
+    // the first subnet call that counts toward the round limit. And a TODO to drop
+    // it.
+
+    let queues = new_state.subnet_queues_mut();
+    // The two calls from `remote_canister_2` were not executed.
+    // assert_eq!(queues.input_queues_message_count(), 2);
+    assert_eq!(queues.input_queues_message_count(), 5);
+    // The other 4 calls were executed.
+    // assert_eq!(queues.output_queues_message_count(), 4);
+    assert_eq!(queues.output_queues_message_count(), 1);
+    assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
+    // assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
+    // assert!(queues.pop_canister_output(&remote_canister_2).is_some());
+    // assert!(queues.pop_canister_output(&remote_canister_2).is_some());
+}
+
+/// Subnet messages with `does_not_run_on_aborted_canister` are skipped when
+/// the target canister has an `AbortedExecution` in its task queue.
+/// Messages without the flag execute normally.
+#[test]
+fn drain_subnet_queues_skips_messages_targeting_aborted_canister() {
+    const SLICE: u64 = 10;
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(SLICE),
+            max_instructions_per_message: NumInstructions::from(SLICE * 10),
+            max_instructions_per_slice: NumInstructions::from(SLICE),
+            max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
+            ..zero_instruction_overhead_config()
+        })
+        .build();
+    let canister = test.create_canister();
+
+    let xnet_caller_1 = canister_test_id(10);
+    let xnet_caller_2 = canister_test_id(11);
+    let xnet_caller_3 = canister_test_id(12);
+
+    // Make all 3 callers controllers, so the calls don't fail because of it.
+    let controllers = &mut test.canister_state_mut(canister).system_state.controllers;
+    controllers.insert(xnet_caller_1.get());
+    controllers.insert(xnet_caller_2.get());
+    controllers.insert(xnet_caller_3.get());
+
+    // Start and immediately abort a long execution.
+    test.send_ingress(canister, ingress(SLICE * 10));
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
+    // StopCanister — does_not_run_on_aborted_canister: true → skipped.
+    let canister_id_payload = Encode!(&CanisterIdRecord::from(canister)).unwrap();
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        canister_id_payload.clone(),
+        Cycles::zero(),
+        xnet_caller_1,
+        InputQueueType::RemoteSubnet,
+    );
+
+    // FetchCanisterLogs — does_not_run_on_aborted_canister: true → skipped.
+    test.inject_call_to_ic00(
+        Method::FetchCanisterLogs,
+        FetchCanisterLogsRequest::new(canister).encode(),
+        Cycles::zero(),
+        xnet_caller_2,
+        InputQueueType::RemoteSubnet,
+    );
+
+    // Now enqueue a `CanisterStatus` call from each of the three remote callers.
+    // The first two should be skipped, because we skip whole input queues, not just
+    // individual messages. The third one should be executed.
+    for caller in [xnet_caller_1, xnet_caller_2, xnet_caller_3] {
+        // CanisterStatus — does_not_run_on_aborted_canister: false.
+        test.inject_call_to_ic00(
+            Method::CanisterStatus,
+            canister_id_payload.clone(),
+            Cycles::zero(),
+            caller,
+            InputQueueType::RemoteSubnet,
+        );
+    }
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 5);
+
+    let mut new_state = test.drain_subnet_messages();
+
+    let queues = new_state.subnet_queues_mut();
+    // All calls from `xnet_caller_1` and `xnet_caller_2` were skipped.
+    assert_eq!(queues.input_queues_message_count(), 4);
+    // The call from `xnet_caller_3` was executed.
+    assert_eq!(queues.output_queues_message_count(), 1);
+    assert!(queues.pop_canister_output(&xnet_caller_3).is_some());
 }

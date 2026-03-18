@@ -17,6 +17,8 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:prometheus",
     "@crate_index//:regex",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
     "@crate_index//:uuid",
 ]
 
