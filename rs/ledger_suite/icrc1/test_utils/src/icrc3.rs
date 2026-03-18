@@ -428,6 +428,7 @@ impl<Tokens: TokensType> AuthorizedMintBuilder<Tokens> {
     /// Build the authorized mint block
     pub fn build(self) -> ICRC3Value {
         let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("mthd".to_string(), ICRC3Value::Text("152mint".to_string()));
         tx_fields.insert("to".to_string(), account_to_icrc3_value(&self.to));
         tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
         tx_fields.insert(
@@ -437,8 +438,7 @@ impl<Tokens: TokensType> AuthorizedMintBuilder<Tokens> {
         if let Some(reason) = self.reason {
             tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
         }
-        self.builder
-            .build_with_operation(Some("152mint"), tx_fields)
+        self.builder.build_with_operation(None, tx_fields)
     }
 }
 
@@ -455,6 +455,7 @@ impl<Tokens: TokensType> AuthorizedBurnBuilder<Tokens> {
     /// Build the authorized burn block
     pub fn build(self) -> ICRC3Value {
         let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("mthd".to_string(), ICRC3Value::Text("152burn".to_string()));
         tx_fields.insert("from".to_string(), account_to_icrc3_value(&self.from));
         tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
         tx_fields.insert(
@@ -464,8 +465,7 @@ impl<Tokens: TokensType> AuthorizedBurnBuilder<Tokens> {
         if let Some(reason) = self.reason {
             tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
         }
-        self.builder
-            .build_with_operation(Some("152burn"), tx_fields)
+        self.builder.build_with_operation(None, tx_fields)
     }
 }
 
