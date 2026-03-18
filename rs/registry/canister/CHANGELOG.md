@@ -11,6 +11,67 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-13: Proposal 140861
+
+http://dashboard.internetcomputer.org/proposal/140861
+
+## Added
+
+* Adding support for recalling replica versions for subnets.
+* CloudEngines can have a Free cycles cost schedule. 
+* **SEV invariant:** Enforced that SEV-enabled subnets contain only SEV-enabled nodes (i.e., nodes with a chip ID in their node record).
+* New invariant to check that subnet admins can be non-empty only for rented subnets.
+* New endpoint to update the subnet admins field in the SubnetRecord.
+
+## Changed
+
+* **SEV on existing subnets:** Enabled SEV activation for existing subnets. Once enabled, SEV cannot be disabled.
+
+
+# 2026-03-07: Proposal 140777
+
+http://dashboard.internetcomputer.org/proposal/140777
+
+## Added
+
+* Adding support for recalling replica versions for subnets.
+
+
+# 2026-02-27: Proposal 140599
+
+http://dashboard.internetcomputer.org/proposal/140599
+
+## Added
+
+* Added an optional field `max_ingress_bytes_per_block` to `CreateSubnetPayload` and
+`UpdateSubnetPayload` which, when present, will set a limit on how big the ingress payload can be in
+blocks produced by the created/updated subnet.
+
+
+# 2026-02-20: Proposal 140510
+
+http://dashboard.internetcomputer.org/proposal/140510
+
+## Added
+
+* Add type4 node reward type for Cloud Engine nodes.
+* Invariant about cycles cost schedule and subnet types allowing only application subnets to be put on "Free" schedule.
+* New subnet admins field in the SubnetRecord.
+
+
+# 2026-02-11: Proposal 140316
+
+http://dashboard.internetcomputer.org/proposal/140316
+
+## Added
+
+* Enabling direct node swapping feature on all subnets for all node operators.
+
+## Fixed
+
+* When performing `RemoveNodes`, generate 1 update mutation per node operator key. Before this change, a single node operator record would be changed multiple times in a single version if the remove nodes proposal removed multiple nodes from the same node operator, which caused confusion. This bug resulted in incorrect tracking of node operator allowance depending on how they are fetched from the registry (given the different implementations in the registry utility functions).
+
+
 # 2026-01-16: Proposal 140014
 
 http://dashboard.internetcomputer.org/proposal/140014

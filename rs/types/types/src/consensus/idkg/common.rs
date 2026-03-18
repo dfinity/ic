@@ -75,10 +75,10 @@ impl From<RequestId> for pb::RequestId {
     }
 }
 
-impl TryFrom<&pb::RequestId> for RequestId {
+impl TryFrom<pb::RequestId> for RequestId {
     type Error = ProxyDecodeError;
 
-    fn try_from(request_id: &pb::RequestId) -> Result<Self, Self::Error> {
+    fn try_from(request_id: pb::RequestId) -> Result<Self, Self::Error> {
         Ok(Self {
             callback_id: CallbackId::from(request_id.callback_id),
             height: Height::from(request_id.height),
@@ -130,13 +130,11 @@ impl From<&TranscriptRef> for pb::TranscriptRef {
     }
 }
 
-impl TryFrom<&pb::TranscriptRef> for TranscriptRef {
+impl TryFrom<pb::TranscriptRef> for TranscriptRef {
     type Error = ProxyDecodeError;
-    fn try_from(trancript_ref: &pb::TranscriptRef) -> Result<Self, Self::Error> {
-        let transcript_id = try_from_option_field(
-            trancript_ref.transcript_id.as_ref(),
-            "TranscriptRef::transcript_id",
-        )?;
+    fn try_from(trancript_ref: pb::TranscriptRef) -> Result<Self, Self::Error> {
+        let transcript_id =
+            try_from_option_field(trancript_ref.transcript_id, "TranscriptRef::transcript_id")?;
         Ok(Self {
             height: Height::from(trancript_ref.height),
             transcript_id,
@@ -190,11 +188,11 @@ impl From<&MaskedTranscript> for pb::MaskedTranscript {
     }
 }
 
-impl TryFrom<&pb::MaskedTranscript> for MaskedTranscript {
+impl TryFrom<pb::MaskedTranscript> for MaskedTranscript {
     type Error = ProxyDecodeError;
-    fn try_from(transcript: &pb::MaskedTranscript) -> Result<Self, Self::Error> {
+    fn try_from(transcript: pb::MaskedTranscript) -> Result<Self, Self::Error> {
         Ok(Self(try_from_option_field(
-            transcript.transcript_ref.as_ref(),
+            transcript.transcript_ref,
             "MaskedTranscript::transcript_ref",
         )?))
     }
@@ -239,11 +237,11 @@ impl From<&UnmaskedTranscript> for pb::UnmaskedTranscript {
     }
 }
 
-impl TryFrom<&pb::UnmaskedTranscript> for UnmaskedTranscript {
+impl TryFrom<pb::UnmaskedTranscript> for UnmaskedTranscript {
     type Error = ProxyDecodeError;
-    fn try_from(transcript: &pb::UnmaskedTranscript) -> Result<Self, Self::Error> {
+    fn try_from(transcript: pb::UnmaskedTranscript) -> Result<Self, Self::Error> {
         Ok(Self(try_from_option_field(
-            transcript.transcript_ref.as_ref(),
+            transcript.transcript_ref,
             "UnmaskedTranscript::transcript_ref",
         )?))
     }
@@ -311,12 +309,12 @@ impl From<&IDkgTranscriptAttributes> for pb::IDkgTranscriptAttributes {
     }
 }
 
-impl TryFrom<&pb::IDkgTranscriptAttributes> for IDkgTranscriptAttributes {
+impl TryFrom<pb::IDkgTranscriptAttributes> for IDkgTranscriptAttributes {
     type Error = ProxyDecodeError;
-    fn try_from(attributes: &pb::IDkgTranscriptAttributes) -> Result<Self, Self::Error> {
+    fn try_from(attributes: pb::IDkgTranscriptAttributes) -> Result<Self, Self::Error> {
         let mut receivers = BTreeSet::new();
-        for pb_node_id in &attributes.receivers {
-            let node_id = crate::node_id_try_from_option(Some(pb_node_id.clone()))?;
+        for pb_node_id in attributes.receivers {
+            let node_id = crate::node_id_try_from_protobuf(pb_node_id)?;
             receivers.insert(node_id);
         }
         Ok(IDkgTranscriptAttributes::new(
@@ -394,11 +392,11 @@ impl From<&RandomTranscriptParams> for pb::RandomTranscriptParams {
         }
     }
 }
-impl TryFrom<&pb::RandomTranscriptParams> for RandomTranscriptParams {
+impl TryFrom<pb::RandomTranscriptParams> for RandomTranscriptParams {
     type Error = ProxyDecodeError;
-    fn try_from(transcript: &pb::RandomTranscriptParams) -> Result<Self, Self::Error> {
+    fn try_from(transcript: pb::RandomTranscriptParams) -> Result<Self, Self::Error> {
         Ok(Self(try_from_option_field(
-            transcript.transcript_ref.as_ref(),
+            transcript.transcript_ref,
             "RandomTranscriptParams::transcript_ref",
         )?))
     }
@@ -443,11 +441,11 @@ impl From<&RandomUnmaskedTranscriptParams> for pb::RandomUnmaskedTranscriptParam
         }
     }
 }
-impl TryFrom<&pb::RandomUnmaskedTranscriptParams> for RandomUnmaskedTranscriptParams {
+impl TryFrom<pb::RandomUnmaskedTranscriptParams> for RandomUnmaskedTranscriptParams {
     type Error = ProxyDecodeError;
-    fn try_from(transcript: &pb::RandomUnmaskedTranscriptParams) -> Result<Self, Self::Error> {
+    fn try_from(transcript: pb::RandomUnmaskedTranscriptParams) -> Result<Self, Self::Error> {
         Ok(Self(try_from_option_field(
-            transcript.transcript_ref.as_ref(),
+            transcript.transcript_ref,
             "RandomUnmaskedTranscriptParams::transcript_ref",
         )?))
     }
@@ -492,11 +490,11 @@ impl From<&ReshareOfMaskedParams> for pb::ReshareOfMaskedParams {
         }
     }
 }
-impl TryFrom<&pb::ReshareOfMaskedParams> for ReshareOfMaskedParams {
+impl TryFrom<pb::ReshareOfMaskedParams> for ReshareOfMaskedParams {
     type Error = ProxyDecodeError;
-    fn try_from(transcript: &pb::ReshareOfMaskedParams) -> Result<Self, Self::Error> {
+    fn try_from(transcript: pb::ReshareOfMaskedParams) -> Result<Self, Self::Error> {
         Ok(Self(try_from_option_field(
-            transcript.transcript_ref.as_ref(),
+            transcript.transcript_ref,
             "ReshareOfMaskedParams::transcript_ref",
         )?))
     }
@@ -572,11 +570,11 @@ impl From<&ReshareOfUnmaskedParams> for pb::ReshareOfUnmaskedParams {
         }
     }
 }
-impl TryFrom<&pb::ReshareOfUnmaskedParams> for ReshareOfUnmaskedParams {
+impl TryFrom<pb::ReshareOfUnmaskedParams> for ReshareOfUnmaskedParams {
     type Error = ProxyDecodeError;
-    fn try_from(transcript: &pb::ReshareOfUnmaskedParams) -> Result<Self, Self::Error> {
+    fn try_from(transcript: pb::ReshareOfUnmaskedParams) -> Result<Self, Self::Error> {
         Ok(Self(try_from_option_field(
-            transcript.transcript_ref.as_ref(),
+            transcript.transcript_ref,
             "ReshareOfUnmaskedParams::transcript_ref",
         )?))
     }
@@ -628,11 +626,11 @@ impl From<&UnmaskedTimesMaskedParams> for pb::UnmaskedTimesMaskedParams {
         }
     }
 }
-impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
+impl TryFrom<pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
     type Error = ProxyDecodeError;
-    fn try_from(transcript: &pb::UnmaskedTimesMaskedParams) -> Result<Self, Self::Error> {
+    fn try_from(transcript: pb::UnmaskedTimesMaskedParams) -> Result<Self, Self::Error> {
         Ok(Self(try_from_option_field(
-            transcript.transcript_ref.as_ref(),
+            transcript.transcript_ref,
             "UnmaskedTimesMaskedParams::transcript_ref",
         )?))
     }
@@ -808,34 +806,28 @@ impl From<&IDkgTranscriptOperationRef> for pb::IDkgTranscriptOperationRef {
     }
 }
 
-impl TryFrom<&pb::IDkgTranscriptOperationRef> for IDkgTranscriptOperationRef {
+impl TryFrom<pb::IDkgTranscriptOperationRef> for IDkgTranscriptOperationRef {
     type Error = ProxyDecodeError;
-    fn try_from(op_ref: &pb::IDkgTranscriptOperationRef) -> Result<Self, Self::Error> {
+    fn try_from(op_ref: pb::IDkgTranscriptOperationRef) -> Result<Self, Self::Error> {
         if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::Random as i32) {
             Ok(Self::Random)
         } else if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::RandomUnmasked as i32) {
             Ok(Self::RandomUnmasked)
         } else if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::ReshareOfMasked as i32) {
             Ok(Self::ReshareOfMasked(try_from_option_field(
-                op_ref.masked.as_ref(),
+                op_ref.masked,
                 "IDkgTranscriptOperationRef::masked",
             )?))
         } else if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::ReshareOfUnmasked as i32) {
             Ok(Self::ReshareOfUnmasked(try_from_option_field(
-                op_ref.unmasked.as_ref(),
+                op_ref.unmasked,
                 "IDkgTranscriptOperationRef::unmasked",
             )?))
         } else if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::UnmaskedTimesMasked as i32)
         {
             Ok(Self::UnmaskedTimesMasked(
-                try_from_option_field(
-                    op_ref.unmasked.as_ref(),
-                    "IDkgTranscriptOperationRef::unmasked",
-                )?,
-                try_from_option_field(
-                    op_ref.masked.as_ref(),
-                    "IDkgTranscriptOperationRef::masked",
-                )?,
+                try_from_option_field(op_ref.unmasked, "IDkgTranscriptOperationRef::unmasked")?,
+                try_from_option_field(op_ref.masked, "IDkgTranscriptOperationRef::masked")?,
             ))
         } else {
             Err(ProxyDecodeError::Other(format!(
@@ -881,28 +873,28 @@ impl From<&IDkgTranscriptParamsRef> for pb::IDkgTranscriptParamsRef {
     }
 }
 
-impl TryFrom<&pb::IDkgTranscriptParamsRef> for IDkgTranscriptParamsRef {
+impl TryFrom<pb::IDkgTranscriptParamsRef> for IDkgTranscriptParamsRef {
     type Error = ProxyDecodeError;
-    fn try_from(params: &pb::IDkgTranscriptParamsRef) -> Result<Self, Self::Error> {
+    fn try_from(params: pb::IDkgTranscriptParamsRef) -> Result<Self, Self::Error> {
         let transcript_id: IDkgTranscriptId = try_from_option_field(
-            params.transcript_id.as_ref(),
+            params.transcript_id,
             "IDkgTranscriptParamsRef::transcript_id",
         )?;
 
         let mut dealers = BTreeSet::new();
-        for pb_node_id in &params.dealers {
-            let node_id = crate::node_id_try_from_option(Some(pb_node_id.clone()))?;
+        for pb_node_id in params.dealers {
+            let node_id = crate::node_id_try_from_protobuf(pb_node_id)?;
             dealers.insert(node_id);
         }
 
         let mut receivers = BTreeSet::new();
-        for pb_node_id in &params.receivers {
-            let node_id = crate::node_id_try_from_option(Some(pb_node_id.clone()))?;
+        for pb_node_id in params.receivers {
+            let node_id = crate::node_id_try_from_protobuf(pb_node_id)?;
             receivers.insert(node_id);
         }
 
         let operation_ref = try_from_option_field(
-            params.operation_type_ref.as_ref(),
+            params.operation_type_ref,
             "IDkgTranscriptParamsRef::operation_type_ref",
         )?;
 
@@ -1034,11 +1026,11 @@ impl From<&PreSignatureInCreation> for pb::PreSignatureInCreation {
     }
 }
 
-impl TryFrom<&pb::PreSignatureInCreation> for PreSignatureInCreation {
+impl TryFrom<pb::PreSignatureInCreation> for PreSignatureInCreation {
     type Error = ProxyDecodeError;
-    fn try_from(pre_signature: &pb::PreSignatureInCreation) -> Result<Self, Self::Error> {
+    fn try_from(pre_signature: pb::PreSignatureInCreation) -> Result<Self, Self::Error> {
         use pb::pre_signature_in_creation::Msg;
-        let Some(msg) = pre_signature.msg.as_ref() else {
+        let Some(msg) = pre_signature.msg else {
             return Err(ProxyDecodeError::MissingField(
                 "PreSignatureInCreation::msg",
             ));
@@ -1128,11 +1120,11 @@ impl From<&PreSignatureRef> for pb::PreSignatureRef {
     }
 }
 
-impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
+impl TryFrom<pb::PreSignatureRef> for PreSignatureRef {
     type Error = ProxyDecodeError;
-    fn try_from(pre_signature: &pb::PreSignatureRef) -> Result<Self, Self::Error> {
+    fn try_from(pre_signature: pb::PreSignatureRef) -> Result<Self, Self::Error> {
         use pb::pre_signature_ref::Msg;
-        let Some(msg) = pre_signature.msg.as_ref() else {
+        let Some(msg) = pre_signature.msg else {
             return Err(ProxyDecodeError::MissingField(
                 "PreSignatureInCreation::msg",
             ));
@@ -1267,11 +1259,11 @@ impl From<&PreSignature> for pb::PreSignature {
     }
 }
 
-impl TryFrom<&pb::PreSignature> for PreSignature {
+impl TryFrom<pb::PreSignature> for PreSignature {
     type Error = ProxyDecodeError;
-    fn try_from(pre_signature: &pb::PreSignature) -> Result<Self, Self::Error> {
+    fn try_from(pre_signature: pb::PreSignature) -> Result<Self, Self::Error> {
         use pb::pre_signature::Msg;
-        let Some(msg) = pre_signature.msg.as_ref() else {
+        let Some(msg) = pre_signature.msg else {
             return Err(ProxyDecodeError::MissingField("PreSignature::msg"));
         };
         Ok(match msg {

@@ -175,7 +175,7 @@ pub struct ConsensusDependencies {
     pub(crate) self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     pub(crate) canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub(crate) query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
-    pub(crate) vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    pub(crate) chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
@@ -204,7 +204,7 @@ impl ConsensusDependencies {
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
-            (&cup).into(),
+            cup.into(),
             pool_config.clone(),
             metrics_registry.clone(),
             no_op_logger(),
@@ -212,6 +212,7 @@ impl ConsensusDependencies {
         )));
         let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
         let idkg_pool = idkg_pool::IDkgPoolImpl::new(
+            replica_config.node_id,
             pool_config,
             no_op_logger(),
             metrics_registry.clone(),
@@ -235,7 +236,7 @@ impl ConsensusDependencies {
             self_validating_payload_builder: Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             canister_http_payload_builder: Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             query_stats_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
-            vetkd_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
+            chain_key_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             state_manager,
             thread_pool: build_thread_pool(MAX_CONSENSUS_THREADS),
             metrics_registry,

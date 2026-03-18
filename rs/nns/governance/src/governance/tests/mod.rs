@@ -391,6 +391,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 swap_due_timestamp_seconds: None,
                 nns_proposal_id: None,
                 neurons_fund_participation_constraints: None,
+                custom_proposal_criticality: None,
             },
         );
 
@@ -739,6 +740,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                 neuron_basket_construction_parameters: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
+                custom_proposal_criticality: None,
             },
         );
 
@@ -1031,7 +1033,7 @@ mod neuron_archiving_tests {
         // Dissolved in the distant past.
         let model_neuron = NeuronBuilder::new(
             NeuronId { id: 1 },
-            Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+            Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
             PrincipalId::new_user_test_id(1),
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: 42,
@@ -1067,7 +1069,7 @@ mod neuron_archiving_tests {
         let neuron_with_dissolve_state_and_age = |dissolve_state_and_age| {
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 dissolve_state_and_age,
                 NOW,

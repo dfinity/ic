@@ -696,7 +696,6 @@ mod server {
         );
     }
 
-    // TODO(CRP-2149): remove dependency on system time in the following test
     #[test]
     fn should_return_error_if_client_cert_not_yet_valid() {
         let rng = &mut reproducible_rng();

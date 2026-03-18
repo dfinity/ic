@@ -2412,7 +2412,7 @@ impl ProposalData {
         let required_yes_of_total_basis_points =
             u128::from(percentage_of_total_required.basis_points.unwrap());
         let required_no_of_total_basis_points =
-            10_000u128.saturating_sub(required_yes_of_total_basis_points);
+            10_000_u128.saturating_sub(required_yes_of_total_basis_points);
 
         debug_assert!(required_yes_of_total_basis_points <= 10_000);
 
@@ -5559,6 +5559,7 @@ Payload rendering here"#
             max_age_bonus_percentage: None,
             maturity_modulation_disabled: None,
             automatically_advance_target_version: None,
+            custom_proposal_criticality: None,
         };
 
         let result = validate_and_render_manage_nervous_system_parameters(

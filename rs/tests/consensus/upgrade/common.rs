@@ -16,13 +16,14 @@ use candid::Principal;
 use futures::future::try_join_all;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, cert_state_makes_progress_with_retries, store_message,
+    can_read_msg, cert_state_makes_progress_with_retries, store_message_with_retries,
 };
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
+use ic_management_canister_types::{CanisterId, TakeCanisterSnapshotArgs};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::{LogStream, create_agent};
@@ -154,7 +155,7 @@ pub fn upgrade(
 
     let msg = &format!("hello before upgrade to {upgrade_version}");
     info!(logger, "Storing message: '{}'", msg);
-    let can_id = store_message(
+    let can_id = store_message_with_retries(
         &healthy_node.get_public_url(),
         healthy_node.effective_canister_id(),
         msg,
@@ -175,7 +176,13 @@ pub fn upgrade(
             .await
             .expect("Failed to create agent");
         let mgr = ManagementCanister::create(&agent);
-        mgr.take_canister_snapshot(&can_id, None).await.unwrap();
+        let snapshot_args = TakeCanisterSnapshotArgs {
+            canister_id: CanisterId::from(can_id),
+            replace_snapshot: None,
+        };
+        mgr.take_canister_snapshot(&can_id, &snapshot_args)
+            .await
+            .unwrap();
     });
 
     info!(logger, "Stopping faulty node {} ...", faulty_node.node_id);
@@ -231,7 +238,7 @@ pub fn upgrade(
     info!(logger, "After upgrade could read message '{}'", msg);
 
     let msg_2 = &format!("hello after upgrade to {upgrade_version}");
-    let can_id_2 = store_message(
+    let can_id_2 = store_message_with_retries(
         &faulty_node.get_public_url(),
         faulty_node.effective_canister_id(),
         msg_2,

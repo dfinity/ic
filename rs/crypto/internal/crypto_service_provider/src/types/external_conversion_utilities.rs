@@ -22,7 +22,6 @@ use std::convert::TryFrom;
 #[cfg(test)]
 mod tests;
 
-// TODO (CRP-201): Remove generic methods in CSP conversions
 impl<T> TryFrom<&IndividualMultiSigOf<T>> for CspSignature {
     type Error = CryptoError;
 
@@ -49,7 +48,6 @@ impl<T> TryFrom<&IndividualMultiSigOf<T>> for CspSignature {
     }
 }
 
-// TODO (CRP-201): Remove generic methods in CSP conversions
 impl<T> TryFrom<&CombinedMultiSigOf<T>> for CspSignature {
     type Error = CryptoError;
 
@@ -76,7 +74,6 @@ impl<T> TryFrom<&CombinedMultiSigOf<T>> for CspSignature {
     }
 }
 
-// TODO (CRP-201): Remove generic methods in CSP conversions
 impl<T> TryFrom<&ThresholdSigShareOf<T>> for CspSignature {
     type Error = CryptoError;
 
@@ -103,7 +100,6 @@ impl<T> TryFrom<&ThresholdSigShareOf<T>> for CspSignature {
     }
 }
 
-// TODO (CRP-201): Remove generic methods in CSP conversions
 impl<T> TryFrom<&CombinedThresholdSigOf<T>> for CspSignature {
     type Error = CryptoError;
 

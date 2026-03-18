@@ -11,7 +11,7 @@ use tempfile::Builder;
 #[test]
 fn ensure_equality_of_signed_bytes_of_catch_up_package_wrappers() {
     let cup = make_genesis(DkgSummary::fake());
-    let protobuf = pb::CatchUpPackage::from(&cup);
+    let protobuf = pb::CatchUpPackage::from(cup.clone());
 
     assert_eq!(
         CatchUpContentProtobufBytes::from(&protobuf).as_signed_bytes(),
@@ -42,7 +42,7 @@ fn check_cup_integrity_from_protobuf() {
     // Corrupt the hash value.
     cup.content.block = Hashed::recompose(CryptoHashOf::new(CryptoHash(vec![1; 32])), value);
 
-    let protobuf = pb::CatchUpPackage::from(&cup);
+    let protobuf = pb::CatchUpPackage::from(cup);
     let result = CatchUpPackage::try_from(&protobuf);
     assert!(result.is_err());
 }

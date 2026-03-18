@@ -148,10 +148,6 @@ pub trait ThresholdSignatureCspClient {
 ///   resharing DKG.
 /// * The arguments and calculation differ slightly at some of the steps in the
 ///   protocol.
-///
-/// TODO(CRP-563): Prefix the NiDkg methods with nidkg_.
-///
-/// TODO(CRP-564): Remove the csp_ prefix from argument names.
 pub trait NiDkgCspClient {
     /// Updates the epoch of the (forward-secure) DKG dealing decryption key
     /// (i.e., the secret part of the DKG dealing encryption key) so that it

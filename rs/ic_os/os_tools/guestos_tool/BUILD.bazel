@@ -10,7 +10,11 @@ DEPENDENCIES = [
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
-    "@crate_index//:regex",
+    "@crate_index//:nix",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
 ]
 
 MACRO_DEPENDENCIES = [

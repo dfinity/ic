@@ -72,8 +72,6 @@ impl TranscriptData {
     }
 
     /// Returns a reference to the registry version.
-    /////////////////////////////////////////
-    // TODO(CRP-2599): remove allow(unused) once this method is used
     #[allow(unused)]
     pub fn registry_version(&self) -> RegistryVersion {
         self.registry_version

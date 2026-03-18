@@ -844,7 +844,7 @@ impl ProtocolRound {
         );
 
         /*
-         * This function assumes the MEGa keys are secp256k1 (CRP-2236)
+         * This function assumes the MEGa keys are secp256k1
          *
          * So for setup.key_curve() == K256 we expect success, and other
          * curves should fail.

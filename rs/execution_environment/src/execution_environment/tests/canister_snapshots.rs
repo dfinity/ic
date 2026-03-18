@@ -18,8 +18,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionState, SchedulerState,
     canister_state::{
-        WASM_PAGE_SIZE_IN_BYTES,
-        execution_state::{WasmBinary, WasmExecutionMode},
+        WASM_PAGE_SIZE_IN_BYTES, execution_state::WasmBinary,
         system_state::wasm_chunk_store::CHUNK_SIZE,
     },
     metadata_state::UnflushedCheckpointOp,
@@ -31,18 +30,17 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
-    CanisterId, Cycles, NumInstructions, SnapshotId,
+    CanisterId, NumInstructions, SnapshotId,
     batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
 use std::borrow::Borrow;
-
-const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
 fn take_canister_snapshot_decode_round_trip() {
@@ -262,9 +260,9 @@ fn take_canister_snapshot_fails_canister_does_not_own_replace_snapshot() {
         .subnet_message("take_canister_snapshot", args.encode())
         .unwrap_err();
 
-    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message =
-        format!("The snapshot {snapshot_id} does not belong to canister {canister_id_2}",)
+        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id_2}",)
             .to_string();
     assert!(error.description().contains(&message));
 
@@ -308,12 +306,21 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
     let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
     let snapshot_id = response.snapshot_id();
 
-    assert!(test.state().canister_snapshots.contains(&snapshot_id));
-    assert!(test.state().canister_snapshots.contains(&snapshot_id));
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .contains(&snapshot_id)
+    );
 
-    assert!(test.state().canister_snapshots.contains(&snapshot_id));
-
-    let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
+    let snapshot = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .canister_snapshots
+        .get(snapshot_id)
+        .unwrap();
     assert_eq!(
         *snapshot.canister_module(),
         test.canister_state(canister_id)
@@ -328,15 +335,6 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
         test.canister_state(canister_id)
             .system_state
             .wasm_chunk_store
-    );
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
     );
 
     // Grow the canister's memory before taking another snapshot.
@@ -361,17 +359,20 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
 
     // Check that old snapshot ID was deleted.
     assert_ne!(new_snapshot_id, snapshot_id);
-    assert!(!test.state().canister_snapshots.contains(&snapshot_id));
-    assert!(test.state().canister_snapshots.contains(&new_snapshot_id));
-
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
+    assert!(
+        !test
+            .state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
+            .contains(&snapshot_id)
+    );
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .contains(&new_snapshot_id)
     );
 }
 
@@ -412,12 +413,21 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
     let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
     let snapshot_id = response.snapshot_id();
 
-    assert!(test.state().canister_snapshots.contains(&snapshot_id));
-    assert!(test.state().canister_snapshots.contains(&snapshot_id));
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .contains(&snapshot_id)
+    );
 
-    assert!(test.state().canister_snapshots.contains(&snapshot_id));
-
-    let snapshot = test.state().canister_snapshots.get(snapshot_id).unwrap();
+    let snapshot = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .canister_snapshots
+        .get(snapshot_id)
+        .unwrap();
     assert_eq!(
         *snapshot.canister_module(),
         test.canister_state(canister_id)
@@ -581,7 +591,7 @@ fn canister_snapshot_reserves_cycles_difference() {
 
 #[test]
 fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_snapshot() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
     const CAPACITY: u64 = 500 * MIB;
     const THRESHOLD: u64 = CAPACITY / 2;
 
@@ -692,7 +702,7 @@ fn take_canister_snapshot_does_not_reduce_subnet_available_memory_when_failing_t
 
 #[test]
 fn take_canister_snapshot_increases_heap_delta() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
     const CAPACITY: u64 = 1_000_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
 
@@ -732,7 +742,7 @@ fn take_canister_snapshot_increases_heap_delta() {
 
 #[test]
 fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
@@ -818,7 +828,7 @@ fn take_snapshot_with_maximal_chunk_store() {
     // The chunk store may have no more than 100 entries.
     // If this test fails, the wasm chunk store size or the
     // max number of stored chunks may have changed.
-    for i in 0..100u32 {
+    for i in 0..100_u32 {
         let chunk = i.to_be_bytes().to_vec();
         let upload_args = UploadChunkArgs {
             canister_id: canister_id.into(),
@@ -956,7 +966,14 @@ fn delete_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
     assert!(result.is_ok());
     let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
     let snapshot_id = response.snapshot_id();
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
+            .canister_snapshots
+            .get(snapshot_id)
+            .is_some()
+    );
 
     let initial_canister_state = test.state().canister_state(&canister_id_2).unwrap().clone();
 
@@ -966,9 +983,9 @@ fn delete_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
     let error = test
         .subnet_message("delete_canister_snapshot", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message =
-        format!("The snapshot {snapshot_id} does not belong to canister {canister_id_2}",)
+        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id_2}",)
             .to_string();
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id_2).is_some());
@@ -1006,19 +1023,16 @@ fn delete_canister_snapshot_succeeds() {
     assert!(result.is_ok());
     let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
     let snapshot_id = response.snapshot_id();
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .get(snapshot_id)
+            .is_some()
+    );
     let subnet_available_memory_after_taking_snapshot =
         test.subnet_available_memory().get_execution_memory() as u64;
-
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
-    );
 
     // Deletes canister snapshot successfully.
     let args: DeleteCanisterSnapshotArgs =
@@ -1028,17 +1042,15 @@ fn delete_canister_snapshot_succeeds() {
         test.subnet_available_memory().get_execution_memory() as u64;
 
     assert!(result.is_ok());
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_none());
-    assert!(test.state().canister_state(&canister_id).is_some());
-
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
+    assert!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
+            .get(snapshot_id)
+            .is_none()
     );
+    assert!(test.state().canister_state(&canister_id).is_some());
 
     assert_gt!(
         subnet_available_memory_after_deleting_snapshot,
@@ -1098,13 +1110,9 @@ fn list_canister_snapshot_fails_invalid_controller() {
     if let RequestOrResponse::Response(res) = response {
         assert_eq!(res.originator, *receiver);
         res.response_payload.assert_contains_reject(
-            RejectCode::CanisterError,
+            RejectCode::CanisterReject,
             &format!(
-                "Only the controllers of the canister {} can control it.\n\
-                    Canister's controllers: {}\n\
-                    Sender's ID: {}",
-                canister_id,
-                test.user_id().get(),
+                "Caller {} is not allowed to call list_canister_snapshots",
                 caller_canister.get(),
             ),
         );
@@ -1158,7 +1166,7 @@ fn list_canister_snapshot_succeeds() {
 fn load_canister_snapshot_decode_round_trip() {
     let canister_id = canister_test_id(4);
     let snapshot_id = SnapshotId::from((canister_id, 6));
-    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5u64));
+    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5_u64));
     let encoded_args = args.encode();
     assert_eq!(
         args,
@@ -1292,7 +1300,14 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
     assert!(result.is_ok());
     let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
     let snapshot_id = response.snapshot_id();
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
+            .canister_snapshots
+            .get(snapshot_id)
+            .is_some()
+    );
 
     // Change the user id to a different one, so the second canister has a different controller.
     test.set_user_id(user_test_id(42));
@@ -1332,7 +1347,7 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
 
 #[test]
 fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
@@ -1475,6 +1490,17 @@ fn load_canister_snapshot_succeeds() {
     // Load an existing snapshot.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
 
+    // Verify that the snapshot still exists,
+    // i.e., loading a snapshot should not consume it.
+    assert_eq!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .len(),
+        1
+    );
+
     // Verify chunk store contains data.
     assert!(
         test.state()
@@ -1540,7 +1566,14 @@ fn helper_take_snapshot(test: &mut ExecutionTest, canister_id: CanisterId) -> (S
     let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
     let snapshot_id = response.snapshot_id();
     let snapshot_taken_at_timestamp = response.taken_at_timestamp();
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .get(snapshot_id)
+            .is_some()
+    );
 
     (snapshot_id, snapshot_taken_at_timestamp)
 }
@@ -1657,7 +1690,14 @@ fn snapshot_is_deleted_with_canister_delete() {
     let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
         .unwrap()
         .snapshot_id();
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .get(snapshot_id)
+            .is_some()
+    );
 
     // Delete the canister, snapshot is also deleted.
     test.stop_canister(canister_id);
@@ -1666,7 +1706,6 @@ fn snapshot_is_deleted_with_canister_delete() {
 
     // Canister is deleted together with the canister snapshot.
     assert!(test.state().canister_state(&canister_id).is_none());
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_none());
 }
 
 #[test]
@@ -1703,11 +1742,10 @@ fn take_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Take a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        WASM_EXECUTION_MODE,
     );
 
     // Take a snapshot for the canister.
@@ -1717,7 +1755,14 @@ fn take_canister_snapshot_charges_canister_cycles() {
     let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
         .unwrap()
         .snapshot_id();
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .get(snapshot_id)
+            .is_some()
+    );
 
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
@@ -1759,7 +1804,14 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
         .unwrap()
         .snapshot_id();
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .get(snapshot_id)
+            .is_some()
+    );
 
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let initial_balance = test.canister_state(canister_id).system_state.balance();
@@ -1767,11 +1819,10 @@ fn load_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Load a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().execution_cost(
+    let expected_charge = test.cycles_account_manager().management_canister_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
-        WASM_EXECUTION_MODE,
     );
 
     // Load an existing snapshot will decrease the balance.
@@ -1974,7 +2025,7 @@ fn read_canister_snapshot_metadata_fails_canister_and_snapshot_must_match() {
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
 
     // Try to access metadata via a bad snapshot id
     let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, (canister_id, 42).into());
@@ -2014,7 +2065,7 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 fn read_canister_snapshot_data(
@@ -2384,7 +2435,7 @@ fn read_canister_snapshot_data_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_data", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 #[test]
@@ -2430,7 +2481,7 @@ fn read_canister_snapshot_data_fails_canister_and_snapshot_must_match() {
     let error = test
         .subnet_message("read_canister_snapshot_data", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
 
     // Try to access metadata via a bad snapshot id
     let args = ReadCanisterSnapshotDataArgs::new(
@@ -2923,6 +2974,7 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
         system_state: _,
         execution_state,
         scheduler_state,
+        canister_snapshots: _,
     } = canister_state;
 
     //
@@ -2953,10 +3005,6 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
     // DO NOT MODIFY WITHOUT READING DOC COMMENT!
     //
     let SchedulerState {
-        last_full_execution_round: _,
-        accumulated_priority: _,
-        priority_credit: _,
-        long_execution_mode: _,
         heap_delta_debit: _,
         install_code_debit: _,
     } = scheduler_state;

@@ -1271,6 +1271,17 @@ pub struct NervousSystemParameters {
     /// Whether to automatically advance the SNS target version after a new upgrade is published
     /// by the NNS. If not specified, defaults to false for backward compatibility.
     pub automatically_advance_target_version: Option<bool>,
+    /// Custom proposal criticality configuration. Allows specifying additional native function IDs
+    /// that should be treated as critical. If not specified, defaults to None (no custom criticality).
+    pub custom_proposal_criticality: Option<CustomProposalCriticality>,
+}
+/// Defines custom proposal criticality settings for the nervous system.
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+pub struct CustomProposalCriticality {
+    /// List of native function IDs that should be treated as critical.
+    /// These functions will require a higher level of consensus to be executed.
+    /// Only non-critical native function IDs can be added to this list.
+    pub additional_critical_native_action_ids: Vec<u64>,
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct VotingRewardsParameters {

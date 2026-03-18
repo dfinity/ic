@@ -44,7 +44,7 @@ pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
             ParsedSevAttestationPackage::new_with_unverified_certificate_chain(
                 attestation_report,
                 certificate_chain,
-                custom_data_debug_info,
+                Some(custom_data_debug_info),
             ),
         )
     } else {
@@ -59,7 +59,7 @@ pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
             attestation_report,
             certificate_chain,
             sev_root_certificate_verification,
-            custom_data_debug_info,
+            Some(custom_data_debug_info),
         )
     };
 
@@ -140,7 +140,7 @@ mod tests {
         };
 
         let mut firmware = MockSevGuestFirmwareBuilder::new()
-            .with_custom_data_override(Some([99u8; 64]))
+            .with_custom_data_override(Some([99_u8; 64]))
             .with_signer(Some(signer))
             // We make the mock firmware claim that it generates valid custom data, but it doesn't
             // so the attestation package verification will fail.

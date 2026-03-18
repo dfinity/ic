@@ -17,9 +17,8 @@ use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, SignedIngress};
-use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
-};
+use ic_types::{CanisterId, ComputeAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId};
+use ic_types_cycles::Cycles;
 use more_asserts::assert_lt;
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
@@ -44,7 +43,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
 
     let instruction_to_cost = match config.embedders_config.metering_type {
         MeteringType::New => instruction_to_cost,
-        MeteringType::None => |_op: &wasmparser::Operator, _mem_type: WasmMemoryType| 0u64,
+        MeteringType::None => |_op: &wasmparser::Operator, _mem_type: WasmMemoryType| 0_u64,
     };
 
     let cost_const = instruction_to_cost(
@@ -753,42 +752,44 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             fetch_canister_logs_base_fee: Cycles::new(0),
             fetch_canister_logs_per_byte_fee: Cycles::new(0),
         },
-        SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
-            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(500_000_000_000),
-            compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
+        SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
+            CyclesAccountManagerConfig {
+                reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
+                canister_creation_fee: Cycles::new(500_000_000_000),
+                compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
-            // The following fields are set based on a thought experiment where
-            // we estimated how many resources a representative benchmark on a
-            // verified subnet is using.
-            update_message_execution_fee: Cycles::new(5_000_000),
-            ten_update_instructions_execution_fee: Cycles::new(
-                ten_update_instructions_execution_fee_in_cycles,
-            ),
-            ten_update_instructions_execution_fee_wasm64: Cycles::new(
-                WASM64_INSTRUCTION_COST_MULTIPLIER
-                    * ten_update_instructions_execution_fee_in_cycles,
-            ),
-            xnet_call_fee: Cycles::new(260_000),
-            xnet_byte_transmission_fee: Cycles::new(1_000),
-            ingress_message_reception_fee: Cycles::new(1_200_000),
-            ingress_byte_reception_fee: Cycles::new(2_000),
-            // 4 SDR per GiB per year => 4e12 Cycles per year
-            gib_storage_per_second_fee: Cycles::new(127_000),
-            duration_between_allocation_charges: Duration::from_secs(10),
-            ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
-            schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
-            vetkd_fee: VETKD_FEE,
-            http_request_linear_baseline_fee: Cycles::new(3_000_000),
-            http_request_quadratic_baseline_fee: Cycles::new(60_000),
-            http_request_per_byte_fee: Cycles::new(400),
-            http_response_per_byte_fee: Cycles::new(800),
-            max_storage_reservation_period: Duration::from_secs(0),
-            default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
-                .default_reserved_balance_limit,
-            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
-            fetch_canister_logs_per_byte_fee: Cycles::new(800),
-        },
+                // The following fields are set based on a thought experiment where
+                // we estimated how many resources a representative benchmark on a
+                // verified subnet is using.
+                update_message_execution_fee: Cycles::new(5_000_000),
+                ten_update_instructions_execution_fee: Cycles::new(
+                    ten_update_instructions_execution_fee_in_cycles,
+                ),
+                ten_update_instructions_execution_fee_wasm64: Cycles::new(
+                    WASM64_INSTRUCTION_COST_MULTIPLIER
+                        * ten_update_instructions_execution_fee_in_cycles,
+                ),
+                xnet_call_fee: Cycles::new(260_000),
+                xnet_byte_transmission_fee: Cycles::new(1_000),
+                ingress_message_reception_fee: Cycles::new(1_200_000),
+                ingress_byte_reception_fee: Cycles::new(2_000),
+                // 5.6 SDR per GiB per year => 5.6e12 Cycles per year
+                gib_storage_per_second_fee: Cycles::new(177_800),
+                duration_between_allocation_charges: Duration::from_secs(10),
+                ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+                schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
+                vetkd_fee: VETKD_FEE,
+                http_request_linear_baseline_fee: Cycles::new(3_000_000),
+                http_request_quadratic_baseline_fee: Cycles::new(60_000),
+                http_request_per_byte_fee: Cycles::new(400),
+                http_response_per_byte_fee: Cycles::new(800),
+                max_storage_reservation_period: Duration::from_secs(0),
+                default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
+                    .default_reserved_balance_limit,
+                fetch_canister_logs_base_fee: Cycles::new(1_000_000),
+                fetch_canister_logs_per_byte_fee: Cycles::new(800),
+            }
+        }
     }
 }
 
@@ -944,15 +945,15 @@ fn test_subnet_size_one_gib_storage_default_cost() {
 
     // Assert small subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_lo, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(4.005_072));
+    assert_eq!(cost * per_year, trillion_cycles(5.607_100_800));
 
     // Assert big subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_hi, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(10.474_777_008));
+    assert_eq!(cost * per_year, trillion_cycles(14.664_713_040));
 
     // Assert big subnet size cost per year scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(4.005_040_464));
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(5.607_069_264));
 }
 
 // Storage cost tests split into 2: zero and non-zero compute allocation.

@@ -78,7 +78,7 @@ pub(crate) const DEFAULT_MAX_SANDBOXES_RSS: NumBytes = NumBytes::new(50 * 1024 *
 /// The maximum number of pages that a message dirties without optimizing dirty
 /// page copying by triggering a new execution slice for copying pages.
 /// This default is 1 GiB.
-pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GiB as usize) / PAGE_SIZE;
+pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GIB as usize) / PAGE_SIZE;
 
 /// Scheduling overhead for copying dirty pages, in instructions.
 pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
@@ -86,34 +86,32 @@ pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::ne
 /// The overhead for dirty pages in Wasm64.
 pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
 
-#[allow(non_upper_case_globals)]
-const KiB: u64 = 1024;
-#[allow(non_upper_case_globals)]
-const GiB: u64 = KiB * KiB * KiB;
+const KIB: u64 = 1024;
+const GIB: u64 = KIB * KIB * KIB;
 
 // Maximum number of stable memory dirty OS pages (4KiB) that an upgrade/install message execution
 // is allowed to produce.
 const STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE: NumOsPages =
-    NumOsPages::new(8 * GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(8 * GIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory dirty OS pages (4KiB) that a regular message (update) execution
 // is allowed to produce.
 const STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE: NumOsPages =
-    NumOsPages::new(2 * GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(2 * GIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory dirty OS pages (4KiB) that a non-replicated query is allowed to produce.
-const STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY: NumOsPages = NumOsPages::new(GiB / (PAGE_SIZE as u64));
+const STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY: NumOsPages = NumOsPages::new(GIB / (PAGE_SIZE as u64));
 
 // Maximum number of stable memory OS pages (4KiB) that that an upgrade/install message execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE: NumOsPages =
-    NumOsPages::new(8 * GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(8 * GIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory OS pages (4KiB) that a that a regular message (update) execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE: NumOsPages =
-    NumOsPages::new(2 * GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(2 * GIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory OS pages (4KiB) that a single non-replicated query execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
-    NumOsPages::new(GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(GIB / (PAGE_SIZE as u64));
 
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.

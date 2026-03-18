@@ -9,8 +9,8 @@ use dfn_candid::candid;
 use ic_base_types::NodeId;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, prepare_registry, prepare_registry_with_two_node_sets},
 };
@@ -23,7 +23,7 @@ use registry_canister::{
 
 #[test]
 fn test_the_anonymous_user_cannot_change_subnet_membership() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let (init_mutate, subnet_id, unassigned_node_ids, _) =
@@ -105,7 +105,7 @@ fn test_the_anonymous_user_cannot_change_subnet_membership() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_change_subnet_membership() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             // An attacker got a canister that is trying to pass for the governance
             // canister...
@@ -177,7 +177,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_change_subnet_membe
 
 #[test]
 fn test_change_subnet_membership_succeeds() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let (init_mutate, subnet_id, unassigned_node_ids, _) =
@@ -285,7 +285,7 @@ fn test_change_subnet_membership_succeeds() {
 
 #[test]
 fn test_change_subnet_membership_duplicate_nodes() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let (init_mutate, subnet_1, subnet_2, _nodes, _) =
                 prepare_registry_with_two_node_sets(3, 1, true);

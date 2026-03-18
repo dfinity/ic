@@ -14,8 +14,7 @@ use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_types_test_utils::ids::NODE_1;
 use proptest::prelude::*;
-use rand::SeedableRng;
-use rand::{CryptoRng, Rng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 mod gen_dealing_encryption_key_pair_tests {
@@ -28,9 +27,10 @@ mod gen_dealing_encryption_key_pair_tests {
     };
 
     #[test]
-    fn should_correctly_generate_dealing_encryption_key_pair() {
+    fn should_correctly_generate_stable_dealing_encryption_key_pair() {
+        let rng = ChaCha20Rng::seed_from_u64(42);
         let csp = Csp::builder_for_test()
-            .with_vault(LocalCspVault::builder_for_test().with_rng(rng()).build())
+            .with_vault(LocalCspVault::builder_for_test().with_rng(rng).build())
             .build();
         let (public_key, pop) = csp
             .csp_vault
@@ -98,10 +98,6 @@ mod gen_dealing_encryption_key_pair_tests {
             Err(CspDkgCreateFsKeyError::DuplicateKeyId(error))
             if error.contains("duplicate ni-dkg dealing encryption secret key id: KeyId(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a)")
         );
-    }
-
-    fn rng() -> impl CryptoRng + Rng {
-        ChaCha20Rng::seed_from_u64(42)
     }
 }
 

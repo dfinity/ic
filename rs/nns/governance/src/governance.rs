@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 use crate::{
-    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled, decoder_config,
+    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled,
+    are_subnet_splitting_proposals_enabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -150,22 +151,22 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-pub mod disburse_maturity;
+#[cfg(feature = "canbench-rs")]
+mod benches;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
-pub mod test_data;
 #[cfg(test)]
 mod tests;
-pub mod voting_power_snapshots;
 
-#[cfg(feature = "canbench-rs")]
-mod benches;
-
-#[macro_use]
-pub mod tla_macros;
+pub mod create_neuron;
+pub mod disburse_maturity;
+pub mod test_data;
 #[cfg(feature = "tla")]
 pub mod tla;
+#[macro_use]
+pub mod tla_macros;
+pub mod voting_power_snapshots;
 
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
@@ -240,7 +241,7 @@ pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 20;
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
 /// The maximum number of neurons returned by `list_neurons`
-pub const MAX_LIST_NEURONS_RESULTS: usize = 500;
+pub const MAX_LIST_NEURONS_RESULTS: usize = 50;
 
 const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 
@@ -266,9 +267,9 @@ pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
-/// The number of seconds between automated Node Provider reward events
-/// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
-pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
+/// The amount of time between when node providers are rewarded (for hosting
+/// canisters). (Such rewards come in the form of minted ICP.)
+pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = ONE_MONTH_SECONDS;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
@@ -2711,6 +2712,13 @@ impl Governance {
             ));
         }
 
+        if neuron_state == NeuronState::Dissolved {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Neuron is dissolved.",
+            ));
+        }
+
         if !is_neuron_controlled_by_caller {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
         }
@@ -4845,6 +4853,13 @@ impl Governance {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
+            ValidNnsFunction::SplitSubnet => {
+                if !are_subnet_splitting_proposals_enabled() {
+                    return Err(invalid_proposal_error(String::from(
+                        "Subnet Splitting proposals not yet enabled",
+                    )));
+                }
+            }
             _ => {}
         };
 
@@ -5037,14 +5052,16 @@ impl Governance {
             ));
         }
 
-        let self_describing_action =
-            if is_self_describing_proposal_actions_enabled() && cfg!(target_arch = "wasm32") {
-                // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-                // implemented.
-                action.to_self_describing(self.env.clone()).await.ok()
-            } else {
-                None
-            };
+        let self_describing_action = if is_self_describing_proposal_actions_enabled()
+            && cfg!(target_arch = "wasm32")
+            && !cfg!(feature = "canbench-rs")
+        {
+            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
+            // implemented.
+            action.to_self_describing(self.env.clone()).await.ok()
+        } else {
+            None
+        };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the
@@ -7810,6 +7827,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
             declining_voting_power_neuron_subset_metrics,
@@ -7874,6 +7892,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             total_staked_e8s_non_self_authenticating_controller,
             total_voting_power_non_self_authenticating_controller,
 

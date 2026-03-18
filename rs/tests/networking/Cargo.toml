@@ -41,6 +41,7 @@ ic-system-test-driver = { path = "../driver" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-utils = { workspace = true }
 itertools = { workspace = true }
@@ -84,6 +85,10 @@ path = "canister_http_stress_test.rs"
 [[bin]]
 name = "ic-systest-canister-http-soak"
 path = "canister_http_soak_test.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-flexible"
+path = "canister_http_flexible_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http"

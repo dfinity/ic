@@ -27,15 +27,17 @@ use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
+    MemoryAllocation, NumBytes, NumInstructions, Time,
     messages::{CallbackId, CanisterMessage, NO_DEADLINE, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles128()`
@@ -132,7 +134,6 @@ where
         .unwrap();
     let callback = Callback::new(
         call_context_id,
-        canister_test_id(LOCAL_CANISTER_ID),
         canister_test_id(REMOTE_CANISTER_ID),
         Cycles::new(0),
         Cycles::new(0),
@@ -175,6 +176,8 @@ where
         subnet_type,
         subnets,
         None,
+        CanisterCyclesCostSchedule::Normal,
+        BTreeSet::new(),
     ));
 
     BenchmarkArgs {

@@ -1,7 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
-load("@rules_python//python:defs.bzl", "py_test")
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "write_info_file_var")
 
 bool_flag(
@@ -102,41 +100,5 @@ buildifier(
     exclude_patterns = BUILDIFIER_EXCLUDES,
     lint_mode = "warn",
     mode = "diff",
-)
-
-py_test(
-    name = "buildifier_test",
-    size = "small",
-    srcs = ["buildifier_test.py"],
-    data = [
-        ":buildifier.check",
-        "//:WORKSPACE.bazel",
-    ],
-    env = {
-        "BUILDIFIER_CHECK_BIN": "$(location :buildifier.check)",
-        "WORKSPACE": "$(location //:WORKSPACE.bazel)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
     visibility = ["//visibility:public"],
-)
-
-sh_test(
-    name = "gazelle_test",
-    srcs = ["gazelle_test.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "//:gazelle",
-    ],
-    env = {
-        "GAZELLE_BIN": "$(rootpath //:gazelle)",
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-    ],
 )

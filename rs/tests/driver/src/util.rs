@@ -21,6 +21,7 @@ use ic_agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
     },
+    agent_error::TransportError,
     export::Principal,
     identity::BasicIdentity,
 };
@@ -48,9 +49,10 @@ use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
 use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
-    CanisterId, Cycles, PrincipalId,
+    CanisterId, PrincipalId,
     messages::{HttpCallContent, HttpQueryContent, HttpReadStateContent},
 };
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{
@@ -81,8 +83,8 @@ pub mod delegations;
 
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
-pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
-pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
+pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(40);
+pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(40);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 
@@ -92,10 +94,8 @@ pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 pub const MAX_TCP_ERROR_RETRIES: usize = 5;
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
-    ic_agent::identity::BasicIdentity::from_pem(std::io::Cursor::new(
-        TEST_IDENTITY_KEYPAIR.to_pem(),
-    ))
-    .expect("Invalid secret key.")
+    ic_agent::identity::BasicIdentity::from_pem(TEST_IDENTITY_KEYPAIR.to_pem())
+        .expect("Invalid secret key.")
 }
 
 /// Initializes a testing [Runtime] from a node's url. You should really
@@ -686,6 +686,31 @@ impl<'a> MessageCanister<'a> {
             .unwrap()
     }
 
+    pub async fn new_with_cycles_with_retries<C: Into<u128>>(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        cycles: C,
+        log: &slog::Logger,
+    ) -> MessageCanister<'a> {
+        let c = cycles.into();
+        retry_with_msg_async!(
+            format!(
+                "install MessageCanister {}",
+                effective_canister_id.to_string()
+            ),
+            log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                Self::new_with_params(agent, effective_canister_id, None, Some(c))
+                    .await
+                    .map_err(|e| anyhow!(e))
+            }
+        )
+        .await
+        .expect("Could not create message canister with cycles.")
+    }
+
     pub fn canister_id(&self) -> Principal {
         self.canister_id
     }
@@ -930,7 +955,9 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder.build().map_err(AgentError::TransportError)?;
+    let client = builder
+        .build()
+        .map_err(|e| AgentError::TransportError(TransportError::Reqwest(e)))?;
     agent_with_client_identity(url, client, identity).await
 }
 
@@ -1511,7 +1538,6 @@ pub fn escape_for_wat(id: &Principal) -> String {
 
 pub fn get_config() -> ConfigOptional {
     let template = generate_ic_config::IcConfigTemplate {
-        ipv6_address: "::".to_string(),
         ipv6_prefix: "::/64".to_string(),
         ipv4_address: "".to_string(),
         ipv4_gateway: "".to_string(),
@@ -1616,12 +1642,13 @@ pub struct MetricsFetcher {
     nodes: Vec<IcNodeSnapshot>,
     metrics: Vec<String>,
     port: u16,
+    client: reqwest::Client,
 }
 
 impl MetricsFetcher {
     /// Create a new [`MetricsFetcher`]
     pub fn new(nodes: impl Iterator<Item = IcNodeSnapshot>, metrics: Vec<String>) -> Self {
-        Self::new_with_port(nodes, metrics, 9090)
+        Self::new_with_port(nodes, metrics, REPLICA_METRICS_PORT)
     }
 
     /// Create a new [`MetricsFetcher`] for a specific port
@@ -1630,10 +1657,15 @@ impl MetricsFetcher {
         metrics: Vec<String>,
         port: u16,
     ) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(AGENT_REQUEST_TIMEOUT)
+            .build()
+            .expect("Failed to build HTTP client for metrics fetching");
         Self {
             nodes: nodes.collect(),
             metrics,
             port,
+            client,
         }
     }
 
@@ -1678,7 +1710,7 @@ impl MetricsFetcher {
 
         let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, self.port, 0, 0));
         let url = format!("http://{socket_addr}");
-        let response = reqwest::get(url).await?.text().await?;
+        let response = self.client.get(url).send().await?.text().await?;
 
         // Filter out only lines that contain metrics we are interested in
         let mut result = BTreeMap::new();

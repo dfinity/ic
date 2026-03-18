@@ -11,16 +11,17 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState,
-    canister_snapshots::CanisterSnapshotError,
+    canister_state::canister_snapshots::CanisterSnapshotError,
     canister_state::system_state::wasm_chunk_store::{WasmChunkStore, chunk_size},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, SnapshotId, SubnetId,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    SnapshotId, SubnetId,
     ingress::IngressStatus,
     messages::{CanisterCall, MessageId, RejectContext},
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::{AsErrorHelp, CanisterModule, ErrorHelp, WasmHash, doc_ref};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -75,7 +76,6 @@ pub(crate) enum StopCanisterResult {
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub(crate) struct CanisterMgrConfig {
-    pub(crate) subnet_memory_capacity: NumBytes,
     pub(crate) default_provisional_cycles_balance: Cycles,
     pub(crate) default_freeze_threshold: NumSeconds,
     pub(crate) compute_capacity: u64,
@@ -99,7 +99,6 @@ pub(crate) struct CanisterMgrConfig {
 impl CanisterMgrConfig {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        subnet_memory_capacity: NumBytes,
         default_provisional_cycles_balance: Cycles,
         default_freeze_threshold: NumSeconds,
         own_subnet_id: SubnetId,
@@ -121,7 +120,6 @@ impl CanisterMgrConfig {
         max_environment_variable_value_length: usize,
     ) -> Self {
         Self {
-            subnet_memory_capacity,
             default_provisional_cycles_balance,
             default_freeze_threshold,
             own_subnet_id,
@@ -323,10 +321,20 @@ pub(crate) struct UploadChunkResult {
 
 #[derive(Eq, PartialEq, Debug)]
 pub(crate) enum CanisterManagerError {
+    InvalidSubnetAdmin {
+        subnet_admins_expected: BTreeSet<PrincipalId>,
+        caller: PrincipalId,
+    },
     CanisterInvalidController {
         canister_id: CanisterId,
         controllers_expected: BTreeSet<PrincipalId>,
         controller_provided: PrincipalId,
+    },
+    CanisterInvalidControllerOrSubnetAdmin {
+        canister_id: CanisterId,
+        controllers_expected: BTreeSet<PrincipalId>,
+        subnet_admins_expected: BTreeSet<PrincipalId>,
+        caller: PrincipalId,
     },
     CallerNotAuthorized,
     CanisterAlreadyExists(CanisterId),
@@ -409,10 +417,6 @@ pub(crate) enum CanisterManagerError {
         value: NumBytes,
         limit: NumBytes,
     },
-    CanisterSnapshotInvalidOwnership {
-        canister_id: CanisterId,
-        snapshot_id: SnapshotId,
-    },
     CanisterSnapshotNotController {
         sender: PrincipalId,
         canister_id: CanisterId,
@@ -475,10 +479,6 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         section_name: String,
     },
-    CanisterLogMemoryLimitIsTooLow {
-        bytes: NumBytes,
-        limit: NumBytes,
-    },
     CanisterLogMemoryLimitIsTooHigh {
         bytes: NumBytes,
         limit: NumBytes,
@@ -494,11 +494,21 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::InvalidSenderSubnet(_)
             | CanisterManagerError::SenderNotInWhitelist(_)
             | CanisterManagerError::CanisterNotHostedBySubnet { .. } => ErrorHelp::InternalError,
+            CanisterManagerError::InvalidSubnetAdmin { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a subnet admin \
+                            or add the current caller as a subnet admin.".to_string(),
+                doc_link: doc_ref("invalid-subnet-admin"),
+            },
             CanisterManagerError::CanisterInvalidController { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a controller of the target canister or \
                 add the current caller as a controller."
                     .to_string(),
                 doc_link: doc_ref("invalid-controller"),
+            },
+            CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a controller of the target canister or subnet admin \
+                            or add the current caller as a controller or subnet admin.".to_string(),
+                doc_link: doc_ref("invalid-controller-subnet-admin"),
             },
             CanisterManagerError::CanisterNotFound(_) => ErrorHelp::UserError {
                 suggestion: "Check the ICP dashboard to ensure the canister exists.".to_string(),
@@ -620,12 +630,6 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Try waiting a few seconds before retrying the operation.".to_string(),
                 doc_link: doc_ref("canister-heap-delta-rate-limited"),
             },
-            CanisterManagerError::CanisterSnapshotInvalidOwnership { .. } => ErrorHelp::UserError {
-                suggestion:
-                    "Use the `list_canister_snapshot` API to see which snapshots are present."
-                        .to_string(),
-                doc_link: doc_ref("canister-snapshot-invalid-ownership"),
-            },
             CanisterManagerError::CanisterSnapshotNotController { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "Make sure you are a controller of the canister that the snapshot belongs to."
@@ -727,10 +731,6 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "The caller is not authorized to call this method.".to_string(),
                 doc_link: "".to_string(),
             },
-            CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
-                suggestion: "Set a higher canister log memory limit.".to_string(),
-                doc_link: "".to_string(),
-            },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
                 doc_link: "".to_string(),
@@ -797,6 +797,24 @@ impl From<CanisterManagerError> for UserError {
                     available.display(),
                 ),
             ),
+            InvalidSubnetAdmin {
+                subnet_admins_expected,
+                caller,
+            } => {
+                let subnet_admins_expected = subnet_admins_expected
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                Self::new(
+                    ErrorCode::InvalidSubnetAdmin,
+                    format!(
+                        "Only the subnet admins can perform certain actions.\n\
+                        Subnet admins: {subnet_admins_expected}\n\
+                        Sender's ID: {caller}{additional_help}"
+                    ),
+                )
+            }
             CanisterNonEmpty(canister_id) => Self::new(
                 ErrorCode::CanisterNonEmpty,
                 format!(
@@ -819,6 +837,32 @@ impl From<CanisterManagerError> for UserError {
                         "Only the controllers of the canister {canister_id} can control it.\n\
                         Canister's controllers: {controllers_expected}\n\
                         Sender's ID: {controller_provided}{additional_help}"
+                    ),
+                )
+            }
+            CanisterInvalidControllerOrSubnetAdmin {
+                canister_id,
+                controllers_expected,
+                subnet_admins_expected,
+                caller,
+            } => {
+                let controllers_expected = controllers_expected
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                let subnet_admins_expected = subnet_admins_expected
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                Self::new(
+                    ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
+                    format!(
+                        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions.\n\
+                        Canister's controllers: {controllers_expected}\n\
+                        Subnet admins: {subnet_admins_expected}\n\
+                        Sender's ID: {caller}{additional_help}"
                     ),
                 )
             }
@@ -985,15 +1029,6 @@ impl From<CanisterManagerError> for UserError {
                     "Canister {canister_id} is heap delta rate limited: current delta debit is {value}, but limit is {limit}.{additional_help}"
                 ),
             ),
-            CanisterSnapshotInvalidOwnership {
-                canister_id,
-                snapshot_id,
-            } => Self::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "The snapshot {snapshot_id} does not belong to canister {canister_id}.{additional_help}",
-                ),
-            ),
             CanisterSnapshotExecutionStateNotFound { canister_id } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!("Failed to create snapshot for empty canister {canister_id}:",),
@@ -1118,12 +1153,6 @@ impl From<CanisterManagerError> for UserError {
             CallerNotAuthorized => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The caller is not authorized to call this method.".to_string(),
-            ),
-            CanisterLogMemoryLimitIsTooLow { bytes, limit } => Self::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "The canister log memory limit {bytes} is too low. It must be at least {limit}."
-                ),
             ),
             CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,

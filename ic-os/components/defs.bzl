@@ -1,5 +1,8 @@
 """ Rules for working with components. """
 
+# Destination path for the OS-type marker file, shared by all OS variants.
+OS_TYPE_DEST = "/opt/ic/share/os-type"
+
 def _tree_hash_impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
     input_paths = []

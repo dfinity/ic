@@ -95,8 +95,6 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     );
 }
 
-// TODO(CRP-430): check/improve the test coverage of SKS checks.
-
 #[test]
 fn should_fail_check_keys_with_registry_if_no_keys_are_present_in_registry() {
     let crypto = TestKeygenCrypto::builder()
@@ -250,7 +248,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_malformed() {
 fn should_fail_check_keys_with_registry_if_node_signing_secret_key_is_missing() {
     let node_signing_pk_without_corresponding_secret_key = PublicKey {
         algorithm: AlgorithmId::Ed25519 as i32,
-        key_value: [1u8; 32].to_vec(),
+        key_value: [1_u8; 32].to_vec(),
         version: 0,
         proof_data: None,
         timestamp: None,
@@ -277,7 +275,7 @@ fn should_fail_check_keys_with_registry_if_node_signing_secret_key_is_missing() 
 fn should_fail_check_keys_with_registry_if_committee_member_secret_key_is_missing() {
     let committee_pk_without_corresponding_secret_key = PublicKey {
         algorithm: AlgorithmId::MultiBls12_381 as i32,
-        key_value: [1u8; 96].to_vec(),
+        key_value: [1_u8; 96].to_vec(),
         version: 0,
         proof_data: Some(vec![1u8; 48]),
         timestamp: None,
@@ -959,7 +957,7 @@ fn should_fail_check_keys_with_registry_if_registry_tls_cert_has_no_matching_sec
         )
         .build();
     let (tls_cert_without_corresponding_secret_key, _tls_cert_der) = {
-        let seed = Seed::from_bytes(&[9u8; 32]);
+        let seed = Seed::from_bytes(&[9_u8; 32]);
         let not_before = 123_u64;
         let not_after_unix_time = 456_u64;
         let common_name = "another_common_name";

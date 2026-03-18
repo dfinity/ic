@@ -8,8 +8,8 @@ use dfn_candid::candid;
 use ic_base_types::{NodeId, SubnetId};
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, prepare_registry, prepare_registry_with_two_node_sets},
 };
@@ -22,7 +22,7 @@ use registry_canister::{
 
 #[test]
 fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let (init_mutate, subnet_id, _, _) = prepare_registry(num_nodes_in_subnet, 0);
@@ -100,7 +100,7 @@ fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_remove_nodes_from_subnet() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             // An attacker got a canister that is trying to pass for the governance
             // canister...
@@ -168,7 +168,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_remove_nodes_from_s
 
 #[test]
 fn test_remove_nodes_from_subnet_succeeds() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet1 = 4_usize;
             let num_nodes_in_subnet2 = 4_usize;
@@ -264,7 +264,7 @@ fn test_remove_nodes_from_subnet_succeeds() {
 /// `remove_nodes_from_subnet`
 #[test]
 fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 2_usize;
             let num_unassigned_nodes = 2_usize;

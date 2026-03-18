@@ -26,6 +26,7 @@ ic-nns-constants = { path = "../nns/constants" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
@@ -47,7 +48,7 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "40.0.0", default-features = false, features = [
+wasmtime = { version = "42.0.1", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',

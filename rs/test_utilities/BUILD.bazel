@@ -12,6 +12,7 @@ rust_library(
         # Keep sorted.
         "//rs/bitcoin/replica_types",
         "//rs/config",
+        "//rs/consensus/features",
         "//rs/crypto/sha2",
         "//rs/crypto/tree_hash",
         "//rs/cycles_account_manager",
@@ -23,6 +24,7 @@ rust_library(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/test_utilities/types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:hex-literal",

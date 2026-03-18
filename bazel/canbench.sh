@@ -20,15 +20,14 @@
 
 set -eEuo pipefail
 
-RUNFILES="$PWD"
-REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
-REPO_RESULTS_PATH="${REPO_PATH}/${CANBENCH_RESULTS_PATH}"
 CANBENCH_OUTPUT="$(mktemp -t canbench_output.txt.XXXX)"
 NOISE_THRESHOLD_ARG="${NOISE_THRESHOLD:+--noise-threshold ${NOISE_THRESHOLD}}"
 PATTERN_ARG="${CANBENCH_PATTERN:+${CANBENCH_PATTERN}}"
+REPO_RESULTS_PATH="$CANBENCH_RESULTS_PATH"
 
 # Generates a canbench.yml dynamically to be used by canbench.
-CANBENCH_YML="${RUNFILES}/canbench.yml"
+CANBENCH_YML="$(mktemp -d)/canbench.yml"
+export CANBENCH_CFG_FILE="$CANBENCH_YML"
 
 echo "wasm_path:" >${CANBENCH_YML}
 echo "  ${WASM_PATH}" >>${CANBENCH_YML}
@@ -44,7 +43,7 @@ if [ -n "${CANBENCH_INIT_ARGS_HEX:-}" ]; then
 fi
 
 if [ -s "${CANBENCH_STABLE_MEMORY_FILE:-}" ]; then
-    TMP_MEMORY_FILE=$(mktemp -p . XXXXXXX.mem)
+    TMP_MEMORY_FILE=$(mktemp -p . mem.XXXXXXX)
     if [[ "${CANBENCH_STABLE_MEMORY_FILE}" =~ [.]gz$ ]]; then
         gunzip -c "${CANBENCH_STABLE_MEMORY_FILE}" >"$TMP_MEMORY_FILE"
     else
@@ -64,7 +63,7 @@ elif [ "$1" = "--update" ]; then
     # Since we cannot specify an empty results file for the first time, we need to copy the default
     # results file to the desired location.
     if [ ! -s ${REPO_RESULTS_PATH} ]; then
-        cp "${RUNFILES}/canbench_results.yml" "${REPO_RESULTS_PATH}"
+        cp "$PWD/canbench_results.yml" "${REPO_RESULTS_PATH}"
     fi
 elif [ "$1" = "--test" ]; then
     # Runs the benchmark test that fails if the diffs are new or above the threshold.

@@ -4,11 +4,13 @@ use crate::{
         Governance, ValidGovernanceProto,
         test_helpers::{DoNothingLedger, basic_governance_proto},
     },
+    pb::v1::NervousSystemParameters,
     pb::v1::{
         self as pb, ExecuteExtensionOperation, Topic::TreasuryAssetManagement,
         nervous_system_function,
     },
     storage::cache_registered_extension,
+    types::NativeAction,
     types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment},
 };
 use ic_base_types::{CanisterId, PrincipalId};
@@ -305,4 +307,67 @@ fn test_all_topics() {
         let observed = governance.get_topic_and_criticality_for_action(&action);
         assert_eq!(observed, expected);
     }
+}
+
+#[test]
+fn test_additional_critical_native_action_ids_upgrades_criticality() {
+    //  Create a governance instance with custom_proposal_criticality set
+    let mut governance_proto = basic_governance_proto();
+    let mut parameters = NervousSystemParameters::with_default_values();
+    parameters.custom_proposal_criticality = Some(pb::CustomProposalCriticality {
+        additional_critical_native_action_ids: vec![NativeAction::Motion as u64],
+    });
+    governance_proto.parameters = Some(parameters);
+    let governance_proto = ValidGovernanceProto::try_from(governance_proto).unwrap();
+    let governance = Governance::new(
+        governance_proto,
+        Box::<NativeEnvironment>::default(),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    // Test that Motion is upgraded to Critical due to custom_proposal_criticality
+    let motion_action = pb::proposal::Action::Motion(pb::Motion {
+        motion_text: "test".to_string(),
+    });
+    let (topic, criticality) = governance
+        .get_topic_and_criticality_for_action(&motion_action)
+        .unwrap();
+    assert_eq!(topic, Some(pb::Topic::Governance));
+    assert_eq!(
+        criticality,
+        ProposalCriticality::Critical,
+        "Motion should be upgraded to Critical when in custom_proposal_criticality"
+    );
+
+    // Test that a critical action stays critical.
+    let transfer_action =
+        pb::proposal::Action::TransferSnsTreasuryFunds(pb::TransferSnsTreasuryFunds {
+            from_treasury: pb::transfer_sns_treasury_funds::TransferFrom::IcpTreasury as i32,
+            amount_e8s: 1000,
+            memo: None,
+            to_principal: None,
+            to_subaccount: None,
+        });
+    let (topic, criticality) = governance
+        .get_topic_and_criticality_for_action(&transfer_action)
+        .unwrap();
+    assert_eq!(topic, Some(pb::Topic::TreasuryAssetManagement));
+    assert_eq!(criticality, ProposalCriticality::Critical);
+
+    // Test that a normal action stays normal when not in custom_proposal_criticality
+    let register_dapp_action =
+        pb::proposal::Action::RegisterDappCanisters(pb::RegisterDappCanisters {
+            canister_ids: vec![],
+        });
+    let (topic, criticality) = governance
+        .get_topic_and_criticality_for_action(&register_dapp_action)
+        .unwrap();
+    assert_eq!(topic, Some(pb::Topic::DappCanisterManagement));
+    assert_eq!(
+        criticality,
+        ProposalCriticality::Normal,
+        "RegisterDappCanisters should stay Normal when NOT in custom_proposal_criticality"
+    );
 }

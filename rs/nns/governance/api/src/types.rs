@@ -1979,7 +1979,9 @@ pub struct WaitForQuietState {
 /// This is a view of the ProposalData returned by API queries and is NOT used
 /// for storage. The ballots are restricted to those of the caller's neurons and
 /// additionally it has the computed fields, topic, status, and reward_status.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq, Default,
+)]
 pub struct ProposalInfo {
     /// The unique id for this proposal.
     pub id: Option<::ic_nns_common::pb::v1::ProposalId>,
@@ -2448,6 +2450,7 @@ pub mod create_service_nervous_system {
         pub neuron_maximum_age_for_age_bonus: Option<::ic_nervous_system_proto::pb::v1::Duration>,
         pub neuron_maximum_age_bonus: Option<::ic_nervous_system_proto::pb::v1::Percentage>,
         pub voting_reward_parameters: Option<governance_parameters::VotingRewardParameters>,
+        pub custom_proposal_criticality: Option<governance_parameters::CustomProposalCriticality>,
     }
     /// Nested message and enum types in `GovernanceParameters`.
     pub mod governance_parameters {
@@ -2465,6 +2468,18 @@ pub mod create_service_nervous_system {
             pub final_reward_rate: Option<::ic_nervous_system_proto::pb::v1::Percentage>,
             pub reward_rate_transition_duration:
                 Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            Clone,
+            PartialEq,
+            Debug,
+            Default,
+        )]
+        pub struct CustomProposalCriticality {
+            pub additional_critical_native_action_ids: Option<Vec<u64>>,
         }
     }
 }
@@ -2939,6 +2954,7 @@ pub mod governance {
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
         pub fully_lost_voting_power_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        pub total_maturity_disbursements_in_progress_e8s_equivalent: u64,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
@@ -3056,7 +3072,7 @@ pub struct ListProposalInfoResponse {
 /// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
 /// which is currently 500 neurons.  If you are unsure of the number of results in a set,
 /// you can use the `total_pages_available` field in the response to determine how many
-/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.
 /// When paging through results, it is good to keep in mind that newly inserted neurons
 /// could be missed if they are inserted between calls to pages, and this could result in missing
 /// a neuron in the combined responses.
@@ -4091,6 +4107,8 @@ pub enum NnsFunction {
     /// UpdateConfigOfSubnet can be used instead. But otherwise, this is the
     /// state of the art (as of Oct 2025) way of doing subnet recovery.
     SetSubnetOperationalLevel = 55,
+    /// The proposal requests to split a subnet.
+    SplitSubnet = 56,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4174,6 +4192,7 @@ impl NnsFunction {
             NnsFunction::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
             NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
+            NnsFunction::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4254,6 +4273,7 @@ impl NnsFunction {
             "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
+            "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             _ => None,
         }
     }
@@ -4523,3 +4543,22 @@ pub struct SelfDescribingProposalAction {
 pub struct GetPendingProposalsRequest {
     pub return_self_describing_action: Option<bool>,
 }
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct CreateNeuronRequest {
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub source_subaccount: Option<Vec<u8>>,
+    pub amount_e8s: Option<u64>,
+    pub controller: Option<PrincipalId>,
+    pub followees: Option<manage_neuron::SetFollowing>,
+    pub dissolve_delay_seconds: Option<u64>,
+    pub dissolving: Option<bool>,
+    pub auto_stake_maturity: Option<bool>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct CreatedNeuron {
+    pub neuron_id: Option<NeuronId>,
+}
+
+pub type CreateNeuronResponse = Result<CreatedNeuron, GovernanceError>;

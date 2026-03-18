@@ -39,7 +39,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers,
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
-use ic_types::{Cycles, ExecutionRound, Height};
+use ic_types::{ExecutionRound, Height};
+use ic_types_cycles::Cycles;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -127,7 +128,7 @@ fn entries_sorted_lexicographically() {
     let mut ingress_history = IngressHistoryState::new();
     let time = UNIX_EPOCH;
 
-    for i in (0..10u64).rev() {
+    for i in (0..10_u64).rev() {
         ingress_history.insert(
             message_test_id(i),
             IngressStatus::Known {
@@ -141,7 +142,7 @@ fn entries_sorted_lexicographically() {
             |_| {},
         );
     }
-    let mut expected: Vec<_> = (0..10u64).map(message_test_id).collect();
+    let mut expected: Vec<_> = (0..10_u64).map(message_test_id).collect();
     expected.sort();
 
     let actual: Vec<_> = ingress_history
@@ -369,26 +370,23 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
-    // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
-    let mut proto = pb::SystemMetadata::from(&system_metadata);
-    proto.canister_allocation_ranges = None;
-    assert_eq!(
-        system_metadata,
-        (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
-            .try_into()
-            .unwrap()
-    );
-
     // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
     fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
         let proto = pb::SystemMetadata::from(system_metadata);
         assert_eq!(
             *system_metadata,
-            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
+            (
+                proto,
+                system_metadata.subnet_schedule.clone(),
+                &DummyMetrics as &dyn CheckpointLoadingMetrics
+            )
                 .try_into()
                 .unwrap()
         );
     }
+
+    // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
+    validate_roundtrip_encoding(&system_metadata);
 
     // Set `canister_allocation_ranges`, but not `last_generated_canister_id`.
     system_metadata.canister_allocation_ranges = canister_allocation_ranges.try_into().unwrap();
@@ -417,6 +415,13 @@ fn system_metadata_roundtrip_encoding() {
             failed_blockmakers: vec![node_test_id(4)],
         },
     );
+    validate_roundtrip_encoding(&system_metadata);
+
+    // Add scheduling priority for a canister.
+    system_metadata
+        .subnet_schedule
+        .get_mut(CanisterId::from_u64(1))
+        .accumulated_priority = 1.into();
     validate_roundtrip_encoding(&system_metadata);
 }
 
@@ -1037,7 +1042,6 @@ fn sign_with_threshold_context_roundtrip() {
                     derivation_path: Arc::new(vec![]),
                     pseudo_random_id: [1; 32],
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: None,
                     nonce: Some([3; 32]),
                 },
             );

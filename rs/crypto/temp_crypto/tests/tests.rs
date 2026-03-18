@@ -65,8 +65,8 @@ mod vault_rng {
     const REG_V1: RegistryVersion = RegistryVersion::new(1);
     const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
 
-    const SEED_0: [u8; 32] = [0u8; 32];
-    const SEED_1: [u8; 32] = [1u8; 32];
+    const SEED_0: [u8; 32] = [0_u8; 32];
+    const SEED_1: [u8; 32] = [1_u8; 32];
 
     #[test]
     fn should_have_same_initial_keys_with_same_rng() {

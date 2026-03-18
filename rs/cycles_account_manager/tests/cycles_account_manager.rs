@@ -7,9 +7,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{CanisterIdRecord, IC_00, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    SystemState,
-    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
-    testing::SystemStateTesting,
+    SystemState, canister_state::execution_state::WasmExecutionMode, testing::SystemStateTesting,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -21,12 +19,12 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     batch::CanisterCyclesCostSchedule,
     messages::{SignedIngress, extract_effective_canister_id},
-    nominal_cycles::NominalCycles,
     time::{CoarseTime, UNIX_EPOCH},
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
 
@@ -909,11 +907,12 @@ fn cycles_withdraw_for_execution() {
 
     assert!(
         cycles_account_manager
-            .can_withdraw_cycles(
+            .can_withdraw_cycles_with_threshold(
                 &system_state,
                 exec_cycles_max,
                 memory_usage,
                 message_memory_usage,
+                system_state.reserved_balance(),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
                 false,
@@ -936,11 +935,12 @@ fn cycles_withdraw_for_execution() {
     );
     assert_eq!(system_state.balance(), freeze_threshold_cycles);
     assert_eq!(
-        cycles_account_manager.can_withdraw_cycles(
+        cycles_account_manager.can_withdraw_cycles_with_threshold(
             &system_state,
             Cycles::new(10),
             memory_usage,
             message_memory_usage,
+            system_state.reserved_balance(),
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
             false,
@@ -1068,11 +1068,12 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
 
     assert!(
         cycles_account_manager
-            .can_withdraw_cycles(
+            .can_withdraw_cycles_with_threshold(
                 &system_state,
                 exec_cycles_max,
                 memory_usage,
                 message_memory_usage,
+                system_state.reserved_balance(),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
                 false,

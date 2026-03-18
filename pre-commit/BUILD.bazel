@@ -1,183 +1,108 @@
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
-sh_test(
-    name = "ruff-lint",
-    size = "small",
-    srcs = ["ruff-lint.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "//:ruff",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "ruff_path": "$(rootpath //:ruff)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-)
-
 sh_binary(
-    name = "ruff-format",
-    srcs = ["ruff-format.sh"],
+    name = "shfmt-fix",
+    srcs = ["shfmt.sh"],
     data = [
-        "//:WORKSPACE.bazel",
-        "//:ruff",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "ruff_path": "$(rootpath //:ruff)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-    visibility = ["//visibility:public"],
-)
-
-sh_test(
-    name = "buf",
-    size = "small",
-    srcs = ["buf.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "//:buf.yaml",
-        "@rules_buf_toolchains//:buf",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
-        "buf_config": "$(rootpath //:buf.yaml)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-)
-
-sh_test(
-    name = "protobuf-format-check",
-    size = "small",
-    srcs = ["protobuf-format-check.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "@rules_buf_toolchains//:buf",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-)
-
-sh_binary(
-    name = "protobuf-format",
-    srcs = ["protobuf-format.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "@rules_buf_toolchains//:buf",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-    visibility = ["//visibility:public"],
-)
-
-sh_test(
-    name = "shfmt-check",
-    size = "small",
-    srcs = ["shfmt-format.sh"],
-    args = ["$(rootpath //:WORKSPACE.bazel)"],
-    data = [
-        "//:WORKSPACE.bazel",
         "//:shfmt",
     ],
     env = {
-        # Hack to get a path to the actual checkout
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "shfmt_path": "$(rootpath //:shfmt)",
+        "SHFMT": "$(rootpath //:shfmt)",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "shfmt-check",
+    srcs = ["shfmt.sh"],
+    data = [
+        "//:shfmt",
+    ],
+    env = {
+        "SHFMT": "$(rootpath //:shfmt)",
         # read by our script to differentiate between write & check
         "SHFMT_CHECK": "1",
     },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-)
-
-sh_binary(
-    name = "shfmt-format",
-    srcs = ["shfmt-format.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "//:shfmt",
-    ],
-    env = {
-        # Hack to get a path to the actual checkout
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "shfmt_path": "$(rootpath //:shfmt)",
-    },
-    tags = [
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-    ],
     visibility = ["//visibility:public"],
 )
 
-sh_test(
-    name = "DFINITY-capitalization",
-    size = "small",
-    srcs = ["DFINITY-capitalization.sh"],
+sh_binary(
+    name = "ruff-fix",
+    srcs = ["ruff-fix.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:ruff",
     ],
     env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "RUFF": "$(rootpath //:ruff)",
     },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
+    visibility = ["//visibility:public"],
 )
 
-sh_test(
-    name = "do-not-merge",
-    size = "small",
-    srcs = ["do-not-merge.sh"],
+sh_binary(
+    name = "ruff-check",
+    srcs = ["ruff-check.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:ruff",
     ],
     env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "RUFF": "$(rootpath //:ruff)",
     },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "buf-fix",
+    srcs = ["buf-fix.sh"],
+    data = [
+        "@rules_buf_toolchains//:buf",
     ],
+    env = {
+        "BUF": "$(rootpath @rules_buf_toolchains//:buf)",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "buf-check",
+    srcs = ["buf-check.sh"],
+    data = [
+        "@rules_buf_toolchains//:buf",
+    ],
+    env = {
+        "BUF": "$(rootpath @rules_buf_toolchains//:buf)",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "DFINITY-capitalization-check",
+    srcs = ["DFINITY-capitalization-check.sh"],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "do-not-merge-check",
+    srcs = ["do-not-merge-check.sh"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "buildifier-fix",
+    actual = "//bazel:buildifier",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "buildifier-check",
+    actual = "//bazel:buildifier.check",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "gazelle-check",
+    actual = "//:gazelle",
+    visibility = ["//visibility:public"],
 )
 
 sh_test(
