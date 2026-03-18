@@ -14,7 +14,6 @@ RUN echo "[storage]\nrootless_storage_path=\"/tmp/containers\"" > /etc/container
 # marker for scripts to check if they are running in this container
 RUN touch /home/ubuntu/.ic-build-container
 
-# Todo: split out essential packages from application-level packages
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
