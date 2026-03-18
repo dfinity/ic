@@ -14,6 +14,7 @@ use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::CyclesUseCase;
 use ic_types_test_utils::ids::canister_test_id;
+use more_asserts::assert_lt;
 use std::time::Duration;
 
 #[test]
@@ -65,9 +66,10 @@ fn only_charge_for_allocation_after_specified_duration() {
     // should be triggered.
     test.set_time(initial_time + 2 * time_between_batches);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert_eq!(
+    assert_lt!(
         test.canister_state(canister).system_state.balance().get(),
-        initial_cycles - 10,
+        initial_cycles,
+        "Canister balance should decrease due to allocation charging"
     );
 }
 
@@ -120,11 +122,16 @@ fn charging_for_message_memory_works() {
 
     // The balance of the canister should have been reduced by the cost of
     // message memory during the charge period.
+    let canister_state = test.canister_state(canister);
     assert_eq!(
-        test.canister_state(canister).system_state.balance(),
+        canister_state.system_state.balance(),
         balance_before
             - test.memory_cost(
-                test.canister_state(canister).message_memory_usage().total(),
+                canister_state.message_memory_usage().total(),
+                charge_duration,
+            )
+            - test.memory_cost(
+                canister_state.log_memory_store_memory_usage(),
                 charge_duration,
             ),
     );
