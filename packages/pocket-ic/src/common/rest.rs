@@ -845,7 +845,18 @@ impl ExtendedSubnetConfigSet {
             );
         }
 
-        // 4. Check for existence across everything (again cloning the iterator to prevent its consumption).
+        // 4. Cloud engines must have a "free" cost schedule.
+        if self
+            .cloud_engine
+            .iter()
+            .any(|spec| spec.cost_schedule != CanisterCyclesCostSchedule::Free)
+        {
+            return Err(
+                "Every subnet of kind `CloudEngine` must have cost schedule of kind `Free`".into(),
+            );
+        }
+
+        // 5. Check for existence across everything (again cloning the iterator to prevent its consumption).
         let has_any = all.clone().next().is_some();
 
         if !has_any {

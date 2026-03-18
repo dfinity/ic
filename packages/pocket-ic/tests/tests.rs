@@ -3402,6 +3402,19 @@ fn subnet_admins_on_default_cost_schedule() {
 }
 
 #[test]
+#[should_panic(
+    expected = "Every subnet of kind `CloudEngine` must have cost schedule of kind `Free`"
+)]
+fn default_cost_schedule_on_cloud_engine() {
+    // Creating a cloud engine with the default cost schedule should fail.
+    let config = ExtendedSubnetConfigSet {
+        cloud_engine: vec![SubnetSpec::default()],
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new_with_config(config).build();
+}
+
+#[test]
 fn cloud_engine_default_effective_canister_id() {
     // Create a PocketIC instance with a single (cloud) engine and NNS subnet.
     let admin = Principal::anonymous();
