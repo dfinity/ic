@@ -15,15 +15,15 @@ if ! cargo clippy --locked --all-features --workspace --all-targets --keep-going
     # solid gold, not raw ore.
     echo ""
     echo "========================================"
-    echo -ne "\033[1;31m"  # Start red.
+    echo -ne "\033[1;31m" # Start red.
     echo "Clippy violations found!"
-    echo -ne "\033[0m"     # Clear formatting.
+    echo -ne "\033[0m" # Clear formatting.
     echo ""
-    echo -ne "\033[1;32m"  # Start green.
+    echo -ne "\033[1;32m" # Start green.
     echo "To automatically fix many of these, run:"
     echo ""
     echo "    cargo clippy --fix"
-    echo -ne "\033[0m"     # Clear formatting.
+    echo -ne "\033[0m" # Clear formatting.
     echo ""
     echo "========================================"
     exit 1
