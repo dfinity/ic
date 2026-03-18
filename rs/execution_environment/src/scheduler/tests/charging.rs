@@ -11,9 +11,9 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::CyclesUseCase;
 use ic_types_test_utils::ids::canister_test_id;
 use std::time::Duration;
 
@@ -261,6 +261,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
+        None,
         Some(initial_time),
         None,
         Some(canister_test_id(10).get()),
@@ -370,6 +371,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         Cycles::new(17_780_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
+        None,
         None,
         Some(initial_time),
         None,

@@ -1,6 +1,6 @@
 use crate::LIMITER_REJECT_COUNT;
 use candid::CandidType;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
@@ -160,7 +160,7 @@ mod tests {
         assert_eq!(limiter.get_count(), Cycles::new(24));
 
         // Times in the past should be added to the most recent window.
-        limiter.add(t, Cycles::from(1u128));
+        limiter.add(t, Cycles::from(1_u128));
         assert_eq!(limiter.time_windows.len(), 2);
         assert_eq!(limiter.get_count(), Cycles::new(25));
 

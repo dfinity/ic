@@ -12,6 +12,7 @@ candid = { workspace = true }
 canister-test = { path = "../canister_test" }
 ic-cdk = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-base-types = { path = "../../types/base_types" }
 lazy_static = "1.4.0"

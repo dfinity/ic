@@ -20,6 +20,7 @@ ic-system-test-driver = { path = "../driver" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
 slog = { workspace = true }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-config = { path = "../../config" }
 ic-cdk = { workspace = true }

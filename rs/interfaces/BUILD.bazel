@@ -21,6 +21,7 @@ rust_library(
         "//rs/registry/provisional_whitelist",
         "//rs/registry/subnet_type",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",

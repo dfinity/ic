@@ -363,7 +363,7 @@ pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
                 let mut rng = StdRng::from_entropy();
                 let prob = rng.r#gen::<f64>() * 100.0;
 
-                let mut payload = [0u8; 8];
+                let mut payload = [0_u8; 8];
                 rng.fill_bytes(&mut payload);
                 let canister_request = GenericRequest::new(
                     counter_canister_principal,

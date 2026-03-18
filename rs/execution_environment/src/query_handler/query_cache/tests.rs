@@ -11,7 +11,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::universal_canister::wasm;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
@@ -21,6 +20,7 @@ use ic_types::{
     },
     time,
 };
+use ic_types_cycles::CyclesUseCase;
 use ic_types_test_utils::ids::subnet_test_id;
 use ic_universal_canister::call_args;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};

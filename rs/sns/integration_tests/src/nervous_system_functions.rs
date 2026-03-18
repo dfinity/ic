@@ -132,7 +132,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             &&nervous_system_function
         );
 
-        let invalid_value = 5i64;
+        let invalid_value = 5_i64;
         let proposal_payload = Proposal {
             title: "An invalid ExecuteNervousSystemFunction call".into(),
             action: Some(Action::ExecuteGenericNervousSystemFunction(
@@ -157,7 +157,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
                 .contains("Value < 10. Invalid!")
         );
 
-        let valid_value = 11i64;
+        let valid_value = 11_i64;
 
         let proposal_payload = Proposal {
             title: "A valid ExecuteNervousSystemFunction call".into(),
