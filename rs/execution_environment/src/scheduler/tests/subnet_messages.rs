@@ -414,6 +414,53 @@ fn drain_subnet_queues_skips_messages_targeting_aborted_canister() {
     assert!(queues.pop_canister_output(&xnet_caller_3).is_some());
 }
 
+/// `drain_subnet_queues` breaks the loop when an (install code) execution is
+/// paused.
+#[test]
+fn drain_subnet_queues_breaks_on_paused_execution() {
+    const SLICE: u64 = 10;
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_message: NumInstructions::from(100),
+            max_instructions_per_slice: NumInstructions::from(SLICE),
+            max_instructions_per_install_code: NumInstructions::new(100),
+            max_instructions_per_install_code_slice: NumInstructions::new(SLICE),
+            ..zero_instruction_overhead_config()
+        })
+        .build();
+    let canister = test.create_canister();
+
+    // Install code that needs more than one DTS slice → will be paused.
+    test.inject_install_code_call_to_ic00(
+        canister,
+        TestInstallCode::Reinstall {
+            init: instructions(SLICE * 3),
+        },
+    );
+    // A second message from a different sender (in a different input queue).
+    test.inject_call_to_ic00(
+        Method::CanisterStatus,
+        Encode!(&CanisterIdRecord::from(canister)).unwrap(),
+        Cycles::zero(),
+        canister_test_id(42),
+        InputQueueType::RemoteSubnet,
+    );
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 2);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The install code was popped and paused after one slice.
+    assert!(
+        test.state()
+            .canister_state(&canister)
+            .unwrap()
+            .has_paused_install_code()
+    );
+    // The loop broke immediately, so the other message was not executed.
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+}
+
 mod can_execute_subnet_msg_tests {
     use super::*;
     use candid::CandidType;
