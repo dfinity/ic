@@ -37,7 +37,7 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:15e6eca52d696697a681916c92ab3623ebff1fcff70156220b0270c2985a6b2b
+      image: ghcr.io/dfinity/ic-build@sha256:0a0cff0b12c7586c2f312c739176924edf0c9e71df92f382eba836913da9f1c6
       options: >-
          -e NODE_NAME --mount type=tmpfs,target="/tmp/containers"
     steps:
@@ -47,6 +47,7 @@ jobs:
           # Ensures we fetch the merge-base, which we compare against
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.commit-sha }}
+      - uses: ./.github/actions/netrc
       - name: Run candid compatibility checks
         uses: ./.github/actions/bazel
         with:
@@ -77,6 +78,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
           token: ${{ steps.app-token.outputs.token }}
+      - uses: ./.github/actions/netrc
       - name: Run Linter
         id: linter
         uses: ./.github/actions/bazel
@@ -86,9 +88,21 @@ jobs:
 
             EXIT_STATUS=0
 
-            bazel run :buildifier
-            bazel run :shfmt-format
-            bazel run :ruff-format
+            # First run all checks and record any potential error
+            for check in //pre-commit:{shfmt-check,ruff-check,buf-check,DFINITY-capitalization-check,do-not-merge-check,buildifier-check,gazelle-check} ; do
+              echo -n "Checking $check ... "
+              if bazel run "$check"; then
+                echo "ok"
+              else
+                echo "failed"
+                EXIT_STATUS=1
+              fi
+            done
+
+            # Then try to autofix whenever possible
+            bazel run //pre-commit:buildifier-fix
+            bazel run //pre-commit:shfmt-fix
+            bazel run //pre-commit:ruff-fix
             bazel run :rustfmt
             bazel run :gazelle
 

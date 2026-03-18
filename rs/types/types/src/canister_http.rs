@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, Cycles, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
@@ -62,6 +62,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     state::system_metadata::v1 as pb_metadata,
 };
+use ic_types_cycles::Cycles;
 use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
@@ -507,12 +508,14 @@ impl CanisterHttpRequestContext {
         request: &Request,
         args: CanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
-        subnet_size: usize,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
         validate_http_headers_and_body(args.headers.get(), args.body.as_ref().unwrap_or(&vec![]))?;
+        if node_ids.is_empty() {
+            return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
+        }
 
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
@@ -579,7 +582,7 @@ impl CanisterHttpRequestContext {
             refund_status: RefundStatus {
                 //TODO(IC-1937): subtract the base fee from the refundable amount.
                 refundable_cycles: request.payment,
-                per_replica_allowance: request.payment / subnet_size.max(1),
+                per_replica_allowance: request.payment / node_ids.len(),
                 refunded_cycles: Cycles::new(0),
                 refunding_nodes: BTreeSet::new(),
             },
@@ -1041,7 +1044,7 @@ impl CountBytes for CanisterHttpResponseProof {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Cycles, messages::NO_DEADLINE, time::UNIX_EPOCH};
+    use crate::{messages::NO_DEADLINE, time::UNIX_EPOCH};
 
     use super::*;
 
@@ -1247,7 +1250,7 @@ mod tests {
         // PUT with is_replicated None -> rejected
         let args = dummy_args(HttpMethod::PUT, None);
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1257,7 +1260,7 @@ mod tests {
         // PUT with is_replicated Some(true) -> rejected
         let args = dummy_args(HttpMethod::PUT, Some(true));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1267,7 +1270,7 @@ mod tests {
         // PUT with is_replicated Some(false) -> accepted
         let args = dummy_args(HttpMethod::PUT, Some(false));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1287,7 +1290,7 @@ mod tests {
         // DELETE with is_replicated None -> rejected
         let args = dummy_args(HttpMethod::DELETE, None);
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1297,7 +1300,7 @@ mod tests {
         // DELETE with is_replicated Some(true) -> rejected
         let args = dummy_args(HttpMethod::DELETE, Some(true));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1307,7 +1310,7 @@ mod tests {
         // DELETE with is_replicated Some(false) -> accepted
         let args = dummy_args(HttpMethod::DELETE, Some(false));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
@@ -1335,12 +1338,29 @@ mod tests {
         });
 
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
 
         assert_matches!(
             result,
             Err(CanisterHttpRequestContextError::TransformPrincipalId(_))
+        );
+    }
+
+    #[test]
+    fn rejects_empty_node_ids() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::new();
+        let request = dummy_request();
+        let args = dummy_args(HttpMethod::GET, None);
+
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)
         );
     }
 

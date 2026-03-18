@@ -50,7 +50,7 @@ fn test_fee_range(
         &mut utxos,
         amount,
         fee_rate_in_millikoinus_per_byte,
-        crate::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+        crate::DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION,
         &fee_estimator,
     )
     .unwrap();

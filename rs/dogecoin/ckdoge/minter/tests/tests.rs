@@ -206,7 +206,7 @@ mod deposit {
 
 mod withdrawal {
     use ic_ckdoge_minter::{
-        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
+        DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
         WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
     };
     use ic_ckdoge_minter_test_utils::{
@@ -420,7 +420,7 @@ mod withdrawal {
         };
         // Step 1: deposit a lot of small UTXOs
         // < 2_000 to avoid ledger spawning an archive.
-        const NUM_UXTOS: usize = DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION + 2;
+        const NUM_UXTOS: usize = DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION + 2;
         let deposit_value = RETRIEVE_DOGE_MIN_AMOUNT;
         setup
             .deposit_flow()
@@ -430,7 +430,7 @@ mod withdrawal {
             .minter_update_balance()
             .expect_mint();
 
-        let too_large_num_inputs = DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION + 1;
+        let too_large_num_inputs = DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION + 1;
         let withdrawal_amount = too_large_num_inputs as u64 * deposit_value;
 
         setup
@@ -444,7 +444,7 @@ mod withdrawal {
             .minter_await_withdrawal_reimbursed(WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
                     num_inputs: too_large_num_inputs,
-                    max_num_inputs: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+                    max_num_inputs: DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION,
                 },
             ));
     }

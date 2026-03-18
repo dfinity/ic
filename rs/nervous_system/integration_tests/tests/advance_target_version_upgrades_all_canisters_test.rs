@@ -141,7 +141,7 @@ async fn test_advance_target_version_upgrades_all_canisters(
                 .map(|versions| versions.len())
         },
         // Hopefully there are 7 upgrade steps - 1 initial version, then another for each of the 6 canisters.
-        &Some(7usize),
+        &Some(7_usize),
     )
     .await
     .unwrap();

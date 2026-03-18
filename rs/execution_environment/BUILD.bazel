@@ -33,6 +33,7 @@ rust_library(
         "//rs/state_layout",
         "//rs/sys",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
@@ -113,11 +114,12 @@ rust_ic_test_suite(
     srcs = glob(
         ["tests/*.rs"],
         exclude = [
-            # Exclude the dts and storage_reservation tests,
-            # which have separate dts_test and storage_reservation_test targets below
+            # Exclude the dts, memory_matrix, and storage_reservation tests,
+            # which have separate targets below
             # because they suffer from long running times on CI
             # so we want to experiment with different configuration options.
             "tests/dts.rs",
+            "tests/memory_matrix.rs",
             "tests/storage_reservation.rs",
         ],
     ),
@@ -173,6 +175,7 @@ rust_ic_test_suite(
         "//rs/test_utilities/metrics",
         "//rs/test_utilities/types",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/types_test_utils",
@@ -221,7 +224,9 @@ rust_ic_test(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/state_machine_tests",
+        "//rs/test_utilities/metrics",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",
@@ -255,8 +260,45 @@ rust_ic_test(
         "//rs/registry/subnet_type",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
+    ],
+)
+
+rust_ic_test(
+    name = "memory_matrix_test",
+    size = "large",
+    srcs = ["tests/memory_matrix.rs"],
+    data = [
+        "//rs/universal_canister/impl:universal_canister.module",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
+    env = {
+        "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "RUST_TEST_THREADS": "4",
+    },
+    tags = [
+        "cpu:4",
+        "test_all_platforms_slow",
+    ],
+    deps = [
+        # Keep sorted.
+        ":execution_environment",
+        "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/cycles_account_manager",
+        "//rs/replicated_state",
+        "//rs/test_utilities",
+        "//rs/test_utilities/execution_environment",
+        "//rs/types/base_types",
+        "//rs/types/cycles",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:more-asserts",
+        "@crate_index//:num-traits",
+        "@crate_index//:wat",
     ],
 )
 
@@ -336,9 +378,9 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//rs/config",
-        "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "//rs/types/types_test_utils",
         "@crate_index//:criterion",
@@ -360,6 +402,7 @@ rust_ic_bench(
         # Keep sorted.
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:more-asserts",
@@ -378,6 +421,7 @@ rust_ic_bench(
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:lazy_static",
@@ -395,6 +439,7 @@ rust_library(
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:serde",
@@ -419,6 +464,7 @@ rust_ic_bench(
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",

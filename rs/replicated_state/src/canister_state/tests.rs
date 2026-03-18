@@ -5,13 +5,13 @@ use super::*;
 use crate::CallContext;
 use crate::CallOrigin;
 use crate::Memory;
+use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::canister_state::system_state::testing::SystemStateTesting;
 use crate::canister_state::system_state::{
-    CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
-    MAX_CANISTER_HISTORY_CHANGES,
+    CallContextManager, CanisterHistory, CanisterStatus, MAX_CANISTER_HISTORY_CHANGES,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
@@ -30,9 +30,9 @@ use ic_types::messages::{
     NO_DEADLINE, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
-use ic_types::{CountBytes, Cycles, Time};
+use ic_types::{CountBytes, Time};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
 use strum::IntoEnumIterator;
@@ -91,9 +91,15 @@ impl CanisterStateFixture {
             Cycles::new(1 << 36),
             NumSeconds::from(100_000),
         );
+        let canister_snapshots = CanisterSnapshots::default();
 
         CanisterStateFixture {
-            canister_state: CanisterState::new(system_state, None, scheduler_state),
+            canister_state: CanisterState::new(
+                system_state,
+                None,
+                scheduler_state,
+                canister_snapshots,
+            ),
         }
     }
 
@@ -856,8 +862,8 @@ fn canister_state_ingress_induction_cycles_debit() {
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        ingress_induction_debit.into()
+        system_state.canister_metrics().consumed_cycles().get(),
+        ingress_induction_debit.get()
     );
     assert_eq!(
         *system_state
@@ -865,7 +871,7 @@ fn canister_state_ingress_induction_cycles_debit() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
-        ingress_induction_debit.into()
+        NominalCycles::from(ingress_induction_debit.get()),
     );
 }
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -881,7 +887,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::from(initial_consumed_cycles)
+        NominalCycles::from(initial_consumed_cycles.get())
     );
 
     let cycles = Cycles::new(100);
@@ -892,7 +898,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::from(initial_consumed_cycles - cycles)
+        NominalCycles::from((initial_consumed_cycles - cycles).get())
     );
 }
 
@@ -914,7 +920,7 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)
             .unwrap(),
-        NominalCycles::from(cycles_to_consume - cycles_to_add)
+        NominalCycles::from((cycles_to_consume - cycles_to_add).get())
     );
 }
 

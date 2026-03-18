@@ -38,7 +38,6 @@ use slog::{Logger, info};
 use std::sync::Arc;
 
 const NUM_MSGS: usize = 32;
-const MAX_SIZE: usize = 2 * 1024 * 1024;
 const MSG_SIZE: usize = 2 * 1000 * 1000;
 
 #[derive(Debug)]
@@ -47,16 +46,9 @@ enum PayloadType {
     XNet(usize),
 }
 
-/// The configuration that is used for the dual workload test.
-/// In this configuration, all sizes are set to 2MiB.
 fn setup(env: TestEnv) {
     InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .add_nodes(1)
-                .with_max_block_payload_size(MAX_SIZE as u64)
-                .with_max_ingress_message_size(MAX_SIZE as u64),
-        )
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -223,7 +215,6 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
-        .remove_metrics_to_check("critical_errors")
         .execute_from_args()?;
     Ok(())
 }

@@ -87,9 +87,17 @@ while test $# -gt $CTR; do
     esac
 done
 
-# option to pass in another shell if desired
 if [ $# -eq 0 ]; then
-    cmd=("${USHELL:-/usr/bin/bash}")
+    # if no command is specified, create an shell
+    if [ -z "${USHELL:-}" ] || [ "$USHELL" == "bash" ]; then
+        # bit of a hack: we source the completion by passing it as an rcfile.
+        # The completion itself requires `.bazelversion` to exist.
+        # We avoid generating the completion in the container _build_ so that
+        # the container itself does not depend on the bazel version.
+        cmd=("/usr/bin/bash" -c "exec bash --rcfile <(bazel completion bash)")
+    else
+        cmd=("$USHELL")
+    fi
 else
     cmd=("$@")
 fi
@@ -134,6 +142,8 @@ USER=$(whoami)
 
 PODMAN_RUN_ARGS=(
     -w "$WORKDIR"
+    --rm              # remove container after it ran
+    --log-driver=none # by default podman logs all of stdout to the journal which is resource-consuming and wasteful
 
     -u "ubuntu:ubuntu"
     -e HOSTUSER="$USER"
@@ -225,21 +235,14 @@ else
     eprintln "No ssh-agent to forward."
 fi
 
-# Omit -t if not a tty.
-# Also shut up logging, because podman will by default log
-# every byte of standard output to the journal, and that
-# destroys the journal + wastes enormous amounts of CPU.
-# I witnessed journald and syslog peg 2 cores of my devenv
-# when running a simple cat /path/to/file.
+# if a user is attached, make it interactive and create tty
 if tty >/dev/null 2>&1; then
-    tty_arg=-t
-else
-    tty_arg=
+    PODMAN_RUN_ARGS+=(-i -t)
 fi
 
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
-OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
+PODMAN_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
 
 if [ -f "$HOME/.container-run.conf" ]; then
     # conf file with user's custom PODMAN_RUN_USR_ARGS
@@ -255,4 +258,4 @@ if [ -f "$HOME/.container-run.conf" ]; then
 fi
 
 set -x
-exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
+exec "${CONTAINER_CMD[@]}" run "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"

@@ -1,21 +1,20 @@
 use crate::{
     DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     cli::{
-        consent_given, print_height_info, read_optional, read_optional_data_location,
-        read_optional_node_ids, read_optional_subnet_id, read_optional_version,
-        wait_for_confirmation,
+        consent_given, print_height_info, read, read_optional, read_optional_data_location,
+        read_optional_node_ids, read_optional_subnet_id, read_optional_type, wait_for_confirmation,
     },
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    util::SshUser,
+    util::{SshUser, node_id_from_str},
 };
 use clap::Parser;
 use ic_base_types::{NodeId, SubnetId};
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
-use std::{iter::Peekable, net::IpAddr, path::PathBuf};
+use std::{collections::BTreeMap, iter::Peekable, net::IpAddr, path::PathBuf};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;
@@ -148,6 +147,16 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long)]
     pub readonly_key_file: Option<PathBuf>,
 
+    /// The node id and the corresponding public ssh key to be deployed to this node for write
+    /// access, used for SEV-enabled subnet recovery.
+    #[clap(long, value_parser=crate::util::node_id_and_pub_key_from_str)]
+    pub write_node_id_and_pub_key: Option<(NodeId, String)>,
+
+    /// The path to a file containing the private key associated with the public key in
+    /// `write_node_id_and_pub_key`, i.e. for the `recovery` SSH user.
+    #[clap(long)]
+    pub recovery_key_file: Option<PathBuf>,
+
     /// IP address of the node to download the consensus pool from.
     #[clap(long)]
     pub download_pool_node: Option<IpAddr>,
@@ -256,6 +265,36 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         Enter your key: ",
                     );
                 }
+
+                if self.params.write_node_id_and_pub_key.is_none() {
+                    // Print node heights to help choose an up-to-date node for write access and
+                    // avoid long state upload times later.
+                    print_height_info(
+                        &self.logger,
+                        &self.recovery.registry_helper,
+                        self.params.subnet_id,
+                    );
+
+                    let write_node_id = read_optional_type(
+                        &self.logger,
+                        "Do you need to add write access to a node in the subnet (SEV recovery)? If yes, enter the Node ID:",
+                        node_id_from_str,
+                    );
+
+                    if let Some(node_id) = write_node_id {
+                        let write_pub_key = read(
+                            &self.logger,
+                            &format!(
+                                "Enter public key to add SSH write access to {node_id}. Ensure the right format.\n\
+                                Format:   ssh-ed25519 <pubkey> <identity>\n\
+                                Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
+                                Enter your key: "
+                            ),
+                        );
+
+                        self.params.write_node_id_and_pub_key = Some((node_id, write_pub_key));
+                    }
+                }
             }
 
             StepType::DownloadCertifications => {
@@ -308,8 +347,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::BlessVersion => {
                 if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version =
-                        read_optional_version(&self.logger, "Upgrade version: ");
+                    self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
                 }
             }
 
@@ -357,16 +395,26 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
         match step_type {
             StepType::Halt => {
-                let keys = if let Some(pub_key) = &self.params.readonly_pub_key {
+                let subnet_readonly_keys = if let Some(pub_key) = &self.params.readonly_pub_key {
                     vec![pub_key.clone()]
                 } else {
                     vec![]
                 };
-                Ok(Box::new(self.recovery.halt_subnet(
-                    self.params.subnet_id,
-                    true,
-                    &keys,
-                )))
+
+                if let Some((node_id, pub_key)) = self.params.write_node_id_and_pub_key.clone() {
+                    Ok(Box::new(self.recovery.take_subnet_offline_for_repairs(
+                        self.params.subnet_id,
+                        &subnet_readonly_keys,
+                        &BTreeMap::from([(node_id, vec![pub_key])]),
+                    )))
+                } else {
+                    // TODO (CON-1637): Remove this branch and only use `take_subnet_offline_for_repairs`
+                    Ok(Box::new(self.recovery.halt_subnet(
+                        self.params.subnet_id,
+                        true,
+                        &subnet_readonly_keys,
+                    )))
+                }
             }
 
             StepType::DownloadCertifications => {
@@ -442,9 +490,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::UploadState => {
                 if let Some(method) = self.params.upload_method {
-                    Ok(Box::new(
-                        self.recovery.get_upload_state_and_restart_step(method),
-                    ))
+                    let (ssh_user, key_file) = if self.params.write_node_id_and_pub_key.is_some() {
+                        (SshUser::Recovery, self.params.recovery_key_file.clone())
+                    } else {
+                        (SshUser::Admin, self.recovery.admin_key_file.clone())
+                    };
+
+                    Ok(Box::new(self.recovery.get_upload_state_and_restart_step(
+                        ssh_user, method, key_file,
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
@@ -526,11 +580,22 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::Unhalt => Ok(Box::new(self.recovery.halt_subnet(
-                self.params.subnet_id,
-                false,
-                &["".to_string()],
-            ))),
+            StepType::Unhalt => {
+                if self.params.write_node_id_and_pub_key.is_some() {
+                    Ok(Box::new(
+                        self.recovery
+                            .bring_subnet_back_online_after_repairs(self.params.subnet_id),
+                    ))
+                } else {
+                    // TODO (CON-1637): Remove this branch and only use
+                    // `bring_subnet_back_online_after_repairs`
+                    Ok(Box::new(self.recovery.halt_subnet(
+                        self.params.subnet_id,
+                        false,
+                        &["".to_string()],
+                    )))
+                }
+            }
 
             StepType::Cleanup => Ok(Box::new(self.recovery.get_cleanup_step())),
         }

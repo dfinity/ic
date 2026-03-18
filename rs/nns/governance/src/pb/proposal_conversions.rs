@@ -566,9 +566,9 @@ pub(crate) fn proposal_data_to_info(
 mod tests {
     use super::*;
 
-    use crate::{
-        pb::v1::{CreateServiceNervousSystem, create_service_nervous_system::LedgerParameters},
-        proposals::self_describing::LocallyDescribableProposalAction,
+    use crate::pb::v1::{
+        CreateServiceNervousSystem, SelfDescribingProposalAction,
+        create_service_nervous_system::LedgerParameters,
     };
 
     use ic_base_types::PrincipalId;
@@ -721,7 +721,11 @@ mod tests {
             }),
             ..Default::default()
         };
-        let self_describing_action = create_service_nervous_system.to_self_describing_action();
+        let self_describing_action = SelfDescribingProposalAction {
+            type_name: "Create Service Nervous System (SNS)".to_string(),
+            type_description: "Create a new Service Nervous System (SNS).".to_string(),
+            value: Some(pb::SelfDescribingValue::from(create_service_nervous_system)),
+        };
 
         // Sanity check that the self-describing value does have logos when we don't omit them.
         let self_describing_value_with_logos =
