@@ -116,6 +116,13 @@ CMD ["/bin/bash"]
 
 FROM base as build
 
+# Install additional packages only needed for CI
+ARG PACKAGE_CI_FILE=ci/container/files/packages.ci
+COPY ${PACKAGE_CI_FILE} /tmp/
+RUN apt -yq update && \
+    apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_CI_FILE)") && \
+    rm "/tmp/$(basename $PACKAGE_CI_FILE)"
+
 FROM base as dev
 
 # Temporarily switch to root to install development packages.

@@ -1,31 +1,24 @@
 # Essentials
-curl
 build-essential
+curl
 git
 git-lfs
 gnupg
-uuid-dev
-zsh
 iproute2
+jq
 shellcheck
+sudo
 xxd
 vim
 retry
+uuid-dev
 zip
+zsh
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
 libevent-dev
 libboost-dev
-
-# GitHub CI
-sudo
-jq
-rclone
-time
-podman # rosetta-release.yml
-rsync # container-base-images.yml
-lcov # used for bazel coverage
 
 # RUST
 gcc
