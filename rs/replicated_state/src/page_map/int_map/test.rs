@@ -4,9 +4,9 @@ use std::collections::BTreeMap;
 
 #[test]
 fn test_int_map_consecutive_inserts() {
-    let m: IntMap<u64, u64> = (0..100u64).map(|x| (x, x + 100)).collect();
+    let m: IntMap<u64, u64> = (0..100_u64).map(|x| (x, x + 100)).collect();
 
-    for i in 0..100u64 {
+    for i in 0..100_u64 {
         assert_eq!(
             m.get(&i).cloned(),
             Some(i + 100),
@@ -17,12 +17,12 @@ fn test_int_map_consecutive_inserts() {
 
 #[test]
 fn test_int_map_sparse_inserts() {
-    let m: IntMap<u64, u64> = (0..100u64)
+    let m: IntMap<u64, u64> = (0..100_u64)
         .filter(|x| x % 2 == 0)
         .map(|x| (x, x + 100))
         .collect();
 
-    for i in 0..100u64 {
+    for i in 0..100_u64 {
         if i % 2 == 0 {
             assert_eq!(m.get(&i).cloned(), Some(i + 100));
         } else {
@@ -33,15 +33,15 @@ fn test_int_map_sparse_inserts() {
 
 #[test]
 fn test_int_map_union() {
-    let lmap: IntMap<u64, u64> = (1..101u64).map(|x| (x, x)).collect();
-    let rmap: IntMap<u64, u64> = (50..150u64).map(|x| (x, x + 100)).collect();
+    let lmap: IntMap<u64, u64> = (1..101_u64).map(|x| (x, x)).collect();
+    let rmap: IntMap<u64, u64> = (50..150_u64).map(|x| (x, x + 100)).collect();
     let m = rmap.union(lmap);
 
     assert!(m.get(&0).is_none());
-    for i in 1..50u64 {
+    for i in 1..50_u64 {
         assert_eq!(m.get(&i).cloned(), Some(i));
     }
-    for i in 50..150u64 {
+    for i in 50..150_u64 {
         assert_eq!(m.get(&i).cloned(), Some(i + 100), "Map: {m:?}");
     }
     assert!(m.get(&150).is_none());
@@ -49,15 +49,15 @@ fn test_int_map_union() {
 
 #[test]
 fn test_iter() {
-    let int_map: IntMap<u64, _> = (1..100u64).map(|x| (x, x)).collect();
-    let btree_map: BTreeMap<_, _> = (1..100u64).map(|x| (x, x)).collect();
+    let int_map: IntMap<u64, _> = (1..100_u64).map(|x| (x, x)).collect();
+    let btree_map: BTreeMap<_, _> = (1..100_u64).map(|x| (x, x)).collect();
 
     assert!(int_map.iter().eq(btree_map.iter()));
 }
 
 #[test]
 fn test_int_map_bounds() {
-    let m: IntMap<u64, u64> = (10..=100u64).map(|x| (7 * x, 0)).collect();
+    let m: IntMap<u64, u64> = (10..=100_u64).map(|x| (7 * x, 0)).collect();
     for i in 0..800 {
         let (start, end) = m.bounds(&i);
         if (70..=700).contains(&i) {
@@ -90,7 +90,7 @@ fn test_max_key() {
 #[test]
 fn test_max_key_range() {
     let mut m = IntMap::<u64, u64>::new();
-    for i in 0..1000u64 {
+    for i in 0..1000_u64 {
         m = m.insert(i, i + 100).0;
         assert_eq!(m.max_key(), Some(&i));
     }

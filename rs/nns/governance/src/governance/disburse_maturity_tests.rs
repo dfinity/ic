@@ -22,7 +22,7 @@ static DEFAULT_MATURITY_MODULATION_BASIS_POINTS: i32 = 100; // 1%
 fn create_neuron_builder() -> NeuronBuilder {
     NeuronBuilder::new(
         NeuronId { id: 1 },
-        icp_ledger::Subaccount([1u8; 32]),
+        icp_ledger::Subaccount([1_u8; 32]),
         CONTROLLER,
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: NOW_SECONDS + ONE_DAY_SECONDS,

@@ -411,7 +411,7 @@ mod ecdsa_sign_share {
 
         let keys_openings = parameters.keys_openings();
 
-        let invalid_scalar_encoding = EccScalarBytes::K256(Box::new([0xFFu8; 32]));
+        let invalid_scalar_encoding = EccScalarBytes::K256(Box::new([0xFF_u8; 32]));
         let invalid_commitment_opening_encoding =
             CommitmentOpeningBytes::Simple(invalid_scalar_encoding);
         let invalid_commitment_opening =

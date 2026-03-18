@@ -317,6 +317,7 @@ struct SubnetConfigInternal {
     pub subnet_id: SubnetId,
     pub subnet_kind: SubnetKind,
     pub subnet_admins: Option<Vec<PrincipalId>>,
+    pub cost_schedule: CanisterCyclesCostSchedule,
     pub instruction_config: SubnetInstructionConfig,
     pub ranges: Vec<CanisterIdRange>,
     pub alloc_range: Option<CanisterIdRange>,
@@ -624,11 +625,13 @@ struct PocketIcSubnets {
 }
 
 impl PocketIcSubnets {
+    #[allow(clippy::too_many_arguments)]
     fn state_machine_builder(
         state_machine_state_dir: Box<dyn StateMachineStateDir>,
         runtime: Arc<Runtime>,
         subnet_kind: SubnetKind,
         subnet_admins: Option<Vec<PrincipalId>>,
+        cost_schedule: CanisterCyclesCostSchedule,
         subnet_seed: [u8; 32],
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -640,17 +643,6 @@ impl PocketIcSubnets {
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
-        let cost_schedule = match subnet_kind {
-            SubnetKind::CloudEngine => CanisterCyclesCostSchedule::Free,
-            SubnetKind::Application
-            | SubnetKind::Bitcoin
-            | SubnetKind::Fiduciary
-            | SubnetKind::II
-            | SubnetKind::NNS
-            | SubnetKind::SNS
-            | SubnetKind::System
-            | SubnetKind::VerifiedApplication => CanisterCyclesCostSchedule::Normal,
-        };
         let mut subnet_config = SubnetConfig::new(subnet_type);
         // using `let IcpConfig { }` with explicit field names
         // to force an update after adding a new field to `IcpConfig`
@@ -835,6 +827,7 @@ impl PocketIcSubnets {
             subnet_state_dir,
             subnet_kind,
             subnet_admins,
+            cost_schedule,
             instruction_config,
             expected_state_time,
         } = subnet_config_info;
@@ -882,6 +875,7 @@ impl PocketIcSubnets {
             self.runtime.clone(),
             subnet_kind,
             subnet_admins.clone(),
+            cost_schedule,
             subnet_seed,
             instruction_config.clone(),
             self.registry_data_provider.clone(),
@@ -1041,6 +1035,7 @@ impl PocketIcSubnets {
             subnet_id,
             subnet_kind,
             subnet_admins,
+            cost_schedule,
             instruction_config,
             ranges,
             alloc_range,
@@ -2759,6 +2754,14 @@ impl PocketIc {
                 canister_ranges.push(from_range(&alloc_range));
             }
             let subnet_seed = compute_subnet_seed(config.ranges.clone(), config.alloc_range);
+            let cost_schedule = match config.cost_schedule {
+                CanisterCyclesCostSchedule::Normal => {
+                    pocket_ic::common::rest::CanisterCyclesCostSchedule::Normal
+                }
+                CanisterCyclesCostSchedule::Free => {
+                    pocket_ic::common::rest::CanisterCyclesCostSchedule::Free
+                }
+            };
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
                 subnet_admins: config.subnet_admins.as_ref().map(|subnet_admins| {
@@ -2767,6 +2770,7 @@ impl PocketIc {
                         .map(|subnet_admin| subnet_admin.0.into())
                         .collect()
                 }),
+                cost_schedule,
                 subnet_seed,
                 canister_ranges,
                 instruction_config: config.instruction_config.clone(),
@@ -2875,6 +2879,7 @@ impl PocketIc {
                                 .map(|subnet_admin| Principal::from(*subnet_admin).into())
                                 .collect()
                         }),
+                        cost_schedule: config.cost_schedule,
                         instruction_config: config.instruction_config,
                         expected_state_time,
                     }
@@ -2885,7 +2890,13 @@ impl PocketIc {
                 .get_named()
                 .into_iter()
                 .map(|(subnet_kind, subnet_state_dir, instruction_config)| {
-                    (subnet_kind, None, subnet_state_dir, instruction_config)
+                    (
+                        subnet_kind,
+                        None,
+                        Default::default(),
+                        subnet_state_dir,
+                        instruction_config,
+                    )
                 })
                 .collect();
             let flexible_subnets = {
@@ -2893,6 +2904,7 @@ impl PocketIc {
                     (
                         SubnetKind::System,
                         None,
+                        Default::default(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2900,7 +2912,8 @@ impl PocketIc {
                 let app = subnet_configs.application.iter().map(|spec| {
                     (
                         SubnetKind::Application,
-                        None,
+                        spec.get_subnet_admins(),
+                        spec.get_cost_schedule(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2909,6 +2922,7 @@ impl PocketIc {
                     (
                         SubnetKind::CloudEngine,
                         spec.get_subnet_admins(),
+                        spec.get_cost_schedule(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2917,6 +2931,7 @@ impl PocketIc {
                     (
                         SubnetKind::VerifiedApplication,
                         None,
+                        Default::default(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2933,15 +2948,17 @@ impl PocketIc {
             // so that their canister ranges do not conflict with canister ranges
             // of fresh subnets (which are more flexible)
             all_subnets.sort_by(
-                |(_, _, a, _): &(_, _, Option<PathBuf>, _),
-                 (_, _, b, _): &(_, _, Option<PathBuf>, _)| {
+                |(_, _, _, a, _): &(_, _, _, Option<PathBuf>, _),
+                 (_, _, _, b, _): &(_, _, _, Option<PathBuf>, _)| {
                     a.is_none().cmp(&b.is_none())
                 },
             );
 
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
-            for (subnet_kind, subnet_admins, subnet_state_dir, instruction_config) in all_subnets {
+            for (subnet_kind, subnet_admins, cost_schedule, subnet_state_dir, instruction_config) in
+                all_subnets
+            {
                 let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
@@ -3051,6 +3068,14 @@ impl PocketIc {
                     (ranges, alloc_range, subnet_id)
                 };
 
+                let cost_schedule = match cost_schedule {
+                    pocket_ic::common::rest::CanisterCyclesCostSchedule::Normal => {
+                        CanisterCyclesCostSchedule::Normal
+                    }
+                    pocket_ic::common::rest::CanisterCyclesCostSchedule::Free => {
+                        CanisterCyclesCostSchedule::Free
+                    }
+                };
                 subnet_config_info.push(SubnetConfigInfo {
                     ranges,
                     alloc_range,
@@ -3060,6 +3085,7 @@ impl PocketIc {
                     subnet_admins: subnet_admins.map(|subnet_admins| {
                         subnet_admins.into_iter().map(PrincipalId::from).collect()
                     }),
+                    cost_schedule,
                     instruction_config,
                     expected_state_time: None,
                 });
@@ -3326,6 +3352,7 @@ struct SubnetConfigInfo {
     pub subnet_state_dir: Option<PathBuf>,
     pub subnet_kind: SubnetKind,
     pub subnet_admins: Option<Vec<PrincipalId>>,
+    pub cost_schedule: CanisterCyclesCostSchedule,
     pub instruction_config: SubnetInstructionConfig,
     pub expected_state_time: Option<SystemTime>,
 }
@@ -5383,6 +5410,7 @@ fn route(
                             subnet_state_dir: None,
                             subnet_kind,
                             subnet_admins: None,
+                            cost_schedule: Default::default(),
                             instruction_config,
                             expected_state_time: None,
                         },

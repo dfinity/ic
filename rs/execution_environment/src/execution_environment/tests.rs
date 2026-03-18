@@ -2151,7 +2151,7 @@ fn http_request_bound_holds() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -2439,7 +2439,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000_000u128))
+        .accept_cycles(Cycles::from(1_000_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -2450,7 +2450,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
             call_args()
                 .other_side(b)
                 .on_reject(wasm().reject_message().append_and_reply()),
-            Cycles::from(1_000_000u128),
+            Cycles::from(1_000_000_u128),
         )
         .build();
     test.canister_state_mut(b_id).system_state.freeze_threshold = NumSeconds::from(0);
@@ -2991,7 +2991,7 @@ fn execute_canister_http_request() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -3312,7 +3312,7 @@ fn can_refund_cycles_after_successful_provisional_create_canister() {
         .with_provisional_whitelist_all()
         .build();
     let canister = test.universal_canister().unwrap();
-    let payment = 10_000_000_000u128;
+    let payment = 10_000_000_000_u128;
     let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(None, None)).unwrap();
     let create_canister = wasm()
         .call_with_cycles(
@@ -3359,7 +3359,7 @@ fn create_canister_with_specified_id(
             ic00::IC_00,
             Method::ProvisionalCreateCanisterWithCycles,
             call_args().other_side(args),
-            Cycles::from(10_000_000_000u128),
+            Cycles::from(10_000_000_000_u128),
         )
         .build();
 
@@ -3525,7 +3525,7 @@ fn can_refund_cycles_after_successful_provisional_topup_canister() {
         .build();
     let canister_1 = test.universal_canister().unwrap();
     let canister_2 = test.universal_canister().unwrap();
-    let payment = 10_000_000_000u128;
+    let payment = 10_000_000_000_u128;
     let top_up = 1_000_000_000;
     let args = Encode!(&ProvisionalTopUpCanisterArgs::new(canister_2, top_up)).unwrap();
     let top_up_canister = wasm()
@@ -3582,7 +3582,7 @@ fn replicated_query_refunds_all_sent_cycles() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transferred_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000_u128);
 
     let b_callback = wasm().message_payload().append_and_reply().build();
 
@@ -3657,7 +3657,7 @@ fn replicated_query_can_accept_cycles() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transferred_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000_u128);
 
     // Canister B attempts to accept cycles in a replicated query. Should succeed.
     let b_callback = wasm()
@@ -3742,7 +3742,7 @@ fn replicated_query_does_not_accept_cycles_on_trap() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transferred_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000_u128);
 
     // Canister B attempts to accept cycles in a replicated query. Should succeed.
     let b_callback = wasm()
@@ -3826,7 +3826,7 @@ fn replicated_query_can_burn_cycles() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let cycles_to_burn = Cycles::new(10_000_000u128);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
 
     let payload = wasm().cycles_burn128(cycles_to_burn).reply().build();
     let (message_id, _) = test.ingress_raw(canister_id, "query", payload);
@@ -3864,7 +3864,7 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let cycles_to_burn = Cycles::new(10_000_000u128);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
 
     let payload = wasm().cycles_burn128(cycles_to_burn).reply().trap().build();
     let (message_id, _) = test.ingress_raw(canister_id, "query", payload);
@@ -4227,7 +4227,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
                 call_args()
                     .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                     .on_reject(wasm().reject_message().reject()),
-                Cycles::from(100_000_000_000u128),
+                Cycles::from(100_000_000_000_u128),
             )
             .build();
         let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
@@ -4506,7 +4506,7 @@ fn test_vetkd_derive_key_api_is_enabled() {
             call_args()
                 .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                 .on_reject(wasm().reject_message().reject()),
-            Cycles::from(100_000_000_000u128),
+            Cycles::from(100_000_000_000_u128),
         )
         .build();
     let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
@@ -4570,7 +4570,7 @@ fn cannot_accept_cycles_after_replying() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let d_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transferred_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000_u128);
 
     // Canister C and D simply reply with the payload they were called with.
     let c_callback = wasm().message_payload().append_and_reply().build();
@@ -4580,7 +4580,7 @@ fn cannot_accept_cycles_after_replying() {
     // then replies to A and finally tries to accept the remaining cycles after replying.
     // It should not be able to accept any more cycles after replying.
     let b_callback = wasm()
-        .accept_cycles(transferred_cycles / 2u64)
+        .accept_cycles(transferred_cycles / 2_u64)
         .message_payload()
         .append_and_reply()
         .call_simple(
@@ -4588,7 +4588,7 @@ fn cannot_accept_cycles_after_replying() {
             "update",
             call_args()
                 .other_side(c_callback)
-                .on_reply(wasm().accept_cycles(transferred_cycles / 2u64).build()),
+                .on_reply(wasm().accept_cycles(transferred_cycles / 2_u64).build()),
         )
         .call_simple(d_id, "update", call_args().other_side(d_callback))
         .build();
