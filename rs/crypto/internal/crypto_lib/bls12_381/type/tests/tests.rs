@@ -60,7 +60,7 @@ fn scalar_random_is_stable() {
     let seed = 802;
 
     let rng = &mut ChaCha20Rng::seed_from_u64(seed);
-    let mut bytes = [0u8; 32];
+    let mut bytes = [0_u8; 32];
     rng.fill_bytes(&mut bytes);
     assert_eq!(
         hex::encode(bytes),
@@ -118,7 +118,7 @@ fn test_scalar_batch_random_generates_unique_values() {
 
 #[test]
 fn test_polynomial_random_is_stable() {
-    let seed = [1u8; 32];
+    let seed = [1_u8; 32];
     let rng = &mut ChaCha20Rng::from_seed(seed);
     let poly = Polynomial::random(3, rng);
 
@@ -282,7 +282,7 @@ fn test_scalar_from_integer_type() {
         assert_eq!(Scalar::from_u32(r), Scalar::from_u64(r as u64));
 
         let bytes = Scalar::from_u32(r).serialize();
-        let mut expected = [0u8; 32];
+        let mut expected = [0_u8; 32];
         expected[28..].copy_from_slice(&r.to_be_bytes());
         assert_eq!(bytes, expected);
     }
@@ -586,7 +586,7 @@ fn test_g1_generator_is_expected_value() {
     .unwrap();
 
     fn x4() -> [u8; 48] {
-        let mut x4 = [0u8; 48];
+        let mut x4 = [0_u8; 48];
         x4[0] = 0x80; // set compressed bit
         x4[47] = 4;
         x4
