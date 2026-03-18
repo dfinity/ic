@@ -449,7 +449,7 @@ pub fn encode_metrics(
     })?;
 
     metrics.encode_counter(
-        "ckbtc_minter_get_utxos_min_confirmation_vilations",
+        "ckbtc_minter_get_utxos_min_confirmation_violations",
         GET_UTXOS_MIN_CONFIRMATIONS_VIOLATIONS.get() as f64,
         "Number of violations (less than min_confirmations detected) in get_utxos results.",
     )?;
