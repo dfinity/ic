@@ -722,10 +722,17 @@ fn finalization_clears_scheduled_canister_log_delta_sizes() {
         let mut delta = ic_types::CanisterLog::default_delta();
         delta.add_record(0, content.as_bytes().to_vec());
         let size = delta.bytes_used();
-        canister
-            .system_state
-            .canister_log
-            .append_delta_log(&mut delta);
+        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister
+                .system_state
+                .log_memory_store
+                .append_delta_log(&mut delta);
+        } else {
+            canister
+                .system_state
+                .canister_log
+                .append_delta_log(&mut delta);
+        };
         size
     }
     let size1 = append_delta_log(test.canister_state_mut(canister_a), "hello");
@@ -736,7 +743,11 @@ fn finalization_clears_scheduled_canister_log_delta_sizes() {
 
     // Both canisters have delta log sizes.
     fn has_delta_log_sizes(canister: &CanisterState) -> bool {
-        canister.system_state.canister_log.has_delta_log_sizes()
+        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister.system_state.log_memory_store.has_delta_log_sizes()
+        } else {
+            canister.system_state.canister_log.has_delta_log_sizes()
+        }
     }
     assert!(has_delta_log_sizes(test.canister_state(canister_a)));
     assert!(has_delta_log_sizes(test.canister_state(canister_b)));
