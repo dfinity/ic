@@ -4,7 +4,10 @@ use crate::{
     metrics::CanisterHttpPayloadBuilderMetrics,
     payload_builder::{
         parse::bytes_to_payload,
-        utils::{group_shares_by_callback_id, grouped_shares_meet_divergence_criteria},
+        utils::{
+            find_flexible_responses, find_fully_replicated_response, find_non_replicated_response,
+            group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
+        },
     },
 };
 use ic_consensus_utils::{
@@ -34,12 +37,12 @@ use ic_types::{
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
-        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseWithConsensus, Replication,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
+        Replication,
     },
     consensus::Committee,
-    crypto::Signed,
+    crypto::{Signed, crypto_hash},
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSignature,
@@ -67,17 +70,6 @@ pub struct CanisterHttpBatchStats {
     pub divergence_responses: usize,
     pub single_signature_responses: usize,
     pub payload_bytes: usize,
-}
-
-enum CandidateOrDivergence {
-    Candidate(
-        (
-            CanisterHttpResponseMetadata,
-            BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
-            CanisterHttpResponse,
-        ),
-    ),
-    Divergence(CanisterHttpResponseDivergence),
 }
 
 /// Implementation of the [`BatchPayloadBuilder`] for the canister http feature.
@@ -166,19 +158,17 @@ impl CanisterHttpPayloadBuilderImpl {
         delivered_ids: HashSet<CallbackId>,
         max_payload_size: NumBytes,
     ) -> CanisterHttpPayload {
-        // Get the threshold value that is needed for consensus
-        let threshold = match self
-            .membership
-            .get_committee_threshold(height, Committee::CanisterHttp)
-        {
-            Ok(threshold) => threshold,
+        // Derive threshold and faults_tolerated from a single committee call
+        let committee_members = match self.membership.get_canister_http_committee(height) {
+            Ok(members) => members,
             Err(err) => {
-                warn!(self.log, "Failed to get membership: {:?}", err);
+                warn!(self.log, "Failed to get canister http committee: {:?}", err);
                 return CanisterHttpPayload::default();
             }
         };
+        let faults_tolerated = ic_types::consensus::get_faults_tolerated(committee_members.len());
+        let threshold = committee_members.len() - faults_tolerated;
 
-        // Get the consensus registry version
         let consensus_registry_version = match registry_version_at_height(
             self.cache.as_ref(),
             height,
@@ -193,13 +183,26 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         };
 
-        let faults_tolerated = match self.membership.get_canister_http_committee(height) {
-            Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
-            _ => {
-                warn!(self.log, "Failed to get canister http committee");
+        let state = match self
+            .state_reader
+            .get_state_at(validation_context.certified_height)
+        {
+            Ok(state) => state,
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "CanisterHttpPayloadBuilder: state unavailable at height {}: {err:?}",
+                    validation_context.certified_height,
+                );
                 return CanisterHttpPayload::default();
             }
         };
+
+        let canister_http_request_contexts = &state
+            .get_ref()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
 
         let mut accumulated_size = 0;
         let mut responses_included = 0;
@@ -207,56 +210,15 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut candidates = vec![];
         let mut timeouts = vec![];
         let mut divergence_responses = vec![];
+        let mut flexible_responses = vec![];
 
         // Metrics counters
-        let mut unique_includable_responses = 0;
-        let mut timeouts_included = 0;
         let mut total_share_count = 0;
         let mut active_shares = 0;
-        let mut unique_responses_count = 0;
 
-        let empty_contexts = BTreeMap::new();
-
-        let state_result = self
-            .state_reader
-            .get_state_at(validation_context.certified_height);
-
-        let canister_http_request_contexts =
-            state_result.as_ref().map_or(&empty_contexts, |state| {
-                &state
-                    .get_ref()
-                    .metadata
-                    .subnet_call_context_manager
-                    .canister_http_request_contexts
-            });
-
-        // Check the state for timeouts NOTE: We can not use the existing
-        // timed out artifacts for this task, since we don't have consensus
-        // on them. For example a malicious node might publish a single
-        // timed out metadata share and we would pick it up to generate a
-        // time out response. Instead, we scan the state metadata for timed
-        // out requests and generate time out responses based on that
-        // Iterate over all outstanding canister http requests
-        for (callback_id, request) in canister_http_request_contexts {
-            unique_includable_responses += 1;
-            let candidate_size = callback_id.count_bytes();
-            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-            if size >= max_payload_size {
-                // All timeouts have the same size, so we can stop iterating.
-                break;
-            } else if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time
-                && !delivered_ids.contains(callback_id)
-            {
-                timeouts_included += 1;
-                timeouts.push(*callback_id);
-                accumulated_size += candidate_size;
-            }
-        }
-
-        // Since aggegating the signatures is expensive, we don't want to do the
-        // size checks after aggregation. Also we don't want to hold the lock on
-        // the pool while aggregating. Therefore, we pick the candidates for the
-        // payload first, then aggregate the signatures in a second step
+        // Since aggregating signatures is potentially expensive (currently for
+        // BasicSignatures it is not expensive), we pick the candidates first
+        // (under the pool lock), then aggregate in a separate step.
         {
             let pool_access = self.pool.read().unwrap();
 
@@ -283,126 +245,120 @@ impl CanisterHttpPayloadBuilderImpl {
                 .filter(|&response| !delivered_ids.contains(&response.content.id));
 
             // Group the shares by their metadata
-            let response_candidates_by_callback_id = group_shares_by_callback_id(share_candidates);
+            let shares_by_callback_id = group_shares_by_callback_id(share_candidates);
 
             self.metrics.total_shares.set(total_share_count);
             self.metrics.active_shares.set(active_shares);
 
-            let candidates_and_divergences = response_candidates_by_callback_id
-                .into_iter()
-                .filter_map(|(id, grouped_shares)| {
-                    let consensus_candidate =
-                        grouped_shares.iter().find_map(|(metadata, shares)| {
-                            unique_responses_count += 1;
-                            match canister_http_request_contexts
-                                .get(&id)
-                                .map(|context| &context.replication)
-                            {
-                                Some(Replication::NonReplicated(node_id)) => {
-                                    // For a non-replicated call, we require EXACTLY ONE share,
-                                    // and it MUST be from the designated node.
-                                    shares
-                                        .iter()
-                                        .find(|share| share.signature.signer == *node_id)
-                                        .map(|correct_share| (metadata, vec![*correct_share]))
-                                }
-                                Some(Replication::Flexible { .. }) => {
-                                    // TODO(flexible-http-outcalls): implement Flexible payload construction
-                                    None
-                                }
-                                None | Some(Replication::FullyReplicated) => {
-                                    let signers: BTreeSet<_> =
-                                        shares.iter().map(|share| share.signature.signer).collect();
-                                    if signers.len() >= threshold {
-                                        Some((metadata, shares.clone()))
-                                    } else {
-                                        None
-                                    }
-                                }
+            // Single pass over all open request contexts. Each callback_id is
+            // handled exactly once.
+            for (callback_id, request) in canister_http_request_contexts {
+                if delivered_ids.contains(callback_id) {
+                    continue;
+                }
+                if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time {
+                    let candidate_size = callback_id.count_bytes();
+                    let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                    if size < max_payload_size {
+                        timeouts.push(*callback_id);
+                        accumulated_size += candidate_size;
+                        // Because timeouts are very cheap to verify, they are
+                        // not counted as responses (so that they are irrelevant
+                        // for the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit.
+                    }
+                    continue;
+                }
+                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                    // We use `continue` here and not `break` so that more
+                    // timeouts can be included in the payload.
+                    continue;
+                }
+                let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
+                    continue;
+                };
+                match &request.replication {
+                    Replication::FullyReplicated => {
+                        if let Some((metadata, shares, content)) =
+                            find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
+                        {
+                            let candidate_size =
+                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                            if size < max_payload_size {
+                                candidates.push((metadata, shares, content));
+                                responses_included += 1;
+                                accumulated_size += candidate_size;
                             }
-                        });
-
-                    if let Some((metadata, shares)) = consensus_candidate {
-                        pool_access
-                            .get_response_content_by_hash(&metadata.content_hash)
-                            .map(|content| {
-                                CandidateOrDivergence::Candidate((
-                                    metadata.clone(),
-                                    shares.iter().map(|share| share.signature.clone()).collect(),
-                                    content,
-                                ))
-                            })
-                    } else {
-                        // No set of grouped shares large enough was found
-                        // so now we check whether we have divergence.
-                        if grouped_shares_meet_divergence_criteria(
-                            &grouped_shares,
+                        } else if grouped_shares_meet_divergence_criteria(
+                            grouped_shares,
                             faults_tolerated,
                         ) {
-                            Some(CandidateOrDivergence::Divergence(
-                                CanisterHttpResponseDivergence {
-                                    shares: grouped_shares
-                                        .into_iter()
-                                        .flat_map(|(_, shares)| shares.into_iter().cloned())
-                                        .collect(),
-                                },
-                            ))
-                        } else {
-                            // If not, we don't include this response candidate at all
-                            None
+                            let divergence = CanisterHttpResponseDivergence {
+                                shares: grouped_shares
+                                    .values()
+                                    .flat_map(|shares| shares.iter())
+                                    .map(|share| (*share).clone())
+                                    .collect(),
+                            };
+                            let divergence_size = divergence.count_bytes();
+                            let size = NumBytes::new((accumulated_size + divergence_size) as u64);
+                            if size < max_payload_size {
+                                divergence_responses.push(divergence);
+                                responses_included += 1;
+                                accumulated_size += divergence_size;
+                            }
                         }
                     }
-                });
-
-            for candidate_or_divergence in candidates_and_divergences {
-                unique_includable_responses += 1;
-                match candidate_or_divergence {
-                    CandidateOrDivergence::Candidate((metadata, shares, content)) => {
-                        let candidate_size =
-                            size_of::<CanisterHttpResponseProof>() + content.count_bytes();
-                        let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                        if size < max_payload_size {
-                            candidates.push((metadata.clone(), shares, content));
+                    Replication::NonReplicated(designated_node_id) => {
+                        if let Some((metadata, shares, content)) = find_non_replicated_response(
+                            grouped_shares,
+                            designated_node_id,
+                            &*pool_access,
+                        ) {
+                            let candidate_size =
+                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                            if size < max_payload_size {
+                                candidates.push((metadata, shares, content));
+                                responses_included += 1;
+                                accumulated_size += candidate_size;
+                            }
+                        }
+                    }
+                    Replication::Flexible {
+                        committee,
+                        min_responses,
+                        max_responses,
+                    } => {
+                        if let Some((group, group_size)) = find_flexible_responses(
+                            *callback_id,
+                            grouped_shares,
+                            committee,
+                            *min_responses,
+                            *max_responses,
+                            accumulated_size,
+                            max_payload_size,
+                            &*pool_access,
+                        ) {
+                            flexible_responses.push(group);
                             responses_included += 1;
-                            accumulated_size += candidate_size;
+                            accumulated_size += group_size;
                         }
                     }
-                    CandidateOrDivergence::Divergence(divergence) => {
-                        let divergence_size = divergence.count_bytes();
-                        let size = NumBytes::new((accumulated_size + divergence_size) as u64);
-                        if size < max_payload_size {
-                            divergence_responses.push(divergence);
-                            responses_included += 1;
-                            accumulated_size += divergence_size;
-                        }
-                    }
-                }
-
-                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                    break;
                 }
             }
-        };
-
-        self.metrics.included_timeouts.set(timeouts_included);
-        self.metrics.unique_responses.set(unique_responses_count);
-        self.metrics
-            .unique_includable_responses
-            .set(unique_includable_responses);
-
-        // Now that we have the candidates, aggregate the signatures and construct the payload
+        }
 
         CanisterHttpPayload {
             responses: candidates
-                .drain(..)
+                .into_iter()
                 .filter_map(|(metadata, shares, content)| {
                     self.aggregate(consensus_registry_version, metadata, shares, content)
                 })
                 .collect(),
             timeouts,
             divergence_responses,
-            // TODO(flexible-http-outcalls): implement flexible responses
-            flexible_responses: vec![],
+            flexible_responses,
         }
     }
 
@@ -411,16 +367,11 @@ impl CanisterHttpPayloadBuilderImpl {
         height: Height,
         payload: &CanisterHttpPayload,
         validation_context: &ValidationContext,
-        delivered_ids: HashSet<CallbackId>,
+        mut delivered_ids: HashSet<CallbackId>,
     ) -> Result<(), PayloadValidationError> {
         // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
-        }
-
-        // Flexible responses are not yet supported
-        if !payload.flexible_responses.is_empty() {
-            return invalid_artifact(InvalidCanisterHttpPayloadReason::FlexibleResponsesNotEmpty);
         }
 
         // Check whether feature is enabled and reject if it isn't.
@@ -441,7 +392,6 @@ impl CanisterHttpPayloadBuilderImpl {
             });
         }
 
-        // Validate the timed out calls
         let state = &self
             .state_reader
             .get_state_at(validation_context.certified_height)
@@ -456,6 +406,7 @@ impl CanisterHttpPayloadBuilderImpl {
             .subnet_call_context_manager
             .canister_http_request_contexts;
 
+        // Validate the timed out calls
         for timeout_id in &payload.timeouts {
             // Get requests
             let request = http_contexts.get(timeout_id).ok_or(
@@ -464,11 +415,15 @@ impl CanisterHttpPayloadBuilderImpl {
                 ),
             )?;
 
-            // Check that they are timed out and no dupicates
-            if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL >= validation_context.time
-                || delivered_ids.contains(timeout_id)
-            {
+            // Check that the request has actually timed out
+            if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL >= validation_context.time {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::NotTimedOut(
+                    *timeout_id,
+                ));
+            }
+            // Check for duplicates (already delivered or repeated in this payload)
+            if !delivered_ids.insert(*timeout_id) {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
                     *timeout_id,
                 ));
             }
@@ -495,27 +450,9 @@ impl CanisterHttpPayloadBuilderImpl {
             .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
             // Check that the response is not submitted twice
-            if delivered_ids.contains(&response.content.id) {
+            if !delivered_ids.insert(response.content.id) {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
                     response.content.id,
-                ));
-            }
-        }
-
-        // Check that there are no duplicate responses among non-replicated requests.
-        // As it's very easy for a malicious delegated node to submit multiple responses (even different).
-        let mut non_replicated_ids = HashSet::new();
-        for response in &payload.responses {
-            let callback_id = &response.content.id;
-
-            if let Some(&CanisterHttpRequestContext {
-                replication: Replication::NonReplicated(_),
-                ..
-            }) = http_contexts.get(callback_id)
-                && !non_replicated_ids.insert(callback_id)
-            {
-                return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
-                    *callback_id,
                 ));
             }
         }
@@ -534,21 +471,15 @@ impl CanisterHttpPayloadBuilderImpl {
         // do all the cheap checks first
         for response in &payload.responses {
             let callback_id = response.content.id;
-            let (effective_committee, effective_threshold) = match http_contexts.get(&callback_id) {
-                Some(&CanisterHttpRequestContext {
-                    replication: Replication::NonReplicated(ref node_id),
-                    ..
-                }) => (vec![*node_id], 1),
-                None
-                // TODO(flexible-http-outcalls): implement Flexible payload validation
-                | Some(&CanisterHttpRequestContext {
-                    replication: Replication::Flexible { .. },
-                    ..
-                })
-                | Some(&CanisterHttpRequestContext {
-                    replication: Replication::FullyReplicated,
-                    ..
-                }) => {
+            let request_context = http_contexts.get(&callback_id).ok_or(
+                CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
+                ),
+            )?;
+
+            let (effective_committee, effective_threshold) = match request_context.replication {
+                Replication::NonReplicated(node_id) => (vec![node_id], 1),
+                Replication::FullyReplicated => {
                     let threshold = match self
                         .membership
                         .get_committee_threshold(height, Committee::CanisterHttp)
@@ -562,6 +493,11 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     };
                     (committee.clone(), threshold)
+                }
+                Replication::Flexible { .. } => {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
+                    );
                 }
             };
 
@@ -636,12 +572,160 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
                 );
             }
-            for (_, grouped_shares) in grouped_shares {
+            for (callback_id, grouped_shares) in grouped_shares {
+                if !delivered_ids.insert(callback_id) {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
+                        callback_id,
+                    ));
+                }
+                let context = http_contexts.get(&callback_id).ok_or(
+                    CanisterHttpPayloadValidationError::InvalidArtifact(
+                        InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
+                    ),
+                )?;
+                if !matches!(context.replication, Replication::FullyReplicated) {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
+                    );
+                }
                 if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
                     return invalid_artifact(
                         InvalidCanisterHttpPayloadReason::DivergenceProofDoesNotMeetDivergenceCriteria,
                     );
                 }
+            }
+        }
+
+        // Validate flexible responses
+        for group in &payload.flexible_responses {
+            let callback_id = group.callback_id;
+
+            if !delivered_ids.insert(callback_id) {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
+                    callback_id,
+                ));
+            }
+
+            // Look up the request context and verify it's a Flexible replication
+            let context = http_contexts.get(&callback_id).ok_or(
+                CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
+                ),
+            )?;
+            let Replication::Flexible {
+                committee: flex_committee,
+                min_responses,
+                max_responses,
+            } = &context.replication
+            else {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::InvalidPayloadSection(
+                    callback_id,
+                ));
+            };
+
+            // Check response count is within [min_responses, max_responses]
+            let (min_responses, max_responses) = (*min_responses, *max_responses);
+            let count = group.responses.len();
+            if count < min_responses as usize || count > max_responses as usize {
+                return invalid_artifact(
+                    InvalidCanisterHttpPayloadReason::FlexibleResponseCountOutOfRange {
+                        callback_id,
+                        count,
+                        min_responses,
+                        max_responses,
+                    },
+                );
+            }
+
+            let mut seen_signers = HashSet::new();
+
+            for entry in &group.responses {
+                // Callback id consistency
+                if entry.response.id != callback_id {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
+                            callback_id,
+                            mismatched_id: entry.response.id,
+                        },
+                    );
+                }
+                if entry.proof.content.id != callback_id {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
+                            callback_id,
+                            mismatched_id: entry.proof.content.id,
+                        },
+                    );
+                }
+
+                // No duplicate signers
+                let signer = entry.proof.signature.signer;
+                if !seen_signers.insert(signer) {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner {
+                            callback_id,
+                            signer,
+                        },
+                    );
+                }
+
+                // Signer must be in the flexible committee
+                if !flex_committee.contains(&signer) {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee {
+                            callback_id,
+                            signer,
+                        },
+                    );
+                }
+
+                // Content hash must match
+                let calculated_hash = crypto_hash(&entry.response);
+                if calculated_hash != entry.proof.content.content_hash {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::ContentHashMismatch {
+                            metadata_hash: entry.proof.content.content_hash.clone(),
+                            calculated_hash,
+                        },
+                    );
+                }
+
+                // Metadata consistency (timeout)
+                if entry.proof.content.timeout != entry.response.timeout {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::InvalidMetadata {
+                        metadata_id: entry.proof.content.id,
+                        content_id: entry.response.id,
+                        metadata_timeout: entry.proof.content.timeout,
+                        content_timeout: entry.response.timeout,
+                    });
+                }
+
+                // Response must not be timed out
+                if entry.response.timeout < validation_context.time {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::Timeout {
+                        timed_out_at: entry.response.timeout,
+                        validation_time: validation_context.time,
+                    });
+                }
+
+                // Registry version must match
+                if entry.proof.content.registry_version != consensus_registry_version {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
+                            expected: consensus_registry_version,
+                            received: entry.proof.content.registry_version,
+                        },
+                    );
+                }
+
+                // Verify the individual share signature
+                self.crypto
+                    .verify(&entry.proof, consensus_registry_version)
+                    .map_err(|err| {
+                        CanisterHttpPayloadValidationError::InvalidArtifact(
+                            InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
+                        )
+                    })?;
             }
         }
 
@@ -680,7 +764,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         );
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = self.get_canister_http_payload_impl(height, context, delivered_ids, max_size);
-        parse::payload_to_bytes(&payload, max_size)
+        parse::payload_to_bytes(payload, max_size)
     }
 
     fn validate_payload(

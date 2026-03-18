@@ -67,11 +67,11 @@ use candid::{
     utils::{ArgumentDecoder, ArgumentEncoder},
 };
 use flate2::read::GzDecoder;
-use ic_management_canister_types::{
+pub use ic_management_canister_types::{
     CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
     Snapshot,
 };
-use ic_transport_types::SubnetMetrics;
+pub use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
 use semver::{Version, VersionReq};
@@ -79,6 +79,8 @@ use serde::{Deserialize, Serialize};
 use slog::Level;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+#[cfg(windows)]
+use std::sync::Once;
 use std::{
     fs::OpenOptions,
     net::{IpAddr, SocketAddr},
@@ -1966,7 +1968,31 @@ fn wsl_path(path: &PathBuf, desc: &str) -> String {
 }
 
 #[cfg(windows)]
+static WSL_WARM_UP: Once = Once::new();
+
+#[cfg(windows)]
+fn warm_up_wsl() {
+    WSL_WARM_UP.call_once(|| {
+        let output = Command::new("wsl")
+            .arg("bash")
+            .arg("-c")
+            .arg("true")
+            .output()
+            .expect("Failed to warm up WSL");
+        if !output.status.success() {
+            panic!(
+                "Failed to warm up WSL.\nStatus: {}\nStdout: {}\nStderr: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
+    });
+}
+
+#[cfg(windows)]
 fn pocket_ic_server_cmd(bin_path: &PathBuf) -> Command {
+    warm_up_wsl();
     let mut cmd = Command::new("wsl");
     cmd.arg(wsl_path(bin_path, "PocketIC binary"));
     cmd

@@ -45,7 +45,8 @@ use ic_nns_test_utils::{
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_metrics::fetch_int_gauge_vec;
-use ic_types::{CanisterId, Cycles, PrincipalId};
+use ic_types::{CanisterId, PrincipalId};
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{
     AccountBalanceArgs, AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs,

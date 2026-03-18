@@ -249,7 +249,9 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript;
     use ic_interfaces_registry::{RegistryClient, RegistryVersionedRecord};
     use ic_logger::no_op_logger;
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, RecoveryArgs, SubnetRecord, catch_up_package_contents::CupType,
+    };
     use ic_types::{
         Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, Time,
         consensus::HasVersion,
@@ -279,6 +281,11 @@ mod tests {
                         registry_store_uri: None,
                         ecdsa_initializations: vec![],
                         chain_key_initializations: vec![],
+                        cup_type: Some(CupType::Recovery(RecoveryArgs {
+                            height: 54321,
+                            time: 1,
+                            state_hash: vec![1, 2, 3, 4, 5],
+                        })),
                     };
 
                 // Encode the cup to protobuf

@@ -151,7 +151,6 @@ pub(super) fn fake_signature_request_context(
         derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [0; 32],
-        matched_pre_signature: None,
         nonce: None,
     }
 }

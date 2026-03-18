@@ -472,7 +472,7 @@ mod read_state_request {
     }
 
     fn random_label<R: Rng + CryptoRng>(rng: &mut R) -> Label {
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         rng.fill_bytes(&mut bytes);
         Label::from(bytes)
     }

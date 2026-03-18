@@ -302,7 +302,7 @@ fn test_sync_registry_stored() {
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, RegistryVersion::new(5));
 
-    for version in 1..=4u8 {
+    for version in 1..=4_u8 {
         let value = client.get_value("Foo", v(version as u64)).unwrap().unwrap();
         assert_eq!(value, vec![version]);
     }

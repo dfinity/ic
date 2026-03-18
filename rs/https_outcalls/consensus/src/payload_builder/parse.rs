@@ -36,32 +36,39 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
     Ok(payload)
 }
 
-pub(crate) fn payload_to_bytes(payload: &CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
+pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
+    let CanisterHttpPayload {
+        timeouts,
+        divergence_responses,
+        responses,
+        flexible_responses,
+    } = payload;
+
     let message_iterator =
-        payload
-            .timeouts
-            .iter()
+        timeouts
+            .into_iter()
             .map(|timeout| CanisterHttpResponseMessage {
                 message_type: Some(MessageType::Timeout(timeout.get())),
             })
-            .chain(payload.divergence_responses.iter().map(|response| {
-                CanisterHttpResponseMessage {
-                    message_type: Some(MessageType::DivergenceResponse(
-                        pb::CanisterHttpResponseDivergence::from(response),
-                    )),
-                }
-            }))
             .chain(
-                payload
-                    .responses
-                    .iter()
+                divergence_responses
+                    .into_iter()
+                    .map(|response| CanisterHttpResponseMessage {
+                        message_type: Some(MessageType::DivergenceResponse(
+                            pb::CanisterHttpResponseDivergence::from(response),
+                        )),
+                    }),
+            )
+            .chain(
+                responses
+                    .into_iter()
                     .map(|response| CanisterHttpResponseMessage {
                         message_type: Some(MessageType::Response(
                             pb::CanisterHttpResponseWithConsensus::from(response),
                         )),
                     }),
             )
-            .chain(payload.flexible_responses.iter().map(|flex_responses| {
+            .chain(flexible_responses.into_iter().map(|flex_responses| {
                 CanisterHttpResponseMessage {
                     message_type: Some(MessageType::FlexibleResponses(
                         pb::FlexibleCanisterHttpResponses::from(flex_responses),
