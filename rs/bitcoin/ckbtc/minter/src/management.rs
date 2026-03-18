@@ -176,6 +176,12 @@ pub async fn get_utxos<R: CanisterRuntime>(
         num_pages += 1;
     }
 
+    for utxo in &utxos {
+        if response.tip_height.saturating_sub(utxo.height) + 1 < min_confirmations {
+            crate::metrics::GET_UTXOS_MIN_CONFIRMATIONS_VIOLATIONS
+                .with(|cell| cell.set(cell.get() + 1));
+        }
+    }
     observe_get_utxos_latency(utxos.len(), num_pages, source, start_time, now);
 
     response.utxos = utxos;

@@ -31,6 +31,7 @@ thread_local! {
     pub static GET_UTXOS_CACHE_HITS : Cell<u64> = Cell::default();
     pub static GET_UTXOS_CACHE_MISSES: Cell<u64> = Cell::default();
     pub static SIGN_WITH_ECDSA_LATENCY: RefCell<BTreeMap<MetricsResult, LatencyHistogram>> = RefCell::default();
+    pub static GET_UTXOS_MIN_CONFIRMATIONS_VIOLATIONS: Cell<u64> = Cell::default();
 }
 
 pub const BUCKETS_DEFAULT_MS: [u64; 8] =
@@ -446,6 +447,12 @@ pub fn encode_metrics(
         }
         Ok(())
     })?;
+
+    metrics.encode_counter(
+        "ckbtc_minter_get_utxos_min_confirmation_vilations",
+        GET_UTXOS_MIN_CONFIRMATIONS_VIOLATIONS.get() as f64,
+        "Number of violations (less than min_confirmations detected) in get_utxos results.",
+    )?;
 
     Ok(())
 }
