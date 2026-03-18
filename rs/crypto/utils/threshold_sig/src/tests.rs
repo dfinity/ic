@@ -72,7 +72,7 @@ fn signature_verification_should_pass_test_vectors() {
                 PublicKeyBytes::SIZE,
                 "Test vector public key has wrong length"
             );
-            let mut buffer = [0u8; PublicKeyBytes::SIZE];
+            let mut buffer = [0_u8; PublicKeyBytes::SIZE];
             buffer.copy_from_slice(&public_key);
             ThresholdSigPublicKey::from(CspThresholdSigPublicKey::ThresBls12_381(PublicKeyBytes(
                 buffer,

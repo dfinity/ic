@@ -164,7 +164,7 @@ impl ConsensusImpl {
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
-        vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -194,7 +194,7 @@ impl ConsensusImpl {
             self_validating_payload_builder,
             canister_http_payload_builder,
             query_stats_payload_builder,
-            vetkd_payload_builder,
+            chain_key_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
