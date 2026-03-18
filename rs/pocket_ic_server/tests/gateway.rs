@@ -432,7 +432,7 @@ fn test_unresponsive_gateway_backend() {
     // Query a few endpoints on the HTTP gateway:
     // - a custom dashboard endpoint (handled by the PocketIC server);
     // - an /api endpoint (proxied by `ic-gateway`);
-    // - an asset endpoint (handled by `ic-http-gateway`).
+    // - an asset endpoint (handled by `ic-http-gateway-protocol`).
     let paths = vec![
         "_/dashboard".to_string(),
         "api/v2/status".to_string(),
