@@ -5,6 +5,7 @@ use super::*;
 use crate::CallContext;
 use crate::CallOrigin;
 use crate::Memory;
+use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
@@ -24,15 +25,14 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, MAX_RESPONSE_COUNT_BYTES,
     NO_DEADLINE, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
-use ic_types::{CountBytes, Cycles, Time};
+use ic_types::{CountBytes, Time};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
 use strum::IntoEnumIterator;
@@ -91,9 +91,15 @@ impl CanisterStateFixture {
             Cycles::new(1 << 36),
             NumSeconds::from(100_000),
         );
+        let canister_snapshots = CanisterSnapshots::default();
 
         CanisterStateFixture {
-            canister_state: CanisterState::new(system_state, None, scheduler_state),
+            canister_state: CanisterState::new(
+                system_state,
+                None,
+                scheduler_state,
+                canister_snapshots,
+            ),
         }
     }
 

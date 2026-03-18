@@ -4,7 +4,10 @@ use super::super::test_utilities::{
     SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
 };
 use super::super::*;
-use super::{make_ecdsa_key_id, make_schnorr_key_id, zero_instruction_messages};
+use super::{
+    make_ecdsa_key_id, make_schnorr_key_id, zero_instruction_messages,
+    zero_instruction_overhead_config,
+};
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::RejectCode;
@@ -19,17 +22,17 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_gauge, fetch_gauge_vec, fetch_histogram_vec_stats, fetch_int_gauge,
-    fetch_int_gauge_vec, metric_vec,
+    HistogramStats, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_histogram_vec_stats,
+    fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
+use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;
@@ -40,14 +43,10 @@ fn validate_consumed_instructions_metric() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
             max_instructions_per_install_code_slice: NumInstructions::new(50),
             max_instructions_per_round: NumInstructions::from(400),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -93,12 +92,9 @@ fn can_record_metrics_single_scheduler_thread() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_query_message: NumInstructions::new(5),
             max_instructions_per_slice: NumInstructions::from(5),
             max_instructions_per_install_code_slice: NumInstructions::from(5),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -135,13 +131,9 @@ fn can_record_metrics_for_a_round() {
             scheduler_cores,
             max_instructions_per_round: NumInstructions::from(instructions * 2),
             max_instructions_per_message: NumInstructions::from(instructions),
-            max_instructions_per_query_message: NumInstructions::new(instructions),
             max_instructions_per_slice: NumInstructions::from(instructions),
             max_instructions_per_install_code_slice: NumInstructions::from(instructions),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -249,20 +241,7 @@ fn can_record_metrics_for_a_round() {
 /// incremented.
 #[test]
 fn prepay_failures_counted() {
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(1000),
-            max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_query_message: NumInstructions::new(100),
-            max_instructions_per_slice: NumInstructions::from(100),
-            max_instructions_per_install_code_slice: NumInstructions::from(100),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister_with_cycles = test.create_canister_with(
         Cycles::new(1_000_000_000_000_000),
@@ -318,18 +297,7 @@ fn execution_round_metrics_are_recorded() {
     // scheduler cores, so each canister gets its own thread for running.
     // Besides canister messages, there are three subnet messages.
     let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(400),
-            max_instructions_per_message: NumInstructions::from(10),
-            max_instructions_per_query_message: NumInstructions::new(10),
-            max_instructions_per_slice: NumInstructions::from(10),
-            max_instructions_per_install_code_slice: NumInstructions::from(10),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
+        .with_scheduler_config(zero_instruction_overhead_config())
         .build();
 
     for _ in 0..2 {
@@ -377,28 +345,42 @@ fn execution_round_metrics_are_recorded() {
             .messages
             .get_sample_count()
     );
-    assert_eq!(2, metrics.round_subnet_queue.duration.get_sample_count());
     assert_eq!(
         2,
-        metrics.round_subnet_queue.instructions.get_sample_count()
+        metrics.round_inner_subnet_queue.duration.get_sample_count()
+    );
+    assert_eq!(
+        2,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_count()
     );
     assert_eq!(
         30,
-        metrics.round_subnet_queue.instructions.get_sample_sum() as u64,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_sum() as u64,
     );
-    assert_eq!(2, metrics.round_subnet_queue.messages.get_sample_count());
+    assert_eq!(
+        2,
+        metrics.round_inner_subnet_queue.messages.get_sample_count()
+    );
     assert_eq!(
         3,
-        metrics.round_subnet_queue.messages.get_sample_sum() as u64,
+        metrics.round_inner_subnet_queue.messages.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.duration.get_sample_count());
     assert_eq!(1, metrics.round_inner.instructions.get_sample_count());
+    // (3 subnet messages + 10 canister messages) * 10 instructions
     assert_eq!(
-        100,
+        130,
         metrics.round_inner.instructions.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.messages.get_sample_count());
-    assert_eq!(10, metrics.round_inner.messages.get_sample_sum() as u64,);
+    // 3 subnet messages + 10 canister messages
+    assert_eq!(13, metrics.round_inner.messages.get_sample_sum() as u64,);
     assert_eq!(2, metrics.round_inner_iteration.duration.get_sample_count());
     assert_eq!(
         2,
@@ -1181,5 +1163,49 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
                 (initial_balance.get() - removed_cycles.get()) as f64
             )
         ]),
+    );
+}
+
+#[test]
+fn canister_ingress_queue_latencies_are_observed() {
+    let t0 = UNIX_EPOCH + Duration::from_secs(1_000);
+    let delta_t = 3;
+    let t1 = t0 + Duration::from_secs(delta_t);
+
+    let mut test = SchedulerTestBuilder::new().build();
+    let a = test.create_canister();
+    let b = test.create_canister();
+
+    // Send 2 ingress messages to canister A, one at `t0` and one at `t1`; and 1 to
+    // canister B at `t1`.
+    test.set_time(t0);
+    let msg_a1 = test.send_ingress(a, ingress(1));
+    test.set_time(t1);
+    let msg_a2 = test.send_ingress(a, ingress(1));
+    let msg_b1 = test.send_ingress(b, ingress(1));
+
+    // Execute all messages, at `t1`.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // All 3 messages produced a response.
+    for msg_id in [msg_a1, msg_a2, msg_b1] {
+        assert_eq!(
+            test.ingress_error(&msg_id).code(),
+            ErrorCode::CanisterDidNotReply
+        );
+    }
+
+    // Canister A: 2 messages with latencies 3s and 0s each → average = 1.5
+    // Canister B: 1 message with latency 0s → average = 0.0
+    // Histogram: 2 observations (one per canister), sum = 1.5
+    assert_eq!(
+        fetch_histogram_stats(
+            test.metrics_registry(),
+            "scheduler_canister_ingress_queue_latencies_seconds",
+        ),
+        Some(HistogramStats {
+            count: 2,
+            sum: (delta_t as f64) / 2.0
+        })
     );
 }

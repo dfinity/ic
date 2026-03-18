@@ -4,6 +4,7 @@ use super::super::test_utilities::{
     SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions,
 };
 use super::super::*;
+use super::zero_instruction_overhead_config;
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, Method};
@@ -18,14 +19,11 @@ fn dts_long_execution_completes() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -94,14 +92,11 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -161,14 +156,11 @@ fn dts_long_execution_runs_out_of_instructions() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -201,15 +193,12 @@ fn complete_concurrent_long_executions(
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
             max_paused_executions: num_canisters,
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -247,7 +236,6 @@ fn respect_max_paused_executions(
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
             max_paused_executions,
@@ -302,7 +290,6 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
             scheduler_cores,
             max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
-            max_instructions_per_query_message: max_instructions_per_slice.into(),
             max_paused_executions: num_canisters,
             ..SchedulerConfig::application_subnet()
         })
@@ -368,7 +355,6 @@ fn filter_after_long_executions() {
         .with_scheduler_config(SchedulerConfig {
             max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
-            max_instructions_per_query_message: max_instructions_per_slice.into(),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -399,19 +385,16 @@ fn filter_after_long_executions() {
 }
 
 #[test]
-fn dts_allow_only_one_long_install_code_execution_at_any_time() {
+fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(160),
             max_instructions_per_message: NumInstructions::from(40),
-            max_instructions_per_query_message: NumInstructions::from(10),
             max_instructions_per_slice: NumInstructions::from(10),
             max_instructions_per_install_code: NumInstructions::new(40),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -424,25 +407,19 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // 1 slice and no messages executed.
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    let metrics = test.scheduler().metrics.as_ref();
     assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_subnet_queue
-            .slices
-            .get_sample_sum(),
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
         1.0
     );
     assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_subnet_queue
-            .messages
-            .get_sample_sum(),
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
         0.0
     );
 
-    // Add a second canister with a long install code message.
+    // Add a second canister with a short install code message.
     let canister_2 = test.create_canister();
     let install_code = TestInstallCode::Upgrade {
         post_upgrade: instructions(10),
@@ -457,58 +434,33 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
     // After second round.
     assert!(test.canister_state(canister_1).has_paused_install_code());
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+    let metrics = test.scheduler().metrics.as_ref();
+    // First slice executed as a regular subnet message, second as a long install.
     assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_subnet_queue
-            .slices
-            .get_sample_sum(),
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
         1.0
     );
     assert_eq!(
-        test.scheduler()
-            .metrics
+        metrics
             .round_advance_long_install_code
             .slices
             .get_sample_sum(),
         1.0
     );
+    // Only the two slices were executed.
+    assert_eq!(metrics.round.slices.get_sample_sum(), 2.0);
     assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_subnet_queue
-            .messages
-            .get_sample_sum(),
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
         0.0
     );
 
+    let state_metrics = &test.scheduler().state_metrics;
+    // 2 rounds because the first canister was paused twice.
     assert_eq!(
-        test.scheduler()
-            .state_metrics
-            .canister_paused_execution()
-            .get_sample_sum(),
-        0.0
-    );
-    assert_eq!(
-        test.scheduler()
-            .state_metrics
-            .canister_aborted_execution()
-            .get_sample_sum(),
-        0.0
-    );
-    assert_eq!(
-        test.scheduler()
-            .state_metrics
+        state_metrics
             .canister_paused_install_code()
             .get_sample_sum(),
         2.0
-    );
-    assert_eq!(
-        test.scheduler()
-            .state_metrics
-            .canister_aborted_install_code()
-            .get_sample_sum(),
-        0.0
     );
 
     // Third round: execution for first canister is done.
@@ -517,51 +469,38 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
     assert!(!test.canister_state(canister_1).has_paused_install_code());
     assert!(!test.canister_state(canister_2).has_paused_install_code());
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    let metrics = test.scheduler().metrics.as_ref();
     assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_subnet_queue
-            .slices
-            .get_sample_sum(),
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
         2.0
     );
     assert_eq!(
-        test.scheduler()
-            .metrics
-            .round_subnet_queue
-            .messages
-            .get_sample_sum(),
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
         1.0
     );
     assert_eq!(
-        test.scheduler()
-            .metrics
+        metrics
             .round_advance_long_install_code
             .slices
             .get_sample_sum(),
         2.0
     );
     assert_eq!(
-        test.scheduler()
-            .metrics
+        metrics
             .round_advance_long_install_code
             .messages
             .get_sample_sum(),
         1.0
     );
+    // 3 slices for the first canister, 1 slice for the second.
+    assert_eq!(metrics.round.slices.get_sample_sum(), 4.0);
+    let state_metrics = &test.scheduler().state_metrics;
+    // Same 2 rounds of paused install code as above.
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        state_metrics
             .canister_paused_install_code()
             .get_sample_sum(),
         2.0
-    );
-    assert_eq!(
-        test.scheduler()
-            .state_metrics
-            .canister_paused_install_code()
-            .get_sample_count(),
-        3
     );
 }
 
@@ -570,12 +509,10 @@ fn dts_resume_install_code_after_abort() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_install_code: NumInstructions::new(1000),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -591,14 +528,16 @@ fn dts_resume_install_code_after_abort() {
     test.execute_round(ExecutionRoundType::CheckpointRound);
     assert!(test.canister_state(canister).has_aborted_install_code());
 
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert!(test.canister_state(canister).has_paused_install_code());
-    for _ in 0..10 {
+    for _ in 0..9 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
+        assert!(test.canister_state(canister).has_paused_install_code());
     }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert!(!test.canister_state(canister).has_paused_install_code());
     assert!(!test.canister_state(canister).has_aborted_install_code());
 
+    // After 1 + 9 rounds we had a paused install code.
     assert_eq!(
         test.scheduler()
             .state_metrics
@@ -606,6 +545,7 @@ fn dts_resume_install_code_after_abort() {
             .get_sample_sum(),
         10.0
     );
+    // After the checkpoint round we had an aborted install code.
     assert_eq!(
         test.scheduler()
             .state_metrics
@@ -620,29 +560,46 @@ fn dts_resume_long_execution_after_abort() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
+
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let canister = test.create_canister();
     let message_id = test.send_ingress(canister, ingress(1000));
 
+    /// Returns the last executed round and whether the canister was fully executed.
+    fn execution_stats(test: &SchedulerTest, canister: CanisterId) -> (u64, bool) {
+        (
+            test.canister_state(canister)
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .last_executed_round
+                .get(),
+            test.was_fully_executed(canister),
+        )
+    }
+
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert!(test.canister_state(canister).has_paused_execution());
+    assert_eq!(execution_stats(&test, canister), (1, true));
+
     test.execute_round(ExecutionRoundType::CheckpointRound);
     assert!(!test.canister_state(canister).has_paused_execution());
     assert!(test.canister_state(canister).has_aborted_execution());
+    assert_eq!(execution_stats(&test, canister), (2, true));
 
-    for _ in 0..10 {
+    for i in 0..10 {
         assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
         test.execute_round(ExecutionRoundType::OrdinaryRound);
+        assert_eq!(execution_stats(&test, canister), (i + 3, true));
     }
     assert_eq!(
         test.ingress_error(&message_id).code(),
@@ -669,14 +626,11 @@ fn dts_update_and_heartbeat() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(300),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(200),
             max_instructions_per_slice: NumInstructions::from(200),
             max_instructions_per_install_code_slice: NumInstructions::from(200),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -692,7 +646,7 @@ fn dts_update_and_heartbeat() {
     let message_id = test.send_ingress(canister, ingress(300));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // The heartbeat did not give the ingress message a chance to run.
-    assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    assert_eq!(test.ingress_state(&message_id), IngressState::Received);
 
     test.expect_heartbeat(canister, instructions(100));
     test.execute_round(ExecutionRoundType::OrdinaryRound);

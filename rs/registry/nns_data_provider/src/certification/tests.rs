@@ -231,7 +231,7 @@ fn test_decode_prefix() {
 
 #[test]
 fn test_decode_bad_root_hash() {
-    let bad_digest = Digest([0u8; 32]);
+    let bad_digest = Digest([0_u8; 32]);
 
     let (cid, pk, payload) = make_certified_delta(
         vec![make_change(vec![upsert("key", "value")])],

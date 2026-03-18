@@ -32,9 +32,10 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types::{
-    ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    ComputeAllocation, MemoryAllocation, NumBytes,
     methods::{FuncRef, WasmMethod},
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};

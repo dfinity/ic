@@ -65,6 +65,7 @@ BASE_DEPENDENCIES = [
         "//packages/ic-error-types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
+        "//rs/types/cycles",
         "@crate_index//:crossbeam-channel",
         "@crate_index//:hex",
         "@crate_index//:ic-xrc-types",

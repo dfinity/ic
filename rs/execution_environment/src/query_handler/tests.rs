@@ -8,10 +8,11 @@ use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
-    Cycles, NumInstructions,
+    NumInstructions,
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
+use ic_types_cycles::Cycles;
 use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
 
@@ -199,6 +200,21 @@ fn composite_query_call_with_side_effects() {
             .build(),
     );
     assert_eq!(output, Ok(WasmResult::Reply(10_i32.to_le_bytes().to_vec())));
+}
+
+#[test]
+fn composite_query_call_to_the_same_canister() {
+    // In this test we have a single canister that makes a composite self-call.
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let output = test.non_replicated_query(
+        canister_id,
+        "composite_query",
+        wasm().inter_query(canister_id, call_args()).build(),
+    );
+    assert!(matches!(output, Ok(WasmResult::Reply(_))));
 }
 
 #[test]

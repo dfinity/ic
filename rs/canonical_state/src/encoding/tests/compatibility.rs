@@ -17,18 +17,17 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    CryptoHashOfPartialState, Cycles, NumBytes, Time,
+    CryptoHashOfPartialState, NumBytes, Time,
     crypto::CryptoHash,
     messages::{
         CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata,
         Response, StreamMessage,
     },
-    nominal_cycles::NominalCycles,
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndex},
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use serde_cbor::value::Value;
 use std::collections::{BTreeMap, VecDeque};
 

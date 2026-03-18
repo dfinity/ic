@@ -6,7 +6,8 @@ use std::time::Duration;
 use crate::execution_environment::{NUMBER_OF_EXECUTION_THREADS, SUBNET_HEAP_DELTA_CAPACITY};
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{Cycles, ExecutionRound, NumInstructions};
+use ic_types::{ExecutionRound, NumInstructions};
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -474,8 +475,8 @@ impl CyclesAccountManagerConfig {
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
             ingress_byte_reception_fee: Cycles::new(2_000),
-            // 4 SDR per GiB per year => 4e12 Cycles per year
-            gib_storage_per_second_fee: Cycles::new(127_000),
+            // 5.6 SDR per GiB per year => 5.6e12 Cycles per year
+            gib_storage_per_second_fee: Cycles::new(177_800),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,

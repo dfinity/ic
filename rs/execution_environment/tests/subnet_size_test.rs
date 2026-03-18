@@ -17,9 +17,8 @@ use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, SignedIngress};
-use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
-};
+use ic_types::{CanisterId, ComputeAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId};
+use ic_types_cycles::Cycles;
 use more_asserts::assert_lt;
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
@@ -774,8 +773,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
                 xnet_byte_transmission_fee: Cycles::new(1_000),
                 ingress_message_reception_fee: Cycles::new(1_200_000),
                 ingress_byte_reception_fee: Cycles::new(2_000),
-                // 4 SDR per GiB per year => 4e12 Cycles per year
-                gib_storage_per_second_fee: Cycles::new(127_000),
+                // 5.6 SDR per GiB per year => 5.6e12 Cycles per year
+                gib_storage_per_second_fee: Cycles::new(177_800),
                 duration_between_allocation_charges: Duration::from_secs(10),
                 ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
                 schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
@@ -946,15 +945,15 @@ fn test_subnet_size_one_gib_storage_default_cost() {
 
     // Assert small subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_lo, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(4.005_072));
+    assert_eq!(cost * per_year, trillion_cycles(5.607_100_800));
 
     // Assert big subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_hi, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(10.474_777_008));
+    assert_eq!(cost * per_year, trillion_cycles(14.664_713_040));
 
     // Assert big subnet size cost per year scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(4.005_040_464));
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(5.607_069_264));
 }
 
 // Storage cost tests split into 2: zero and non-zero compute allocation.

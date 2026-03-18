@@ -29,9 +29,8 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
+    CanisterId, CountBytes, PrincipalId, RegistryVersion,
     batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpMethod, Transform},
     consensus::idkg::IDkgMasterPublicKeyId,
@@ -40,9 +39,9 @@ use ic_types::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
         RequestOrResponse, Response,
     },
-    nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
@@ -1873,15 +1872,17 @@ fn canister_snapshots_after_split() {
     // The snapshots do not exist in the replicated state before the requests.
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         0
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         0
     );
@@ -1908,15 +1909,17 @@ fn canister_snapshots_after_split() {
     // Verify the snapshots exist in the replicated state.
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
     );
@@ -1960,32 +1963,20 @@ fn canister_snapshots_after_split() {
 
     assert_eq!(
         state_a
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
-    );
-    assert_eq!(
-        state_a
-            .canister_snapshots
-            .list_snapshots(canister_id_2)
-            .len(),
-        0
     );
 
     assert_eq!(
         state_b
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
-    );
-    assert_eq!(
-        state_b
-            .canister_snapshots
-            .list_snapshots(canister_id_1)
-            .len(),
-        0
     );
 }
 

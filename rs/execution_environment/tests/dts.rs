@@ -25,7 +25,8 @@ use ic_replicated_state::canister_state::{NextExecution, execution_state::NextSc
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
-use ic_types::{CryptoHashOfState, Cycles, NumInstructions};
+use ic_types::{CryptoHashOfState, NumInstructions};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{
     CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, call_args, wasm,
 };

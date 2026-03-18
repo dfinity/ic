@@ -2,6 +2,7 @@
 
 use super::super::test_utilities::{SchedulerTestBuilder, ingress};
 use super::super::*;
+use super::zero_instruction_overhead_config;
 use crate::scheduler::test_utilities::{on_response, other_side};
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::{
@@ -9,9 +10,9 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::CyclesUseCase;
 use ic_types_test_utils::ids::canister_test_id;
 use std::time::Duration;
 
@@ -76,14 +77,10 @@ fn charging_for_message_memory_works() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::from(1),
             max_instructions_per_slice: NumInstructions::new(1),
             max_instructions_per_install_code_slice: NumInstructions::new(1),
             max_instructions_per_round: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -184,9 +181,10 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(12_700_000),
+        Cycles::new(17_780_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
+        None,
         None,
         Some(initial_time),
         None,
@@ -195,8 +193,9 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         0
     );
@@ -232,8 +231,9 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         1
     );
@@ -271,8 +271,9 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         0
     );
@@ -291,9 +292,10 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(12_700_000),
+        Cycles::new(17_780_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
+        None,
         None,
         Some(initial_time),
         None,
@@ -302,8 +304,9 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         0
     );
@@ -346,8 +349,9 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         1
     );
@@ -403,8 +407,9 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id)
             .len(),
         0
     );
