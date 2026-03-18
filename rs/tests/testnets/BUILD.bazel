@@ -126,6 +126,7 @@ system_test(
         "dynamic_testnet",
         "manual",
     ],
+    enable_metrics = True,
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/dre/utils:os_qualification_utils",

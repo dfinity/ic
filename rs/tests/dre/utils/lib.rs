@@ -5,6 +5,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Node, Subnet},
     node_software_version::NodeSoftwareVersion,
+    resource::BootImage,
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
 };
@@ -29,8 +30,6 @@ const GUESTOS_UPDATE_IMG_URL: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_URL";
 const GUESTOS_UPDATE_IMG_HASH: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_HASH";
 const GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE: &str =
     "ENV_DEPS__GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE";
-
-pub const IC_CONFIG: &str = "IC_CONFIG";
 
 pub fn setup(env: TestEnv, config: IcConfig) {
     let mut ic = InternetComputer::new();
@@ -60,6 +59,23 @@ pub fn setup(env: TestEnv, config: IcConfig) {
             ConfigurableUnassignedNodes::Complex(uns) => uns
                 .into_iter()
                 .for_each(|un| ic = ic.clone().with_unassigned_node(un)),
+            ConfigurableUnassignedNodes::SimpleVector(specs) => {
+                let default_config = Node::new_with_settings(
+                    ic.default_vm_resources,
+                    ic.vm_allocation.clone(),
+                    BootImage::GroupDefault,
+                    ic.required_host_features.clone(),
+                );
+                for spec in &specs {
+                    for _ in 0..spec.num_nodes {
+                        ic = ic.with_unassigned_node(
+                            default_config
+                                .clone()
+                                .with_reward_type(spec.node_type.clone()),
+                        );
+                    }
+                }
+            }
         }
     }
     if let Some(u) = config.api_boundary_nodes {
@@ -109,10 +125,17 @@ pub enum ConfigurableApiBoundaryNodes {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct PartialUnassignedNodesConfig {
+    pub num_nodes: usize,
+    pub node_type: String,
+}
+
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
 pub enum ConfigurableUnassignedNodes {
     Simple(usize),
     Complex(Vec<Node>),
+    SimpleVector(Vec<PartialUnassignedNodesConfig>),
 }
 
 pub fn mock_env_variables(config: &IcConfig) {
