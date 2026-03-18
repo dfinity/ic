@@ -134,9 +134,10 @@ fn install_ii_canisters(
     let frontend_canister_id =
         block_on(async { create_canister(&agent, node.effective_canister_id()).await });
 
+    // Install code into the II frontend canister.
     let frontend_wasm =
         load_wasm(env::var("II_FRONTEND_WASM_PATH").expect("II_FRONTEND_WASM_PATH not set"));
-    let frontend_arg = candid::encode_one(InternetIdentityFrontendInitArgs {
+    let frontend_arg = Encode!(InternetIdentityFrontendInitArgs {
         backend_canister_id,
         backend_origin: format!("https://{backend_canister_id}.{ic_gateway_domain}"),
         related_origins: Some(vec![format!(
@@ -146,7 +147,6 @@ fn install_ii_canisters(
         dev_csp: Some(true),
     })
     .unwrap();
-
     let logger = env.logger();
     let subnet_id = node.subnet_id().unwrap();
     block_on(async move {
@@ -164,6 +164,7 @@ fn install_ii_canisters(
             subnet_id
         );
     });
+
     (backend_canister_id, frontend_canister_id)
 }
 
