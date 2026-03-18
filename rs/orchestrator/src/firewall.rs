@@ -176,8 +176,8 @@ impl Firewall {
             .unwrap_or_else(|| vec![registry_version])
     }
 
-    // Get the node reward type of this node from the registry, and default to `Unspecified` if it
-    // is not found or there is an error.
+    /// Get the node reward type of this node from the registry, and default to
+    /// [`NodeRewardType::Unspecified`] if it is not found or there is an error.
     fn get_defaulting_node_reward_type(
         &self,
         node_id: NodeId,
@@ -210,12 +210,12 @@ impl Firewall {
         }
     }
 
-    // Depending on the node reward type, determine the set of node types that should be
-    // whitelisted.
-    // Currently, if the node reward type is not `Type4` (cloud engine node), then all nodes except
-    // cloud engine nodes will be whitelisted. For the latter, all nodes are whitelisted.
-    // If the node reward type cannot be determined, we will default to a non cloud engine node and
-    // protect them from cloud engine nodes just in case.
+    /// Depending on the node reward type, determine the set of node types that should be
+    /// whitelisted.
+    /// Currently, if the node reward type is not `Type4` (cloud engine node), then all nodes except
+    /// cloud engine nodes will be whitelisted. For the latter, all nodes are whitelisted.
+    /// If the node reward type cannot be determined, we will default to a non cloud engine node and
+    /// protect them from cloud engine nodes just in case.
     fn get_whitelisted_node_types(node_reward_type: NodeRewardType) -> Vec<NodeRewardType> {
         match node_reward_type {
             NodeRewardType::Unspecified
