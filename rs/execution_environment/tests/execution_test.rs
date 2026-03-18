@@ -1270,7 +1270,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
         HypervisorConfig::default(),
     ));
 
-    let initial_cycles = Cycles::new(588 * B);
+    let initial_cycles = Cycles::new(823 * B);
 
     let canister_id = create_universal_canister_with_cycles(
         &env,
@@ -1304,7 +1304,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
     // The amount of remaining cycles in the main balance should be large enough
     // to start message execution but should be lower than the freezing
     // threshold.
-    let reserved_cycles = Cycles::new(504 * B);
+    let reserved_cycles = Cycles::new(706 * B);
     {
         let mut state = env.get_latest_state().as_ref().clone();
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
