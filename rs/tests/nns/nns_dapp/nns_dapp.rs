@@ -137,7 +137,7 @@ fn install_ii_canisters(
     // Install code into the II frontend canister.
     let frontend_wasm =
         load_wasm(env::var("II_FRONTEND_WASM_PATH").expect("II_FRONTEND_WASM_PATH not set"));
-    let frontend_arg = Encode!(InternetIdentityFrontendInitArgs {
+    let frontend_arg = Encode!(&InternetIdentityFrontendInitArgs {
         backend_canister_id,
         backend_origin: format!("https://{backend_canister_id}.{ic_gateway_domain}"),
         related_origins: Some(vec![format!(
