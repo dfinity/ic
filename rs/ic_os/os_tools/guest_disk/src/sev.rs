@@ -6,11 +6,12 @@ use crate::crypt::{
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result, bail, ensure};
 use attestation::attestation_report::AttestationReportExt;
-use config_types::GuestVMType;
+use config_types::{GuestOSConfig, GuestVMType};
 use hex;
 use libcryptsetup_rs::CryptDevice;
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
+use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::path::Path;
@@ -128,6 +129,7 @@ impl SevDiskEncryption<'_> {
 
         let mut errors = vec![];
         println!("Current TCB version: {}", sev_metadata.tcb_version);
+        println!("Current guest SVN: {}", sev_metadata.guest_svn);
         println!(
             "Current launch measurement: {}",
             sev_metadata.launch_measurement_hex
@@ -142,6 +144,7 @@ impl SevDiskEncryption<'_> {
                 "Candidate launch measurement: {}",
                 candidate.sev_metadata.launch_measurement_hex
             );
+            println!("Candidate guest SVN: {}", candidate.sev_metadata.guest_svn);
             let key = match derive_key_from_sev_measurement(
                 self.sev_firmware.as_mut(),
                 Key::DiskEncryptionKey {
@@ -263,6 +266,7 @@ impl SevDiskEncryption<'_> {
             .context("Failed to get attestation report from SEV firmware")?;
         let report = AttestationReport::from_bytes(&report_bytes)
             .context("Failed to parse attestation report")?;
+        println!("Generated attestation report: {}", report);
         Ok(SevMetadata {
             launch_measurement_hex: hex::encode(report.measurement),
             tcb_version: report

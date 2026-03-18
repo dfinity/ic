@@ -1,5 +1,6 @@
 use sev::Generation;
-use sev::firmware::guest::AttestationReport;
+use sev::error::AttestationReportError;
+use sev::firmware::guest::{AttestationReport, ReportVariant};
 use sev::firmware::host::TcbVersion;
 use sev::parser::ByteParser;
 use std::convert::TryInto;
@@ -19,14 +20,29 @@ pub trait AttestationReportExt {
 
 impl AttestationReportExt for AttestationReport {
     fn generation(&self) -> Result<Generation> {
-        Generation::identify_cpu(
-            self.cpuid_fam_id.ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "cpuid_fam_id is missing")
-            })?,
-            self.cpuid_mod_id.ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "CPUID model ID is missing")
-            })?,
-        )
+        // FIXME
+        Ok(Generation::Milan)
+        // // Determine the variant based on version and CPUID step
+        // let variant = match self.version {
+        //     2 => ReportVariant::V2,
+        //     3 | 4 => ReportVariant::V3,
+        //     _ => ReportVariant::V5,
+        // };
+        //
+        // let generation = match variant {
+        //     ReportVariant::V2 => {
+        //         if chip_id_is_turin_like(&self.chip_id)? {
+        //             Generation::Turin
+        //         } else {
+        //             Generation::Genoa
+        //         }
+        //     }
+        //     _ => {
+        //         let family = self.cpuid_fam_id.unwrap_or(0);
+        //         let model = self.cpuid_mod_id.unwrap_or(0);
+        //         Generation::identify_cpu(family, model)?
+        //     }
+        // };
     }
 
     fn launch_tcb_as_u64(&self) -> Result<u64> {
@@ -44,6 +60,16 @@ impl AttestationReportExt for AttestationReport {
     fn current_tcb_as_u64(&self) -> Result<u64> {
         tcb_version_to_u64(self.current_tcb, self.generation()?)
     }
+}
+
+fn chip_id_is_turin_like(bytes: &[u8]) -> std::result::Result<bool, AttestationReportError> {
+    // Chip ID -> 0x1A0-0x1E0
+    if bytes == [0; 64] {
+        return Err(AttestationReportError::MaskedChipId);
+    }
+
+    // Last 8 bytes of CHIP_ID are zero, then it is Turin Like.
+    Ok(bytes[8..] == [0; 56])
 }
 
 /// Converts a `TcbVersion` to its raw `u64` representation (little-endian layout

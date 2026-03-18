@@ -1,10 +1,8 @@
 use crate::firmware::SevGuestFirmware;
 use anyhow::Context;
 use anyhow::Result;
-use attestation::attestation_report::AttestationReportExt;
 use hkdf::SimpleHkdf;
-use sev::Generation;
-use sev::firmware::guest::{AttestationReport, DerivedKey, GuestFieldSelect};
+use sev::firmware::guest::{AttestationReport, DerivedKey, GuestFieldSelect, Version};
 use sev::parser::ByteParser;
 use sha2::Sha256;
 use std::os::unix::ffi::OsStrExt;
@@ -30,12 +28,25 @@ pub fn derive_key_from_sev_measurement(
     field_select.set_measurement(true);
     field_select.set_tcb_version(true);
 
-    let derived_key = sev_firmware
-        .get_derived_key(
-            Some(1),
-            DerivedKey::new(false, field_select, 0, 0, tcb_version, None),
-        )
-        .context("Failed to get derived key from SEV firmware")?;
+    let report = sev_firmware.get_report(None, None, None)?;
+    let report =
+        AttestationReport::from_bytes(&report).context("Failed to parse attestation report")?;
+    let derived_key = if report.current >= Version::new(1, 58, 0) {
+        field_select.set_launch_mit_vector(true);
+        sev_firmware
+            .get_derived_key(
+                Some(2),
+                DerivedKey::new(false, field_select, 0, 0, tcb_version, Some(0)),
+            )
+            .context("Failed to get derived key from SEV firmware")?
+    } else {
+        sev_firmware
+            .get_derived_key(
+                Some(1),
+                DerivedKey::new(false, field_select, 0, 0, tcb_version, None),
+            )
+            .context("Failed to get derived key from SEV firmware")?
+    };
 
     let mut output = vec![0; 32];
     // Should not be InvalidLength, since we hardcoded 32 bytes for the derived key length
