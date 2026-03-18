@@ -1272,33 +1272,22 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-/// Encodes a histogram in Prometheus format.
+/// Encodes a histogram in Prometheus format. No-op if the histogram has no observations.
 fn encode_histogram<const N: usize>(
     w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
     name: &str,
     help: &str,
     histogram: &ledger_canister::HistogramData<N>,
 ) -> std::io::Result<()> {
-    // Only encode if the histogram has any data
     if histogram.count() == 0 {
         return Ok(());
     }
-
-    // Convert cumulative counts to per-bucket counts for ic_metrics_encoder
-    // ic_metrics_encoder expects (bucket_bound, per_bucket_count) not cumulative
-    let buckets: Vec<(f64, u64)> = histogram.buckets().collect();
-    let mut per_bucket_counts: Vec<(f64, f64)> = Vec::with_capacity(buckets.len() + 1);
-    let mut prev_cumulative = 0u64;
-    for (le, cumulative) in buckets {
-        let per_bucket = cumulative.saturating_sub(prev_cumulative);
-        per_bucket_counts.push((le, per_bucket as f64));
-        prev_cumulative = cumulative;
-    }
-    // Add remaining count for +Inf bucket
-    let inf_bucket_count = histogram.count().saturating_sub(prev_cumulative);
-    per_bucket_counts.push((f64::INFINITY, inf_bucket_count as f64));
-
-    w.encode_histogram(name, per_bucket_counts.into_iter(), histogram.sum(), help)?;
+    w.encode_histogram(
+        name,
+        histogram.per_bucket_counts().into_iter(),
+        histogram.sum(),
+        help,
+    )?;
     Ok(())
 }
 
