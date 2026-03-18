@@ -2700,14 +2700,6 @@ mod metrics {
             "Expected ledger_archiving_chunks_bucket metric after archiving"
         );
 
-        // Check for ledger_archiving_blocks histogram
-        assert!(
-            metrics_after
-                .iter()
-                .any(|line| line.contains("ledger_archiving_blocks_bucket")),
-            "Expected ledger_archiving_blocks_bucket metric after archiving"
-        );
-
         // Verify that the count metrics show 1 observation
         let count_value = parse_metric(&env, ledger_id, "ledger_archiving_duration_seconds_count");
         assert_eq!(

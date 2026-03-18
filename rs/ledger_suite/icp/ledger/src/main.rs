@@ -73,9 +73,9 @@ use icrc_ledger_types::{
     },
 };
 use ledger_canister::{
-    ARCHIVING_BLOCKS_HISTOGRAM, ARCHIVING_CHUNK_DURATION_HISTOGRAM, ARCHIVING_CHUNKS_HISTOGRAM,
-    ARCHIVING_DURATION_HISTOGRAM, LEDGER, LEDGER_VERSION, Ledger, MAX_MESSAGE_SIZE_BYTES,
-    UPGRADES_MEMORY, balances_len, get_allowances_list,
+    ARCHIVING_CHUNK_DURATION_HISTOGRAM, ARCHIVING_CHUNKS_HISTOGRAM, ARCHIVING_DURATION_HISTOGRAM,
+    LEDGER, LEDGER_VERSION, Ledger, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY, balances_len,
+    get_allowances_list,
 };
 use num_traits::cast::ToPrimitive;
 use std::cell::RefCell;
@@ -1269,15 +1269,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             h,
         )
     })?;
-    ARCHIVING_BLOCKS_HISTOGRAM.with_borrow(|h| {
-        encode_histogram(
-            w,
-            "ledger_archiving_blocks",
-            "Number of blocks archived per operation.",
-            h,
-        )
-    })?;
-
     Ok(())
 }
 
