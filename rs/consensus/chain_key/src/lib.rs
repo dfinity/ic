@@ -1,5 +1,5 @@
 //! This module provides the component responsible for generating and validating
-//! payloads relevant to chain key operations.
+//! payloads relevant to the chain key feature.
 
 use crate::metrics::ChainKeyPayloadBuilderMetrics;
 use crate::utils::{
@@ -70,14 +70,15 @@ mod utils;
 
 const EMPTY_VEC_REF: &Vec<u8> = &vec![];
 
-/// In addition to a timeout, we expire request contexts that were created more than one entire
-/// DKG interval ago. VetKD NiDkgTranscripts are reshared during every interval. However, it is
-/// important that for any given request, we use the same transcript to create, validate and
-/// combine vetKD shares. Consequently, once the NiDkgTranscript that was paired with a request
-/// context disappears from the summary block, the outstanding request should be rejected.
+/// In addition to a timeout which applies to all keys, we expire request contexts for chain keys
+/// using NI-DKG (e.g., vetKD), that were created more than one entire DKG interval ago.
+/// NiDkgTranscripts are reshared during every interval. However, it is important that for any
+/// given request, we use the same transcript to create, validate and combine the shares.
+/// Consequently, once the NiDkgTranscript that was paired with a request context disappears
+/// from the summary block, the outstanding request should be rejected.
 ///
-/// Request contexts are paired with the summary's "next transcript", if such a transcript exists,
-/// otherwise the "current transcript" is used.
+/// Request contexts for chain keys using NI-DKG (e.g., vetKD) are paired with the summary's
+/// "next transcript", if such a transcript exists, otherwise the "current transcript" is used.
 /// This guarantees that the transcript will exist for at least one DKG interval starting with the
 /// creation of the context: If it was a "next transcript", then it will still exist as a "current
 /// transcript" in the subsequent interval. If it was a "current transcript", then this implies
@@ -709,12 +710,12 @@ impl IntoMessages<Vec<ConsensusResponse>> for ChainKeyPayloadBuilderImpl {
                         ChainKeyAgreement::Reject(error_code) => {
                             ResponsePayload::Reject(match error_code {
                                 ChainKeyErrorCode::TimedOut => RejectContext::new(
-                                    RejectCode::CanisterError,
-                                    "Signature request expired",
+                                    RejectCode::SysTransient,
+                                    "Chain key request expired",
                                 ),
                                 ChainKeyErrorCode::InvalidKey => RejectContext::new(
-                                    RejectCode::CanisterReject,
-                                    "Invalid or disabled key_id in signature request",
+                                    RejectCode::SysTransient,
+                                    "Invalid or disabled key_id in request",
                                 ),
                             })
                         }
@@ -886,7 +887,7 @@ mod tests {
 
     #[test]
     fn test_into_messages() {
-        let agreements = make_vetkd_agreements(0, 1, 2);
+        let agreements = make_chain_key_agreements(0, 1, 2);
         let payload = as_bytes(agreements.clone());
         let messages = ChainKeyPayloadBuilderImpl::into_messages(&payload);
         for i in 0..3 {
@@ -900,15 +901,15 @@ mod tests {
                         panic!("Unexpected response: {response:?}");
                     };
                     context.assert_contains(
-                        RejectCode::CanisterReject,
-                        "Invalid or disabled key_id in signature request",
+                        RejectCode::SysTransient,
+                        "Invalid or disabled key_id in request",
                     );
                 }
                 ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut) => {
                     let ResponsePayload::Reject(context) = &response.payload else {
                         panic!("Unexpected response: {response:?}");
                     };
-                    context.assert_contains(RejectCode::CanisterError, "Signature request expired");
+                    context.assert_contains(RejectCode::SysTransient, "Chain key request expired");
                 }
                 ChainKeyAgreement::Success(data) => {
                     let ResponsePayload::Data(response_data) = &response.payload else {
@@ -1145,7 +1146,7 @@ mod tests {
                 );
 
                 // payload that rejects valid contexts should be invalid
-                let payload = as_bytes(make_vetkd_agreements_with_payload(
+                let payload = as_bytes(make_chain_key_agreements_with_payload(
                     &[1, 2],
                     ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut),
                 ));
@@ -1178,7 +1179,7 @@ mod tests {
             };
 
             // Non-empty payloads should be rejected
-            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
+            let payload = as_bytes(make_chain_key_agreements(0, 1, 2));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
@@ -1209,7 +1210,7 @@ mod tests {
             };
 
             // Non-empty payload validation should be fail if we don't have the state
-            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
+            let payload = as_bytes(make_chain_key_agreements(0, 1, 2));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
@@ -1275,8 +1276,8 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let payloads = [
-            as_bytes(make_vetkd_agreements(0, 1, 2)),
-            as_bytes(make_vetkd_agreements(2, 3, 4)),
+            as_bytes(make_chain_key_agreements(0, 1, 2)),
+            as_bytes(make_chain_key_agreements(2, 3, 4)),
         ];
         let past_payloads = payloads
             .iter()
@@ -1289,7 +1290,7 @@ mod tests {
             assert!(payload.is_empty());
 
             // Payload with agreements that are already part of past payloads should be rejected
-            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
+            let payload = as_bytes(make_chain_key_agreements(0, 1, 2));
             let validation = builder.validate_payload(
                 HEIGHT,
                 &ProposalContext {
@@ -1318,18 +1319,18 @@ mod tests {
             validation_context: &VALIDATION_CONTEXT,
         };
         test_payload_builder_with_num_threads(Some(config), contexts, shares, 1, |builder| {
-            // Payload with bogus agreements for ECDSA contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements(0, 1, 2));
+            // Payload with agreements for IDKG contexts should be rejected
+            let payload = as_bytes(make_chain_key_agreements(0, 1, 2));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
-                    InvalidChainKeyPayloadReason::DecodingError(_)
-                ))
+                    InvalidChainKeyPayloadReason::UnexpectedIDkgContext(id)
+                )) if id.get() == 0
             );
 
             // Payload with agreements for unknown contexts should be rejected
-            let payload = as_bytes(make_vetkd_agreements(3, 4, 5));
+            let payload = as_bytes(make_chain_key_agreements(3, 4, 5));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
@@ -1477,12 +1478,11 @@ mod tests {
                 let serialized_payload =
                     build_and_validate(&builder, MAX_SIZE, &[], &validation_context);
                 let payload = bytes_to_chain_key_payload(&serialized_payload).unwrap();
+                assert_eq!(payload.agreements.len(), 2);
                 for (id, context) in contexts {
                     match context.key_id() {
                         MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
-                            if let Some(agreement) = payload.agreements.get(&id) {
-                                assert_eq!(agreement, &ChainKeyAgreement::Reject(expected_error));
-                            }
+                            assert!(!payload.agreements.contains_key(&id));
                         }
                         MasterPublicKeyId::VetKd(_) => {
                             assert_eq!(
@@ -1494,7 +1494,7 @@ mod tests {
                 }
 
                 // payload with different rejects for the same contexts should be rejected
-                let payload = as_bytes(make_vetkd_agreements_with_payload(
+                let payload = as_bytes(make_chain_key_agreements_with_payload(
                     &[1, 2],
                     ChainKeyAgreement::Reject(rejected_error),
                 ));
@@ -1509,7 +1509,7 @@ mod tests {
                 );
 
                 // payload with success responses for the same contexts should be rejected
-                let payload = as_bytes(make_vetkd_agreements_with_payload(
+                let payload = as_bytes(make_chain_key_agreements_with_payload(
                     &[1, 2],
                     ChainKeyAgreement::Success(vec![1, 1, 1]),
                 ));

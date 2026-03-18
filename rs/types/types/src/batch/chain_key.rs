@@ -4,8 +4,8 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     types::v1::{
-        VetKdAgreement as VetKdAgreementProto, VetKdErrorCode as VetKdErrorCodeProto,
-        vet_kd_agreement::Agreement as VetKdInternalAgreementProto,
+        ChainKeyAgreement as ChainKeyAgreementProto, ChainKeyErrorCode as ChainKeyErrorCodeProto,
+        chain_key_agreement::Agreement as ChainKeyInternalAgreementProto,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -54,55 +54,57 @@ impl ChainKeyPayload {
     }
 }
 
-impl From<ChainKeyAgreement> for VetKdInternalAgreementProto {
+impl From<ChainKeyAgreement> for ChainKeyInternalAgreementProto {
     fn from(agreement: ChainKeyAgreement) -> Self {
         match agreement {
-            ChainKeyAgreement::Success(data) => VetKdInternalAgreementProto::Data(data),
-            ChainKeyAgreement::Reject(error_code) => {
-                VetKdInternalAgreementProto::Reject(VetKdErrorCodeProto::from(error_code).into())
-            }
+            ChainKeyAgreement::Success(data) => ChainKeyInternalAgreementProto::Data(data),
+            ChainKeyAgreement::Reject(error_code) => ChainKeyInternalAgreementProto::Reject(
+                ChainKeyErrorCodeProto::from(error_code).into(),
+            ),
         }
     }
 }
 
-impl TryFrom<VetKdInternalAgreementProto> for ChainKeyAgreement {
+impl TryFrom<ChainKeyInternalAgreementProto> for ChainKeyAgreement {
     type Error = ProxyDecodeError;
-    fn try_from(proto: VetKdInternalAgreementProto) -> Result<Self, Self::Error> {
+    fn try_from(proto: ChainKeyInternalAgreementProto) -> Result<Self, Self::Error> {
         let res = match proto {
-            VetKdInternalAgreementProto::Data(data) => ChainKeyAgreement::Success(data),
-            VetKdInternalAgreementProto::Reject(error_code) => ChainKeyAgreement::Reject(
-                ChainKeyErrorCode::try_from(VetKdErrorCodeProto::try_from(error_code).map_err(
-                    |_| ProxyDecodeError::ValueOutOfRange {
-                        typ: "ChainKeyErrorCode",
-                        err: format!("Unexpected value for chain key error code {error_code}"),
-                    },
-                )?)?,
-            ),
+            ChainKeyInternalAgreementProto::Data(data) => ChainKeyAgreement::Success(data),
+            ChainKeyInternalAgreementProto::Reject(error_code) => {
+                ChainKeyAgreement::Reject(ChainKeyErrorCode::try_from(
+                    ChainKeyErrorCodeProto::try_from(error_code).map_err(|_| {
+                        ProxyDecodeError::ValueOutOfRange {
+                            typ: "ChainKeyErrorCode",
+                            err: format!("Unexpected value for chain key error code {error_code}"),
+                        }
+                    })?,
+                )?)
+            }
         };
         Ok(res)
     }
 }
 
-impl From<ChainKeyErrorCode> for VetKdErrorCodeProto {
+impl From<ChainKeyErrorCode> for ChainKeyErrorCodeProto {
     fn from(value: ChainKeyErrorCode) -> Self {
         match value {
-            ChainKeyErrorCode::TimedOut => VetKdErrorCodeProto::TimedOut,
-            ChainKeyErrorCode::InvalidKey => VetKdErrorCodeProto::InvalidKey,
+            ChainKeyErrorCode::TimedOut => ChainKeyErrorCodeProto::TimedOut,
+            ChainKeyErrorCode::InvalidKey => ChainKeyErrorCodeProto::InvalidKey,
         }
     }
 }
 
-impl TryFrom<VetKdErrorCodeProto> for ChainKeyErrorCode {
+impl TryFrom<ChainKeyErrorCodeProto> for ChainKeyErrorCode {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: VetKdErrorCodeProto) -> Result<Self, Self::Error> {
+    fn try_from(value: ChainKeyErrorCodeProto) -> Result<Self, Self::Error> {
         match value {
-            VetKdErrorCodeProto::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+            ChainKeyErrorCodeProto::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "ChainKeyErrorCode",
                 err: format!("Unexpected value for chain key error code {value:?}"),
             }),
-            VetKdErrorCodeProto::TimedOut => Ok(ChainKeyErrorCode::TimedOut),
-            VetKdErrorCodeProto::InvalidKey => Ok(ChainKeyErrorCode::InvalidKey),
+            ChainKeyErrorCodeProto::TimedOut => Ok(ChainKeyErrorCode::TimedOut),
+            ChainKeyErrorCodeProto::InvalidKey => Ok(ChainKeyErrorCode::InvalidKey),
         }
     }
 }
@@ -111,7 +113,7 @@ pub fn chain_key_payload_to_bytes(payload: ChainKeyPayload, max_size: NumBytes) 
     let message_iterator = payload
         .agreements
         .into_iter()
-        .map(|(callback_id, agreement)| VetKdAgreementProto {
+        .map(|(callback_id, agreement)| ChainKeyAgreementProto {
             callback_id: callback_id.get(),
             agreement: Some(agreement.into()),
         });
@@ -120,13 +122,13 @@ pub fn chain_key_payload_to_bytes(payload: ChainKeyPayload, max_size: NumBytes) 
 }
 
 pub fn bytes_to_chain_key_payload(data: &[u8]) -> Result<ChainKeyPayload, ProxyDecodeError> {
-    let messages: Vec<VetKdAgreementProto> =
+    let messages: Vec<ChainKeyAgreementProto> =
         slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?;
     let mut payload = ChainKeyPayload::default();
 
     for message in messages {
         let callback_id = CallbackId::from(message.callback_id);
-        let response = try_from_option_field(message.agreement, "VetKdAgreement::agreement")?;
+        let response = try_from_option_field(message.agreement, "ChainKeyAgreement::agreement")?;
         payload.agreements.insert(callback_id, response);
     }
 

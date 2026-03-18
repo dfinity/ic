@@ -1297,7 +1297,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
-            vetkd_payload_bytes,
+            chain_key_payload_bytes,
             idkg_payload,
         ) = if payload.is_summary() {
             (
@@ -1337,7 +1337,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
-            vetkd_payload_bytes,
+            chain_key_payload_bytes,
             idkg_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
@@ -1368,7 +1368,7 @@ impl TryFrom<pb::Block> for Block {
                 .unwrap_or_default(),
             canister_http: block.canister_http_payload_bytes,
             query_stats: block.query_stats_payload_bytes,
-            chain_key: block.vetkd_payload_bytes,
+            chain_key: block.chain_key_payload_bytes,
         };
 
         let payload = match dkg_payload {
