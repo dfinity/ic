@@ -1200,7 +1200,6 @@ mod tests {
     use slog::Level;
     use std::collections::BTreeSet;
     use std::io::Write;
-    use std::os::fd::AsRawFd;
     use std::os::unix::fs::PermissionsExt;
     use std::{collections::BTreeMap, path::Path};
     use tempfile::{TempDir, tempdir};
@@ -1449,21 +1448,6 @@ mod tests {
         file.write_all(bash_script.as_bytes()).unwrap();
         file.set_permissions(std::fs::Permissions::from_mode(0o755))
             .unwrap();
-
-        // The ugly hack below is to work around rstest running the tests in multiple threads but
-        // in the same process. Each of them creates their own binary file and later executes it.
-        // This means a parallel test might still have the file open for writing while the current
-        // one is trying to execute it. This yields ETXTBSY errors on Linux. To avoid this, we use
-        // the below hack, taken from https://github.com/rust-lang/rust/issues/114554, see
-        // "Implementation of the `flock` algorithm"
-        std::thread::sleep(std::time::Duration::from_micros(2));
-
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-        drop(file);
-
-        let file = std::fs::File::open(binary_path).unwrap();
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_SH) };
-        drop(file);
     }
 
     async fn create_upgrade_for_test(
@@ -1496,17 +1480,30 @@ mod tests {
         create_binary(&ic_binary_dir.join("manageboot.sh"), "#!/bin/sh\nexit 0\n");
 
         let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
-        // Start the replica process if the test scenario indicates so
+        // Start the replica process if the test scenario indicates so.
+        // Retry on ETXTBSY: parallel rstest threads run in the same process. When one thread
+        // calls Command::spawn() (fork+exec), the child inherits writable fds from other
+        // threads that are inside create_binary's File::create(). The kernel returns ETXTBSY
+        // if any fd with write access to the binary's inode is still open. The inherited fds
+        // are closed once the child's exec() triggers O_CLOEXEC, so a brief retry resolves it.
         if test_scenario.was_replica_process_started_previously() {
-            replica_process
-                .lock()
-                .unwrap()
-                .start(ReplicaProcess {
+            let mut retries = 0;
+            loop {
+                match replica_process.lock().unwrap().start(ReplicaProcess {
                     version: current_replica_version.clone(),
                     binary: ic_binary_dir.join("replica").display().to_string(),
                     args: vec![],
-                })
-                .unwrap();
+                }) {
+                    Ok(()) => break,
+                    Err(e)
+                        if e.kind() == std::io::ErrorKind::ExecutableFileBusy && retries < 50 =>
+                    {
+                        retries += 1;
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    Err(e) => panic!("Failed to start replica process: {e}"),
+                }
+            }
         }
 
         let cup_dir = dir.join("cups");
