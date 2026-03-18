@@ -361,7 +361,7 @@ rust_test(
             "requires-network",
             "test_all_platforms",
         ],
-        deps = TEST_DEPENDENCIES,
+        deps = [":pocket-ic-server-lib"] + TEST_DEPENDENCIES,
     )
     for name in [
         "test",

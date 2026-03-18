@@ -1,32 +1,23 @@
 use crate::common::{send_signal_to_pic, start_server, start_server_helper};
-use candid::{CandidType, Encode, Principal};
+use candid::{Encode, Principal};
 use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, Topology,
 };
 use pocket_ic::{PocketIc, PocketIcBuilder};
+use pocket_ic_server::external_canister_types::InternetIdentityFrontendInit;
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::Url;
 use reqwest::blocking::Client;
 use reqwest::header;
 use reqwest::{Client as NonblockingClient, StatusCode};
-use serde::Serialize;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use tempfile::NamedTempFile;
 
 mod common;
-
-#[derive(CandidType, Serialize)]
-struct InternetIdentityFrontendInitArgs {
-    backend_canister_id: Principal,
-    backend_origin: String,
-    related_origins: Option<Vec<String>>,
-    fetch_root_key: Option<bool>,
-    dev_csp: Option<bool>,
-}
 
 fn deploy_ii(pic: &PocketIc) -> Principal {
     // Deploy II backend.
@@ -43,14 +34,15 @@ fn deploy_ii(pic: &PocketIc) -> Principal {
     let frontend_wasm =
         std::fs::read(frontend_path).expect("Could not read II frontend wasm file.");
     pic.add_cycles(frontend_id, 2_000_000_000_000);
-    // The backend_origin omits the port because the HTTP gateway hasn't been
-    // created yet at this point. It's only used by the frontend for browser-side
+    // The backend_origin is mocked out since it's only used by the frontend for browser-side
     // redirects to the backend, which these tests don't exercise.
-    let frontend_arg = Encode!(&InternetIdentityFrontendInitArgs {
+    let frontend_arg = Encode!(&InternetIdentityFrontendInit {
         backend_canister_id: backend_id,
-        backend_origin: format!("http://{backend_id}.localhost"),
+        backend_origin: "dummy_backend_origin".to_string(),
         related_origins: None,
         fetch_root_key: Some(true),
+        analytics_config: None,
+        dummy_auth: None,
         dev_csp: Some(true),
     })
     .unwrap();
@@ -74,14 +66,15 @@ async fn deploy_ii_async(pic: &pocket_ic::nonblocking::PocketIc) -> Principal {
     let frontend_wasm =
         std::fs::read(frontend_path).expect("Could not read II frontend wasm file.");
     pic.add_cycles(frontend_id, 2_000_000_000_000).await;
-    // The backend_origin omits the port because the HTTP gateway hasn't been
-    // created yet at this point. It's only used by the frontend for browser-side
+    // The backend_origin is mocked out since it's only used by the frontend for browser-side
     // redirects to the backend, which these tests don't exercise.
-    let frontend_arg = Encode!(&InternetIdentityFrontendInitArgs {
+    let frontend_arg = Encode!(&InternetIdentityFrontendInit {
         backend_canister_id: backend_id,
-        backend_origin: format!("http://{backend_id}.localhost"),
+        backend_origin: "dummy_backend_origin".to_string(),
         related_origins: None,
         fetch_root_key: Some(true),
+        analytics_config: None,
+        dummy_auth: None,
         dev_csp: Some(true),
     })
     .unwrap();
