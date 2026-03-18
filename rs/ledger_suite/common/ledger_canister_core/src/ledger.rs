@@ -493,23 +493,17 @@ pub fn remove_archived_blocks<LA: LedgerAccess>(
     result: Result<ArchivingSuccess, ArchivingError>,
 ) {
     LA::with_ledger_mut(|ledger| match result {
-        Ok(ArchivingSuccess {
-            blocks_archived, ..
-        }) => ledger
+        Ok(ArchivingSuccess { stats }) => ledger
             .blockchain_mut()
-            .remove_archived_blocks(blocks_archived),
-        Err(ArchivingError {
-            blocks_archived,
-            error,
-            ..
-        }) => {
+            .remove_archived_blocks(stats.blocks_archived),
+        Err(ArchivingError { error, stats }) => {
             ledger
                 .blockchain_mut()
-                .remove_archived_blocks(blocks_archived);
+                .remove_archived_blocks(stats.blocks_archived);
             log!(
                 sink,
                 "[ledger] archived only {} out of {} blocks; error: {}",
-                blocks_archived,
+                stats.blocks_archived,
                 expected_num_blocks,
                 error
             );

@@ -28,8 +28,6 @@ pub struct ArchivingStats {
 /// Result of a successful archiving operation.
 #[derive(Debug, Clone)]
 pub struct ArchivingSuccess {
-    /// Number of blocks successfully archived.
-    pub blocks_archived: usize,
     /// Statistics collected during the archiving operation.
     pub stats: ArchivingStats,
 }
@@ -37,8 +35,6 @@ pub struct ArchivingSuccess {
 /// Error returned when archiving fails, including partial progress and statistics.
 #[derive(Debug, Clone)]
 pub struct ArchivingError {
-    /// Number of blocks successfully archived before the error occurred.
-    pub blocks_archived: usize,
     /// Description of the error.
     pub error: String,
     /// Statistics collected during the archiving operation.
@@ -293,11 +289,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
             Err(e) => {
                 stats.duration_nanos = Rt::time().saturating_sub(start_time);
                 stats.blocks_archived = num_sent_blocks;
-                return Err(ArchivingError {
-                    blocks_archived: num_sent_blocks,
-                    error: e.0,
-                    stats,
-                });
+                return Err(ArchivingError { error: e.0, stats });
             }
         };
 
@@ -307,7 +299,6 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
             stats.duration_nanos = Rt::time().saturating_sub(start_time);
             stats.blocks_archived = num_sent_blocks;
             return Err(ArchivingError {
-                blocks_archived: num_sent_blocks,
                 error: "empty chunk".into(),
                 stats,
             });
@@ -329,7 +320,6 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                 stats.duration_nanos = Rt::time().saturating_sub(start_time);
                 stats.blocks_archived = num_sent_blocks;
                 return Err(ArchivingError {
-                    blocks_archived: num_sent_blocks,
                     error: "empty chunk".into(),
                     stats,
                 });
@@ -359,11 +349,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                     stats.num_chunks += 1;
                     stats.duration_nanos = Rt::time().saturating_sub(start_time);
                     stats.blocks_archived = num_sent_blocks;
-                    return Err(ArchivingError {
-                        blocks_archived: num_sent_blocks,
-                        error: msg,
-                        stats,
-                    });
+                    return Err(ArchivingError { error: msg, stats });
                 }
             };
 
@@ -415,10 +401,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
         stats.duration_nanos / 1_000_000
     );
 
-    Ok(ArchivingSuccess {
-        blocks_archived: num_sent_blocks,
-        stats,
-    })
+    Ok(ArchivingSuccess { stats })
 }
 
 // Helper function to create a canister and install the node Wasm bytecode.

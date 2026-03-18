@@ -112,8 +112,10 @@ pub fn emulate_archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone) {
         num_blocks,
         &sink,
         Ok(ArchivingSuccess {
-            blocks_archived: num_blocks,
-            stats: ArchivingStats::default(),
+            stats: ArchivingStats {
+                blocks_archived: num_blocks,
+                ..ArchivingStats::default()
+            },
         }),
     )
 }
