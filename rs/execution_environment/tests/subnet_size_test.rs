@@ -43,7 +43,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
 
     let instruction_to_cost = match config.embedders_config.metering_type {
         MeteringType::New => instruction_to_cost,
-        MeteringType::None => |_op: &wasmparser::Operator, _mem_type: WasmMemoryType| 0u64,
+        MeteringType::None => |_op: &wasmparser::Operator, _mem_type: WasmMemoryType| 0_u64,
     };
 
     let cost_const = instruction_to_cost(
