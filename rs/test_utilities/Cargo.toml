@@ -22,6 +22,7 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-test-utilities-types = { path = "./types" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 lazy_static = { workspace = true }

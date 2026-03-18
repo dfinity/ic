@@ -28,12 +28,11 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;
@@ -346,28 +345,42 @@ fn execution_round_metrics_are_recorded() {
             .messages
             .get_sample_count()
     );
-    assert_eq!(2, metrics.round_subnet_queue.duration.get_sample_count());
     assert_eq!(
         2,
-        metrics.round_subnet_queue.instructions.get_sample_count()
+        metrics.round_inner_subnet_queue.duration.get_sample_count()
+    );
+    assert_eq!(
+        2,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_count()
     );
     assert_eq!(
         30,
-        metrics.round_subnet_queue.instructions.get_sample_sum() as u64,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_sum() as u64,
     );
-    assert_eq!(2, metrics.round_subnet_queue.messages.get_sample_count());
+    assert_eq!(
+        2,
+        metrics.round_inner_subnet_queue.messages.get_sample_count()
+    );
     assert_eq!(
         3,
-        metrics.round_subnet_queue.messages.get_sample_sum() as u64,
+        metrics.round_inner_subnet_queue.messages.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.duration.get_sample_count());
     assert_eq!(1, metrics.round_inner.instructions.get_sample_count());
+    // (3 subnet messages + 10 canister messages) * 10 instructions
     assert_eq!(
-        100,
+        130,
         metrics.round_inner.instructions.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.messages.get_sample_count());
-    assert_eq!(10, metrics.round_inner.messages.get_sample_sum() as u64,);
+    // 3 subnet messages + 10 canister messages
+    assert_eq!(13, metrics.round_inner.messages.get_sample_sum() as u64,);
     assert_eq!(2, metrics.round_inner_iteration.duration.get_sample_count());
     assert_eq!(
         2,

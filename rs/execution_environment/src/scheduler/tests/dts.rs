@@ -9,6 +9,7 @@ use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, Method};
 use ic_registry_subnet_type::SubnetType;
+use ic_types::LongExecutionMode;
 use ic_types::methods::SystemMethod;
 use ic_types_test_utils::ids::canister_test_id;
 use more_asserts::assert_le;
@@ -410,8 +411,14 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     // 1 slice and no messages executed.
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     let metrics = test.scheduler().metrics.as_ref();
-    assert_eq!(metrics.round_subnet_queue.slices.get_sample_sum(), 1.0);
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 0.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
+        1.0
+    );
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        0.0
+    );
 
     // Add a second canister with a short install code message.
     let canister_2 = test.create_canister();
@@ -430,7 +437,10 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
     let metrics = test.scheduler().metrics.as_ref();
     // First slice executed as a regular subnet message, second as a long install.
-    assert_eq!(metrics.round_subnet_queue.slices.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
+        1.0
+    );
     assert_eq!(
         metrics
             .round_advance_long_install_code
@@ -440,7 +450,10 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     );
     // Only the two slices were executed.
     assert_eq!(metrics.round.slices.get_sample_sum(), 2.0);
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 0.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        0.0
+    );
 
     let state_metrics = &test.scheduler().state_metrics;
     // 2 rounds because the first canister was paused twice.
@@ -458,8 +471,14 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     assert!(!test.canister_state(canister_2).has_paused_install_code());
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     let metrics = test.scheduler().metrics.as_ref();
-    assert_eq!(metrics.round_subnet_queue.slices.get_sample_sum(), 2.0);
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
+        2.0
+    );
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        1.0
+    );
     assert_eq!(
         metrics
             .round_advance_long_install_code
@@ -642,4 +661,74 @@ fn dts_update_and_heartbeat() {
         test.ingress_error(&message_id).code(),
         ErrorCode::CanisterDidNotReply,
     );
+}
+
+/// `abort_paused_executions_above_limit` keeps the highest-priority paused
+/// executions (up to `max_paused_executions`) and aborts the rest.
+/// Priority is determined by long_execution_mode and accumulated_priority,
+/// and the highest priority canisters keep their paused executions.
+#[test]
+fn abort_paused_executions_keeps_highest_priority() {
+    const SLICE: u64 = 10;
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            // Enough cores to (start) executing all canisters in one round.
+            scheduler_cores: 4,
+            max_instructions_per_round: NumInstructions::from(SLICE),
+            max_instructions_per_slice: NumInstructions::from(SLICE),
+            max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
+            max_paused_executions: 2,
+            ..zero_instruction_overhead_config()
+        })
+        .build();
+
+    let mut create_canister = |compute_allocation: u64| -> CanisterId {
+        test.create_canister_with(
+            Cycles::new(1_000_000_000_000),
+            ComputeAllocation::try_from(compute_allocation).unwrap(),
+            MemoryAllocation::default(),
+            None,
+            None,
+            None,
+        )
+    };
+
+    // Three canisters with progressively lower compute allocations.
+    let high = create_canister(50);
+    let mid = create_canister(25);
+    let low = create_canister(0);
+
+    // Start executing the low compute allocation canister one round early.
+    test.send_ingress(low, ingress(100));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    test.send_ingress(high, ingress(100));
+    test.send_ingress(mid, ingress(100));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The low compute allocation canister is classified as `Prioritized`, as it has
+    // executed a second slice.
+    assert_eq!(
+        test.state().canister_priority(&low).long_execution_mode,
+        LongExecutionMode::Prioritized
+    );
+    // The high and mid compute allocation canisters are only `Opportunistic`.
+    assert_eq!(
+        test.state().canister_priority(&high).long_execution_mode,
+        LongExecutionMode::Opportunistic
+    );
+    assert_eq!(
+        test.state().canister_priority(&mid).long_execution_mode,
+        LongExecutionMode::Opportunistic
+    );
+
+    // The low compute allocation canister keeps its paused execution (its
+    // `Prioritized` mode actually gives it the highest priority).
+    assert!(test.canister_state(low).has_paused_execution());
+    // The high compute allocation canister comes in second, so it's still paused.
+    assert!(test.canister_state(high).has_paused_execution());
+    // The medium compute allocation canister had the lowest priority, so it was
+    // aborted.
+    assert!(test.canister_state(mid).has_aborted_execution());
 }

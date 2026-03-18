@@ -51,6 +51,7 @@ use ic_management_canister_types_private::{
     VetKdKeyId,
 };
 use ic_protobuf::types::v1 as pb;
+use ic_types_cycles::Cycles;
 use phantom_newtype::{AmountOf, Id};
 use prost::Message;
 use rand::{CryptoRng, RngCore};
@@ -493,6 +494,15 @@ impl ExhaustiveSet for CatchUpShareContent {
         <CatchUpContent>::exhaustive_set(rng)
             .iter()
             .map(|cup| cup.into())
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for Cycles {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <u128>::exhaustive_set(rng)
+            .into_iter()
+            .map(Cycles::from)
             .collect()
     }
 }
