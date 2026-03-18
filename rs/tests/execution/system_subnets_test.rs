@@ -14,7 +14,7 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::types::CreateCanisterResult;
 use ic_system_test_driver::util::{UniversalCanister, assert_reject, block_on};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_utils::interfaces::ManagementCanister;
 
 fn main() -> Result<()> {

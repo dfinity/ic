@@ -17,7 +17,8 @@ use ic_replica_tests::assert_reject;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::universal_canister::management::CanisterUpgradeOptions;
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, management, wasm};
-use ic_types::{CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId, ingress::WasmResult};
+use ic_types::{CanisterId, ComputeAllocation, NumBytes, PrincipalId, ingress::WasmResult};
+use ic_types_cycles::Cycles;
 use maplit::btreeset;
 use std::{collections::BTreeSet, mem::size_of, str::FromStr};
 

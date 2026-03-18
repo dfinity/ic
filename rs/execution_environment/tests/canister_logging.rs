@@ -19,7 +19,8 @@ use ic_state_machine_tests::{
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
-use ic_types::{CanisterId, Cycles, NumInstructions, ingress::WasmResult};
+use ic_types::{CanisterId, NumInstructions, ingress::WasmResult};
+use ic_types_cycles::Cycles;
 use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
@@ -930,12 +931,10 @@ fn test_canister_log_stays_within_limit() {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
         env.tick();
     }
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
+    let canister_log_records = fetch_log_records(&env, user_controller, canister_id);
     // Expect records' total size to be under the limit, excluding the outer vector's static size.
     assert_le!(
-        response
-            .canister_log_records
+        canister_log_records
             .iter()
             .map(|r| r.data_size())
             .sum::<usize>(),

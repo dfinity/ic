@@ -23,8 +23,8 @@ impl Default for MockSevGuestFirmwareBuilder {
         Self {
             derived_key: None,
             custom_data_override: None,
-            measurement: [0u8; 48],
-            chip_id: [0u8; 64],
+            measurement: [0_u8; 48],
+            chip_id: [0_u8; 64],
             signer: None,
             generates_report_with_wrong_custom_data: None,
             generates_report_with_wrong_signature: None,

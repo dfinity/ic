@@ -32,6 +32,8 @@ struct MockCanister {
 struct CanisterSettings {
     log_memory_limit: Option<NumBytes>,
 
+    /// Temporary field to allow `..Default::default()` syntax and prevent clippy lints.
+    /// Remove once a second legitimate field is added to `CanisterSettings`.
     #[allow(dead_code)]
     some_other_field: Option<u64>,
 }
@@ -300,6 +302,7 @@ fn test_canister_resize_up_preserves_logs() {
         log_memory_limit: Some(log_memory_limit_after),
         ..Default::default()
     });
+
     // Assert logs are preserved.
     assert_eq!(canister.fetch_canister_logs(), logs_before);
     assert_eq!(canister.next_idx(), 1);

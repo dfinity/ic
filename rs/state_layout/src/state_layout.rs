@@ -18,12 +18,12 @@ use ic_replicated_state::{
     page_map::{Shard, StorageLayout, StorageResult},
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles,
-    ExecutionRound, Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId,
-    SnapshotId, Time, batch::TotalQueryStats, nominal_cycles::NominalCycles,
+    AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound,
+    Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
+    batch::TotalQueryStats,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
