@@ -69,7 +69,7 @@ fn manifest_builder_bad_file_hash() {
         &FileInfo {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
             size_bytes: 0,
-            hash: [0u8; 32],
+            hash: [0_u8; 32],
         },
         &[],
     );
@@ -331,7 +331,7 @@ fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
             file_index: 13,
             size_bytes: 1234,
             offset: 0,
-            hash: [13u8; 32],
+            hash: [13_u8; 32],
         },
     )
 }

@@ -1152,7 +1152,7 @@ mod tests {
                     )],
                 );
 
-                let target_id = NiDkgTargetId::new([0u8; 32]);
+                let target_id = NiDkgTargetId::new([0_u8; 32]);
                 // The first two times, the context will have a request for the given target and
                 // not afterwards.
                 complement_state_manager_with_setup_initial_dkg_request(

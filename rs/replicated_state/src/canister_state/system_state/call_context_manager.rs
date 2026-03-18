@@ -12,9 +12,8 @@ use ic_types::messages::{
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
-use ic_types::{
-    CanisterId, Cycles, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
-};
+use ic_types::{CanisterId, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf};
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::{From, TryFrom, TryInto};

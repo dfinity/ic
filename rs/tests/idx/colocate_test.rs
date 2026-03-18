@@ -136,7 +136,7 @@ fn setup(env: TestEnv) {
 
     // Set a timeout so blocking SSH operations fail instead of hanging
     // indefinitely during network splits.
-    session.set_timeout(60_000);
+    session.set_timeout(180_000);
 
     scp_send_to(
         log.clone(),

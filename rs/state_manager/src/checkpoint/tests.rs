@@ -26,10 +26,11 @@ use ic_test_utilities_types::{
     messages::IngressBuilder,
 };
 use ic_types::{
-    CanisterId, Cycles, Height,
+    CanisterId, Height,
     malicious_flags::MaliciousFlags,
     messages::{StopCanisterCallId, StopCanisterContext},
 };
+use ic_types_cycles::Cycles;
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::CanisterModule;
 use std::{collections::BTreeSet, fs::OpenOptions, path::Path};

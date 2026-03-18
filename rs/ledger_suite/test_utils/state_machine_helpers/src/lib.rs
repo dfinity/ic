@@ -11,7 +11,7 @@ use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
 use ic_state_machine_tests::{StateMachine, WasmResult};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;

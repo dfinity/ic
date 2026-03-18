@@ -1,4 +1,4 @@
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 // Assert that a cycles balance is equal to some value. Given that some cycles
 // can be deducted for storage and other minor costs, there's some tolerance to
 // how close the two balances are defined by `epsilon`.
