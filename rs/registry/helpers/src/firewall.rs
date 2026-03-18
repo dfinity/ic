@@ -68,11 +68,8 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
         let subnet_ids = subnet_types
             .into_iter()
             .map(|subnet_id| {
-                match self.get_subnet_ids_of_type(subnet_id, version) {
-                    Ok(Some(ids)) => Ok(ids),
-                    Ok(None) => Ok(vec![]),
-                    Err(e) => Err(e), // Propagate any errors encountered while fetching subnet ids
-                }
+                self.get_subnet_ids_of_type(subnet_id, version)
+                    .map(Option::unwrap_or_default)
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
@@ -82,11 +79,8 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
         let node_ids = subnet_ids
             .into_iter()
             .map(|subnet_id| {
-                match self.get_node_ids_on_subnet(subnet_id, version) {
-                    Ok(Some(ids)) => Ok(ids),
-                    Ok(None) => Ok(vec![]),
-                    Err(e) => Err(e), // Propagate any errors encountered while fetching node ids
-                }
+                self.get_node_ids_on_subnet(subnet_id, version)
+                    .map(Option::unwrap_or_default)
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
