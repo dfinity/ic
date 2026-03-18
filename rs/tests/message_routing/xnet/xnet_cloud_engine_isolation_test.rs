@@ -39,7 +39,6 @@ use ic_universal_canister::{call_args, wasm};
 use slog::info;
 use std::time::Duration;
 
-
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
@@ -177,7 +176,10 @@ fn test(env: TestEnv) {
         info!(logger, "Self-call on CloudEngine subnet 2 succeeded.");
 
         // 2. Intra-subnet call between two different canisters on the same CloudEngine subnet.
-        info!(logger, "Testing intra-subnet call on CloudEngine subnet 1...");
+        info!(
+            logger,
+            "Testing intra-subnet call on CloudEngine subnet 1..."
+        );
         let res = uc_ce_1a
             .update(
                 wasm().inter_update(
@@ -193,9 +195,15 @@ fn test(env: TestEnv) {
             data,
             "Intra-subnet call on CloudEngine subnet 1 should succeed"
         );
-        info!(logger, "Intra-subnet call on CloudEngine subnet 1 succeeded.");
+        info!(
+            logger,
+            "Intra-subnet call on CloudEngine subnet 1 succeeded."
+        );
 
-        info!(logger, "Testing intra-subnet call on CloudEngine subnet 2...");
+        info!(
+            logger,
+            "Testing intra-subnet call on CloudEngine subnet 2..."
+        );
         let res = uc_ce_2a
             .update(
                 wasm().inter_update(
@@ -211,7 +219,10 @@ fn test(env: TestEnv) {
             data,
             "Intra-subnet call on CloudEngine subnet 2 should succeed"
         );
-        info!(logger, "Intra-subnet call on CloudEngine subnet 2 succeeded.");
+        info!(
+            logger,
+            "Intra-subnet call on CloudEngine subnet 2 succeeded."
+        );
 
         // 3. Application → CloudEngine should be rejected.
         // The on_reject handler replies with the reject code so we can verify
@@ -290,4 +301,3 @@ fn test(env: TestEnv) {
         info!(logger, "All assertions passed.");
     });
 }
- 

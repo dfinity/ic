@@ -859,8 +859,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .ok_or_else(|| not_found_error("subnet record", Some(own_subnet_id)))?;
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
 
-        let network_topology =
-            self.try_to_populate_network_topology(registry_version, own_subnet_id, own_subnet_type)?;
+        let network_topology = self.try_to_populate_network_topology(
+            registry_version,
+            own_subnet_id,
+            own_subnet_type,
+        )?;
 
         let provisional_whitelist = self
             .registry
