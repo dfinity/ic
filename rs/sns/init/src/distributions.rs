@@ -112,10 +112,6 @@ impl FractionalDeveloperVotingPower {
             return Err("Error: swap_distribution.total_e8s must be greater than or equal to swap_distribution.initial_swap_amount_e8s".to_string());
         }
 
-        if Self::get_total_distributions(&developer_distribution.developer_neurons).is_err() {
-            return Err("Error: The sum of all developer allocated tokens overflowed and is an invalid distribution".to_string());
-        }
-
         Ok(())
     }
 
@@ -368,25 +364,6 @@ impl FractionalDeveloperVotingPower {
         let tokens = Tokens::from_e8s(amount_e8s);
 
         (account, tokens)
-    }
-
-    /// Safely get the sum of all the e8 denominated neuron distributions. The maximum amount
-    /// of tokens e8s must be less than or equal to u64::MAX.
-    fn get_total_distributions(distributions: &Vec<NeuronDistribution>) -> Result<u64, String> {
-        let mut distribution_total: u64 = 0;
-        for distribution in distributions {
-            distribution_total = match distribution_total.checked_add(distribution.stake_e8s) {
-                Some(total) => total,
-                None => {
-                    return Err(
-                        "The total distribution overflowed and is not a valid distribution"
-                            .to_string(),
-                    );
-                }
-            }
-        }
-
-        Ok(distribution_total)
     }
 
     fn developer_distribution(&self) -> Result<&DeveloperDistribution, String> {
@@ -833,27 +810,6 @@ mod test {
                 .is_ok()
         );
 
-        // The sum of the distributions MUST fit into a u64
-        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
-            developer_neurons: vec![
-                NeuronDistribution {
-                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    stake_e8s: u64::MAX,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                },
-                NeuronDistribution {
-                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
-                    stake_e8s: u64::MAX,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                },
-            ],
-        });
-        assert!(
-            initial_token_distribution
-                .validate(&nervous_system_parameters)
-                .is_err()
-        );
-
         // The sum of the distributions can equal the swap_distribution.total_e8s
         // which is set to 100 at the beginning of the test
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
@@ -870,10 +826,9 @@ mod test {
                 },
             ],
         });
-        assert!(
-            initial_token_distribution
-                .validate(&nervous_system_parameters)
-                .is_ok()
+        assert_eq!(
+            initial_token_distribution.validate(&nervous_system_parameters),
+            Ok(())
         );
 
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
@@ -890,10 +845,9 @@ mod test {
                 },
             ],
         });
-        assert!(
-            initial_token_distribution
-                .validate(&nervous_system_parameters)
-                .is_ok()
+        assert_eq!(
+            initial_token_distribution.validate(&nervous_system_parameters),
+            Ok(())
         );
 
         // Reset to a valid developer_distribution
