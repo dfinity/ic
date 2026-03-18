@@ -332,7 +332,7 @@ fn upgrade_fails_on_short_pre_upgrade_trap() {
 fn test_install_and_reinstall_with_canister_install_mode_v2() {
     let mut test = execution_test_with_max_rounds(1);
     let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
-    let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+    let canister_id = test.create_canister(Cycles::from(1_000_000_000_000_u128));
     // test install
     assert_eq!(test.install_canister_v2(canister_id, old_binary), Ok(()));
     // test reinstall
@@ -348,7 +348,7 @@ fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
 
     for skip_pre_upgrade in [None, Some(false), Some(true)] {
         let old_binary = binary(&[(Function::PreUpgrade, Execution::ShortTrap)]);
-        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000_u128));
         test.install_canister_v2(canister_id, old_binary).unwrap();
         let canister_state_before = test.canister_state(canister_id).clone();
 
@@ -383,7 +383,7 @@ fn test_upgrade_execution_with_canister_install_mode_v2() {
 
     for skip_pre_upgrade in [None, Some(false), Some(true)] {
         let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
-        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000_u128));
         test.install_canister_v2(canister_id, old_binary).unwrap();
         let canister_state_before = test.canister_state(canister_id).clone();
 

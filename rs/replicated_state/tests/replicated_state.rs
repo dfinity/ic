@@ -1342,7 +1342,7 @@ fn online_split() {
             .task_queue
             .enqueue(ExecutionTask::AbortedInstallCode {
                 message: CanisterCall::Request(RequestBuilder::default().build().into()),
-                call_id: InstallCodeCallId::new(3u64),
+                call_id: InstallCodeCallId::new(3_u64),
                 prepaid_execution_cycles: Cycles::new(3),
             });
     };

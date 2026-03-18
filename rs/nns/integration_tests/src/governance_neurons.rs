@@ -532,7 +532,7 @@ fn test_neuron_disburse_maturity() {
     // Step 6.1: Disburse maturity the remaining maturity for neuron 1 to its controller.
     let disburse_destination_3_principal =
         PrincipalId::new_self_authenticating(b"disburse_destination_3");
-    let disburse_destination_3_subaccount = [1u8; 32];
+    let disburse_destination_3_subaccount = [1_u8; 32];
     let disburse_destination_3 = AccountIdentifier::new(
         disburse_destination_3_principal,
         Some(Subaccount(disburse_destination_3_subaccount)),

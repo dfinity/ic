@@ -3242,7 +3242,7 @@ macro_rules! assert_delta {
 }
 
 fn mock_random_number_generator() -> Box<ReproducibleRng> {
-    Box::new(ReproducibleRng::from_seed_for_debugging([0u8; 32]))
+    Box::new(ReproducibleRng::from_seed_for_debugging([0_u8; 32]))
 }
 
 #[cfg(test)]

@@ -111,7 +111,7 @@ impl CanisterEnv {
             // inception.
             rng: {
                 let now_nanos = now_nanoseconds() as u128;
-                let mut seed = [0u8; 32];
+                let mut seed = [0_u8; 32];
                 seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
                 seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
                 ChaCha20Rng::from_seed(seed)
