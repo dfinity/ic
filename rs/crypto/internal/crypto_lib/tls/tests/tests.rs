@@ -50,7 +50,7 @@ fn should_generate_ed25519_secret_key_as_pkcs8_v1_format_in_der_encoding() {
 
 #[test]
 fn should_have_stable_representation_of_private_key() {
-    let seed = Seed::from_bytes(&[0x42u8; 32]);
+    let seed = Seed::from_bytes(&[0x42_u8; 32]);
 
     let (_cert, secret_key) =
         generate_tls_key_pair_der(seed, "common name", not_before(), not_after())

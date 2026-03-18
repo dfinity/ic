@@ -5,7 +5,8 @@ use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
-use ic_types::{CanisterId, Cycles};
+use ic_types::CanisterId;
+use ic_types_cycles::Cycles;
 
 const T: u128 = 1_000_000_000_000;
 

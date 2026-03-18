@@ -137,7 +137,7 @@ mod tests {
             .add_neuron(
                 NeuronBuilder::new(
                     NeuronId { id: 1 },
-                    Subaccount::try_from([1u8; 32].as_slice()).unwrap(),
+                    Subaccount::try_from([1_u8; 32].as_slice()).unwrap(),
                     PrincipalId::new_self_authenticating(b"neuron-id"),
                     DissolveStateAndAge::NotDissolving {
                         dissolve_delay_seconds,

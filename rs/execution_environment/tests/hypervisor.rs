@@ -38,7 +38,7 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
+    CanisterId, ComputeAllocation, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
     PrincipalId, Time,
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
@@ -47,6 +47,7 @@ use ic_types::{
     batch::CanisterCyclesCostSchedule,
     messages::{CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
 };
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -3349,7 +3350,7 @@ fn ic0_mint_cycles128_succeeds_on_cmc() {
     }
     assert_eq!(canister_id, CYCLES_MINTING_CANISTER_ID);
     let initial_cycles = test.canister_state(canister_id).system_state.balance();
-    let amount: u128 = (1u128 << 64) + 2u128;
+    let amount: u128 = (1_u128 << 64) + 2_u128;
     let payload = wasm()
         .mint_cycles128(Cycles::from(amount))
         .reply_data_append()
@@ -3943,7 +3944,7 @@ fn ic0_msg_cycles_available_works_for_calls() {
     let callee_id = test.canister_from_wat(wat).unwrap();
     let caller_id = test.universal_canister().unwrap();
     let caller = wasm()
-        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50_u128))
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(WasmResult::Reply(vec![]), result);
@@ -3968,11 +3969,11 @@ fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
     let callee_id = test.canister_from_wat(wat).unwrap();
     let caller_id = test.universal_canister().unwrap();
     let caller = wasm()
-        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50_u128))
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
 
-    let x = 50u128;
+    let x = 50_u128;
     let x = Vec::from(x.to_le_bytes());
     assert_eq!(WasmResult::Reply(x), result);
 }
@@ -3997,11 +3998,11 @@ fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
     let callee_id = test.canister_from_wat(wat).unwrap();
     let caller_id = test.universal_canister().unwrap();
     let caller = wasm()
-        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50_u128))
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
 
-    let x = 22u128;
+    let x = 22_u128;
     let x = Vec::from(x.to_le_bytes());
     assert_eq!(WasmResult::Reply(x), result);
 }
@@ -5311,7 +5312,7 @@ fn execute_with_huge_cycle_balance() {
             (func (export "canister_init"))
             (memory 0)
         )"#;
-    test.canister_from_cycles_and_wat(Cycles::new(1u128 << 100), wat)
+    test.canister_from_cycles_and_wat(Cycles::new(1_u128 << 100), wat)
         .unwrap();
 }
 
@@ -7328,7 +7329,7 @@ fn division_by_zero() {
     let result = test.ingress(canister_id, "div_f32", vec![]).unwrap();
     match result {
         WasmResult::Reply(v) => {
-            let mut bytes = [0u8; 4];
+            let mut bytes = [0_u8; 4];
             bytes.copy_from_slice(&v);
             let res = f32::from_le_bytes(bytes);
             assert!(res.is_infinite());
@@ -7339,7 +7340,7 @@ fn division_by_zero() {
     let result = test.ingress(canister_id, "div_f64", vec![]).unwrap();
     match result {
         WasmResult::Reply(v) => {
-            let mut bytes = [0u8; 8];
+            let mut bytes = [0_u8; 8];
             bytes.copy_from_slice(&v);
             let res = f64::from_le_bytes(bytes);
             assert!(res.is_infinite());
@@ -7405,7 +7406,7 @@ fn charge_for_dirty_pages() {
 
     match res {
         WasmResult::Reply(v) => {
-            let mut bytes = [0u8; 8];
+            let mut bytes = [0_u8; 8];
             bytes.copy_from_slice(&v);
             let res = u64::from_le_bytes(bytes);
             assert_eq!(res, 17);
@@ -7435,7 +7436,7 @@ fn charge_for_dirty_pages() {
     let res = test.ingress(canister_id, "test", vec![]).unwrap();
     match res {
         WasmResult::Reply(v) => {
-            let mut bytes = [0u8; 8];
+            let mut bytes = [0_u8; 8];
             bytes.copy_from_slice(&v);
             let res = u64::from_le_bytes(bytes);
             assert_eq!(res, 17);

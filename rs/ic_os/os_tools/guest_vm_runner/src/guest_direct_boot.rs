@@ -7,6 +7,7 @@ use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use ic_device::mount::{FileSystem, MountOptions, PartitionProvider, PartitionSelector};
 use std::fs::File;
 use tempfile::NamedTempFile;
+use tracing::info;
 use uuid::Uuid;
 
 const fn const_unwrap(result: std::result::Result<Uuid, uuid::Error>) -> Uuid {
@@ -98,7 +99,7 @@ pub async fn prepare_direct_boot(
         boot_alternative = boot_alternative.get_opposite();
     }
 
-    println!("Will boot into {boot_alternative} from {guest_vm_type:?} GuestVM");
+    info!("Will boot into {boot_alternative} from {guest_vm_type:?} GuestVM");
 
     // The variable name inside 'boot_args' that contains the kernel command line parameters.
     // Note that this depends on the boot alternative since they contain the root partition and
@@ -128,14 +129,14 @@ pub async fn prepare_direct_boot(
     // operation. Therefore, we don't write out grubenv until we can ensure that we'll do a direct
     // boot.
     if !boot_args_path.exists() {
-        println!(
+        info!(
             "No boot_args file found in boot partition {boot_alternative}. Cannot prepare \
              direct boot."
         );
         return Ok(None);
     }
     if !ovmf_sev_path.exists() {
-        println!(
+        info!(
             "No OVMF.fd file found in boot partition {boot_alternative}. Cannot prepare \
              direct boot."
         );
