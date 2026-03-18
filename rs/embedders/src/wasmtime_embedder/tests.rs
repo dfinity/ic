@@ -32,9 +32,10 @@ use ic_sys::PageIndex;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     batch::CanisterCyclesCostSchedule, time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::BinaryEncodedWasm;
 
 use ic_replicated_state::NumWasmPages;
