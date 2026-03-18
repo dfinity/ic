@@ -29,11 +29,12 @@ use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_i
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, Time,
+    MemoryAllocation, NumBytes, NumInstructions, Time,
     messages::{CallbackId, CanisterMessage, NO_DEADLINE, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use std::{collections::BTreeSet, sync::Arc};
@@ -114,12 +115,6 @@ where
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
     canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(0));
     canister_state.system_state.freeze_threshold = 0.into();
-    // After canister creation its log memory limit was set to a default value,
-    // and allocated corresponding log_memory_store memory.
-    canister_state
-        .system_state
-        .log_memory_store
-        .resize_for_testing(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
 
     // Create call context and callback
     let call_origin = CallOrigin::CanisterUpdate(
