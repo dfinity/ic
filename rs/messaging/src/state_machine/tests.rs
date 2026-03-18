@@ -21,8 +21,9 @@ use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::batch::{BatchMessages, BlockmakerMetrics, CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::messages::SignedIngress;
 use ic_types::{
-    CanisterId, Cycles, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, Time,
 };
+use ic_types_cycles::Cycles;
 use maplit::btreemap;
 use mockall::{Sequence, mock, predicate::*};
 use std::collections::{BTreeMap, BTreeSet};

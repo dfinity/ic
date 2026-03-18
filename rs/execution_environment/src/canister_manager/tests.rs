@@ -85,15 +85,14 @@ use ic_test_utilities_types::{
     messages::{IngressBuilder, RequestBuilder},
 };
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, SubnetId, UserId,
+    CanisterId, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
+    SubnetId, UserId,
     batch::CanisterCyclesCostSchedule,
-    cycles_use_case::CyclesUseCase,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
-    nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;

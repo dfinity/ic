@@ -410,8 +410,14 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     // 1 slice and no messages executed.
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     let metrics = test.scheduler().metrics.as_ref();
-    assert_eq!(metrics.round_subnet_queue.slices.get_sample_sum(), 1.0);
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 0.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
+        1.0
+    );
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        0.0
+    );
 
     // Add a second canister with a short install code message.
     let canister_2 = test.create_canister();
@@ -430,7 +436,10 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
     let metrics = test.scheduler().metrics.as_ref();
     // First slice executed as a regular subnet message, second as a long install.
-    assert_eq!(metrics.round_subnet_queue.slices.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
+        1.0
+    );
     assert_eq!(
         metrics
             .round_advance_long_install_code
@@ -440,7 +449,10 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     );
     // Only the two slices were executed.
     assert_eq!(metrics.round.slices.get_sample_sum(), 2.0);
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 0.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        0.0
+    );
 
     let state_metrics = &test.scheduler().state_metrics;
     // 2 rounds because the first canister was paused twice.
@@ -458,8 +470,14 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     assert!(!test.canister_state(canister_2).has_paused_install_code());
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
     let metrics = test.scheduler().metrics.as_ref();
-    assert_eq!(metrics.round_subnet_queue.slices.get_sample_sum(), 2.0);
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.slices.get_sample_sum(),
+        2.0
+    );
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        1.0
+    );
     assert_eq!(
         metrics
             .round_advance_long_install_code

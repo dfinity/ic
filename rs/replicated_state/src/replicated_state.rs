@@ -26,14 +26,13 @@ use ic_types::{
     AccumulatedPriority, CanisterId, NumBytes, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
-    cycles_use_case::CyclesUseCase,
     ingress::IngressStatus,
     messages::{
         CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
     },
-    nominal_cycles::NominalCycles,
     time::CoarseTime,
 };
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
@@ -43,7 +42,7 @@ use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
 #[cfg(debug_assertions)]
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -1678,7 +1677,7 @@ impl ReplicatedState {
             .subnet_metrics
             .get_consumed_cycles_by_use_case()
             .get(&CyclesUseCase::DroppedMessages)
-            .map(ic_types::nominal_cycles::NominalCycles::get)
+            .map(NominalCycles::get)
             .unwrap_or_default()
             .into();
         canister_cycles
@@ -1751,7 +1750,7 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 
 pub mod testing {
     use super::*;
-    use ic_types::Cycles;
+    use ic_types_cycles::Cycles;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {

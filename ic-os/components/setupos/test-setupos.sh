@@ -100,27 +100,43 @@ function test_detect_hardware_generation_helper() {
 function test_verify_cpu() {
     # Gen1 Success
     test_verify_cpu_helper "verify_cpu Gen1 success" "1" '[
-      {"id": "cpu:0", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}},
-      {"id": "cpu:1", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}}
+      {"id": "cpu:0", "product": "AMD EPYC 7302", "capabilities": {"sev": "true", "svm": "true"}},
+      {"id": "cpu:1", "product": "AMD EPYC 7302", "capabilities": {"sev": "true", "svm": "true"}}
     ]' 64 0
 
     # Gen1 Failure
     test_verify_cpu_helper "verify_cpu Gen1 failure" "1" '[
-      {"id": "cpu:0", "product": "Invalid CPU", "capabilities": {"sev": "false"}},
-      {"id": "cpu:1", "product": "Invalid CPU", "capabilities": {"sev": "false"}}
+      {"id": "cpu:0", "product": "Invalid CPU", "capabilities": {"sev": "false", "svm": "false"}},
+      {"id": "cpu:1", "product": "Invalid CPU", "capabilities": {"sev": "false", "svm": "false"}}
     ]' 64 1
 
     # Gen2 Success
     test_verify_cpu_helper "verify_cpu Gen2 success" "2" '[
-      {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}},
-      {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}}
+      {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true", "svm": "true"}},
+      {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true", "svm": "true"}}
     ]' 70 0
 
     # Gen2 Failure
     test_verify_cpu_helper "verify_cpu Gen2 failure" "2" '[
-      {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "false"}},
-      {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "false"}}
+      {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "false", "svm": "true"}},
+      {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "false", "svm": "true"}}
     ]' 64 1
+
+    # Gen3 Success
+    test_verify_cpu_helper "verify_cpu Gen3 success" "3" '[
+      {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {"svm": "true"}},
+      {"id": "cpu:1", "product": "Foobaz CPU", "capabilities": {"svm": "true"}}
+    ]' 1 0
+
+    test_verify_cpu_helper "verify_cpu Gen3 success" "3" '[
+      {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {"vmx": "true"}},
+    ]' 1 0
+
+    # Gen3 Failure
+    test_verify_cpu_helper "verify_cpu Gen3 failure" "3" '[
+      {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {}},
+      {"id": "cpu:1", "product": "Foobaz CPU", "capabilities": {}}
+    ]' 1 1
 }
 
 function test_verify_cpu_helper() {

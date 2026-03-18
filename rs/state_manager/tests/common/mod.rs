@@ -26,12 +26,13 @@ use ic_test_utilities_state::{initial_execution_state, new_canister_state};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::{
-    CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
+    CanisterId, CryptoHashOfState, Height, RegistryVersion, SubnetId,
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
 use tempfile::TempDir;
