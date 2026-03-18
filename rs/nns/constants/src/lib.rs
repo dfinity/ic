@@ -38,7 +38,7 @@ pub const MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 17;
 pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x_0210_0001;
 pub const CYCLES_LEDGER_CANISTER_INDEX: u64 = 0x_0210_0002;
 pub const CYCLES_LEDGER_INDEX_CANISTER_INDEX: u64 = 0x_0210_0003;
-pub const INTERNET_IDENTITY_FRONTEND_CANISTER_INDEX: u64 = 0x_0210_0008;
+pub const INTERNET_IDENTITY_FRONTEND_CANISTER_INDEX: u64 = 0x_0210_0006;
 
 // Canisters belonging to the Bitcoin subnet, whose ID begins with w4rem.
 pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x_01A0_0001;
@@ -146,7 +146,7 @@ pub const CYCLES_LEDGER_CANISTER_ID: CanisterId =
 /// 0x_0210_0003 (34_603_011): ul4oc-4iaaa-aaaaq-qaabq-cai
 pub const CYCLES_LEDGER_INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(CYCLES_LEDGER_INDEX_CANISTER_INDEX);
-/// 0x_0210_0008 (34_603_016): uqzsh-gqaaa-aaaaq-qaada-cai
+/// 0x_0210_0006 (34_603_014): uqzsh-gqaaa-aaaaq-qaada-cai
 pub const INTERNET_IDENTITY_FRONTEND_CANISTER_ID: CanisterId =
     CanisterId::from_u64(INTERNET_IDENTITY_FRONTEND_CANISTER_INDEX);
 

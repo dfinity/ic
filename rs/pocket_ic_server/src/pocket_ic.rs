@@ -2183,6 +2183,14 @@ impl PocketIcSubnets {
             return;
         }
 
+        // Nothing to do if the II frontend has already been deployed.
+        if ii_subnet
+            .state_machine
+            .canister_exists(INTERNET_IDENTITY_FRONTEND_CANISTER_ID)
+        {
+            return;
+        }
+
         let gateway_port = self.gateway_port.expect(
             "The HTTP gateway is supposed to be created if the `ii` ICP feature is specified.",
         );
