@@ -10,8 +10,8 @@ use crate::icrc::{
 
 pub const BTYPE_122_BURN: &str = "122burn";
 pub const BTYPE_122_MINT: &str = "122mint";
-pub const OP_152_BURN: &str = "152burn";
-pub const OP_152_MINT: &str = "152mint";
+pub const MTHD_152_BURN: &str = "152burn";
+pub const MTHD_152_MINT: &str = "152mint";
 
 /// Validate whether a block conforms to the ICRC-122 `122burn` block schema.
 pub fn validate_burn(block: &Value) -> Result<(), ValuePredicateFailures> {
@@ -29,7 +29,7 @@ fn burn_block_predicate() -> impl Fn(Cow<Value>) -> Result<(), ValuePredicateFai
     let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
     let is_tx = and(vec![
         is_map(),
-        item("op", Optional, is_text()),
+        item("mthd", Optional, is_text()),
         item("amt", Required, is_nat()),
         item("from", Required, is_account()),
         item("caller", Optional, is_principal()),
@@ -53,7 +53,7 @@ fn mint_block_predicate() -> impl Fn(Cow<Value>) -> Result<(), ValuePredicateFai
     let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
     let is_tx = and(vec![
         is_map(),
-        item("op", Optional, is_text()),
+        item("mthd", Optional, is_text()),
         item("amt", Required, is_nat()),
         item("to", Required, is_account()),
         item("caller", Optional, is_principal()),
@@ -130,7 +130,7 @@ mod tests {
             (
                 "tx",
                 Value::map([
-                    ("op", Value::text(OP_152_BURN)),
+                    ("mthd", Value::text(MTHD_152_BURN)),
                     ("amt", Value::Nat(Nat::from(500_u64))),
                     ("from", account(&[1u8; 29])),
                     ("caller", Value::blob(vec![1u8; 29])),
@@ -151,7 +151,7 @@ mod tests {
             (
                 "tx",
                 Value::map([
-                    ("op", Value::text(OP_152_MINT)),
+                    ("mthd", Value::text(MTHD_152_MINT)),
                     ("amt", Value::Nat(Nat::from(500_u64))),
                     ("to", account(&[2u8; 29])),
                     ("caller", Value::blob(vec![1u8; 29])),
