@@ -3,13 +3,19 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 /// Utxo wrapper that follows the order of ascending height.
-#[derive(Ord, PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 struct OrderedUtxo(Utxo);
 
 impl PartialOrd for OrderedUtxo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.0.height.partial_cmp(&other.0.height) {
-            Some(Ordering::Equal) => self.0.partial_cmp(&other.0),
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OrderedUtxo {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.0.height.cmp(&other.0.height) {
+            Ordering::Equal => self.0.cmp(&other.0),
             ord => ord,
         }
     }
