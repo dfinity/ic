@@ -18,6 +18,9 @@ use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+mod ordered_utxoset;
+use ordered_utxoset::OrderedUtxoSet;
+
 #[derive(Deserialize, candid::CandidType)]
 pub struct GetEventsArg {
     pub start: u64,
@@ -353,6 +356,10 @@ impl EventLogger for CkBtcEventLogger {
             None => return Err(ReplayLogError::EmptyLog),
         };
 
+        let mut received_utxos = OrderedUtxoSet::new(100);
+        let mut dup_received = BTreeSet::new();
+        let mut rejected_sent = BTreeSet::new();
+
         // Because `kyt_principal` was previously used as a default
         // substitute for `kyt_provider` during kyt_fee accounting,
         // we need to keep track of this value so that `distribute_kyt_fee`
@@ -374,7 +381,22 @@ impl EventLogger for CkBtcEventLogger {
                 }
                 EventType::ReceivedUtxos {
                     to_account, utxos, ..
-                } => state.add_utxos::<I>(to_account, utxos),
+                } => {
+                    let utxos = utxos
+                        .into_iter()
+                        .filter(|utxo| {
+                            if received_utxos.contains(utxo) {
+                                state.checked_utxos.remove(&utxo);
+                                dup_received.insert(utxo.clone());
+                                false
+                            } else {
+                                received_utxos.insert(utxo.clone());
+                                true
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    state.add_utxos::<I>(to_account, utxos);
+                }
                 EventType::AcceptedRetrieveBtcRequest(req) => {
                     if let Some(account) = req.reimbursement_account {
                         state
@@ -409,6 +431,11 @@ impl EventLogger for CkBtcEventLogger {
                     withdrawal_fee,
                     signed_tx,
                 } => {
+                    // Ignore this event if the utxos contain a dup.
+                    if utxos.iter().any(|utxo| dup_received.contains(utxo)) {
+                        rejected_sent.insert(txid);
+                        continue;
+                    }
                     let mut retrieve_btc_requests = BTreeSet::new();
                     let mut consolidate_utxos_request = None;
                     for block_index in request_block_indices {
@@ -460,6 +487,11 @@ impl EventLogger for CkBtcEventLogger {
                     reason,
                     new_utxos,
                 } => {
+                    // Ignore if old_txid was already rejected
+                    if rejected_sent.contains(&old_txid) {
+                        rejected_sent.insert(new_txid);
+                        continue;
+                    }
                     let (old_requests, old_utxos) = match state
                         .submitted_transactions
                         .iter()
