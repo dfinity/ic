@@ -526,10 +526,7 @@ impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
         let system_subnet_ids = subnet_ids.map(|ids| {
             ids.into_iter()
                 .filter(|subnet_id| {
-                    matches!(
-                        self.get_subnet_type(*subnet_id, version),
-                        Ok(Some(t)) if t == subnet_type
-                    )
+                    self.get_subnet_type(*subnet_id, version) == Ok(Some(subnet_type))
                 })
                 .collect()
         });
