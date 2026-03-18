@@ -281,22 +281,22 @@ impl Firewall {
 
             // For each of them, check their node reward type and only include the ones with
             // whitelisted node reward types.
-            let whitelisted_node_ids = all_node_ids.clone().into_iter().filter(|other_node_id| {
+            let whitelisted_node_ids = all_node_ids.iter().cloned().filter(|other_node_id| {
                 let other_reward_type =
                     self.get_defaulting_node_reward_type(*other_node_id, registry_version);
 
                 whitelisted_node_types.contains(&other_reward_type)
             });
 
-            all_node_ips.extend(
-                self.registry
-                    .get_available_ip_addresses_for_node_ids(all_node_ids, registry_version),
-            );
             whitelisted_node_ips.extend(
                 self.registry.get_available_ip_addresses_for_node_ids(
                     whitelisted_node_ids,
                     registry_version,
                 ),
+            );
+            all_node_ips.extend(
+                self.registry
+                    .get_available_ip_addresses_for_node_ids(all_node_ids, registry_version),
             );
         }
 
