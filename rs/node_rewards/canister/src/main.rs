@@ -75,6 +75,30 @@ fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
     CANISTER.with(|canister| canister.borrow().get_registry_value(key))
 }
 
+#[cfg(feature = "test")]
+#[query(hidden = true)]
+fn __self_call() {}
+
+#[cfg(feature = "test")]
+#[update(hidden = true)]
+fn start_recovery_test_tasks() {
+    use ic_node_rewards_canister::timer_tasks::test_tasks::{
+        PanickingRecoveryTask, SuccessRecoveryTask,
+    };
+    PanickingRecoveryTask.schedule();
+    SuccessRecoveryTask.schedule();
+}
+
+#[cfg(feature = "test")]
+#[query(hidden = true)]
+fn get_recovery_test_counters() -> (u64, u64) {
+    use ic_node_rewards_canister::timer_tasks::test_tasks;
+    (
+        test_tasks::get_success_task_counter(),
+        test_tasks::get_panic_task_counter(),
+    )
+}
+
 #[update]
 async fn get_node_providers_monthly_xdr_rewards(
     request: GetNodeProvidersMonthlyXdrRewardsRequest,

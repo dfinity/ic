@@ -319,13 +319,9 @@ fn unexecuted_heartbeat_and_timer_tasks_are_removed_after_round() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(10),
             max_instructions_per_message: NumInstructions::new(10),
-            max_instructions_per_query_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     test.set_time(NOW);

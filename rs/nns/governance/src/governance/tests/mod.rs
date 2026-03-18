@@ -1033,7 +1033,7 @@ mod neuron_archiving_tests {
         // Dissolved in the distant past.
         let model_neuron = NeuronBuilder::new(
             NeuronId { id: 1 },
-            Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+            Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
             PrincipalId::new_user_test_id(1),
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: 42,
@@ -1069,7 +1069,7 @@ mod neuron_archiving_tests {
         let neuron_with_dissolve_state_and_age = |dissolve_state_and_age| {
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 dissolve_state_and_age,
                 NOW,

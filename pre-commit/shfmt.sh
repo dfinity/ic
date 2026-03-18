@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-SHFMT="$(readlink "$shfmt_path")"
-REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
-cd "$REPO_PATH"
+SHFMT="$(readlink "$SHFMT")"
+
+cd "${BUILD_WORKSPACE_DIRECTORY:?Expected to run from bazel}"
 
 SHFMT_CHECK="${SHFMT_CHECK:-}"
 
