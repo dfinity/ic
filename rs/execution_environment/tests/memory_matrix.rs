@@ -49,9 +49,9 @@ use ic_management_canister_types_private::{
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_test_utilities::universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
-use ic_types::Cycles;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{MessageId, Payload};
+use ic_types_cycles::Cycles;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use num_traits::ops::saturating::SaturatingSub;
 use std::cmp::max;
