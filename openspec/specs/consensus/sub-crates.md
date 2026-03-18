@@ -403,7 +403,7 @@ The IDKG component round-robins through its three subcomponents (pre-signer, sig
 
 ---
 
-## Crate: ic-consensus-vetkd
+## Crate: ic-consensus-vetkd / ic-consensus-chain-key
 
 The vetKD (Verifiable Encrypted Threshold Key Derivation) consensus crate implements the payload builder for vetKD key derivation. It collects encrypted key shares from the IDKG pool, combines them into encrypted keys, and delivers responses to requesting canisters.
 
