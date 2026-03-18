@@ -1489,11 +1489,12 @@ mod tests {
         if test_scenario.was_replica_process_started_previously() {
             const MAX_ATTEMPTS: u32 = 50;
             for attempt in 1..=MAX_ATTEMPTS {
-                match replica_process.lock().unwrap().start(ReplicaProcess {
+                let result = replica_process.lock().unwrap().start(ReplicaProcess {
                     version: current_replica_version.clone(),
                     binary: ic_binary_dir.join("replica").display().to_string(),
                     args: vec![],
-                }) {
+                });
+                match result {
                     Ok(()) => break,
                     Err(e)
                         if e.kind() == std::io::ErrorKind::ExecutableFileBusy
