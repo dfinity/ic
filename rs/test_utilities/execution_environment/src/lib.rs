@@ -65,22 +65,21 @@ use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::SignedIngressContent;
 use ic_types::{
-    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
+    CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterCall, CanisterTask, CertificateDelegationMetadata,
+        CallbackId, CanisterCall, CanisterMessage, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
         QuerySource, RequestOrResponse, Response, SubnetMessage, extract_effective_canister_id,
     },
-    nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule, WasmHash};
@@ -101,7 +100,7 @@ use tempfile::NamedTempFile;
 mod wat_canister;
 pub use wat_canister::{WatCanisterBuilder, WatFnCode, wat_canister, wat_fn};
 
-const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(2_500_000_000_000);
 
 // These are well formed example public keys.
 // We need to have well formed keys for the "*_public_key" tests, otherwise crypto will
@@ -312,6 +311,7 @@ pub struct ExecutionTest {
     chain_key_data: ChainKeyData,
     replica_version: ReplicaVersion,
     canister_snapshot_baseline_instructions: NumInstructions,
+    execution_config: Config,
 
     // The actual implementation.
     exec_env: Arc<ExecutionEnvironment>,
@@ -589,6 +589,18 @@ impl ExecutionTest {
             execution_memory,
             self.subnet_available_memory
                 .get_guaranteed_response_message_memory(),
+            self.subnet_available_memory
+                .get_wasm_custom_sections_memory(),
+        );
+    }
+
+    fn set_available_guaranteed_response_message_memory(
+        &mut self,
+        guaranteed_response_message_memory: i64,
+    ) {
+        self.subnet_available_memory = SubnetAvailableMemory::new_for_testing(
+            self.subnet_available_memory.get_execution_memory(),
+            guaranteed_response_message_memory,
             self.subnet_available_memory
                 .get_wasm_custom_sections_memory(),
         );
@@ -1263,6 +1275,7 @@ impl ExecutionTest {
             result.instructions_used.unwrap(),
             cost_schedule,
         );
+        self.check_invariants();
     }
 
     /// Executes a query sent by the system in the given canister.
@@ -1351,6 +1364,35 @@ impl ExecutionTest {
         let canister = state.take_canister_state(&canister_id).unwrap();
         let mut canister = Arc::unwrap_or_clone(canister);
         let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let response_arc = Arc::new(response);
+        // We push and then immediately pop the response from the canister queues
+        // to ensure all invariants on the canister (system) state are preserved.
+        let mut subnet_available_guaranteed_response_memory = self
+            .subnet_available_memory
+            .get_guaranteed_response_message_memory();
+        let res = canister
+            .push_input(
+                RequestOrResponse::Response(response_arc.clone()),
+                &mut subnet_available_guaranteed_response_memory,
+                state.metadata.own_subnet_type,
+                InputQueueType::LocalSubnet,
+            )
+            .unwrap();
+        assert!(res, "Response should be successfully inducted");
+        let input = canister.pop_input().unwrap();
+        let callback = match input {
+            CanisterMessage::Response { response, callback } => {
+                assert_eq!(response, response_arc);
+                callback
+            }
+            _ => panic!(
+                "Unexpected input popped from canister queues (there should be no messages in the canister queues before calling `execute_response`): {:?}",
+                input
+            ),
+        };
+        self.set_available_guaranteed_response_message_memory(
+            subnet_available_guaranteed_response_memory,
+        );
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1358,14 +1400,9 @@ impl ExecutionTest {
             compute_allocation_used,
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
-        let callback = canister
-            .system_state
-            .unregister_callback(response.originator_reply_callback)
-            .unwrap()
-            .unwrap();
         let result = self.exec_env.execute_canister_response(
             canister,
-            Arc::new(response),
+            response_arc,
             callback,
             self.instruction_limits.clone(),
             UNIX_EPOCH,
@@ -1393,6 +1430,7 @@ impl ExecutionTest {
         self.update_execution_stats(canister_id, instructions_used, cost_schedule);
         state.put_canister_state(canister);
         self.state = Some(state);
+        self.check_invariants();
         response
     }
 
@@ -1521,7 +1559,7 @@ impl ExecutionTest {
             }
             Ok(Method::LoadCanisterSnapshot) => {
                 let payload = LoadCanisterSnapshotArgs::decode(message.method_payload()).unwrap();
-                let snapshot = self.state.as_ref().unwrap().canister_snapshots.get(payload.snapshot_id()).expect("Loading a non-existing snapshot should fail during validation and no instructions should be used in that case!");
+                let snapshot = self.canister_state(payload.get_canister_id()).canister_snapshots.get(payload.snapshot_id()).expect("Loading a non-existing snapshot should fail during validation and no instructions should be used in that case!");
                 let wasm_module = snapshot.execution_snapshot().wasm_binary.clone();
                 let wasm_source = WasmSource::CanisterModule(wasm_module);
                 let execution_mode = wasm_execution_mode(wasm_source);
@@ -1638,10 +1676,10 @@ impl ExecutionTest {
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             match execute_subnet_message_result_type {
-                ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
+                ExecuteSubnetMessageResultType::Finished => {
                     // cycles charging proceeds by prepaying for the message instruction limit
-                    // and subsequently refunding based on `message_instructions_used`
-                    // and thus `message_instructions_used` are capped
+                    // and subsequently refunding based on `slice_instructions_used`
+                    // and thus `slice_instructions_used` are capped
                     // at the message instruction limit
                     let capped_slice_instructions_used = std::cmp::min(
                         NumInstructions::from(slice_instructions_used.get() as u64),
@@ -1661,12 +1699,11 @@ impl ExecutionTest {
                         // then no instructions should be used.
                         assert_eq!(capped_slice_instructions_used.get(), 0);
                     }
-                    // For backward compatibility, we only perform the following checks and updates for install code messages.
+                    // For backward compatibility, we only perform stats updates for install code messages.
                     if is_install_code {
-                        assert_eq!(message_instructions_used, capped_slice_instructions_used);
                         self.update_execution_stats(
                             canister_id,
-                            message_instructions_used,
+                            capped_slice_instructions_used,
                             cost_schedule,
                         );
                     }
@@ -1688,6 +1725,7 @@ impl ExecutionTest {
         } else {
             assert_eq!(slice_instructions_used.get(), 0);
         }
+        self.check_invariants();
         true
     }
 
@@ -1760,6 +1798,7 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         state.put_canister_states(canisters);
         self.state = Some(state);
+        self.check_invariants();
         executed_any
     }
 
@@ -1816,7 +1855,7 @@ impl ExecutionTest {
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
                 match execute_subnet_message_result_type {
-                    ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
+                    ExecuteSubnetMessageResultType::Finished => {
                         let paused_subnet_message =
                             self.paused_subnet_messages.remove(&canister_id).unwrap();
                         let instructions_used_before = paused_subnet_message.instructions;
@@ -1824,7 +1863,7 @@ impl ExecutionTest {
                             NumInstructions::from(slice_instructions_used.get() as u64)
                                 + instructions_used_before;
                         // cycles charging proceeds by prepaying for the message instruction limit
-                        // and subsequently refunding based on `message_instructions_used`
+                        // and subsequently refunding based on `instructions_used`
                         // and thus `instructions_used` are capped
                         // at the message instruction limit
                         let capped_instructions_used = std::cmp::min(
@@ -1844,10 +1883,9 @@ impl ExecutionTest {
                             cycles_used_before,
                             capped_instructions_used,
                         );
-                        assert_eq!(message_instructions_used, capped_instructions_used);
                         self.update_execution_stats(
                             canister_id,
-                            message_instructions_used,
+                            capped_instructions_used,
                             cost_schedule,
                         );
                     }
@@ -1898,6 +1936,7 @@ impl ExecutionTest {
                 self.state = Some(state);
             }
         }
+        self.check_invariants();
     }
 
     /// Aborts all paused executions.
@@ -2214,6 +2253,14 @@ impl ExecutionTest {
 
         let state_after_split = state.online_split(subnet_id, other_subnet_id).unwrap();
         self.state = Some(state_after_split);
+    }
+
+    pub fn check_invariants(&self) {
+        for canister in self.state.as_ref().unwrap().canisters_iter() {
+            canister
+                .check_invariants(&self.execution_config.embedders_config)
+                .expect("Canister invariant check failed");
+        }
     }
 }
 
@@ -3021,6 +3068,7 @@ impl ExecutionTestBuilder {
                 .subnet_config
                 .scheduler_config
                 .canister_snapshot_baseline_instructions,
+            execution_config: self.execution_config,
         }
     }
 }
@@ -3194,7 +3242,7 @@ macro_rules! assert_delta {
 }
 
 fn mock_random_number_generator() -> Box<ReproducibleRng> {
-    Box::new(ReproducibleRng::from_seed_for_debugging([0u8; 32]))
+    Box::new(ReproducibleRng::from_seed_for_debugging([0_u8; 32]))
 }
 
 #[cfg(test)]

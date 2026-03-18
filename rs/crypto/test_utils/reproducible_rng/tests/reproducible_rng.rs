@@ -4,7 +4,7 @@ use rand::RngCore;
 #[test]
 fn no_trivial_output() {
     let rng = &mut reproducible_rng();
-    let mut bytes = [0u8; 16];
+    let mut bytes = [0_u8; 16];
     rng.fill_bytes(&mut bytes);
     // bytes is not a zero-initialized string after filling it with random bytes
     assert_ne!(&bytes, &[0u8; 16]);
@@ -20,7 +20,7 @@ fn outputs_are_distinct() {
     let mut outputs = std::collections::HashSet::<[u8; 16]>::new();
 
     for _ in 0..NUM_OUTPUTS {
-        let mut random_bytes = [0u8; 16];
+        let mut random_bytes = [0_u8; 16];
         rng.fill_bytes(&mut random_bytes);
         let no_collision = outputs.insert(random_bytes);
         assert!(
