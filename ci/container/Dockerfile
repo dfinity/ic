@@ -83,10 +83,6 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
-USER ubuntu
-# Set PATH for ubuntu user
-ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-
 # Add Rust/Cargo support
 RUN mkdir -p /tmp/rust-version/
 COPY rust-toolchain.toml /tmp/rust-version/rust-toolchain.toml
@@ -103,13 +99,15 @@ RUN rm -rf /tmp/rust-version
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
+
+USER ubuntu
+# Set PATH for ubuntu user
+ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
 WORKDIR /
-# Use buildifier (uid 1001) if /entrypoint.sh is overriden
-# In GitHub that is the case and we need 1001 and we set it via ARG.
-ARG CI_USER="root"
+USER root
 CMD ["/bin/bash"]
 
 FROM base as build
@@ -120,8 +118,6 @@ COPY ${PACKAGE_CI_FILE} /tmp/
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_CI_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_CI_FILE)"
-
-USER $CI_USER
 
 FROM base as dev
 
@@ -142,5 +138,3 @@ RUN (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
 	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
 	&& sudo apt update \
 	&& sudo apt install gh -y
-
-USER $CI_USER
