@@ -20,9 +20,11 @@ use ic_types::ReplicaVersion;
 use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
-    mutations::do_update_subnet_admins::{OperationType, UpdateSubnetAdminsPayload},
+    mutations::do_update_subnet_admins::{
+        MAX_SUSTAINED_SUBNET_ADMINS_PER_DAY, OperationType, UpdateSubnetAdminsPayload,
+    },
 };
-use std::str::FromStr;
+use std::{collections::HashSet, str::FromStr};
 
 #[test]
 fn test_the_anonymous_user_cannot_update_a_subnets_subnet_admins() {
@@ -390,6 +392,151 @@ fn test_subnet_rental_canister_can_update_subnet_admins_of_rented_subnet() {
         .await
         .subnet_admins;
         assert_eq!(subnet_admins, vec![PrincipalIdPb::from(new_subnet_admin)]);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_rate_limit_subnet_admin_updates_per_subnet() {
+    state_machine_test_on_nns_subnet(|runtime| async move {
+        // `TEST_ID` is used as the first subnet_id also when creating the initial
+        // registry mutation. Use another subnet_id for the "test" subnet.
+        let subnet_id = SubnetId::from(
+            PrincipalId::from_str(
+                "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
+            )
+            .unwrap(),
+        );
+
+        let registry = set_up_registry_canister(
+            &runtime,
+            RegistryCanisterInitPayloadBuilder::new()
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
+                .push_init_mutate_request(RegistryAtomicMutateRequest {
+                    mutations: vec![insert(
+                        make_subnet_record_key(subnet_id).as_bytes(),
+                        SubnetRecord {
+                            // The following fieldsare revelant for this test.
+                            subnet_type: SubnetType::Application.into(),
+                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Free.into(),
+                            subnet_admins: vec![],
+                            // Set the rest of the fields to some dummy values.
+                            membership: vec![],
+                            max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                            max_ingress_messages_per_block: 1000,
+                            max_ingress_bytes_per_block: 4 * 1024 * 1024,
+                            max_block_payload_size: 4 * 1024 * 1024,
+                            unit_delay_millis: 500,
+                            initial_notary_delay_millis: 1500,
+                            replica_version_id: ReplicaVersion::default().into(),
+                            dkg_interval_length: 0,
+                            dkg_dealings_per_block: 1,
+                            start_as_nns: false,
+                            is_halted: false,
+                            halt_at_cup_height: false,
+                            features: None,
+                            max_number_of_canisters: 0,
+                            ssh_readonly_access: vec![],
+                            ssh_backup_access: vec![],
+                            chain_key_config: None,
+                            recalled_replica_version_ids: vec![],
+                        }
+                        .encode_to_vec(),
+                    )],
+                    preconditions: vec![],
+                })
+                .build(),
+        )
+        .await;
+
+        // Install the universal canister in place of the subnet rental canister
+        let fake_subnet_rental_canister =
+            create_and_install_mock_subnet_rental_canister(&runtime).await;
+        // Since it takes the id reserved for the subnet rental canister, it can
+        // impersonate it
+        assert_eq!(
+            fake_subnet_rental_canister.canister_id(),
+            ic_nns_constants::SUBNET_RENTAL_CANISTER_ID,
+        );
+
+        // Adding and immediately removing up to `MAX_SUSTAINED_SUBNET_ADMINS_PER_DAY` should work
+        let mut expected_subnet_admins = HashSet::new();
+        for i in 0..MAX_SUSTAINED_SUBNET_ADMINS_PER_DAY {
+            if i % 2 == 0 {
+                let new_subnet_admin = user_test_id(100 + i).get();
+                let payload = UpdateSubnetAdminsPayload {
+                    subnet_id,
+                    operation_type: Some(OperationType::Add(vec![new_subnet_admin])),
+                };
+                assert!(
+                    forward_call_via_universal_canister(
+                        &fake_subnet_rental_canister,
+                        &registry,
+                        "update_subnet_admins",
+                        Encode!(&payload).unwrap()
+                    )
+                    .await
+                );
+                expected_subnet_admins.insert(PrincipalIdPb::from(new_subnet_admin));
+            } else {
+                let existing_subnet_admin = user_test_id(100 + i - 1).get();
+                let payload = UpdateSubnetAdminsPayload {
+                    subnet_id,
+                    operation_type: Some(OperationType::Remove(vec![existing_subnet_admin])),
+                };
+                assert!(
+                    forward_call_via_universal_canister(
+                        &fake_subnet_rental_canister,
+                        &registry,
+                        "update_subnet_admins",
+                        Encode!(&payload).unwrap()
+                    )
+                    .await
+                );
+                expected_subnet_admins.remove(&PrincipalIdPb::from(existing_subnet_admin));
+            }
+        }
+
+        // Verify the subnet has the expected list of admins.
+        let expected_subnet_admins: HashSet<PrincipalIdPb> =
+            expected_subnet_admins.into_iter().collect();
+        let subnet_admins = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await
+        .subnet_admins
+        .into_iter()
+        .collect::<HashSet<PrincipalIdPb>>();
+        assert_eq!(subnet_admins, expected_subnet_admins.clone());
+
+        // Making another subnet admin update should fail due to rate limiting.
+        let new_subnet_admin = user_test_id(200).get();
+        let payload = UpdateSubnetAdminsPayload {
+            subnet_id,
+            operation_type: Some(OperationType::Add(vec![new_subnet_admin])),
+        };
+        assert!(
+            !forward_call_via_universal_canister(
+                &fake_subnet_rental_canister,
+                &registry,
+                "update_subnet_admins",
+                Encode!(&payload).unwrap()
+            )
+            .await
+        );
+
+        // No change should have happened to subnet admins since the last call failed.
+        let subnet_admins = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await
+        .subnet_admins
+        .into_iter()
+        .collect::<HashSet<PrincipalIdPb>>();
+        assert_eq!(subnet_admins, expected_subnet_admins);
 
         Ok(())
     });

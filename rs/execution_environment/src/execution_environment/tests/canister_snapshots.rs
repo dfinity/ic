@@ -30,12 +30,13 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
-    CanisterId, Cycles, NumInstructions, SnapshotId,
+    CanisterId, NumInstructions, SnapshotId,
     batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
@@ -827,7 +828,7 @@ fn take_snapshot_with_maximal_chunk_store() {
     // The chunk store may have no more than 100 entries.
     // If this test fails, the wasm chunk store size or the
     // max number of stored chunks may have changed.
-    for i in 0..100u32 {
+    for i in 0..100_u32 {
         let chunk = i.to_be_bytes().to_vec();
         let upload_args = UploadChunkArgs {
             canister_id: canister_id.into(),
@@ -1109,13 +1110,9 @@ fn list_canister_snapshot_fails_invalid_controller() {
     if let RequestOrResponse::Response(res) = response {
         assert_eq!(res.originator, *receiver);
         res.response_payload.assert_contains_reject(
-            RejectCode::CanisterError,
+            RejectCode::CanisterReject,
             &format!(
-                "Only the controllers of the canister {} can control it.\n\
-                    Canister's controllers: {}\n\
-                    Sender's ID: {}",
-                canister_id,
-                test.user_id().get(),
+                "Caller {} is not allowed to call list_canister_snapshots",
                 caller_canister.get(),
             ),
         );
@@ -1169,7 +1166,7 @@ fn list_canister_snapshot_succeeds() {
 fn load_canister_snapshot_decode_round_trip() {
     let canister_id = canister_test_id(4);
     let snapshot_id = SnapshotId::from((canister_id, 6));
-    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5u64));
+    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5_u64));
     let encoded_args = args.encode();
     assert_eq!(
         args,
@@ -1492,6 +1489,17 @@ fn load_canister_snapshot_succeeds() {
 
     // Load an existing snapshot.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
+
+    // Verify that the snapshot still exists,
+    // i.e., loading a snapshot should not consume it.
+    assert_eq!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .len(),
+        1
+    );
 
     // Verify chunk store contains data.
     assert!(
@@ -2057,7 +2065,7 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 fn read_canister_snapshot_data(
@@ -2427,7 +2435,7 @@ fn read_canister_snapshot_data_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_data", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 #[test]

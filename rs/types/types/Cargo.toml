@@ -21,6 +21,7 @@ ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../management_canister_types" }
 ic-protobuf = { path = "../../protobuf" }
+ic-types-cycles = { path = "../cycles" }
 ic-utils = { path = "../../utils" }
 ic-validate-eq = { path = "../../utils/validate_eq" }
 ic-validate-eq-derive = { path = "../../utils/validate_eq_derive" }

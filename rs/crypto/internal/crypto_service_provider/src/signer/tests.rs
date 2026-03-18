@@ -26,7 +26,7 @@ use rand::Rng;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
 
-const KEY_ID: [u8; 32] = [0u8; 32];
+const KEY_ID: [u8; 32] = [0_u8; 32];
 
 mod sign_common {
     use super::*;
@@ -93,7 +93,7 @@ mod sign_ed25519 {
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         let sk_with_wrong_type = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
-            SecretArray::new_and_dont_zeroize_argument(&[0u8; multi_types::SecretKeyBytes::SIZE]),
+            SecretArray::new_and_dont_zeroize_argument(&[0_u8; multi_types::SecretKeyBytes::SIZE]),
         ));
         let csp = Csp::builder_for_test()
             .with_vault(

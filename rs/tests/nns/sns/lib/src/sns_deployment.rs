@@ -37,7 +37,8 @@ use ic_system_test_driver::{
     types::{CanisterStatusResult, CreateCanisterResult},
     util::UniversalCanister,
 };
-use ic_types::{Cycles, Height};
+use ic_types::Height;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{management, wasm};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_agent::Icrc1Agent;
