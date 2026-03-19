@@ -126,6 +126,17 @@ pub struct DummyAuthConfig {
 }
 
 #[derive(CandidType)]
+pub struct InternetIdentityFrontendInit {
+    pub backend_canister_id: Principal,
+    pub backend_origin: String,
+    pub related_origins: Option<Vec<String>>,
+    pub fetch_root_key: Option<bool>,
+    pub analytics_config: Option<Option<AnalyticsConfig>>,
+    pub dummy_auth: Option<Option<DummyAuthConfig>>,
+    pub dev_csp: Option<bool>,
+}
+
+#[derive(CandidType)]
 pub struct InternetIdentityInit {
     pub assigned_user_number_range: Option<(AnchorNumber, AnchorNumber)>,
     pub archive_config: Option<ArchiveConfig>,

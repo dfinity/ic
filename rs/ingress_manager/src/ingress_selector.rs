@@ -801,13 +801,14 @@ pub(crate) mod tests {
     use ic_types::{
         Height, RegistryVersion,
         artifact::IngressMessageId,
-        batch::{CanisterCyclesCostSchedule, IngressPayload},
+        batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
         state_manager::{StateManagerError, StateManagerResult},
         time::{UNIX_EPOCH, expiry_time_from_now},
     };
+    use ic_types_cycles::CanisterCyclesCostSchedule;
     use rstest::rstest;
     use std::sync::RwLock;
     use std::{collections::HashSet, convert::TryInto, time::Duration};
@@ -1624,7 +1625,7 @@ pub(crate) mod tests {
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(1))
                             // No cycles
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .with_log_memory_limit(0) // Don't pay for logs memory allocation.
                             .build(),
                     )
@@ -1678,7 +1679,7 @@ pub(crate) mod tests {
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(0))
                             // Not enough cycles
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),
@@ -1887,7 +1888,7 @@ pub(crate) mod tests {
                     .with_canister(
                         CanisterStateBuilder::new()
                             .with_canister_id(canister_test_id(2))
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),

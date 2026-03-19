@@ -247,7 +247,7 @@ impl StructIO {
         offset: MemoryAddress,
         capacity: MemorySize,
     ) -> ([u8; N], MemoryPosition) {
-        let mut result = [0u8; N];
+        let mut result = [0_u8; N];
         let len = MemorySize::new(N as u64);
         let remaining = Self::remaining(position, capacity);
         if len <= remaining {

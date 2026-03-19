@@ -48,7 +48,7 @@ impl std::str::FromStr for Hash {
         if !s.starts_with("0x") {
             return Err("Ethereum hash doesn't start with 0x".to_string());
         }
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         hex::decode_to_slice(&s[2..], &mut bytes)
             .map_err(|e| format!("failed to decode hash from hex: {e}"))?;
         Ok(Self(bytes))

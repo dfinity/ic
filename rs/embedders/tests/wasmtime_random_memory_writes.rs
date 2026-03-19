@@ -23,13 +23,13 @@ use ic_test_utilities_execution_environment::bytes_and_logging_cost;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
+use ic_types::MemoryAllocation;
 use ic_types::{
     ComputeAllocation, NumBytes, NumInstructions, PrincipalId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
 };
-use ic_types::{MemoryAllocation, batch::CanisterCyclesCostSchedule};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
 use proptest::prelude::*;

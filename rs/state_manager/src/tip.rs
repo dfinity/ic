@@ -1003,7 +1003,7 @@ fn merge(
     merge_candidates.sort_by_key(|m| {
         if m.write_size_bytes() != 0 {
             // Fixed point to compute overhead ratio for sort.
-            -1000i64 * (m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
+            -1000_i64 * (m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
                 / m.write_size_bytes() as i64
         } else {
             0
