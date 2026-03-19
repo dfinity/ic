@@ -1,4 +1,3 @@
-use crate::canister_state::system_state::CyclesUseCase;
 use crate::{
     CallOrigin, CanisterState, CanisterStatus, ExecutionTask, ReplicatedState, num_bytes_try_from,
 };
@@ -10,10 +9,10 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{
     binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
 };
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumInstructions, Time,
+    Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes, NumInstructions, Time,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use prometheus::{Gauge, GaugeVec, Histogram, HistogramVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -326,6 +325,9 @@ impl ReplicatedStateMetrics {
         let mut total_canister_balance = Cycles::zero();
         let mut total_canister_reserved_balance = Cycles::zero();
 
+        let mut total_canister_snapshots_memory_taken = NumBytes::new(0);
+        let mut total_canister_snapshots_count = 0;
+
         let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
         state.canisters_iter().for_each(|canister| {
             match canister.system_state.get_status() {
@@ -405,6 +407,9 @@ impl ReplicatedStateMetrics {
                     canisters_with_old_open_call_contexts += 1;
                 }
             }
+
+            total_canister_snapshots_memory_taken += canister.canister_snapshots.memory_taken();
+            total_canister_snapshots_count += canister.canister_snapshots.len();
         });
 
         self.old_open_call_contexts
@@ -421,7 +426,7 @@ impl ReplicatedStateMetrics {
         consumed_cycles_total += state
             .metadata
             .subnet_metrics
-            .consumed_cycles_by_deleted_canisters;
+            .get_consumed_cycles_by_deleted_canisters();
 
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
@@ -432,10 +437,16 @@ impl ReplicatedStateMetrics {
         );
 
         // Add the consumed cycles in ecdsa outcalls.
-        consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls;
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_ecdsa_outcalls();
 
         // Add the consumed cycles in http outcalls.
-        consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_http_outcalls;
+        consumed_cycles_total += state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_http_outcalls();
 
         self.consumed_cycles.set(consumed_cycles_total.get() as f64);
 
@@ -512,9 +523,9 @@ impl ReplicatedStateMetrics {
             .set(total_canister_reserved_balance.get() as f64);
 
         self.canister_snapshots_memory_usage
-            .set(state.canister_snapshots.memory_taken().get() as i64);
+            .set(total_canister_snapshots_memory_taken.get() as i64);
         self.num_canister_snapshots
-            .set(state.canister_snapshots.count() as i64);
+            .set(total_canister_snapshots_count as i64);
 
         // TODO: Consider only doing this every Nth round.
         for canister in state.canisters_iter() {

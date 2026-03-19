@@ -30,8 +30,8 @@ use uuid::Uuid;
 const BASE_ROOTFS_HASH: &str = "ba5e";
 const RECOVERY_ROOTFS_HASH: &str =
     "1d0dad2a5a983ae4be9a401b0aac325d2a38f1ba217efe0c43bc68806d2ba54a";
-const CHIP_ID: [u8; 64] = [42u8; 64];
-const MEASUREMENT: [u8; 48] = [66u8; 48];
+const CHIP_ID: [u8; 64] = [42_u8; 64];
+const MEASUREMENT: [u8; 48] = [66_u8; 48];
 
 const A_ROOT_PATH: &str = "/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7";
 const B_ROOT_PATH: &str = "/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5";
@@ -201,7 +201,7 @@ impl TestFixture {
             Label::from("time") => LabeledTree::Leaf(vec![0u8; 8])
         ]);
 
-        let mut rng = rand::rngs::StdRng::from_seed([42u8; 32]);
+        let mut rng = rand::rngs::StdRng::from_seed([42_u8; 32]);
         let (_cert, root_pk, cert_cbor) =
             CertificateBuilder::new_with_rng(CertificateData::CustomTree(tree), &mut rng).build();
 

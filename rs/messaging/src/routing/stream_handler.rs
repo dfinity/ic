@@ -23,6 +23,7 @@ use ic_types::messages::{
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CanisterId, SubnetId};
+use ic_types_cycles::NominalCycles;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
@@ -819,7 +820,9 @@ impl StreamHandlerImpl {
                 self.metrics.critical_error_sender_subnet_mismatch.inc();
                 stream.push_accept_signal();
                 // Cycles are lost.
-                state.observe_lost_cycles_due_to_dropped_messages(rep.refund);
+                state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::from(
+                    rep.refund.get(),
+                ));
             }
         }
     }
@@ -904,7 +907,9 @@ impl StreamHandlerImpl {
                                 );
                                 self.metrics.critical_error_induct_response_failed.inc();
                                 // Cycles are lost.
-                                state.observe_lost_cycles_due_to_dropped_messages(response.refund);
+                                state.observe_lost_cycles_due_to_dropped_messages(
+                                    NominalCycles::from(response.refund.get()),
+                                );
                                 Accept
                             }
                         }
@@ -1004,7 +1009,9 @@ impl StreamHandlerImpl {
                         LABEL_VALUE_TYPE_REFUND,
                         LABEL_VALUE_DROPPED,
                     );
-                    state.observe_lost_cycles_due_to_dropped_messages(refund.amount());
+                    state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::from(
+                        refund.amount().get(),
+                    ));
                 }
             }
 

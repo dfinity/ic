@@ -7,9 +7,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{CanisterIdRecord, IC_00, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    SystemState,
-    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
-    testing::SystemStateTesting,
+    SystemState, canister_state::execution_state::WasmExecutionMode, testing::SystemStateTesting,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -21,12 +19,11 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    batch::CanisterCyclesCostSchedule,
+    ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     messages::{SignedIngress, extract_effective_canister_id},
-    nominal_cycles::NominalCycles,
     time::{CoarseTime, UNIX_EPOCH},
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
 

@@ -1,7 +1,7 @@
 [Unit]
 Description=Discard unused blocks on /var/lib/ic/crypto filesystem
-After=setup-fstrim-metrics.service
-Wants=setup-fstrim-metrics.service
+After=setup-fstrim-tool.service
+Wants=setup-fstrim-tool.service
 
 [Service]
 Type=oneshot

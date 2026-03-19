@@ -35,6 +35,7 @@ ic-canister-client-sender = { path = "../../../../canister_client/sender" }
 ic-rosetta-test-utils = { path = "../../../../rosetta-api/icp/test_utils" }
 ic-ledger-core = { path = "../../../../ledger_suite/common/ledger_core" }
 ic-nervous-system-common = { path = "../../../../nervous_system/common" }
+ic-types-cycles = { path = "../../../../types/cycles" }
 ic-types = { path = "../../../../types/types" }
 ic-universal-canister = { path = "../../../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
