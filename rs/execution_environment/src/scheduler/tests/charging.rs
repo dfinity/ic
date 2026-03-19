@@ -68,7 +68,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
-        initial_cycles ,
+        initial_cycles - 10,
     );
 }
 
@@ -120,7 +120,7 @@ fn charging_for_message_memory_works() {
     test.charge_for_resource_allocations();
 
     // The balance of the canister should have been reduced by the cost of
-    // message memory during the charge period.
+    // message and log memory during the charge period.
     let canister_state = test.canister_state(canister);
     assert_eq!(
         canister_state.system_state.balance(),
