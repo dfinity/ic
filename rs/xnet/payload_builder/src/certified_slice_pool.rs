@@ -1524,7 +1524,7 @@ fn witness_count_bytes(
     } else {
         let remaining_leaves = total_leaves - right_pruned_leaves;
         let min_complete_subtree_leaves =
-            1u64.rotate_right((total_leaves ^ remaining_leaves).leading_zeros());
+            1_u64.rotate_right((total_leaves ^ remaining_leaves).leading_zeros());
         let complete_subtree_remaining_leaves =
             remaining_leaves & (min_complete_subtree_leaves - 1);
         min_complete_subtree_leaves - complete_subtree_remaining_leaves

@@ -742,8 +742,8 @@ fn median<T: Ord>(values: &mut [T]) -> Option<&T> {
 }
 
 fn split_in_two(array: [u8; 64]) -> ([u8; 32], [u8; 32]) {
-    let mut r = [0u8; 32];
-    let mut s = [0u8; 32];
+    let mut r = [0_u8; 32];
+    let mut s = [0_u8; 32];
     r.copy_from_slice(&array[..32]);
     s.copy_from_slice(&array[32..]);
     (r, s)
