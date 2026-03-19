@@ -2200,7 +2200,7 @@ impl CanisterManager {
                 None => {
                     // If not found, the operation fails due to invalid parameters.
                     return Err(CanisterManagerError::CanisterSnapshotNotFound {
-                        canister_id,
+                        canister_id: snapshot_canister_id,
                         snapshot_id,
                     });
                 }
