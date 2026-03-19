@@ -16,26 +16,26 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 
 static MAINNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Mainnet.deserialize());
+static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
+    CkDogeEventLogger
+        .replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
+        .expect("Failed to replay events")
+});
 
 #[tokio::test]
 async fn should_replay_events_for_mainnet() {
     Mainnet.retrieve_and_store_events_if_env().await;
 
-    let state = CkDogeEventLogger
-        .replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
-        .expect("Failed to replay events");
+    let state = &MAINNET_STATE;
     state
         .check_invariants()
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
+    assert_eq!(state.get_total_btc_managed(), 1_312_238_620_970);
 }
 
-// This test is ignored because it takes too long to run.
-// It's useful to run it locally when updating mainnet_events.gz.
-// bazel test //rs/dogecoin/ckdoge/minter:ckdoge_minter_replay_events_tests --test_arg="should_replay_events_and_check_invariants" --test_arg=--ignored
 #[test]
-#[ignore]
 fn should_replay_events_and_check_invariants() {
     println!("Replaying {} events", MAINNET_EVENTS.total_event_count);
     let _state = CkDogeEventLogger
