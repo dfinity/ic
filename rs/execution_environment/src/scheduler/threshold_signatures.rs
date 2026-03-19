@@ -41,7 +41,7 @@ pub(crate) fn update_signature_request_contexts(
                 .height()
                 .is_some_and(|height| height.get() + 1 == current_round.get())
         {
-            let mut nonce = [0u8; 32];
+            let mut nonce = [0_u8; 32];
             csprng.fill_bytes(&mut nonce);
             let _ = context.nonce.insert(nonce);
             metrics

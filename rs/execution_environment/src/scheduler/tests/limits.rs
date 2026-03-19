@@ -5,6 +5,7 @@ use super::super::test_utilities::{
 };
 use super::super::*;
 use super::{zero_instruction_messages, zero_instruction_overhead_config};
+use crate::scheduler::test_utilities::EMPTY_WASM;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::{NumWasmPages, num_bytes_try_from};
@@ -837,7 +838,8 @@ fn later_canister_on_thread_is_skipped_when_heap_delta_per_iteration_is_exceeded
 /// `guaranteed_response_message_memory` component:
 ///
 /// * Two canisters A and B, with `scheduler_cores = 2` (one canister per
-///   core). Subnet memory capacity is set to 4 pages.
+///   core). Subnet memory capacity is set to 4 pages plus
+///   the size of the canister WASM for canisters A and B.
 ///
 /// * 2 ingress messages are sent to A. Each ingress allocates 1 page, then
 ///   makes one call to A and one call to B (2 pages allocated, 2 available).
@@ -859,6 +861,7 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
         num_bytes_try_from(NumWasmPages::new(pages)).unwrap()
     }
 
+    let subnet_memory_capacity = pages_into_bytes(4).get() + (2 * EMPTY_WASM.len() as u64);
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
@@ -869,11 +872,11 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
             max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
             ..zero_instruction_overhead_config()
         })
-        .with_subnet_memory_capacity(pages_into_bytes(4).get())
+        .with_subnet_memory_capacity(subnet_memory_capacity)
         .build();
 
-    let a = test.create_canister();
-    let b = test.create_canister();
+    let a = test.create_canister_without_log_memory();
+    let b = test.create_canister_without_log_memory();
 
     for _ in 0..2 {
         // Each ingress, A allocates 1 page, then calls A and B.
@@ -904,6 +907,12 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 6.0);
 
     // 3 pages allocated by A, 1 page allocated by B.
-    assert_eq!(test.canister_state(a).memory_usage(), pages_into_bytes(3));
-    assert_eq!(test.canister_state(b).memory_usage(), pages_into_bytes(1));
+    assert_eq!(
+        test.canister_state(a).memory_usage(),
+        pages_into_bytes(3) + NumBytes::new(EMPTY_WASM.len() as u64)
+    );
+    assert_eq!(
+        test.canister_state(b).memory_usage(),
+        pages_into_bytes(1) + NumBytes::new(EMPTY_WASM.len() as u64)
+    );
 }

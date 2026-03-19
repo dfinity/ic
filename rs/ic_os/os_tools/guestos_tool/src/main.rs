@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use tracing::{info, warn};
 
 use cloud_provision::obtain_guestos_config;
 use generate_network_config::{generate_networkd_config, validate_and_construct_ipv4_address_info};
@@ -69,6 +70,14 @@ struct GuestOSArgs {
 }
 
 pub fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .without_time()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("ERROR: this only runs on Linux.");
@@ -109,7 +118,7 @@ pub fn main() -> Result<()> {
                 ipv4_info,
             )?;
 
-            eprintln!("Restarting systemd networkd");
+            warn!("Restarting systemd networkd");
             restart_systemd_networkd();
 
             Ok(())
@@ -125,7 +134,7 @@ pub fn main() -> Result<()> {
             std::fs::write(&config_path, &json)
                 .context("unable to write GuestOS config to disk")?;
 
-            println!("GuestOS config was written to {}", config_path.display());
+            info!("GuestOS config was written to {}", config_path.display());
             Ok(())
         }
 

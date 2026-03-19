@@ -35,13 +35,14 @@ use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     CanisterState, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
-use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
+use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, NumMessages, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes, NumInstructions,
+    NumMessages, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -304,12 +305,6 @@ impl SchedulerImpl {
                     // `ongoing_long_install_code`, we need to break the loop
                     // here to ensure correctness in the unlikely case of
                     // some instructions still remaining in the round.
-                    break;
-                }
-
-                // TODO(DSM-108): This appears to be counterproductive (`can_execute_subnet_msg`
-                // would simply skip messages that consume instructions). Remove.
-                if round_limits.instructions_reached() {
                     break;
                 }
             }
@@ -1411,16 +1406,6 @@ impl Scheduler for SchedulerImpl {
                 registry_settings.subnet_size,
             );
 
-            // If we have executed a long-running install code above, then it is
-            // very likely that `round_limits.instructions < 0` at this point.
-            // However, we would like to make progress with other subnet
-            // messages that do not consume instructions. To allow that, we set
-            // the number available instructions to 0 if it is not positive.
-            //
-            // TODO(DSM-108): This appears to do nothing. Remove.
-            subnet_round_limits.instructions = subnet_round_limits
-                .instructions
-                .max(RoundInstructions::from(0));
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
         }
 

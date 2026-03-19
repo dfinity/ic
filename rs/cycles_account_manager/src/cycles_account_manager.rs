@@ -10,15 +10,13 @@ use ic_replicated_state::{
     CanisterState, SystemState, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, SubnetId,
-    batch::CanisterCyclesCostSchedule,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    SubnetId,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
-    cycles_use_case::CyclesUseCase,
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
-    nominal_cycles::NominalCycles,
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::{cmp::min, str::FromStr, time::Duration};

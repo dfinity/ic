@@ -1032,13 +1032,13 @@ fn height_from_dir_entry(filename: &DirEntry) -> u64 {
 
 fn last_dir_height(dir: &PathBuf, radix: u32) -> u64 {
     if !dir.exists() {
-        return 0u64;
+        return 0_u64;
     }
     match read_dir(dir) {
         Ok(file_list) => file_list
             .flatten()
             .map(|filename| height_from_dir_entry_radix(&filename, radix))
-            .fold(0u64, |a, b| -> u64 { a.max(b) }),
+            .fold(0_u64, |a, b| -> u64 { a.max(b) }),
         Err(_) => 0,
     }
 }
