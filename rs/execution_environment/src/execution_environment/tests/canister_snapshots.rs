@@ -1250,19 +1250,14 @@ fn load_canister_snapshot_fails_invalid_controller() {
 #[test]
 fn load_canister_snapshot_fails_snapshot_canister_not_found() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_caller(own_subnet, caller_canister)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
-    // Create canister.
+    // Create canister onto which a snapshot is supposed to be loaded.
     let canister_id = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    // Load canister snapshot fails because the canister holding the snapshot does not exist.
+    // Loading canister snapshot fails because the canister holding the snapshot does not exist.
     let snapshot_canister_id = canister_test_id(2);
     let snapshot_id = SnapshotId::from((snapshot_canister_id, 3));
     let args: LoadCanisterSnapshotArgs =
@@ -1277,6 +1272,7 @@ fn load_canister_snapshot_fails_snapshot_canister_not_found() {
     .to_string();
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id).is_some());
+    assert!(test.state().canister_state(&snapshot_canister_id).is_none());
 }
 
 #[test]
@@ -1312,14 +1308,9 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
 #[test]
 fn load_canister_snapshot_fails_snapshot_not_found_on_another_canister() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_caller(own_subnet, caller_canister)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
-    // Create canister.
+    // Create canister onto which a snapshot is supposed to be loaded.
     let canister_id = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
@@ -1329,7 +1320,7 @@ fn load_canister_snapshot_fails_snapshot_not_found_on_another_canister() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    // Load canister snapshot fails because snapshot does not exist (on another canister).
+    // Loading canister snapshot fails because the snapshot does not exist (on another canister).
     let snapshot_id = SnapshotId::from((snapshot_canister_id, 3));
     let args: LoadCanisterSnapshotArgs =
         LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
