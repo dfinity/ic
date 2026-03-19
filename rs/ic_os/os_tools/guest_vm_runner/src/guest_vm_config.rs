@@ -8,6 +8,7 @@ use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::calculate_deterministic_mac;
 use deterministic_ips::node_type::NodeType;
 use std::path::{Path, PathBuf};
+use tracing::info;
 
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
@@ -66,7 +67,7 @@ pub fn assemble_config_media(
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
     bootstrap_options.build_bootstrap_config_image(media_path)?;
 
-    println!(
+    info!(
         "Assembling config media for GuestOS: {}",
         media_path.display()
     );

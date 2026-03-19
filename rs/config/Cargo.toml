@@ -11,6 +11,7 @@ ic-base-types = { path = "../types/base_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-sys = { path = "../sys" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
 json5 = "0.4.1"
 serde = { workspace = true }

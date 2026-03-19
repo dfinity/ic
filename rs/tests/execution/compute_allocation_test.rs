@@ -10,7 +10,7 @@ use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, H
 use ic_system_test_driver::systest;
 use ic_system_test_driver::types::CreateCanisterResult;
 use ic_system_test_driver::util::{UniversalCanister, assert_reject, block_on};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallInterface, UNIVERSAL_CANISTER_WASM, call_args, management, wasm};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
@@ -117,7 +117,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
         ) -> Result<(Principal, Vec<u8>), AgentError> {
             let created_canister = universal_canister
                 .update(wasm().call(management::create_canister(Cycles::from(
-                    10_000_000_000_000_000u128,
+                    10_000_000_000_000_000_u128,
                 ))))
                 .await
                 .map(|res| {

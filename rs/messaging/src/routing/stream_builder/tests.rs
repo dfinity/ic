@@ -29,7 +29,8 @@ use ic_types::messages::{
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
-use ic_types::{CanisterId, Cycles, SubnetId, Time};
+use ic_types::{CanisterId, SubnetId, Time};
+use ic_types_cycles::Cycles;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -1056,12 +1057,12 @@ fn build_streams_with_oversized_payloads() {
         // Payloads/error message that result in `get_payload_size()` returning exactly
         // `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 + 1`.
         let oversized_request_payload: Vec<u8> = std::iter::repeat_n(
-            0u8,
+            0_u8,
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize - method_name.len() + 1,
         )
         .collect();
         let oversized_response_payload: Vec<u8> =
-            std::iter::repeat_n(0u8, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
+            std::iter::repeat_n(0_u8, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
                 .collect();
         let oversized_error_message: String =
             "x".repeat(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize);

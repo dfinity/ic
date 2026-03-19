@@ -31,7 +31,7 @@ use ic_system_test_driver::{
     nns::set_authorized_subnetwork_list,
     util::{block_on, runtime_from_url},
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use icp_ledger::{Operation, Tokens};
 use num_traits::ToPrimitive;
 use slog::info;

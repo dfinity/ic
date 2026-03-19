@@ -24,11 +24,11 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     CanisterId,
-    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use mockall::predicate::{always, eq};
 
 struct NoopIngressHistoryWriter;
