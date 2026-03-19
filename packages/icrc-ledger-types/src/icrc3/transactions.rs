@@ -20,6 +20,9 @@ pub const TRANSACTION_BURN: &str = "burn";
 pub const TRANSACTION_MINT: &str = "mint";
 pub const TRANSACTION_TRANSFER: &str = "transfer";
 pub const TRANSACTION_FEE_COLLECTOR: &str = "107feecol";
+pub const TRANSACTION_124_PAUSE: &str = "124pause";
+pub const TRANSACTION_124_UNPAUSE: &str = "124unpause";
+pub const TRANSACTION_124_DEACTIVATE: &str = "124deactivate";
 
 pub type GenericTransaction = Value;
 
@@ -73,6 +76,14 @@ pub struct FeeCollector {
     pub mthd: Option<String>,
 }
 
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ManagementAction {
+    pub caller: Option<Principal>,
+    pub reason: Option<String>,
+    pub ts: Option<u64>,
+    pub mthd: Option<String>,
+}
+
 // Representation of a Transaction which supports the Icrc1 Standard functionalities
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
@@ -82,6 +93,9 @@ pub struct Transaction {
     pub transfer: Option<Transfer>,
     pub approve: Option<Approve>,
     pub fee_collector: Option<FeeCollector>,
+    pub pause: Option<ManagementAction>,
+    pub unpause: Option<ManagementAction>,
+    pub deactivate: Option<ManagementAction>,
     pub timestamp: u64,
 }
 
@@ -95,6 +109,9 @@ impl Transaction {
             transfer: None,
             approve: None,
             fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: None,
         }
     }
 
@@ -107,6 +124,9 @@ impl Transaction {
             transfer: None,
             approve: None,
             fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: None,
         }
     }
 
@@ -119,6 +139,9 @@ impl Transaction {
             transfer: Some(transfer),
             approve: None,
             fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: None,
         }
     }
 
@@ -131,6 +154,9 @@ impl Transaction {
             transfer: None,
             approve: Some(approve),
             fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: None,
         }
     }
 
@@ -143,6 +169,54 @@ impl Transaction {
             transfer: None,
             approve: None,
             fee_collector: Some(fee_collector),
+            pause: None,
+            unpause: None,
+            deactivate: None,
+        }
+    }
+
+    pub fn pause(pause: ManagementAction, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_124_PAUSE.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            pause: Some(pause),
+            unpause: None,
+            deactivate: None,
+        }
+    }
+
+    pub fn unpause(unpause: ManagementAction, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_124_UNPAUSE.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            pause: None,
+            unpause: Some(unpause),
+            deactivate: None,
+        }
+    }
+
+    pub fn deactivate(deactivate: ManagementAction, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_124_DEACTIVATE.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: Some(deactivate),
         }
     }
 }

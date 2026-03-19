@@ -1110,7 +1110,10 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 fee_collector: _,
                 caller: _,
                 mthd: _,
-            } => {
+            }
+            | Operation::Pause { .. }
+            | Operation::Unpause { .. }
+            | Operation::Deactivate { .. } => {
                 // Does not affect the balance
             }
         },
@@ -1155,7 +1158,10 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
             }
         }
         Operation::Approve { from, .. } => vec![from],
-        Operation::FeeCollector { .. } => vec![],
+        Operation::FeeCollector { .. }
+        | Operation::Pause { .. }
+        | Operation::Unpause { .. }
+        | Operation::Deactivate { .. } => vec![],
     }
 }
 

@@ -7,7 +7,8 @@ use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc3::transactions::{
-    Approve, Burn, FeeCollector, Mint, TRANSACTION_APPROVE, TRANSACTION_BURN,
+    Approve, Burn, FeeCollector, ManagementAction, Mint, TRANSACTION_124_DEACTIVATE,
+    TRANSACTION_124_PAUSE, TRANSACTION_124_UNPAUSE, TRANSACTION_APPROVE, TRANSACTION_BURN,
     TRANSACTION_FEE_COLLECTOR, TRANSACTION_MINT, TRANSACTION_TRANSFER, Transaction, Transfer,
 };
 use serde::Deserialize;
@@ -163,6 +164,9 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             transfer: None,
             approve: None,
             fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: None,
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;
@@ -244,6 +248,45 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 tx.fee_collector = Some(FeeCollector {
                     fee_collector,
                     caller,
+                    ts: created_at_time,
+                    mthd,
+                });
+            }
+            Operation::Pause {
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_124_PAUSE.to_string();
+                tx.pause = Some(ManagementAction {
+                    caller,
+                    reason,
+                    ts: created_at_time,
+                    mthd,
+                });
+            }
+            Operation::Unpause {
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_124_UNPAUSE.to_string();
+                tx.unpause = Some(ManagementAction {
+                    caller,
+                    reason,
+                    ts: created_at_time,
+                    mthd,
+                });
+            }
+            Operation::Deactivate {
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_124_DEACTIVATE.to_string();
+                tx.deactivate = Some(ManagementAction {
+                    caller,
+                    reason,
                     ts: created_at_time,
                     mthd,
                 });

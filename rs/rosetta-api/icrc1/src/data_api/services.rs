@@ -1229,11 +1229,10 @@ mod test {
                                         IcrcOperation::Mint { to, .. } => Some(to.into()),
                                         IcrcOperation::Burn { from, .. } => Some(from.into()),
                                         IcrcOperation::Approve { from, .. } => Some(from.into()),
-                                        IcrcOperation::FeeCollector {
-                                            fee_collector: _,
-                                            caller: _,
-                                            mthd: _,
-                                        } => None,
+                                        IcrcOperation::FeeCollector { .. }
+                                        | IcrcOperation::Pause { .. }
+                                        | IcrcOperation::Unpause { .. }
+                                        | IcrcOperation::Deactivate { .. } => None,
                                     };
                                 if search_transactions_request.account_identifier.is_some() {
                                     break;
@@ -1287,11 +1286,10 @@ mod test {
                                                 .try_into()
                                                 .unwrap(),
                                         ),
-                                    IcrcOperation::FeeCollector {
-                                        fee_collector: _,
-                                        caller: _,
-                                        mthd: _,
-                                    } => false,
+                                    IcrcOperation::FeeCollector { .. }
+                                    | IcrcOperation::Pause { .. }
+                                    | IcrcOperation::Unpause { .. }
+                                    | IcrcOperation::Deactivate { .. } => false,
                                 })
                                 .count();
 

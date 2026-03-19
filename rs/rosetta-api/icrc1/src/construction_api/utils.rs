@@ -275,6 +275,11 @@ pub fn build_icrc1_ledger_canister_method_args(
         crate::common::storage::types::IcrcOperation::FeeCollector { .. } => {
             bail!("FeeCollector Operation not supported")
         }
+        crate::common::storage::types::IcrcOperation::Pause { .. }
+        | crate::common::storage::types::IcrcOperation::Unpause { .. }
+        | crate::common::storage::types::IcrcOperation::Deactivate { .. } => {
+            bail!("ICRC-124 operations not supported")
+        }
     }
     .context("Unable to encode canister method args")
 }
@@ -303,6 +308,11 @@ fn extract_caller_principal_from_icrc1_ledger_operation(
         }
         crate::common::storage::types::IcrcOperation::FeeCollector { .. } => {
             bail!("FeeCollector Operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::Pause { .. }
+        | crate::common::storage::types::IcrcOperation::Unpause { .. }
+        | crate::common::storage::types::IcrcOperation::Deactivate { .. } => {
+            bail!("ICRC-124 operations not supported")
         }
     })
 }

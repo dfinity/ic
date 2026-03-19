@@ -465,6 +465,11 @@ pub fn update_account_balances(
                 } => {
                     current_fee_collector_107 = Some(fee_collector);
                 }
+                crate::common::storage::types::IcrcOperation::Pause { .. }
+                | crate::common::storage::types::IcrcOperation::Unpause { .. }
+                | crate::common::storage::types::IcrcOperation::Deactivate { .. } => {
+                    // Does not affect balances
+                }
             }
         }
 
@@ -602,6 +607,45 @@ pub fn store_blocks(
                 mthd: _,
             } => (
                 BTYPE_107,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::Pause { .. } => (
+                "124pause",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::Unpause { .. } => (
+                "124unpause",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::Deactivate { .. } => (
+                "124deactivate",
                 None,
                 None,
                 None,
