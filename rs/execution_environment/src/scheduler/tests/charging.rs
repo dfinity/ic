@@ -91,7 +91,7 @@ fn charging_for_message_memory_only_works() {
     test.set_time(initial_time);
 
     let initial_cycles = 1_000_000_000_000;
-    let canister = self.create_canister_with_controller(
+    let canister = test.create_canister_with_controller(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
@@ -153,7 +153,7 @@ fn charging_for_message_memory_and_logging_works() {
     test.set_time(initial_time);
 
     let initial_cycles = 1_000_000_000_000;
-    let canister = self.create_canister_with_controller(
+    let canister = test.create_canister_with_controller(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
