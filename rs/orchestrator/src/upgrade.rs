@@ -1368,7 +1368,7 @@ mod tests {
         let membership_vec = membership.into_iter().collect::<Vec<_>>();
 
         let rng = &mut reproducible_rng();
-        let mut target_id_bytes = [0u8; 32];
+        let mut target_id_bytes = [0_u8; 32];
         rng.fill_bytes(&mut target_id_bytes);
         let target_id = NiDkgTargetId::new(target_id_bytes);
 

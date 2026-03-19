@@ -35,13 +35,14 @@ use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     CanisterState, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
-use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
+use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, NumMessages, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes, NumInstructions,
+    NumMessages, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_utils::iter::left_outer_join;
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
@@ -449,8 +450,8 @@ impl SchedulerImpl {
             // they are processed until the subnet messages' instruction limit is reached.
             {
                 let subnet_measurement_scope = MeasurementScope::nested(
-                    &self.metrics.round_subnet_queue,
-                    root_measurement_scope,
+                    &self.metrics.round_inner_subnet_queue,
+                    &measurement_scope,
                 );
 
                 // TODO(EXC-1517): Improve inner loop preparation.

@@ -4,7 +4,8 @@ use super::super::test_utilities::{
     SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
 };
 use super::super::*;
-use super::zero_instruction_messages;
+use super::{zero_instruction_messages, zero_instruction_overhead_config};
+use crate::scheduler::test_utilities::EMPTY_WASM;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::{NumWasmPages, num_bytes_try_from};
@@ -28,13 +29,9 @@ fn round_instructions_limit_depends_on_slice_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_query_message: NumInstructions::from(1000),
             max_instructions_per_slice: NumInstructions::from(slice),
             max_instructions_per_install_code_slice: NumInstructions::from(install_code_slice),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         };
 
         let mut test = SchedulerTestBuilder::new()
@@ -80,13 +77,9 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
             max_instructions_per_install_code_slice: NumInstructions::new(50),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -127,7 +120,6 @@ fn test_message_limit_from_message_overhead() {
     let scheduler_config = SchedulerConfig {
         scheduler_cores: 2,
         max_instructions_per_message: NumInstructions::from(5_000_000_000),
-        max_instructions_per_query_message: NumInstructions::from(5_000_000_000),
         max_instructions_per_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_install_code_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_round: NumInstructions::from(7_000_000_000),
@@ -259,12 +251,9 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
             scheduler_cores: 2,
             max_instructions_per_round: instructions_per_message - NumInstructions::from(1),
             max_instructions_per_message: instructions_per_message,
-            max_instructions_per_query_message: instructions_per_message,
             max_instructions_per_slice: instructions_per_message,
             max_instructions_per_install_code_slice: instructions_per_message,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -305,12 +294,9 @@ fn can_execute_messages_with_just_enough_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(50 * 3),
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::from(50),
             max_instructions_per_install_code_slice: NumInstructions::from(50),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -365,7 +351,6 @@ fn max_canisters_per_round() {
                 scheduler_cores: 2,
                 max_instructions_per_round: 100.into(),
                 max_instructions_per_message: 10.into(),
-                max_instructions_per_query_message: 10.into(),
                 max_instructions_per_slice: 10.into(),
                 max_instructions_per_install_code_slice: 10.into(),
                 instruction_overhead_per_execution: 0.into(),
@@ -434,12 +419,9 @@ fn can_fully_execute_canisters_deterministically_until_out_of_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(51),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_query_message: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
             max_instructions_per_install_code_slice: NumInstructions::from(5),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -494,12 +476,9 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_query_message: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
             max_instructions_per_install_code_slice: NumInstructions::from(5),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -561,13 +540,10 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(400),
             max_instructions_per_message: NumInstructions::new(10),
-            max_instructions_per_query_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -587,8 +563,12 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 3.0);
-    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 10.0);
+    assert_eq!(
+        metrics.round_inner_subnet_queue.messages.get_sample_sum(),
+        3.0
+    );
+    // 3 subnet messages + 10 input messages
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 13.0);
 
     assert_eq!(
         test.state()
@@ -802,13 +782,80 @@ fn scheduled_heap_delta_limit_scaling() {
     assert_eq!(10, scheduled_limit(55, 50, 9, 10, 5));
 }
 
+#[test]
+fn heap_delta_is_summed_across_threads() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    let a = test.create_canister();
+    let b = test.create_canister();
+
+    // Each canister runs on a separate thread and dirties a different number
+    // of pages so we can distinguish them in the sum.
+    test.send_ingress(a, ingress(10).dirty_pages(3));
+    test.send_ingress(b, ingress(10).dirty_pages(5));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(test.ingress_queue_size(a), 0);
+    assert_eq!(test.ingress_queue_size(b), 0);
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate,
+        NumBytes::new(ic_sys::PAGE_SIZE as u64) * 8, // 3 + 5 pages
+    );
+}
+
+#[test]
+fn later_canister_on_thread_is_skipped_when_heap_delta_per_iteration_is_exceeded() {
+    let page_size = NumBytes::new(ic_sys::PAGE_SIZE as u64);
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_heap_delta_per_iteration: page_size,
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // With 3 canisters and 2 cores, at least one core gets 2 canisters.
+    // Each canister has a message that dirties 2 pages. Because the
+    // per-iteration heap delta limit is 1 page, the first canister on each
+    // core exceeds the limit. The second canister sharing a core is then
+    // skipped by the outer loop in `execute_canisters_on_thread`.
+    let a = test.create_canister();
+    let b = test.create_canister();
+    let c = test.create_canister();
+    test.send_ingress(a, ingress(10).dirty_pages(2));
+    test.send_ingress(b, ingress(10).dirty_pages(2));
+    test.send_ingress(c, ingress(10).dirty_pages(2));
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Two canisters execute (one per core); the third is skipped.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        2
+    );
+    assert_eq!(
+        test.ingress_queue_size(a) + test.ingress_queue_size(b) + test.ingress_queue_size(c),
+        1,
+        "exactly one canister should still have its message queued"
+    );
+}
+
 /// The scheduler recomputes `subnet_available_memory` from the replicated
 /// state at the start of every inner-loop iteration after the first. This
 /// test verifies that the refresh works correctly for the
 /// `guaranteed_response_message_memory` component:
 ///
 /// * Two canisters A and B, with `scheduler_cores = 2` (one canister per
-///   core). Subnet memory capacity is set to 4 pages.
+///   core). Subnet memory capacity is set to 4 pages plus
+///   the size of the canister WASM for canisters A and B.
 ///
 /// * 2 ingress messages are sent to A. Each ingress allocates 1 page, then
 ///   makes one call to A and one call to B (2 pages allocated, 2 available).
@@ -830,6 +877,7 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
         num_bytes_try_from(NumWasmPages::new(pages)).unwrap()
     }
 
+    let subnet_memory_capacity = pages_into_bytes(4).get() + (2 * EMPTY_WASM.len() as u64);
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
@@ -838,16 +886,13 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
             max_instructions_per_message: NumInstructions::from(SLICE),
             max_instructions_per_slice: NumInstructions::from(SLICE),
             max_instructions_per_install_code_slice: NumInstructions::from(SLICE),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
-        .with_subnet_memory_capacity(pages_into_bytes(4).get())
+        .with_subnet_memory_capacity(subnet_memory_capacity)
         .build();
 
-    let a = test.create_canister();
-    let b = test.create_canister();
+    let a = test.create_canister_without_log_memory();
+    let b = test.create_canister_without_log_memory();
 
     for _ in 0..2 {
         // Each ingress, A allocates 1 page, then calls A and B.
@@ -878,6 +923,12 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 6.0);
 
     // 3 pages allocated by A, 1 page allocated by B.
-    assert_eq!(test.canister_state(a).memory_usage(), pages_into_bytes(3));
-    assert_eq!(test.canister_state(b).memory_usage(), pages_into_bytes(1));
+    assert_eq!(
+        test.canister_state(a).memory_usage(),
+        pages_into_bytes(3) + NumBytes::new(EMPTY_WASM.len() as u64)
+    );
+    assert_eq!(
+        test.canister_state(b).memory_usage(),
+        pages_into_bytes(1) + NumBytes::new(EMPTY_WASM.len() as u64)
+    );
 }

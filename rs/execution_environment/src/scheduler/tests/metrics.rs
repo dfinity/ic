@@ -4,7 +4,10 @@ use super::super::test_utilities::{
     SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
 };
 use super::super::*;
-use super::{make_ecdsa_key_id, make_schnorr_key_id, zero_instruction_messages};
+use super::{
+    make_ecdsa_key_id, make_schnorr_key_id, zero_instruction_messages,
+    zero_instruction_overhead_config,
+};
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::RejectCode;
@@ -25,12 +28,11 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;
@@ -41,14 +43,10 @@ fn validate_consumed_instructions_metric() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
             max_instructions_per_install_code_slice: NumInstructions::new(50),
             max_instructions_per_round: NumInstructions::from(400),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -94,12 +92,9 @@ fn can_record_metrics_single_scheduler_thread() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_query_message: NumInstructions::new(5),
             max_instructions_per_slice: NumInstructions::from(5),
             max_instructions_per_install_code_slice: NumInstructions::from(5),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -136,13 +131,9 @@ fn can_record_metrics_for_a_round() {
             scheduler_cores,
             max_instructions_per_round: NumInstructions::from(instructions * 2),
             max_instructions_per_message: NumInstructions::from(instructions),
-            max_instructions_per_query_message: NumInstructions::new(instructions),
             max_instructions_per_slice: NumInstructions::from(instructions),
             max_instructions_per_install_code_slice: NumInstructions::from(instructions),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -250,20 +241,7 @@ fn can_record_metrics_for_a_round() {
 /// incremented.
 #[test]
 fn prepay_failures_counted() {
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(1000),
-            max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_query_message: NumInstructions::new(100),
-            max_instructions_per_slice: NumInstructions::from(100),
-            max_instructions_per_install_code_slice: NumInstructions::from(100),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister_with_cycles = test.create_canister_with(
         Cycles::new(1_000_000_000_000_000),
@@ -319,18 +297,7 @@ fn execution_round_metrics_are_recorded() {
     // scheduler cores, so each canister gets its own thread for running.
     // Besides canister messages, there are three subnet messages.
     let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(400),
-            max_instructions_per_message: NumInstructions::from(10),
-            max_instructions_per_query_message: NumInstructions::new(10),
-            max_instructions_per_slice: NumInstructions::from(10),
-            max_instructions_per_install_code_slice: NumInstructions::from(10),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
+        .with_scheduler_config(zero_instruction_overhead_config())
         .build();
 
     for _ in 0..2 {
@@ -378,28 +345,42 @@ fn execution_round_metrics_are_recorded() {
             .messages
             .get_sample_count()
     );
-    assert_eq!(2, metrics.round_subnet_queue.duration.get_sample_count());
     assert_eq!(
         2,
-        metrics.round_subnet_queue.instructions.get_sample_count()
+        metrics.round_inner_subnet_queue.duration.get_sample_count()
+    );
+    assert_eq!(
+        2,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_count()
     );
     assert_eq!(
         30,
-        metrics.round_subnet_queue.instructions.get_sample_sum() as u64,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_sum() as u64,
     );
-    assert_eq!(2, metrics.round_subnet_queue.messages.get_sample_count());
+    assert_eq!(
+        2,
+        metrics.round_inner_subnet_queue.messages.get_sample_count()
+    );
     assert_eq!(
         3,
-        metrics.round_subnet_queue.messages.get_sample_sum() as u64,
+        metrics.round_inner_subnet_queue.messages.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.duration.get_sample_count());
     assert_eq!(1, metrics.round_inner.instructions.get_sample_count());
+    // (3 subnet messages + 10 canister messages) * 10 instructions
     assert_eq!(
-        100,
+        130,
         metrics.round_inner.instructions.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.messages.get_sample_count());
-    assert_eq!(10, metrics.round_inner.messages.get_sample_sum() as u64,);
+    // 3 subnet messages + 10 canister messages
+    assert_eq!(13, metrics.round_inner.messages.get_sample_sum() as u64,);
     assert_eq!(2, metrics.round_inner_iteration.duration.get_sample_count());
     assert_eq!(
         2,
@@ -959,7 +940,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -1049,7 +1030,7 @@ fn http_outcalls_free() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -1107,7 +1088,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with(
-        Cycles::from(5_000_000_000_000u128),
+        Cycles::from(5_000_000_000_000_u128),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
         None,
@@ -1115,7 +1096,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         None,
     );
 
-    let removed_cycles = Cycles::from(1000u128);
+    let removed_cycles = Cycles::from(1000_u128);
     test.canister_state_mut(canister_id)
         .system_state
         .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
@@ -1139,7 +1120,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
 #[test]
 fn consumed_cycles_are_updated_from_deleted_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
-    let initial_balance = Cycles::from(5_000_000_000_000u128);
+    let initial_balance = Cycles::from(5_000_000_000_000_u128);
     let canister_id = test.create_canister_with(
         initial_balance,
         ComputeAllocation::zero(),
@@ -1149,7 +1130,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         Some(CanisterStatusType::Stopped),
     );
 
-    let removed_cycles = Cycles::from(1000u128);
+    let removed_cycles = Cycles::from(1000_u128);
     test.canister_state_mut(canister_id)
         .system_state
         .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
@@ -1157,7 +1138,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
     test.inject_call_to_ic00(
         Method::DeleteCanister,
         CanisterIdRecord::from(canister_id).encode(),
-        Cycles::from(1_000_000_000_000u128),
+        Cycles::from(1_000_000_000_000_u128),
         CanisterId::try_from(user_test_id(1).get()).unwrap(),
         InputQueueType::RemoteSubnet,
     );

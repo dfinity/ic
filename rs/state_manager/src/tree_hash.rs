@@ -90,16 +90,15 @@ mod tests {
         canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-    use ic_types::cycles_use_case::CyclesUseCase;
     use ic_types::{
-        CanisterId, CryptoHashOfPartialState, Cycles, Height, Time,
+        CanisterId, CryptoHashOfPartialState, Height, Time,
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
         messages::{NO_DEADLINE, Refund, RequestMetadata},
-        nominal_cycles::NominalCycles,
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
     };
+    use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::{BTreeMap, BTreeSet};
@@ -182,7 +181,7 @@ mod tests {
             let mut wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::from(2));
             wasm_memory
                 .page_map
-                .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::from(1), &[0_u8; PAGE_SIZE])]);
             let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),

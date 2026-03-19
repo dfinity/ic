@@ -161,7 +161,7 @@ pub fn bitcoin_get_balance(
             min_confirmations,
         },
         call: Call::new(Principal::management_canister(), "bitcoin_get_balance")
-            .cycles(100_000_000u64)
+            .cycles(100_000_000_u64)
             .on_reject(wasm().reject_message().reject()),
     }
 }

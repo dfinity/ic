@@ -2,6 +2,7 @@
 
 use super::super::test_utilities::{SchedulerTestBuilder, ingress, instructions};
 use super::super::*;
+use super::zero_instruction_overhead_config;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_types::methods::SystemMethod;
 
@@ -148,12 +149,9 @@ fn execute_heartbeat_before_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
             max_instructions_per_install_code_slice: NumInstructions::new(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     let canister = test.create_canister_with(
@@ -181,12 +179,9 @@ fn execute_global_timer_before_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
             max_instructions_per_install_code_slice: NumInstructions::new(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     let canister = test.create_canister_with(
@@ -219,12 +214,9 @@ fn execute_multiple_heartbeats() {
             scheduler_cores: 5,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     let number_of_canisters: usize = 3;
@@ -278,12 +270,9 @@ fn heartbeat_metrics_are_recorded() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     let canister0 = test.create_canister_with(
@@ -330,13 +319,9 @@ fn unexecuted_heartbeat_and_timer_tasks_are_removed_after_round() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(10),
             max_instructions_per_message: NumInstructions::new(10),
-            max_instructions_per_query_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     test.set_time(NOW);

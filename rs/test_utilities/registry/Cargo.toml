@@ -17,6 +17,7 @@ ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifac
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 tempfile = { workspace = true }

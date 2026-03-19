@@ -143,8 +143,8 @@ pub fn test(env: TestEnv) {
 
 fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
     let ii_canister_id = ii_node.create_and_install_canister_with_arg(
-        &env::var("II_WASM_PATH").expect("II_WASM_PATH not set"),
-        None,
+        &env::var("II_BACKEND_WASM_PATH").expect("II_BACKEND_WASM_PATH not set"),
+        Some(build_internet_identity_backend_install_arg()),
     );
     info!(
         env.logger(),
