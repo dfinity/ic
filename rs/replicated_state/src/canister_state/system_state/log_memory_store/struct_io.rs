@@ -397,7 +397,7 @@ mod tests {
         let loaded_index = io.load_index_table();
         let loaded = loaded_index.raw_entries();
 
-        // For 10 MB data capacity, 28 bytes per entry = 146 entries
+        // Entry count is fixed by index table size: 4096 / 28 bytes per entry = 146.
         assert_eq!(loaded.len(), 146);
         // All loaded entries are invalid.
         for entry in loaded {

@@ -85,6 +85,7 @@ impl RingBuffer {
     }
 
     /// Returns the data capacity of the ring buffer.
+    #[cfg(test)]
     pub fn byte_capacity(&self) -> usize {
         self.io.load_header().data_capacity.get() as usize
     }
@@ -132,8 +133,7 @@ impl RingBuffer {
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
-            let capacity = MemorySize::new(h.data_capacity.get() as u64);
-            if added_size > capacity {
+            if added_size > h.data_capacity {
                 debug_assert!(false, "Log record size exceeds ring buffer capacity");
                 return;
             }
