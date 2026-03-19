@@ -1552,44 +1552,14 @@ async fn perform_read_state_call_with_delegations(
     signer: &GenericIdentity<'_>,
     delegations: &[SignedDelegation],
 ) -> ReplicaResponse {
-    /*
-     * In order to properly test read state request we must have another
-     * call to check the status of.
-     */
-    let request_id = {
-        let content = HttpCallContent::Call {
-            update: HttpCanisterUpdate {
-                canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
-                method_name: "update".to_string(),
-                arg: Blob(wasm().reply_data(b"read state test").build()),
-                sender: Blob(sender.principal().as_slice().to_vec()),
-                ingress_expiry: expiry_time().as_nanos() as u64,
-                nonce: None,
-            },
-        };
-
-        let signature = sender.sign_update(&content);
-        let request_id = MessageId::from(content.representation_independent_hash());
-
-        // Always use a v3 call to test read state request since the call is sync,
-        // otherwise we have to wait until the call executes before checking the read state, which
-        // requires a potentially flaky retry loop.
-
-        let _response = send_request(
-            /*api_ver=*/ 3,
-            test,
-            "call",
-            content,
-            sender.public_key_der(),
-            None,
-            signature,
-        )
-        .await;
-
-        request_id
-    };
-
-    let paths = vec![vec!["request_status".into(), (request_id).into()].into()];
+    let paths = vec![
+        vec![
+            "canister".into(),
+            test.canister_id.get_ref().as_slice().into(),
+            "module_hash".into(),
+        ]
+        .into(),
+    ];
 
     let content = HttpReadStateContent::ReadState {
         read_state: HttpReadState {
