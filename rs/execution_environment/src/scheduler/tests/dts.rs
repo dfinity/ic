@@ -298,11 +298,8 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
 
     // Create one canister with many long messages
     let long_canister_id = test.create_canister();
-    let mut long_message_ids = vec![];
     for _ in 0..num_long_messages {
-        let long_message_id =
-            test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
-        long_message_ids.push(long_message_id);
+        test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
     }
 
     // Create many canisters with 4 short messages each
