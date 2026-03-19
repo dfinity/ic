@@ -201,6 +201,9 @@ pub enum OperationType {
     Approve,
     Fee,
     FeeCollector,
+    Pause,
+    Unpause,
+    Deactivate,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -425,5 +428,44 @@ impl TryFrom<ObjectMap> for FeeCollectorMetadata {
     fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
         serde_json::from_value(serde_json::Value::Object(o))
             .context("Could not parse FeeCollectorMetadata from JSON object")
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct ManagementActionMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caller: Option<Principal>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mthd: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl TryFrom<ManagementActionMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: ManagementActionMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!(
+                    "Could not convert ManagementActionMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!(
+                "Could not convert ManagementActionMetadata to ObjectMap: {:?}",
+                err
+            ),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for ManagementActionMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o))
+            .context("Could not parse ManagementActionMetadata from JSON object")
     }
 }
