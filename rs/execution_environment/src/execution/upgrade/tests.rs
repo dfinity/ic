@@ -10,10 +10,9 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::ids::user_test_id;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::IngressState;
 use ic_types::{ComputeAllocation, MemoryAllocation};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
 ////////////////////////////////////////////////////////////////////////
 // Constants and templates

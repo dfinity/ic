@@ -144,6 +144,7 @@ system_test_nns(
         "//rs/test_utilities",
         "//rs/test_utilities/types",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:ic-agent",

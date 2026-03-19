@@ -31,12 +31,11 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
     CanisterId, NumInstructions, SnapshotId,
-    batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};

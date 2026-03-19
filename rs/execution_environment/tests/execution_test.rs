@@ -22,13 +22,10 @@ use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
-use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    ingress::{IngressState, IngressStatus},
-};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};

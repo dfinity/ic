@@ -21,12 +21,11 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE};
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{ComputeAllocation, NumInstructions};
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::convert::From;

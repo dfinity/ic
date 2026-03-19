@@ -801,13 +801,14 @@ pub(crate) mod tests {
     use ic_types::{
         Height, RegistryVersion,
         artifact::IngressMessageId,
-        batch::{CanisterCyclesCostSchedule, IngressPayload},
+        batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
         state_manager::{StateManagerError, StateManagerResult},
         time::{UNIX_EPOCH, expiry_time_from_now},
     };
+    use ic_types_cycles::CanisterCyclesCostSchedule;
     use rstest::rstest;
     use std::sync::RwLock;
     use std::{collections::HashSet, convert::TryInto, time::Duration};
