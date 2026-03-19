@@ -670,6 +670,11 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 ),
             ));
         }
+        crate::common::storage::types::IcrcOperation::Pause { .. }
+        | crate::common::storage::types::IcrcOperation::Unpause { .. }
+        | crate::common::storage::types::IcrcOperation::Deactivate { .. } => {
+            panic!("ICRC-124 Rosetta support not yet implemented")
+        }
     };
 
     Ok(operations)

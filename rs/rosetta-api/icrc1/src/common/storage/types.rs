@@ -8,6 +8,9 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
+use icrc_ledger_types::icrc124::schema::{
+    BTYPE_124_DEACTIVATE, BTYPE_124_PAUSE, BTYPE_124_UNPAUSE,
+};
 use icrc_ledger_types::{
     icrc::generic_value::Value,
     icrc1::{account::Account, transfer::Memo},
@@ -138,7 +141,10 @@ impl RosettaBlock {
                 IcrcOperation::Transfer { fee, .. } => fee,
                 IcrcOperation::Approve { fee, .. } => fee,
                 IcrcOperation::Burn { fee, .. } => fee,
-                IcrcOperation::FeeCollector { .. } => None,
+                IcrcOperation::FeeCollector { .. }
+                | IcrcOperation::Pause { .. }
+                | IcrcOperation::Unpause { .. }
+                | IcrcOperation::Deactivate { .. } => None,
             }))
     }
 
@@ -378,6 +384,21 @@ pub enum IcrcOperation {
         caller: Option<Principal>,
         mthd: Option<String>,
     },
+    Pause {
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    Unpause {
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    Deactivate {
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
 }
 
 impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
@@ -453,6 +474,36 @@ impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
                         fee_collector,
                         caller,
                         mthd,
+                    })
+                }
+                BTYPE_124_PAUSE => {
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::Pause {
+                        caller,
+                        mthd,
+                        reason,
+                    })
+                }
+                BTYPE_124_UNPAUSE => {
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::Unpause {
+                        caller,
+                        mthd,
+                        reason,
+                    })
+                }
+                BTYPE_124_DEACTIVATE => {
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::Deactivate {
+                        caller,
+                        mthd,
+                        reason,
                     })
                 }
                 found => {
@@ -552,6 +603,31 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 }
                 if let Some(mthd) = mthd {
                     map.insert("mthd".to_string(), Value::text(mthd));
+                }
+            }
+            Op::Pause {
+                caller,
+                mthd,
+                reason,
+            }
+            | Op::Unpause {
+                caller,
+                mthd,
+                reason,
+            }
+            | Op::Deactivate {
+                caller,
+                mthd,
+                reason,
+            } => {
+                if let Some(caller) = caller {
+                    map.insert("caller".to_string(), Value::from(caller));
+                }
+                if let Some(mthd) = mthd {
+                    map.insert("mthd".to_string(), Value::text(mthd));
+                }
+                if let Some(reason) = reason {
+                    map.insert("reason".to_string(), Value::text(reason));
                 }
             }
         }
@@ -675,6 +751,33 @@ where
                 fee_collector,
                 caller,
                 mthd,
+            },
+            Op::Pause {
+                caller,
+                mthd,
+                reason,
+            } => Self::Pause {
+                caller,
+                mthd,
+                reason,
+            },
+            Op::Unpause {
+                caller,
+                mthd,
+                reason,
+            } => Self::Unpause {
+                caller,
+                mthd,
+                reason,
+            },
+            Op::Deactivate {
+                caller,
+                mthd,
+                reason,
+            } => Self::Deactivate {
+                caller,
+                mthd,
+                reason,
             },
         }
     }
@@ -818,6 +921,39 @@ mod tests {
             )
     }
 
+    fn arb_management_action()
+    -> impl Strategy<Value = (Option<Principal>, Option<String>, Option<String>)> {
+        (
+            option::of(arb_principal()),
+            option::of(Just("some_method".to_string())),
+            option::of(Just("some_reason".to_string())),
+        )
+    }
+
+    fn arb_pause() -> impl Strategy<Value = IcrcOperation> {
+        arb_management_action().prop_map(|(caller, mthd, reason)| IcrcOperation::Pause {
+            caller,
+            mthd,
+            reason,
+        })
+    }
+
+    fn arb_unpause() -> impl Strategy<Value = IcrcOperation> {
+        arb_management_action().prop_map(|(caller, mthd, reason)| IcrcOperation::Unpause {
+            caller,
+            mthd,
+            reason,
+        })
+    }
+
+    fn arb_deactivate() -> impl Strategy<Value = IcrcOperation> {
+        arb_management_action().prop_map(|(caller, mthd, reason)| IcrcOperation::Deactivate {
+            caller,
+            mthd,
+            reason,
+        })
+    }
+
     fn arb_op() -> impl Strategy<Value = IcrcOperation> {
         prop_oneof![
             arb_approve(),
@@ -825,6 +961,9 @@ mod tests {
             arb_mint(),
             arb_transfer(),
             arb_fee_collector(),
+            arb_pause(),
+            arb_unpause(),
+            arb_deactivate(),
         ]
     }
 
@@ -867,11 +1006,10 @@ mod tests {
                     fee_collector,
                     fee_collector_block_index,
                     btype: match transaction.operation {
-                        IcrcOperation::FeeCollector {
-                            fee_collector: _,
-                            caller: _,
-                            mthd: _,
-                        } => Some(BTYPE_107.to_string()),
+                        IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                        IcrcOperation::Pause { .. } => Some(BTYPE_124_PAUSE.to_string()),
+                        IcrcOperation::Unpause { .. } => Some(BTYPE_124_UNPAUSE.to_string()),
+                        IcrcOperation::Deactivate { .. } => Some(BTYPE_124_DEACTIVATE.to_string()),
                         _ => None,
                     },
                 },
@@ -883,6 +1021,9 @@ mod tests {
         proptest!(|(op in arb_op().no_shrink())| {
             let btype = match op {
                 IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                IcrcOperation::Pause { .. } => Some(BTYPE_124_PAUSE.to_string()),
+                IcrcOperation::Unpause { .. } => Some(BTYPE_124_UNPAUSE.to_string()),
+                IcrcOperation::Deactivate { .. } => Some(BTYPE_124_DEACTIVATE.to_string()),
                 _ => None,
             };
             let actual_op = match IcrcOperation::try_from((btype, BTreeMap::from(op.clone()))) {
@@ -898,6 +1039,9 @@ mod tests {
         proptest!(|(tx in arb_transaction().no_shrink())| {
             let btype = match tx.operation {
                 IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                IcrcOperation::Pause { .. } => Some(BTYPE_124_PAUSE.to_string()),
+                IcrcOperation::Unpause { .. } => Some(BTYPE_124_UNPAUSE.to_string()),
+                IcrcOperation::Deactivate { .. } => Some(BTYPE_124_DEACTIVATE.to_string()),
                 _ => None,
             };
             let actual_tx = match IcrcTransaction::try_from((btype, Value::from(tx.clone()))) {
@@ -1096,6 +1240,46 @@ mod tests {
                 assert_eq!(fee_collector, rosetta_fee_collector, "fee_collector");
                 assert_eq!(caller, rosetta_caller, "caller");
                 assert_eq!(mthd, rosetta_mthd, "mthd");
+            }
+            (
+                ic_icrc1::Operation::Pause {
+                    caller,
+                    mthd,
+                    reason,
+                },
+                IcrcOperation::Pause {
+                    caller: r_caller,
+                    mthd: r_mthd,
+                    reason: r_reason,
+                },
+            )
+            | (
+                ic_icrc1::Operation::Unpause {
+                    caller,
+                    mthd,
+                    reason,
+                },
+                IcrcOperation::Unpause {
+                    caller: r_caller,
+                    mthd: r_mthd,
+                    reason: r_reason,
+                },
+            )
+            | (
+                ic_icrc1::Operation::Deactivate {
+                    caller,
+                    mthd,
+                    reason,
+                },
+                IcrcOperation::Deactivate {
+                    caller: r_caller,
+                    mthd: r_mthd,
+                    reason: r_reason,
+                },
+            ) => {
+                assert_eq!(caller, r_caller, "caller");
+                assert_eq!(mthd, r_mthd, "mthd");
+                assert_eq!(reason, r_reason, "reason");
             }
             (l, r) => panic!(
                 "Found different type of operations. Operation:{l:?} rosetta's Operation:{r:?}"

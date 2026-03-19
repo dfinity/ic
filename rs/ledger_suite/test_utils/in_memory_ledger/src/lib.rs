@@ -541,6 +541,11 @@ where
                 Operation::FeeCollector { .. } => {
                     panic!("FeeCollector107 not implemented")
                 }
+                Operation::Pause { .. }
+                | Operation::Unpause { .. }
+                | Operation::Deactivate { .. } => {
+                    // No balance changes
+                }
             }
         }
         self.post_process_ledger_blocks(blocks);

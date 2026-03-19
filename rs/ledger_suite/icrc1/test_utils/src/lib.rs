@@ -243,7 +243,10 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Burn { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                Operation::FeeCollector { .. } => None,
+                Operation::FeeCollector { .. }
+                | Operation::Pause { .. }
+                | Operation::Unpause { .. }
+                | Operation::Deactivate { .. } => None,
             };
             let btype = match transaction.operation {
                 Operation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
@@ -607,6 +610,9 @@ impl TransactionsAndBalances {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
+            Operation::Pause { .. } | Operation::Unpause { .. } | Operation::Deactivate { .. } => {
+                // No balance changes
+            }
         };
         self.transactions.push(tx);
 
@@ -636,6 +642,9 @@ impl TransactionsAndBalances {
             }
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
+            }
+            Operation::Pause { .. } | Operation::Unpause { .. } | Operation::Deactivate { .. } => {
+                // No balance changes
             }
         }
     }

@@ -73,6 +73,9 @@ type Transaction = record {
   mint : opt Mint;
   approve : opt Approve;
   fee_collector : opt FeeCollector;
+  pause : opt ManagementAction;
+  unpause : opt ManagementAction;
+  deactivate : opt ManagementAction;
   timestamp : nat64;
   transfer : opt Transfer
 };
@@ -80,6 +83,13 @@ type Transaction = record {
 type FeeCollector = record {
   caller : opt principal;
   fee_collector : opt Account;
+  ts : opt nat64;
+  mthd : opt text
+};
+
+type ManagementAction = record {
+  caller : opt principal;
+  reason : opt text;
   ts : opt nat64;
   mthd : opt text
 };

@@ -7,6 +7,9 @@ use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
+use icrc_ledger_types::icrc124::schema::{
+    BTYPE_124_DEACTIVATE, BTYPE_124_PAUSE, BTYPE_124_UNPAUSE,
+};
 use num_bigint::BigUint;
 use rusqlite::Connection;
 use rusqlite::{CachedStatement, Params, named_params, params};
@@ -465,6 +468,11 @@ pub fn update_account_balances(
                 } => {
                     current_fee_collector_107 = Some(fee_collector);
                 }
+                crate::common::storage::types::IcrcOperation::Pause { .. }
+                | crate::common::storage::types::IcrcOperation::Unpause { .. }
+                | crate::common::storage::types::IcrcOperation::Deactivate { .. } => {
+                    // Does not affect balances
+                }
             }
         }
 
@@ -602,6 +610,45 @@ pub fn store_blocks(
                 mthd: _,
             } => (
                 BTYPE_107,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::Pause { .. } => (
+                BTYPE_124_PAUSE,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::Unpause { .. } => (
+                BTYPE_124_UNPAUSE,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::Deactivate { .. } => (
+                BTYPE_124_DEACTIVATE,
                 None,
                 None,
                 None,

@@ -547,6 +547,11 @@ mod tests {
                             ic_icrc1::Operation::FeeCollector { .. } => {
                                 panic!("FeeCollector107 not implemented")
                             }
+                            ic_icrc1::Operation::Pause { .. }
+                            | ic_icrc1::Operation::Unpause { .. }
+                            | ic_icrc1::Operation::Deactivate { .. } => {
+                                panic!("ICRC-124 operations not implemented")
+                            }
                         };
                         let args = match arg_with_caller.arg {
                             LedgerEndpointArg::TransferArg(arg) => Encode!(&arg),

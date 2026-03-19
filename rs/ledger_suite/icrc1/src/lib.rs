@@ -16,7 +16,13 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::{icrc1::transfer::Memo, icrc3::transactions::TRANSACTION_FEE_COLLECTOR};
+use icrc_ledger_types::{
+    icrc1::transfer::Memo,
+    icrc3::transactions::{
+        TRANSACTION_124_DEACTIVATE, TRANSACTION_124_PAUSE, TRANSACTION_124_UNPAUSE,
+        TRANSACTION_FEE_COLLECTOR,
+    },
+};
 use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeMap;
@@ -53,6 +59,21 @@ pub enum Operation<Tokens: TokensType> {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
         mthd: Option<String>,
+    },
+    Pause {
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    Unpause {
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    Deactivate {
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
     },
 }
 
@@ -122,6 +143,10 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mthd: Option<String>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -161,6 +186,21 @@ impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
                 fee_collector: value.fee_collector,
                 caller: value.caller,
                 mthd: value.mthd,
+            },
+            Some(TRANSACTION_124_PAUSE) => Operation::Pause {
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(TRANSACTION_124_UNPAUSE) => Operation::Unpause {
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(TRANSACTION_124_DEACTIVATE) => Operation::Deactivate {
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
             },
             _ => Operation::try_from(value)
                 .map_err(|e| format!("{} and/or unknown btype {:?}", e, btype_str))?,
@@ -241,7 +281,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => Some("mint".to_string()),
                 Transfer { .. } => Some("xfer".to_string()),
                 Approve { .. } => Some("approve".to_string()),
-                FeeCollector { .. } => None,
+                FeeCollector { .. } | Pause { .. } | Unpause { .. } | Deactivate { .. } => None,
             },
             from: match &t.operation {
                 Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
@@ -261,14 +301,14 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
                 | Approve { amount, .. } => Some(amount.clone()),
-                FeeCollector { .. } => None,
+                FeeCollector { .. } | Pause { .. } | Unpause { .. } | Deactivate { .. } => None,
             },
             fee: match &t.operation {
                 Transfer { fee, .. }
                 | Approve { fee, .. }
                 | Mint { fee, .. }
                 | Burn { fee, .. } => fee.to_owned(),
-                FeeCollector { .. } => None,
+                FeeCollector { .. } | Pause { .. } | Unpause { .. } | Deactivate { .. } => None,
             },
             expected_allowance: match &t.operation {
                 Approve {
@@ -285,11 +325,23 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 _ => None,
             },
             caller: match &t.operation {
-                FeeCollector { caller, .. } => caller.to_owned(),
+                FeeCollector { caller, .. }
+                | Pause { caller, .. }
+                | Unpause { caller, .. }
+                | Deactivate { caller, .. } => caller.to_owned(),
                 _ => None,
             },
             mthd: match &t.operation {
-                FeeCollector { mthd, .. } => mthd.to_owned(),
+                FeeCollector { mthd, .. }
+                | Pause { mthd, .. }
+                | Unpause { mthd, .. }
+                | Deactivate { mthd, .. } => mthd.to_owned(),
+                _ => None,
+            },
+            reason: match &t.operation {
+                Pause { reason, .. } | Unpause { reason, .. } | Deactivate { reason, .. } => {
+                    reason.to_owned()
+                }
                 _ => None,
             },
         }
@@ -485,6 +537,11 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
+            Operation::Pause { .. } | Operation::Unpause { .. } | Operation::Deactivate { .. } => {
+                // ICRC-124 management operations do not affect balances or approvals.
+                // Treat them as no-ops when applying historical blocks so replay/upgrade
+                // does not crash the canister.
+            }
         }
         Ok(())
     }
@@ -672,9 +729,10 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         let effective_fee = match &transaction.operation {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
-            Operation::FeeCollector { .. } => {
-                panic!("FeeCollector107 not implemented")
-            }
+            Operation::FeeCollector { .. }
+            | Operation::Pause { .. }
+            | Operation::Unpause { .. }
+            | Operation::Deactivate { .. } => None,
             _ => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
