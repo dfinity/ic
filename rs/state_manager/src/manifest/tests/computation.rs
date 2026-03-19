@@ -387,7 +387,8 @@ fn test_meta_manifest_computation() {
         let encoded_manifest = encode_manifest(&manifest);
         assert!(encoded_manifest.len() <= DEFAULT_CHUNK_SIZE as usize);
 
-        let sub_manifest_hash = hash_concat!(21_u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
+        let sub_manifest_hash =
+            hash_concat!(21_u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
         let expected_meta_manifest = MetaManifest {
             version,
             sub_manifest_hashes: vec![sub_manifest_hash],
@@ -809,7 +810,8 @@ fn test_filter_all_zero_chunks() {
         .expect("failed to create file 'memory'");
     fs::write(subdir.join("metadata"), vec![3_u8; 1050 * 1024])
         .expect("failed to create file 'metadata'");
-    fs::write(subdir.join("queue"), vec![0_u8; 1050 * 1024]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("queue"), vec![0_u8; 1050 * 1024])
+        .expect("failed to create file 'queue'");
 
     let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
     let manifest = compute_manifest(
