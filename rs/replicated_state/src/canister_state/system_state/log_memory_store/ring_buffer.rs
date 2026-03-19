@@ -218,6 +218,12 @@ impl RingBuffer {
                     }
                     pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
                     records.push(CanisterLogRecord::from(record));
+                    // Stop when we've reached the tail — handles the exactly-full buffer
+                    // case where data_head == data_tail and is_alive() returns true
+                    // for every position, which would otherwise cause an infinite loop.
+                    if pos == header.data_tail {
+                        break;
+                    }
                 }
 
                 // Trim older records from the front so total data size ≤ limit.
@@ -542,6 +548,37 @@ mod tests {
         let records: Vec<CanisterLogRecord> = rb.iter().collect();
 
         assert!(records.is_empty());
+    }
+
+    #[test]
+    fn test_records_no_filter_exactly_full_buffer() {
+        // Regression test for a bug where records(None) would loop infinitely
+        // when the ring buffer was exactly full (data_head == data_tail &&
+        // data_size == data_capacity). In that state Header::is_alive() returns
+        // true for every position, so without an explicit data_tail guard the
+        // no-filter scan wraps around and re-reads records forever.
+        let record_size: usize = 25; // 8 (idx) + 8 (timestamp) + 4 (len) + 5 (content)
+        let data_capacity = MemorySize::new(3 * record_size as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
+
+        let r0 = log_record(0, 100, "12345");
+        let r1 = log_record(1, 200, "12345");
+        let r2 = log_record(2, 300, "12345");
+        assert_eq!(bytes_len(&r0), record_size);
+
+        rb.append(&r0);
+        rb.append(&r1);
+        rb.append(&r2);
+
+        // Verify the buffer is exactly full (the condition that triggers the bug).
+        assert_eq!(rb.bytes_used(), data_capacity.get() as usize);
+
+        // This must return all 3 records and terminate — not loop infinitely.
+        let records = rb.records(None);
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0], r0);
+        assert_eq!(records[1], r1);
+        assert_eq!(records[2], r2);
     }
 
     #[test]
