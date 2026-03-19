@@ -199,7 +199,7 @@ impl LedgerSuiteConfig {
         // part of the upgrade/downgrade testing.
         top_up_canisters(state_machine, ledger_canister_id, index_canister_id);
         // Advance the time to make sure the ledger gets the current time for checking allowances.
-        state_machine.advance_time(Duration::from_secs(1u64));
+        state_machine.advance_time(Duration::from_secs(1_u64));
         state_machine.tick();
         let mut previous_ledger_state = None;
         if self.extended_testing {
@@ -1129,7 +1129,7 @@ mod index {
             env.tick();
             num_blocks_synced = u64::try_from(status(env, index_id).num_blocks_synced.0)
                 .expect("num_blocks_synced should fit in u64");
-            chain_length = get_index_blocks(env, ledger_id, 0u64, 0u64).chain_length;
+            chain_length = get_index_blocks(env, ledger_id, 0_u64, 0_u64).chain_length;
             if num_blocks_synced == chain_length {
                 return;
             }

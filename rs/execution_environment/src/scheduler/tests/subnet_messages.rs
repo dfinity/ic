@@ -320,22 +320,15 @@ fn drain_subnet_queues_skips_heavy_subnet_calls_when_instructions_reached() {
 
     let mut new_state = test.drain_subnet_messages();
 
-    // NOTE: For now, we also have a `break` that triggers when the instruction
-    // limit is reached, so `drain_subnet_messages()` bails out immediately after
-    // the first subnet call that counts toward the round limit. And a TODO to drop
-    // it.
-
     let queues = new_state.subnet_queues_mut();
     // The two calls from `remote_canister_2` were not executed.
-    // assert_eq!(queues.input_queues_message_count(), 2);
-    assert_eq!(queues.input_queues_message_count(), 5);
+    assert_eq!(queues.input_queues_message_count(), 2);
     // The other 4 calls were executed.
-    // assert_eq!(queues.output_queues_message_count(), 4);
-    assert_eq!(queues.output_queues_message_count(), 1);
+    assert_eq!(queues.output_queues_message_count(), 4);
     assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
-    // assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
-    // assert!(queues.pop_canister_output(&remote_canister_2).is_some());
-    // assert!(queues.pop_canister_output(&remote_canister_2).is_some());
+    assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
+    assert!(queues.pop_canister_output(&remote_canister_2).is_some());
+    assert!(queues.pop_canister_output(&remote_canister_2).is_some());
 }
 
 /// Subnet messages with `does_not_run_on_aborted_canister` are skipped when
