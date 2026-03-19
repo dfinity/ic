@@ -210,39 +210,53 @@ impl Firewall {
         }
     }
 
-    /// Depending on the node reward type, determine the set of node types that should be
-    /// whitelisted.
+    /// Determines whether a node with `other_reward_type` should be whitelisted for a node with
+    /// `own_reward_type`.
     /// Currently, if the node reward type is not `Type4` (cloud engine node), then all nodes except
     /// cloud engine nodes will be whitelisted. For the latter, all nodes are whitelisted.
     /// If the node reward type cannot be determined, we will default to a non cloud engine node and
     /// protect them from cloud engine nodes just in case.
-    fn get_whitelisted_node_types(node_reward_type: NodeRewardType) -> Vec<NodeRewardType> {
-        match node_reward_type {
-            NodeRewardType::Unspecified
-            | NodeRewardType::Type0
-            | NodeRewardType::Type1
-            | NodeRewardType::Type2
-            | NodeRewardType::Type3
-            | NodeRewardType::Type3dot1
-            | NodeRewardType::Type1dot1 => vec![
-                NodeRewardType::Unspecified,
-                NodeRewardType::Type0,
-                NodeRewardType::Type1,
-                NodeRewardType::Type2,
-                NodeRewardType::Type3,
-                NodeRewardType::Type3dot1,
-                NodeRewardType::Type1dot1,
-            ],
-            NodeRewardType::Type4 => vec![
-                NodeRewardType::Unspecified,
-                NodeRewardType::Type0,
-                NodeRewardType::Type1,
-                NodeRewardType::Type2,
-                NodeRewardType::Type3,
-                NodeRewardType::Type3dot1,
-                NodeRewardType::Type1dot1,
+    fn is_whitelisted(own_reward_type: NodeRewardType, other_reward_type: NodeRewardType) -> bool {
+        // This ugly matching is on purpose to exhaustively list all the combinations of node reward
+        // types such that existing rules are adapted when new node reward types are added.
+        match (own_reward_type, other_reward_type) {
+            (
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1,
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1,
+            ) => true,
+            (
                 NodeRewardType::Type4,
-            ],
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1
+                | NodeRewardType::Type4,
+            ) => true,
+            (
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1,
+                NodeRewardType::Type4,
+            ) => false,
         }
     }
 
@@ -259,7 +273,6 @@ impl Firewall {
         // We assume that nodes' reward types do not change across registry versions, so we just get
         // it from the latest registry version.
         let own_reward_type = self.get_defaulting_node_reward_type(self.node_id, registry_version);
-        let whitelisted_node_types = Self::get_whitelisted_node_types(own_reward_type);
 
         // Get the union of all the node IP addresses from the registry, as well as whitelisted
         // ones.
@@ -285,7 +298,7 @@ impl Firewall {
                 let other_reward_type =
                     self.get_defaulting_node_reward_type(*other_node_id, registry_version);
 
-                whitelisted_node_types.contains(&other_reward_type)
+                Self::is_whitelisted(own_reward_type, other_reward_type)
             });
 
             whitelisted_node_ips.extend(
