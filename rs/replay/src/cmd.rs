@@ -82,6 +82,12 @@ pub enum SubCommand {
     /// WARNING: This is a test-only sub-command and should only be used in
     /// tests.
     WithTrustedNeuronsFollowingNeuronForTests(WithTrustedNeuronsFollowingNeuronCmd),
+
+    /// The replay will replace the subnet list record in the registry with a single subnet being
+    /// the player's subnet.
+    /// WARNING: This is a test-only sub-command and should only be used in
+    /// tests.
+    OverwriteSubnetListWithSingleton,
 }
 
 #[derive(Clone, Parser)]
