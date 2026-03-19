@@ -211,7 +211,7 @@ impl StructIO {
 
     fn remaining(position: MemoryPosition, capacity: MemorySize) -> MemorySize {
         if position < MemoryPosition::new(capacity.get()) {
-            capacity - position
+            MemorySize::new(capacity.get() - position.get())
         } else {
             MemorySize::new(0)
         }

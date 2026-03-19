@@ -224,13 +224,13 @@ impl IndexTable {
     /// Returns the total byte size of the range from the start of `from`
     /// to the end of `to` (both inclusive), correctly handling ring-buffer wraparound.
     fn range_size(&self, from: &IndexEntry, to: &IndexEntry) -> MemorySize {
-        let from_pos = from.position;
-        let to_pos = self.advance(to.position, MemorySize::new(to.bytes_len as u64));
+        let from_pos = from.position.get();
+        let to_pos = self.advance(to.position, MemorySize::new(to.bytes_len as u64)).get();
         if to_pos >= from_pos {
-            to_pos - from_pos // no wrap
+            MemorySize::new(to_pos - from_pos) // no wrap
         } else {
             debug_assert_gt!(self.data_capacity.get(), 0);
-            (self.data_capacity + to_pos) - from_pos // wrap
+            MemorySize::new(self.data_capacity.get() - from_pos + to_pos) // wrap
         }
     }
 
