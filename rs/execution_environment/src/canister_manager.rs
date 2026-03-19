@@ -2728,13 +2728,14 @@ impl CanisterManager {
     pub(crate) fn create_snapshot_from_metadata(
         &self,
         sender: PrincipalId,
+        time: Time,
         canister: &mut CanisterState,
         args: UploadCanisterSnapshotMetadataArgs,
-        state: &mut ReplicatedState,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<SnapshotId, UserError> {
+    ) -> Result<(SnapshotId, NumBytes), UserError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
 
@@ -2795,7 +2796,7 @@ impl CanisterManager {
             .saturating_add(&new_snapshot_size.get().into());
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             canister,
             sender,
             instructions,
@@ -2813,14 +2814,14 @@ impl CanisterManager {
         // Create new snapshot.
         let new_snapshot = CanisterSnapshot::from_metadata(
             &valid_args,
-            state.time(),
+            time,
             canister.system_state.canister_version(),
             Arc::clone(&self.fd_factory),
         );
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             canister,
             sender,
             round_limits,
@@ -2834,17 +2835,14 @@ impl CanisterManager {
                 .heap_delta_debit
                 .saturating_add(&new_snapshot.heap_delta());
         }
-        state.metadata.heap_delta_estimate = state
-            .metadata
-            .heap_delta_estimate
-            .saturating_add(&new_snapshot.heap_delta());
+        let heap_delta_increase = new_snapshot.heap_delta();
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
         canister
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
-        Ok(snapshot_id)
+        Ok((snapshot_id, heap_delta_increase))
     }
 
     /// Writes `args.chunk` to the wasm module, main/stable memory or inserts `args.chunk` to the wasm chunk store.

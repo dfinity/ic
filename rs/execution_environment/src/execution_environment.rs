@@ -2023,8 +2023,8 @@ impl ExecutionEnvironment {
                             *msg.sender(),
                             &mut state,
                             args,
-                            registry_settings.subnet_size,
                             round_limits,
+                            registry_settings,
                         );
                         ExecuteSubnetMessageResult::Finished {
                             response: result.map(|res| (res, Some(canister_id))),
@@ -3153,40 +3153,61 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: UploadCanisterSnapshotMetadataArgs,
-        subnet_size: usize,
         round_limits: &mut RoundLimits,
+        registry_settings: &RegistryExecutionSettings,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
-        // Take canister out.
-        let mut canister = match state.take_canister_state(&canister_id) {
-            None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
-            }
-            Some(canister) => canister,
-        };
 
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
-        let result = self.canister_manager.create_snapshot_from_metadata(
-            sender,
-            Arc::make_mut(&mut canister),
-            args,
+        let time = state.time();
+        let subnet_size = registry_settings.subnet_size;
+        let cost_schedule = state.get_own_cost_schedule();
+
+        let op =
+            |mut canister,
+             mut round_limits,
+             (sender, time, args, subnet_size, cost_schedule, resource_saturation)| {
+                self.canister_manager
+                    .create_snapshot_from_metadata(
+                        sender,
+                        time,
+                        &mut canister,
+                        args,
+                        subnet_size,
+                        cost_schedule,
+                        &mut round_limits,
+                        &resource_saturation,
+                    )
+                    .map(|(snapshot_id, heap_delta_increase)| {
+                        (
+                            canister,
+                            round_limits,
+                            Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id })
+                                .unwrap(),
+                            heap_delta_increase,
+                            vec![],
+                            vec![],
+                            None,
+                        )
+                    })
+                    .map_err(|err| (err, NumInstructions::new(0), Cycles::zero()))
+            };
+        self.execute_mgmt_operation_on_canister(
+            canister_id,
+            op,
+            (
+                sender,
+                time,
+                args,
+                subnet_size,
+                cost_schedule,
+                resource_saturation,
+            ),
             state,
-            subnet_size,
             round_limits,
-            &resource_saturation,
-        );
-        // Put canister back.
-        state.put_canister_state(canister);
-        match result {
-            Ok(snapshot_id) => {
-                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap())
-            }
-            Err(e) => Err(e),
-        }
+            registry_settings,
+        )
     }
 
     fn write_snapshot_data(
