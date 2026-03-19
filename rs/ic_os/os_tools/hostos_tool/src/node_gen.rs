@@ -34,11 +34,11 @@ fn parse_hardware_gen(cpu_model_line: &str) -> Result<HardwareGen> {
         .with_context(|| format!("Could not parse AMD EPYC model number: {cpu_model_line}"))?;
     let epyc_model_number = epyc_model_number.as_str();
 
-    match epyc_model_number.chars().last() {
+    match epyc_model_number.chars().rfind(|c| c.is_ascii_digit()) {
         Some('2') => Ok(HardwareGen::Gen1),
-        Some('3') => Ok(HardwareGen::Gen2),
+        Some('3' | '4' | '5') => Ok(HardwareGen::Gen2),
         Some(_) => {
-            eprintln!("CPU model other than EPYC Rome or Milan: {cpu_model_line}");
+            eprintln!("CPU model other than EPYC Rome, Milan, Genoa or Turin: {cpu_model_line}");
             Ok(HardwareGen::Unknown)
         }
         None => Err(anyhow!(
@@ -119,6 +119,10 @@ pub mod tests {
         );
         assert_eq!(
             parse_hardware_gen("model name      : AMD EPYC 7543 32-Core Processor").unwrap(),
+            HardwareGen::Gen2
+        );
+        assert_eq!(
+            parse_hardware_gen("model name      : AMD EPYC 9374F 32-Core Processor").unwrap(),
             HardwareGen::Gen2
         );
         assert!(
