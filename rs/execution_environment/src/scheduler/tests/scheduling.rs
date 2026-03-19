@@ -766,14 +766,10 @@ fn scheduler_respects_compute_allocation(
             test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
-        for canister_id in test
-            .state()
-            .metadata
-            .subnet_schedule
-            .fully_executed_canisters
-            .iter()
-        {
-            *scheduled_first_counters.entry(*canister_id).or_insert(0) += 1;
+        for canister in canister_ids.iter() {
+            if test.was_fully_executed(*canister) {
+                *scheduled_first_counters.entry(*canister).or_insert(0) += 1;
+            }
         }
     }
 
