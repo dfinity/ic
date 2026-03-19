@@ -414,6 +414,10 @@ impl RoundSchedule {
         let now = state.time();
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
+        // Remove any deleted canisters from the subnet schedule. Beyond this point it
+        // is safe to assume that the subnet schedule only refers to existing canisters.
+        subnet_schedule.retain(|canister_id, _| canister_states.contains_key(canister_id));
+
         // Charge canisters for full executions in this round.
         for canister_id in self.fully_executed_canisters.iter() {
             // Don't re-create `CanisterPriority` for deleted canisters.
@@ -434,7 +438,6 @@ impl RoundSchedule {
         for canister_id in &self.scheduled_canisters {
             let Some(canister) = canister_states.get_mut(canister_id) else {
                 // Canister was deleted.
-                subnet_schedule.remove(canister_id);
                 continue;
             };
 
@@ -457,17 +460,6 @@ impl RoundSchedule {
                 .system_state
                 .canister_metrics_mut()
                 .observe_round_scheduled();
-        }
-
-        // Remove any deleted canisters from the subnet schedule. Beyond this point it
-        // is safe to assume that the subnet schedule only refers to existing canisters.
-        let deleted_canisters: Vec<_> = subnet_schedule
-            .iter()
-            .map(|(canister_id, _)| *canister_id)
-            .filter(|canister_id| !canister_states.contains_key(canister_id))
-            .collect();
-        for canister_id in deleted_canisters {
-            subnet_schedule.remove(&canister_id);
         }
 
         self.grant_heap_delta_and_install_code_credits(state, metrics);

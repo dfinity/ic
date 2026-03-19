@@ -20,9 +20,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 fn main() {
+    // 100k canisters, 5k active, 1k executed every round.
     let mut canisters = BTreeMap::new();
     let mut executed_canisters = BTreeSet::new();
-    for i in 0..50_000 {
+    for i in 0..100_000 {
         let canister_id = canister_test_id(i);
         let scheduler_state = SchedulerState::default();
         let system_state = SystemState::new_running_for_testing(
@@ -34,27 +35,30 @@ fn main() {
         let canister_snapshots = CanisterSnapshots::default();
         let mut canister_state =
             CanisterState::new(system_state, None, scheduler_state, canister_snapshots);
-        // Every 10th canister has a long execution, the rest have new inputs.
-        if i % 10 == 0 {
-            canister_state
-                .system_state
-                .task_queue
-                .enqueue(ExecutionTask::PausedExecution {
-                    id: PausedExecutionId(0),
-                    input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-                });
-        } else {
-            let mut available_memory = i64::MAX;
-            canister_state
-                .push_input(
-                    RequestBuilder::new().receiver(canister_id).build().into(),
-                    &mut available_memory,
-                    SubnetType::Application,
-                    InputQueueType::RemoteSubnet,
-                )
-                .unwrap();
+        // 5k active canisters.
+        if i < 5_000 {
+            // Every 10th canister has a long execution, the rest have new inputs.
+            if i % 10 == 0 {
+                canister_state
+                    .system_state
+                    .task_queue
+                    .enqueue(ExecutionTask::PausedExecution {
+                        id: PausedExecutionId(0),
+                        input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+                    });
+            } else {
+                let mut available_memory = i64::MAX;
+                canister_state
+                    .push_input(
+                        RequestBuilder::new().receiver(canister_id).build().into(),
+                        &mut available_memory,
+                        SubnetType::Application,
+                        InputQueueType::RemoteSubnet,
+                    )
+                    .unwrap();
+            }
         }
-        // First 1k canisters will complete an execution every round.
+        // First 1k canisters complete an execution every round.
         if i < 1_000 {
             executed_canisters.insert(canister_id);
         }
