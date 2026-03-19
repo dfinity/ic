@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::bail;
 use bare_metal_deployment::BareMetalIpmiSession;
 use ic_system_test_driver::{
@@ -81,9 +83,13 @@ fn simple_bare_metal_with_trusted_execution_environment_setup(env: TestEnv) {
     bare_metal.keep_alive_after_drop();
 }
 
+pub fn registration(env: TestEnv) {
+    registration_with_timeout(env, NODE_REGISTRATION_TIMEOUT);
+}
+
 /// Allow the nested GuestOS to install and launch, and check that it can
 /// successfully join the testnet.
-pub fn registration(env: TestEnv) {
+pub fn registration_with_timeout(env: TestEnv, timeout: Duration) {
     let logger = env.logger();
 
     let initial_topology = env.topology_snapshot();
@@ -101,12 +107,12 @@ pub fn registration(env: TestEnv) {
     retry_with_msg!(
         format!("Waiting for all {n} nodes to join ..."),
         logger.clone(),
-        NODE_REGISTRATION_TIMEOUT,
+        timeout,
         NODE_REGISTRATION_BACKOFF,
         || {
             new_topology = block_on(
                 new_topology.block_for_newer_registry_version_within_duration(
-                    NODE_REGISTRATION_TIMEOUT,
+                    timeout,
                     NODE_REGISTRATION_BACKOFF,
                 ),
             )

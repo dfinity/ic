@@ -40,7 +40,7 @@ use ic_testnet_mainnet_nns::{
 };
 use ic_types::ReplicaVersion;
 use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_run_command;
-use nested::util::setup_ic_infrastructure;
+use nested::util::{NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
 use rand::seq::SliceRandom;
 use slog::{Logger, info};
 use std::{net::IpAddr, path::Path};
@@ -237,7 +237,13 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
             .setup_and_start(&env)
             .unwrap();
 
-        nested::registration(env.clone());
+        let registration_timeout = if cfg.use_mainnet_state {
+            // Using mainnet state requires nodes to first sync their local store, which takes time
+            NODE_REGISTRATION_TIMEOUT.saturating_add(secs(10 * 60))
+        } else {
+            NODE_REGISTRATION_TIMEOUT
+        };
+        nested::registration_with_timeout(env.clone(), registration_timeout);
         block_on(replace_nns_with_nested_vms(&env, cfg.use_mainnet_state));
     }
 
