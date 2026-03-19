@@ -132,7 +132,7 @@ impl RingBuffer {
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
-            let capacity = MemorySize::new(self.byte_capacity() as u64);
+            let capacity = MemorySize::new(h.data_capacity.get() as u64);
             if added_size > capacity {
                 debug_assert!(false, "Log record size exceeds ring buffer capacity");
                 return;
