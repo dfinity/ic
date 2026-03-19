@@ -8,7 +8,10 @@ use axum::{
 };
 use bytes::Bytes;
 use ic_bn_lib::http::{body::buffer_body, calc_headers_size};
-use ic_bn_lib::prometheus::{IntCounter, Registry, register_int_counter_with_registry};
+use ic_bn_lib::prometheus::{
+    IntCounter, IntGauge, Registry, register_int_counter_with_registry,
+    register_int_gauge_with_registry,
+};
 use ic_types::SubnetId;
 use moka::sync::Cache;
 
@@ -41,6 +44,8 @@ pub struct SubnetReadStateCacheState {
     body_timeout: Duration,
     pub hits: IntCounter,
     pub misses: IntCounter,
+    entries: IntGauge,
+    memory: IntGauge,
 }
 
 impl SubnetReadStateCacheState {
@@ -71,13 +76,34 @@ impl SubnetReadStateCacheState {
         )
         .expect("failed to register subnet read_state cache misses metric");
 
+        let entries = register_int_gauge_with_registry!(
+            "subnet_read_state_cache_entries",
+            "Number of entries in the subnet read_state cache",
+            registry
+        )
+        .expect("failed to register subnet read_state cache entries metric");
+
+        let memory = register_int_gauge_with_registry!(
+            "subnet_read_state_cache_memory_bytes",
+            "Memory usage of the subnet read_state cache in bytes",
+            registry
+        )
+        .expect("failed to register subnet read_state cache memory metric");
+
         Self {
             cache,
             max_item_size,
             body_timeout,
             hits,
             misses,
+            entries,
+            memory,
         }
+    }
+
+    fn update_gauges(&self) {
+        self.entries.set(self.cache.entry_count() as i64);
+        self.memory.set(self.cache.weighted_size() as i64);
     }
 }
 
@@ -106,6 +132,7 @@ pub async fn subnet_read_state_cache_middleware(
 
     if let Some(cached) = state.cache.get(&cache_key) {
         state.hits.inc();
+        state.update_gauges();
         return Ok(cached.map(Body::from));
     }
 
@@ -121,6 +148,7 @@ pub async fn subnet_read_state_cache_middleware(
 
         let cached = Response::from_parts(parts, body_bytes);
         state.cache.insert(cache_key, cached.clone());
+        state.update_gauges();
 
         Ok(cached.map(Body::from))
     } else {
