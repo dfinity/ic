@@ -938,7 +938,6 @@ mod tests {
                 let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
 
                 let mut payload_deserialized = bytes_to_chain_key_payload(&payload).unwrap();
-                println!("payload_deserialized: {:?}", payload_deserialized);
                 assert_eq!(payload_deserialized.agreements.len(), 4);
                 for i in 0..4 {
                     assert_matches!(

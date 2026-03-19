@@ -16,9 +16,6 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    SignWithThresholdContext, ThresholdArguments,
-};
 use ic_types::{
     Height, RegistryVersion, SubnetId,
     batch::{AvailablePreSignatures, ConsensusResponse},
@@ -26,19 +23,14 @@ use ic_types::{
         Block, HasHeight,
         idkg::{
             CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
-            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
-            TranscriptLookupError, TranscriptRef,
-            common::{BuildSignatureInputsError, ThresholdSigInputs},
+            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, TranscriptLookupError,
+            TranscriptRef,
         },
     },
-    crypto::{
-        canister_threshold_sig::{
-            MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
-            idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
-        },
-        vetkd::{VetKdArgs, VetKdDerivationContextRef},
+    crypto::canister_threshold_sig::{
+        MasterPublicKey,
+        idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
     },
-    messages::CallbackId,
     registry::RegistryClientError,
 };
 use rayon::{ThreadPool, ThreadPoolBuilder};
