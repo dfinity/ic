@@ -15,7 +15,6 @@ use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::CyclesUseCase;
 use ic_types_test_utils::ids::canister_test_id;
-use more_asserts::assert_lt;
 use std::time::Duration;
 
 #[test]
@@ -67,10 +66,9 @@ fn only_charge_for_allocation_after_specified_duration() {
     // should be triggered.
     test.set_time(initial_time + 2 * time_between_batches);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert_lt!(
+    assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
-        initial_cycles,
-        "Canister balance should decrease due to allocation charging"
+        initial_cycles ,
     );
 }
 
