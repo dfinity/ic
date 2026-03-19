@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{mem::size_of, sync::Arc, time::Duration};
 
 use axum::{
     body::Body,
@@ -7,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
-use ic_bn_lib::http::body::buffer_body;
+use ic_bn_lib::http::{body::buffer_body, calc_headers_size};
 use ic_bn_lib::prometheus::{IntCounter, Registry, register_int_counter_with_registry};
 use ic_types::SubnetId;
 use moka::sync::Cache;
@@ -27,6 +27,14 @@ struct CacheKey {
     paths: ReadStatePaths,
 }
 
+fn weigh_entry(_key: &CacheKey, value: &Response<Bytes>) -> u32 {
+    let size = size_of::<CacheKey>()
+        + size_of::<Response<Bytes>>()
+        + calc_headers_size(value.headers())
+        + value.body().len();
+    size as u32
+}
+
 pub struct SubnetReadStateCacheState {
     cache: Cache<CacheKey, Response<Bytes>>,
     max_item_size: usize,
@@ -38,13 +46,14 @@ pub struct SubnetReadStateCacheState {
 impl SubnetReadStateCacheState {
     pub fn new(
         ttl: Duration,
-        max_entries: u64,
+        cache_size: u64,
         max_item_size: usize,
         body_timeout: Duration,
         registry: &Registry,
     ) -> Self {
         let cache = Cache::builder()
-            .max_capacity(max_entries)
+            .max_capacity(cache_size)
+            .weigher(weigh_entry)
             .time_to_live(ttl)
             .build();
 
@@ -133,7 +142,7 @@ mod tests {
     use crate::{http::RequestType, routes::RequestContext};
 
     const DEFAULT_TTL: Duration = Duration::from_secs(60);
-    const DEFAULT_MAX_ENTRIES: u64 = 100;
+    const DEFAULT_CACHE_SIZE: u64 = 1024 * 1024;
     const DEFAULT_MAX_ITEM_SIZE: usize = 1024 * 1024;
     const DEFAULT_BODY_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -158,11 +167,11 @@ mod tests {
         SubnetId::from(PrincipalId::new_subnet_test_id(n))
     }
 
-    fn setup_app(ttl: Duration, max_entries: u64) -> (Router, Arc<SubnetReadStateCacheState>) {
+    fn setup_app(ttl: Duration, cache_size: u64) -> (Router, Arc<SubnetReadStateCacheState>) {
         let registry = Registry::new_custom(None, None).unwrap();
         let state = Arc::new(SubnetReadStateCacheState::new(
             ttl,
-            max_entries,
+            cache_size,
             DEFAULT_MAX_ITEM_SIZE,
             DEFAULT_BODY_TIMEOUT,
             &registry,
@@ -180,7 +189,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_hit_and_miss() {
-        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
         let subnet = test_subnet_id(1);
         let paths = vec![vec![b"time".to_vec()]];
@@ -212,7 +221,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_different_paths_are_separate_entries() {
-        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
         let subnet = test_subnet_id(1);
 
@@ -230,7 +239,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_different_subnets_are_separate_entries() {
-        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
         let paths = vec![vec![b"time".to_vec()]];
 
@@ -248,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_path_order_does_not_matter() {
-        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
         let subnet = test_subnet_id(1);
 
@@ -265,7 +274,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_paths_bypasses_cache() {
-        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_MAX_ENTRIES);
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
         // Request with no paths in context
         let ctx = Arc::new(RequestContext {
@@ -286,7 +295,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ttl_expiration() {
-        let (mut app, state) = setup_app(Duration::from_millis(50), DEFAULT_MAX_ENTRIES);
+        let (mut app, state) = setup_app(Duration::from_millis(50), DEFAULT_CACHE_SIZE);
 
         let subnet = test_subnet_id(1);
         let paths = vec![vec![b"time".to_vec()]];

@@ -349,9 +349,9 @@ pub struct SubnetReadStateCache {
     #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
     pub subnet_read_state_cache_ttl: Duration,
 
-    /// Maximum number of cached subnet read_state entries
-    #[clap(env, long, default_value = "1000")]
-    pub subnet_read_state_cache_max_entries: u64,
+    /// Maximum size of the subnet read_state cache in bytes
+    #[clap(env, long, default_value = "10MB", value_parser = parse_size)]
+    pub subnet_read_state_cache_size: u64,
 
     /// Maximum size of a single cached response body in bytes.
     /// Responses larger than this will not be cached.
