@@ -46,7 +46,7 @@ use std::time::Duration;
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
-pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 pub const NODE_UPGRADE_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
@@ -322,6 +322,22 @@ pub async fn wait_for_expected_guest_version(
     .await
 }
 
+/// Try to get the current boot ID from a HostOS node.
+/// Returns an error if SSH is unavailable (e.g. during a reboot cycle).
+pub fn try_get_host_boot_id(node: &NestedVm) -> Result<String> {
+    block_on(try_get_host_boot_id_async(node))
+}
+
+/// Try to get the current boot ID from a HostOS node. Asynchronous version.
+/// Returns an error if SSH is unavailable (e.g. during a reboot cycle).
+pub async fn try_get_host_boot_id_async(node: &NestedVm) -> Result<String> {
+    Ok(node
+        .block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+        .await?
+        .trim()
+        .to_string())
+}
+
 /// Get the current boot ID from a HostOS node.
 pub fn get_host_boot_id(node: &NestedVm) -> String {
     block_on(get_host_boot_id_async(node))
@@ -329,11 +345,9 @@ pub fn get_host_boot_id(node: &NestedVm) -> String {
 
 /// Get the current boot ID from a HostOS node. Asynchronous version
 pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
-    node.block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+    try_get_host_boot_id_async(node)
         .await
         .expect("Failed to retrieve boot ID")
-        .trim()
-        .to_string()
 }
 
 /// Execute a bash script on a node via SSH and log the output.

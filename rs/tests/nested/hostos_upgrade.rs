@@ -12,7 +12,8 @@ use nested::{HOST_VM_NAME, registration};
 
 use nested::util::{
     NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, check_hostos_version, elect_hostos_version,
-    get_host_boot_id, try_logging_guestos_diagnostics, update_nodes_hostos_version,
+    get_host_boot_id, try_get_host_boot_id, try_logging_guestos_diagnostics,
+    update_nodes_hostos_version,
 };
 
 fn main() -> Result<()> {
@@ -104,7 +105,9 @@ pub fn upgrade_hostos(env: TestEnv) {
         NODE_UPGRADE_TIMEOUT,
         NODE_UPGRADE_BACKOFF,
         || {
-            let host_boot_id = get_host_boot_id(&host);
+            // Use try_get_host_boot_id instead of get_host_boot_id to avoid
+            // panicking when SSH is unavailable during the reboot cycle.
+            let host_boot_id = try_get_host_boot_id(&host)?;
             if host_boot_id != host_boot_id_pre_upgrade {
                 info!(
                     logger,

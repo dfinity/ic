@@ -225,6 +225,7 @@ const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 // under load.
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(300);
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const SSH_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const FW_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -2320,11 +2321,18 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
+    // Set a timeout for the SSH handshake and authentication to prevent
+    // indefinite hangs when the remote host accepts TCP but stalls during
+    // the SSH protocol exchange (e.g. during a reboot cycle).
+    sess.set_timeout(SSH_HANDSHAKE_TIMEOUT.as_millis() as u32);
     sess.handshake()?;
     let priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
     sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
+    // Clear the timeout so subsequent operations on this session
+    // (e.g. long-running commands) are not subject to the handshake timeout.
+    sess.set_timeout(0);
     Ok(sess)
 }
 
