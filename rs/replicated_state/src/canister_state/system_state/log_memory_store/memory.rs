@@ -38,7 +38,7 @@ impl Add<MemorySize> for MemoryAddress {
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
 pub(super) struct MemoryPosition(u64);
-const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
+const _: () = assert!(std::mem::size_of::<MemoryPosition>() == 8);
 
 impl MemoryPosition {
     pub const fn new(v: u64) -> Self {
@@ -77,7 +77,7 @@ impl Sub<MemoryPosition> for MemoryPosition {
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
 pub(super) struct MemorySize(u64);
-const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
+const _: () = assert!(std::mem::size_of::<MemorySize>() == 8);
 
 impl MemorySize {
     pub const fn new(v: u64) -> Self {
