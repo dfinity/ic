@@ -3106,7 +3106,7 @@ fn wasm64_msg_cycles_refunded128() {
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
 
-    let x = 777u128;
+    let x = 777_u128;
 
     let mut expected_heap = vec![0; dirty_heap_size];
     expected_heap[0..16].copy_from_slice(&x.to_le_bytes());
@@ -3168,7 +3168,7 @@ fn wasm64_cycles_burn128() {
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
 
-    let x = 33u128;
+    let x = 33_u128;
 
     let mut expected_heap = vec![0; dirty_heap_size];
     expected_heap[0..16].copy_from_slice(&x.to_le_bytes());

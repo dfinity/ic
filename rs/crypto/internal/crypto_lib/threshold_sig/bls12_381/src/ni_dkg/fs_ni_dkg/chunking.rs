@@ -39,7 +39,7 @@ impl PlaintextChunks {
         let mut chunks = [0; NUM_CHUNKS];
 
         for i in 0..NUM_CHUNKS {
-            let mut buffer = [0u8; CHUNK_BYTES];
+            let mut buffer = [0_u8; CHUNK_BYTES];
             buffer.copy_from_slice(&bytes[CHUNK_BYTES * i..CHUNK_BYTES * (i + 1)]);
             chunks[i] = u16::from_be_bytes(buffer) as isize;
         }

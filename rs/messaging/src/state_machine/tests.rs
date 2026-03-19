@@ -18,12 +18,12 @@ use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::batch::BatchBuilder;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_test_utilities_types::messages::SignedIngressBuilder;
-use ic_types::batch::{BatchMessages, BlockmakerMetrics, CanisterCyclesCostSchedule, ChainKeyData};
+use ic_types::batch::{BatchMessages, BlockmakerMetrics, ChainKeyData};
 use ic_types::messages::SignedIngress;
 use ic_types::{
     CanisterId, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, Time,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use maplit::btreemap;
 use mockall::{Sequence, mock, predicate::*};
 use std::collections::{BTreeMap, BTreeSet};

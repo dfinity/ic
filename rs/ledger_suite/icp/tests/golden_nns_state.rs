@@ -235,7 +235,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     let mut setup = Setup::new();
 
     // Advance the time to make sure the ledger gets the current time for checking allowances.
-    setup.state_machine.advance_time(Duration::from_secs(1u64));
+    setup.state_machine.advance_time(Duration::from_secs(1_u64));
     setup.state_machine.tick();
 
     // Perform upgrade and downgrade testing
