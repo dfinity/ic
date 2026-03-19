@@ -1,16 +1,17 @@
 use core::{convert::From, iter::Iterator};
 use ic_interfaces::batch_payload::PastPayload;
-use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId, VetKdKeyId};
+use ic_management_canister_types_private::{
+    EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId,
+};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments, VetKdArguments,
+    SignWithThresholdContext, ThresholdArguments,
 };
+use ic_test_utilities_consensus::idkg::fake_signature_request_args;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::consensus::idkg::{EcdsaSigShare, IDkgMessage, RequestId, SchnorrSigShare};
+use ic_types::RegistryVersion;
+use ic_types::consensus::idkg::{EcdsaSigShare, IDkgMessage, PreSigId, RequestId, SchnorrSigShare};
 use ic_types::crypto::canister_threshold_sig::{ThresholdEcdsaSigShare, ThresholdSchnorrSigShare};
-use ic_types::crypto::threshold_sig::ni_dkg::{
-    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
-};
 use ic_types::{
     Height, NumBytes,
     batch::{ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, chain_key_payload_to_bytes},
@@ -21,7 +22,7 @@ use ic_types::{
     messages::CallbackId,
     time::UNIX_EPOCH,
 };
-use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
+use ic_types_test_utils::ids::node_test_id;
 use std::str::FromStr;
 use std::{collections::BTreeMap, sync::Arc};
 use strum::EnumCount;
@@ -77,7 +78,7 @@ pub(super) fn as_past_payload(payload: &[u8]) -> PastPayload<'_> {
     }
 }
 
-/// Create a [`ChainKeyConfig`] with one ECDSA and two VetKD key IDs,
+/// Create a [`ChainKeyConfig`] with one ECDSA, two VetKD key IDs, and one Schnorr key ID,
 /// and 1 second request timeout
 pub(super) fn make_chain_key_config() -> ChainKeyConfig {
     let key_config = KeyConfig {
@@ -97,12 +98,18 @@ pub(super) fn make_chain_key_config() -> ChainKeyConfig {
         pre_signatures_to_create_in_advance: None,
         max_queue_size: 3,
     };
+    let key_config_3 = KeyConfig {
+        key_id: MasterPublicKeyId::Schnorr(SchnorrKeyId::from_str("Ed25519:some_key_3").unwrap()),
+        pre_signatures_to_create_in_advance: Some(1),
+        max_queue_size: 3,
+    };
 
     ChainKeyConfig {
         key_configs: vec![
             key_config.clone(),
             key_config_1.clone(),
             key_config_2.clone(),
+            key_config_3.clone(),
         ],
         // 1 second timeout
         signature_request_timeout_ns: Some(1_000_000_000),
@@ -110,48 +117,21 @@ pub(super) fn make_chain_key_config() -> ChainKeyConfig {
     }
 }
 
-pub(super) fn fake_dkg_id(key_id: VetKdKeyId) -> NiDkgId {
-    NiDkgId {
-        start_block_height: Height::from(0),
-        dealer_subnet: subnet_test_id(0),
-        dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id)),
-        target_subnet: NiDkgTargetSubnet::Local,
-    }
-}
-
-pub(super) fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments {
-    match key_id {
-        MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
-            key_id,
-            message_hash: [0; 32],
-            pre_signature: None,
-        }),
-        MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
-            key_id,
-            message: Arc::new(vec![1; 48]),
-            taproot_tree_root: None,
-            pre_signature: None,
-        }),
-        MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
-            key_id: key_id.clone(),
-            input: Arc::new(vec![1; 32]),
-            transport_public_key: vec![1; 32],
-            ni_dkg_id: fake_dkg_id(key_id),
-            height: Height::from(100),
-        }),
-    }
-}
-
-pub(super) fn fake_signature_request_context(
+pub(super) fn fake_completed_signature_request_context(
     key_id: MasterPublicKeyId,
 ) -> SignWithThresholdContext {
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id),
+        args: fake_signature_request_args(
+            key_id,
+            Height::from(100),
+            Some(PreSigId(0)),
+            RegistryVersion::from(10),
+        ),
         derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [0; 32],
-        nonce: None,
+        nonce: Some([0; 32]),
     }
 }
 
@@ -164,7 +144,7 @@ pub(super) fn make_contexts(
     for (i, key_id) in config.key_ids().into_iter().enumerate() {
         map.insert(
             CallbackId::new(i as u64),
-            fake_signature_request_context(key_id),
+            fake_completed_signature_request_context(key_id),
         );
     }
     map

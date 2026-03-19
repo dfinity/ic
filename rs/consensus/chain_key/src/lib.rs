@@ -3,17 +3,23 @@
 
 use crate::metrics::ChainKeyPayloadBuilderMetrics;
 use crate::utils::{
-    group_shares_by_callback_id, invalid_artifact, invalid_artifact_err, parse_past_payload_ids,
-    validation_failed, validation_failed_err,
+    Shares, group_shares_by_callback_id, invalid_artifact, invalid_artifact_err,
+    parse_past_payload_ids, validation_failed, validation_failed_err,
 };
+use ic_consensus_utils::chain_key::build_signature_inputs;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, get_registry_version_and_interval_length_at_height,
 };
 use ic_error_types::RejectCode;
-use ic_interfaces::crypto::ErrorReproducibility;
+use ic_interfaces::crypto::{
+    ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifier,
+};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    chain_key::{ChainKeyPayloadValidationFailure, InvalidChainKeyPayloadReason},
+    chain_key::{
+        ChainKeyAgreementValidationError, ChainKeyPayloadValidationFailure, CombineSharesError,
+        InvalidChainKeyPayloadReason,
+    },
     consensus::PayloadValidationError,
     consensus_pool::ConsensusPoolCache,
     idkg::IDkgPool,
@@ -21,7 +27,9 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, warn};
-use ic_management_canister_types_private::{MasterPublicKeyId, Payload, VetKdDeriveKeyResult};
+use ic_management_canister_types_private::{
+    MasterPublicKeyId, Payload, SignWithECDSAReply, SignWithSchnorrReply, VetKdDeriveKeyResult,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::chain_keys::ChainKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -29,8 +37,9 @@ use ic_replicated_state::{
     ReplicatedState,
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
 };
-use ic_types::crypto::vetkd::{
-    VetKdDerivationContextRef, VetKdKeyShareCombinationError, VetKdKeyVerificationError,
+use ic_types::consensus::idkg::common::ThresholdSigInputs;
+use ic_types::crypto::canister_threshold_sig::{
+    ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
 };
 use ic_types::{
     CountBytes, Height, NumBytes, SubnetId, Time,
@@ -38,7 +47,7 @@ use ic_types::{
         ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, ConsensusResponse,
         ValidationContext, bytes_to_chain_key_payload, chain_key_payload_to_bytes,
     },
-    crypto::vetkd::{VetKdArgs, VetKdEncryptedKey},
+    crypto::vetkd::VetKdEncryptedKey,
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
 };
 use num_traits::ops::saturating::SaturatingSub;
@@ -55,8 +64,6 @@ mod metrics;
 #[cfg(test)]
 mod test_utils;
 mod utils;
-
-const EMPTY_VEC_REF: &Vec<u8> = &vec![];
 
 /// In addition to a timeout which applies to all keys, we expire request contexts for chain keys
 /// using NI-DKG (e.g., vetKD), that were created more than one entire DKG interval ago.
@@ -117,7 +124,7 @@ impl ChainKeyPayloadBuilderImpl {
         }
     }
 
-    /// Return the set of enabled VetKD key IDs and request expiry time according to
+    /// Return the set of enabled `MasterPublicKeyId`s and request expiry time according to
     /// the chain key config at the registry version corresponding to the given block height.
     fn get_enabled_keys_and_expiry(
         &self,
@@ -175,8 +182,6 @@ impl ChainKeyPayloadBuilderImpl {
             .key_configs
             .into_iter()
             .map(|key_config| key_config.key_id)
-            // Skip keys that don't need to run NIDKG protocol
-            .filter(|key_id| key_id.is_vetkd_key())
             // Skip keys that are disabled
             .filter(|key_id| {
                 enabled_subnets
@@ -196,6 +201,71 @@ impl ChainKeyPayloadBuilderImpl {
         ))
     }
 
+    fn combine_shares(
+        &self,
+        shares: &Shares,
+        callback_id: &CallbackId,
+        inputs: &ThresholdSigInputs,
+    ) -> Result<ChainKeyAgreement, CombineSharesError> {
+        match inputs {
+            ThresholdSigInputs::Ecdsa(args) => {
+                let shares = shares
+                    .ecdsa_shares
+                    .get(callback_id)
+                    .ok_or(CombineSharesError::NoSharesFound)?;
+                ThresholdEcdsaSigVerifier::combine_sig_shares(self.crypto.as_ref(), args, shares)
+                    .map_or_else(
+                        |err| Err(CombineSharesError::Ecdsa(err)),
+                        |signature| {
+                            Ok(ChainKeyAgreement::Success(
+                                SignWithECDSAReply {
+                                    signature: signature.signature,
+                                }
+                                .encode(),
+                            ))
+                        },
+                    )
+            }
+            ThresholdSigInputs::Schnorr(args) => {
+                let shares = shares
+                    .schnorr_shares
+                    .get(callback_id)
+                    .ok_or(CombineSharesError::NoSharesFound)?;
+                ThresholdSchnorrSigVerifier::combine_sig_shares(self.crypto.as_ref(), args, shares)
+                    .map_or_else(
+                        |err| Err(CombineSharesError::Schnorr(err)),
+                        |signature| {
+                            Ok(ChainKeyAgreement::Success(
+                                SignWithSchnorrReply {
+                                    signature: signature.signature,
+                                }
+                                .encode(),
+                            ))
+                        },
+                    )
+            }
+            ThresholdSigInputs::VetKd(args) => {
+                let shares = shares
+                    .vetkd_shares
+                    .get(callback_id)
+                    .ok_or(CombineSharesError::NoSharesFound)?;
+                self.crypto
+                    .combine_encrypted_key_shares(shares, args)
+                    .map_or_else(
+                        |err| Err(CombineSharesError::VetKd(err)),
+                        |key| {
+                            Ok(ChainKeyAgreement::Success(
+                                VetKdDeriveKeyResult {
+                                    encrypted_key: key.encrypted_key,
+                                }
+                                .encode(),
+                            ))
+                        },
+                    )
+            }
+        }
+    }
+
     fn get_chain_key_payload_impl(
         &self,
         request_expiry: RequestExpiry,
@@ -209,9 +279,9 @@ impl ChainKeyPayloadBuilderImpl {
             group_shares_by_callback_id(
                 pool_access
                     .validated()
-                    .vetkd_key_shares()
+                    .signature_shares()
                     .map(|(_id, share)| share)
-                    .filter(|share| !delivered_ids.contains(&share.request_id.callback_id)),
+                    .filter(|share| !delivered_ids.contains(&share.callback_id())),
             )
         };
 
@@ -221,11 +291,6 @@ impl ChainKeyPayloadBuilderImpl {
                 .signature_request_contexts()
                 .par_iter()
                 .flat_map(|(callback_id, context)| {
-                    if !context.is_vetkd() {
-                        // Skip non-vetkd contexts.
-                        return None;
-                    }
-
                     if delivered_ids.contains(callback_id) {
                         // Skip contexts for which we already delivered a response.
                         return None;
@@ -240,44 +305,41 @@ impl ChainKeyPayloadBuilderImpl {
                         return Some((*callback_id, reject));
                     }
 
-                    let shares = grouped_shares.get(callback_id)?;
-                    let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
-                        return None;
-                    };
-                    debug_assert_eq!(context.derivation_path.len(), 1);
-                    let args = VetKdArgs {
-                        context: VetKdDerivationContextRef {
-                            caller: context.request.sender.get_ref(),
-                            context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
-                        },
-                        ni_dkg_id: &ctxt_args.ni_dkg_id,
-                        input: &ctxt_args.input,
-                        transport_public_key: &ctxt_args.transport_public_key,
-                    };
                     let key_id = context.key_id();
-                    match self.crypto.combine_encrypted_key_shares(shares, &args) {
-                        Ok(key) => {
-                            self.metrics
-                                .payload_metrics_inc("vetkd_agreement_completed", &key_id);
-                            let result = VetKdDeriveKeyResult {
-                                encrypted_key: key.encrypted_key,
-                            };
-                            Some((*callback_id, ChainKeyAgreement::Success(result.encode())))
+                    let inputs = match build_signature_inputs(*callback_id, context) {
+                        Ok((_, inputs)) => inputs,
+                        Err(err) => {
+                            if err.is_fatal() {
+                                warn!(
+                                    self.log,
+                                    "Failed to build signature inputs: callback_id = {:?}, key_id = {:?}, {:?}",
+                                    callback_id,
+                                    key_id,
+                                    err
+                                );
+                                self.metrics
+                                    .payload_errors_inc("signature_inputs_malformed", &key_id);
+                            }
+                            return None;
                         }
-                        Err(
-                            VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
-                                ..
-                            },
-                        ) => None,
+                    };
+
+                    match self.combine_shares(&grouped_shares, callback_id, &inputs) {
+                        Ok(agreement) => {
+                            self.metrics
+                                .payload_metrics_inc("chain_key_agreement_completed", &key_id);
+                            Some((*callback_id, agreement))
+                        }
+                        Err(err) if err.is_unsatisfied_reconstruction_threshold() => None,
                         Err(err) => {
                             warn!(
                                 self.log,
-                                "Failed to combine vetKD key shares: callback_id = {:?}, {:?}",
+                                "Failed to combine shares: callback_id = {:?}, key_id = {:?}, {:?}",
                                 callback_id,
+                                key_id,
                                 err
                             );
-                            self.metrics
-                                .payload_errors_inc("combine_key_shares", &key_id);
+                            self.metrics.payload_errors_inc("combine_shares", &key_id);
                             None
                         }
                     }
@@ -329,12 +391,6 @@ impl ChainKeyPayloadBuilderImpl {
                         ));
                     };
 
-                    if !context.is_vetkd() {
-                        return invalid_artifact_err(
-                            InvalidChainKeyPayloadReason::UnexpectedIDkgContext(id),
-                        );
-                    }
-
                     let expected_reject =
                         reject_if_invalid(&valid_keys, context, &request_expiry, None);
 
@@ -347,8 +403,30 @@ impl ChainKeyPayloadBuilderImpl {
                                         received: None,
                                     },
                                 );
-                            } else {
-                                self.validate_chain_key_agreement(id, context, data)?
+                            } else if let Err(err) =
+                                self.validate_chain_key_agreement(id, context, data)
+                            {
+                                if err.is_reproducible() {
+                                    return invalid_artifact_err(
+                                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(err),
+                                    );
+                                } else {
+                                    warn!(
+                                        self.log,
+                                        "Chain key payload validation failure: {err:?}"
+                                    );
+                                    let label = if err.is_nidkg_transcript_not_loaded() {
+                                        "validation_failed_nidkg_transcript_not_loaded"
+                                    } else {
+                                        "validation_failed"
+                                    };
+                                    self.metrics.payload_errors_inc(label, &context.key_id());
+                                    return validation_failed_err(
+                                        ChainKeyPayloadValidationFailure::InvalidChainKeyAgreement(
+                                            err,
+                                        ),
+                                    );
+                                }
                             }
                         }
                         reject => {
@@ -371,57 +449,49 @@ impl ChainKeyPayloadBuilderImpl {
         Ok(())
     }
 
-    /// Validate the VetKD key given in `data` according to the context of its request.
+    /// Validate the chain key agreement given in `data` according to the context of its request.
     fn validate_chain_key_agreement(
         &self,
         id: CallbackId,
         context: &SignWithThresholdContext,
         data: Vec<u8>,
-    ) -> Result<(), PayloadValidationError> {
-        let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
-            return invalid_artifact_err(InvalidChainKeyPayloadReason::UnexpectedIDkgContext(id));
-        };
-        debug_assert_eq!(context.derivation_path.len(), 1);
-        let args = VetKdArgs {
-            context: VetKdDerivationContextRef {
-                caller: context.request.sender.get_ref(),
-                context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
-            },
-            ni_dkg_id: &ctxt_args.ni_dkg_id,
-            input: &ctxt_args.input,
-            transport_public_key: &ctxt_args.transport_public_key,
-        };
-        let reply = match VetKdDeriveKeyResult::decode(&data) {
-            Ok(data) => data,
-            Err(error) => {
-                return invalid_artifact_err(InvalidChainKeyPayloadReason::DecodingError(format!(
-                    "{error:?}",
-                )));
+    ) -> Result<(), ChainKeyAgreementValidationError> {
+        let (_, inputs) = build_signature_inputs(id, context)?;
+        match inputs {
+            ThresholdSigInputs::VetKd(inputs) => {
+                let reply = VetKdDeriveKeyResult::decode(&data)?;
+                let encrypted_key = VetKdEncryptedKey {
+                    encrypted_key: reply.encrypted_key,
+                };
+                self.crypto
+                    .verify_encrypted_key(&encrypted_key, &inputs)
+                    .map_err(ChainKeyAgreementValidationError::VetKd)
             }
-        };
-        let encrypted_key = VetKdEncryptedKey {
-            encrypted_key: reply.encrypted_key,
-        };
-        self.crypto
-            .verify_encrypted_key(&encrypted_key, &args)
-            .map_err(|err| {
-                if err.is_reproducible() {
-                    warn!(self.log, "Invalid chain key payload: {err:?}");
-                    invalid_artifact(InvalidChainKeyPayloadReason::VetKdKeyVerificationError(err))
-                } else {
-                    warn!(self.log, "chain key payload validation failure: {err:?}");
-                    let label = match err {
-                        VetKdKeyVerificationError::ThresholdSigDataNotFound(_) => {
-                            "validation_failed_nidkg_transcript_not_loaded"
-                        }
-                        _ => "validation_failed",
-                    };
-                    self.metrics.payload_errors_inc(label, &context.key_id());
-                    validation_failed(ChainKeyPayloadValidationFailure::VetKdKeyVerificationError(
-                        err,
-                    ))
-                }
-            })
+            ThresholdSigInputs::Ecdsa(inputs) => {
+                let reply = SignWithECDSAReply::decode(&data)?;
+                let signature = ThresholdEcdsaCombinedSignature {
+                    signature: reply.signature,
+                };
+                ThresholdEcdsaSigVerifier::verify_combined_sig(
+                    self.crypto.as_ref(),
+                    &inputs,
+                    &signature,
+                )
+                .map_err(ChainKeyAgreementValidationError::Ecdsa)
+            }
+            ThresholdSigInputs::Schnorr(inputs) => {
+                let reply = SignWithSchnorrReply::decode(&data)?;
+                let signature = ThresholdSchnorrCombinedSignature {
+                    signature: reply.signature,
+                };
+                ThresholdSchnorrSigVerifier::verify_combined_sig(
+                    self.crypto.as_ref(),
+                    &inputs,
+                    &signature,
+                )
+                .map_err(ChainKeyAgreementValidationError::Schnorr)
+            }
+        }
     }
 }
 
@@ -861,15 +931,14 @@ mod tests {
                 let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
 
                 let mut payload_deserialized = bytes_to_chain_key_payload(&payload).unwrap();
-                assert_eq!(payload_deserialized.agreements.len(), 2);
-                assert_matches!(
-                    payload_deserialized.agreements.get(&CallbackId::from(1)),
-                    Some(ChainKeyAgreement::Success(_))
-                );
-                assert_matches!(
-                    payload_deserialized.agreements.get(&CallbackId::from(2)),
-                    Some(ChainKeyAgreement::Success(_))
-                );
+                println!("payload_deserialized: {:?}", payload_deserialized);
+                assert_eq!(payload_deserialized.agreements.len(), 4);
+                for i in 0..4 {
+                    assert_matches!(
+                        payload_deserialized.agreements.get(&CallbackId::from(i)),
+                        Some(ChainKeyAgreement::Success(_))
+                    );
+                }
 
                 // payload containing aggreements that can't be decoded should be invalid
                 payload_deserialized
@@ -880,7 +949,9 @@ mod tests {
                 assert_matches!(
                     validation.unwrap_err(),
                     ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
-                        InvalidChainKeyPayloadReason::DecodingError(_)
+                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
+                            ChainKeyAgreementValidationError::DecodingError(_)
+                        )
                     ))
                 );
 
@@ -896,7 +967,7 @@ mod tests {
 
                 // payload that rejects valid contexts should be invalid
                 let payload = as_bytes(make_chain_key_agreements_with_payload(
-                    &[1, 2],
+                    &[2, 3],
                     ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut),
                 ));
                 let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
@@ -1006,7 +1077,7 @@ mod tests {
             // Payload size should exceed the smaller limit
             assert!(payload.len() as u64 > max.get());
             let payload_deserialized = bytes_to_chain_key_payload(&payload).unwrap();
-            assert_eq!(payload_deserialized.agreements.len(), 2);
+            assert_eq!(payload_deserialized.agreements.len(), 4);
 
             // Now enforce the smaller limit
             let payload = build_and_validate(&builder, max, &[], &VALIDATION_CONTEXT);
@@ -1016,7 +1087,7 @@ mod tests {
             assert_eq!(payload_deserialized.agreements.len(), 1);
             let (id, agreement) = payload_deserialized.agreements.iter().next().unwrap();
             assert_matches!(agreement, ChainKeyAgreement::Success(_));
-            assert!(id.get() == 1 || id.get() == 2);
+            assert!((0..4).contains(&id.get()));
         })
     }
 
@@ -1068,24 +1139,14 @@ mod tests {
             validation_context: &VALIDATION_CONTEXT,
         };
         test_payload_builder_with_num_threads(Some(config), contexts, shares, 1, |builder| {
-            // Payload with agreements for IDKG contexts should be rejected
-            let payload = as_bytes(make_chain_key_agreements(0, 1, 2));
-            let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-            assert_matches!(
-                validation.unwrap_err(),
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
-                    InvalidChainKeyPayloadReason::UnexpectedIDkgContext(id)
-                )) if id.get() == 0
-            );
-
             // Payload with agreements for unknown contexts should be rejected
-            let payload = as_bytes(make_chain_key_agreements(3, 4, 5));
+            let payload = as_bytes(make_chain_key_agreements(4, 5, 6));
             let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
             assert_matches!(
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
                     InvalidChainKeyPayloadReason::MissingContext(id)
-                )) if id.get() >= 3 && id.get() <= 5
+                )) if id.get() >= 4 && id.get() <= 6
             );
         })
     }
@@ -1110,6 +1171,7 @@ mod tests {
                 finalize_last_summary: true,
                 expected_error: ChainKeyErrorCode::InvalidKey,
                 rejected_error: ChainKeyErrorCode::TimedOut,
+                reject_only_vetkd: false,
             },
         );
     }
@@ -1125,6 +1187,7 @@ mod tests {
                 finalize_last_summary: true,
                 expected_error: ChainKeyErrorCode::InvalidKey,
                 rejected_error: ChainKeyErrorCode::TimedOut,
+                reject_only_vetkd: false,
             },
         );
     }
@@ -1145,12 +1208,13 @@ mod tests {
                 finalize_last_summary: true,
                 expected_error: ChainKeyErrorCode::TimedOut,
                 rejected_error: ChainKeyErrorCode::InvalidKey,
+                reject_only_vetkd: false,
             },
         );
     }
 
     #[test]
-    fn test_reject_contexts_for_expired_transcripts() {
+    fn test_reject_vetkd_contexts_for_expired_transcripts() {
         let config = make_chain_key_config();
         let context = ValidationContext {
             // Fast-forward chain until requested transcripts are no longer part
@@ -1166,12 +1230,13 @@ mod tests {
                 finalize_last_summary: true,
                 expected_error: ChainKeyErrorCode::TimedOut,
                 rejected_error: ChainKeyErrorCode::InvalidKey,
+                reject_only_vetkd: true,
             },
         );
     }
 
     #[test]
-    fn test_reject_contexts_for_expired_transcripts_no_finalized_summary() {
+    fn test_reject_vetkd_contexts_for_expired_transcripts_no_finalized_summary() {
         let config = make_chain_key_config();
         let context = ValidationContext {
             // Fast-forward chain until requested transcripts are no longer part
@@ -1187,6 +1252,7 @@ mod tests {
                 finalize_last_summary: false,
                 expected_error: ChainKeyErrorCode::TimedOut,
                 rejected_error: ChainKeyErrorCode::InvalidKey,
+                reject_only_vetkd: true,
             },
         );
     }
@@ -1196,6 +1262,7 @@ mod tests {
         finalize_last_summary: bool,
         expected_error: ChainKeyErrorCode,
         rejected_error: ChainKeyErrorCode,
+        reject_only_vetkd: bool,
     }
 
     fn reject_invalid_contexts_test(
@@ -1208,6 +1275,7 @@ mod tests {
             finalize_last_summary,
             expected_error,
             rejected_error,
+            reject_only_vetkd,
         } = test_config;
         let contexts = make_contexts(&make_chain_key_config());
         let shares = make_shares(&contexts);
@@ -1227,18 +1295,13 @@ mod tests {
                 let serialized_payload =
                     build_and_validate(&builder, MAX_SIZE, &[], &validation_context);
                 let payload = bytes_to_chain_key_payload(&serialized_payload).unwrap();
-                assert_eq!(payload.agreements.len(), 2);
+                assert_eq!(payload.agreements.len(), 4);
                 for (id, context) in contexts {
-                    match context.key_id() {
-                        MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
-                            assert!(!payload.agreements.contains_key(&id));
-                        }
-                        MasterPublicKeyId::VetKd(_) => {
-                            assert_eq!(
-                                payload.agreements.get(&id).unwrap(),
-                                &ChainKeyAgreement::Reject(expected_error)
-                            );
-                        }
+                    let agreement = payload.agreements.get(&id).unwrap();
+                    if reject_only_vetkd && !context.key_id().is_vetkd_key() {
+                        assert_matches!(agreement, ChainKeyAgreement::Success(_));
+                    } else {
+                        assert_eq!(agreement, &ChainKeyAgreement::Reject(expected_error));
                     }
                 }
 
@@ -1320,7 +1383,7 @@ mod tests {
         let now = current_time();
         test_payload_builder(Some(config), BTreeMap::new(), vec![], |builder| {
             let (keys, expiry) = builder.get_enabled_keys_and_expiry(HEIGHT, now).unwrap();
-            assert_eq!(keys.len(), 2);
+            assert_eq!(keys.len(), 4);
             assert!(keys.contains(&MasterPublicKeyId::VetKd(
                 VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap()
             )));

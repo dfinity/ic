@@ -31,6 +31,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/fake",
     "//rs/registry/keys",
     "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/state",
     "//rs/test_utilities/types",
