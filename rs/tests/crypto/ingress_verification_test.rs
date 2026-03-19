@@ -1552,6 +1552,11 @@ async fn perform_read_state_call_with_delegations(
     signer: &GenericIdentity<'_>,
     delegations: &[SignedDelegation],
 ) -> ReplicaResponse {
+    // For the path to use in the read state request, one possibilty would be
+    // to use "/request_status/<request_id>", but then we'd first have to make
+    // an update call so as to create that request_id. Instead, we just use
+    // "/canister/<canister_id>/module_hash" since that is always
+    // accessible for our own canister.
     let paths = vec![
         vec![
             "canister".into(),
