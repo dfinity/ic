@@ -36,7 +36,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 fn dummy_utxo_from_value(v: u64) -> Utxo {
-    let mut bytes = [0u8; 32];
+    let mut bytes = [0_u8; 32];
     bytes[0..8].copy_from_slice(&v.to_be_bytes());
     Utxo {
         outpoint: OutPoint {
@@ -178,7 +178,7 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
 
 #[test]
 fn greedy_smoke_test() {
-    let mut utxos: UtxoSet = (1..10u64).map(dummy_utxo_from_value).collect();
+    let mut utxos: UtxoSet = (1..10_u64).map(dummy_utxo_from_value).collect();
     assert_eq!(utxos.len(), 9_usize);
 
     let res = greedy(15, &mut utxos);
@@ -1066,7 +1066,7 @@ fn can_form_a_batch_conditions() {
 #[test]
 fn test_build_account_to_utxos_table_pagination() {
     let mut state = CkBtcMinterState::from(InitArgs {
-        retrieve_btc_min_amount: 5_000u64,
+        retrieve_btc_min_amount: 5_000_u64,
         ..init_args()
     });
     let account1 = Account::from(
@@ -1208,7 +1208,7 @@ fn test_build_consolidation_transaction() {
     let fee_millisatoshi_per_vbyte = FeeRate::from_millis_per_byte(10);
 
     // Randomly generate a utxo set from proptest strategy
-    let strategy = arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1000..2000);
+    let strategy = arbitrary::utxo_set(1_000_000_u64..1_000_000_000, 1000..2000);
     let mut runner = TestRunner::new(Config::default());
     let mut utxos: UtxoSet = strategy.new_tree(&mut runner).unwrap().current();
 

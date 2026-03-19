@@ -940,7 +940,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -1030,7 +1030,7 @@ fn http_outcalls_free() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -1088,7 +1088,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with(
-        Cycles::from(5_000_000_000_000u128),
+        Cycles::from(5_000_000_000_000_u128),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
         None,
@@ -1096,7 +1096,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         None,
     );
 
-    let removed_cycles = Cycles::from(1000u128);
+    let removed_cycles = Cycles::from(1000_u128);
     test.canister_state_mut(canister_id)
         .system_state
         .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
@@ -1120,7 +1120,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
 #[test]
 fn consumed_cycles_are_updated_from_deleted_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
-    let initial_balance = Cycles::from(5_000_000_000_000u128);
+    let initial_balance = Cycles::from(5_000_000_000_000_u128);
     let canister_id = test.create_canister_with(
         initial_balance,
         ComputeAllocation::zero(),
@@ -1130,7 +1130,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         Some(CanisterStatusType::Stopped),
     );
 
-    let removed_cycles = Cycles::from(1000u128);
+    let removed_cycles = Cycles::from(1000_u128);
     test.canister_state_mut(canister_id)
         .system_state
         .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
@@ -1138,7 +1138,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
     test.inject_call_to_ic00(
         Method::DeleteCanister,
         CanisterIdRecord::from(canister_id).encode(),
-        Cycles::from(1_000_000_000_000u128),
+        Cycles::from(1_000_000_000_000_u128),
         CanisterId::try_from(user_test_id(1).get()).unwrap(),
         InputQueueType::RemoteSubnet,
     );

@@ -1950,6 +1950,11 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
         self.expiration = expiration;
     }
 
+    pub fn clear(&mut self) {
+        self.keys.clear();
+        self.values.clear();
+    }
+
     pub fn prune<T: Into<Timestamp>>(&mut self, now: T) {
         let timestamp = now.into();
         if let Some(expire_cutoff) = timestamp.checked_sub(self.expiration) {

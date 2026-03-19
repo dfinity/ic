@@ -226,9 +226,9 @@ fn should_invalid_threshold_signatures_not_be_cached() {
     let rng = &mut reproducible_rng();
 
     for _ in 0..10000 {
-        let mut pk = [0u8; 96];
-        let mut sig = [0u8; 48];
-        let mut msg = [0u8; 32];
+        let mut pk = [0_u8; 96];
+        let mut sig = [0_u8; 48];
+        let mut msg = [0_u8; 32];
 
         rng.fill_bytes(&mut pk);
         rng.fill_bytes(&mut sig);
