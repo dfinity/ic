@@ -20,7 +20,7 @@ use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CanisterId, CountBytes, Cycles, Height, NumBytes, RegistryVersion, Time,
+    CanisterId, CountBytes, Height, NumBytes, RegistryVersion, Time,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
@@ -29,6 +29,7 @@ use ic_types::{
         EXPECTED_MESSAGE_ID_LENGTH, MessageId, SignedIngress, extract_effective_canister_id,
     },
 };
+use ic_types_cycles::Cycles;
 use ic_validator::RequestValidationError;
 use std::{collections::BTreeMap, collections::HashMap, sync::Arc};
 
@@ -800,13 +801,14 @@ pub(crate) mod tests {
     use ic_types::{
         Height, RegistryVersion,
         artifact::IngressMessageId,
-        batch::{CanisterCyclesCostSchedule, IngressPayload},
+        batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
         state_manager::{StateManagerError, StateManagerResult},
         time::{UNIX_EPOCH, expiry_time_from_now},
     };
+    use ic_types_cycles::CanisterCyclesCostSchedule;
     use rstest::rstest;
     use std::sync::RwLock;
     use std::{collections::HashSet, convert::TryInto, time::Duration};
@@ -1622,7 +1624,7 @@ pub(crate) mod tests {
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(1))
                             // No cycles
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),
@@ -1675,7 +1677,7 @@ pub(crate) mod tests {
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(0))
                             // Not enough cycles
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),
@@ -1884,7 +1886,7 @@ pub(crate) mod tests {
                     .with_canister(
                         CanisterStateBuilder::new()
                             .with_canister_id(canister_test_id(2))
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),
