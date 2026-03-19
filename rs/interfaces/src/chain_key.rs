@@ -102,6 +102,6 @@ pub enum ChainKeyPayloadValidationFailure {
     DkgSummaryUnavailable(Height),
     /// The registry client returned an error
     RegistryClientError(RegistryClientError),
-    /// Crypto failed to determine the validity of the key
+    /// Crypto failed to determine the validity of the agreement
     InvalidChainKeyAgreement(ChainKeyAgreementValidationError),
 }

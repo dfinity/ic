@@ -1,4 +1,6 @@
 //! This module implements the IDKG payload builder.
+
+// TODO(CON-1682): Remove once old signature aggregation code is removed.
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use crate::{
@@ -355,6 +357,9 @@ fn create_summary_payload_helper(
 
     idkg_summary.idkg_transcripts.clear();
 
+    // Purge deprecated signature agreements in the idkg payload.
+    idkg_summary.signature_agreements.clear();
+
     // We purge available pre-signatures of the parent payload,
     // because they were already delivered with the previous payload.
     idkg_summary.available_pre_signatures.clear();
@@ -689,15 +694,7 @@ pub(crate) fn create_data_payload_helper_2(
         .signature_request_timeout_ns
         .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
 
-    // signatures::update_signature_agreements(
-    //     &all_signing_requests,
-    //     signature_builder,
-    //     request_expiry_time,
-    //     idkg_payload,
-    //     valid_keys,
-    //     idkg_payload_metrics,
-    //     thread_pool,
-    // );
+    // Purge deprecated signature agreements in the idkg payload.
     idkg_payload.signature_agreements.clear();
 
     let new_transcripts = [
