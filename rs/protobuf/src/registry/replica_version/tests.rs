@@ -55,7 +55,7 @@ fn test_validate_guest_launch_measurement_empty_kernel_cmdline() {
 fn test_validate_guest_launch_measurement_multiple_defects() {
     let measurement = GuestLaunchMeasurement {
         measurement: vec![0_u8; 32], // Wrong size.
-        metadata: None,             // No metadata.
+        metadata: None,              // No metadata.
     };
     let defects = measurement.validate().unwrap_err();
     // Should report measurement size error. Metadata missing is allowed though.
