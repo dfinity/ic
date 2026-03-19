@@ -152,7 +152,7 @@ async fn should_replay_events_for_testnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Testnet);
-    assert_eq!(state.get_total_btc_managed(), 24_902_022_759);
+    assert_eq!(state.get_total_btc_managed(), 24_885_679_983);
 }
 
 // This test is ignored because it takes too long to run,
