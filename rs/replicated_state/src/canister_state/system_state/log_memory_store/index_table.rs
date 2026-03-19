@@ -143,7 +143,7 @@ impl IndexTable {
     }
 
     /// Return all raw entries, including invalid ones.
-    pub fn raw_entries(&self) -> &Vec<IndexEntry> {
+    pub fn raw_entries(&self) -> &[IndexEntry] {
         &self.entries
     }
 
