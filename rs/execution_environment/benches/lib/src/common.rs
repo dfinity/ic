@@ -27,14 +27,13 @@ use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     MemoryAllocation, NumBytes, NumInstructions, Time,
     messages::{CallbackId, CanisterMessage, NO_DEADLINE, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use std::{collections::BTreeSet, sync::Arc};
