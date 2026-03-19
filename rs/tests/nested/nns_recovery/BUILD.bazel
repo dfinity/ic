@@ -35,6 +35,8 @@ rust_library(
         "//rs/tests/testnets/mainnet_nns:lib",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
         "@crate_index//:rand",
         "@crate_index//:serde_json",
         "@crate_index//:slog",

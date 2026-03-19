@@ -1,4 +1,6 @@
 use anyhow::bail;
+use candid::Principal;
+use ic_agent::Agent;
 use ic_consensus_system_test_subnet_recovery::utils::{
     BACKUP_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes, get_ssh_keys_for_user,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
@@ -7,13 +9,13 @@ use ic_consensus_system_test_subnet_recovery::utils::{
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version_with_retries,
-    rw_message::store_message_with_retries,
+    rw_message::{cert_state_makes_progress_with_retries, store_message_with_retries},
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
     },
     subnet::assert_subnet_is_healthy,
-    upgrade::bless_replica_version,
+    upgrade::{assert_assigned_replica_version, bless_replica_version},
 };
 use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_recovery::{
@@ -294,11 +296,12 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Ensure NNS subnet is functional");
-    let init_msg = "subnet recovery works!";
+    let init_msg = "subnet recovery initially works!";
     let app_can_id = if cfg.use_mainnet_state {
         block_on(async {
             let nns_url = nns_node.get_public_url();
-            let agent = assert_create_agent(&nns_url.as_str()).await;
+            let agent = assert_create_agent(nns_url.as_str()).await;
+
             let canister_principal = ProposalWithMainnetState::add_nns_canister(
                 nns_url.clone(),
                 AddCanisterRequest {
@@ -331,15 +334,27 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             &logger,
         )
     };
-    let msg = "subnet recovery works again!";
-    assert_subnet_is_healthy(
-        &nns_subnet.nodes().collect::<Vec<_>>(),
-        &current_version,
-        app_can_id,
-        init_msg,
-        msg,
-        &logger,
-    );
+
+    let msg = "subnet recovery works!";
+    if cfg.use_mainnet_state {
+        assert_subnet_is_healthy_with_mainnet_state(
+            &nns_subnet.nodes().collect::<Vec<_>>(),
+            &current_version,
+            app_can_id,
+            init_msg,
+            msg,
+            &logger,
+        );
+    } else {
+        assert_subnet_is_healthy(
+            &nns_subnet.nodes().collect::<Vec<_>>(),
+            &current_version,
+            app_can_id,
+            init_msg,
+            msg,
+            &logger,
+        );
+    }
 
     // identifies the version of the replica after the recovery
     let upgrade_version = get_guestos_update_img_version();
@@ -407,7 +422,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &healthy_node.get_public_url(),
         app_can_id,
         msg,
-        true,
+        // When using mainnet state, queries (reading) will also fail because the root key has
+        // changed. Thus, we do not check that the subnet works for reading in that case.
+        !cfg.use_mainnet_state,
         &logger,
     );
 
@@ -586,14 +603,25 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     info!(logger, "Ensure the subnet is healthy after the recovery");
     let new_msg = "subnet recovery still works!";
-    assert_subnet_is_healthy(
-        &nns_subnet.nodes().collect::<Vec<_>>(),
-        &upgrade_version,
-        app_can_id,
-        msg,
-        new_msg,
-        &logger,
-    );
+    if cfg.use_mainnet_state {
+        assert_subnet_is_healthy_with_mainnet_state(
+            &nns_subnet.nodes().collect::<Vec<_>>(),
+            &upgrade_version,
+            app_can_id,
+            msg,
+            new_msg,
+            &logger,
+        );
+    } else {
+        assert_subnet_is_healthy(
+            &nns_subnet.nodes().collect::<Vec<_>>(),
+            &upgrade_version,
+            app_can_id,
+            msg,
+            new_msg,
+            &logger,
+        );
+    }
 }
 
 async fn simulate_node_provider_action(
@@ -741,5 +769,103 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
                 .join(CreateNNSRecoveryTarStep::get_sha_name()),
             &local_output_dir.join(CreateNNSRecoveryTarStep::get_sha_name()),
         );
+    }
+}
+
+/// Code duplicate of rs/tests/consensus/utils/src/subnet.rs:assert_subnet_is_healthy
+/// The difference is that we create an agent that does not verify query signatures.
+/// To verify query response signatures from the root subnet, the agent requires the root subnet_id.
+/// This is needed to retrieve the public keys of nodes within the root subnet.
+/// Typically, the agent derives the root subnet_id from the root key. However, when using mainnet
+/// state, the root key is different from the original one, but the subnet_id is reused.
+/// So we create a new agent that does not verify the query response signatures for the time being.
+/// A long-term solution involves modifying the agent to fetch the root subnet_id from the HTTP
+/// status endpoint.
+fn assert_subnet_is_healthy_with_mainnet_state(
+    subnet: &[IcNodeSnapshot],
+    target_version: &ReplicaVersion,
+    can_id: Principal,
+    old_msg: &str,
+    new_msg: &str,
+    logger: &Logger,
+) {
+    info!(
+        logger,
+        "Confirm that ALL nodes are healthy and running on version {target_version}"
+    );
+    for node in subnet {
+        assert_assigned_replica_version(node, target_version, logger.clone());
+        info!(
+            logger,
+            "Healthy upgrade of assigned node {} to {}", node.node_id, target_version
+        );
+    }
+
+    let node = &subnet[0];
+    node.await_status_is_healthy().unwrap();
+    // make sure that state sync is completed
+    cert_state_makes_progress_with_retries(
+        &node.get_public_url(),
+        node.effective_canister_id(),
+        logger,
+        secs(600),
+        secs(10),
+    );
+
+    let agent_bypass_signature = Agent::builder()
+        .with_url(node.get_public_url())
+        .with_verify_query_signatures(false)
+        .build()
+        .expect("Failed to create agent");
+    block_on(agent_bypass_signature.fetch_root_key()).unwrap();
+
+    let mcan = MessageCanister::from_canister_id(&agent_bypass_signature, can_id);
+
+    info!(logger, "Ensure the old message is still readable");
+    assert_eq!(
+        block_on(mcan.read_msg()).expect("Received an empty message"),
+        old_msg,
+    );
+
+    info!(logger, "Ensure that the subnet is accepting updates");
+    block_on(mcan.store_msg(new_msg));
+
+    // Wait until all nodes answer with the new message
+    for node in subnet {
+        let agent_bypass_signature = Agent::builder()
+            .with_url(node.get_public_url())
+            .with_verify_query_signatures(false)
+            .build()
+            .expect("Failed to create agent");
+        let mcan = MessageCanister::from_canister_id(&agent_bypass_signature, can_id);
+
+        block_on(retry_with_msg_async!(
+            format!(
+                "Waiting for node {} to have the new message readable",
+                node.node_id
+            ),
+            &logger,
+            secs(30),
+            secs(5),
+            || async {
+                match mcan.try_read_msg().await {
+                    Ok(Some(msg)) if msg == new_msg => Ok(()),
+                    Ok(Some(msg)) => {
+                        bail!(
+                            "Received unexpected message: '{}', expected: '{}'",
+                            msg,
+                            new_msg
+                        )
+                    }
+                    Ok(None) => {
+                        bail!("Received an empty message")
+                    }
+                    Err(err) => {
+                        bail!("Failed reading a message. Error: {}", err)
+                    }
+                }
+            }
+        ))
+        .expect("Failed to read the new message from the node");
     }
 }
