@@ -194,7 +194,7 @@ impl RingBuffer {
     ///
     /// - No filter: return the most recent records (tail), trimming older ones
     ///   from the start so total data size ≤ result_max_size.
-    /// - With filter: return the most oldest records (head), trimming newer ones
+    /// - With filter: return the oldest records (head), trimming newer ones
     ///   from the end so total data size ≤ result_max_size.
     pub fn records(&self, maybe_filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         let header = self.io.load_header();
@@ -382,16 +382,12 @@ mod tests {
 
     #[test]
     fn test_exact_fit_no_eviction() {
-        let record_size: usize = 25;
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
         let r0 = log_record(0, 100, "12345");
-        assert_eq!(bytes_len(&r0), record_size);
         let r1 = log_record(1, 200, "12345");
         let r2 = log_record(2, 300, "12345");
         let r3 = log_record(3, 400, "12345");
+        let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
 
         // Add and remove one record to test wrap-around.
         rb.append(&r0);
@@ -409,16 +405,12 @@ mod tests {
 
     #[test]
     fn test_eviction_when_adding_exceeds_capacity() {
-        let record_size: usize = 25;
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
         let r0 = log_record(0, 100, "12345");
-        assert_eq!(bytes_len(&r0), record_size);
         let r1 = log_record(1, 200, "12345");
         let r2 = log_record(2, 300, "12345");
-        let r3 = log_record(3, 400, "123456"); // 26 bytes to force eviction.
+        let r3 = log_record(3, 400, "123456"); // one byte longer than r0..r2, forces eviction.
+        let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
 
         // Add and remove one record to test wrap-around.
         rb.append(&r0);
