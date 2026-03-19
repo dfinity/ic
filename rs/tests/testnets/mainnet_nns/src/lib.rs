@@ -707,8 +707,7 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
         )
         .expect("Could not restart ic-replica on API BN");
 
-    api_bn
-        .await_status_is_healthy()
+    block_on(api_bn.await_status_is_healthy_with_retries_async(secs(15 * 60), secs(30)))
         .expect("API BN did not become healthy after patching");
 }
 
