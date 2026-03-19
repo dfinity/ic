@@ -58,8 +58,7 @@ impl StructIO {
     }
 
     pub fn save_header(&mut self, header: &Header) {
-        self.header_cache = OnceLock::new();
-        let _ = self.header_cache.set(*header);
+        self.header_cache = OnceLock::from(*header);
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
         addr = self.write_raw_u8(addr, header.version);
