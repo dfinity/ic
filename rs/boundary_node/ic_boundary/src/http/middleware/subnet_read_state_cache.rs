@@ -144,7 +144,7 @@ pub async fn subnet_read_state_cache_middleware(
         let (parts, body) = response.into_parts();
         let body_bytes = buffer_body(body, state.max_item_size, state.body_timeout)
             .await
-            .map_err(|e| ErrorCause::Other(format!("failed to buffer response body: {e}")))?;
+            .map_err(|e| ErrorCause::from_body_error(e, state.max_item_size))?;
 
         let cached = Response::from_parts(parts, body_bytes);
         state.cache.insert(cache_key, cached.clone());

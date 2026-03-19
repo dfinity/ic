@@ -6,6 +6,7 @@ use axum::{
 };
 
 use ic_bn_lib::http::headers::X_IC_ERROR_CAUSE;
+use ic_bn_lib_common::types::http::Error as HttpError;
 use strum::{Display, IntoStaticStr};
 use tower_governor::GovernorError;
 
@@ -46,6 +47,15 @@ pub enum ErrorCause {
 }
 
 impl ErrorCause {
+    pub fn from_body_error(e: HttpError, max_size: usize) -> Self {
+        match e {
+            HttpError::BodyReadingFailed(v) => Self::UnableToReadBody(v),
+            HttpError::BodyTooBig => Self::PayloadTooLarge(max_size),
+            HttpError::BodyTimedOut => Self::BodyTimedOut,
+            _ => Self::Other(e.to_string()),
+        }
+    }
+
     pub fn details(&self) -> Option<String> {
         match self {
             Self::Other(x) => Some(x.clone()),
