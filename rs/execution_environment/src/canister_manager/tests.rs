@@ -87,12 +87,11 @@ use ic_test_utilities_types::{
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     SubnetId, UserId,
-    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;

@@ -11,6 +11,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::CyclesUseCase;
@@ -237,6 +238,60 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 }
 
 #[test]
+fn open_call_contexts_produce_reject_responses_when_out_of_cycles() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    let mut test = SchedulerTestBuilder::new().build();
+
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+    );
+
+    // Make a XNet call, so the call context stays open, awaiting response from the
+    // remote subnet).
+    let message_id = test.send_ingress(
+        canister,
+        ingress(1).call(other_side(test.xnet_canister_id(), 1), on_response(1)),
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_output());
+    assert!(test.canister_state(canister).execution_state.is_some());
+
+    // Drain all cycles so the next allocation charge triggers uninstall.
+    test.canister_state_mut(canister)
+        .system_state
+        .set_balance(Cycles::zero());
+
+    let duration_between_allocation_charges = test
+        .scheduler()
+        .cycles_account_manager
+        .duration_between_allocation_charges();
+    test.set_time(initial_time + duration_between_allocation_charges);
+
+    test.charge_for_resource_allocations();
+
+    // Canister was uninstalled.
+    assert!(test.canister_state(canister).execution_state.is_none());
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        1
+    );
+    // And the ingress was rejected.
+    assert_eq!(
+        test.ingress_error(&message_id).code(),
+        ErrorCode::CanisterRejectedMessage,
+    );
+}
+
+#[test]
 fn dont_charge_allocations_for_paused_canisters() {
     const T0: Time = Time::from_nanos_since_unix_epoch(1_000_000_000);
     const INITIAL_CYCLES: Cycles = Cycles::new(10_000_000);
@@ -317,7 +372,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(17_780_000),
+        Cycles::new(24_892_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
@@ -428,7 +483,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(17_780_000),
+        Cycles::new(24_892_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,

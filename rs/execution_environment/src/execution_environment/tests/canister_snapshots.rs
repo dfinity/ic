@@ -31,12 +31,11 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
     CanisterId, NumInstructions, SnapshotId,
-    batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
@@ -591,7 +590,7 @@ fn canister_snapshot_reserves_cycles_difference() {
 
 #[test]
 fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_snapshot() {
-    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(39_200_000_000_000);
     const CAPACITY: u64 = 500 * MIB;
     const THRESHOLD: u64 = CAPACITY / 2;
 
@@ -702,7 +701,7 @@ fn take_canister_snapshot_does_not_reduce_subnet_available_memory_when_failing_t
 
 #[test]
 fn take_canister_snapshot_increases_heap_delta() {
-    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(39_200_000_000_000);
     const CAPACITY: u64 = 1_000_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
 
@@ -742,7 +741,7 @@ fn take_canister_snapshot_increases_heap_delta() {
 
 #[test]
 fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
-    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(39_200_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
@@ -1347,7 +1346,7 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
 
 #[test]
 fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
-    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(39_200_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;

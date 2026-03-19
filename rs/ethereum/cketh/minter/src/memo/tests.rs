@@ -283,7 +283,7 @@ fn should_decode_ledger_burn_gas_fee_memo() {
 #[test]
 fn should_decode_ledger_burn_erc20_convert_memo() {
     let memo = BurnMemo::Erc20Convert {
-        ckerc20_withdrawal_id: 123u64,
+        ckerc20_withdrawal_id: 123_u64,
         to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
     };
     let mut buf = vec![];
@@ -295,7 +295,7 @@ fn should_decode_ledger_burn_erc20_convert_memo() {
     let result = decode_ledger_memo(args);
     let expected: DecodeLedgerMemoResult =
         Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20Convert {
-            ckerc20_withdrawal_id: 123u64,
+            ckerc20_withdrawal_id: 123_u64,
             to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
         }))));
     assert_eq!(
@@ -308,7 +308,7 @@ fn should_decode_ledger_burn_erc20_convert_memo() {
 #[test]
 fn should_use_mixed_case_checksum_while_decoding_address() {
     let memo = BurnMemo::Erc20Convert {
-        ckerc20_withdrawal_id: 123u64,
+        ckerc20_withdrawal_id: 123_u64,
         to_address: USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE.parse().unwrap(),
     };
     let mut buf = vec![];
@@ -320,7 +320,7 @@ fn should_use_mixed_case_checksum_while_decoding_address() {
     let result = decode_ledger_memo(args);
     let expected: DecodeLedgerMemoResult =
         Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20Convert {
-            ckerc20_withdrawal_id: 123u64,
+            ckerc20_withdrawal_id: 123_u64,
             to_address: USDC_ERC20_CONTRACT_ADDRESS.to_string(),
         }))));
     assert_eq!(
