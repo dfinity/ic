@@ -20,5 +20,5 @@ The community will be able to retroactively verify the wasm binaries that were r
 
 ```
 cd rs/bitcoin/ckbtc/minter
-didc encode -d ckbtc_minter.did -t '(MinterArg)' '(variant {Upgrade = null })' | xxd -r -p | sha256sum
+didc encode -d ckbtc_minter.did -t '(MinterArg)' '(variant { Upgrade = null })' | xxd -r -p | sha256sum
 ```
