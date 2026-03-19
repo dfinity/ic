@@ -2571,10 +2571,44 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         origin: CanisterChangeOrigin,
     ) -> Result<Vec<u8>, UserError> {
+        // Check if the canister on which the snapshot is loaded exists.
+        // We do this check at the very beginning for the sake of consistency
+        // with other mgmt canister endpoints that check for the existence
+        // of the "effective" canister at the very beginning.
         let canister_id = args.get_canister_id();
+        if state.canister_state(&canister_id).is_none() {
+            return Err(UserError::new(
+                ErrorCode::CanisterNotFound,
+                format!("Canister {} not found.", &canister_id),
+            ));
+        }
+
+        // Get `Arc<CanisterState>` containing the snapshot to be loaded.
+        // We do that before taking the canister on which the snapshot is loaded
+        // out of `ReplicatedState` since that might be the same canister
+        // (and thus `ReplicatedState::canister_state_arc` would return `None`
+        // after `ReplicatedState::take_canister_state`).
+        let snapshot_id = args.snapshot_id();
+        let snapshot_canister_id = snapshot_id.get_canister_id();
+        let snapshot_canister: Arc<CanisterState> =
+            match state.canister_state_arc(&snapshot_canister_id) {
+                Some(snapshot_canister) => snapshot_canister,
+                None => {
+                    let err = CanisterManagerError::CanisterSnapshotNotFound {
+                        canister_id: snapshot_canister_id,
+                        snapshot_id,
+                    };
+                    return Err(err.into());
+                }
+            };
+
         // Take canister out.
         let mut old_canister = match state.take_canister_state(&canister_id) {
             None => {
+                // We should have produced this error already
+                // at the very beginning of this function,
+                // but we return it here, too, instead of panicking
+                // to make the code more robust.
                 return Err(UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
@@ -2583,13 +2617,13 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
-        let snapshot_id = args.snapshot_id();
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let result = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
             Arc::make_mut(&mut old_canister),
+            snapshot_canister,
             snapshot_id,
             state,
             round_limits,
