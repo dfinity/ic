@@ -66,14 +66,6 @@ impl Rem<MemorySize> for MemoryPosition {
     }
 }
 
-// position - position = size
-impl Sub<MemoryPosition> for MemoryPosition {
-    type Output = MemorySize;
-    fn sub(self, rhs: MemoryPosition) -> MemorySize {
-        MemorySize(self.0 - rhs.0)
-    }
-}
-
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
 pub(super) struct MemorySize(u64);
