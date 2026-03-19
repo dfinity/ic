@@ -1,5 +1,7 @@
 use crate::common::storage::types::{IcrcOperation, RosettaBlock};
-use crate::common::types::{FeeCollectorMetadata, FeeMetadata, FeeSetter};
+use crate::common::types::{
+    FeeCollectorMetadata, FeeMetadata, FeeSetter, ManagementActionMetadata,
+};
 use crate::{
     AppState, MultiTokenAppState,
     common::{
@@ -156,6 +158,9 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         Transfer,
         Approve,
         FeeCollector,
+        Pause,
+        Unpause,
+        Deactivate,
     }
 
     // A builder which helps depict the icrc1 Operation and allows for an arbitrary order of rosetta_core Operations
@@ -172,6 +177,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         fee_collector: Option<Account>,
         caller: Option<Principal>,
         mthd: Option<String>,
+        reason: Option<String>,
     }
 
     impl IcrcOperationBuilder {
@@ -189,6 +195,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 fee_collector: None,
                 caller: None,
                 mthd: None,
+                reason: None,
             }
         }
 
@@ -252,6 +259,11 @@ pub fn rosetta_core_operations_to_icrc1_operation(
             self
         }
 
+        pub fn with_reason(mut self, reason: Option<String>) -> Self {
+            self.reason = reason;
+            self
+        }
+
         pub fn build(self) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
             Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer or Approve")? {
                 IcrcOperation::Mint => {
@@ -299,6 +311,21 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     fee_collector: self.fee_collector,
                     caller: self.caller,
                     mthd: self.mthd,
+                },
+                IcrcOperation::Pause => crate::common::storage::types::IcrcOperation::Pause{
+                    caller: self.caller,
+                    mthd: self.mthd,
+                    reason: self.reason,
+                },
+                IcrcOperation::Unpause => crate::common::storage::types::IcrcOperation::Unpause{
+                    caller: self.caller,
+                    mthd: self.mthd,
+                    reason: self.reason,
+                },
+                IcrcOperation::Deactivate => crate::common::storage::types::IcrcOperation::Deactivate{
+                    caller: self.caller,
+                    mthd: self.mthd,
+                    reason: self.reason,
                 },
             })
         }
@@ -416,6 +443,39 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     .with_fee_collector(fc_metadata.fee_collector)
                     .with_caller(fc_metadata.caller)
                     .with_mthd(fc_metadata.mthd)
+            }
+            OperationType::Pause => {
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for pause operations")?;
+                let ma_metadata = ManagementActionMetadata::try_from(metadata)?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::Pause)
+                    .with_caller(ma_metadata.caller)
+                    .with_mthd(ma_metadata.mthd)
+                    .with_reason(ma_metadata.reason)
+            }
+            OperationType::Unpause => {
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for unpause operations")?;
+                let ma_metadata = ManagementActionMetadata::try_from(metadata)?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::Unpause)
+                    .with_caller(ma_metadata.caller)
+                    .with_mthd(ma_metadata.mthd)
+                    .with_reason(ma_metadata.reason)
+            }
+            OperationType::Deactivate => {
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for deactivate operations")?;
+                let ma_metadata = ManagementActionMetadata::try_from(metadata)?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::Deactivate)
+                    .with_caller(ma_metadata.caller)
+                    .with_mthd(ma_metadata.mthd)
+                    .with_reason(ma_metadata.reason)
             }
         };
     }
@@ -670,10 +730,68 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 ),
             ));
         }
-        crate::common::storage::types::IcrcOperation::Pause { .. }
-        | crate::common::storage::types::IcrcOperation::Unpause { .. }
-        | crate::common::storage::types::IcrcOperation::Deactivate { .. } => {
-            panic!("ICRC-124 Rosetta support not yet implemented")
+        crate::common::storage::types::IcrcOperation::Pause {
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::Pause.to_string(),
+                None,
+                None,
+                None,
+                Some(
+                    ManagementActionMetadata {
+                        caller,
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::Unpause {
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::Unpause.to_string(),
+                None,
+                None,
+                None,
+                Some(
+                    ManagementActionMetadata {
+                        caller,
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::Deactivate {
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::Deactivate.to_string(),
+                None,
+                None,
+                None,
+                Some(
+                    ManagementActionMetadata {
+                        caller,
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
         }
     };
 
