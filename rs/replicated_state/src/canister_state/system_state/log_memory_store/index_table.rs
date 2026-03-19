@@ -225,7 +225,9 @@ impl IndexTable {
     /// to the end of `to` (both inclusive), correctly handling ring-buffer wraparound.
     fn range_size(&self, from: &IndexEntry, to: &IndexEntry) -> MemorySize {
         let from_pos = from.position.get();
-        let to_pos = self.advance(to.position, MemorySize::new(to.bytes_len as u64)).get();
+        let to_pos = self
+            .advance(to.position, MemorySize::new(to.bytes_len as u64))
+            .get();
         if to_pos >= from_pos {
             MemorySize::new(to_pos - from_pos) // no wrap
         } else {
