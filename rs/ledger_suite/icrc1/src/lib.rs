@@ -538,7 +538,9 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 panic!("FeeCollector107 not implemented")
             }
             Operation::Pause { .. } | Operation::Unpause { .. } | Operation::Deactivate { .. } => {
-                panic!("ICRC-124 operations cannot be applied")
+                // ICRC-124 management operations do not affect balances or approvals.
+                // Treat them as no-ops when applying historical blocks so replay/upgrade
+                // does not crash the canister.
             }
         }
         Ok(())

@@ -164,6 +164,9 @@ async fn test_icps_per_sns_token_client() {
                                 approve: None,
                                 transfer: None,
                                 fee_collector: None,
+                                pause: None,
+                                unpause: None,
+                                deactivate: None,
                             },
                         ],
 

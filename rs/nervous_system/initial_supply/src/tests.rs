@@ -77,6 +77,9 @@ async fn test_initial_supply() {
                     approve: None,
                     transfer: None,
                     fee_collector: None,
+                    pause: None,
+                    unpause: None,
+                    deactivate: None,
                 }
             };
 

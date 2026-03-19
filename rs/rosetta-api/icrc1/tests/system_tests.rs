@@ -1537,7 +1537,10 @@ fn test_construction_submit() {
                             ic_icrc1::Operation::Approve { fee, .. } => fee,
                             ic_icrc1::Operation::Mint { .. } => None,
                             ic_icrc1::Operation::Burn { .. } => None,
-                            ic_icrc1::Operation::FeeCollector { .. } => None,
+                            ic_icrc1::Operation::FeeCollector { .. }
+                            | ic_icrc1::Operation::Pause { .. }
+                            | ic_icrc1::Operation::Unpause { .. }
+                            | ic_icrc1::Operation::Deactivate { .. } => None,
                         };
 
                         // Rosetta does not support mint and burn operations
