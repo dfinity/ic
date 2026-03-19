@@ -15106,7 +15106,6 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto-utils-threshold-sig-der",
- "ic-limits",
  "ic-nervous-system-common",
  "ic-nervous-system-root",
  "ic-nns-common",

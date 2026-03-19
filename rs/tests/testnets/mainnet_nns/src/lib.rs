@@ -3,7 +3,6 @@ use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
-use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
@@ -81,7 +80,7 @@ pub mod proposals;
 /// except the root subnet (tdb26), which will contain only the single-node NNS subnet.
 /// Proposals can be made (and will instantly execute) using the relevant functions in
 /// `crate::proposals`.
-pub fn setup(env: TestEnv) {
+pub fn setup(env: TestEnv, dkg_interval: Option<u64>) {
     // Since we're creating the IC concurrently with fetching the state we use a channel to tell the
     // thread fetching the state when the IC is ready such that it can scp the ic.json5 config file
     // from the NNS node once it's online, used by ic-replay.
@@ -96,7 +95,7 @@ pub fn setup(env: TestEnv) {
     // Recover the NNS concurrently:
     let env_clone = env.clone();
     let recover_nns_thread = std::thread::spawn(move || {
-        setup_recovered_nns(env_clone, rx_finished_ic_setup, rx_aux_node)
+        setup_recovered_nns(env_clone, dkg_interval, rx_finished_ic_setup, rx_aux_node)
     });
 
     // Setup and start the aux UVM concurrently:
@@ -168,6 +167,7 @@ pub fn setup(env: TestEnv) {
 
 fn setup_recovered_nns(
     env: TestEnv,
+    dkg_interval: Option<u64>,
     rx_finished_ic_setup: Receiver<()>,
     rx_aux_node: Receiver<DeployedUniversalVm>,
 ) -> NeuronId {
@@ -213,45 +213,44 @@ fn setup_recovered_nns(
         neuron_id,
     );
 
-    let dkg_interval = std::env::var("DKG_INTERVAL")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(DKG_INTERVAL_HEIGHT);
-    let subnet_config = UpdateSubnetPayload {
-        subnet_id: SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap()),
-        max_ingress_bytes_per_message: None,
-        max_ingress_messages_per_block: None,
-        max_ingress_bytes_per_block: None,
-        max_block_payload_size: None,
-        unit_delay_millis: None,
-        initial_notary_delay_millis: None,
-        dkg_interval_length: Some(dkg_interval),
-        dkg_dealings_per_block: None,
-        start_as_nns: None,
-        subnet_type: None,
-        is_halted: None,
-        halt_at_cup_height: None,
-        features: None,
-        chain_key_config: None,
-        chain_key_signing_enable: None,
-        chain_key_signing_disable: None,
-        max_number_of_canisters: None,
-        ssh_readonly_access: None,
-        ssh_backup_access: None,
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
-    };
-    block_on(ProposalWithMainnetState::update_subnet_record(
-        recovered_nns_node.get_public_url(),
-        subnet_config,
-    ));
+    if let Some(dkg_interval) = dkg_interval {
+        info!(env.logger(), "Overriding DKG interval to {dkg_interval}");
+        let subnet_config = UpdateSubnetPayload {
+            subnet_id: SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap()),
+            max_ingress_bytes_per_message: None,
+            max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
+            max_block_payload_size: None,
+            unit_delay_millis: None,
+            initial_notary_delay_millis: None,
+            dkg_interval_length: Some(dkg_interval),
+            dkg_dealings_per_block: None,
+            start_as_nns: None,
+            subnet_type: None,
+            is_halted: None,
+            halt_at_cup_height: None,
+            features: None,
+            chain_key_config: None,
+            chain_key_signing_enable: None,
+            chain_key_signing_disable: None,
+            max_number_of_canisters: None,
+            ssh_readonly_access: None,
+            ssh_backup_access: None,
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: false,
+        };
+        block_on(ProposalWithMainnetState::update_subnet_record(
+            recovered_nns_node.get_public_url(),
+            subnet_config,
+        ));
+    }
 
     let recovered_nns_pub_key = fetch_recovered_nns_public_key_pem(&recovered_nns_node);
 

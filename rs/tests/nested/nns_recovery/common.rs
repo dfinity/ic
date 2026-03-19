@@ -226,7 +226,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     }
 
     if cfg.use_mainnet_state {
-        setup_with_mainnet_state(env.clone());
+        setup_with_mainnet_state(env.clone(), Some(cfg.dkg_interval));
     } else {
         setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
     }

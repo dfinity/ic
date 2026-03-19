@@ -15,7 +15,6 @@ rust_library(
         "//rs/canister_client",
         "//rs/canister_client/sender",
         "//rs/crypto/utils/threshold_sig_der",
-        "//rs/limits",
         "//rs/nervous_system/common",
         "//rs/nervous_system/root",
         "//rs/nns/common",
