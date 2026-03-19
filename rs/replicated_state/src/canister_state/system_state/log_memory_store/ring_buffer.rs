@@ -262,7 +262,7 @@ impl RingBuffer {
                         break;
                     }
                     let new_pos = header.advance_position(pos, distance);
-                    // corrupted or zero-length record — avoid infinite loop
+                    // corrupted record — avoid infinite loop
                     if new_pos == pos {
                         break;
                     }
