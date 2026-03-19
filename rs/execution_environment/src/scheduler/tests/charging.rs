@@ -71,7 +71,7 @@ fn only_charge_for_allocation_after_specified_duration() {
         test.canister_state(canister).system_state.balance().get(),
         initial_cycles
             - if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                28
+                20
             } else {
                 10
             },
