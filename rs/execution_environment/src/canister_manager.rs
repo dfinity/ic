@@ -2996,6 +2996,7 @@ impl CanisterManager {
             ),
             CanisterSnapshotDataOffset::WasmChunk => (
                 wasm_chunk_store::chunk_size().get(),
+                // `upload_chunk` already has this high cycle cost, so we keep it consistent.
                 self.config.upload_wasm_chunk_instructions,
             ),
         }
