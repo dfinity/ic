@@ -660,6 +660,7 @@ mod tests {
     use ic_consensus_mocks::{
         Dependencies, dependencies_with_subnet_records_with_raw_state_manager,
     };
+    use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationFailure};
     use ic_interfaces::idkg::IDkgChangeAction;
     use ic_interfaces::p2p::consensus::MutablePool;
@@ -670,7 +671,8 @@ mod tests {
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::RegistryVersion;
-    use ic_types::consensus::idkg::IDkgMessage;
+    use ic_types::consensus::idkg::common::BuildSignatureInputsError;
+    use ic_types::consensus::idkg::{IDkgMessage, PreSigId};
     use ic_types::state_manager::StateManagerError;
     use ic_types::subnet_id_into_protobuf;
     use ic_types::time::UNIX_EPOCH;
@@ -766,6 +768,7 @@ mod tests {
             CERTIFIED_HEIGHT,
             true,
             num_threads,
+            None,
             run,
         )
     }
@@ -778,6 +781,7 @@ mod tests {
         certified_height: Height,
         finalize_last_summary: bool,
         num_threads: usize,
+        crypto_override: Option<Arc<dyn ConsensusCrypto>>,
         run: impl FnOnce(ChainKeyPayloadBuilderImpl) -> T,
     ) -> T {
         let committee = (0..4).map(|id| node_test_id(id as u64)).collect::<Vec<_>>();
@@ -862,6 +866,8 @@ mod tests {
                 .collect();
             idkg_pool.write().unwrap().apply(mutations);
 
+            let crypto: Arc<dyn ConsensusCrypto> = crypto_override.unwrap_or(crypto);
+
             let payload_builder = ChainKeyPayloadBuilderImpl::new(
                 idkg_pool.clone(),
                 pool.get_cache(),
@@ -927,6 +933,7 @@ mod tests {
             CERTIFIED_HEIGHT,
             finalize_last_summary,
             NUM_THREADS,
+            None,
             |builder| {
                 let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
 
@@ -1291,6 +1298,7 @@ mod tests {
             validation_context.certified_height,
             finalize_last_summary,
             NUM_THREADS,
+            None,
             |builder| {
                 let serialized_payload =
                     build_and_validate(&builder, MAX_SIZE, &[], &validation_context);
@@ -1337,6 +1345,128 @@ mod tests {
                 // Empty payloads should always be valid
                 let validation = builder.validate_payload(height, &proposal_context, &[], &[]);
                 assert!(validation.is_ok());
+            },
+        )
+    }
+
+    #[test]
+    fn test_no_agreements_for_incomplete_idkg_contexts() {
+        let config = make_chain_key_config();
+        let idkg_key_ids: Vec<_> = config
+            .key_ids()
+            .iter()
+            .filter(|key_id| key_id.is_idkg_key())
+            .cloned()
+            .collect();
+        assert_eq!(idkg_key_ids.len(), 2);
+        let mut contexts = BTreeMap::new();
+        contexts.insert(
+            CallbackId::new(0),
+            fake_signature_request_context(idkg_key_ids[0].clone(), None, None),
+        );
+        contexts.insert(
+            CallbackId::new(1),
+            fake_signature_request_context(idkg_key_ids[1].clone(), Some(PreSigId(0)), None),
+        );
+        let shares = make_shares(&contexts);
+
+        test_payload_builder_with_num_threads(Some(config), contexts, shares, 1, |builder| {
+            let payload = build_and_validate(&builder, MAX_SIZE, &[], &VALIDATION_CONTEXT);
+            assert!(payload.is_empty());
+
+            let proposal_context = ProposalContext {
+                proposer: node_test_id(0),
+                validation_context: &VALIDATION_CONTEXT,
+            };
+            for id in [0, 1] {
+                let payload = as_bytes(make_chain_key_agreements_with_payload(
+                    &[id],
+                    ChainKeyAgreement::Success(vec![1, 2, 3]),
+                ));
+                let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+                assert_matches!(
+                    validation.unwrap_err(),
+                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
+                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
+                            ChainKeyAgreementValidationError::BuildSignatureInputsError(
+                                BuildSignatureInputsError::ContextIncomplete
+                            )
+                        )
+                    ))
+                );
+            }
+        })
+    }
+
+    #[test]
+    fn test_reject_cryptographically_invalid_agreements() {
+        let config = make_chain_key_config();
+        let contexts = make_contexts(&config);
+        let real_crypto = TempCryptoComponent::builder().build_arc();
+
+        test_payload_builder_ext(
+            Some(config),
+            true,
+            contexts.clone(),
+            vec![],
+            CERTIFIED_HEIGHT,
+            true,
+            1,
+            Some(real_crypto),
+            |builder| {
+                let proposal_context = ProposalContext {
+                    proposer: node_test_id(0),
+                    validation_context: &VALIDATION_CONTEXT,
+                };
+
+                for (&id, context) in &contexts {
+                    let agreement = fake_agreement_for_context(context);
+                    let mut agreements = BTreeMap::new();
+                    agreements.insert(id, agreement);
+                    let payload = as_bytes(agreements);
+                    let validation =
+                        builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
+                    let key_id = context.key_id();
+                    let err = validation.unwrap_err();
+                    match &key_id {
+                        MasterPublicKeyId::Ecdsa(_) => {
+                            assert_matches!(
+                                err,
+                                ValidationError::InvalidArtifact(
+                                    InvalidPayloadReason::InvalidChainKeyPayload(
+                                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
+                                            ChainKeyAgreementValidationError::Ecdsa(_)
+                                        )
+                                    )
+                                )
+                            );
+                        }
+                        MasterPublicKeyId::Schnorr(_) => {
+                            assert_matches!(
+                                err,
+                                ValidationError::InvalidArtifact(
+                                    InvalidPayloadReason::InvalidChainKeyPayload(
+                                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
+                                            ChainKeyAgreementValidationError::Schnorr(_)
+                                        )
+                                    )
+                                )
+                            );
+                        }
+                        MasterPublicKeyId::VetKd(_) => {
+                            assert_matches!(
+                                err,
+                                ValidationError::InvalidArtifact(
+                                    InvalidPayloadReason::InvalidChainKeyPayload(
+                                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
+                                            ChainKeyAgreementValidationError::VetKd(_)
+                                        )
+                                    )
+                                )
+                            );
+                        }
+                    }
+                }
             },
         )
     }
@@ -1412,6 +1542,7 @@ mod tests {
             height,
             true,
             NUM_THREADS,
+            None,
             |builder| {
                 let (keys, expiry) = builder.get_enabled_keys_and_expiry(HEIGHT, now).unwrap();
                 assert!(keys.is_empty());

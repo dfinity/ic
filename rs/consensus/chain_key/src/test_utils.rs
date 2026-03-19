@@ -1,7 +1,8 @@
 use core::{convert::From, iter::Iterator};
 use ic_interfaces::batch_payload::PastPayload;
 use ic_management_canister_types_private::{
-    EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId,
+    EcdsaKeyId, MasterPublicKeyId, Payload, SchnorrKeyId, SignWithECDSAReply, SignWithSchnorrReply,
+    VetKdDeriveKeyResult, VetKdKeyId,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
@@ -120,18 +121,26 @@ pub(super) fn make_chain_key_config() -> ChainKeyConfig {
 pub(super) fn fake_completed_signature_request_context(
     key_id: MasterPublicKeyId,
 ) -> SignWithThresholdContext {
+    fake_signature_request_context(key_id, Some(PreSigId(0)), Some([0; 32]))
+}
+
+pub(super) fn fake_signature_request_context(
+    key_id: MasterPublicKeyId,
+    pre_sig_id: Option<PreSigId>,
+    nonce: Option<[u8; 32]>,
+) -> SignWithThresholdContext {
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(
             key_id,
             Height::from(100),
-            Some(PreSigId(0)),
+            pre_sig_id,
             RegistryVersion::from(10),
         ),
         derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [0; 32],
-        nonce: Some([0; 32]),
+        nonce,
     }
 }
 
@@ -190,4 +199,23 @@ pub(super) fn make_shares(
         }
     }
     messages
+}
+
+/// Create a properly-encoded but dummy agreement for the given request context.
+pub(super) fn fake_agreement_for_context(context: &SignWithThresholdContext) -> ChainKeyAgreement {
+    let data = match &context.args {
+        ThresholdArguments::Ecdsa(_) => SignWithECDSAReply {
+            signature: vec![0xDE; 64],
+        }
+        .encode(),
+        ThresholdArguments::Schnorr(_) => SignWithSchnorrReply {
+            signature: vec![0xDE; 64],
+        }
+        .encode(),
+        ThresholdArguments::VetKd(_) => VetKdDeriveKeyResult {
+            encrypted_key: vec![0xDE; 64],
+        }
+        .encode(),
+    };
+    ChainKeyAgreement::Success(data)
 }
