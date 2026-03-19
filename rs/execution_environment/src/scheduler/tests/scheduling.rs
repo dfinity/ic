@@ -43,12 +43,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
 
     for canister in test.state().canisters_iter() {
         assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
-        assert_eq!(
-            test.state()
-                .canister_priority(&canister.canister_id())
-                .last_full_execution_round,
-            test.last_round()
-        );
+        assert!(test.was_fully_executed(canister.canister_id()));
         let execution_state = canister.execution_state.as_ref().unwrap();
         assert_eq!(execution_state.last_executed_round.get(), 1);
         let canister_metrics = canister.system_state.canister_metrics();
@@ -186,26 +181,17 @@ fn execute_idle_and_canisters_with_messages() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // We won't update `last_full_execution_round` for the canister without any
+    // We update `last_full_execution_round` for the canister without any
     // input messages.
-    assert_eq!(
-        test.state()
-            .canister_priority(&idle)
-            .last_full_execution_round,
-        test.last_round()
-    );
+    assert!(test.was_fully_executed(idle));
+    // But not its counts of rounds scheduled or executed.
     let idle = test.canister_state(idle);
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
     assert_eq!(idle.system_state.canister_metrics().executed(), 0);
     let execution_state = idle.execution_state.as_ref().unwrap();
     assert_eq!(execution_state.last_executed_round.get(), 0);
 
-    assert_eq!(
-        test.state()
-            .canister_priority(&active)
-            .last_full_execution_round,
-        ExecutionRound::from(1)
-    );
+    assert!(test.was_fully_executed(active));
     let active = test.canister_state(active);
     assert_eq!(active.system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
@@ -254,12 +240,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
     for canister_state in test.state().canisters_iter() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
-        assert_eq!(
-            test.state()
-                .canister_priority(&canister_state.canister_id())
-                .last_full_execution_round,
-            ExecutionRound::new(1)
-        );
+        assert!(test.was_fully_executed(canister_state.canister_id()));
         assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         assert_eq!(
@@ -776,11 +757,9 @@ fn scheduler_respects_compute_allocation(
             test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
-        for canister_id in test.state().canister_states().keys() {
-            let priority = test.state().canister_priority(canister_id);
-            if priority.last_full_execution_round == test.last_round() {
-                let count = scheduled_first_counters.entry(*canister_id).or_insert(0);
-                *count += 1;
+        for canister in canister_ids.iter() {
+            if test.was_fully_executed(*canister) {
+                *scheduled_first_counters.entry(*canister).or_insert(0) += 1;
             }
         }
     }
@@ -952,17 +931,16 @@ fn inner_round_first_execution_is_not_a_full_execution() {
 
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
-        let priority = test.state().canister_priority(&canister.canister_id());
-        // All ingresses should be executed in the previous round.
+        // All ingress messages should have been executed in the previous round.
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         if canister.canister_id() == target_id {
             // The target canister, despite being executed first in the second inner round,
             // should not be marked as fully executed.
             assert_ne!(test.last_round(), 0.into());
-            assert_eq!(priority.last_full_execution_round, 0.into());
+            assert!(!test.was_fully_executed(canister.canister_id()));
         } else {
-            assert_eq!(priority.last_full_execution_round, test.last_round());
+            assert!(test.was_fully_executed(canister.canister_id()));
         }
     }
     let mut total_accumulated_priority = 0;
@@ -1066,17 +1044,16 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     for (i, canister) in test.state().canisters_iter().enumerate() {
-        let priority = test.state().canister_priority(&canister.canister_id());
         if i < num_canisters as usize / 2 {
             // The first half of the canisters should finish their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
             prop_assert_eq!(canister.system_state.canister_metrics().executed(), 1);
-            prop_assert_eq!(priority.last_full_execution_round, test.last_round());
+            prop_assert!(test.was_fully_executed(canister.canister_id()));
         } else {
             // The second half of the canisters should still have their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 1);
             prop_assert_eq!(canister.system_state.canister_metrics().executed(), 0);
-            prop_assert_eq!(priority.last_full_execution_round, 0.into());
+            prop_assert!(!test.was_fully_executed(canister.canister_id()));
         }
     }
     let mut total_accumulated_priority = 0;
@@ -1117,7 +1094,7 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
             // The second half of the canisters should finish their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
             // The second half of the canisters should be executed in the last round.
-            prop_assert_eq!(priority.last_full_execution_round, test.last_round());
+            prop_assert!(test.was_fully_executed(canister.canister_id()));
             prop_assert_eq!(
                 execution_state.last_executed_round.get(),
                 test.last_round().get()
@@ -1270,9 +1247,8 @@ fn frozen_canisters_are_fully_executed() {
     };
     for (i, canister) in canisters.iter().enumerate() {
         if (i as u64) < (canisters_per_core - 1) * 2 {
-            assert_eq!(
-                canister_priority(canister).last_full_execution_round,
-                1.into(),
+            assert!(
+                test.was_fully_executed(*canister),
                 "Canister {i} should have been fully executed",
             );
             assert!(
@@ -1280,9 +1256,8 @@ fn frozen_canisters_are_fully_executed() {
                 "Canister {i} should have been charged"
             );
         } else {
-            assert_eq!(
-                canister_priority(canister).last_full_execution_round,
-                0.into(),
+            assert!(
+                !test.was_fully_executed(*canister),
                 "Canister {i} should not have been executed",
             );
             assert!(
