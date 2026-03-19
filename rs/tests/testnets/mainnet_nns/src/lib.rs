@@ -593,7 +593,7 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    let recovery_dir = env.base_path();
     let mut cmd = Command::new(env.get_path(PATH_IC_RECOVERY));
     cmd.arg("--skip-prompts")
         .arg("--dir")
@@ -819,7 +819,7 @@ fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
     let logger: slog::Logger = env.logger();
     let set_testnet_env_vars_sh_path = env.get_path(PATH_SET_TESTNET_ENV_VARS_SH);
     let set_testnet_env_vars_sh_str = set_testnet_env_vars_sh_path.display();
-    let ic_admin = fs::canonicalize(get_dependency_path_from_env("IC_ADMIN_PATH")).unwrap();
+    let ic_admin = fs::canonicalize(env.get_path("recovery/binaries/ic-admin")).unwrap();
     let pem = env.get_path("neuron_secret_key.pem");
     let mut pem_file = File::create(&pem).unwrap();
     pem_file
