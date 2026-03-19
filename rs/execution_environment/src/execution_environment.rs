@@ -1959,8 +1959,8 @@ impl ExecutionEnvironment {
                         &mut state,
                         args,
                         round_limits,
-                        registry_settings.subnet_size,
                         &resource_saturation,
+                        registry_settings,
                     )
                     .map(|res| (res, Some(canister_id)))
                 });
@@ -2983,38 +2983,55 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         args: DeleteCanisterSnapshotArgs,
         round_limits: &mut RoundLimits,
-        subnet_size: usize,
         resource_saturation: &ResourceSaturation,
+        registry_settings: &RegistryExecutionSettings,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
-        // Take canister out.
-        let mut canister = match state.take_canister_state(&canister_id) {
-            None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
-            }
-            Some(canister) => canister,
-        };
 
-        let result = self
-            .canister_manager
-            .delete_canister_snapshot(
+        let subnet_size = registry_settings.subnet_size;
+        let cost_schedule = state.get_own_cost_schedule();
+
+        let op =
+            |mut canister,
+             mut round_limits,
+             (sender, snapshot_id, subnet_size, cost_schedule, resource_saturation)| {
+                self.canister_manager
+                    .delete_canister_snapshot(
+                        sender,
+                        &mut canister,
+                        snapshot_id,
+                        &mut round_limits,
+                        subnet_size,
+                        cost_schedule,
+                        resource_saturation,
+                    )
+                    .map(|()| {
+                        (
+                            canister,
+                            round_limits,
+                            EmptyBlob.encode(),
+                            NumBytes::new(0),
+                            vec![],
+                            vec![],
+                            None,
+                        )
+                    })
+                    .map_err(|err| (err.into(), NumInstructions::new(0), Cycles::zero()))
+            };
+        self.execute_mgmt_operation_on_canister(
+            canister_id,
+            op,
+            (
                 sender,
-                Arc::make_mut(&mut canister),
                 args.get_snapshot_id(),
-                state,
-                round_limits,
                 subnet_size,
+                cost_schedule,
                 resource_saturation,
-            )
-            .map(|()| EmptyBlob.encode())
-            .map_err(|err| err.into());
-
-        // Put canister back.
-        state.put_canister_state(canister);
-        result
+            ),
+            state,
+            round_limits,
+            registry_settings,
+        )
     }
 
     fn read_snapshot_data(
