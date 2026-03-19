@@ -47,7 +47,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     let canister = test.create_canister_with_controller(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::default(),
+        MemoryAllocation::from(NumBytes::from(bytes_per_cycle)),
         Some(NumBytes::new(0)), // Don't allocate log memory.
         None,
         Some(initial_time),
