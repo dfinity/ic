@@ -334,7 +334,7 @@ impl ChainKeyPayloadBuilderImpl {
                         Err(err) => {
                             warn!(
                                 self.log,
-                                "Failed to combine shares: callback_id = {:?}, key_id = {:?}, {:?}",
+                                "Failed to combine chain key shares: callback_id = {:?}, key_id = {:?}, {:?}",
                                 callback_id,
                                 key_id,
                                 err
@@ -1427,42 +1427,26 @@ mod tests {
                         builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
                     let key_id = context.key_id();
                     let err = validation.unwrap_err();
+                    let ValidationError::InvalidArtifact(
+                        InvalidPayloadReason::InvalidChainKeyPayload(
+                            InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(inner_err),
+                        ),
+                    ) = err
+                    else {
+                        panic!("Unexpected error: {err:?}");
+                    };
                     match &key_id {
                         MasterPublicKeyId::Ecdsa(_) => {
-                            assert_matches!(
-                                err,
-                                ValidationError::InvalidArtifact(
-                                    InvalidPayloadReason::InvalidChainKeyPayload(
-                                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
-                                            ChainKeyAgreementValidationError::Ecdsa(_)
-                                        )
-                                    )
-                                )
-                            );
+                            assert_matches!(inner_err, ChainKeyAgreementValidationError::Ecdsa(_));
                         }
                         MasterPublicKeyId::Schnorr(_) => {
                             assert_matches!(
-                                err,
-                                ValidationError::InvalidArtifact(
-                                    InvalidPayloadReason::InvalidChainKeyPayload(
-                                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
-                                            ChainKeyAgreementValidationError::Schnorr(_)
-                                        )
-                                    )
-                                )
+                                inner_err,
+                                ChainKeyAgreementValidationError::Schnorr(_)
                             );
                         }
                         MasterPublicKeyId::VetKd(_) => {
-                            assert_matches!(
-                                err,
-                                ValidationError::InvalidArtifact(
-                                    InvalidPayloadReason::InvalidChainKeyPayload(
-                                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
-                                            ChainKeyAgreementValidationError::VetKd(_)
-                                        )
-                                    )
-                                )
-                            );
+                            assert_matches!(inner_err, ChainKeyAgreementValidationError::VetKd(_));
                         }
                     }
                 }
@@ -1518,6 +1502,12 @@ mod tests {
             )));
             assert!(keys.contains(&MasterPublicKeyId::VetKd(
                 VetKdKeyId::from_str("bls12_381_g2:some_other_key").unwrap()
+            )));
+            assert!(keys.contains(&MasterPublicKeyId::Ecdsa(
+                EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap()
+            )));
+            assert!(keys.contains(&MasterPublicKeyId::Schnorr(
+                SchnorrKeyId::from_str("Ed25519:some_key_3").unwrap()
             )));
             assert_matches!(expiry.time, Some(time) if time == now.saturating_sub(timeout));
             assert_eq!(
