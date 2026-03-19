@@ -387,59 +387,37 @@ impl Firewall {
 
         // Depending on whether the node is a system or app API boundary node, get the IPs of all
         // system subnet or application subnet nodes
-        let whitelisted_socks_ips: BTreeSet<IpAddr> = match self
+        let whitelisted_subnet_types = match self
             .registry
             .is_system_api_boundary_node(self.node_id, registry_version)
         {
-            Ok(true) => registry_versions
-                .into_iter()
-                .flat_map(|registry_version| {
-                    let system_node_ids = self.registry
-                        .get_subnet_node_ids_of_types(
-                            vec![SubnetType::System],
-                            registry_version,
-                        )
-                        .inspect_err(|err| {
-                            warn!(
-                                every_n_seconds => 30,
-                                self.logger,
-                                "Failed to get the node IDs of system subnet nodes in the registry: {}", err
-                            )
-                        })
-                        .unwrap_or_default();
-
-                    self.registry
-                        .get_available_ip_addresses_for_node_ids(system_node_ids, registry_version)
-                })
-                .collect(),
-            Ok(false) => registry_versions
-                .into_iter()
-                .flat_map(|registry_version| {
-                    let app_node_ids = self.registry
-                        .get_subnet_node_ids_of_types(
-                            vec![SubnetType::Application, SubnetType::VerifiedApplication],
-                            registry_version,
-                        )
-                        .inspect_err(|err| {
-                            warn!(
-                                every_n_seconds => 30,
-                                self.logger,
-                                "Failed to get the node IDs of app subnet nodes in the registry: {}", err
-                            )
-                        })
-                        .unwrap_or_default();
-
-                    self.registry.get_available_ip_addresses_for_node_ids(app_node_ids, registry_version)
-                })
-                .collect(),
+            Ok(true) => vec![SubnetType::System],
+            Ok(false) => vec![SubnetType::Application, SubnetType::VerifiedApplication],
             Err(err) => {
                 warn!(
                     every_n_seconds => 30,
                     self.logger,
                     "Failed to determine if node is a system or app API boundary node: {}", err);
-                BTreeSet::new()
+                vec![]
             }
         };
+        let whitelisted_socks_ips: BTreeSet<IpAddr> = registry_versions
+            .into_iter()
+            .flat_map(|registry_version| {
+                let subnet_node_ids = self.registry
+                    .get_subnet_node_ids_of_types(whitelisted_subnet_types.clone(), registry_version)
+                    .inspect_err(|err| {
+                        warn!(
+                            every_n_seconds => 30,
+                            self.logger,
+                            "Failed to get the node IDs of {:?} subnet nodes in the registry: {}", whitelisted_subnet_types, err
+                        )
+                    })
+                    .unwrap_or_default();
+
+                self.registry.get_available_ip_addresses_for_node_ids(subnet_node_ids, registry_version)
+            })
+            .collect();
 
         // Then split it to v4 and v6 separately
         let (whitelisted_ipv4s, whitelisted_ipv6s) =
