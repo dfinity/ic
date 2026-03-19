@@ -320,22 +320,15 @@ fn drain_subnet_queues_skips_heavy_subnet_calls_when_instructions_reached() {
 
     let mut new_state = test.drain_subnet_messages();
 
-    // NOTE: For now, we also have a `break` that triggers when the instruction
-    // limit is reached, so `drain_subnet_messages()` bails out immediately after
-    // the first subnet call that counts toward the round limit. And a TODO to drop
-    // it.
-
     let queues = new_state.subnet_queues_mut();
     // The two calls from `remote_canister_2` were not executed.
-    // assert_eq!(queues.input_queues_message_count(), 2);
-    assert_eq!(queues.input_queues_message_count(), 5);
+    assert_eq!(queues.input_queues_message_count(), 2);
     // The other 4 calls were executed.
-    // assert_eq!(queues.output_queues_message_count(), 4);
-    assert_eq!(queues.output_queues_message_count(), 1);
+    assert_eq!(queues.output_queues_message_count(), 4);
     assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
-    // assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
-    // assert!(queues.pop_canister_output(&remote_canister_2).is_some());
-    // assert!(queues.pop_canister_output(&remote_canister_2).is_some());
+    assert!(queues.pop_canister_output(&xnet_canister_id).is_some());
+    assert!(queues.pop_canister_output(&remote_canister_2).is_some());
+    assert!(queues.pop_canister_output(&remote_canister_2).is_some());
 }
 
 /// Subnet messages with `does_not_run_on_aborted_canister` are skipped when
@@ -412,4 +405,276 @@ fn drain_subnet_queues_skips_messages_targeting_aborted_canister() {
     // The call from `xnet_caller_3` was executed.
     assert_eq!(queues.output_queues_message_count(), 1);
     assert!(queues.pop_canister_output(&xnet_caller_3).is_some());
+}
+
+/// `drain_subnet_queues` breaks the loop when an (install code) execution is
+/// paused.
+#[test]
+fn drain_subnet_queues_breaks_on_paused_execution() {
+    const SLICE: u64 = 10;
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_message: NumInstructions::from(100),
+            max_instructions_per_slice: NumInstructions::from(SLICE),
+            max_instructions_per_install_code: NumInstructions::new(100),
+            max_instructions_per_install_code_slice: NumInstructions::new(SLICE),
+            ..zero_instruction_overhead_config()
+        })
+        .build();
+    let canister = test.create_canister();
+
+    // Install code that needs more than one DTS slice → will be paused.
+    test.inject_install_code_call_to_ic00(
+        canister,
+        TestInstallCode::Reinstall {
+            init: instructions(SLICE * 3),
+        },
+    );
+    // A second message from a different sender (in a different input queue).
+    test.inject_call_to_ic00(
+        Method::CanisterStatus,
+        Encode!(&CanisterIdRecord::from(canister)).unwrap(),
+        Cycles::zero(),
+        canister_test_id(42),
+        InputQueueType::RemoteSubnet,
+    );
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 2);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The install code was popped and paused after one slice.
+    assert!(
+        test.state()
+            .canister_state(&canister)
+            .unwrap()
+            .has_paused_install_code()
+    );
+    // The loop broke immediately, so the other message was not executed.
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+}
+
+mod can_execute_subnet_msg_tests {
+    use super::*;
+    use candid::CandidType;
+    use ic_management_canister_types_private::TakeCanisterSnapshotArgs;
+    use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+    use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
+
+    /// Fixture for testing `can_execute_subnet_msg()`. By default, tests are run
+    /// with no instructions left and a paused install code on a third party local
+    /// canister, i.e. the most restrictive case.
+    struct CanExecuteSubnetMsgTest {
+        test: SchedulerTest,
+        canister: CanisterId,
+    }
+
+    impl CanExecuteSubnetMsgTest {
+        /// Creates a fixture witn no istructions left and a paused install code (on a
+        /// third party local canister).
+        fn new() -> Self {
+            Self::with_instruction_limit(0)
+        }
+
+        /// Creates a fixture with the given instruction limit and a paused install code
+        /// (on a third party local canister).
+        fn with_instruction_limit(instructions: u64) -> Self {
+            let mut test = SchedulerTestBuilder::new()
+                .with_scheduler_config(SchedulerConfig {
+                    // Ensure that `RoundLimits::instructions_reached()` is immediately true iff `instructions == 0`.
+                    max_instructions_per_round: NumInstructions::from(
+                        instructions * SUBNET_MESSAGES_LIMIT_FRACTION + 1,
+                    ),
+                    ..SchedulerConfig::application_subnet()
+                })
+                .build();
+            let canister = test.create_canister();
+
+            // Have a paused install code for a different local canister.
+            let other_canister = test.create_canister();
+            test.canister_state_mut(other_canister)
+                .system_state
+                .task_queue
+                .enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
+
+            Self { test, canister }
+        }
+
+        fn inject_call<S: ToString, T: CandidType>(&mut self, method_name: S, method_payload: &T) {
+            self.test.inject_call_to_ic00(
+                method_name,
+                Encode!(method_payload).unwrap(),
+                Cycles::zero(),
+                self.test.xnet_canister_id(),
+                InputQueueType::RemoteSubnet,
+            );
+        }
+
+        fn inject_canister_status_call(&mut self, target: CanisterId) {
+            self.inject_call(Method::CanisterStatus, &CanisterIdRecord::from(target));
+        }
+
+        fn inject_install_code_call_to_ic00(&mut self, target: CanisterId) {
+            self.test.inject_install_code_call_to_ic00(
+                target,
+                TestInstallCode::Reinstall {
+                    init: instructions(1),
+                },
+            );
+        }
+
+        fn state(&self) -> &ReplicatedState {
+            self.test.state()
+        }
+
+        fn enqueue_task(&mut self, task: ExecutionTask) {
+            self.test
+                .canister_state_mut(self.canister)
+                .system_state
+                .task_queue
+                .enqueue(task);
+        }
+
+        fn drain_subnet_messages(&mut self) -> ReplicatedState {
+            self.test.drain_subnet_messages()
+        }
+    }
+
+    #[test]
+    fn no_effective_canister_id_is_executed() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+
+        test.inject_call(Method::SubnetInfo, &EmptyBlob);
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 0);
+    }
+
+    #[test]
+    fn missing_effective_canister_state_is_executed() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+
+        let nonexistent = canister_test_id(999);
+        assert!(test.state().canister_state(&nonexistent).is_none());
+        test.inject_install_code_call_to_ic00(nonexistent);
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 0);
+    }
+
+    #[test]
+    fn invalid_method_name_is_executed() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+        test.inject_call("bogus_method", &EmptyBlob);
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 0);
+    }
+
+    #[test]
+    fn effective_canister_with_paused_execution_is_skipped() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+
+        test.enqueue_task(ExecutionTask::PausedExecution {
+            id: PausedExecutionId(0),
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        });
+        test.inject_canister_status_call(test.canister);
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 1);
+    }
+
+    #[test]
+    fn effective_canister_with_paused_install_code_is_skipped() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+
+        test.enqueue_task(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
+        test.inject_canister_status_call(test.canister);
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 1);
+    }
+
+    #[test]
+    fn method_that_counts_toward_round_limit_is_skipped_when_instructions_reached() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+
+        test.inject_call(
+            Method::TakeCanisterSnapshot,
+            &TakeCanisterSnapshotArgs::new(test.canister, None, None, None),
+        );
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 1);
+    }
+
+    #[test]
+    fn method_that_does_not_count_toward_round_limit_is_executed_when_instructions_reached() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+
+        test.inject_canister_status_call(test.canister);
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 0);
+    }
+
+    #[test]
+    fn flagged_method_is_skipped_for_target_with_aborted_execution() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+
+        test.enqueue_task(ExecutionTask::AbortedExecution {
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+            prepaid_execution_cycles: Cycles::zero(),
+        });
+        test.inject_call(Method::StopCanister, &CanisterIdRecord::from(test.canister));
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 1);
+    }
+
+    #[test]
+    fn unflagged_method_is_executed_for_target_with_aborted_execution() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+
+        test.enqueue_task(ExecutionTask::AbortedExecution {
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+            prepaid_execution_cycles: Cycles::zero(),
+        });
+        test.inject_canister_status_call(test.canister);
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 0);
+    }
+
+    #[test]
+    fn install_code_is_skipped_with_ongoing_long_install_code() {
+        let mut test = CanExecuteSubnetMsgTest::with_instruction_limit(1_000_000_000);
+
+        test.inject_install_code_call_to_ic00(test.canister);
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 1);
+    }
+
+    #[test]
+    fn normal_execution() {
+        let mut test = CanExecuteSubnetMsgTest::new();
+
+        test.inject_canister_status_call(test.canister);
+
+        assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+        let new_state = test.drain_subnet_messages();
+        assert_eq!(new_state.subnet_queues().input_queues_message_count(), 0);
+    }
 }

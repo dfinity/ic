@@ -24,13 +24,13 @@ use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use ic_types::{
     NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;

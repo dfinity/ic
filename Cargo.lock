@@ -7662,7 +7662,9 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
+ "flate2",
  "hex",
+ "ic-agent",
  "ic-base-types",
  "ic-cdk",
  "ic-ckbtc-minter",
@@ -15010,6 +15012,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-wasm-types",
  "wat",
 ]
@@ -15115,6 +15118,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-types",
+ "ic-types-cycles",
  "tempfile",
 ]
 
@@ -21537,7 +21541,10 @@ name = "rewards-calculation"
 version = "0.9.0"
 dependencies = [
  "chrono",
+ "futures",
  "ic-base-types",
+ "ic-cdk",
+ "ic-nns-constants",
  "ic-protobuf",
  "itertools 0.12.1",
  "lazy_static",
