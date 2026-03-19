@@ -283,8 +283,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // Subnet read_state caching
     let subnet_read_state_cache_state = if cli
         .subnet_read_state_cache
-        .subnet_read_state_cache_ttl
-        .is_zero()
+        .subnet_read_state_cache_disable
     {
         None
     } else {

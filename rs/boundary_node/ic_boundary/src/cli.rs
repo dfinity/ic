@@ -344,8 +344,11 @@ pub struct Cache {
 
 #[derive(Args)]
 pub struct SubnetReadStateCache {
-    /// TTL for cached subnet read_state responses.
-    /// Set to 0 to disable caching.
+    /// Disable subnet read_state caching
+    #[clap(env, long)]
+    pub subnet_read_state_cache_disable: bool,
+
+    /// TTL for cached subnet read_state responses
     #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
     pub subnet_read_state_cache_ttl: Duration,
 
