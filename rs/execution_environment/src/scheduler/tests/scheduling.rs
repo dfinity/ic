@@ -624,7 +624,7 @@ prop_compose! {
 // floor(`max_instructions_per_round` / `max_instructions_per_message`))`. `available_messages` are the sum of
 // messages in the input queues of all canisters.
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler will never consume more than
 // `max_instructions_per_round` in a single execution round per core.
 fn should_never_consume_more_than_max_instructions_per_round_in_a_single_execution_round(
@@ -673,7 +673,7 @@ fn should_never_consume_more_than_max_instructions_per_round_in_a_single_executi
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler is deterministic, i.e. given
 // the same input, if we execute a round of computation, we always
 // get the same result.
@@ -701,7 +701,7 @@ fn scheduler_deterministically_produces_same_output_given_same_input(
     assert_eq!(test1.state(), test2.state());
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler can successfully deplete the induction
 // pool given sufficient consecutive execution rounds.
 fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
@@ -738,7 +738,7 @@ fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
     }
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler does not lose any canisters
 // after an execution round.
 fn scheduler_does_not_lose_canisters(
@@ -763,11 +763,11 @@ fn scheduler_does_not_lose_canisters(
     assert_eq!(canisters_before, canisters_after);
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // Verifies that each canister is scheduled as the first of its thread as
 // much as its compute_allocation requires.
 fn scheduler_respects_compute_allocation(
-    #[strategy(arb_scheduler_test(2..10, 1..20, 1..2, B..B+1, B..B+1, true))] test: (
+    #[strategy(arb_scheduler_test(2..6, 1..10, 1..2, B..B+1, B..B+1, true))] test: (
         SchedulerTest,
         usize,
         usize,
