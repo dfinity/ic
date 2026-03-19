@@ -211,6 +211,11 @@ if [ "$(id -u)" = "1000" ]; then
             --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
         )
     fi
+    if [ -d "${HOME}/.claude" ]; then
+        PODMAN_RUN_ARGS+=(
+            --mount type=bind,source="${HOME}/.claude",target="/home/ubuntu/.claude"
+        )
+    fi
 
     if findmnt /hoststorage >/dev/null; then
         # use host's storage for cargo target
