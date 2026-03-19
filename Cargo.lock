@@ -13703,7 +13703,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "test-strategy 0.4.0",
+ "test-strategy 0.4.5",
  "tokio",
  "tracing",
  "tracing-appender",
