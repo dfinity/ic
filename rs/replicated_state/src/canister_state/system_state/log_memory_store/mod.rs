@@ -237,7 +237,7 @@ impl LogMemoryStore {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.bytes_used());
         // Append the delta records and persist the ring buffer.
-        ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
+        ring_buffer.append_log_iter(delta_log.records_mut().drain(..));
         self.maybe_page_map = Some(ring_buffer.to_page_map());
         self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
     }
