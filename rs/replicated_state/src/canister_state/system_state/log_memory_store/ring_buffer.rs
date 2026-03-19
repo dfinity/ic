@@ -551,16 +551,14 @@ mod tests {
 
     #[test]
     fn test_records_no_filter_exactly_full_buffer() {
-        // Thest records(None) would NOT loop infinitely on an exactly-full buffer
-        // (data_head == data_tail, data_size == data_capacity).
-        let record_size: usize = 25; // 8 (idx) + 8 (timestamp) + 4 (len) + 5 (content)
-        let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
-
+        // Regression: records(None) would loop infinitely on an exactly-full buffer
+        // (data_head == data_tail, data_size == data_capacity) because is_alive()
+        // returns true for every position in that state.
         let r0 = log_record(0, 100, "12345");
         let r1 = log_record(1, 200, "12345");
         let r2 = log_record(2, 300, "12345");
-        assert_eq!(bytes_len(&r0), record_size);
+        let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
 
         rb.append(&r0);
         rb.append(&r1);
