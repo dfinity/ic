@@ -8,7 +8,7 @@ use ic_consensus_system_test_subnet_recovery::utils::{
 };
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
-    node::await_subnet_earliest_topology_version_with_retries,
+    node::await_subnet_earliest_topology_version_with_retries_async,
     rw_message::{cert_state_makes_progress_with_retries, store_message_with_retries},
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
@@ -144,9 +144,10 @@ async fn replace_nns_with_nested_vms(env: &TestEnv, use_mainnet_state: bool) {
         logger,
         "Waiting for new nodes to take over the NNS subnet..."
     );
-    let new_topology =
-        block_on(topology.block_for_newer_registry_version_within_duration(secs(60), secs(2)))
-            .unwrap();
+    let new_topology = topology
+        .block_for_newer_registry_version_within_duration(secs(60), secs(2))
+        .await
+        .unwrap();
 
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
@@ -165,15 +166,16 @@ async fn replace_nns_with_nested_vms(env: &TestEnv, use_mainnet_state: bool) {
     } else {
         secs(15 * 60)
     };
-    await_subnet_earliest_topology_version_with_retries(
+    await_subnet_earliest_topology_version_with_retries_async(
         &nns_subnet,
         new_topology.get_registry_version(),
         &logger,
         state_sync_timeout,
         secs(15),
-    );
+    )
+    .await;
     for node in nns_subnet.nodes() {
-        node.await_status_is_healthy().unwrap();
+        node.await_status_is_healthy_async().await.unwrap();
     }
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 }
