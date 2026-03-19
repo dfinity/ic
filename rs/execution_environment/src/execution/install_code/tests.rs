@@ -29,6 +29,7 @@ use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use more_asserts::assert_le;
 use std::mem::size_of;
+use std::sync::Arc;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
@@ -2360,7 +2361,9 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     };
 
     // Clear `expected_compiled_wasms` so that the full execution cost is applied
-    test.state_mut().metadata.expected_compiled_wasms.clear();
+    let expected_compiled_wasms =
+        Arc::make_mut(&mut test.state_mut().metadata.expected_compiled_wasms);
+    expected_compiled_wasms.clear();
 
     let canister_id = test.create_canister(CYCLES);
 

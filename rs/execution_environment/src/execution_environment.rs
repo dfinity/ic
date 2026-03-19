@@ -3768,10 +3768,9 @@ impl ExecutionEnvironment {
                     Ok(result) => {
                         state.metadata.heap_delta_estimate += result.heap_delta;
                         if let Some(new_wasm_hash) = result.new_wasm_hash {
-                            state
-                                .metadata
-                                .expected_compiled_wasms
-                                .insert(WasmHash::from(new_wasm_hash));
+                            let expected_compiled_wasms =
+                                Arc::make_mut(&mut state.metadata.expected_compiled_wasms);
+                            expected_compiled_wasms.insert(WasmHash::from(new_wasm_hash));
                         }
                         info!(
                             self.log,

@@ -47,6 +47,7 @@ use maplit::btreemap;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::collections::BTreeMap;
 use std::mem::size_of;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod canister_task;
@@ -1928,7 +1929,9 @@ fn canister_snapshots_after_split() {
     // expected_compiled_wasms cache (a subnet split assumes it happens after a
     // checkpoint round where these two happen among other things).
     test.state_mut().metadata.heap_delta_estimate = NumBytes::from(0);
-    test.state_mut().metadata.expected_compiled_wasms.clear();
+    let expected_compiled_wasms =
+        Arc::make_mut(&mut test.state_mut().metadata.expected_compiled_wasms);
+    expected_compiled_wasms.clear();
 
     // Retain canister 1 on subnet A, migrate canister 2 to subnet B.
     let routing_table = RoutingTable::try_from(btreemap! {

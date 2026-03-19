@@ -1115,7 +1115,9 @@ impl SchedulerImpl {
                 // The set of compiled Wasms must be cleared when taking a
                 // checkpoint to keep it in sync with the protobuf serialization
                 // of `ReplicatedState` which doesn't store this field.
-                state.metadata.expected_compiled_wasms.clear();
+                let expected_compiled_wasms =
+                    Arc::make_mut(&mut state.metadata.expected_compiled_wasms);
+                expected_compiled_wasms.clear();
 
                 // Abort all paused execution before the checkpoint.
                 self.exec_env.abort_all_paused_executions(state, &self.log);

@@ -162,7 +162,7 @@ pub struct SystemMetadata {
     ///
     /// Each time a canister is installed, its Wasm is inserted and the set is
     /// cleared at each checkpoint.
-    pub expected_compiled_wasms: BTreeSet<WasmHash>,
+    pub expected_compiled_wasms: Arc<BTreeSet<WasmHash>>,
 
     /// Responses to `BitcoinGetSuccessors` can be larger than the max inter-canister
     /// response limit. To work around this limitation, large responses are paginated
@@ -455,7 +455,7 @@ impl SystemMetadata {
 
             heap_delta_estimate: NumBytes::from(0),
             subnet_metrics: Default::default(),
-            expected_compiled_wasms: BTreeSet::new(),
+            expected_compiled_wasms: Arc::new(BTreeSet::new()),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
