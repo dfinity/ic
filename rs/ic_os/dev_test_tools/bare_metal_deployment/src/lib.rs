@@ -53,7 +53,7 @@ impl BareMetalIpmiSession {
         let mut session = spawn(&cmd, Some(EXPECT_TIMEOUT_MS))
             .with_context(|| format!("Failed to start ipmitool with command: {}", cmd))?;
 
-        let (_, matched) = session
+        session
             .exp_any(vec![ReadUntil::String(
                 "SOL Session operational".to_string(),
             )])
