@@ -33,11 +33,11 @@ fn test_update_canister_settings_proposal(
         controller_canister_id.get(),
         PrincipalId::new_user_test_id(1),
     ];
-    let target_memory_allocation = 1u64 << 33;
-    let target_compute_allocation = 10u64;
-    let target_freezing_threshold = 100_000u64;
-    let target_wasm_memory_limit = 1u64 << 36;
-    let target_wasm_memory_threshold = 1u64 << 34;
+    let target_memory_allocation = 1_u64 << 33;
+    let target_compute_allocation = 10_u64;
+    let target_freezing_threshold = 100_000_u64;
+    let target_wasm_memory_limit = 1_u64 << 36;
+    let target_wasm_memory_threshold = 1_u64 << 34;
     let target_log_visibility = Some(LogVisibility::Public);
     let canister_settings = || -> DefiniteCanisterSettings {
         get_canister_status(

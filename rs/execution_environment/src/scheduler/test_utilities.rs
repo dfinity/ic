@@ -54,9 +54,9 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
+    CanisterTimer, ComputeAllocation, ExecutionRound, MemoryAllocation, NumInstructions,
     Randomness, ReplicaVersion, Time, UserId,
-    batch::{AvailablePreSignatures, CanisterCyclesCostSchedule, ChainKeyData},
+    batch::{AvailablePreSignatures, ChainKeyData},
     consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus},
@@ -65,16 +65,23 @@ use ic_types::{
     },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use std::{collections::BTreeSet, time::Duration};
 
 use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 
-use super::SchedulerImpl;
+use super::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
+
+/// Valid, but minimal wasm code.
+pub(crate) const EMPTY_WASM: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
+    0x01, 0x00,
+];
 
 /// A helper for the scheduler tests. It comes with its own Wasm executor that
 /// fakes execution of Wasm code for performance, so it can process thousands
@@ -121,6 +128,8 @@ pub(crate) struct SchedulerTest {
     idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     /// Version of the running replica, not the registry's Entry
     replica_version: ReplicaVersion,
+    /// Hypervisor config.
+    hypervisor_config: HypervisorConfig,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -221,6 +230,19 @@ impl SchedulerTest {
         )
     }
 
+    pub fn create_canister_without_log_memory(&mut self) -> CanisterId {
+        self.create_canister_with_controller(
+            self.initial_canister_cycles,
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            Some(NumBytes::from(0)),
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
         use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
         self.scheduler.cycles_account_manager.execution_cost(
@@ -241,6 +263,7 @@ impl SchedulerTest {
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
+        log_memory_limit: Option<NumBytes>,
         system_task: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
         status: Option<CanisterStatusType>,
@@ -249,11 +272,11 @@ impl SchedulerTest {
         let canister_id = self.next_canister_id();
         let wasm_source = system_task
             .map(|x| x.to_string().as_bytes().to_vec())
-            .unwrap_or_default();
+            .unwrap_or(EMPTY_WASM.to_vec());
         let time_of_last_allocation_charge =
             time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
         let controller = controller.unwrap_or(self.user_id.get());
-        let mut canister_state = CanisterStateBuilder::new()
+        let mut builder = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
             .with_cycles(cycles)
             .with_controller(controller)
@@ -262,8 +285,11 @@ impl SchedulerTest {
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
             .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
-            .with_status(status.unwrap_or(CanisterStatusType::Running))
-            .build();
+            .with_status(status.unwrap_or(CanisterStatusType::Running));
+        if let Some(limit) = log_memory_limit {
+            builder = builder.with_log_memory_limit(limit.get() as usize);
+        }
+        let mut canister_state = builder.build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
             wasm_executor
@@ -300,6 +326,7 @@ impl SchedulerTest {
             cycles,
             compute_allocation,
             memory_allocation,
+            None,
             system_task,
             time_of_last_allocation_charge,
             status,
@@ -562,6 +589,7 @@ impl SchedulerTest {
             self.registry_settings(),
         );
         self.state = Some(state);
+        self.check_invariants();
         self.increment_round();
     }
 
@@ -592,7 +620,7 @@ impl SchedulerTest {
         );
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
-                self.scheduler.config.max_instructions_per_round / 16,
+                self.scheduler.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
             ),
             subnet_available_memory: self
                 .scheduler
@@ -602,7 +630,7 @@ impl SchedulerTest {
             compute_allocation_used,
             subnet_memory_reservation: self.scheduler.exec_env.scaled_subnet_memory_reservation(),
         };
-        let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
+        let measurements = MeasurementScope::root(&self.scheduler.metrics.round_inner_subnet_queue);
         self.scheduler.drain_subnet_queues(
             state,
             &mut csprng,
@@ -705,6 +733,14 @@ impl SchedulerTest {
 
         let state_after_split = state.online_split(subnet_id, other_subnet_id).unwrap();
         self.state = Some(state_after_split);
+    }
+
+    pub fn check_invariants(&self) {
+        for canister in self.state.as_ref().unwrap().canisters_iter() {
+            canister
+                .check_invariants(&self.hypervisor_config)
+                .expect("Canister invariant check failed");
+        }
     }
 }
 
@@ -1003,7 +1039,7 @@ impl SchedulerTestBuilder {
 
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
-            self.hypervisor_config,
+            self.hypervisor_config.clone(),
             self.own_subnet_id,
             execution_services.ingress_history_writer,
             execution_services.execution_environment,
@@ -1030,6 +1066,7 @@ impl SchedulerTestBuilder {
             chain_key_subnet_public_keys,
             idkg_pre_signatures: BTreeMap::new(),
             replica_version: self.replica_version,
+            hypervisor_config: self.hypervisor_config,
         }
     }
 }

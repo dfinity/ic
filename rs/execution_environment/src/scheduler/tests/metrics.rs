@@ -28,12 +28,11 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;
@@ -346,28 +345,42 @@ fn execution_round_metrics_are_recorded() {
             .messages
             .get_sample_count()
     );
-    assert_eq!(2, metrics.round_subnet_queue.duration.get_sample_count());
     assert_eq!(
         2,
-        metrics.round_subnet_queue.instructions.get_sample_count()
+        metrics.round_inner_subnet_queue.duration.get_sample_count()
+    );
+    assert_eq!(
+        2,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_count()
     );
     assert_eq!(
         30,
-        metrics.round_subnet_queue.instructions.get_sample_sum() as u64,
+        metrics
+            .round_inner_subnet_queue
+            .instructions
+            .get_sample_sum() as u64,
     );
-    assert_eq!(2, metrics.round_subnet_queue.messages.get_sample_count());
+    assert_eq!(
+        2,
+        metrics.round_inner_subnet_queue.messages.get_sample_count()
+    );
     assert_eq!(
         3,
-        metrics.round_subnet_queue.messages.get_sample_sum() as u64,
+        metrics.round_inner_subnet_queue.messages.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.duration.get_sample_count());
     assert_eq!(1, metrics.round_inner.instructions.get_sample_count());
+    // (3 subnet messages + 10 canister messages) * 10 instructions
     assert_eq!(
-        100,
+        130,
         metrics.round_inner.instructions.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.messages.get_sample_count());
-    assert_eq!(10, metrics.round_inner.messages.get_sample_sum() as u64,);
+    // 3 subnet messages + 10 canister messages
+    assert_eq!(13, metrics.round_inner.messages.get_sample_sum() as u64,);
     assert_eq!(2, metrics.round_inner_iteration.duration.get_sample_count());
     assert_eq!(
         2,
@@ -927,7 +940,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -1017,7 +1030,7 @@ fn http_outcalls_free() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -1075,7 +1088,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with(
-        Cycles::from(5_000_000_000_000u128),
+        Cycles::from(5_000_000_000_000_u128),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
         None,
@@ -1083,7 +1096,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         None,
     );
 
-    let removed_cycles = Cycles::from(1000u128);
+    let removed_cycles = Cycles::from(1000_u128);
     test.canister_state_mut(canister_id)
         .system_state
         .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
@@ -1107,7 +1120,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
 #[test]
 fn consumed_cycles_are_updated_from_deleted_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
-    let initial_balance = Cycles::from(5_000_000_000_000u128);
+    let initial_balance = Cycles::from(5_000_000_000_000_u128);
     let canister_id = test.create_canister_with(
         initial_balance,
         ComputeAllocation::zero(),
@@ -1117,7 +1130,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         Some(CanisterStatusType::Stopped),
     );
 
-    let removed_cycles = Cycles::from(1000u128);
+    let removed_cycles = Cycles::from(1000_u128);
     test.canister_state_mut(canister_id)
         .system_state
         .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
@@ -1125,7 +1138,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
     test.inject_call_to_ic00(
         Method::DeleteCanister,
         CanisterIdRecord::from(canister_id).encode(),
-        Cycles::from(1_000_000_000_000u128),
+        Cycles::from(1_000_000_000_000_u128),
         CanisterId::try_from(user_test_id(1).get()).unwrap(),
         InputQueueType::RemoteSubnet,
     );

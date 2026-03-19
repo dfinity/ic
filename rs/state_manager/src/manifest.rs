@@ -701,7 +701,7 @@ fn get_base_index(relative_path: &Path, base_manifest: &Manifest) -> Option<usiz
             chunk_info
                 .file_index
                 .cmp(&(base_file_index as u32))
-                .then_with(|| chunk_info.offset.cmp(&0u64))
+                .then_with(|| chunk_info.offset.cmp(&0_u64))
         })
         .ok()
 }

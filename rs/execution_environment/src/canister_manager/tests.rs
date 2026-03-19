@@ -85,15 +85,13 @@ use ic_test_utilities_types::{
     messages::{IngressBuilder, RequestBuilder},
 };
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, SubnetId, UserId,
-    batch::CanisterCyclesCostSchedule,
-    cycles_use_case::CyclesUseCase,
+    CanisterId, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
+    SubnetId, UserId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
-    nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
@@ -1002,7 +1000,7 @@ fn stop_a_stopped_canister_from_another_canister() {
             CanisterStatusType::Stopped
         );
 
-        let cycles = 20u128;
+        let cycles = 20_u128;
         let stop_context = StopCanisterContext::Canister {
             sender: controller,
             reply_callback: CallbackId::from(0),
@@ -2144,7 +2142,7 @@ fn delete_canister_consumed_cycles_observed() {
     // in its main as well as reserved balance would be lost.
     test.canister_state_mut(canister_id)
         .system_state
-        .reserve_cycles(initial_cycles / 2u64)
+        .reserve_cycles(initial_cycles / 2_u64)
         .unwrap();
 
     // Stop and delete the canister.
@@ -7093,7 +7091,7 @@ fn can_create_canister_with_extra_cycles() {
         sender_canister_version: None,
     }
     .encode();
-    let cycles = Cycles::from(1_000_000_000_200u64);
+    let cycles = Cycles::from(1_000_000_000_200_u64);
     let payload = wasm()
         .call_with_cycles(
             CanisterId::ic_00(),
@@ -7146,7 +7144,7 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test
-        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
+        .universal_canister_with_cycles(*INITIAL_CYCLES * 2_u64)
         .unwrap();
 
     let create_canister_args = CreateCanisterArgs {
@@ -7207,7 +7205,7 @@ fn create_canister_free() {
         .build();
 
     let canister_id = test
-        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
+        .universal_canister_with_cycles(*INITIAL_CYCLES * 2_u64)
         .unwrap();
 
     let create_canister_args = CreateCanisterArgs {

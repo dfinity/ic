@@ -13,7 +13,8 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, Payload, RejectContext,
     Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CountBytes, Cycles, SubnetId, nominal_cycles::NominalCycles};
+use ic_types::{CountBytes, SubnetId};
+use ic_types_cycles::{Cycles, NominalCycles};
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};

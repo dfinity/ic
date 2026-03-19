@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Rate limit the number of subnet admin updates that can happen for a subnet.
+
 ## Changed
 
 * During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.

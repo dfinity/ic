@@ -88,9 +88,30 @@ jobs:
 
             EXIT_STATUS=0
 
-            bazel run :buildifier
-            bazel run :shfmt-format
-            bazel run :ruff-format
+            checks=(
+              //pre-commit:{shfmt-check,ruff-check,buf-check,DFINITY-capitalization-check,do-not-merge-check,buildifier-check,gazelle-check}
+            )
+
+            # if the CI_OVERRIDE_BUF_BREAKING label is not set on the PR, then run the buf compatibility checks
+            if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' != 'true' ]]; then
+              checks+=( //pre-commit:buf-breaking-check )
+            fi
+
+            # First run all checks and record any potential error
+            for check in ${checks[@]} ; do
+              echo -n "Checking $check ... "
+              if bazel run "$check"; then
+                echo "ok"
+              else
+                echo "failed"
+                EXIT_STATUS=1
+              fi
+            done
+
+            # Then try to autofix whenever possible
+            bazel run //pre-commit:buildifier-fix
+            bazel run //pre-commit:shfmt-fix
+            bazel run //pre-commit:ruff-fix
             bazel run :rustfmt
             bazel run :gazelle
 
