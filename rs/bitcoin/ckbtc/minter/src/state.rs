@@ -33,7 +33,7 @@ use crate::{
 use candid::{CandidType, Deserialize, Principal};
 use canlog::log;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{OutPoint, Txid, Utxo};
+use ic_btc_interface::{Height, OutPoint, Txid, Utxo};
 use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
@@ -577,8 +577,11 @@ pub struct CkBtcMinterState {
     /// Map from burn block index to the reimbursed withdrawal request.
     pub reimbursed_withdrawals: BTreeMap<LedgerBurnIndex, ReimbursedWithdrawalResult>,
 
-    /// Cache of get_utxos call results
+    /// Cache of get_utxos call results.
     pub get_utxos_cache: GetUtxosCache,
+
+    /// Block tip height returned in the last get_utxos call.
+    pub last_get_utxos_tip_height: Option<Height>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
@@ -2059,6 +2062,7 @@ impl From<InitArgs> for CkBtcMinterState {
             get_utxos_cache: GetUtxosCache::new(Duration::from_secs(
                 get_utxos_cache_expiration_seconds.unwrap_or_default(),
             )),
+            last_get_utxos_tip_height: None,
             pending_withdrawal_reimbursements: Default::default(),
             reimbursed_withdrawals: Default::default(),
         }
