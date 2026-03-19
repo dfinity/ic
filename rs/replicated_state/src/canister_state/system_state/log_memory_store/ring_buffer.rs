@@ -121,20 +121,13 @@ impl RingBuffer {
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
         for record in iter.map(LogRecord::from) {
+            // Check that records are added in order, otherwise it breaks the index.
             if record.idx < h.next_idx {
-                debug_assert!(
-                    false,
-                    "Log record idx {} must be >= than next idx {}",
-                    record.idx, h.next_idx
-                );
+                debug_assert!(false, "Log record idx must be >= than next idx");
                 continue;
             }
             if record.timestamp < h.max_timestamp {
-                debug_assert!(
-                    false,
-                    "Log record timestamp {} must be >= than max timestamp {}",
-                    record.timestamp, h.max_timestamp
-                );
+                debug_assert!(false, "Log record timestamp must be >= than max timestamp");
                 continue;
             }
 
