@@ -218,9 +218,8 @@ impl RingBuffer {
                     }
                     pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
                     records.push(CanisterLogRecord::from(record));
-                    // Stop when we've reached the tail — handles the exactly-full buffer
-                    // case where data_head == data_tail and is_alive() returns true
-                    // for every position, which would otherwise cause an infinite loop.
+                    // Stop at the tail — required when the buffer is exactly full
+                    // (data_head == data_tail), where is_alive() is true everywhere.
                     if pos == header.data_tail {
                         break;
                     }
@@ -552,11 +551,8 @@ mod tests {
 
     #[test]
     fn test_records_no_filter_exactly_full_buffer() {
-        // Regression test for a bug where records(None) would loop infinitely
-        // when the ring buffer was exactly full (data_head == data_tail &&
-        // data_size == data_capacity). In that state Header::is_alive() returns
-        // true for every position, so without an explicit data_tail guard the
-        // no-filter scan wraps around and re-reads records forever.
+        // Thest records(None) would NOT loop infinitely on an exactly-full buffer
+        // (data_head == data_tail, data_size == data_capacity).
         let record_size: usize = 25; // 8 (idx) + 8 (timestamp) + 4 (len) + 5 (content)
         let data_capacity = MemorySize::new(3 * record_size as u64);
         let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
