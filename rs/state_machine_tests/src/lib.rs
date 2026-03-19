@@ -4784,7 +4784,7 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory;
 
-        let mut dst = vec![0u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
+        let mut dst = vec![0_u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
         let buffer = Buffer::new(memory.page_map.clone());
         buffer.read(&mut dst, 0);
         dst

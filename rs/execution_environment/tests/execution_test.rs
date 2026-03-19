@@ -658,9 +658,9 @@ fn can_query_cycle_balance_and_top_up_canisters() {
         None,
     );
 
-    assert_eq!(0u128, env.cycle_balance(canister_id));
+    assert_eq!(0_u128, env.cycle_balance(canister_id));
     assert_eq!(
-        &0u64.to_le_bytes()[..],
+        &0_u64.to_le_bytes()[..],
         &env.query(canister_id, "cycle_balance", vec![])
             .unwrap()
             .bytes()[..]
