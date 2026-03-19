@@ -32,7 +32,6 @@ use ic_system_test_driver::{
     driver::ic::{NrOfVCPUs, VmResources},
     systest,
 };
-use ic_testnet_mainnet_nns::MAINNET_NODE_VM_RESOURCES;
 use std::time::Duration;
 
 fn main() -> Result<()> {
@@ -50,7 +49,6 @@ fn main() -> Result<()> {
                         memory_kibibytes: None,
                         boot_image_minimal_size_gibibytes: None,
                     }
-                    .or(&MAINNET_NODE_VM_RESOURCES)
                     .or(&NNS_RECOVERY_VM_RESOURCES),
                 },
             )

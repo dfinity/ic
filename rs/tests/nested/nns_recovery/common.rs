@@ -233,7 +233,12 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
 
     if cfg.subnet_size > 0 {
         let host_vm_names = get_host_vm_names(cfg.subnet_size);
-        NestedNodes::new_with_resources(&host_vm_names, cfg.nested_nodes_vm_resources)
+        let vm_resources = if cfg.use_mainnet_state {
+            MAINNET_NODE_VM_RESOURCES.or(&cfg.nested_nodes_vm_resources)
+        } else {
+            cfg.nested_nodes_vm_resources
+        };
+        NestedNodes::new_with_resources(&host_vm_names, vm_resources)
             .setup_and_start(&env)
             .unwrap();
 
