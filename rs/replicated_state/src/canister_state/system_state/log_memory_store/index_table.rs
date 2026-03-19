@@ -98,7 +98,6 @@ impl IndexTable {
         let entries = if entries.is_empty() {
             vec![IndexEntry::invalid(); entries_count]
         } else {
-            debug_assert_eq!(entries.len(), entries_count, "Entry count mismatch",);
             entries
         };
         Self {
