@@ -185,7 +185,7 @@ pub fn hkdf<H: HmacHashFunction>(
 
     let mut prev_t: Option<Vec<u8>> = None;
 
-    let mut output = vec![0u8; output_len];
+    let mut output = vec![0_u8; output_len];
 
     for i in 0..blocks {
         let mut hmac = Hmac::<H>::new(&prk);
