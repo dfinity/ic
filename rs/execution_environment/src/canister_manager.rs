@@ -57,7 +57,6 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
 };
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
     MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
@@ -68,7 +67,7 @@ use ic_types::{
         StopCanisterContext,
     },
 };
-use ic_types_cycles::{Cycles, CyclesUseCase};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
 use ic_wasm_types::WasmHash;
 use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_traits::{SaturatingAdd, SaturatingSub};

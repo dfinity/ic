@@ -56,7 +56,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     CanisterTimer, ComputeAllocation, ExecutionRound, MemoryAllocation, NumInstructions,
     Randomness, ReplicaVersion, Time, UserId,
-    batch::{AvailablePreSignatures, CanisterCyclesCostSchedule, ChainKeyData},
+    batch::{AvailablePreSignatures, ChainKeyData},
     consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus},
@@ -65,14 +65,14 @@ use ic_types::{
     },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use std::{collections::BTreeSet, time::Duration};
 
 use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 
-use super::SchedulerImpl;
+use super::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
@@ -615,7 +615,7 @@ impl SchedulerTest {
         let compute_allocation_used = state.total_compute_allocation();
         RoundLimits {
             instructions: as_round_instructions(
-                self.scheduler.config.max_instructions_per_round / 16,
+                self.scheduler.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
             ),
             subnet_available_memory: self
                 .scheduler

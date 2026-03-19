@@ -128,7 +128,7 @@ fn entries_sorted_lexicographically() {
     let mut ingress_history = IngressHistoryState::new();
     let time = UNIX_EPOCH;
 
-    for i in (0..10u64).rev() {
+    for i in (0..10_u64).rev() {
         ingress_history.insert(
             message_test_id(i),
             IngressStatus::Known {
@@ -142,7 +142,7 @@ fn entries_sorted_lexicographically() {
             |_| {},
         );
     }
-    let mut expected: Vec<_> = (0..10u64).map(message_test_id).collect();
+    let mut expected: Vec<_> = (0..10_u64).map(message_test_id).collect();
     expected.sort();
 
     let actual: Vec<_> = ingress_history

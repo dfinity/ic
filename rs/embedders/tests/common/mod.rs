@@ -25,12 +25,11 @@ use ic_test_utilities_types::ids::{
 };
 use ic_types::{
     ComputeAllocation, MemoryAllocation, NumInstructions, PrincipalId, Time,
-    batch::CanisterCyclesCostSchedule,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext},
     methods::SystemMethod,
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use std::collections::BTreeMap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
