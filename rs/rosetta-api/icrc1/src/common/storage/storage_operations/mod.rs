@@ -7,6 +7,9 @@ use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
+use icrc_ledger_types::icrc124::schema::{
+    BTYPE_124_DEACTIVATE, BTYPE_124_PAUSE, BTYPE_124_UNPAUSE,
+};
 use num_bigint::BigUint;
 use rusqlite::Connection;
 use rusqlite::{CachedStatement, Params, named_params, params};
@@ -619,7 +622,7 @@ pub fn store_blocks(
                 None,
             ),
             crate::common::storage::types::IcrcOperation::Pause { .. } => (
-                "124pause",
+                BTYPE_124_PAUSE,
                 None,
                 None,
                 None,
@@ -632,7 +635,7 @@ pub fn store_blocks(
                 None,
             ),
             crate::common::storage::types::IcrcOperation::Unpause { .. } => (
-                "124unpause",
+                BTYPE_124_UNPAUSE,
                 None,
                 None,
                 None,
@@ -645,7 +648,7 @@ pub fn store_blocks(
                 None,
             ),
             crate::common::storage::types::IcrcOperation::Deactivate { .. } => (
-                "124deactivate",
+                BTYPE_124_DEACTIVATE,
                 None,
                 None,
                 None,
