@@ -310,7 +310,7 @@ fn test_gaps_handling() {
                 owner: PrincipalId::new_user_test_id(i).0,
                 subaccount: None,
             },
-            1_000_000_000_000u64.into(),
+            1_000_000_000_000_u64.into(),
         ));
     }
     init_args.initial_balances = initial_balances;

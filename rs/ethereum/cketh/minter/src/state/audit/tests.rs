@@ -174,7 +174,7 @@ impl GetEventsFile {
             }
 
             fn ethers_u256_to_be_bytes(num: ethers_core::types::U256) -> [u8; 32] {
-                let mut bytes = [0u8; 32];
+                let mut bytes = [0_u8; 32];
                 num.to_big_endian(&mut bytes);
                 bytes
             }
