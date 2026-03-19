@@ -259,8 +259,8 @@ mod tests {
     const TEST_RESULT_MAX_SIZE: MemorySize = MemorySize::new(2 * MIB);
     const TEST_INDEX_TABLE_PAGES: u16 = 1;
     // Index table of 1 page holds 4096 / 28 bytes per entry = 146 entries max
-    // Average segment size: 10 MB / 146 = ~70 KB
-    // Individual test record size: 10 KB
+    // Average segment size: 10 MiB / 146 = ~70 KiB
+    // Individual test record size: 10 KiB
     const RECORD_HEADER_SIZE: u64 = 8 + 8 + 4; // idx + timestamp + len
     const TEST_RECORD_CONTENT_SIZE: MemorySize = MemorySize::new(10 * KIB - RECORD_HEADER_SIZE);
     // Safety margin to keep “small” and “big” cases clearly separated from the 2 MB limit
