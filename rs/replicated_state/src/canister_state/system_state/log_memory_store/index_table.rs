@@ -247,29 +247,29 @@ mod tests {
     use ic_management_canister_types_private::FetchCanisterLogsRange;
     use more_asserts::{assert_ge, assert_le, assert_lt};
 
-    const KB: u64 = 1000;
-    const MB: u64 = 1000 * KB;
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
 
-    const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(10 * MB);
-    const TEST_NO_WRAP_POSITION: MemoryPosition = MemoryPosition::new(3 * MB);
-    const TEST_WRAP_POSITION: MemoryPosition = MemoryPosition::new(9 * MB);
-    const TEST_RESULT_MAX_SIZE: MemorySize = MemorySize::new(2 * MB);
+    const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(10 * MIB);
+    const TEST_NO_WRAP_POSITION: MemoryPosition = MemoryPosition::new(3 * MIB);
+    const TEST_WRAP_POSITION: MemoryPosition = MemoryPosition::new(9 * MIB);
+    const TEST_RESULT_MAX_SIZE: MemorySize = MemorySize::new(2 * MIB);
     const TEST_INDEX_TABLE_PAGES: u16 = 1;
     // Index table of 1 page holds 4096 / 28 bytes per entry = 146 entries max
     // Average segment size: 10 MB / 146 = ~70 KB
     // Individual test record size: 10 KB
     const RECORD_HEADER_SIZE: u64 = 8 + 8 + 4; // idx + timestamp + len
-    const TEST_RECORD_CONTENT_SIZE: MemorySize = MemorySize::new(10 * KB - RECORD_HEADER_SIZE);
+    const TEST_RECORD_CONTENT_SIZE: MemorySize = MemorySize::new(10 * KIB - RECORD_HEADER_SIZE);
     // Safety margin to keep “small” and “big” cases clearly separated from the 2 MB limit
-    const MARGIN: MemorySize = MemorySize::new(4 * 70 * KB);
+    const MARGIN: MemorySize = MemorySize::new(4 * 70 * KIB);
 
     // Small log – comfortably below the max result limit
-    const TEST_LOG_SIZE_SMALL: MemorySize = MemorySize::new(1_500 * KB); // 1.5 MB or 150 records
+    const TEST_LOG_SIZE_SMALL: MemorySize = MemorySize::new(1_500 * KIB); // 1.5 MB or 150 records
     const _: () = assert!(TEST_LOG_SIZE_SMALL.get() < TEST_RESULT_MAX_SIZE.get() - MARGIN.get());
     const TEST_SMALL_LOG_RECORDS_COUNT: u64 = 150;
 
     // Big log – comfortably above the max result limit
-    const TEST_LOG_SIZE_BIG: MemorySize = MemorySize::new(2_500 * KB); // 2.5 MB or 250 records
+    const TEST_LOG_SIZE_BIG: MemorySize = MemorySize::new(2_500 * KIB); // 2.5 MB or 250 records
     const _: () = assert!(TEST_LOG_SIZE_BIG.get() > TEST_RESULT_MAX_SIZE.get() + MARGIN.get());
     const TEST_BIG_LOG_RECORDS_COUNT: u64 = 250;
 

@@ -132,7 +132,7 @@ impl LogMemoryStore {
     /// Returns the total virtual memory usage of the ring buffer.
     ///
     /// Includes header, index table and data region.
-    /// It is 'virtual' because it is not alligned to actual OS page size.
+    /// It is 'virtual' because it is not aligned to actual OS page size.
     pub fn total_virtual_memory_usage(&self) -> usize {
         self.get_header()
             .map(|h| {
