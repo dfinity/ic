@@ -308,11 +308,11 @@ mod test {
             Cycles::zero()
         );
         assert_eq!(
-            Cycles::from(u128::MAX) - Cycles::from(10u128),
+            Cycles::from(u128::MAX) - Cycles::from(10_u128),
             Cycles::from(u128::MAX - 10)
         );
-        assert_eq!(Cycles::zero() - Cycles::from(10u128), Cycles::zero());
-        assert_eq!(Cycles::from(10u128) - Cycles::from(20u128), Cycles::zero());
+        assert_eq!(Cycles::zero() - Cycles::from(10_u128), Cycles::zero());
+        assert_eq!(Cycles::from(10_u128) - Cycles::from(20_u128), Cycles::zero());
     }
 
     #[test]
