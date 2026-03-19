@@ -78,7 +78,7 @@ proptest! {
         let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().with_sns_subnet().build();
         let init_args = InitArgsBuilder::for_tests()
             .with_minting_account(*TEST_ACCOUNT)
-            .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000u64)
+            .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
             .with_transfer_fee(DEFAULT_TRANSFER_FEE)
             .with_archive_options(ArchiveOptions {
                 trigger_threshold: 10_000,
@@ -145,7 +145,7 @@ proptest! {
         let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().with_sns_subnet().build();
         let init_args = InitArgsBuilder::for_tests()
             .with_minting_account(*TEST_ACCOUNT)
-            .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000u64)
+            .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
             .with_transfer_fee(DEFAULT_TRANSFER_FEE)
             .with_archive_options(ArchiveOptions {
                 // Create archive after every ten blocks
