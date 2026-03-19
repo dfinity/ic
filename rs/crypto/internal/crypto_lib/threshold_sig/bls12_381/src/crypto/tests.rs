@@ -205,7 +205,7 @@ fn test_distinct_messages_yield_distinct_hashes() {
             let bytes = g1.serialize();
             // It suffices to prove that the first 32 bytes are distinct.  More requires a
             // custom hash implementation.
-            let mut hashable = [0u8; 32];
+            let mut hashable = [0_u8; 32];
             hashable.copy_from_slice(&bytes[0..32]);
             hashable
         })
@@ -218,7 +218,7 @@ fn test_distinct_messages_yield_distinct_hashes() {
 fn omnipotent_dealer() {
     let threshold = NumberOfNodes::from(3);
     let num_shares = NumberOfNodes::from(6);
-    let seed = Seed::from_bytes(&[1u8; 32]);
+    let seed = Seed::from_bytes(&[1_u8; 32]);
     let message = b"foo";
 
     let (public_coefficients, shares) =
@@ -325,7 +325,7 @@ proptest! {
 
 #[test]
 fn generating_a_key_returns_expected_error_for_invalid_args() {
-    let seed = [0u8; 32];
+    let seed = [0_u8; 32];
     let rng = &mut ChaChaRng::from_seed(seed);
 
     for threshold in 0..10 {

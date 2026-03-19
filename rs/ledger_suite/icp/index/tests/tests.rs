@@ -36,7 +36,7 @@ const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 
-const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
+const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0_u8; 29]);
 
 // Metadata-related constants
 const TOKEN_NAME: &str = "Test Token";
@@ -217,7 +217,7 @@ fn index_get_blocks_update(
 
 fn call_index_get_blocks(query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>) -> Vec<icp_ledger::Block> {
     let req = GetBlocksRequest {
-        start: 0u8.into(),
+        start: 0_u8.into(),
         length: u64::MAX.into(),
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
@@ -757,9 +757,9 @@ fn test_ledger_index_icrc1_approve_parity() {
             setup.approve_amount,
         )
         .created_at_time(Some(tx_timestamp.as_nanos_since_unix_epoch()))
-        .fee(Some(Nat::from(10_000u16)))
+        .fee(Some(Nat::from(10_000_u16)))
         .memo(Some(setup.memo.clone()))
-        .expected_allowance(Some(Nat::from(0u8)))
+        .expected_allowance(Some(Nat::from(0_u8)))
         .expires_at(Some(expires_at)),
     );
     assert_eq!(tx_block_index, Nat::from(1u8));
@@ -811,9 +811,9 @@ fn test_ledger_index_icrc1_transfer_from_parity() {
             setup.approve_amount,
         )
         .created_at_time(Some(tx_timestamp.as_nanos_since_unix_epoch()))
-        .fee(Some(Nat::from(10_000u16)))
+        .fee(Some(Nat::from(10_000_u16)))
         .memo(Some(setup.memo.clone()))
-        .expected_allowance(Some(Nat::from(0u8)))
+        .expected_allowance(Some(Nat::from(0_u8)))
         .expires_at(Some(expires_at)),
     );
     assert_eq!(tx_block_index, Nat::from(1u8));
@@ -1022,10 +1022,10 @@ fn test_get_account_identifier_transactions() {
     // List of the transactions that the test is going to add. This exists to make
     // the test easier to read. The transactions are executed in separate phases, where the block
     // timestamp is a function of the phase.
-    let mut rounds = 2u32; // ledger is created in 1st round and initialized in 2nd round
-    let mut phase = 0u32;
+    let mut rounds = 2_u32; // ledger is created in 1st round and initialized in 2nd round
+    let mut phase = 0_u32;
     let tx0 = SettledTransactionWithId {
-        id: 0u64,
+        id: 0_u64,
         transaction: SettledTransaction {
             operation: Operation::Mint {
                 to: account(1, 0).into(),
@@ -1040,13 +1040,13 @@ fn test_get_account_identifier_transactions() {
     rounds += 3; // it takes two more rounds to create and initialize index and one more round for the transfer
     phase = 1;
     let tx1 = SettledTransactionWithId {
-        id: 1u64,
+        id: 1_u64,
         transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
                 spender: None,
-                amount: Tokens::from_e8s(1_000_000u64),
+                amount: Tokens::from_e8s(1_000_000_u64),
                 fee: Tokens::from_e8s(10_000),
             },
             memo: Memo(0),
@@ -1058,13 +1058,13 @@ fn test_get_account_identifier_transactions() {
     rounds += 1; // it takes one more round for the transfer
     phase = 2;
     let tx2 = SettledTransactionWithId {
-        id: 2u64,
+        id: 2_u64,
         transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
                 spender: None,
-                amount: Tokens::from_e8s(2_000_000u64),
+                amount: Tokens::from_e8s(2_000_000_u64),
                 fee: Tokens::from_e8s(10_000),
             },
             memo: Memo(0),
@@ -1075,13 +1075,13 @@ fn test_get_account_identifier_transactions() {
     };
     rounds += 1; // it takes one more round for the transfer
     let tx3 = SettledTransactionWithId {
-        id: 3u64,
+        id: 3_u64,
         transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(1, 1).into(),
                 from: account(2, 0).into(),
                 spender: None,
-                amount: Tokens::from_e8s(1_000_000u64),
+                amount: Tokens::from_e8s(1_000_000_u64),
                 fee: Tokens::from_e8s(10_000),
             },
             memo: Memo(0),
@@ -1098,12 +1098,12 @@ fn test_get_account_identifier_transactions() {
         .as_nanos() as u64
         + Duration::from_secs(3600).as_nanos() as u64;
     let tx4 = SettledTransactionWithId {
-        id: 4u64,
+        id: 4_u64,
         transaction: SettledTransaction {
             operation: Operation::Approve {
                 from: account(1, 0).into(),
                 spender: account(4, 4).into(),
-                allowance: Tokens::from_e8s(1_000_000u64),
+                allowance: Tokens::from_e8s(1_000_000_u64),
                 fee: Tokens::from_e8s(10_000),
                 expected_allowance: None,
                 expires_at: Some(TimeStamp::from_nanos_since_unix_epoch(expires_at)),
@@ -1512,7 +1512,7 @@ fn test_approve_args() {
         ledger_id,
         account(1, 0),
         ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000)
-            .expected_allowance(Some(100_000u32.into())),
+            .expected_allowance(Some(100_000_u32.into())),
     );
     wait_until_sync_is_completed(env, index_id, ledger_id);
 

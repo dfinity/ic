@@ -75,7 +75,7 @@ fn test_retention() {
 
 #[test]
 fn should_not_call_retain_if_keystore_would_not_be_modified() {
-    let active_key_ids = set_of(&[KeyId::from([0u8; 32])]);
+    let active_key_ids = set_of(&[KeyId::from([0_u8; 32])]);
     let mut sks = MockSecretKeyStore::new();
     sks.expect_retain_would_modify_keystore()
         .withf(|_filter, scope| *scope == NIDKG_THRESHOLD_SCOPE)
@@ -91,7 +91,7 @@ fn should_not_call_retain_if_keystore_would_not_be_modified() {
 
 #[test]
 fn should_call_retain_if_keystore_would_be_modified() {
-    let active_key_ids = set_of(&[KeyId::from([0u8; 32])]);
+    let active_key_ids = set_of(&[KeyId::from([0_u8; 32])]);
     let mut sks = MockSecretKeyStore::new();
     let mut seq = Sequence::new();
     sks.expect_retain_would_modify_keystore()
@@ -248,7 +248,7 @@ fn should_generate_dkg_dealing_encryption_public_key_with_timestamp() {
 fn should_return_internal_error_from_load_threshold_signing_key_internal_if_nidkg_secret_key_persistence_fails_due_to_serialization_error()
  {
     const INTERNAL_ERROR: &str = "cannot serialize keys";
-    let fs_key_id = KeyId::from([0u8; 32]);
+    let fs_key_id = KeyId::from([0_u8; 32]);
     let vault = csp_vault_with_fs_key_id_and_mock_secret_key_store_insert_error(
         fs_key_id,
         SecretKeyStoreInsertionError::SerializationError(INTERNAL_ERROR.to_string()),
@@ -267,7 +267,7 @@ fn should_return_internal_error_from_load_threshold_signing_key_internal_if_nidk
 fn should_return_transient_internal_error_from_load_threshold_signing_key_if_nidkg_secret_key_persistence_fails_due_to_transient_internal_error()
  {
     const INTERNAL_ERROR: &str = "transient internal error";
-    let fs_key_id = KeyId::from([0u8; 32]);
+    let fs_key_id = KeyId::from([0_u8; 32]);
     let vault = csp_vault_with_fs_key_id_and_mock_secret_key_store_insert_error(
         fs_key_id,
         SecretKeyStoreInsertionError::TransientError(INTERNAL_ERROR.to_string()),
@@ -285,7 +285,7 @@ fn should_return_transient_internal_error_from_load_threshold_signing_key_if_nid
 #[test]
 fn should_return_error_if_update_forward_secure_key_with_wrong_algorithm_id() {
     let mut sks = MockSecretKeyStore::new();
-    let key_id = KeyId::from([0u8; 32]);
+    let key_id = KeyId::from([0_u8; 32]);
     sks.expect_get().never();
     sks.expect_insert_or_replace().never();
     let csp = LocalCspVault::builder_for_test()
@@ -308,7 +308,7 @@ fn should_return_error_if_update_forward_secure_key_with_wrong_algorithm_id() {
 fn should_not_update_forward_secure_key_if_key_is_missing() {
     const INTERNAL_ERROR: &str = "Cannot update forward secure key if it is missing";
     let mut sks = MockSecretKeyStore::new();
-    let sks_key_id = KeyId::from([0u8; 32]);
+    let sks_key_id = KeyId::from([0_u8; 32]);
     sks.expect_get()
         .withf(move |key_id_| key_id_ == &sks_key_id)
         .times(1)
@@ -335,7 +335,7 @@ fn should_not_update_forward_secure_key_if_key_is_missing() {
 #[test]
 fn should_not_update_forward_secure_key_if_epoch_in_sks_is_newer_than_the_one_to_update_to() {
     let mut sks = MockSecretKeyStore::new();
-    let key_id = KeyId::from([0u8; 32]);
+    let key_id = KeyId::from([0_u8; 32]);
     let rng = &mut reproducible_rng();
     let epoch_in_sks = Epoch::from(3);
     let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, epoch_in_sks, rng);
@@ -362,7 +362,7 @@ fn should_not_update_forward_secure_key_if_epoch_in_sks_is_newer_than_the_one_to
 #[test]
 fn should_not_update_forward_secure_key_if_epoch_to_update_to_is_identical_to_that_in_sks() {
     let mut sks = MockSecretKeyStore::new();
-    let key_id = KeyId::from([0u8; 32]);
+    let key_id = KeyId::from([0_u8; 32]);
     let rng = &mut reproducible_rng();
     let epoch = Epoch::from(1);
     let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, epoch, rng);
@@ -384,7 +384,7 @@ fn should_not_update_forward_secure_key_if_epoch_to_update_to_is_identical_to_th
 #[test]
 fn should_update_forward_secure_key_if_epoch_to_update_to_is_newer_than_that_in_sks() {
     let mut sks = MockSecretKeyStore::new();
-    let key_id = KeyId::from([0u8; 32]);
+    let key_id = KeyId::from([0_u8; 32]);
     let rng = &mut reproducible_rng();
     let epoch_in_sks = Epoch::from(1);
     let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, epoch_in_sks, rng);
@@ -419,7 +419,7 @@ fn should_update_forward_secure_key_if_epoch_to_update_to_is_newer_than_that_in_
 fn should_not_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_the_epoch_to_update_to_in_the_meantime()
  {
     let mut sks = MockSecretKeyStore::new();
-    let key_id = KeyId::from([0u8; 32]);
+    let key_id = KeyId::from([0_u8; 32]);
     let rng = &mut reproducible_rng();
     let old_epoch_in_sks = Epoch::from(1);
     let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, old_epoch_in_sks, rng);
@@ -459,7 +459,7 @@ fn should_not_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_th
 fn should_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_an_older_epoch_than_the_one_to_update_to()
  {
     let mut sks = MockSecretKeyStore::new();
-    let key_id = KeyId::from([0u8; 32]);
+    let key_id = KeyId::from([0_u8; 32]);
     let rng = &mut reproducible_rng();
     let old_epoch_in_sks = Epoch::from(1);
     let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, old_epoch_in_sks, rng);
@@ -519,7 +519,7 @@ fn fs_encryption_key_set_with_epoch(
     epoch: Epoch,
     rng: &mut ReproducibleRng,
 ) -> CspSecretKey {
-    let fs_key_pair = ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::create_forward_secure_key_pair(Seed::from_rng(rng), &[0u8; 4]);
+    let fs_key_pair = ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::create_forward_secure_key_pair(Seed::from_rng(rng), &[0_u8; 4]);
     let fs_enc_key_set =
         CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(fs_key_pair));
     update_fs_encryption_key_set_epoch(fs_enc_key_set, key_id, epoch, rng)

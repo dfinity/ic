@@ -227,7 +227,7 @@ where
         let slice = bytes.as_ref();
         let n = slice.len();
         if n <= SMALL_LABEL_SIZE {
-            let mut buf = [0u8; SMALL_LABEL_SIZE + 1];
+            let mut buf = [0_u8; SMALL_LABEL_SIZE + 1];
             buf[0] = n as u8;
             buf[1..=n].copy_from_slice(slice);
             debug_assert!(buf[0] as usize <= SMALL_LABEL_SIZE);
@@ -934,32 +934,32 @@ impl Serialize for MixedHashTree {
         match self {
             MixedHashTree::Empty => {
                 let mut seq = serializer.serialize_seq(Some(1))?;
-                seq.serialize_element(&0u8)?;
+                seq.serialize_element(&0_u8)?;
                 seq.end()
             }
             MixedHashTree::Fork(tree) => {
                 let mut seq = serializer.serialize_seq(Some(3))?;
-                seq.serialize_element(&1u8)?;
+                seq.serialize_element(&1_u8)?;
                 seq.serialize_element(&tree.0)?;
                 seq.serialize_element(&tree.1)?;
                 seq.end()
             }
             MixedHashTree::Labeled(label, tree) => {
                 let mut seq = serializer.serialize_seq(Some(3))?;
-                seq.serialize_element(&2u8)?;
+                seq.serialize_element(&2_u8)?;
                 seq.serialize_element(Bytes::new(label.as_bytes()))?;
                 seq.serialize_element(&tree)?;
                 seq.end()
             }
             MixedHashTree::Leaf(leaf_bytes) => {
                 let mut seq = serializer.serialize_seq(Some(2))?;
-                seq.serialize_element(&3u8)?;
+                seq.serialize_element(&3_u8)?;
                 seq.serialize_element(Bytes::new(leaf_bytes))?;
                 seq.end()
             }
             MixedHashTree::Pruned(digest) => {
                 let mut seq = serializer.serialize_seq(Some(2))?;
-                seq.serialize_element(&4u8)?;
+                seq.serialize_element(&4_u8)?;
                 seq.serialize_element(Bytes::new(digest.as_bytes()))?;
                 seq.end()
             }
