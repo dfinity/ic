@@ -11,7 +11,8 @@ use ic_ckbtc_minter::Network;
 use ic_ckbtc_minter::state::CkBtcMinterState;
 use ic_ckbtc_minter::state::eventlog::{EventLogger, GetEventsArg};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
-use ic_ckdoge_minter::event::{CkDogeEventLogger, CkDogeMinterEvent};
+use ic_ckdoge_minter::event::{CkDogeEventLogger, CkDogeMinterEvent, CkDogeMinterEventType};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -33,6 +34,23 @@ async fn should_replay_events_for_mainnet() {
 
     assert_eq!(state.btc_network, Network::Mainnet);
     assert_eq!(state.get_total_btc_managed(), 1_312_238_620_970);
+}
+
+#[test]
+fn should_not_have_duplicated_mint_events() {
+    let minted_utxos: Vec<_> = MAINNET_EVENTS
+        .events
+        .iter()
+        .filter_map(|event| match &event.payload {
+            CkDogeMinterEventType::ReceivedUtxos { utxos, .. } => Some(utxos),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+
+    let unique_outpoints: BTreeSet<_> = minted_utxos.iter().map(|utxo| &utxo.outpoint).collect();
+
+    assert_eq!(minted_utxos.len(), unique_outpoints.len());
 }
 
 #[test]
