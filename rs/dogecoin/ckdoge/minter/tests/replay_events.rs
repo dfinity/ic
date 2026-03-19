@@ -7,14 +7,14 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_ckbtc_minter::Network;
-use ic_ckbtc_minter::state::CkBtcMinterState;
-use ic_ckbtc_minter::state::eventlog::{EventLogger, GetEventsArg};
-use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
+use ic_ckbtc_minter::{
+    Network,
+    state::CkBtcMinterState,
+    state::eventlog::{EventLogger, GetEventsArg},
+    state::invariants::{CheckInvariants, CheckInvariantsImpl},
+};
 use ic_ckdoge_minter::event::{CkDogeEventLogger, CkDogeMinterEvent, CkDogeMinterEventType};
-use std::collections::BTreeSet;
-use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::{collections::BTreeSet, path::PathBuf, sync::LazyLock};
 
 static MAINNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Mainnet.deserialize());
 static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
