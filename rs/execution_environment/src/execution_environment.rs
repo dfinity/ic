@@ -2000,8 +2000,8 @@ impl ExecutionEnvironment {
                             *msg.sender(),
                             &mut state,
                             args,
-                            registry_settings.subnet_size,
                             round_limits,
+                            registry_settings,
                         );
                         ExecuteSubnetMessageResult::Finished {
                             response: result.map(|x| (x, Some(canister_id))),
@@ -3039,37 +3039,53 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: ReadCanisterSnapshotDataArgs,
-        subnet_size: usize,
         round_limits: &mut RoundLimits,
+        registry_settings: &RegistryExecutionSettings,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
-        // Take canister out.
-        let mut canister = match state.take_canister_state(&canister_id) {
-            None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
-            }
-            Some(canister) => canister,
-        };
 
-        let result = self
-            .canister_manager
-            .read_snapshot_data(
+        let subnet_size = registry_settings.subnet_size;
+        let cost_schedule = state.get_own_cost_schedule();
+
+        let op = |mut canister,
+                  mut round_limits,
+                  (sender, snapshot_id, kind, subnet_size, cost_schedule)| {
+            self.canister_manager
+                .read_snapshot_data(
+                    sender,
+                    &mut canister,
+                    snapshot_id,
+                    kind,
+                    subnet_size,
+                    cost_schedule,
+                    &mut round_limits,
+                )
+                .map(|response| {
+                    (
+                        canister,
+                        round_limits,
+                        Encode!(&response).unwrap(),
+                        NumBytes::new(0),
+                        vec![],
+                        vec![],
+                        None,
+                    )
+                })
+        };
+        self.execute_mgmt_operation_on_canister(
+            canister_id,
+            op,
+            (
                 sender,
-                Arc::make_mut(&mut canister),
                 args.get_snapshot_id(),
                 args.kind,
-                state,
                 subnet_size,
-                round_limits,
-            )
-            .map(|response| Encode!(&response).unwrap());
-
-        // Put canister back.
-        state.put_canister_state(canister);
-        result
+                cost_schedule,
+            ),
+            state,
+            round_limits,
+            registry_settings,
+        )
     }
 
     fn rename_canister(
