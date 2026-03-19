@@ -274,7 +274,7 @@ fn test_icp_anonymous_transfers() {
 
     // Transfer to the account of the anonymous principal using `icrc1_transfer` succeeds
     // The expected block index after the transfer is 2 (0 and 1 are the initial mints to `p1` and `anon`).
-    let mut expected_block_index = 2u64;
+    let mut expected_block_index = 2_u64;
     assert_eq!(
         transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed"),
         expected_block_index
@@ -292,7 +292,7 @@ fn test_icp_anonymous_transfers() {
 
     // Transfer to the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
-        memo: icp_ledger::Memo(0u64),
+        memo: icp_ledger::Memo(0_u64),
         amount: Tokens::from_e8s(TRANSFER_AMOUNT),
         fee: Tokens::from_e8s(FEE),
         from_subaccount: None,
@@ -342,7 +342,7 @@ fn test_icp_anonymous_transfers() {
 
     // Transfer from the account of the anonymous principal using the ICP-specific `transfer` succeeds
     let transfer_args = icp_ledger::TransferArgs {
-        memo: icp_ledger::Memo(0u64),
+        memo: icp_ledger::Memo(0_u64),
         amount: Tokens::from_e8s(TRANSFER_AMOUNT),
         fee: Tokens::from_e8s(FEE),
         from_subaccount: None,
@@ -1500,7 +1500,7 @@ fn test_query_archived_blocks() {
         .token_symbol_and_name("ICP", "Internet Computer")
         .archive_options(ArchiveOptions {
             trigger_threshold: 4,
-            num_blocks_to_archive: 4usize,
+            num_blocks_to_archive: 4_usize,
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_anonymous(),
@@ -1672,8 +1672,8 @@ fn test_icrc21_for_legacy_transfer() {
     );
 
     let transfer_args = TransferArgs {
-        memo: icp_ledger::Memo(15u64),
-        amount: Tokens::from(1_000_000u64),
+        memo: icp_ledger::Memo(15_u64),
+        amount: Tokens::from(1_000_000_u64),
         fee: Tokens::from(10000),
         from_subaccount: from_account.subaccount.map(icp_ledger::Subaccount),
         to: AccountIdentifier::from(receiver_account).to_address(),
@@ -1826,8 +1826,8 @@ fn test_icrc21_legacy_transfer_incorrect_fee() {
         .expect("Unable to install the Ledger canister");
 
     let transfer_args = TransferArgs {
-        memo: icp_ledger::Memo(15u64),
-        amount: Tokens::from(1_000_000u64),
+        memo: icp_ledger::Memo(15_u64),
+        amount: Tokens::from(1_000_000_u64),
         fee: Tokens::from(1),
         from_subaccount: None,
         to: AccountIdentifier::from(Account::from(PrincipalId::new_user_test_id(1).0)).to_address(),
@@ -2242,7 +2242,7 @@ fn test_allowance_listing_values() {
     let approve_args = ApproveArgs {
         from_subaccount: None,
         spender: Account::from(spenders[0].0),
-        amount: Nat::from(1u64),
+        amount: Nat::from(1_u64),
         fee: None,
         memo: None,
         expires_at: None,
@@ -2267,7 +2267,7 @@ fn test_allowance_listing_values() {
     let expiration_far = Some(now + Duration::from_secs(3600).as_nanos() as u64);
     let args = ApproveArgs {
         spender: Account::from(spenders[1].0),
-        amount: Nat::from(1_000_000u64),
+        amount: Nat::from(1_000_000_u64),
         expires_at: expiration_far,
         ..approve_args.clone()
     };
@@ -2352,7 +2352,7 @@ fn test_allowance_listing_take() {
     let approve_args = ApproveArgs {
         from_subaccount: None,
         spender: Account::from(spenders[0].0),
-        amount: Nat::from(1u64),
+        amount: Nat::from(1_u64),
         fee: None,
         memo: None,
         expires_at: None,
@@ -2386,11 +2386,11 @@ fn test_allowance_listing_take() {
     let allowances = list_allowances(&env, canister_id, approver, &args);
     assert_eq!(allowances.len(), MAX_RESULTS);
 
-    args.take = Some(0u64);
+    args.take = Some(0_u64);
     let allowances = list_allowances(&env, canister_id, approver, &args);
     assert_eq!(allowances.len(), 0);
 
-    args.take = Some(5u64);
+    args.take = Some(5_u64);
     let allowances = list_allowances(&env, canister_id, approver, &args);
     assert_eq!(allowances.len(), 5);
 
@@ -2433,7 +2433,7 @@ fn test_tip_of_chain() {
 fn test_remove_approval() {
     const INITIAL_BALANCE: u64 = 10_000_000;
     const APPROVE_AMOUNT: u64 = 1_000_000;
-    const SUBACCOUNT: [u8; 32] = [1u8; 32];
+    const SUBACCOUNT: [u8; 32] = [1_u8; 32];
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
     let p3 = PrincipalId::new_user_test_id(3);
@@ -2539,8 +2539,8 @@ fn test_burn_whole_balance() {
     let env = StateMachine::new();
     let mut initial_balances = HashMap::new();
     let p1 = PrincipalId::new_user_test_id(1);
-    let fee_e8s = 100u64;
-    let initial_balance = 150u64;
+    let fee_e8s = 100_u64;
+    let initial_balance = 150_u64;
     initial_balances.insert(
         AccountIdentifier::from(Account::from(p1.0)),
         Tokens::from_e8s(initial_balance),
@@ -2557,7 +2557,7 @@ fn test_burn_whole_balance() {
 
     let burn = |amount: u64, error_tokens: Option<Tokens>| {
         let args = icp_ledger::TransferArgs {
-            memo: icp_ledger::Memo(0u64),
+            memo: icp_ledger::Memo(0_u64),
             amount: Tokens::from_e8s(amount),
             fee: Tokens::ZERO,
             from_subaccount: None,

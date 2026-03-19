@@ -689,7 +689,7 @@ mod update_balance {
         ) -> Result<Vec<u8>, CallError> {
             let key_name = "test_key".to_string();
             let derivation_path = vec![];
-            let message_hash = [0u8; 32];
+            let message_hash = [0_u8; 32];
 
             let mut runtime = MockCanisterRuntime::new();
 

@@ -418,12 +418,12 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                         .or_default() += 1;
                     // Calculate size bucket as a series of power of 2s.
                     // Note that the max is bounded by `max_response_bytes`, which fits `u32`.
-                    let size = 2u32.pow((response.body.len() as f64).log2().floor() as u32);
+                    let size = 2_u32.pow((response.body.len() as f64).log2().floor() as u32);
                     *stat.http_response_size.entry(size).or_default() += 1;
                 });
 
                 // Ensure response is 200 before decoding
-                if response.status != 200u32 {
+                if response.status != 200_u32 {
                     // All non-200 status are treated as transient errors
                     return Err(HttpGetTxError::Rejected {
                         code: 2, //SYS_TRANSIENT
