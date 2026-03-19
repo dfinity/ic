@@ -26,14 +26,8 @@ struct CacheKey {
     paths: ReadStatePaths,
 }
 
-#[derive(Clone)]
-struct CachedResponse {
-    status: http::StatusCode,
-    body: Bytes,
-}
-
 pub struct SubnetReadStateCacheState {
-    cache: Cache<CacheKey, CachedResponse>,
+    cache: Cache<CacheKey, Response<Bytes>>,
     pub hits: IntCounter,
     pub misses: IntCounter,
 }
@@ -92,10 +86,7 @@ pub async fn subnet_read_state_cache_middleware(
 
     if let Some(cached) = state.cache.get(&cache_key) {
         state.hits.inc();
-        return Ok(Response::builder()
-            .status(cached.status)
-            .body(Body::from(cached.body))
-            .expect("failed to build cached subnet read_state response"));
+        return Ok(cached.map(Body::from));
     }
 
     state.misses.inc();
@@ -108,15 +99,10 @@ pub async fn subnet_read_state_cache_middleware(
             .await
             .map_err(|e| ErrorCause::Other(format!("failed to buffer response body: {e}")))?;
 
-        state.cache.insert(
-            cache_key,
-            CachedResponse {
-                status: parts.status,
-                body: body_bytes.clone(),
-            },
-        );
+        let cached = Response::from_parts(parts, body_bytes);
+        state.cache.insert(cache_key, cached.clone());
 
-        Ok(Response::from_parts(parts, Body::from(body_bytes)))
+        Ok(cached.map(Body::from))
     } else {
         Ok(response)
     }
