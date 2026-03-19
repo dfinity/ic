@@ -1,6 +1,8 @@
 use anyhow::Result;
 use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
+use ic_canister_client::{Ed25519KeyPair, Sender};
+use ic_canister_client_sender::SigKeys;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
 use ic_nervous_system_common::E8;
@@ -30,9 +32,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::{io::Write, process::Command};
 use url::Url;
 
-use crate::proposals::NEURON_CONTROLLER;
-use crate::proposals::NEURON_SECRET_KEY_PEM;
-use crate::proposals::ProposalWithMainnetState;
+use crate::proposals::RecoveredNnsDictatorNeuron;
+use crate::proposals::{ProposalWithMainnetState, RECOVERED_NNS_DICTATOR_NEURON_IDENTITY};
 
 pub const MAINNET_NODE_VM_RESOURCES: VmResources = VmResources {
     vcpus: None,
@@ -199,7 +200,9 @@ fn setup_recovered_nns(
     patch_subnet_list(&env);
     // Set up a dictator neuron with a large stake to be able to pass any proposal instantly during
     // the test
-    let neuron_id: NeuronId = setup_test_neuron(&env);
+    let neuron_identity = Ed25519KeyPair::generate(&mut rand::thread_rng());
+    let neuron_principal = Sender::SigKeys(SigKeys::Ed25519(neuron_identity)).get_principal_id();
+    let neuron_id = setup_test_neuron(&env, neuron_principal);
 
     // Wait until the aux node is setup and we have fetched ic-recovery before starting the recovery
     let aux_node = rx_aux_node.recv().unwrap();
@@ -208,7 +211,13 @@ fn setup_recovered_nns(
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-recovery because {e:?}"));
 
     recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node);
-    ProposalWithMainnetState::write_dictator_neuron_id_to_env(&env, neuron_id);
+    ProposalWithMainnetState::write_dictator_neuron_identity_to_env(
+        &env,
+        RecoveredNnsDictatorNeuron {
+            neuron_id,
+            neuron_secret_key_pem: neuron_identity.to_pem(),
+        },
+    );
 
     test_recovered_nns(&env, &recovered_nns_node);
 
@@ -492,15 +501,14 @@ fn patch_subnet_list(env: &TestEnv) {
     });
 }
 
-fn setup_test_neuron(env: &TestEnv) -> NeuronId {
-    let neuron_id = with_neuron_for_tests(env);
-    with_trusted_neurons_following_neuron_for_tests(env, neuron_id);
+fn setup_test_neuron(env: &TestEnv, controller: PrincipalId) -> NeuronId {
+    let neuron_id = with_neuron_for_tests(env, controller);
+    with_trusted_neurons_following_neuron_for_tests(env, neuron_id, controller);
     neuron_id
 }
 
-fn with_neuron_for_tests(env: &TestEnv) -> NeuronId {
+fn with_neuron_for_tests(env: &TestEnv, controller: PrincipalId) -> NeuronId {
     let logger: slog::Logger = env.logger();
-    let controller = PrincipalId::from_str(NEURON_CONTROLLER).unwrap();
 
     info!(logger, "Create a neuron followed by trusted neurons ...");
     // The neuron's stake must be large enough to be eligible to make proposals (> reject cost fee),
@@ -532,12 +540,14 @@ fn with_neuron_for_tests(env: &TestEnv) -> NeuronId {
     neuron_id
 }
 
-fn with_trusted_neurons_following_neuron_for_tests(env: &TestEnv, neuron_id: NeuronId) {
-    let NeuronId(id) = neuron_id;
-    let controller = PrincipalId::from_str(NEURON_CONTROLLER).unwrap();
+fn with_trusted_neurons_following_neuron_for_tests(
+    env: &TestEnv,
+    neuron_id: NeuronId,
+    controller: PrincipalId,
+) {
     ic_replay(env, |cmd| {
         cmd.arg("with-trusted-neurons-following-neuron-for-tests")
-            .arg(id.to_string())
+            .arg(neuron_id.0.to_string())
             .arg(controller.to_string());
     });
 }
@@ -825,7 +835,13 @@ fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
     let pem = env.get_path("neuron_secret_key.pem");
     let mut pem_file = File::create(&pem).unwrap();
     pem_file
-        .write_all(NEURON_SECRET_KEY_PEM.as_bytes())
+        .write_all(
+            RECOVERED_NNS_DICTATOR_NEURON_IDENTITY
+                .get()
+                .unwrap()
+                .1
+                .as_bytes(),
+        )
         .unwrap();
     let neuron_id_number = neuron_id.0;
     fs::write(

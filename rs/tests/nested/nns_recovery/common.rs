@@ -271,7 +271,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
     if cfg.use_mainnet_state {
-        ProposalWithMainnetState::read_dictator_neuron_id_from_env(&env);
+        ProposalWithMainnetState::read_dictator_neuron_identity_from_env(&env);
     }
 
     let logger = env.logger();

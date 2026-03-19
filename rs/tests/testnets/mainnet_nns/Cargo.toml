@@ -29,6 +29,7 @@ ic-types = { path = "../../../types/types" }
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
 nix = { workspace = true }
 once_cell = "1.21"
+rand = { workspace = true }
 registry-canister = { path = "../../../registry/canister" }
 reqwest = { workspace = true }
 serde = { workspace = true }
