@@ -666,7 +666,7 @@ mod tests {
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::validation::ValidationError;
     use ic_logger::no_op_logger;
-    use ic_management_canister_types_private::VetKdKeyId;
+    use ic_management_canister_types_private::{EcdsaKeyId, SchnorrKeyId, VetKdKeyId};
     use ic_registry_subnet_features::ChainKeyConfig;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_registry::SubnetRecordBuilder;
