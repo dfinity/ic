@@ -114,23 +114,6 @@ impl RingBuffer {
 
     /// Appends records from an iterator.
     pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
-        self.append_log_iter_inner(records, true)
-    }
-
-    /// Append old records from an iterator without checking `next_idx`.
-    pub fn append_log_iter_unchecked(
-        &mut self,
-        records: impl IntoIterator<Item = CanisterLogRecord>,
-    ) {
-        self.append_log_iter_inner(records, false)
-    }
-
-    /// Appends records from an iterator.
-    fn append_log_iter_inner(
-        &mut self,
-        records: impl IntoIterator<Item = CanisterLogRecord>,
-        check_idx_when_adding_new_records: bool,
-    ) {
         let mut iter = records.into_iter().peekable();
         if iter.peek().is_none() {
             return; // Exit early if no records.
@@ -138,26 +121,21 @@ impl RingBuffer {
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
         for record in iter.map(LogRecord::from) {
-            // Validate monotonic ordering for new records to maintain index integrity.
-            // This check is skipped during buffer resizing since existing records
-            // are being re-inserted rather than newly generated.
-            if check_idx_when_adding_new_records {
-                if record.idx < h.next_idx {
-                    debug_assert!(
-                        false,
-                        "Log record idx {} must be >= than next idx {}",
-                        record.idx, h.next_idx
-                    );
-                    continue;
-                }
-                if record.timestamp < h.max_timestamp {
-                    debug_assert!(
-                        false,
-                        "Log record timestamp {} must be >= than max timestamp {}",
-                        record.timestamp, h.max_timestamp
-                    );
-                    continue;
-                }
+            if record.idx < h.next_idx {
+                debug_assert!(
+                    false,
+                    "Log record idx {} must be >= than next idx {}",
+                    record.idx, h.next_idx
+                );
+                continue;
+            }
+            if record.timestamp < h.max_timestamp {
+                debug_assert!(
+                    false,
+                    "Log record timestamp {} must be >= than max timestamp {}",
+                    record.timestamp, h.max_timestamp
+                );
+                continue;
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
