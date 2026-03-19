@@ -292,6 +292,10 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
             cli.subnet_read_state_cache.subnet_read_state_cache_ttl,
             cli.subnet_read_state_cache
                 .subnet_read_state_cache_max_entries,
+            cli.subnet_read_state_cache
+                .subnet_read_state_cache_max_item_size,
+            cli.subnet_read_state_cache
+                .subnet_read_state_cache_body_timeout,
             &metrics_registry,
         )))
     };

@@ -7,6 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
+use ic_bn_lib::http::body::buffer_body;
 use ic_bn_lib::prometheus::{IntCounter, Registry, register_int_counter_with_registry};
 use ic_types::SubnetId;
 use moka::sync::Cache;
@@ -28,12 +29,20 @@ struct CacheKey {
 
 pub struct SubnetReadStateCacheState {
     cache: Cache<CacheKey, Response<Bytes>>,
+    max_item_size: usize,
+    body_timeout: Duration,
     pub hits: IntCounter,
     pub misses: IntCounter,
 }
 
 impl SubnetReadStateCacheState {
-    pub fn new(ttl: Duration, max_entries: u64, registry: &Registry) -> Self {
+    pub fn new(
+        ttl: Duration,
+        max_entries: u64,
+        max_item_size: usize,
+        body_timeout: Duration,
+        registry: &Registry,
+    ) -> Self {
         let cache = Cache::builder()
             .max_capacity(max_entries)
             .time_to_live(ttl)
@@ -55,6 +64,8 @@ impl SubnetReadStateCacheState {
 
         Self {
             cache,
+            max_item_size,
+            body_timeout,
             hits,
             misses,
         }
@@ -95,7 +106,7 @@ pub async fn subnet_read_state_cache_middleware(
 
     if response.status().is_success() {
         let (parts, body) = response.into_parts();
-        let body_bytes = axum::body::to_bytes(body, 10 * 1024 * 1024)
+        let body_bytes = buffer_body(body, state.max_item_size, state.body_timeout)
             .await
             .map_err(|e| ErrorCause::Other(format!("failed to buffer response body: {e}")))?;
 
@@ -123,6 +134,8 @@ mod tests {
 
     const DEFAULT_TTL: Duration = Duration::from_secs(60);
     const DEFAULT_MAX_ENTRIES: u64 = 100;
+    const DEFAULT_MAX_ITEM_SIZE: usize = 1024 * 1024;
+    const DEFAULT_BODY_TIMEOUT: Duration = Duration::from_secs(10);
 
     fn make_request(subnet_id: SubnetId, paths: ReadStatePaths) -> Request<Body> {
         let ctx = Arc::new(RequestContext {
@@ -147,7 +160,13 @@ mod tests {
 
     fn setup_app(ttl: Duration, max_entries: u64) -> (Router, Arc<SubnetReadStateCacheState>) {
         let registry = Registry::new_custom(None, None).unwrap();
-        let state = Arc::new(SubnetReadStateCacheState::new(ttl, max_entries, &registry));
+        let state = Arc::new(SubnetReadStateCacheState::new(
+            ttl,
+            max_entries,
+            DEFAULT_MAX_ITEM_SIZE,
+            DEFAULT_BODY_TIMEOUT,
+            &registry,
+        ));
         let app =
             Router::new()
                 .route("/", post(dummy_handler))
