@@ -82,6 +82,7 @@ system_test_nns(
         "manual", # to prevent the job to be ran twice.
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
+        "colocate",
     ],
     test_timeout = "eternal", # "eternal" (1 hour) is not even enough for this test. Use `--test_timeout=9000` when running it.
     runtime_deps = RUNTIME_DEPS | MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS,
