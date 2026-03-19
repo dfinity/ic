@@ -1,7 +1,8 @@
 use crate::external_canister_types::{
     BitcoinCanisterArg, CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
-    DogecoinCanisterArg, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
-    OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
+    DogecoinCanisterArg, InternetIdentityFrontendInit, InternetIdentityInit,
+    NnsDappCanisterArguments, OpenIdConfig, OpenIdEmailVerification, RateLimitConfig,
+    SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -78,9 +79,9 @@ use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
-    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID,
-    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    INTERNET_IDENTITY_FRONTEND_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
+    LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
@@ -212,8 +213,10 @@ const SNS_LEDGER_INDEX_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_LEDGER_INDEX_CANISTER_WASM_PATH"));
 const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
-const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
-    include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_BACKEND_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_BACKEND_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_FRONTEND_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_FRONTEND_CANISTER_WASM_PATH"));
 const NNS_DAPP_TEST_CANISTER_WASM: &[u8] = include_bytes!(env!("NNS_DAPP_TEST_CANISTER_WASM_PATH"));
 const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
     include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
@@ -314,6 +317,7 @@ struct SubnetConfigInternal {
     pub subnet_id: SubnetId,
     pub subnet_kind: SubnetKind,
     pub subnet_admins: Option<Vec<PrincipalId>>,
+    pub cost_schedule: CanisterCyclesCostSchedule,
     pub instruction_config: SubnetInstructionConfig,
     pub ranges: Vec<CanisterIdRange>,
     pub alloc_range: Option<CanisterIdRange>,
@@ -621,11 +625,13 @@ struct PocketIcSubnets {
 }
 
 impl PocketIcSubnets {
+    #[allow(clippy::too_many_arguments)]
     fn state_machine_builder(
         state_machine_state_dir: Box<dyn StateMachineStateDir>,
         runtime: Arc<Runtime>,
         subnet_kind: SubnetKind,
         subnet_admins: Option<Vec<PrincipalId>>,
+        cost_schedule: CanisterCyclesCostSchedule,
         subnet_seed: [u8; 32],
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -637,17 +643,6 @@ impl PocketIcSubnets {
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
-        let cost_schedule = match subnet_kind {
-            SubnetKind::CloudEngine => CanisterCyclesCostSchedule::Free,
-            SubnetKind::Application
-            | SubnetKind::Bitcoin
-            | SubnetKind::Fiduciary
-            | SubnetKind::II
-            | SubnetKind::NNS
-            | SubnetKind::SNS
-            | SubnetKind::System
-            | SubnetKind::VerifiedApplication => CanisterCyclesCostSchedule::Normal,
-        };
         let mut subnet_config = SubnetConfig::new(subnet_type);
         // using `let IcpConfig { }` with explicit field names
         // to force an update after adding a new field to `IcpConfig`
@@ -832,6 +827,7 @@ impl PocketIcSubnets {
             subnet_state_dir,
             subnet_kind,
             subnet_admins,
+            cost_schedule,
             instruction_config,
             expected_state_time,
         } = subnet_config_info;
@@ -879,6 +875,7 @@ impl PocketIcSubnets {
             self.runtime.clone(),
             subnet_kind,
             subnet_admins.clone(),
+            cost_schedule,
             subnet_seed,
             instruction_config.clone(),
             self.registry_data_provider.clone(),
@@ -1038,6 +1035,7 @@ impl PocketIcSubnets {
             subnet_id,
             subnet_kind,
             subnet_admins,
+            cost_schedule,
             instruction_config,
             ranges,
             alloc_range,
@@ -1081,7 +1079,8 @@ impl PocketIcSubnets {
                 self.deploy_sns(config);
             }
             if let Some(ref config) = ii {
-                self.deploy_ii(config);
+                self.deploy_ii_backend(config);
+                self.deploy_ii_frontend(config);
             }
             if let Some(ref config) = nns_ui {
                 self.deploy_nns_ui(config);
@@ -1977,7 +1976,7 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_ii(&self, config: &IcpFeaturesConfig) {
+    fn deploy_ii_backend(&self, config: &IcpFeaturesConfig) {
         // Using a match here to force an update after changing
         // the type of `IcpFeaturesConfig`.
         match config {
@@ -2124,7 +2123,7 @@ impl PocketIcSubnets {
             } else {
                 None
             };
-            let internet_identity_test_args = Some(InternetIdentityInit {
+            let internet_identity_backend_args = Some(InternetIdentityInit {
                 assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
                 archive_config: None,             // DIFFERENT FROM ICP MAINNET
                 canister_creation_cycles_cost: Some(0),
@@ -2152,11 +2151,98 @@ impl PocketIcSubnets {
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
-                    INTERNET_IDENTITY_TEST_CANISTER_WASM.to_vec(),
-                    Encode!(&internet_identity_test_args).unwrap(),
+                    INTERNET_IDENTITY_BACKEND_CANISTER_WASM.to_vec(),
+                    Encode!(&internet_identity_backend_args).unwrap(),
                 )
                 .unwrap();
         }
+    }
+
+    fn deploy_ii_frontend(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
+        // Nothing to do if the II subnet does not exist (yet).
+        let Some(ref ii_subnet) = self.ii_subnet else {
+            return;
+        };
+
+        // Nothing to do if the II backend has not been deployed (yet).
+        if !ii_subnet
+            .state_machine
+            .canister_exists(IDENTITY_CANISTER_ID)
+        {
+            return;
+        }
+
+        // Nothing to do if the II frontend has already been deployed.
+        if ii_subnet
+            .state_machine
+            .canister_exists(INTERNET_IDENTITY_FRONTEND_CANISTER_ID)
+        {
+            return;
+        }
+
+        let gateway_port = self.gateway_port.expect(
+            "The HTTP gateway is supposed to be created if the `ii` ICP feature is specified.",
+        );
+
+        // dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"uqzsh-gqaaa-aaaaq-qaada-cai";})' --ic
+        // settings = record {
+        //     freezing_threshold = opt (2_592_000 : nat);
+        //     wasm_memory_threshold = opt (0 : nat);
+        //     controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+        //     reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+        //     log_visibility = opt variant { controllers };
+        //     wasm_memory_limit = opt (3_221_225_472 : nat);
+        //     memory_allocation = opt (0 : nat);
+        //     compute_allocation = opt (0 : nat);
+        // };
+        let settings = Some(CanisterSettingsArgs {
+            controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+            compute_allocation: Some(0_u64.into()),
+            memory_allocation: Some(0_u64.into()),
+            freezing_threshold: Some(2_592_000_u64.into()),
+            reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+            log_visibility: Some(LogVisibilityV2::Controllers),
+            log_memory_limit: Some(4_096_u64.into()),
+            wasm_memory_limit: Some(3_221_225_472_u64.into()),
+            wasm_memory_threshold: Some(0_u64.into()),
+            environment_variables: None,
+            snapshot_visibility: Some(SnapshotVisibility::Controllers),
+        });
+
+        let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+            Some(INTERNET_IDENTITY_FRONTEND_CANISTER_ID.get()),
+            Cycles::from(INITIAL_CYCLES),
+            settings,
+        );
+
+        // Install the Internet Identity frontend canister.
+        let backend_origin = format!("http://{IDENTITY_CANISTER_ID}.localhost:{gateway_port}");
+        let frontend_origin =
+            format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}");
+        let ii_frontend_init_payload = InternetIdentityFrontendInit {
+            backend_canister_id: IDENTITY_CANISTER_ID.get().0,
+            backend_origin,
+            related_origins: Some(vec![frontend_origin]),
+            fetch_root_key: Some(true),
+            analytics_config: None,
+            dummy_auth: Some(None),
+            dev_csp: Some(true),
+        };
+        ii_subnet
+            .state_machine
+            .install_wasm_in_mode(
+                canister_id,
+                CanisterInstallMode::Install,
+                INTERNET_IDENTITY_FRONTEND_CANISTER_WASM.to_vec(),
+                Encode!(&ii_frontend_init_payload).unwrap(),
+            )
+            .unwrap();
     }
 
     fn deploy_nns_ui(&self, config: &IcpFeaturesConfig) {
@@ -2668,6 +2754,14 @@ impl PocketIc {
                 canister_ranges.push(from_range(&alloc_range));
             }
             let subnet_seed = compute_subnet_seed(config.ranges.clone(), config.alloc_range);
+            let cost_schedule = match config.cost_schedule {
+                CanisterCyclesCostSchedule::Normal => {
+                    pocket_ic::common::rest::CanisterCyclesCostSchedule::Normal
+                }
+                CanisterCyclesCostSchedule::Free => {
+                    pocket_ic::common::rest::CanisterCyclesCostSchedule::Free
+                }
+            };
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
                 subnet_admins: config.subnet_admins.as_ref().map(|subnet_admins| {
@@ -2676,6 +2770,7 @@ impl PocketIc {
                         .map(|subnet_admin| subnet_admin.0.into())
                         .collect()
                 }),
+                cost_schedule,
                 subnet_seed,
                 canister_ranges,
                 instruction_config: config.instruction_config.clone(),
@@ -2784,6 +2879,7 @@ impl PocketIc {
                                 .map(|subnet_admin| Principal::from(*subnet_admin).into())
                                 .collect()
                         }),
+                        cost_schedule: config.cost_schedule,
                         instruction_config: config.instruction_config,
                         expected_state_time,
                     }
@@ -2794,7 +2890,13 @@ impl PocketIc {
                 .get_named()
                 .into_iter()
                 .map(|(subnet_kind, subnet_state_dir, instruction_config)| {
-                    (subnet_kind, None, subnet_state_dir, instruction_config)
+                    (
+                        subnet_kind,
+                        None,
+                        Default::default(),
+                        subnet_state_dir,
+                        instruction_config,
+                    )
                 })
                 .collect();
             let flexible_subnets = {
@@ -2802,6 +2904,7 @@ impl PocketIc {
                     (
                         SubnetKind::System,
                         None,
+                        Default::default(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2809,7 +2912,8 @@ impl PocketIc {
                 let app = subnet_configs.application.iter().map(|spec| {
                     (
                         SubnetKind::Application,
-                        None,
+                        spec.get_subnet_admins(),
+                        spec.get_cost_schedule(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2818,6 +2922,7 @@ impl PocketIc {
                     (
                         SubnetKind::CloudEngine,
                         spec.get_subnet_admins(),
+                        spec.get_cost_schedule(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2826,6 +2931,7 @@ impl PocketIc {
                     (
                         SubnetKind::VerifiedApplication,
                         None,
+                        Default::default(),
                         spec.get_state_path(),
                         spec.get_instruction_config(),
                     )
@@ -2842,15 +2948,17 @@ impl PocketIc {
             // so that their canister ranges do not conflict with canister ranges
             // of fresh subnets (which are more flexible)
             all_subnets.sort_by(
-                |(_, _, a, _): &(_, _, Option<PathBuf>, _),
-                 (_, _, b, _): &(_, _, Option<PathBuf>, _)| {
+                |(_, _, _, a, _): &(_, _, _, Option<PathBuf>, _),
+                 (_, _, _, b, _): &(_, _, _, Option<PathBuf>, _)| {
                     a.is_none().cmp(&b.is_none())
                 },
             );
 
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
-            for (subnet_kind, subnet_admins, subnet_state_dir, instruction_config) in all_subnets {
+            for (subnet_kind, subnet_admins, cost_schedule, subnet_state_dir, instruction_config) in
+                all_subnets
+            {
                 let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
@@ -2960,6 +3068,14 @@ impl PocketIc {
                     (ranges, alloc_range, subnet_id)
                 };
 
+                let cost_schedule = match cost_schedule {
+                    pocket_ic::common::rest::CanisterCyclesCostSchedule::Normal => {
+                        CanisterCyclesCostSchedule::Normal
+                    }
+                    pocket_ic::common::rest::CanisterCyclesCostSchedule::Free => {
+                        CanisterCyclesCostSchedule::Free
+                    }
+                };
                 subnet_config_info.push(SubnetConfigInfo {
                     ranges,
                     alloc_range,
@@ -2969,6 +3085,7 @@ impl PocketIc {
                     subnet_admins: subnet_admins.map(|subnet_admins| {
                         subnet_admins.into_iter().map(PrincipalId::from).collect()
                     }),
+                    cost_schedule,
                     instruction_config,
                     expected_state_time: None,
                 });
@@ -3235,6 +3352,7 @@ struct SubnetConfigInfo {
     pub subnet_state_dir: Option<PathBuf>,
     pub subnet_kind: SubnetKind,
     pub subnet_admins: Option<Vec<PrincipalId>>,
+    pub cost_schedule: CanisterCyclesCostSchedule,
     pub instruction_config: SubnetInstructionConfig,
     pub expected_state_time: Option<SystemTime>,
 }
@@ -5292,6 +5410,7 @@ fn route(
                             subnet_state_dir: None,
                             subnet_kind,
                             subnet_admins: None,
+                            cost_schedule: Default::default(),
                             instruction_config,
                             expected_state_time: None,
                         },

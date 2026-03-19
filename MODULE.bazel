@@ -468,15 +468,6 @@ http_file(
     url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_293100_308099_auxpow_parsed.csv",
 )
 
-# Internet Identity canister (test build)
-
-http_file(
-    name = "ii_dev_canister",
-    downloaded_file_path = "internet_identity_dev.wasm.gz",
-    sha256 = "2357d822cd451f25c0edab3e45db52ab140a2ac8c4b0170201c78acc5bc11779",
-    url = "https://github.com/dfinity/internet-identity/releases/download/release-2024-05-13/internet_identity_dev.wasm.gz",
-)
-
 # NNS frontend dapp canister
 
 http_file(
@@ -1134,7 +1125,8 @@ canisters(
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
         "node-rewards": "node-rewards-canister.wasm.gz",
-        "internet_identity_test": "internet_identity_dev.wasm.gz",
+        "internet_identity_backend": "internet_identity_production.wasm.gz",
+        "internet_identity_frontend": "internet_identity_frontend.wasm.gz",
         "nns_dapp_test": "nns-dapp_test.wasm.gz",
         "sns_aggregator_test": "sns_aggregator_dev.wasm.gz",
         "cycles_ledger": "cycles-ledger.wasm.gz",
@@ -1147,7 +1139,8 @@ canisters(
     path = "//:mainnet-canister-revisions.json",
     repositories = {
         "cycles_ledger": "dfinity/cycles-ledger",
-        "internet_identity_test": "dfinity/internet-identity",
+        "internet_identity_backend": "dfinity/internet-identity",
+        "internet_identity_frontend": "dfinity/internet-identity",
         "nns_dapp_test": "dfinity/nns-dapp",
         "sns_aggregator_test": "dfinity/nns-dapp",
         "bitcoin_testnet": "dfinity/bitcoin-canister",
