@@ -55,7 +55,7 @@ fn main() -> Result<()> {
         })
         .add_test(systest!(test; TestConfig {
             use_mainnet_state: true,
-            local_recovery: false,
+            local_recovery: true,
             break_dfinity_owned_node: false,
             add_and_bless_upgrade_version: true,
             fix_dfinity_owned_node_like_np: false,
