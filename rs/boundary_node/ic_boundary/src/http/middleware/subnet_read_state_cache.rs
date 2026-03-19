@@ -42,8 +42,8 @@ pub struct SubnetReadStateCacheState {
     cache: Cache<CacheKey, Response<Bytes>>,
     max_item_size: usize,
     body_timeout: Duration,
-    pub hits: IntCounter,
-    pub misses: IntCounter,
+    hits: IntCounter,
+    misses: IntCounter,
     entries: IntGauge,
     memory: IntGauge,
 }
