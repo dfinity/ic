@@ -1,5 +1,4 @@
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 sh_binary(
     name = "shfmt-fix",
@@ -105,29 +104,12 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-sh_test(
-    name = "buf-breaking",
-    srcs = ["check-incompatibilities.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "//:buf.yaml",
-        "@rules_buf_toolchains//:buf",
-    ],
+sh_binary(
+    name = "buf-breaking-check",
+    srcs = ["buf-breaking-check.sh"],
+    data = ["@rules_buf_toolchains//:buf"],
     env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_config": "$(rootpath //:buf.yaml)",
-        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
+        "BUF": "$(rootpath @rules_buf_toolchains//:buf)",
     },
-    env_inherit = [
-        "MERGE_BASE_SHA",
-    ],
-    tags = [
-        # tags copied from other pre-commit tests, but unclear if they are required
-        "external",
-        "local",
-        "smoke",
-        "buf",
-    ],
     visibility = ["//visibility:public"],
 )
