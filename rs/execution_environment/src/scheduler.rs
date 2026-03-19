@@ -1429,16 +1429,6 @@ impl Scheduler for SchedulerImpl {
                 registry_settings.subnet_size,
             );
 
-            // If we have executed a long-running install code above, then it is
-            // very likely that `round_limits.instructions < 0` at this point.
-            // However, we would like to make progress with other subnet
-            // messages that do not consume instructions. To allow that, we set
-            // the number available instructions to 0 if it is not positive.
-            //
-            // TODO(DSM-108): This appears to do nothing. Remove.
-            subnet_round_limits.instructions = subnet_round_limits
-                .instructions
-                .max(RoundInstructions::from(0));
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
         };
 
