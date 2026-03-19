@@ -876,7 +876,7 @@ mod upgrade {
                     fee: None,
                     created_at_time: None,
                     memo: None,
-                    amount: Nat::from(1_000_000u32),
+                    amount: Nat::from(1_000_000_u32),
                 },
             )
             .expect("failed to mint 1 ckUSDC");
