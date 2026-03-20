@@ -7,7 +7,7 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_btc_interface::OutPoint;
+use ic_btc_interface::{OutPoint, Txid};
 use ic_ckbtc_minter::state::eventlog::{
     CkBtcEventLogger, CkBtcMinterEvent, EventLogger, EventType,
 };
@@ -98,6 +98,8 @@ static TESTNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Testnet.dese
 
 #[test]
 fn should_replay_events_and_retain_pending_requests() {
+    use std::str::FromStr;
+
     let state = &MAINNET_STATE;
     state
         .check_invariants()
@@ -120,6 +122,32 @@ fn should_replay_events_and_retain_pending_requests() {
     // 2st stuck retrieve_btc transits to pending
     assert!(block_indices.contains(&3489347));
     assert!(block_indices.contains(&3489353));
+    // The following transactions and resubmissions should not be found
+    let txids = vec![
+        "fad3348b5e121d07bcd4afc523a1a506edf0e232ad3a6a6fdb214c04719a05fc",
+        "f69e339597b98a3286f586785c33b320f38ff4d2921f07dafecd12de881b769d",
+        "d4bcf28392c327795a4cd7f85ab935c348aa980313daba8b40c71ecc1fc4d0a4",
+        "0282fffcd9cd59352a7e6670219949d5493b95068df5ffe399e1648fa51db83c",
+        "9733ae015a766051f51ac12284c3f821ec60ec0d44ffa14bbcc54ef4f5e575da",
+        "36e9125b299428f18e957dd8ffbc2ecb8e125469f77a11e1dbb8245a2a8ed5a9",
+        "1fd0293a0260c844ef1e5822dbc7b9fce3e934f49bcacd3feea6650c96386476",
+    ];
+    let txids = txids
+        .into_iter()
+        .map(|txid| Txid::from_str(txid).unwrap())
+        .collect::<BTreeSet<_>>();
+    let submitted = state
+        .submitted_transactions
+        .iter()
+        .map(|tx| tx.txid)
+        .collect::<BTreeSet<_>>();
+    let stuck = state
+        .stuck_transactions
+        .iter()
+        .map(|tx| tx.txid)
+        .collect::<BTreeSet<_>>();
+    assert!(txids.is_disjoint(&submitted));
+    assert!(txids.is_disjoint(&stuck));
 }
 
 #[tokio::test]
