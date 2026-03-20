@@ -1,5 +1,5 @@
 use ic_certification::{
-    Certificate, Delegation, HashTree, LookupResult, SubtreeLookupResult, leaf,
+    Certificate, Delegation, HashTree, HashTreeNode, LookupResult, SubtreeLookupResult, leaf,
 };
 use ic_principal::Principal;
 use ic_verify_bls_signature::verify_bls_signature;
@@ -129,24 +129,15 @@ fn verify_delegation(
     let canister_ranges_path = ["canister_ranges".as_bytes(), delegation.subnet_id.as_ref()];
     let canister_in_ranges = match cert.tree.lookup_subtree(&canister_ranges_path) {
         SubtreeLookupResult::Found(subnet_tree) => {
-            let mut found = false;
-            for range_key_path in subnet_tree.list_paths() {
-                if range_key_path.is_empty() {
-                    continue;
-                }
-                if let LookupResult::Found(range_data) =
-                    subnet_tree.lookup_path([range_key_path[0].as_bytes()])
-                {
+            match find_leaf_for_principal(subnet_tree.as_ref(), signing_canister_id.as_slice()) {
+                Some(range_data) => {
                     let subnet_ranges: Vec<(Principal, Principal)> =
                         serde_cbor::from_slice(range_data)
                             .map_err(|e| format!("invalid canister range: {e}"))?;
-                    if principal_is_within_ranges(&signing_canister_id, &subnet_ranges) {
-                        found = true;
-                        break;
-                    }
+                    principal_is_within_ranges(&signing_canister_id, &subnet_ranges)
                 }
+                None => false,
             }
-            found
         }
         SubtreeLookupResult::Absent | SubtreeLookupResult::Unknown => {
             let old_canister_ranges_path = [
@@ -190,6 +181,38 @@ fn principal_is_within_ranges(principal: &Principal, ranges: &[(Principal, Princ
         .any(|(start, end)| (start..=end).contains(&principal))
 }
 
+/// Walks the one-level-deep subtree under `/canister_ranges/<subnet_id>/` to
+/// find the shard whose key (label) is the largest one that is <= `target`.
+/// Per the IC spec, shard keys are the starting canister ID of the first range
+/// in each shard, sorted in ascending order, so the correct shard for any
+/// canister ID is the one with the greatest key not exceeding that ID.
+///
+/// Returns the leaf data (CBOR-encoded ranges) of the matching shard, or `None`
+/// if no label <= `target` exists in the tree (which includes pruned/empty
+/// subtrees).
+fn find_leaf_for_principal<'a>(node: &'a HashTreeNode, target: &[u8]) -> Option<&'a [u8]> {
+    match node {
+        HashTreeNode::Empty() | HashTreeNode::Pruned(_) => None,
+        HashTreeNode::Leaf(data) => Some(data),
+        HashTreeNode::Labeled(label, node) => {
+            if label.as_bytes() <= target {
+                find_leaf_for_principal(node, target)
+            } else {
+                None
+            }
+        }
+        HashTreeNode::Fork(children) => {
+            let (left, right) = children.as_ref();
+            // We want the *largest* label <= target (greatest lower bound).
+            // In a well-formed hash tree, every label in the right subtree is
+            // strictly greater than every label in the left, so a match in the
+            // right subtree is always >= any match in the left. Try the right
+            // subtree first and only fall back to the left if it has no match.
+            find_leaf_for_principal(right, target).or_else(|| find_leaf_for_principal(left, target))
+        }
+    }
+}
+
 const SHA256_DIGEST_LEN: usize = 32;
 fn hash_sha256(data: &[u8]) -> [u8; SHA256_DIGEST_LEN] {
     let mut hash = Sha256::default();
@@ -207,4 +230,133 @@ fn check_bls_signature(certificate: &Certificate, signing_pk_raw: &[u8]) -> Resu
         return Err("invalid BLS signature".to_string());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_certification::{empty, fork, labeled, leaf, pruned};
+
+    #[test]
+    fn find_leaf_empty_tree_returns_none() {
+        let tree = empty();
+        assert_eq!(find_leaf_for_principal(tree.as_ref(), b"\x10"), None);
+    }
+
+    #[test]
+    fn find_leaf_pruned_tree_returns_none() {
+        let tree = pruned([0u8; 32]);
+        assert_eq!(find_leaf_for_principal(tree.as_ref(), b"\x10"), None);
+    }
+
+    #[test]
+    fn find_leaf_single_shard_target_above_label() {
+        let tree = labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec()));
+        assert_eq!(
+            find_leaf_for_principal(tree.as_ref(), b"\x20"),
+            Some(b"data_A".as_ref())
+        );
+    }
+
+    #[test]
+    fn find_leaf_single_shard_target_equals_label() {
+        let tree = labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec()));
+        assert_eq!(
+            find_leaf_for_principal(tree.as_ref(), b"\x10"),
+            Some(b"data_A".as_ref())
+        );
+    }
+
+    #[test]
+    fn find_leaf_single_shard_target_below_label() {
+        let tree = labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec()));
+        assert_eq!(find_leaf_for_principal(tree.as_ref(), b"\x05"), None);
+    }
+
+    #[test]
+    fn find_leaf_two_shards_target_in_first() {
+        let tree = fork(
+            labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec())),
+            labeled(b"\x30".to_vec(), leaf(b"data_B".to_vec())),
+        );
+        assert_eq!(
+            find_leaf_for_principal(tree.as_ref(), b"\x20"),
+            Some(b"data_A".as_ref())
+        );
+    }
+
+    #[test]
+    fn find_leaf_two_shards_target_in_second() {
+        let tree = fork(
+            labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec())),
+            labeled(b"\x30".to_vec(), leaf(b"data_B".to_vec())),
+        );
+        assert_eq!(
+            find_leaf_for_principal(tree.as_ref(), b"\x40"),
+            Some(b"data_B".as_ref())
+        );
+    }
+
+    #[test]
+    fn find_leaf_two_shards_target_equals_second_label() {
+        let tree = fork(
+            labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec())),
+            labeled(b"\x30".to_vec(), leaf(b"data_B".to_vec())),
+        );
+        assert_eq!(
+            find_leaf_for_principal(tree.as_ref(), b"\x30"),
+            Some(b"data_B".as_ref())
+        );
+    }
+
+    #[test]
+    fn find_leaf_two_shards_target_before_all() {
+        let tree = fork(
+            labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec())),
+            labeled(b"\x30".to_vec(), leaf(b"data_B".to_vec())),
+        );
+        assert_eq!(find_leaf_for_principal(tree.as_ref(), b"\x05"), None);
+    }
+
+    #[test]
+    fn find_leaf_three_shards_target_in_middle() {
+        let tree = fork(
+            fork(
+                labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec())),
+                labeled(b"\x20".to_vec(), leaf(b"data_B".to_vec())),
+            ),
+            labeled(b"\x30".to_vec(), leaf(b"data_C".to_vec())),
+        );
+        assert_eq!(
+            find_leaf_for_principal(tree.as_ref(), b"\x25"),
+            Some(b"data_B".as_ref())
+        );
+    }
+
+    #[test]
+    fn find_leaf_three_shards_target_in_last() {
+        let tree = fork(
+            fork(
+                labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec())),
+                labeled(b"\x20".to_vec(), leaf(b"data_B".to_vec())),
+            ),
+            labeled(b"\x30".to_vec(), leaf(b"data_C".to_vec())),
+        );
+        assert_eq!(
+            find_leaf_for_principal(tree.as_ref(), b"\xff"),
+            Some(b"data_C".as_ref())
+        );
+    }
+
+    #[test]
+    fn find_leaf_three_shards_target_before_all() {
+        let tree = fork(
+            fork(
+                labeled(b"\x10".to_vec(), leaf(b"data_A".to_vec())),
+                labeled(b"\x20".to_vec(), leaf(b"data_B".to_vec())),
+            ),
+            labeled(b"\x30".to_vec(), leaf(b"data_C".to_vec())),
+        );
+        assert_eq!(find_leaf_for_principal(tree.as_ref(), b"\x05"), None);
+    }
 }
