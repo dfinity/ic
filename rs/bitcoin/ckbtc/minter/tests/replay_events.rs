@@ -96,10 +96,8 @@ static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
 });
 static TESTNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Testnet.deserialize());
 
-#[tokio::test]
-async fn should_replay_events_and_retain_pending_requests() {
-    Mainnet.retrieve_and_store_events_if_env().await;
-
+#[test]
+fn should_replay_events_and_retain_pending_requests() {
     let state = &MAINNET_STATE;
     state
         .check_invariants()
