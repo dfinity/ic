@@ -2320,11 +2320,18 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
+    // Set a timeout for the SSH handshake and authentication to prevent
+    // indefinite hangs when the remote host accepts TCP but stalls during
+    // the SSH protocol exchange.
+    sess.set_timeout(30_000);
     sess.handshake()?;
     let priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
     sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
+    // Clear the timeout so subsequent operations on this session
+    // (e.g. long-running commands) are not subject to the handshake timeout.
+    sess.set_timeout(0);
     Ok(sess)
 }
 

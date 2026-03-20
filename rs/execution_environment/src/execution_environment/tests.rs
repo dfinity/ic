@@ -31,7 +31,6 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
     CanisterId, CountBytes, PrincipalId, RegistryVersion,
-    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpMethod, Transform},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -41,7 +40,7 @@ use ic_types::{
     },
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;

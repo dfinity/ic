@@ -45,7 +45,7 @@ fn next_block_id() -> u64 {
 fn first_non_archive_index() -> u64 {
     ARCHIVES.with(|archives| match archives.borrow().last() {
         Some(archive) => archive.block_range.end,
-        None => 0u64,
+        None => 0_u64,
     })
 }
 
