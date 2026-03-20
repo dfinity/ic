@@ -1301,7 +1301,11 @@ impl Scheduler for SchedulerImpl {
             SchedulerRoundLimits {
                 instructions: round_instructions,
                 subnet_instructions: as_round_instructions(
-                    self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
+                    self.config
+                        .subnet_messages_per_round_instruction_limit
+                        .unwrap_or(
+                            self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
+                        ),
                 ),
                 subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
                 subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),

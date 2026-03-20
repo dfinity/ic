@@ -2071,6 +2071,12 @@ impl StateMachine {
             let round_budget = ic_types::NumInstructions::from(1_000);
             subnet_config.scheduler_config.max_instructions_per_round =
                 round_budget + max_slice - ic_types::NumInstructions::from(1);
+            // Limit subnet message processing to a small budget so that only
+            // one management canister message is processed per round.
+            subnet_config
+                .scheduler_config
+                .subnet_messages_per_round_instruction_limit =
+                Some(ic_types::NumInstructions::from(1_000));
         }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
@@ -2755,6 +2761,21 @@ impl StateMachine {
             .unwrap()
             .insert(message_id.clone(), msg);
         Ok(message_id)
+    }
+
+    /// Take a previously buffered ingress message out of the buffer,
+    /// returning the `SignedIngress`. This is useful for constructing custom
+    /// payloads with multiple ingress messages.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `message_id` was not previously buffered.
+    pub fn take_buffered_ingress(&self, message_id: &MessageId) -> SignedIngress {
+        self.ingress_buffer
+            .write()
+            .unwrap()
+            .remove(message_id)
+            .unwrap_or_else(|| panic!("No buffered ingress message with id {}", message_id))
     }
 
     /// Release a previously buffered ingress message into the ingress pool.

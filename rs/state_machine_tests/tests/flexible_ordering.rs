@@ -466,3 +466,85 @@ fn test_canister_calls_management_canister() {
         "Expected non-empty reply with canister ID"
     );
 }
+
+// ============================================================================
+// Test 9: Verify that subnet messages are processed one at a time via
+// the ordering mechanism.
+//
+// Two ProvisionalCreateCanisterWithCycles ingress messages are submitted
+// to the management canister via separate ordering steps. Each one
+// should complete in its own set of ticks due to the limited subnet
+// instruction budget.
+// ============================================================================
+#[test]
+fn test_one_subnet_message_per_round() {
+    use ic_management_canister_types_private::{
+        Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    };
+
+    let sm = setup();
+
+    let args = ProvisionalCreateCanisterWithCyclesArgs {
+        amount: Some(candid::Nat::from(0_u64)),
+        settings: None,
+        specified_id: None,
+        sender_canister_version: None,
+    }
+    .encode();
+
+    let id1 = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            ic_management_canister_types_private::IC_00,
+            Method::ProvisionalCreateCanisterWithCycles,
+            args.clone(),
+        )
+        .unwrap();
+    let id2 = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            ic_management_canister_types_private::IC_00,
+            Method::ProvisionalCreateCanisterWithCycles,
+            args,
+        )
+        .unwrap();
+
+    // Execute first subnet message.
+    sm.execute_with_ordering(MessageOrdering(vec![OrderedMessage::Ingress(
+        ic_management_canister_types_private::IC_00,
+        id1.clone(),
+    )]));
+
+    // First should be done, second should not have been touched.
+    let is_done = |id: &ic_types::messages::MessageId| {
+        matches!(
+            sm.ingress_status(id),
+            IngressStatus::Known {
+                state: IngressState::Completed(_),
+                ..
+            }
+        )
+    };
+    assert!(
+        is_done(&id1),
+        "First create_canister should be done: {:?}",
+        sm.ingress_status(&id1)
+    );
+    assert!(
+        !is_done(&id2),
+        "Second create_canister should NOT be done yet: {:?}",
+        sm.ingress_status(&id2)
+    );
+
+    // Execute second subnet message.
+    sm.execute_with_ordering(MessageOrdering(vec![OrderedMessage::Ingress(
+        ic_management_canister_types_private::IC_00,
+        id2.clone(),
+    )]));
+
+    assert!(
+        is_done(&id2),
+        "Second create_canister should be done: {:?}",
+        sm.ingress_status(&id2)
+    );
+}

@@ -274,6 +274,13 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading or downloading binary snapshot data.
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
+
+    /// Optional override for the subnet message instruction budget per round.
+    /// When `Some`, this value is used instead of the default
+    /// `max_instructions_per_round / 16`. This allows testing configurations
+    /// (e.g. flexible message ordering) to restrict how many subnet messages
+    /// are processed per round.
+    pub subnet_messages_per_round_instruction_limit: Option<NumInstructions>,
 }
 
 impl SchedulerConfig {
@@ -305,6 +312,7 @@ impl SchedulerConfig {
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
             canister_snapshot_data_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
+            subnet_messages_per_round_instruction_limit: None,
         }
     }
 
@@ -349,6 +357,7 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
+            subnet_messages_per_round_instruction_limit: None,
         }
     }
 
