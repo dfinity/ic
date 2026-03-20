@@ -39,7 +39,7 @@ impl JournalStreamer {
         self
     }
 
-    pub fn from_now(self) -> Self {
+    pub fn from_now(mut self) -> Self {
         let (_message, cursor) = Self::new(self.session.clone())
             .max_lines(1)
             .search_and_return_cursors("__CURSOR")?
@@ -61,7 +61,7 @@ impl JournalStreamer {
             })?;
 
         self.to_cursor = Some(cursor.to_string());
-        self
+        Ok(self)
     }
 
     pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {
