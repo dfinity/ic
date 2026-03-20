@@ -180,7 +180,7 @@ jobs:
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            bazel test //rs/orchestrator:orchestrator_test --cache_test_results=no --runs_per_test=100
+            bazel test //rs/orchestrator:orchestrator_test --cache_test_results=no --runs_per_test=100 --jobs=10
 
   bazel-test-all:
     name: Bazel Test All
