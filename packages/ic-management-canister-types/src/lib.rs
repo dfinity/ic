@@ -46,6 +46,23 @@ pub enum LogVisibility {
     AllowedViewers(Vec<Principal>),
 }
 
+/// # Snapshot Visibility.
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
+)]
+pub enum SnapshotVisibility {
+    /// Controllers.
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    /// Public.
+    #[serde(rename = "public")]
+    Public,
+    /// Allowed viewers.
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(Vec<Principal>),
+}
+
 /// # Environment Variable.
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
@@ -140,6 +157,11 @@ pub struct CanisterSettings {
     ///
     /// Default value: `null` (i.e., no environment variables provided).
     pub environment_variables: Option<Vec<EnvironmentVariable>>,
+
+    /// Defines who is allowed to read the canister's snapshots.
+    ///
+    /// Default value: [`SnapshotVisibility::Controllers`].
+    pub snapshot_visibility: Option<SnapshotVisibility>,
 }
 
 /// # Definite Canister Settings
@@ -171,6 +193,8 @@ pub struct DefiniteCanisterSettings {
     pub wasm_memory_threshold: Nat,
     /// A list of environment variables.
     pub environment_variables: Vec<EnvironmentVariable>,
+    /// Visibility of canister snapshots.
+    pub snapshot_visibility: SnapshotVisibility,
 }
 
 /// # Create Canister Args
