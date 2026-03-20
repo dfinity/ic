@@ -294,8 +294,7 @@ async fn upgrade_to(
                 node.node_id,
                 JournalStreamer::new(node.block_on_ssh_session().unwrap())
                     .follow()
-                    .from_now()
-                    .expect("Failed to set from cursor to now"),
+                    .from_now(),
             )
         })
         .collect::<BTreeMap<_, _>>();

@@ -39,16 +39,16 @@ impl JournalStreamer {
         self
     }
 
-    pub fn from_now(self) -> anyhow::Result<Self> {
+    pub fn from_now(self) -> Self {
         let (_message, cursor) = Self::new(self.session.clone())
             .max_lines(1)
             .search_and_return_cursors("__CURSOR")?
             .into_iter()
             .next()
-            .ok_or_else(|| anyhow::anyhow!("No journal entries found"))?;
+            .expect("The journal should have at least one entry");
 
         self.from_cursor = Some(cursor.to_string());
-        Ok(self)
+        self
     }
 
     pub fn until(mut self, search_regex: &str) -> anyhow::Result<Self> {

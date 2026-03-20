@@ -923,9 +923,7 @@ fn corrupt_latest_cup(
         "Getting journal cursor on node {:?}",
         app_node.get_ip_addr()
     );
-    let journal_streamer = JournalStreamer::new(session.clone())
-        .from_now()
-        .expect("Failed to create journal streamer");
+    let journal_streamer = JournalStreamer::new(session.clone()).from_now();
 
     info!(logger, "Reading CUP from node {:?}", app_node.get_ip_addr());
     let (mut channel, _) = session.scp_recv(Path::new(CUP_PATH)).unwrap();
