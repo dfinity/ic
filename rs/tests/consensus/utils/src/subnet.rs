@@ -160,7 +160,7 @@ pub fn disable_chain_key_on_subnet(
     ));
 
     info!(logger, "Waiting until signing fails.");
-    let message_hash = vec![0xabu8; 32];
+    let message_hash = vec![0xab_u8; 32];
     for key_id in key_ids {
         ic_system_test_driver::retry_with_msg!(
             "check if signing has failed",

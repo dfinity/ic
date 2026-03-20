@@ -39,7 +39,7 @@ fn certification_api_test() {
         let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
         let _ = canister
-            .update_("set_certified_data", bytes, vec![0u8; 32])
+            .update_("set_certified_data", bytes, vec![0_u8; 32])
             .await?;
 
         let _ = canister.query_("get_certificate", bytes, vec![]).await?;
@@ -55,7 +55,7 @@ fn stable_memory_read_write() {
 
         let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
-        let contents_1 = vec![0xdeu8; 100];
+        let contents_1 = vec![0xde_u8; 100];
 
         let _ = canister
             .update_("write_stable_memory_fn", bytes, contents_1.clone())
@@ -67,7 +67,7 @@ fn stable_memory_read_write() {
 
         assert_eq!(buf, contents_1);
 
-        let contents_2 = vec![0xadu8; 98];
+        let contents_2 = vec![0xad_u8; 98];
 
         let _ = canister
             .update_("write_stable_memory_writer", bytes, contents_2.clone())

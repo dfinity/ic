@@ -4113,7 +4113,7 @@ fn upload_blob_from_file(
         .map_err(|e| format!("Could not open {} file: {}", blob_kind.description(), e))?;
     while offset < length {
         let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
-        let mut chunk = vec![0u8; chunk_size as usize];
+        let mut chunk = vec![0_u8; chunk_size as usize];
         file.read_exact(&mut chunk)
             .map_err(|e| format!("Could not read {} file: {}", blob_kind.description(), e))?;
         let kind = match blob_kind {

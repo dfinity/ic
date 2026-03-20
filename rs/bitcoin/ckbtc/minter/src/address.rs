@@ -566,7 +566,7 @@ mod tests {
         assert_eq!(
             ParseAddressError::UnsupportedWitnessVersion(2),
             BitcoinAddress::parse(
-                &generate_address(Some(2), &[0u8; 20], Network::Mainnet),
+                &generate_address(Some(2), &[0_u8; 20], Network::Mainnet),
                 Network::Mainnet,
             )
             .unwrap_err()

@@ -53,7 +53,7 @@ fn file_hash(file_index: u32, chunks: &[&[u8]], version: StateSyncVersion) -> [u
         }
         (chunk.len() as u32).update_hash(&mut h);
         offset.update_hash(&mut h);
-        let chunk_hash = hash_concat!(14u8, b"ic-state-chunk", chunk);
+        let chunk_hash = hash_concat!(14_u8, b"ic-state-chunk", chunk);
         chunk_hash.update_hash(&mut h);
         offset += chunk.len() as u64;
     }
@@ -68,11 +68,11 @@ fn simple_file_table_and_chunk_table(version: StateSyncVersion) -> (Vec<FileInfo
     let chunk_2 = &[1_u8; 1024];
     let chunk_3 = &[2_u8; 1024];
     let chunk_4 = &[2_u8; 26];
-    let chunk_0_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_0);
-    let chunk_1_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_1);
-    let chunk_2_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_2);
-    let chunk_3_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_3);
-    let chunk_4_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_4);
+    let chunk_0_hash = hash_concat!(14_u8, b"ic-state-chunk", chunk_0);
+    let chunk_1_hash = hash_concat!(14_u8, b"ic-state-chunk", chunk_1);
+    let chunk_2_hash = hash_concat!(14_u8, b"ic-state-chunk", chunk_2);
+    let chunk_3_hash = hash_concat!(14_u8, b"ic-state-chunk", chunk_3);
+    let chunk_4_hash = hash_concat!(14_u8, b"ic-state-chunk", chunk_4);
 
     let file_0_hash = file_hash(0, &[chunk_0], version);
     let file_1_hash = file_hash(1, &[chunk_1, chunk_2], version);
@@ -140,14 +140,14 @@ fn simple_file_table_and_chunk_table(version: StateSyncVersion) -> (Vec<FileInfo
 
 // The file table and chunk table is used to create a manifest which is larger than 100 MiB after encoding.
 pub(crate) fn dummy_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInfo>) {
-    let chunk_hash = hash_concat!(14u8, b"ic-state-chunk", vec![0u8; 1000].as_slice());
+    let chunk_hash = hash_concat!(14_u8, b"ic-state-chunk", vec![0_u8; 1000].as_slice());
     let file_hash = hash_concat!(
-        13u8,
+        13_u8,
         b"ic-state-file",
-        1u32,
-        0u32,
-        1000u32,
-        0u64,
+        1_u32,
+        0_u32,
+        1000_u32,
+        0_u64,
         &chunk_hash[..]
     );
     let chunk_info = ChunkInfo {
@@ -174,49 +174,49 @@ fn simple_manifest_v1() -> ([u8; 32], Manifest) {
         chunk_table.clone(),
     );
     let expected_hash = hash_concat!(
-        17u8,
+        17_u8,
         b"ic-state-manifest",
         StateSyncVersion::V1,
         // files
-        4u32,
+        4_u32,
         "root.bin",
-        1000u64,
+        1000_u64,
         &file_table[0].hash[..],
         "subdir/memory",
-        2048u64,
+        2048_u64,
         &file_table[1].hash[..],
         "subdir/metadata",
-        1050u64,
+        1050_u64,
         &file_table[2].hash[..],
         "subdir/queue",
-        0u64,
+        0_u64,
         &file_table[3].hash[..],
         // chunks
-        5u32,
+        5_u32,
         // chunk 0
-        0u32,
-        1000u32,
-        0u64,
+        0_u32,
+        1000_u32,
+        0_u64,
         &chunk_table[0].hash[..],
         // chunk 1
-        1u32,
-        1024u32,
-        0u64,
+        1_u32,
+        1024_u32,
+        0_u64,
         &chunk_table[1].hash[..],
         // chunk 2
-        1u32,
-        1024u32,
-        1024u64,
+        1_u32,
+        1024_u32,
+        1024_u64,
         &chunk_table[2].hash[..],
         // chunk 3
-        2u32,
-        1024u32,
-        0u64,
+        2_u32,
+        1024_u32,
+        0_u64,
         &chunk_table[3].hash[..],
         // chunk 4
-        2u32,
-        26u32,
-        1024u64,
+        2_u32,
+        26_u32,
+        1024_u64,
         &chunk_table[4].hash[..]
     );
 
@@ -234,12 +234,12 @@ fn simple_manifest(version: StateSyncVersion) -> ([u8; 32], Manifest) {
     // If it is not the case due to future changes, the `sub_manifest_hash` below should also be updated.
     assert!(encoded_manifest.len() <= DEFAULT_CHUNK_SIZE as usize);
 
-    let sub_manifest_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
+    let sub_manifest_hash = hash_concat!(21_u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
     let expected_hash = hash_concat!(
-        22u8,
+        22_u8,
         b"ic-state-meta-manifest",
         version,
-        1u32,
+        1_u32,
         &sub_manifest_hash[..]
     );
     (expected_hash, manifest)
@@ -278,13 +278,13 @@ fn test_simple_manifest_computation() {
     let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
 
     let root = dir.path();
-    fs::write(root.join("root.bin"), vec![0u8; 1000]).expect("failed to create file 'test.bin'");
+    fs::write(root.join("root.bin"), vec![0_u8; 1000]).expect("failed to create file 'test.bin'");
 
     let subdir = root.join("subdir");
     fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
-    fs::write(subdir.join("memory"), vec![1u8; 2048]).expect("failed to create file 'memory'");
-    fs::write(subdir.join("queue"), vec![0u8; 0]).expect("failed to create file 'queue'");
-    fs::write(subdir.join("metadata"), vec![2u8; 1050]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("memory"), vec![1_u8; 2048]).expect("failed to create file 'memory'");
+    fs::write(subdir.join("queue"), vec![0_u8; 0]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("metadata"), vec![2_u8; 1050]).expect("failed to create file 'queue'");
 
     let test_computation_with_num_threads = |num_threads: u32| {
         let mut thread_pool = scoped_threadpool::Pool::new(num_threads);
@@ -337,15 +337,15 @@ fn test_manifest_computation_skips_marker_file() {
     let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
 
     let root = dir.path();
-    fs::write(root.join("root.bin"), vec![0u8; 1000]).expect("failed to create file 'test.bin'");
+    fs::write(root.join("root.bin"), vec![0_u8; 1000]).expect("failed to create file 'test.bin'");
     fs::File::create(root.join(UNVERIFIED_CHECKPOINT_MARKER))
         .expect("failed to create marker file");
 
     let subdir = root.join("subdir");
     fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
-    fs::write(subdir.join("memory"), vec![1u8; 2048]).expect("failed to create file 'memory'");
-    fs::write(subdir.join("queue"), vec![0u8; 0]).expect("failed to create file 'queue'");
-    fs::write(subdir.join("metadata"), vec![2u8; 1050]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("memory"), vec![1_u8; 2048]).expect("failed to create file 'memory'");
+    fs::write(subdir.join("queue"), vec![0_u8; 0]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("metadata"), vec![2_u8; 1050]).expect("failed to create file 'queue'");
 
     let mut thread_pool = scoped_threadpool::Pool::new(1);
 
@@ -387,7 +387,7 @@ fn test_meta_manifest_computation() {
         let encoded_manifest = encode_manifest(&manifest);
         assert!(encoded_manifest.len() <= DEFAULT_CHUNK_SIZE as usize);
 
-        let sub_manifest_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
+        let sub_manifest_hash = hash_concat!(21_u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
         let expected_meta_manifest = MetaManifest {
             version,
             sub_manifest_hashes: vec![sub_manifest_hash],
@@ -438,13 +438,13 @@ fn test_validate_sub_manifest() {
     let sub_manifest_0 = encoded_manifest
         [0..std::cmp::min(DEFAULT_CHUNK_SIZE as usize, encoded_manifest.len())]
         .to_vec();
-    let expected_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &sub_manifest_0[..]);
+    let expected_hash = hash_concat!(21_u8, b"ic-state-sub-manifest", &sub_manifest_0[..]);
     assert_eq!(expected_hash, meta_manifest.sub_manifest_hashes[0]);
 
     let mut bad_chunk = sub_manifest_0;
     let alter_position = bad_chunk.len() / 2;
     bad_chunk[alter_position] = bad_chunk[alter_position].wrapping_add(1);
-    let actual_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &bad_chunk[..]);
+    let actual_hash = hash_concat!(21_u8, b"ic-state-sub-manifest", &bad_chunk[..]);
 
     assert_eq!(
         Err(ChunkValidationError::InvalidChunkHash {
@@ -518,7 +518,7 @@ fn meta_manifest_passes_validation() {
 #[test]
 fn bad_root_hash_detected_for_meta_manifest() {
     for version in versions_from(StateSyncVersion::V2) {
-        let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+        let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
         let (file_table, chunk_table) = simple_file_table_and_chunk_table(version);
         let manifest = Manifest::new(version, file_table, chunk_table);
         let meta_manifest = build_meta_manifest(&manifest);
@@ -534,7 +534,7 @@ fn bad_root_hash_detected_for_meta_manifest() {
 
 #[test]
 fn bad_root_hash_detected() {
-    let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+    let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
     for (manifest_hash, manifest) in simple_manifest_all_supported_versions() {
         // Manifest is internally consistent
         assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
@@ -566,7 +566,7 @@ fn bad_file_hash_detected() {
             validate_manifest_internal_consistency(&manifest),
             Err(ManifestValidationError::InvalidFileHash {
                 relative_path: manifest.file_table[0].relative_path.clone(),
-                expected_hash: vec![1u8; 32],
+                expected_hash: vec![1_u8; 32],
                 actual_hash: actual_hash.clone(),
             })
         );
@@ -574,7 +574,7 @@ fn bad_file_hash_detected() {
             validate_manifest(&manifest, &root_hash),
             Err(ManifestValidationError::InvalidFileHash {
                 relative_path: manifest.file_table[0].relative_path.clone(),
-                expected_hash: vec![1u8; 32],
+                expected_hash: vec![1_u8; 32],
                 actual_hash,
             })
         );
@@ -601,15 +601,15 @@ fn bad_chunk_size_detected() {
 #[test]
 fn bad_chunk_hash_detected() {
     for (_, manifest) in simple_manifest_all_supported_versions() {
-        let valid_chunk_0 = vec![0u8; 1000];
+        let valid_chunk_0 = vec![0_u8; 1000];
         assert_eq!(
-            hash_concat!(14u8, b"ic-state-chunk", &valid_chunk_0[..]),
+            hash_concat!(14_u8, b"ic-state-chunk", &valid_chunk_0[..]),
             manifest.chunk_table[0].hash
         );
 
         let mut bad_chunk = valid_chunk_0;
         bad_chunk[0] = 1;
-        let actual_hash = hash_concat!(14u8, b"ic-state-chunk", &bad_chunk[..]);
+        let actual_hash = hash_concat!(14_u8, b"ic-state-chunk", &bad_chunk[..]);
         assert_eq!(
             validate_chunk(0, &bad_chunk, &manifest),
             Err(ChunkValidationError::InvalidChunkHash {
@@ -667,19 +667,19 @@ fn test_diff_manifest_v1() {
     );
 
     // the chunk_2 from the file_1 changes.
-    let chunk_1_hash = hash_concat!(14u8, b"ic-state-chunk", vec![1u8; 1024].as_slice());
-    let chunk_2_hash = hash_concat!(14u8, b"ic-state-chunk", vec![255u8; 1024].as_slice());
+    let chunk_1_hash = hash_concat!(14_u8, b"ic-state-chunk", vec![1_u8; 1024].as_slice());
+    let chunk_2_hash = hash_concat!(14_u8, b"ic-state-chunk", vec![255_u8; 1024].as_slice());
     let file_1_hash = hash_concat!(
-        13u8,
+        13_u8,
         b"ic-state-file",
-        2u32,
-        1u32,
-        1024u32,
-        0u64,
+        2_u32,
+        1_u32,
+        1024_u32,
+        0_u64,
         &chunk_1_hash[..],
-        1u32,
-        1024u32,
-        1024u64,
+        1_u32,
+        1024_u32,
+        1024_u64,
         &chunk_2_hash[..]
     );
 
@@ -730,16 +730,16 @@ fn test_diff_manifest() {
     let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let root = dir.path();
 
-    fs::write(root.join("root.bin"), vec![2u8; 1000 * 1024])
+    fs::write(root.join("root.bin"), vec![2_u8; 1000 * 1024])
         .expect("failed to create file 'test.bin'");
 
     let subdir = root.join("subdir");
     fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
-    fs::write(subdir.join("memory"), vec![1u8; 2048 * 1024])
+    fs::write(subdir.join("memory"), vec![1_u8; 2048 * 1024])
         .expect("failed to create file 'memory'");
-    fs::write(subdir.join("metadata"), vec![3u8; 1050 * 1024])
+    fs::write(subdir.join("metadata"), vec![3_u8; 1050 * 1024])
         .expect("failed to create file 'metadata'");
-    fs::write(subdir.join("queue"), vec![0u8; 0]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("queue"), vec![0_u8; 0]).expect("failed to create file 'queue'");
 
     let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
     let manifest_old = compute_manifest(
@@ -754,9 +754,9 @@ fn test_diff_manifest() {
     )
     .expect("failed to compute manifest");
 
-    fs::write(subdir.join("metadata"), vec![3u8; 2048 * 1024])
+    fs::write(subdir.join("metadata"), vec![3_u8; 2048 * 1024])
         .expect("failed to write file 'metadata'");
-    fs::write(subdir.join("queue"), vec![0u8; 2048 * 1024]).expect("failed to write file 'queue'");
+    fs::write(subdir.join("queue"), vec![0_u8; 2048 * 1024]).expect("failed to write file 'queue'");
     // The files in the manifest is sorted by relative path. The index of file
     // 'metadata' is 2. The indices of its chunks are 3 and 4.
     let manifest_new = compute_manifest(
@@ -800,16 +800,16 @@ fn test_filter_all_zero_chunks() {
     let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let root = dir.path();
 
-    fs::write(root.join("root.bin"), vec![2u8; 1000 * 1024])
+    fs::write(root.join("root.bin"), vec![2_u8; 1000 * 1024])
         .expect("failed to create file 'test.bin'");
 
     let subdir = root.join("subdir");
     fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
-    fs::write(subdir.join("memory"), vec![0u8; 2048 * 1024])
+    fs::write(subdir.join("memory"), vec![0_u8; 2048 * 1024])
         .expect("failed to create file 'memory'");
-    fs::write(subdir.join("metadata"), vec![3u8; 1050 * 1024])
+    fs::write(subdir.join("metadata"), vec![3_u8; 1050 * 1024])
         .expect("failed to create file 'metadata'");
-    fs::write(subdir.join("queue"), vec![0u8; 1050 * 1024]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("queue"), vec![0_u8; 1050 * 1024]).expect("failed to create file 'queue'");
 
     let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
     let manifest = compute_manifest(
@@ -912,16 +912,16 @@ fn test_hash_plan() {
     let populate_checkpoint = |root: &Path| {
         fs::create_dir_all(root).unwrap();
 
-        fs::write(root.join("root.bin"), vec![2u8; 1000 * 1024])
+        fs::write(root.join("root.bin"), vec![2_u8; 1000 * 1024])
             .expect("failed to create file 'root.bin'");
 
         let subdir = root.join("subdir");
         fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
 
-        fs::write(subdir.join("memory"), vec![1u8; 2048 * 1024])
+        fs::write(subdir.join("memory"), vec![1_u8; 2048 * 1024])
             .expect("failed to create file 'memory'");
 
-        fs::write(subdir.join("metadata"), vec![3u8; 1050 * 1024])
+        fs::write(subdir.join("metadata"), vec![3_u8; 1050 * 1024])
             .expect("failed to create file 'metadata'");
     };
     populate_checkpoint(&base_dir);
@@ -942,8 +942,8 @@ fn test_hash_plan() {
 
     let next_dir = dir.path().join("next");
     populate_checkpoint(&next_dir);
-    let mut memory_new = vec![1u8; 1024 * 1024];
-    memory_new.append(&mut vec![6u8; 2048 * 1024]);
+    let mut memory_new = vec![1_u8; 1024 * 1024];
+    memory_new.append(&mut vec![6_u8; 2048 * 1024]);
 
     fs::write(next_dir.join("subdir").join("memory"), memory_new)
         .expect("failed to write file 'memory'");
@@ -1099,11 +1099,11 @@ fn test_files_with_same_inodes() {
     let checkpoint1 = root.join("checkpoint1");
     fs::create_dir(&checkpoint1).expect("failed to create dir 'subdir'");
 
-    fs::write(checkpoint0.join("wasm_a"), vec![1u8; 2048 * 1024])
+    fs::write(checkpoint0.join("wasm_a"), vec![1_u8; 2048 * 1024])
         .expect("failed to create file 'wasm_a'");
-    fs::write(checkpoint0.join("wasm_b"), vec![1u8; 2048 * 1024])
+    fs::write(checkpoint0.join("wasm_b"), vec![1_u8; 2048 * 1024])
         .expect("failed to create file 'wasm_b'");
-    fs::write(checkpoint1.join("wasm_a"), vec![1u8; 2048 * 1024])
+    fs::write(checkpoint1.join("wasm_a"), vec![1_u8; 2048 * 1024])
         .expect("failed to create file 'wasm_a'");
     fs::hard_link(checkpoint0.join("wasm_b"), checkpoint1.join("wasm_b"))
         .expect("failed to hardlink wasm_b");
@@ -1347,9 +1347,9 @@ fn test_file_index_independent_file_hash() {
     };
 
     // A directory only containing `file1` and `file3`.
-    fs::write(root.join(&file1), vec![1u8; 1000])
+    fs::write(root.join(&file1), vec![1_u8; 1000])
         .unwrap_or_else(|_| panic!("failed to create file '{}'", file1.display()));
-    fs::write(root.join(&file3), vec![3u8; 1000])
+    fs::write(root.join(&file3), vec![3_u8; 1000])
         .unwrap_or_else(|_| panic!("failed to create file '{}'", file3.display()));
 
     let (file1_hash_v2_before, file3_hash_v2_before) =
@@ -1358,7 +1358,7 @@ fn test_file_index_independent_file_hash() {
         compute_file1_and_file3_hashes(CURRENT_STATE_SYNC_VERSION);
 
     // Directory now contains `file1`, `file2` and `file3`.
-    fs::write(root.join(&file2), vec![2u8; 1000])
+    fs::write(root.join(&file2), vec![2_u8; 1000])
         .unwrap_or_else(|_| panic!("failed to create file '{}'", file2.display()));
 
     let (file1_hash_v2_after, file3_hash_v2_after) =

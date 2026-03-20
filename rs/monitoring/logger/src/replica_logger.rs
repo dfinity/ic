@@ -208,7 +208,7 @@ mod tests {
                         line: std::line!(),
                         column: std::column!(),
                     }
-                ) == ((i == 1u32) || i == 6u32)
+                ) == ((i == 1_u32) || i == 6_u32)
             );
             if i == 4_u32 {
                 std::thread::sleep(Duration::from_millis(500));

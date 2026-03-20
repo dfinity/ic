@@ -20,7 +20,7 @@ fn archive_mainnet_u256_wasm() -> Vec<u8> {
 }
 
 fn default_init_args() -> Vec<u8> {
-    Encode!(&Principal::anonymous(), &0u64, &Some(10u64), &Some(10u64)).unwrap()
+    Encode!(&Principal::anonymous(), &0_u64, &Some(10_u64), &Some(10_u64)).unwrap()
 }
 
 // TODO: When the PR that added this test is part of mainnet, we can uncomment the panic expectation.

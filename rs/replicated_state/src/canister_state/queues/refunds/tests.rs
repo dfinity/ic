@@ -51,7 +51,7 @@ fn test_add_multiple_refunds() {
 
     assert_eq!(pool.len(), 1);
     assert_eq!(
-        &[refund(canister_id, cycles * 3u64)],
+        &[refund(canister_id, cycles * 3_u64)],
         collect_iter(&pool).as_slice()
     );
 }

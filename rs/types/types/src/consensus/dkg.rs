@@ -402,11 +402,11 @@ fn build_initial_dkg_attempts_map(
 ) -> BTreeMap<NiDkgTargetId, u32> {
     vec.iter()
         .map(|item| {
-            let mut id = [0u8; NiDkgTargetId::SIZE];
+            let mut id = [0_u8; NiDkgTargetId::SIZE];
             // Safely convert the received slice to a fixed-size slice.
             let mut v = Vec::<u8>::new();
             v.extend_from_slice(&item.target_id);
-            v.resize(NiDkgTargetId::SIZE, 0u8);
+            v.resize(NiDkgTargetId::SIZE, 0_u8);
             id.copy_from_slice(&v);
             // Return the key-value pair.
             (NiDkgTargetId::new(id), item.attempt_no)

@@ -1108,7 +1108,7 @@ pub fn fake_sign(unsigned_tx: &tx::UnsignedTransaction) -> tx::SignedTransaction
                 previous_output: unsigned_input.previous_output.clone(),
                 sequence: unsigned_input.sequence,
                 signature: signature::EncodedSignature::fake(),
-                pubkey: ByteBuf::from(vec![0u8; tx::PUBKEY_LEN]),
+                pubkey: ByteBuf::from(vec![0_u8; tx::PUBKEY_LEN]),
             })
             .collect(),
         outputs: unsigned_tx.outputs.clone(),
