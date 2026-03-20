@@ -46,47 +46,49 @@ fn bench_verify(c: &mut Criterion) {
 fn bench_batch_verify(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_verify");
 
-    for batch_size in [13, 34, 40] {
-        let mut key_rng = rng();
-        let keys: Vec<PrivateKey> = (0..batch_size)
-            .map(|_| PrivateKey::generate_using_rng(&mut key_rng))
-            .collect();
-        let public_keys: Vec<PublicKey> = keys.iter().map(|k| k.public_key()).collect();
-        let messages: Vec<Vec<u8>> = (0..batch_size)
-            .map(|i| {
-                let mut m = vec![0u8; 32];
-                m[..8].copy_from_slice(&(i as u64).to_le_bytes());
-                m
-            })
-            .collect();
-        let signatures: Vec<[u8; 64]> = keys
-            .iter()
-            .zip(messages.iter())
-            .map(|(k, m)| k.sign_message(m))
-            .collect();
+    for msg_len in [32, 1024*1024] {
+        for batch_size in [13, 34, 40] {
+            let mut key_rng = rng();
+            let keys: Vec<PrivateKey> = (0..batch_size)
+                .map(|_| PrivateKey::generate_using_rng(&mut key_rng))
+                .collect();
+            let public_keys: Vec<PublicKey> = keys.iter().map(|k| k.public_key()).collect();
+            let messages: Vec<Vec<u8>> = (0..batch_size)
+                .map(|i| {
+                    let mut m = vec![0u8; msg_len];
+                    m[..8].copy_from_slice(&(i as u64).to_le_bytes());
+                    m
+                })
+                .collect();
+            let signatures: Vec<[u8; 64]> = keys
+                .iter()
+                .zip(messages.iter())
+                .map(|(k, m)| k.sign_message(m))
+                .collect();
 
-        let messages_ref: Vec<&[u8]> = messages.iter().map(|m| m.as_slice()).collect();
-        let signatures_ref: Vec<&[u8]> = signatures.iter().map(|s| s.as_slice()).collect();
+            let messages_ref: Vec<&[u8]> = messages.iter().map(|m| m.as_slice()).collect();
+            let signatures_ref: Vec<&[u8]> = signatures.iter().map(|s| s.as_slice()).collect();
 
-        group.throughput(Throughput::Elements(batch_size as u64));
-        group.bench_with_input(
-            BenchmarkId::new("verify", batch_size),
-            &(&messages_ref, &signatures_ref, &public_keys),
-            |b, (msgs, sigs, pks)| {
-                b.iter_batched(
-                    rng,
-                    |mut rng| {
-                        PublicKey::batch_verify(
-                            black_box(msgs),
-                            black_box(sigs),
-                            black_box(pks),
-                            &mut rng,
-                        )
-                    },
-                    BatchSize::SmallInput,
-                )
-            },
-        );
+            group.throughput(Throughput::Elements(batch_size as u64));
+            group.bench_with_input(
+                format!("batch_verify({},{})", batch_size, msg_len),
+                &(&messages_ref, &signatures_ref, &public_keys),
+                |b, (msgs, sigs, pks)| {
+                    b.iter_batched(
+                        rng,
+                        |mut rng| {
+                            PublicKey::batch_verify(
+                                black_box(msgs),
+                                black_box(sigs),
+                                black_box(pks),
+                                &mut rng,
+                            )
+                        },
+                        BatchSize::SmallInput,
+                    )
+                },
+            );
+        }
     }
 
     group.finish();
