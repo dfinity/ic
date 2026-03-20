@@ -8,13 +8,16 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_btc_interface::OutPoint;
+use ic_ckbtc_minter::address::BitcoinAddress;
+use ic_ckbtc_minter::fees::BitcoinFeeEstimator;
 use ic_ckbtc_minter::state::eventlog::{
     CkBtcEventLogger, CkBtcMinterEvent, EventLogger, EventType,
 };
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::{CkBtcMinterState, LedgerMintIndex};
-use ic_ckbtc_minter::{ECDSAPublicKey, Network};
-use maplit::btreemap;
+use ic_ckbtc_minter::tx::FeeRate;
+use ic_ckbtc_minter::{ECDSAPublicKey, Network, build_unsigned_transaction};
+use maplit::{btreemap, btreeset};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -122,6 +125,92 @@ async fn should_replay_events_and_retain_pending_requests() {
     // 2st stuck retrieve_btc transits to pending
     assert!(block_indices.contains(&3489347));
     assert!(block_indices.contains(&3489353));
+}
+
+#[test]
+fn should_be_able_to_send_fresh_transaction() {
+    let mut state = MAINNET_STATE.clone();
+
+    state
+        .check_invariants()
+        .expect("Failed to check invariants");
+
+    let pending_withdrawals: BTreeSet<_> = state
+        .pending_retrieve_btc_requests
+        .iter()
+        .map(|req| req.block_index)
+        .collect();
+    assert_eq!(
+        pending_withdrawals.len(),
+        state.pending_retrieve_btc_requests.len()
+    );
+    assert_eq!(pending_withdrawals.len(), 6);
+    let stuck_withdrawals = btreeset! { 3459007_u64, 3459009, 3459013, 3489347, 3489353 };
+    assert!(stuck_withdrawals.is_subset(&pending_withdrawals));
+
+    let batch = state.build_batch(100);
+    assert_eq!(
+        batch
+            .iter()
+            .map(|req| req.block_index)
+            .collect::<BTreeSet<_>>(),
+        pending_withdrawals
+    );
+    println!("{batch:?}");
+
+    let outputs: Vec<_> = batch
+        .iter()
+        .map(|req| (req.address.clone(), req.amount))
+        .collect();
+
+    let main_address = BitcoinAddress::parse(
+        "bc1q0jrxz4jh59t5qsu7l0y59kpfdmgjcq60wlee3h",
+        Network::Mainnet,
+    )
+    .unwrap();
+    let max_num_inputs_in_transaction = 1000;
+    let fee_millisatoshi_per_vbyte = FeeRate::from_millis_per_byte(1_500);
+    let fee_estimator = BitcoinFeeEstimator::from_state(&state);
+    let (unsigned_tx, change_output, total_fee, utxos) = build_unsigned_transaction(
+        &mut state.available_utxos,
+        outputs,
+        &main_address,
+        max_num_inputs_in_transaction,
+        fee_millisatoshi_per_vbyte,
+        &fee_estimator,
+    )
+    .unwrap();
+
+    println!("tx: {unsigned_tx:?}");
+    println!("change_output: {change_output:?}");
+    println!("total_fee: {total_fee:?}");
+    println!("utxos: {utxos:?}");
+
+    let input_outpoints: Vec<_> = unsigned_tx
+        .inputs
+        .iter()
+        .map(|input| &input.previous_output)
+        .map(|outpoint| format!("{}:{}", outpoint.txid, outpoint.vout))
+        .collect();
+    assert_eq!(
+        input_outpoints,
+        vec![
+            "68c6e98741cee0ceca94c9e34b93fac64a1ad70c0fc134aa22936d321f3432f3:4",
+            "9114688b68c51906adbc44b09896a259ffccc5e3e974906afe7a2444cfa62a28:0",
+            "b1a328a6ef7c92df7c92dca15b345b1d66cfe5c7b7637fe82a69aef1b211ad36:0",
+            "3895d99d362f362993c2137dafb92c99887b36fbbb1a81f7f2f11cad974e11e4:1",
+            "ed307192ef1e09c51d6276357ddb31f65fdbcb502c5047a6d8d68443eb5c06a4:21",
+            "76e17e2941e80e8d25e01abce53b87f2cb1c12f9d86d0578ccf3e67426b17b2e:0",
+            "f3ad7d7befd989a4724ced75a8eed451aeee6ecf4f161b0bd59071e52545fe79:1"
+        ]
+    );
+
+    assert!(!input_outpoints.contains(
+        &"91bb46443799335076fbcd117f2295c7499d02dd3a59c22a531d31591114b303:5".to_string()
+    ));
+    assert!(!input_outpoints.contains(
+        &"8942e5ef0d4ace158a4fddd5153d320701bd13370ff8fecef13795cdd8ff1dc5:1".to_string()
+    ));
 }
 
 #[tokio::test]
