@@ -275,7 +275,7 @@ async fn test_upgrade_existing_sns() {
             ApproveArgs {
                 from_subaccount: wealthy_user_account.subaccount,
                 amount: Nat::from(100_000_u64),
-                expected_allowance: Some(Nat::from(0u8)),
+                expected_allowance: Some(Nat::from(0_u8)),
                 expires_at: Some(current_ic_unix_time_nanos + 100_000_000_000),
                 fee: Some(Nat::from(transaction_fee_sns_e8s)),
                 memo: None,

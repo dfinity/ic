@@ -91,7 +91,7 @@ impl Setup {
 
 impl Default for Setup {
     fn default() -> Self {
-        Self::new(&Principal::anonymous(), &0u64, &None, &None)
+        Self::new(&Principal::anonymous(), &0_u64, &None, &None)
     }
 }
 
@@ -130,7 +130,7 @@ fn test_icrc3_get_blocks() {
         None,
         Operation::Mint {
             to: Account::from(Principal::anonymous()),
-            amount: Tokens::from(1_000_000_000u64),
+            amount: Tokens::from(1_000_000_000_u64),
             fee: None,
         },
     );
@@ -143,7 +143,7 @@ fn test_icrc3_get_blocks() {
                 owner: Principal::anonymous(),
                 subaccount: Some([1; 32]),
             },
-            amount: Tokens::from(1u64),
+            amount: Tokens::from(1_u64),
             fee: None,
             spender: None,
         },
@@ -157,7 +157,7 @@ fn test_icrc3_get_blocks() {
                 owner: Principal::anonymous(),
                 subaccount: Some([1; 32]),
             },
-            amount: Tokens::from(1_000_000u64),
+            amount: Tokens::from(1_000_000_u64),
             fee: None,
             expected_allowance: None,
             expires_at: None,
@@ -176,7 +176,7 @@ fn test_icrc3_get_blocks() {
                 owner: Principal::anonymous(),
                 subaccount: Some([1; 32]),
             },
-            amount: Tokens::from(100_000u64),
+            amount: Tokens::from(100_000_u64),
             fee: None,
         },
     );

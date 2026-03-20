@@ -130,7 +130,7 @@ impl GenesisTokenCanisterInitPayloadBuilder {
                         .unwrap()
                         .as_nanos();
 
-                    let mut seed = [0u8; 32];
+                    let mut seed = [0_u8; 32];
                     seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
                     seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
                     seed
@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_make_neurons() {
-        let seed = [145u8; 32];
+        let seed = [145_u8; 32];
         let mut rng = StdRng::from_seed(seed);
         let stakes = vec![5000, 5000, 5000, 5000, 5000, 5000, 5000];
         let account_a_neurons = make_neurons("accountA", "sr", stakes.clone(), &mut rng, 12345678);

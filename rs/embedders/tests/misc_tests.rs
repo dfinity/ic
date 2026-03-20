@@ -10,10 +10,11 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
-    Cycles, NumBytes, PrincipalId,
+    NumBytes, PrincipalId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::sync::Arc;
 use wirm::{Module, wasmparser::ExternalKind};
@@ -164,7 +165,7 @@ fn test_decode_large_compressed_module() {
 fn test_decode_large_compressed_module_with_tweaked_size() {
     let mut contents = compressed_test_contents("zeros.gz");
     let n = contents.len();
-    contents[n - 4..n].copy_from_slice(&100u32.to_le_bytes());
+    contents[n - 4..n].copy_from_slice(&100_u32.to_le_bytes());
     decode_wasm(default_max_size(), Arc::new(contents)).unwrap();
 }
 

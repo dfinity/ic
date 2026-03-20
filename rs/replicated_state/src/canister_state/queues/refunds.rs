@@ -1,5 +1,6 @@
+use ic_types::CanisterId;
 use ic_types::messages::Refund;
-use ic_types::{CanisterId, Cycles};
+use ic_types_cycles::Cycles;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::btree_map::Entry::{Occupied, Vacant};

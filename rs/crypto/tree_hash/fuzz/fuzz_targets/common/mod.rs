@@ -28,7 +28,7 @@ pub fn fuzz_target<F: Fn(&LabeledTree<Vec<u8>>, &mut ChaCha20Rng)>(data: &[u8], 
 pub fn fuzz_mutator(data: &mut [u8], size: usize, max_size: usize, seed: u32) -> usize {
     let tree_data = if size < CHACHA_SEED_LEN {
         // invalid tree encoding if there's not enough bytes to construct a slice
-        &[0u8; 0]
+        &[0_u8; 0]
     } else {
         &data[CHACHA_SEED_LEN..size]
     };
@@ -36,7 +36,7 @@ pub fn fuzz_mutator(data: &mut [u8], size: usize, max_size: usize, seed: u32) ->
     let mut tree = match ProtobufLabeledTree::proxy_decode(tree_data) {
         Ok(tree) if matches!(tree, LabeledTree::SubTree(_)) => tree,
         Err(_) | Ok(_) /*if matches!(tree, LabeledTree::Leaf(_))*/ => {
-            let seed = [0u8; CHACHA_SEED_LEN];
+            let seed = [0_u8; CHACHA_SEED_LEN];
             let encoded_tree =
                 ProtobufLabeledTree::proxy_encode(LabeledTree::<Vec<u8>>::SubTree(flatmap!()));
             let bytes: Vec<_> = seed.into_iter().chain(encoded_tree).collect();

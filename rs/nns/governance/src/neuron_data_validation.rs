@@ -701,7 +701,7 @@ mod tests {
             *next_test_neuron_id += 1;
             id
         });
-        let mut account = [1u8; 32].to_vec();
+        let mut account = [1_u8; 32].to_vec();
         account.splice(24..32, id.to_le_bytes());
         let subaccount = Subaccount::try_from(&account[..]).unwrap();
         let known_neuron_name = format!("known neuron data{id}");
@@ -752,7 +752,7 @@ mod tests {
     fn test_finish_validation() {
         let neuron = NeuronBuilder::new(
             NeuronId { id: 1 },
-            Subaccount::try_from([1u8; 32].as_ref()).unwrap(),
+            Subaccount::try_from([1_u8; 32].as_ref()).unwrap(),
             PrincipalId::new_user_test_id(1),
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: 1,
@@ -785,7 +785,7 @@ mod tests {
         // it at this time.
         let neuron = NeuronBuilder::new(
             NeuronId { id: 1 },
-            Subaccount::try_from([1u8; 32].as_ref()).unwrap(),
+            Subaccount::try_from([1_u8; 32].as_ref()).unwrap(),
             PrincipalId::new_user_test_id(1),
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: 1,

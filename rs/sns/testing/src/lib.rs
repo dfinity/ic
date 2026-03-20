@@ -175,7 +175,7 @@ impl FromStr for ParsedTokens {
         }
         // Tokens are supposed to have at most 8 decimal places.
         // The mantissa is multiplied by 10^(8 - scale) to get the amount in e8s.
-        let e8s: i128 = decimal_tokens.mantissa() * 10i128.pow(8 - decimal_tokens.scale());
+        let e8s: i128 = decimal_tokens.mantissa() * 10_i128.pow(8 - decimal_tokens.scale());
         if e8s > i128::from(u64::MAX) {
             return Err(
                 "The amount of e8s tokens must be less than or equal to 2^64 - 1".to_string(),

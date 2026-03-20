@@ -914,7 +914,7 @@ checksum = "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
 dependencies = [
  "hermit-abi 0.1.19",
  "libc",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -1762,8 +1762,20 @@ version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23cdc57ce23ac53c931e88a43d06d070a6fd142f2617be5855eb75efc9beb1c2"
 dependencies = [
- "bytecheck_derive",
- "ptr_meta",
+ "bytecheck_derive 0.6.12",
+ "ptr_meta 0.1.4",
+ "simdutf8",
+]
+
+[[package]]
+name = "bytecheck"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0caa33a2c0edca0419d15ac723dff03f1956f7978329b1e3b5fdaaaed9d3ca8b"
+dependencies = [
+ "bytecheck_derive 0.8.2",
+ "ptr_meta 0.3.1",
+ "rancor",
  "simdutf8",
 ]
 
@@ -1776,6 +1788,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "bytecheck_derive"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89385e82b5d1821d2219e0b095efa2cc1f246cbf99080f3be46a1a85c0d392d9"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -1829,12 +1852,6 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[package]]
-name = "c_linked_list"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4964518bd3b4a8190e832886cdc0da9794f12e8e6c1613a9e90ff331c4c8724b"
 
 [[package]]
 name = "cached"
@@ -2046,6 +2063,7 @@ dependencies = [
  "ic-replica-tests",
  "ic-state-machine-tests",
  "ic-types",
+ "ic-types-cycles",
  "on_wire",
  "rand 0.8.5",
  "tokio",
@@ -2062,6 +2080,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-types-cycles",
  "slog",
  "tokio",
 ]
@@ -2420,7 +2439,7 @@ checksum = "129026dd5a8a9592d96916258f3a5379589e513ea5e86aeb0bd2530286e44e9e"
 dependencies = [
  "libc",
  "time",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -2615,16 +2634,19 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "askama",
+ "base64 0.13.1",
  "clap 4.6.0",
  "config_types",
  "deterministic_ips",
  "fs_extra",
- "get_if_addrs",
+ "getifs",
  "ic-config",
+ "ipnet",
  "macaddr",
  "network",
  "once_cell",
  "regex",
+ "reqwest",
  "rust-ini",
  "securefmt",
  "serde",
@@ -2735,6 +2757,7 @@ dependencies = [
  "ic-sys",
  "ic-system-test-driver",
  "ic-types",
+ "ic-types-cycles",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "itertools 0.12.1",
@@ -2788,6 +2811,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-types-cycles",
  "ic-vetkeys",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
@@ -3251,7 +3275,7 @@ dependencies = [
  "rustix 0.38.44",
  "signal-hook",
  "signal-hook-mio",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -3260,7 +3284,7 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acdd7c62a3665c7f6830a51635d9ac9b23ed385797f70a83bb8bafe9c572ab2b"
 dependencies = [
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -3455,6 +3479,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-types",
+ "ic-types-cycles",
  "ic-types-test-utils",
  "ic-xrc-types",
  "icp-ledger",
@@ -3483,6 +3508,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-nns-constants",
  "ic-types",
+ "ic-types-cycles",
  "icp-ledger",
  "on_wire",
  "rand 0.8.5",
@@ -4116,7 +4142,7 @@ checksum = "4ebda144c4fe02d1f7ea1a7d9641b6fc6b580adcfa024ae48797ecdeb6825b4d"
 dependencies = [
  "libc",
  "redox_users 0.4.6",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -4499,7 +4525,7 @@ checksum = "f639046355ee4f37944e44f60642c6f3a7efa3cf6b78c78a0d989a8ce6c396a1"
 dependencies = [
  "errno-dragonfly",
  "libc",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -4709,6 +4735,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-wasm-types",
  "lazy_static",
  "tempfile",
@@ -4740,6 +4767,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-types-cycles",
  "ic-types-test-utils",
  "ic-universal-canister",
  "ic-utils 0.45.0",
@@ -4888,7 +4916,7 @@ dependencies = [
  "cc",
  "lazy_static",
  "libc",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -5222,12 +5250,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gcc"
-version = "0.3.55"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f5f3913fa0bfe7ee1fd8248b6b9f42a5af4b9d65ec2dd2c3c26132b950ecfc2"
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5239,25 +5261,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "get_if_addrs"
-version = "0.5.3"
+name = "getifs"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abddb55a898d32925f3148bd281174a68eeb68bbfd9a5938a57b18f506ee4ef7"
+checksum = "7143bdeb50c2871c11628ebd913d22c4182b41d1793912e6f89ecbcb6b48d596"
 dependencies = [
- "c_linked_list",
- "get_if_addrs-sys",
+ "bitflags 2.11.0",
+ "cfg-if",
+ "either",
+ "hardware-address",
+ "ipnet",
+ "iprfc",
+ "iprobe",
  "libc",
- "winapi 0.2.8",
-]
-
-[[package]]
-name = "get_if_addrs-sys"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d04f9fb746cf36b191c00f3ede8bde9c8e64f9f4b05ae2694a9ccf5e3f5ab48"
-dependencies = [
- "gcc",
- "libc",
+ "linux-raw-sys 0.12.1",
+ "paste",
+ "rustix 1.1.4",
+ "smallvec-wrapper",
+ "smol_str",
+ "triomphe",
+ "widestring",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5479,6 +5503,8 @@ dependencies = [
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -5607,6 +5633,8 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
  "virt",
 ]
@@ -5616,16 +5644,16 @@ name = "guestos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "base64 0.13.1",
  "clap 4.6.0",
  "config_tool",
  "config_types",
  "indoc 1.0.9",
  "network",
  "nix 0.24.3",
- "reqwest",
  "serde",
  "serde_json",
+ "tracing",
+ "tracing-subscriber",
  "utils",
 ]
 
@@ -5696,6 +5724,16 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "hardware-address"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36fca164ea873ea6d164c3b9e6bc59a70e172d28a57b8513528ed4f5ec127c9f"
+dependencies = [
+ "paste",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6009,6 +6047,8 @@ dependencies = [
  "prometheus",
  "regex",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
  "utils",
  "uuid",
 ]
@@ -6655,6 +6695,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "rand 0.8.5",
  "serde",
@@ -7037,7 +7078,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.9",
  "ic-test-utilities-load-wasm",
- "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "pocket-ic",
  "proptest",
@@ -7234,6 +7275,7 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-wasm-types",
  "lazy_static",
  "libc",
@@ -7317,6 +7359,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "ic-wasm-types",
  "lazy_static",
@@ -7572,6 +7615,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils-ensure",
  "ic0",
  "icrc-ledger-client-cdk",
@@ -7618,7 +7662,9 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
+ "flate2",
  "hex",
+ "ic-agent",
  "ic-base-types",
  "ic-cdk",
  "ic-ckbtc-minter",
@@ -7740,6 +7786,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
+ "ic-types-cycles",
  "icrc-ledger-types",
  "num-traits",
  "serde",
@@ -7758,6 +7805,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-sys",
  "ic-types",
+ "ic-types-cycles",
  "json5",
  "proptest",
  "proptest-derive",
@@ -7776,11 +7824,11 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-certification",
+ "ic-consensus-chain-key",
  "ic-consensus-dkg",
  "ic-consensus-idkg",
  "ic-consensus-mocks",
  "ic-consensus-utils",
- "ic-consensus-vetkd",
  "ic-crypto-prng",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-crypto-returning-ok",
@@ -7872,6 +7920,41 @@ dependencies = [
  "prometheus",
  "slog",
  "tokio",
+]
+
+[[package]]
+name = "ic-consensus-chain-key"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "ic-artifact-pool",
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
+ "ic-error-types 0.2.0",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-management-canister-types-private",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-subnet-features",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-registry",
+ "ic-test-utilities-state",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-types-test-utils",
+ "num-traits",
+ "prometheus",
+ "prost 0.13.5",
+ "rayon",
+ "slog",
+ "strum 0.26.3",
 ]
 
 [[package]]
@@ -8062,41 +8145,6 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "slog",
-]
-
-[[package]]
-name = "ic-consensus-vetkd"
-version = "0.9.0"
-dependencies = [
- "assert_matches",
- "ic-artifact-pool",
- "ic-consensus-mocks",
- "ic-consensus-utils",
- "ic-error-types 0.2.0",
- "ic-interfaces",
- "ic-interfaces-registry",
- "ic-interfaces-state-manager",
- "ic-logger",
- "ic-management-canister-types-private",
- "ic-metrics",
- "ic-protobuf",
- "ic-registry-client-fake",
- "ic-registry-client-helpers",
- "ic-registry-keys",
- "ic-registry-subnet-features",
- "ic-replicated-state",
- "ic-test-utilities",
- "ic-test-utilities-registry",
- "ic-test-utilities-state",
- "ic-test-utilities-types",
- "ic-types",
- "ic-types-test-utils",
- "num-traits",
- "prometheus",
- "prost 0.13.5",
- "rayon",
- "slog",
- "strum 0.26.3",
 ]
 
 [[package]]
@@ -9389,6 +9437,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "prometheus",
  "serde",
  "slog",
@@ -9520,6 +9569,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "ic-utils-lru-cache",
  "ic-wasm-types",
@@ -9640,6 +9690,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-types-test-utils",
  "ic-universal-canister",
  "ic-utils 0.9.0",
@@ -9701,6 +9752,8 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -10111,6 +10164,7 @@ dependencies = [
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
+ "ic-interfaces-mocks",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
@@ -10396,6 +10450,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
+ "ic-types-cycles",
  "icrc-ledger-types",
  "lazy_static",
  "leb128",
@@ -10464,6 +10519,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
+ "ic-types-cycles",
  "icrc-ledger-types",
  "num-traits",
  "proptest",
@@ -10662,6 +10718,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-validator",
  "pprof",
  "prometheus",
@@ -10685,6 +10742,7 @@ dependencies = [
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
  "ic-types",
+ "ic-types-cycles",
  "ic-wasm-types",
  "phantom_newtype",
  "proptest",
@@ -10935,6 +10993,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "icrc-ledger-types",
  "paste",
@@ -10954,6 +11013,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-state-machine-tests",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "icp-ledger",
  "icrc-ledger-types",
@@ -10993,6 +11053,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "icp-ledger",
  "icrc-ledger-types",
@@ -11179,6 +11240,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils-thread",
  "lazy_static",
  "maplit",
@@ -11241,6 +11303,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-config",
  "ic-http-types",
  "ic-limits",
  "ic-management-canister-types 0.5.0",
@@ -12352,6 +12415,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-metrics",
  "ic-types",
+ "ic-types-cycles",
  "ic-types-test-utils",
  "ic-xrc-types",
  "icp-ledger",
@@ -12436,6 +12500,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "ic-xrc-types",
  "icp-ledger",
@@ -12755,6 +12820,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "ic-utils 0.45.0",
  "ic_consensus_system_test_utils",
@@ -13179,11 +13245,22 @@ dependencies = [
  "prometheus",
  "prost 0.13.5",
  "rand 0.8.5",
+ "rstest",
  "slog",
  "tempfile",
  "tokio",
  "tokio-util",
  "url",
+]
+
+[[package]]
+name = "ic-registry-resource-limits"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-protobuf",
+ "ic-types",
+ "serde",
 ]
 
 [[package]]
@@ -13395,12 +13472,12 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-certification",
+ "ic-consensus-chain-key",
  "ic-consensus-dkg",
  "ic-consensus-features",
  "ic-consensus-idkg",
  "ic-consensus-manager",
  "ic-consensus-utils",
- "ic-consensus-vetkd",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
@@ -13462,6 +13539,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-tracing",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "maplit",
  "prost 0.13.5",
@@ -13510,6 +13588,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "ic-validate-eq",
  "ic-validate-eq-derive",
@@ -14367,6 +14446,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "ic-wasm",
  "icp-ledger",
@@ -14427,6 +14507,7 @@ dependencies = [
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "ic-utils-thread",
  "ic-wasm-types",
@@ -14499,6 +14580,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "ic-xnet-payload-builder",
  "maplit",
@@ -14557,6 +14639,7 @@ dependencies = [
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "ic-utils-thread",
  "ic-validate-eq",
@@ -14663,6 +14746,7 @@ dependencies = [
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "proxy_canister",
  "serde",
@@ -14761,6 +14845,7 @@ dependencies = [
  "ic-sys",
  "ic-test-identity",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "ic-utils 0.45.0",
  "icp-ledger",
@@ -14867,6 +14952,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "lazy_static",
  "nix 0.24.3",
@@ -14927,6 +15013,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-wasm-types",
  "wat",
 ]
@@ -14957,6 +15044,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-types-test-utils",
  "ic-universal-canister",
  "ic-wasm-types",
@@ -15027,9 +15115,11 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-local-store-artifacts",
  "ic-registry-proto-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-types",
+ "ic-types-cycles",
  "tempfile",
 ]
 
@@ -15059,6 +15149,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-wasm-types",
  "mockall",
  "proptest",
@@ -15090,6 +15181,7 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-ed25519 0.6.0",
  "ic-types",
+ "ic-types-cycles",
  "ic-types-test-utils",
  "rand 0.8.5",
  "serde_cbor",
@@ -15287,6 +15379,7 @@ dependencies = [
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-protobuf",
+ "ic-types-cycles",
  "ic-types-test-utils",
  "ic-utils 0.9.0",
  "ic-validate-eq",
@@ -15314,11 +15407,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-types-cycles"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-heap-bytes",
+ "ic-protobuf",
+ "serde",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+ "thousands",
+]
+
+[[package]]
 name = "ic-types-test-utils"
 version = "0.9.0"
 dependencies = [
  "ic-protobuf",
  "ic-types",
+ "ic-types-cycles",
  "proptest",
  "strum 0.26.3",
 ]
@@ -16032,6 +16139,7 @@ dependencies = [
  "ic-cdk",
  "ic-state-machine-tests",
  "ic-types",
+ "ic-types-cycles",
  "lazy_static",
  "proptest",
  "serde",
@@ -16614,6 +16722,26 @@ name = "ipnetwork"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf370abdafd54d13e54a620e8c3e1145f28e46cc9d704bc6d94414559df41763"
+
+[[package]]
+name = "iprfc"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bc9535b4a1d67bfcd48132d801bedcba48364615bd718b1d63da985e93d5310"
+dependencies = [
+ "bitflags 2.11.0",
+ "ipnet",
+ "paste",
+]
+
+[[package]]
+name = "iprobe"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff11c64cf994eda9584764f77c94dd1a7499bcbe1634f2c330e7ab9e0d7f5a6d"
+dependencies = [
+ "rustix 1.1.4",
+]
 
 [[package]]
 name = "iri-string"
@@ -17214,7 +17342,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2b111a074963af1d37a139918ac6d49ad1d0d5e47f72fd55388619691a7d753"
 dependencies = [
  "cc",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -17599,6 +17727,7 @@ dependencies = [
  "ratatui",
  "scopeguard",
  "shell-escape",
+ "tracing",
  "tui-textarea",
 ]
 
@@ -18029,6 +18158,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
+name = "munge"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e17401f259eba956ca16491461b6e8f72913a0a114e39736ce404410f915a0c"
+dependencies = [
+ "munge_macro",
+]
+
+[[package]]
+name = "munge_macro"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4568f25ccbd45ab5d5603dc34318c1ec56b117531781260002151b8530a9f931"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "neli"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18129,6 +18278,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "ic-utils 0.45.0",
  "ic_consensus_system_test_utils",
@@ -18292,6 +18442,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-tests-ckbtc",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "ic-utils 0.45.0",
  "ic_consensus_system_test_utils",
@@ -18953,6 +19104,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 name = "orchestrator"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "assert_matches",
  "async-stream",
  "async-trait",
@@ -18965,7 +19117,6 @@ dependencies = [
  "der 0.7.10",
  "env-file-reader",
  "exec",
- "get_if_addrs",
  "guest_upgrade_server",
  "hex",
  "http-body-util",
@@ -19776,6 +19927,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-state-manager",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.45.0",
  "ic-validator-ingress-message",
  "icp-ledger",
@@ -20381,7 +20533,16 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0738ccf7ea06b608c10564b31debd4f5bc5e197fc8bfe088f68ae5ce81e7a4f1"
 dependencies = [
- "ptr_meta_derive",
+ "ptr_meta_derive 0.1.4",
+]
+
+[[package]]
+name = "ptr_meta"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b9a0cf95a1196af61d4f1cbdab967179516d9a4a4312af1f31948f8f6224a79"
+dependencies = [
+ "ptr_meta_derive 0.3.1",
 ]
 
 [[package]]
@@ -20393,6 +20554,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "ptr_meta_derive"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7347867d0a7e1208d93b46767be83e2b8f978c3dad35f775ac8d8847551d6fe1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -20442,7 +20614,7 @@ dependencies = [
  "raw-cpuid",
  "wasi",
  "web-sys",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -20552,6 +20724,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 
 [[package]]
+name = "rancor"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a063ea72381527c2a0561da9c80000ef822bdd7c3241b1cc1b12100e3df081ee"
+dependencies = [
+ "ptr_meta 0.3.1",
+]
+
+[[package]]
 name = "rand"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20567,7 +20748,7 @@ dependencies = [
  "rand_os",
  "rand_pcg 0.1.2",
  "rand_xorshift 0.1.1",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -20707,7 +20888,7 @@ checksum = "1166d5c91dc97b88d1decc3285bb0a99ed84b05cfd0bc2341bdf2d43fc41e39b"
 dependencies = [
  "libc",
  "rand_core 0.4.2",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -20721,7 +20902,7 @@ dependencies = [
  "libc",
  "rand_core 0.4.2",
  "rdrand",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -21150,6 +21331,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-node-provider-rewards",
  "ic-registry-proto-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -21275,7 +21457,16 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71fe3824f5629716b1589be05dacd749f6aa084c87e00e016714a8cdfccc997c"
 dependencies = [
- "bytecheck",
+ "bytecheck 0.6.12",
+]
+
+[[package]]
+name = "rend"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cadadef317c2f20755a64d7fdc48f9e7178ee6b0e1f7fce33fa60f1d68a276e6"
+dependencies = [
+ "bytecheck 0.8.2",
 ]
 
 [[package]]
@@ -21351,7 +21542,10 @@ name = "rewards-calculation"
 version = "0.9.0"
 dependencies = [
  "chrono",
+ "futures",
  "ic-base-types",
+ "ic-cdk",
+ "ic-nns-constants",
  "ic-protobuf",
  "itertools 0.12.1",
  "lazy_static",
@@ -21434,13 +21628,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2297bf9c81a3f0dc96bc9521370b88f054168c29826a75e89c55ff196e7ed6a1"
 dependencies = [
  "bitvec",
- "bytecheck",
+ "bytecheck 0.6.12",
  "bytes",
  "hashbrown 0.12.3",
- "ptr_meta",
- "rend",
- "rkyv_derive",
+ "ptr_meta 0.1.4",
+ "rend 0.4.2",
+ "rkyv_derive 0.7.46",
  "seahash",
+ "tinyvec",
+ "uuid",
+]
+
+[[package]]
+name = "rkyv"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a30e631b7f4a03dee9056b8ef6982e8ba371dd5bedb74d3ec86df4499132c70"
+dependencies = [
+ "bytecheck 0.8.2",
+ "bytes",
+ "hashbrown 0.16.1",
+ "indexmap 2.13.0",
+ "munge",
+ "ptr_meta 0.3.1",
+ "rancor",
+ "rend 0.5.3",
+ "rkyv_derive 0.8.15",
+ "smallvec",
  "tinyvec",
  "uuid",
 ]
@@ -21454,6 +21668,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "rkyv_derive"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8100bb34c0a1d0f907143db3149e6b4eea3c33b9ee8b189720168e818303986f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -21718,7 +21943,7 @@ dependencies = [
  "bytes",
  "num-traits",
  "rand 0.8.5",
- "rkyv",
+ "rkyv 0.7.46",
  "serde",
  "serde_json",
 ]
@@ -22635,6 +22860,8 @@ dependencies = [
  "network",
  "prost 0.13.5",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "url",
  "utils",
 ]
@@ -23029,6 +23256,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "smallvec-wrapper"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71a120c9f2941389140711334f4aec8f54544cffd18b86bc20eb1230cd73191b"
+dependencies = [
+ "either",
+ "paste",
+ "rkyv 0.8.15",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
 name = "smart-default"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23037,6 +23277,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "smol_str"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4aaa7368fcf4852a4c2dd92df0cace6a71f2091ca0a23391ce7f3a31833f1523"
+dependencies = [
+ "borsh",
+ "serde_core",
 ]
 
 [[package]]
@@ -23093,6 +23343,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-system-test-driver",
  "ic-types",
+ "ic-types-cycles",
  "ic-universal-canister",
  "ic-utils 0.45.0",
  "ic_consensus_system_test_utils",
@@ -23129,7 +23380,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7916fc008ca5542385b89a3d3ce689953c143e9304a9bf8beec1de48994c0d"
 dependencies = [
  "libc",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -23605,7 +23856,7 @@ dependencies = [
  "libc",
  "nom 7.1.3",
  "time",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -23724,7 +23975,7 @@ checksum = "c59df8ac95d96ff9bede18eb7300b0fda5e5d8d90960e76f8e14ae765eedbf1f"
 dependencies = [
  "dirs-next",
  "rustversion",
- "winapi 0.3.9",
+ "winapi",
 ]
 
 [[package]]
@@ -24650,6 +24901,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "triomphe"
+version = "0.1.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd69c5aa8f924c7519d6372789a74eac5b94fb0f8fcf0d4a97eb0bfc3e785f39"
+dependencies = [
+ "serde",
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -25429,6 +25690,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-wasm-types",
  "lazy_static",
  "libfuzzer-sys",
@@ -25780,12 +26042,6 @@ name = "widestring"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
-
-[[package]]
-name = "winapi"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "167dc9d6949a9b857f3451275e911c3f44255842c1f7a76f33c55103a909087a"
 
 [[package]]
 name = "winapi"

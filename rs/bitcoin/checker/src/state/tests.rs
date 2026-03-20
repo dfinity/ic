@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn test_fetch_guard() {
     use super::*;
-    let txid = Txid::from([0u8; 32]);
+    let txid = Txid::from([0_u8; 32]);
     let max = MAX_CONCURRENT;
     {
         let _guard = FetchGuard::new(txid).unwrap();
@@ -31,7 +31,7 @@ fn test_fetch_guard() {
 
 #[test]
 fn test_fetch_status() {
-    let txid_0 = Txid::from([0u8; 32]);
+    let txid_0 = Txid::from([0_u8; 32]);
     assert!(get_fetch_status(txid_0).is_none());
     set_fetch_status(txid_0, FetchTxStatus::PendingOutcall);
     assert!(matches!(
@@ -84,10 +84,10 @@ fn test_fetch_status() {
 
 #[test]
 fn test_fetch_tx_cache_bounds() {
-    let txid_0 = Txid::from([0u8; 32]);
-    let txid_1 = Txid::from([1u8; 32]);
-    let txid_2 = Txid::from([2u8; 32]);
-    let txid_3 = Txid::from([3u8; 32]);
+    let txid_0 = Txid::from([0_u8; 32]);
+    let txid_1 = Txid::from([1_u8; 32]);
+    let txid_2 = Txid::from([2_u8; 32]);
+    let txid_3 = Txid::from([3_u8; 32]);
     let max_entries = 3;
     let mut cache = FetchTxCache::new(max_entries);
     assert_eq!(cache.set_status_with(txid_0, (), 0), None);
@@ -136,7 +136,7 @@ fn cache_should_have_same_size() {
         Status2,
     }
 
-    let txid_0 = Txid::from([0u8; 32]);
+    let txid_0 = Txid::from([0_u8; 32]);
     let max_entries = 3;
     let mut cache = FetchTxCache::new(max_entries);
     assert_eq!(cache.status.len(), 0);

@@ -355,8 +355,8 @@ fn can_insert_valid_route() {
     let mut rt = new_routing_table(vec![((1, 1000), 1)]);
     assert_eq!(rt.well_formed(), Ok(()));
     let new_range = CanisterIdRange {
-        start: CanisterId::from(1001u64),
-        end: CanisterId::from(2000u64),
+        start: CanisterId::from(1001_u64),
+        end: CanisterId::from(2000_u64),
     };
     let new_subnet_id = subnet_test_id(2);
     assert_eq!(rt.insert(new_range, new_subnet_id), Ok(()));
@@ -372,16 +372,16 @@ fn cannot_insert_invalid_route() {
     let mut rt = new_routing_table(vec![((1, 1000), 1)]);
     assert_eq!(rt.well_formed(), Ok(()));
     let invalid_range = CanisterIdRange {
-        start: CanisterId::from(100u64),
-        end: CanisterId::from(2000u64),
+        start: CanisterId::from(100_u64),
+        end: CanisterId::from(2000_u64),
     };
     assert_matches!(
         rt.insert(invalid_range, subnet_test_id(2)),
         Err(WellFormedError::RoutingTableNotDisjoint(_))
     );
     let original_range = CanisterIdRange {
-        start: CanisterId::from(1u64),
-        end: CanisterId::from(1000u64),
+        start: CanisterId::from(1_u64),
+        end: CanisterId::from(1000_u64),
     };
     assert_eq!(
         rt.lookup_entry(CanisterId::from(101u64)),
@@ -418,8 +418,8 @@ fn can_reassign_ranges() {
         ((30, 30), 4),
     ]);
     let dst = subnet_test_id(10);
-    for start in 0..=30u64 {
-        for end in start..=30u64 {
+    for start in 0..=30_u64 {
+        for end in start..=30_u64 {
             let mut rt_copy = rt.clone();
 
             let res = rt_copy.assign_ranges(
@@ -431,7 +431,7 @@ fn can_reassign_ranges() {
             );
             assert_eq!(res, Ok(()));
 
-            for i in 0u64..start {
+            for i in 0_u64..start {
                 assert_eq!(
                     rt.lookup_entry(CanisterId::from(i)).map(|(_, s)| s),
                     rt_copy.lookup_entry(CanisterId::from(i)).map(|(_, s)| s)
@@ -443,7 +443,7 @@ fn can_reassign_ranges() {
                     Some(dst)
                 );
             }
-            for i in (end + 1)..=30u64 {
+            for i in (end + 1)..=30_u64 {
                 assert_eq!(
                     rt.lookup_entry(CanisterId::from(i)).map(|(_, s)| s),
                     rt_copy.lookup_entry(CanisterId::from(i)).map(|(_, s)| s)
