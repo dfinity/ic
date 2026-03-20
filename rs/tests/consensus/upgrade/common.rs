@@ -402,7 +402,6 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
     info!(logger, "Node started: {}", app_node.get_ip_addr());
 }
 
-/// Finds the latest computed state root hash from the node logs fired after a given cursor.
 /// Returns the last computed root hash found in the logs for every node.
 fn find_latest_computed_root_hashes_from_logs(
     logger: &Logger,
