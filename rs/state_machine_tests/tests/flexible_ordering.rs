@@ -415,3 +415,54 @@ fn test_subnet_message_ordering() {
     // Second call completed after upgrade.
     assert_eq!(get_reply(&sm, &ingress_a2), b"after upgrade");
 }
+
+// ============================================================================
+// Test 8: Canister makes an inter-canister call to the management canister.
+//
+// Canister A uses the UC to call `create_canister` on IC_00. The request
+// goes through the subnet queue, and the response comes back to A.
+// This tests that the ordering mechanism correctly handles:
+// - Request { source: A, target: IC_00 } — checked via subnet_queues
+// - Response { source: IC_00, target: A } — checked via A's input queue
+// ============================================================================
+#[test]
+fn test_canister_calls_management_canister() {
+    use ic_universal_canister::{CallInterface, management};
+
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+
+    // A calls create_canister on the management canister.
+    // On reply, A forwards the raw reply bytes.
+    let on_reply = wasm().message_payload().reply_data_append().reply().build();
+    let a_payload = wasm()
+        .call(management::create_canister(INITIAL_CYCLES_BALANCE.get() / 2).on_reply(on_reply))
+        .build();
+
+    // Management canister calls from a canister go through a multi-round
+    // pipeline: output queue → loopback stream → subnet queue → execution →
+    // response → canister callback. The Ingress variant with extra ticks
+    // handles this automatically — keep ticking until the ingress completes.
+    let ingress_a = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_payload,
+        )
+        .unwrap();
+
+    sm.execute_with_ordering(MessageOrdering(vec![
+        // A executes ingress, which triggers the full create_canister
+        // round-trip via the management canister. The extra-tick loop in
+        // execute_ordered_ingress handles the multi-round pipeline.
+        OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+    ]));
+
+    // A should have completed with a reply containing the new canister ID.
+    let reply = get_reply(&sm, &ingress_a);
+    assert!(
+        !reply.is_empty(),
+        "Expected non-empty reply with canister ID"
+    );
+}

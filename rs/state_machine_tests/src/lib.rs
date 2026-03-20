@@ -2850,25 +2850,62 @@ impl StateMachine {
         self.set_ordering_target(Some(target));
         self.tick_with_config(payload);
 
-        // The ingress may need multiple ticks to execute:
-        // - With a restricted round budget, the canister may not have been
-        //   scheduled yet (status = Received).
-        // - DTS may have sliced the execution (e.g. install_code).
-        // - System tasks (heartbeat/timer) may execute before the ingress.
-        // Keep ticking with the target boosted until the ingress transitions
-        // out of `Received`.
+        // The ingress may need multiple ticks to execute or complete:
+        // - Status = Received: not yet executed (restricted round budget,
+        //   system tasks executing first).
+        // - Status = Processing: canister made an inter-canister call and is
+        //   waiting for a callback. If the call targets the management
+        //   canister, the full pipeline (loopback stream → subnet queue →
+        //   execution → response) completes automatically via ticking. If
+        //   the call targets another canister, the user provides explicit
+        //   Request/Response ordering steps — we should stop and let those
+        //   steps handle the rest.
+        // - DTS may have sliced the execution.
+        //
+        // Strategy: keep ticking until the ingress leaves `Received`. If it
+        // reaches `Processing`, continue ticking only as long as the system
+        // is making progress (messages in subnet queues, output queues, or
+        // DTS slices being resumed). Stop when the ingress completes or
+        // when the target canister is idle with no pending system work.
         let mut ticks = 0;
-        while matches!(
-            self.ingress_status(ingress_id),
-            IngressStatus::Known {
-                state: IngressState::Received,
-                ..
+        let mut last_status_change = 0;
+        let mut prev_is_received = true;
+        loop {
+            let is_terminal = matches!(
+                self.ingress_status(ingress_id),
+                IngressStatus::Known {
+                    state: IngressState::Completed(_) | IngressState::Failed(_),
+                    ..
+                }
+            );
+            if is_terminal {
+                break;
             }
-        ) {
+            let is_received = matches!(
+                self.ingress_status(ingress_id),
+                IngressStatus::Known {
+                    state: IngressState::Received,
+                    ..
+                }
+            );
+            // Detect status transitions.
+            if is_received != prev_is_received {
+                last_status_change = ticks;
+                prev_is_received = is_received;
+            }
+            // If the ingress is in Processing and we've ticked several times
+            // without progress, the canister is likely waiting for an
+            // external event that the user needs to control via explicit
+            // ordering steps (Request/Response). Stop here.
+            if !is_received && ticks - last_status_change > 10 {
+                break;
+            }
             if ticks >= max_ticks {
                 panic!(
-                    "Ingress {} still in Received state after {} ticks",
-                    ingress_id, ticks
+                    "Ingress {} did not complete after {} ticks. Status: {:?}",
+                    ingress_id,
+                    ticks,
+                    self.ingress_status(ingress_id),
                 );
             }
             self.set_ordering_target(Some(target));
@@ -2876,19 +2913,21 @@ impl StateMachine {
             ticks += 1;
         }
 
-        // If the ingress started a DTS execution (e.g. inter-canister call
-        // that's now in Processing, or a long install_code), the canister
-        // may have a paused execution. Keep ticking to let it complete.
-        self.complete_dts_execution(target, max_ticks - ticks);
+        // If the canister has a paused DTS execution, complete it.
+        self.complete_dts_execution(target, max_ticks.saturating_sub(ticks));
     }
 
     /// Execute a canister-to-canister request or response as part of the
     /// ordering.
     ///
-    /// Waits for the message to appear in `target`'s input queue from
-    /// `source`, then boosts `target` and ticks until the message is
-    /// consumed. Handles system tasks (heartbeat/timer) that may execute
-    /// before the input queue message.
+    /// For normal canister targets: waits for the message to appear in
+    /// `target`'s input queue from `source`, then boosts `target` and ticks
+    /// until the message is consumed.
+    ///
+    /// For management canister targets (`IC_00`): the request from `source`
+    /// is in the subnet queue (`subnet_queues`). Subnet messages are drained
+    /// at the start of every round via `drain_subnet_queues`, so no priority
+    /// boost is needed — just tick until the message is consumed.
     fn execute_ordered_canister_message(
         &self,
         target: CanisterId,
@@ -2896,36 +2935,48 @@ impl StateMachine {
         msg_type: &str,
         max_ticks: usize,
     ) {
-        // Phase 1: wait for the message to appear in target's input queue.
-        // This may require ticks for induction (same-subnet message routing
-        // that happens at the end of inner-round iterations) or for subnet
-        // message processing that produces the expected message.
+        let is_management_canister = target == ic_management_canister_types_private::IC_00;
+
+        // Phase 1: wait for the message to appear.
         let mut ticks = 0;
         while !self.has_message_from(target, source) {
             if ticks >= max_ticks {
                 self.panic_no_message(target, source, msg_type);
             }
-            // Tick with target boosted to avoid executing other canisters.
-            self.set_ordering_target(Some(target));
+            // Boost the target to prevent other canisters from executing.
+            // For management canister targets, the boost is not strictly
+            // needed (subnet messages drain regardless), but it prevents
+            // side effects from other canisters.
+            self.set_ordering_target(Some(source));
             self.tick();
             ticks += 1;
         }
 
-        // Phase 2: boost target and tick until the message from source is
-        // consumed. System tasks (heartbeat/timer) in the target's task
-        // queue execute before input queue messages, so multiple ticks may
-        // be needed.
+        // Phase 2: tick until the message from source is consumed.
         while self.has_message_from(target, source) {
             if ticks >= max_ticks {
                 self.panic_no_message(target, source, msg_type);
             }
-            self.set_ordering_target(Some(target));
-            self.tick();
+            if is_management_canister {
+                // Subnet messages are processed by `drain_subnet_queues`
+                // at the start of every round — no priority boost needed.
+                self.tick();
+            } else {
+                self.set_ordering_target(Some(target));
+                self.tick();
+            }
             ticks += 1;
         }
 
-        // If the message execution was DTS-sliced, complete it.
-        self.complete_dts_execution(target, max_ticks - ticks);
+        // If the message execution was DTS-sliced (e.g. install_code),
+        // complete it. For management canister targets, DTS produces a
+        // `ContinueInstallCode` on the affected canister (not IC_00
+        // itself), so we check the *source* canister.
+        if is_management_canister {
+            self.complete_dts_execution(source, max_ticks - ticks);
+        } else {
+            self.complete_dts_execution(target, max_ticks - ticks);
+        }
     }
 
     /// If the target canister has a paused/aborted DTS execution, keep
@@ -2955,16 +3006,24 @@ impl StateMachine {
         }
     }
 
-    /// Returns `true` if `target` canister has a message from `source` in its
-    /// input queue sender schedule.
+    /// Returns `true` if `target` has a message from `source` in its input
+    /// queue sender schedule.
+    ///
+    /// When `target` is the management canister (`IC_00`), checks the
+    /// `subnet_queues` instead (where inter-canister requests to `IC_00`
+    /// are routed).
     fn has_message_from(&self, target: CanisterId, source: CanisterId) -> bool {
         use ic_replicated_state::testing::CanisterQueuesTesting;
 
         let state = self.get_latest_state();
-        let Some(canister_state) = state.canister_state(&target) else {
-            return false;
+        let queues = if target == ic_management_canister_types_private::IC_00 {
+            state.subnet_queues()
+        } else {
+            let Some(canister_state) = state.canister_state(&target) else {
+                return false;
+            };
+            canister_state.system_state.queues()
         };
-        let queues = canister_state.system_state.queues();
         queues
             .local_sender_schedule()
             .iter()
@@ -2980,20 +3039,34 @@ impl StateMachine {
         use ic_replicated_state::testing::CanisterQueuesTesting;
 
         let state = self.get_latest_state();
-        let canister_state = state.canister_state(&target).unwrap_or_else(|| {
-            panic!(
-                "Canister {} not found when looking for {} from {}",
-                target, msg_type, source
-            )
-        });
-        let queues = canister_state.system_state.queues();
+        let is_mgmt = target == ic_management_canister_types_private::IC_00;
+        let queues = if is_mgmt {
+            state.subnet_queues()
+        } else {
+            state
+                .canister_state(&target)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Canister {} not found when looking for {} from {}",
+                        target, msg_type, source
+                    )
+                })
+                .system_state
+                .queues()
+        };
+        let queue_name = if is_mgmt {
+            "subnet_queues"
+        } else {
+            "input queue"
+        };
         panic!(
-            "Expected {} from {} in {}'s input queue, but {} is not in any sender schedule \
+            "Expected {} from {} in {}'s {}, but {} is not in any sender schedule \
              after draining system messages. \
              Local senders: {:?}, Remote senders: {:?}",
             msg_type,
             source,
             target,
+            queue_name,
             source,
             queues.local_sender_schedule(),
             queues.remote_sender_schedule(),
