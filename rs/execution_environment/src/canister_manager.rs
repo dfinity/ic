@@ -59,7 +59,6 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
 };
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
     MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
@@ -70,7 +69,7 @@ use ic_types::{
         StopCanisterContext,
     },
 };
-use ic_types_cycles::{Cycles, CyclesUseCase};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
 use ic_wasm_types::WasmHash;
 use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_traits::{SaturatingAdd, SaturatingSub};
@@ -2863,14 +2862,13 @@ impl CanisterManager {
         // Write data to the appropriate location, as specified by the `CanisterSnapshotDataOffset` variant.
         // Memory has already been reserved by `create_snapshot_from_metadata`,
         // but the instructions used to copy the data still need to be accounted for.
-        // Cycles should be charged in any case, because memory is being written.
-        let (bytes_written, cycles_cost, instructions) =
-            self.get_bytes_and_cycles_and_instructions(args);
+        // Cycles for instructions should also be charged.
+        let (bytes_written, instructions) = self.get_bytes_and_instructions(args);
         self.cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
-                NumInstructions::new(cycles_cost.low64()),
+                instructions,
                 subnet_size,
                 cost_schedule,
             )
@@ -2978,31 +2976,27 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Returns the bytes, cycles and instructions that should be charged for this data upload operation.
-    fn get_bytes_and_cycles_and_instructions(
+    /// Returns the bytes and instructions that should be charged for this snapshot data upload operation.
+    fn get_bytes_and_instructions(
         &self,
         args: &UploadCanisterSnapshotDataArgs,
-    ) -> (u64, Cycles, NumInstructions) {
+    ) -> (u64, NumInstructions) {
         match args.kind {
             CanisterSnapshotDataOffset::WasmModule { .. } => (
                 args.chunk.len() as u64,
-                Cycles::from(args.chunk.len() as u64),
                 NumInstructions::new(args.chunk.len() as u64),
             ),
             CanisterSnapshotDataOffset::WasmMemory { .. } => (
                 args.chunk.len() as u64,
-                Cycles::from(args.chunk.len() as u64),
                 NumInstructions::new(args.chunk.len() as u64),
             ),
             CanisterSnapshotDataOffset::StableMemory { .. } => (
                 args.chunk.len() as u64,
-                Cycles::from(args.chunk.len() as u64),
                 NumInstructions::new(args.chunk.len() as u64),
             ),
             CanisterSnapshotDataOffset::WasmChunk => (
                 wasm_chunk_store::chunk_size().get(),
                 // `upload_chunk` already has this high cycle cost, so we keep it consistent.
-                Cycles::from(self.config.upload_wasm_chunk_instructions.get()),
                 self.config.upload_wasm_chunk_instructions,
             ),
         }

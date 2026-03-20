@@ -1016,7 +1016,7 @@ impl dyn StorageLayout + '_ {
             .open(overlay)
             .map_err(to_storage_err)?;
 
-        let mut version_buf = [0u8; VERSION_NUM_BYTES];
+        let mut version_buf = [0_u8; VERSION_NUM_BYTES];
         file.seek(SeekFrom::End(-(VERSION_NUM_BYTES as i64)))
             .map_err(to_storage_err)?;
         file.read_exact(&mut version_buf).map_err(to_storage_err)?;
@@ -1030,7 +1030,7 @@ impl dyn StorageLayout + '_ {
             }) as Box<dyn std::error::Error + Send>);
         }
 
-        let mut last_page_index_range_buf = [[0u8; 8]; 3];
+        let mut last_page_index_range_buf = [[0_u8; 8]; 3];
         file.seek(SeekFrom::End(
             -((VERSION_NUM_BYTES + SIZE_NUM_BYTES + PAGE_INDEX_RANGE_NUM_BYTES) as i64),
         ))

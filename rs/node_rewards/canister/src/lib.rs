@@ -67,7 +67,7 @@ impl Storable for NaiveDateStorable {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let mut arr = [0u8; 4];
+        let mut arr = [0_u8; 4];
         arr.copy_from_slice(&bytes);
         let days = i32::from_be_bytes(arr);
         Self(NaiveDate::from_num_days_from_ce_opt(days).unwrap())

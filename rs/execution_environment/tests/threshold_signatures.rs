@@ -176,7 +176,7 @@ fn execute_threshold_public_key(
                 call_args()
                     .other_side(threshold_public_key_payload(public_key_method, key_id))
                     .on_reject(wasm().reject_message().reject()),
-                Cycles::from(100_000_000_000u128),
+                Cycles::from(100_000_000_000_u128),
             )
             .build(),
     )
@@ -198,7 +198,7 @@ fn execute_sign_with_threshold(
                 call_args()
                     .other_side(sign_with_threshold_key_payload(sign_with_method, key_id))
                     .on_reject(wasm().reject_message().reject()),
-                Cycles::from(100_000_000_000u128),
+                Cycles::from(100_000_000_000_u128),
             )
             .build(),
     )
@@ -626,7 +626,7 @@ fn test_schnorr_sign_with_invalid_aux_field_rejected() {
                     call_args()
                         .other_side(sign_with_schnorr_args.encode())
                         .on_reject(wasm().reject_message().reject()),
-                    Cycles::from(100_000_000_000u128),
+                    Cycles::from(100_000_000_000_u128),
                 )
                 .build(),
         );
@@ -855,7 +855,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
     ];
     for (method, key_id, max_queue_size) in test_cases {
         let fee = 1_000_000;
-        let payment = 2_000_000u128;
+        let payment = 2_000_000_u128;
         let own_subnet = subnet_test_id(1);
         let nns_subnet = subnet_test_id(2);
         let env = StateMachineBuilder::new()

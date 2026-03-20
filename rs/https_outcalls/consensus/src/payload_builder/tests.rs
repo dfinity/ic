@@ -2034,7 +2034,7 @@ fn flexible_invalid_fewer_than_min_responses() {
 
 #[test]
 fn flexible_invalid_more_than_max_responses() {
-    let committee: BTreeSet<_> = (0..5u64).map(node_test_id).collect();
+    let committee: BTreeSet<_> = (0..5_u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
     setup_test_with_flexible_context(5, callback_id, committee, 1, 2, |payload_builder, _pool| {
