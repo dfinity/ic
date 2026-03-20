@@ -2574,7 +2574,7 @@ impl ExecutionEnvironment {
         // Check if the canister on which the snapshot is loaded exists.
         // We do this check at the very beginning for the sake of consistency
         // with other mgmt canister endpoints that check for the existence
-        // of the "effective" canister at the very beginning.
+        // of the "effective" canister ID at the very beginning.
         let canister_id = args.get_canister_id();
         if state.canister_state(&canister_id).is_none() {
             return Err(UserError::new(
@@ -2603,19 +2603,9 @@ impl ExecutionEnvironment {
             };
 
         // Take canister out.
-        let mut old_canister = match state.take_canister_state(&canister_id) {
-            None => {
-                // We should have produced this error already
-                // at the very beginning of this function,
-                // but we return it here, too, instead of panicking
-                // to make the code more robust.
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
-            }
-            Some(canister) => canister,
-        };
+        // We have already checked at the very beginning of this function
+        // that the canister exists so it is safe to unwrap here.
+        let mut old_canister = state.take_canister_state(&canister_id).unwrap();
 
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
