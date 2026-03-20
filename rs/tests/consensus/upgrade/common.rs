@@ -287,19 +287,6 @@ async fn upgrade_to(
     target_version: &ReplicaVersion,
     logger: &Logger,
 ) {
-    let journal_streamers = healthy_nodes
-        .iter()
-        .map(|node| {
-            (
-                node.node_id,
-                JournalStreamer::new(node.block_on_ssh_session().unwrap())
-                    .follow()
-                    .from_now()
-                    .expect("Failed to create journal streamer"),
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-
     info!(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
@@ -314,25 +301,25 @@ async fn upgrade_to(
     );
 
     // Concurrently assert that all orchestrators shut down gracefully
-    let journal_streamers =
-        try_join_all(journal_streamers.into_iter().map(|(node_id, streamer)| {
-            tokio::task::spawn_blocking(move || {
-                (
-                    node_id,
-                    streamer
-                        .until("Orchestrator shut down gracefully")
-                        .unwrap_or_else(|_| {
-                            panic!(
-                                "{node_id} did not log that the orchestrator has shut down gracefully"
-                            )
-                        })
-                )
-            })
-        }))
-        .await
-        .unwrap()
-        .into_iter()
-        .collect::<BTreeMap<_, _>>();
+    let journal_streamers = try_join_all(healthy_nodes.iter().map(|node| {
+        tokio::task::spawn_blocking(move || {
+            (
+                node.node_id,
+                JournalStreamer::new(node.block_on_ssh_session().unwrap())
+                    .follow()
+                    .until("Orchestrator shut down gracefully")
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "{node_id} did not log that the orchestrator has shut down gracefully"
+                        )
+                    }),
+            )
+        })
+    }))
+    .await
+    .unwrap()
+    .into_iter()
+    .collect::<BTreeMap<_, _>>();
     info!(logger, "All orchestrators shut down the tasks gracefully");
 
     for node in &healthy_nodes {
