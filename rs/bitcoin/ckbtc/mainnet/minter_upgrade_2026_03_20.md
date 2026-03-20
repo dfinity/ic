@@ -2,15 +2,15 @@
 
 Repository: `https://github.com/dfinity/ic.git`
 
-Git hash: `c016162d2861e5ad6260d4f62c511a3e5cef5a31`
+Git hash: `00b276124eacd236b379f09322064c602fcfe9e2`
 
-New compressed Wasm hash: `96e98bbddf63f1b381f1a36801f3e9d93336b0023823b4d33d38fead41103fa1`
+New compressed Wasm hash: `83674bf178a41356c43b96cffd63f5bbe13545dfc3777fdfdd6f3ffc6848be31`
 
-Upgrade args hash: `0fee102bd16b053022b69f2c65fd5e2f41d150ce9c214ac8731cfaf496ebda4e`
+Upgrade args hash: `abf6b9f54bb94025c0aff10c4eb05e182118052d6c7a490c2aa50ea651ed7d23`
 
 Target canister: `mqygn-kiaaa-aaaar-qaadq-cai`
 
-Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/140090
+Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/140929
 
 ---
 
@@ -30,17 +30,26 @@ The expected result is that the aforementioned withdrawals are considered as pen
 ## Release Notes
 
 ```
-git log --format='%C(auto) %h %s' b2d93fe83a8f878a331d73df1cffed72022860b2..c016162d2861e5ad6260d4f62c511a3e5cef5a31 -- rs/bitcoin/ckbtc/minter
-79cbc4b37c fix(ckbtc): compute minter str address in retrieve_btc (#8671)
-990e96bf57 fix(ckbtc/ckdoge): defuse guard directly after signing transaction (#8579)
+git log --format='%C(auto) %h %s' 307d063f3473cf5261ce84ccafaecceb8440e4e8..00b276124eacd236b379f09322064c602fcfe9e2 -- rs/bitcoin/ckbtc/minter
+00b276124e fix(ckbtc): unstuck ckbtc withdrawal requests (#9450)
+2b46af588f revert(ckbtc): keeping finalized UTXOs in state (#9505)
+b4741211f2 test(ckbtc): Update ckBTC minter events for replay tests (#9497)
+9a4fa5e220 fix(ckbtc): Clear get_utxos_cache when tip height changes (#9475)
+a08eb494fe chore(de-fi): Add separator before type suffix in integer literals. (#9433)
+a639c6bab4 test(ckbtc): Update ckBTC minter events for replay tests (#9441)
+dd06753d23 fix(ckbtc): keeping finalized UTXOs in state (#9437)
+cca3eb1c44 refactor: Group cycles related types in new ic-types-cycles crate (#9341)
+b34d5ed28c chore: Upgrade rustc to 1.93.1  (#9113)
+713c399a69 fix: deflake //rs/bitcoin/ckbtc/minter:ckbtc_minter_canbench_test (#9220)
+042becb616 fix(ckbtc/ckdoge): destructure init args (#9108)
  ```
 
 ## Upgrade args
 
 ```
 git fetch
-git checkout c016162d2861e5ad6260d4f62c511a3e5cef5a31
-didc encode '()' | xxd -r -p | sha256sum
+git checkout 00b276124eacd236b379f09322064c602fcfe9e2
+didc encode -d rs/bitcoin/ckbtc/minter/ckbtc_minter.did -t '(MinterArg)' '(variant { Upgrade = null })' | xxd -r -p | sha256sum
 ```
 
 ## Wasm Verification
@@ -49,7 +58,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 
 ```
 git fetch
-git checkout c016162d2861e5ad6260d4f62c511a3e5cef5a31
+git checkout 00b276124eacd236b379f09322064c602fcfe9e2
 "./ci/container/build-ic.sh" "--canisters"
 sha256sum ./artifacts/canisters/ic-ckbtc-minter.wasm.gz
 ```
