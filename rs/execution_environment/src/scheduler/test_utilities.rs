@@ -72,8 +72,9 @@ use std::{collections::BTreeSet, time::Duration};
 
 use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 
-use super::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerImpl};
+use super::SchedulerImpl;
 use crate::metrics::MeasurementScope;
+use ic_config::subnet_config::SUBNET_MESSAGES_LIMIT_FRACTION;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
 

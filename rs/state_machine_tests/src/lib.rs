@@ -2027,8 +2027,7 @@ impl StateMachine {
             );
             sc.max_instructions_per_round = max_slice + ic_types::NumInstructions::from(1_000)
                 - ic_types::NumInstructions::from(1);
-            sc.subnet_messages_per_round_instruction_limit =
-                Some(ic_types::NumInstructions::from(1_000));
+            sc.subnet_messages_per_round_instruction_limit = ic_types::NumInstructions::from(1_000);
         }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
