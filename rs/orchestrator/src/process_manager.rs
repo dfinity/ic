@@ -39,15 +39,31 @@ pub(crate) trait Process {
     fn get_env(&self) -> HashMap<String, String>;
 }
 
-/// A [`ProcessManager`] manages running a single versioned [`Process`]
-pub(crate) struct ProcessManager<P: Process> {
+/// Trait for managing a single versioned [`Process`]
+pub(crate) trait ProcessManager<P: Process>: Send {
+    /// Start the given process.
+    fn start(&mut self, process: P) -> Result<()>;
+
+    /// Stop the currently running process.
+    fn stop(&mut self) -> Result<()>;
+
+    /// Returns true only if the process is running.
+    fn is_running(&self) -> bool;
+
+    /// Returns the `Pid` of the currently running process; or `None` if no
+    /// process is running.
+    fn get_pid(&self) -> Option<Pid>;
+}
+
+/// A [`ProcessManagerImpl`] manages running a single versioned [`Process`]
+pub(crate) struct ProcessManagerImpl<P: Process> {
     process: Option<P>,
     pid_cell: PIDCell,
     log: ReplicaLogger,
     join_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-impl<P: Process> ProcessManager<P> {
+impl<P: Process> ProcessManagerImpl<P> {
     pub(crate) fn new(logger: ReplicaLogger) -> Self {
         Self {
             process: None,
@@ -55,17 +71,6 @@ impl<P: Process> ProcessManager<P> {
             log: logger,
             join_handle: None,
         }
-    }
-
-    /// Returns true only if the process is running.
-    pub fn is_running(&self) -> bool {
-        self.get_pid().is_some()
-    }
-
-    /// Returns the `Pid` if the currently running process; or `None` if no
-    /// process is running.
-    pub fn get_pid(&self) -> Option<Pid> {
-        *self.pid_cell.lock().unwrap()
     }
 
     /// Sets the pid for the running process.
@@ -96,10 +101,6 @@ impl<P: Process> ProcessManager<P> {
     /// We still depend on init to handle reaping of adopted children,
     /// as the orchestrator has no way of adopting or even knowing the
     /// processes in question, cf. https://linux.die.net/man/2/waitpid.
-    pub(crate) fn stop(&mut self) -> Result<()> {
-        self.kill()
-    }
-
     fn kill(&mut self) -> Result<()> {
         let pid = self.pid_cell.lock().unwrap();
         if let Some(pid) = *pid {
@@ -120,8 +121,10 @@ impl<P: Process> ProcessManager<P> {
         info!(self.log, "no {} process running", P::NAME);
         Ok(())
     }
+}
 
-    pub(crate) fn start(&mut self, process: P) -> Result<()> {
+impl<P: Process + Send> ProcessManager<P> for ProcessManagerImpl<P> {
+    fn start(&mut self, process: P) -> Result<()> {
         // Do nothing if we're already running a process with the requested version
         if let Some(current_version) = self.process.as_ref().map(|p| p.get_version())
             && self.get_pid().is_some()
@@ -176,6 +179,18 @@ impl<P: Process> ProcessManager<P> {
         self.process = Some(process);
         Ok(())
     }
+
+    fn stop(&mut self) -> Result<()> {
+        self.kill()
+    }
+
+    fn is_running(&self) -> bool {
+        self.get_pid().is_some()
+    }
+
+    fn get_pid(&self) -> Option<Pid> {
+        *self.pid_cell.lock().unwrap()
+    }
 }
 
 /// Wait for the child process to return, log the exit status and send.
@@ -193,5 +208,41 @@ fn wait_on_exit(
             info!(log, "{} exited. Exit Status: {:?}", name, exit_status);
         }
         let _pid = pid_cell.lock().unwrap().take();
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    pub(crate) struct FakeProcessManager {
+        running: bool,
+    }
+
+    impl FakeProcessManager {
+        pub(crate) fn new() -> Self {
+            Self { running: false }
+        }
+    }
+
+    impl<P: Process> ProcessManager<P> for FakeProcessManager {
+        fn start(&mut self, _process: P) -> Result<()> {
+            self.running = true;
+            Ok(())
+        }
+
+        fn stop(&mut self) -> Result<()> {
+            self.running = false;
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            self.running
+        }
+
+        fn get_pid(&self) -> Option<Pid> {
+            // Return a dummy PID if the process is running.
+            self.running.then_some(Pid::from_raw(12345))
+        }
     }
 }
