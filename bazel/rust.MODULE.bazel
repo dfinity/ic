@@ -705,7 +705,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-management-canister-types",
-    version = "^0.5.0",
+    version = "^0.7.1",
 )
 crate.spec(
     default_features = False,

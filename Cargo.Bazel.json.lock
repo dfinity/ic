@@ -1,5 +1,5 @@
 {
-  "checksum": "801819ace5a0e1549782e69946d75afd848ef2abda952b6c1367b2e11d522a70",
+  "checksum": "4fea2818ab51c6a1dc87aa843c2df2f05aadaa8cb30245db1f12ae35f85180f8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21825,7 +21825,7 @@
               "target": "ic_identity_hsm"
             },
             {
-              "id": "ic-management-canister-types 0.5.0",
+              "id": "ic-management-canister-types 0.7.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -37415,6 +37415,61 @@
         },
         "edition": "2024",
         "version": "0.5.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-management-canister-types 0.7.1": {
+      "name": "ic-management-canister-types",
+      "version": "0.7.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.7.1/download",
+          "sha256": "51705516ed4d23f24e8d714a70fe9d7ec17106cfd830d5434a1b29f583ef70ee"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_management_canister_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_management_canister_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.22",
+              "target": "candid"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.7.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -98728,7 +98783,7 @@
     "ic-gateway 0.2.0",
     "ic-http-certification 3.1.0",
     "ic-identity-hsm 0.45.0",
-    "ic-management-canister-types 0.5.0",
+    "ic-management-canister-types 0.7.1",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.1.0",
     "ic-sha3 1.0.0",
