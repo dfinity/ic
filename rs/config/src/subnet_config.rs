@@ -275,11 +275,8 @@ pub struct SchedulerConfig {
     /// Number of instructions to count when uploading or downloading binary snapshot data.
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
 
-    /// Optional override for the subnet message instruction budget per round.
-    /// When `Some`, this value is used instead of the default
-    /// `max_instructions_per_round / 16`. This allows testing configurations
-    /// (e.g. flexible message ordering) to restrict how many subnet messages
-    /// are processed per round.
+    /// Override for the per-round subnet message instruction budget.
+    /// When set, used instead of `max_instructions_per_round / 16`.
     pub subnet_messages_per_round_instruction_limit: Option<NumInstructions>,
 }
 
