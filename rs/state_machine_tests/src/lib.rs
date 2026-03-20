@@ -2725,7 +2725,6 @@ impl StateMachine {
             "call with_flexible_ordering() first"
         );
         use ic_replicated_state::canister_state::NextExecution;
-        use ic_replicated_state::testing::CanisterQueuesTesting;
         const MAX_TICKS: usize = 100;
 
         for msg in ordering.0 {

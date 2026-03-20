@@ -5,6 +5,7 @@ use ic_state_machine_tests::{
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
+use std::panic;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -547,4 +548,286 @@ fn test_one_subnet_message_per_round() {
         "Second create_canister should be done: {:?}",
         sm.ingress_status(&id2)
     );
+}
+
+// ============================================================================
+// Test 10: DTS — a slow canister message gets sliced across multiple rounds.
+// The loop does ~3B instructions, exceeding max_instructions_per_slice (2B)
+// but staying under max_instructions_per_message (5B).
+// ============================================================================
+#[test]
+fn test_dts_execution_completes() {
+    fn slow_wasm() -> Vec<u8> {
+        wat::parse_str(
+            r#"(module
+                (import "ic0" "msg_reply" (func $msg_reply))
+                (func $run
+                    (local $i i32)
+                    (loop $loop
+                        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                        (br_if $loop (i32.lt_s (local.get $i) (i32.const 3000000000)))
+                    )
+                    (call $msg_reply))
+                (memory $memory 1)
+                (export "canister_update run" (func $run))
+            )"#,
+        )
+        .unwrap()
+    }
+
+    let sm = setup();
+    let canister = sm.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+    sm.install_wasm_in_mode(
+        canister,
+        ic_management_canister_types_private::CanisterInstallMode::Install,
+        slow_wasm(),
+        vec![],
+    )
+    .unwrap();
+
+    let ingress_id = sm
+        .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "run", vec![])
+        .unwrap();
+
+    // This message will be DTS-sliced. execute_with_ordering should tick
+    // until all slices complete.
+    sm.execute_with_ordering(MessageOrdering(vec![OrderedMessage::Ingress(
+        canister,
+        ingress_id.clone(),
+    )]));
+
+    match sm.ingress_status(&ingress_id) {
+        IngressStatus::Known {
+            state: IngressState::Completed(WasmResult::Reply(_)),
+            ..
+        } => {}
+        other => panic!("Expected DTS message to complete, got: {:?}", other),
+    }
+}
+
+// ============================================================================
+// Test 11: execute_with_ordering panics without with_flexible_ordering.
+// ============================================================================
+#[test]
+fn test_panics_without_flexible_ordering() {
+    let sm = StateMachineBuilder::new().build();
+    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        sm.execute_with_ordering(MessageOrdering(vec![]));
+    }));
+    assert!(result.is_err(), "Should panic without flexible ordering");
+}
+
+// ============================================================================
+// Test 12: Two calls from A to B, processed in batch.
+//
+// When two requests from A are in B's queue simultaneously,
+// sender_in_queue can't distinguish them — both get consumed in one
+// Request step. We verify the overall result is correct.
+// ============================================================================
+#[test]
+fn test_batched_calls_same_source() {
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+    let canister_b = install_uc(&sm);
+
+    let b_reply_1 = wasm().reply_data(b"reply1").build();
+    let a_calls_b_1 = wasm()
+        .inter_update(canister_b, CallArgs::default().other_side(b_reply_1))
+        .build();
+    let b_reply_2 = wasm().reply_data(b"reply2").build();
+    let a_calls_b_2 = wasm()
+        .inter_update(canister_b, CallArgs::default().other_side(b_reply_2))
+        .build();
+
+    let ingress_a = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_calls_b_1,
+        )
+        .unwrap();
+    let ingress_b = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_calls_b_2,
+        )
+        .unwrap();
+
+    // Both ingress messages make calls A→B. We process them fully: the
+    // Request step consumes all pending A→B messages, and the Response
+    // step consumes all pending B→A responses.
+    sm.execute_with_ordering(MessageOrdering(vec![
+        OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+        OrderedMessage::Ingress(canister_a, ingress_b.clone()),
+        OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        },
+        OrderedMessage::Response {
+            source: canister_b,
+            target: canister_a,
+        },
+    ]));
+
+    assert_eq!(get_reply(&sm, &ingress_a), b"reply1");
+    assert_eq!(get_reply(&sm, &ingress_b), b"reply2");
+}
+
+// ============================================================================
+// Test 13: Alternating call-response pattern.
+//
+// Ingress(A) → Request(B) → Response(A) → Ingress(A) → Request(B) → Response(A)
+// ============================================================================
+#[test]
+fn test_alternating_call_response() {
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+    let canister_b = install_uc(&sm);
+
+    let b_reply_1 = wasm().reply_data(b"first").build();
+    let a_calls_b_1 = wasm()
+        .inter_update(canister_b, CallArgs::default().other_side(b_reply_1))
+        .build();
+    let b_reply_2 = wasm().reply_data(b"second").build();
+    let a_calls_b_2 = wasm()
+        .inter_update(canister_b, CallArgs::default().other_side(b_reply_2))
+        .build();
+
+    let ingress_a = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_calls_b_1,
+        )
+        .unwrap();
+    let ingress_b = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_calls_b_2,
+        )
+        .unwrap();
+
+    sm.execute_with_ordering(MessageOrdering(vec![
+        OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+        OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        },
+        OrderedMessage::Response {
+            source: canister_b,
+            target: canister_a,
+        },
+        OrderedMessage::Ingress(canister_a, ingress_b.clone()),
+        OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        },
+        OrderedMessage::Response {
+            source: canister_b,
+            target: canister_a,
+        },
+    ]));
+
+    assert_eq!(get_reply(&sm, &ingress_a), b"first");
+    assert_eq!(get_reply(&sm, &ingress_b), b"second");
+}
+
+// ============================================================================
+// Test 14: Response from uninvolved canister — impossible ordering panics.
+// ============================================================================
+#[test]
+fn test_impossible_ordering_response_from_uninvolved() {
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+    let canister_b = install_uc(&sm);
+    let canister_c = install_uc(&sm);
+
+    // A calls B, but we claim C sent a response to A (C was never called).
+    let b_reply = wasm().reply_data(b"hi").build();
+    let a_payload = wasm()
+        .inter_update(canister_b, CallArgs::default().other_side(b_reply))
+        .build();
+    let ingress_id = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_payload,
+        )
+        .unwrap();
+
+    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        sm.execute_with_ordering(MessageOrdering(vec![
+            OrderedMessage::Ingress(canister_a, ingress_id.clone()),
+            OrderedMessage::Response {
+                source: canister_c,
+                target: canister_a,
+            },
+        ]));
+    }));
+    assert!(
+        result.is_err(),
+        "Should panic: response from uninvolved canister"
+    );
+}
+
+// ============================================================================
+// Test 15: Request from wrong source — impossible ordering panics.
+// ============================================================================
+#[test]
+fn test_impossible_ordering_wrong_source() {
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+    let canister_b = install_uc(&sm);
+    let canister_c = install_uc(&sm);
+
+    let b_reply = wasm().reply_data(b"hi").build();
+    let a_payload = wasm()
+        .inter_update(canister_b, CallArgs::default().other_side(b_reply))
+        .build();
+    let ingress_id = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_payload,
+        )
+        .unwrap();
+
+    // A called B, but we claim C sent a request to B.
+    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        sm.execute_with_ordering(MessageOrdering(vec![
+            OrderedMessage::Ingress(canister_a, ingress_id.clone()),
+            OrderedMessage::Request {
+                source: canister_c,
+                target: canister_b,
+            },
+        ]));
+    }));
+    assert!(result.is_err(), "Should panic: wrong source canister");
+}
+
+// ============================================================================
+// Test 16: Request to canister with no messages — impossible ordering panics.
+// ============================================================================
+#[test]
+fn test_impossible_ordering_no_messages() {
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+    let canister_b = install_uc(&sm);
+
+    // No ingress submitted — B has no messages from A.
+    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        sm.execute_with_ordering(MessageOrdering(vec![OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        }]));
+    }));
+    assert!(result.is_err(), "Should panic: no messages in queue");
 }
