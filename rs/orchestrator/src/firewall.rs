@@ -294,7 +294,7 @@ impl Firewall {
 
             // For each of them, check their node reward type and only include the ones with
             // whitelisted node reward types.
-            let whitelisted_node_ids = all_node_ids.iter().cloned().filter(|other_node_id| {
+            let whitelisted_node_ids = all_node_ids.iter().copied().filter(|other_node_id| {
                 let other_reward_type =
                     self.get_defaulting_node_reward_type(*other_node_id, registry_version);
 
