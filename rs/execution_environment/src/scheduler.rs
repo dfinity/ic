@@ -308,12 +308,6 @@ impl SchedulerImpl {
                     // some instructions still remaining in the round.
                     break;
                 }
-
-                // TODO(DSM-108): This appears to be counterproductive (`can_execute_subnet_msg`
-                // would simply skip messages that consume instructions). Remove.
-                if round_limits.instructions_reached() {
-                    break;
-                }
             }
         }
         state
@@ -1133,7 +1127,7 @@ impl SchedulerImpl {
                 // The set of compiled Wasms must be cleared when taking a
                 // checkpoint to keep it in sync with the protobuf serialization
                 // of `ReplicatedState` which doesn't store this field.
-                state.metadata.expected_compiled_wasms.clear();
+                state.metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
 
                 // Abort all paused execution before the checkpoint.
                 self.exec_env.abort_all_paused_executions(state, &self.log);
@@ -1453,16 +1447,6 @@ impl Scheduler for SchedulerImpl {
                 registry_settings.subnet_size,
             );
 
-            // If we have executed a long-running install code above, then it is
-            // very likely that `round_limits.instructions < 0` at this point.
-            // However, we would like to make progress with other subnet
-            // messages that do not consume instructions. To allow that, we set
-            // the number available instructions to 0 if it is not positive.
-            //
-            // TODO(DSM-108): This appears to do nothing. Remove.
-            subnet_round_limits.instructions = subnet_round_limits
-                .instructions
-                .max(RoundInstructions::from(0));
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
         };
 

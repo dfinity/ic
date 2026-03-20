@@ -22,7 +22,7 @@ const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 
-const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
+const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0_u8; 29]);
 
 fn index_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -167,17 +167,17 @@ fn should_install_and_upgrade_with_valid_values() {
     let max_seconds_for_timer = max_value_for_interval() - max_index_sync_time();
     let build_index_interval_values = [
         (None, None),
-        (None, Some(1u64)),
-        (None, Some(10u64)),
+        (None, Some(1_u64)),
+        (None, Some(10_u64)),
         (None, Some(max_seconds_for_timer)),
-        (Some(1u64), None),
-        (Some(1u64), Some(1u64)),
-        (Some(1u64), Some(10u64)),
-        (Some(1u64), Some(max_seconds_for_timer)),
-        (Some(10u64), None),
-        (Some(10u64), Some(1u64)),
-        (Some(10u64), Some(10u64)),
-        (Some(10u64), Some(max_seconds_for_timer)),
+        (Some(1_u64), None),
+        (Some(1_u64), Some(1_u64)),
+        (Some(1_u64), Some(10_u64)),
+        (Some(1_u64), Some(max_seconds_for_timer)),
+        (Some(10_u64), None),
+        (Some(10_u64), Some(1_u64)),
+        (Some(10_u64), Some(10_u64)),
+        (Some(10_u64), Some(max_seconds_for_timer)),
     ];
 
     // Installing and upgrading with valid values should succeed
@@ -244,7 +244,7 @@ fn should_sync_according_to_interval() {
 
     // Generate arbitrary accounts for testing
     fn arb_account() -> impl Strategy<Value = Account> {
-        (1u64..1000, 0u128..1000).prop_map(|(owner, subaccount)| account(owner, subaccount))
+        (1_u64..1000, 0_u128..1000).prop_map(|(owner, subaccount)| account(owner, subaccount))
     }
 
     let mut runner = TestRunner::new(proptest::test_runner::Config::with_cases(4));

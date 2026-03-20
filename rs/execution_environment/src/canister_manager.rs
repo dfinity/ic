@@ -1671,17 +1671,12 @@ impl CanisterManager {
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
-            return Err((
-                CanisterManagerError::WasmChunkStoreError {
-                    message: format!(
-                        "Canister is heap delta rate limited. Current delta debit: {}, limit: {}",
-                        canister.scheduler_state.heap_delta_debit,
-                        self.config.heap_delta_rate_limit
-                    ),
-                },
-                instructions,
-                cycles,
-            ));
+            let err = CanisterManagerError::CanisterHeapDeltaRateLimited {
+                canister_id: canister.canister_id(),
+                value: canister.scheduler_state.heap_delta_debit,
+                limit: self.config.heap_delta_rate_limit,
+            };
+            return Err((err, instructions, cycles));
         }
 
         let memory_usage = canister.memory_usage();
@@ -2184,7 +2179,7 @@ impl CanisterManager {
         instruction_limits: InstructionLimits,
         origin: CanisterChangeOrigin,
         resource_saturation: &ResourceSaturation,
-        expected_compiled_wasms: BTreeSet<WasmHash>,
+        expected_compiled_wasms: Arc<BTreeSet<WasmHash>>,
         metrics: &ExecutionEnvironmentMetrics,
     ) -> Result<NumBytes, (CanisterManagerError, NumInstructions, Cycles)> {
         let canister_id = canister.canister_id();
@@ -2205,7 +2200,7 @@ impl CanisterManager {
             return Err((err, NumInstructions::new(0), Cycles::zero()));
         }
 
-        let snapshot_canister_id = snapshot_id.get_canister_id();
+        let snapshot_canister_id = snapshot_canister.canister_id();
         let snapshot: Arc<CanisterSnapshot> =
             match snapshot_canister.canister_snapshots.get(snapshot_id) {
                 None => {
@@ -2879,11 +2874,10 @@ impl CanisterManager {
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
-            let err = CanisterManagerError::WasmChunkStoreError {
-                message: format!(
-                    "Canister is heap delta rate limited. Current delta debit: {}, limit: {}",
-                    canister.scheduler_state.heap_delta_debit, self.config.heap_delta_rate_limit
-                ),
+            let err = CanisterManagerError::CanisterHeapDeltaRateLimited {
+                canister_id: canister.canister_id(),
+                value: canister.scheduler_state.heap_delta_debit,
+                limit: self.config.heap_delta_rate_limit,
             };
             return Err((err, NumInstructions::new(0), Cycles::zero()));
         }
@@ -2891,7 +2885,7 @@ impl CanisterManager {
         // Write data to the appropriate location, as specified by the `CanisterSnapshotDataOffset` variant.
         // Memory has already been reserved by `create_snapshot_from_metadata`,
         // but the instructions used to copy the data still need to be accounted for.
-        // Cycles should be charged in any case, because memory is being written.
+        // Cycles for instructions should also be charged.
         let (bytes_written, instructions) = self.get_bytes_and_instructions(args);
         let cycles = self.cycles_account_manager.management_canister_cost(
             instructions,
@@ -3024,7 +3018,7 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Returns the bytes, cycles and instructions that should be charged for this data upload operation.
+    /// Returns the bytes and instructions that should be charged for this snapshot data upload operation.
     fn get_bytes_and_instructions(
         &self,
         args: &UploadCanisterSnapshotDataArgs,
@@ -3044,6 +3038,7 @@ impl CanisterManager {
             ),
             CanisterSnapshotDataOffset::WasmChunk => (
                 wasm_chunk_store::chunk_size().get(),
+                // `upload_chunk` already has this high cycle cost, so we keep it consistent.
                 self.config.upload_wasm_chunk_instructions,
             ),
         }

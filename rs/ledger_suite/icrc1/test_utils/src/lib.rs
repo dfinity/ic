@@ -57,12 +57,12 @@ pub fn minter_identity() -> BasicIdentity {
 }
 
 pub fn principal_strategy() -> impl Strategy<Value = Principal> {
-    let bytes_strategy = prop::collection::vec(0..=255u8, 29);
+    let bytes_strategy = prop::collection::vec(0..=255_u8, 29);
     bytes_strategy.prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
 }
 
 pub fn account_strategy() -> impl Strategy<Value = Account> {
-    let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
+    let bytes_strategy = prop::option::of(prop::collection::vec(0..=255_u8, 32));
     let principal_strategy = principal_strategy();
     (bytes_strategy, principal_strategy).prop_map(|(bytes, principal)| Account {
         owner: principal,
@@ -84,7 +84,7 @@ pub fn arb_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
 }
 
 fn arb_memo() -> impl Strategy<Value = Option<Memo>> {
-    prop::option::of(prop::collection::vec(0..=255u8, 32).prop_map(|x| Memo(ByteBuf::from(x))))
+    prop::option::of(prop::collection::vec(0..=255_u8, 32).prop_map(|x| Memo(ByteBuf::from(x))))
 }
 
 fn operation_strategy<Tokens: TokensType>(
@@ -301,7 +301,7 @@ pub fn valid_blockchain_with_gaps_strategy<Tokens: TokensType>(
         "There must be at least two blocks for there to be a gap",
         |blocks| blocks.len() > 1,
     );
-    let gaps = prop::collection::vec(0..5usize, size);
+    let gaps = prop::collection::vec(0..5_usize, size);
     (blockchain_strategy, gaps)
         .prop_map(|(blockchain, gaps)| {
             let block_indices: Vec<usize> = gaps
@@ -715,7 +715,7 @@ impl TransactionsAndBalances {
 }
 
 fn amount_strategy() -> impl Strategy<Value = u64> {
-    0..100_000_000_000u64 // max is 1M ICP
+    0..100_000_000_000_u64 // max is 1M ICP
 }
 
 pub fn basic_identity_strategy() -> impl Strategy<Value = BasicIdentity> {
@@ -741,7 +741,7 @@ impl SigningAccount {
 }
 
 fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount> {
-    let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
+    let bytes_strategy = prop::option::of(prop::collection::vec(0..=255_u8, 32));
     let identity_strategy = basic_identity_strategy();
     (bytes_strategy, identity_strategy).prop_map(|(bytes, identity)| SigningAccount {
         identity,

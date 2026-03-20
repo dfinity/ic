@@ -2875,10 +2875,24 @@ impl ExecutionEnvironment {
         origin: CanisterChangeOrigin,
         registry_settings: &RegistryExecutionSettings,
     ) -> Result<Vec<u8>, UserError> {
+        // Check if the canister on which the snapshot is loaded exists.
+        // We do this check at the very beginning for the sake of consistency
+        // with other mgmt canister endpoints that check for the existence
+        // of the "effective" canister ID at the very beginning.
         let canister_id = args.get_canister_id();
+        if state.canister_state(&canister_id).is_none() {
+            return Err(UserError::new(
+                ErrorCode::CanisterNotFound,
+                format!("Canister {} not found.", &canister_id),
+            ));
+        }
 
+        // Get `Arc<CanisterState>` containing the snapshot to be loaded.
+        // We do that before taking the canister on which the snapshot is loaded
+        // out of `ReplicatedState` since that might be the same canister
+        // (and thus `ReplicatedState::canister_state_arc` would return `None`
+        // after `ReplicatedState::take_canister_state`).
         let snapshot_id = args.snapshot_id();
-
         let snapshot_canister_id = snapshot_id.get_canister_id();
         let snapshot_canister: Arc<CanisterState> =
             match state.canister_state_arc(&snapshot_canister_id) {
@@ -4191,10 +4205,9 @@ impl ExecutionEnvironment {
                     Ok(result) => {
                         state.metadata.heap_delta_estimate += result.heap_delta;
                         if let Some(new_wasm_hash) = result.new_wasm_hash {
-                            state
-                                .metadata
-                                .expected_compiled_wasms
-                                .insert(WasmHash::from(new_wasm_hash));
+                            let expected_compiled_wasms =
+                                Arc::make_mut(&mut state.metadata.expected_compiled_wasms);
+                            expected_compiled_wasms.insert(WasmHash::from(new_wasm_hash));
                         }
                         info!(
                             self.log,
