@@ -6122,9 +6122,9 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-interface"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4209c650d166815b01336cbbab6310f44895a0fa6571a952b6a84097e5fd87ae"
+checksum = "7b07cca9319498684a7477a77a66d87377ecd698b5465a3b8523484fcca16bff"
 dependencies = [
  "candid",
  "datasize",
@@ -6382,9 +6382,9 @@ dependencies = [
 
 [[package]]
 name = "ic-doge-interface"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b36c851b8fc6ec45666e3a912c8b22878e4f12f6d1d9f7033a153c7684903829"
+checksum = "b6d9bf312c324521ce174560c002e90aef179bf16befb46c62bdffbccff8f14b"
 dependencies = [
  "candid",
  "datasize",
