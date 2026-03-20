@@ -32,7 +32,7 @@ use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::time::UNIX_EPOCH;
-use ic_types_cycles::{CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CyclesUseCase, NominalCycles, NominalCyclesTesting};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;
@@ -857,7 +857,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         &no_op_logger(),
     );
 
-    let consumed_cycles_before = NominalCycles::from(
+    let consumed_cycles_before = NominalCycles::new(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -893,7 +893,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         0.into(),
         &no_op_logger(),
     );
-    let consumed_cycles_after = NominalCycles::from(
+    let consumed_cycles_after = NominalCycles::new(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -902,7 +902,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_before + NominalCycles::from(fee.get()),
+        consumed_cycles_before + NominalCycles::new(fee.get()),
         consumed_cycles_after
     );
 
@@ -929,7 +929,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         &no_op_logger(),
     );
 
-    let consumed_cycles_before = NominalCycles::from(
+    let consumed_cycles_before = NominalCycles::new(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -994,7 +994,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         0.into(),
         &no_op_logger(),
     );
-    let consumed_cycles_after = NominalCycles::from(
+    let consumed_cycles_after = NominalCycles::new(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -1003,7 +1003,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_before + NominalCycles::from(fee.get()),
+        consumed_cycles_before + NominalCycles::new(fee.get()),
         consumed_cycles_after
     );
 

@@ -520,7 +520,7 @@ fn call_increases_cycles_consumed_metric() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap(),
-        NominalCycles::from(0)
+        NominalCycles::zero()
     );
 }
 
