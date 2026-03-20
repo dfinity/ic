@@ -582,6 +582,9 @@ pub struct CkBtcMinterState {
 
     /// Block tip height returned in the last get_utxos call.
     pub last_get_utxos_tip_height: Option<Height>,
+
+    /// All OutPoints ever minted.
+    pub minted_outpoints: BTreeSet<OutPoint>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
@@ -773,6 +776,7 @@ impl CkBtcMinterState {
         let account_bucket = self.utxos_state_addresses.entry(account).or_default();
 
         for utxo in utxos {
+            self.minted_outpoints.insert(utxo.outpoint.clone());
             self.outpoint_account.insert(utxo.outpoint.clone(), account);
             self.available_utxos.insert(utxo.clone());
             self.checked_utxos.remove(&utxo);
@@ -2065,6 +2069,7 @@ impl From<InitArgs> for CkBtcMinterState {
             last_get_utxos_tip_height: None,
             pending_withdrawal_reimbursements: Default::default(),
             reimbursed_withdrawals: Default::default(),
+            minted_outpoints: Default::default(),
         }
     }
 }
