@@ -5,8 +5,8 @@ use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
 };
 use ic_types::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId,
-    IDkgPayload, KeyTranscriptCreation,
+    CompletedReshareRequest, HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload,
+    KeyTranscriptCreation,
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
@@ -176,10 +176,6 @@ impl IDkgPayloadMetrics {
     pub(crate) fn report(&self, payload: &IDkgPayload) {
         let expected_keys = expected_keys(payload);
 
-        self.payload_metrics_set_without_key_id_label(
-            "signature_agreements",
-            payload.signature_agreements.len(),
-        );
         self.payload_metrics_set(
             "available_pre_signatures",
             count_by_master_public_key_id(
@@ -409,7 +405,6 @@ impl ThresholdSignatureMetrics {
 /// IDkg payload stats
 #[derive(Default)]
 pub struct IDkgPayloadStats {
-    pub signature_agreements: usize,
     pub key_transcripts_created: CounterPerMasterPublicKeyId,
     pub available_pre_signatures: CounterPerMasterPublicKeyId,
     pub pre_signatures_in_creation: CounterPerMasterPublicKeyId,
@@ -441,11 +436,6 @@ impl From<&IDkgPayload> for IDkgPayloadStats {
 
         Self {
             key_transcripts_created,
-            signature_agreements: payload
-                .signature_agreements
-                .values()
-                .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
-                .count(),
             available_pre_signatures: count_by_master_public_key_id(
                 payload.available_pre_signatures.values(),
                 &keys,

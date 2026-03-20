@@ -60,16 +60,6 @@ pub mod common;
 pub mod ecdsa;
 pub mod schnorr;
 
-/// For completed signature requests, we differentiate between those
-/// that have already been reported and those that have not. This is
-/// to prevent signatures from being reported more than once.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub enum CompletedSignature {
-    ReportedToExecution,
-    Unreported(crate::batch::ConsensusResponse),
-}
-
 /// A [`MasterPublicKeyId`], that contains a variant that is compatible with the IDKG protocol.
 ///
 /// The [`MasterPublicKeyId`] can hold a number of different key types.
@@ -163,9 +153,6 @@ impl<'de> serde::Deserialize<'de> for IDkgMasterPublicKeyId {
 /// protocol since the summary block.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgPayload {
-    /// Collection of completed signatures.
-    pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
-
     /// IDKG transcript Pre-Signatures that we can use to create threshold signatures.
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
 
@@ -201,7 +188,6 @@ impl IDkgPayload {
                 .map(|key_transcript| (key_transcript.key_id(), key_transcript))
                 .collect(),
             uid_generator: IDkgUIDGenerator::new(subnet_id, height),
-            signature_agreements: BTreeMap::new(),
             available_pre_signatures: BTreeMap::new(),
             pre_signatures_in_creation: BTreeMap::new(),
             idkg_transcripts: BTreeMap::new(),
@@ -1830,19 +1816,6 @@ pub type Payload = Option<IDkgPayload>;
 
 impl From<&IDkgPayload> for pb::IDkgPayload {
     fn from(payload: &IDkgPayload) -> Self {
-        // signature_agreements
-        let mut signature_agreements = Vec::new();
-        for (pseudo_random_id, completed) in &payload.signature_agreements {
-            let unreported = match completed {
-                CompletedSignature::Unreported(response) => Some(response.into()),
-                CompletedSignature::ReportedToExecution => None,
-            };
-            signature_agreements.push(pb::CompletedSignature {
-                pseudo_random_id: pseudo_random_id.to_vec(),
-                unreported,
-            });
-        }
-
         let mut available_pre_signatures = Vec::new();
         for (pre_sig_id, pre_sig) in &payload.available_pre_signatures {
             available_pre_signatures.push(pb::AvailablePreSignature {
@@ -1901,7 +1874,7 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
             .collect();
 
         Self {
-            signature_agreements,
+            signature_agreements: Vec::new(),
             available_pre_signatures,
             pre_signatures_in_creation,
             next_unused_transcript_id,
@@ -1923,30 +1896,6 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
             let key_transcript = MasterKeyTranscript::try_from(key_transcript_proto)?;
 
             key_transcripts.insert(key_transcript.key_id(), key_transcript);
-        }
-
-        let mut signature_agreements = BTreeMap::new();
-        for completed_signature in payload.signature_agreements {
-            let pseudo_random_id = {
-                if completed_signature.pseudo_random_id.len() != 32 {
-                    return Err(ProxyDecodeError::Other(
-                        "Expects 32 bytes of pseudo_random_id".to_string(),
-                    ));
-                }
-
-                let mut x = [0; 32];
-                x.copy_from_slice(&completed_signature.pseudo_random_id);
-                x
-            };
-
-            let signature = if let Some(unreported) = completed_signature.unreported {
-                let response = crate::batch::ConsensusResponse::try_from(unreported)?;
-                CompletedSignature::Unreported(response)
-            } else {
-                CompletedSignature::ReportedToExecution
-            };
-
-            signature_agreements.insert(pseudo_random_id, signature);
         }
 
         // available_pre_signatures
@@ -2025,7 +1974,6 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
         }
 
         Ok(Self {
-            signature_agreements,
             available_pre_signatures,
             pre_signatures_in_creation,
             idkg_transcripts,

@@ -38,4 +38,6 @@ pub enum ChainKeyPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     /// Crypto failed to determine the validity of the key
     VetKdKeyVerificationError(VetKdKeyVerificationError),
+    /// Crypto failed to verify a signature
+    SignatureVerificationError(String),
 }
