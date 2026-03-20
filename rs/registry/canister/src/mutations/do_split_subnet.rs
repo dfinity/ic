@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, convert::TryFrom};
 
 #[derive(Debug, PartialEq, Eq)]
-/// Error which might occuring during validation of a payload.
+/// Error which might occurring during validation of a payload.
 enum PayloadValidationError {
     FailedToGetSourceSubnetRecord(String),
     UnknownNodeId(NodeId),
@@ -71,6 +71,8 @@ impl Registry {
         let (mut source_subnet_record, ranges_to_migrate) = self
             .validate_subnet_splitting_payload(&payload, pre_call_registry_version)
             .map_err(|err| format!("Failed to validate the payload: {err}"))?;
+
+        // Remove the migrated nodes from the source subnet
         let source_nodes: Vec<NodeId> = source_subnet_record
             .membership
             .iter()
@@ -79,8 +81,6 @@ impl Registry {
             })
             .filter(|node_id| !payload.destination_node_ids.contains(node_id))
             .collect();
-
-        // Remove some nodes from the source subnet
         source_subnet_record.membership =
             source_nodes.iter().map(|id| id.get().into_vec()).collect();
         let destination_subnet_record = SubnetRecord {
@@ -94,25 +94,25 @@ impl Registry {
             initial_notary_delay_millis: source_subnet_record.initial_notary_delay_millis,
             replica_version_id: source_subnet_record.replica_version_id.clone(),
             dkg_interval_length: source_subnet_record.dkg_interval_length,
-            start_as_nns: false,
             subnet_type: source_subnet_record.subnet_type,
             max_ingress_bytes_per_block: source_subnet_record.max_ingress_bytes_per_block,
             recalled_replica_version_ids: source_subnet_record.recalled_replica_version_ids.clone(),
             dkg_dealings_per_block: source_subnet_record.dkg_dealings_per_block,
-            is_halted: false,
             max_ingress_messages_per_block: source_subnet_record.max_ingress_messages_per_block,
             max_block_payload_size: source_subnet_record.max_block_payload_size,
             features: source_subnet_record.features,
             max_number_of_canisters: source_subnet_record.max_number_of_canisters,
             ssh_readonly_access: source_subnet_record.ssh_readonly_access.clone(),
             ssh_backup_access: source_subnet_record.ssh_backup_access.clone(),
+            canister_cycles_cost_schedule: source_subnet_record.canister_cycles_cost_schedule,
+            subnet_admins: source_subnet_record.subnet_admins.clone(),
+            start_as_nns: false,
+            is_halted: false,
             halt_at_cup_height: false,
             // We don't support splitting signing subnets (yet). If we are here then we know that
             // the source subnet being split is not signing (see the
             // `validate_subnet_splitting_payload`) method.
             chain_key_config: None,
-            canister_cycles_cost_schedule: source_subnet_record.canister_cycles_cost_schedule,
-            subnet_admins: source_subnet_record.subnet_admins.clone(),
         };
 
         let create_cup_contents = |nodes| async {
@@ -294,11 +294,14 @@ impl Registry {
             return Err(PayloadValidationError::SourceSubnetIsSigningSubnet);
         }
 
-        // Only rental subnets have free cycles cost schedule
-        if source_subnet_record.canister_cycles_cost_schedule() == CanisterCyclesCostSchedule::Free
-            && source_subnet_type == SubnetType::Application
-        {
-            return Err(PayloadValidationError::SourceSubnetIsRentalSubnet);
+        match source_subnet_record.canister_cycles_cost_schedule() {
+            CanisterCyclesCostSchedule::Unspecified | CanisterCyclesCostSchedule::Normal => {}
+            // Rental subnets are application subnets with free cycles cost schedule, which are
+            // not (yet) allowed to be split
+            CanisterCyclesCostSchedule::Free if source_subnet_type == SubnetType::Application => {
+                return Err(PayloadValidationError::SourceSubnetIsRentalSubnet);
+            }
+            CanisterCyclesCostSchedule::Free => {}
         }
 
         let routing_table = self.get_routing_table_or_panic(registry_version);

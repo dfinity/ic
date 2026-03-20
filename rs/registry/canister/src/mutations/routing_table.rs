@@ -16,7 +16,7 @@ use ic_registry_keys::{
 };
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
-    routing_table_insert_subnet, routing_table_insert_subnet_and_reroute,
+    routing_table_insert_subnet, routing_table_insert_subnet_and_reroute_or_panic,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use ic_registry_transport::{delete, upsert};
@@ -329,12 +329,11 @@ impl Registry {
         subnet_id_to_add: SubnetId,
     ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
-            routing_table_insert_subnet_and_reroute(
+            routing_table_insert_subnet_and_reroute_or_panic(
                 subnet_id_to_add,
                 routing_table,
                 canister_id_ranges,
             )
-            .unwrap();
         })
     }
 
