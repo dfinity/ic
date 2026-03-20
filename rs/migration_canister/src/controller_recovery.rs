@@ -3,7 +3,7 @@ use crate::processing::ProcessingResult;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_cdk::api::canister_self;
-use ic_cdk::management_canister::CanisterInfoResult;
+use ic_management_canister_types::CanisterInfoResult;
 use serde::{Deserialize, Serialize};
 
 #[async_trait]
@@ -134,7 +134,7 @@ mod test {
     };
     use async_trait::async_trait;
     use candid::Principal;
-    use ic_cdk::management_canister::CanisterInfoResult;
+    use ic_management_canister_types::CanisterInfoResult;
     use ic_nns_constants::MIGRATION_CANISTER_ID;
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};

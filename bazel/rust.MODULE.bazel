@@ -647,7 +647,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-cdk",
-    version = "^0.19.0",
+    version = "^0.20.0",
 )
 crate.spec(
     package = "ic-cdk-executor",
@@ -705,7 +705,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-management-canister-types",
-    version = "^0.5.0",
+    version = "^0.7.1",
 )
 crate.spec(
     default_features = False,
