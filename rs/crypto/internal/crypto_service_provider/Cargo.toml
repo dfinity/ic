@@ -44,7 +44,6 @@ parking_lot = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -84,7 +83,6 @@ ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory
 ic-test-utilities-time = { path = "../../../test_utilities/time" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 mockall = { workspace = true }
-num_cpus = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 rsa = { workspace = true }
