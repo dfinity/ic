@@ -46,8 +46,8 @@ fn bench_verify(c: &mut Criterion) {
 fn bench_batch_verify(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_verify");
 
-    for msg_len in [32, 1000000] {
-        for batch_size in [13, 34, 40] {
+    for batch_size in [13, 34, 40] {
+        for msg_len in [32, 1000000] {
             let mut key_rng = rng();
             let keys: Vec<PrivateKey> = (0..batch_size)
                 .map(|_| PrivateKey::generate_using_rng(&mut key_rng))
