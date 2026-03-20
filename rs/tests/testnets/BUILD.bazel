@@ -349,7 +349,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "mainnet_nns",
+    name = "mainnet_nns_state",
     enable_metrics = True,
     env = MAINNET_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
