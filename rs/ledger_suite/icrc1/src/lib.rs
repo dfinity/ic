@@ -19,6 +19,8 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::{
     icrc1::transfer::Memo,
     icrc3::transactions::{
+        TRANSACTION_123_FREEZE_ACCOUNT, TRANSACTION_123_FREEZE_PRINCIPAL,
+        TRANSACTION_123_UNFREEZE_ACCOUNT, TRANSACTION_123_UNFREEZE_PRINCIPAL,
         TRANSACTION_124_DEACTIVATE, TRANSACTION_124_PAUSE, TRANSACTION_124_UNPAUSE,
         TRANSACTION_FEE_COLLECTOR,
     },
@@ -71,6 +73,30 @@ pub enum Operation<Tokens: TokensType> {
         reason: Option<String>,
     },
     Deactivate {
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    FreezeAccount {
+        account: Account,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    UnfreezeAccount {
+        account: Account,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    FreezePrincipal {
+        principal: Principal,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    UnfreezePrincipal {
+        principal: Principal,
         caller: Option<Principal>,
         mthd: Option<String>,
         reason: Option<String>,
@@ -147,6 +173,15 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    pub account: Option<Account>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub principal: Option<Principal>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -198,6 +233,38 @@ impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
                 reason: value.reason,
             },
             Some(TRANSACTION_124_DEACTIVATE) => Operation::Deactivate {
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(TRANSACTION_123_FREEZE_ACCOUNT) => Operation::FreezeAccount {
+                account: value
+                    .account
+                    .ok_or("`account` field required for freeze_account operation")?,
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(TRANSACTION_123_UNFREEZE_ACCOUNT) => Operation::UnfreezeAccount {
+                account: value
+                    .account
+                    .ok_or("`account` field required for unfreeze_account operation")?,
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(TRANSACTION_123_FREEZE_PRINCIPAL) => Operation::FreezePrincipal {
+                principal: value
+                    .principal
+                    .ok_or("`principal` field required for freeze_principal operation")?,
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(TRANSACTION_123_UNFREEZE_PRINCIPAL) => Operation::UnfreezePrincipal {
+                principal: value
+                    .principal
+                    .ok_or("`principal` field required for unfreeze_principal operation")?,
                 caller: value.caller,
                 mthd: value.mthd,
                 reason: value.reason,
@@ -281,7 +348,14 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => Some("mint".to_string()),
                 Transfer { .. } => Some("xfer".to_string()),
                 Approve { .. } => Some("approve".to_string()),
-                FeeCollector { .. } | Pause { .. } | Unpause { .. } | Deactivate { .. } => None,
+                FeeCollector { .. }
+                | Pause { .. }
+                | Unpause { .. }
+                | Deactivate { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             from: match &t.operation {
                 Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
@@ -301,14 +375,28 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
                 | Approve { amount, .. } => Some(amount.clone()),
-                FeeCollector { .. } | Pause { .. } | Unpause { .. } | Deactivate { .. } => None,
+                FeeCollector { .. }
+                | Pause { .. }
+                | Unpause { .. }
+                | Deactivate { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             fee: match &t.operation {
                 Transfer { fee, .. }
                 | Approve { fee, .. }
                 | Mint { fee, .. }
                 | Burn { fee, .. } => fee.to_owned(),
-                FeeCollector { .. } | Pause { .. } | Unpause { .. } | Deactivate { .. } => None,
+                FeeCollector { .. }
+                | Pause { .. }
+                | Unpause { .. }
+                | Deactivate { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             expected_allowance: match &t.operation {
                 Approve {
@@ -328,19 +416,41 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 FeeCollector { caller, .. }
                 | Pause { caller, .. }
                 | Unpause { caller, .. }
-                | Deactivate { caller, .. } => caller.to_owned(),
+                | Deactivate { caller, .. }
+                | FreezeAccount { caller, .. }
+                | UnfreezeAccount { caller, .. }
+                | FreezePrincipal { caller, .. }
+                | UnfreezePrincipal { caller, .. } => caller.to_owned(),
                 _ => None,
             },
             mthd: match &t.operation {
                 FeeCollector { mthd, .. }
                 | Pause { mthd, .. }
                 | Unpause { mthd, .. }
-                | Deactivate { mthd, .. } => mthd.to_owned(),
+                | Deactivate { mthd, .. }
+                | FreezeAccount { mthd, .. }
+                | UnfreezeAccount { mthd, .. }
+                | FreezePrincipal { mthd, .. }
+                | UnfreezePrincipal { mthd, .. } => mthd.to_owned(),
                 _ => None,
             },
             reason: match &t.operation {
-                Pause { reason, .. } | Unpause { reason, .. } | Deactivate { reason, .. } => {
-                    reason.to_owned()
+                Pause { reason, .. }
+                | Unpause { reason, .. }
+                | Deactivate { reason, .. }
+                | FreezeAccount { reason, .. }
+                | UnfreezeAccount { reason, .. }
+                | FreezePrincipal { reason, .. }
+                | UnfreezePrincipal { reason, .. } => reason.to_owned(),
+                _ => None,
+            },
+            account: match &t.operation {
+                FreezeAccount { account, .. } | UnfreezeAccount { account, .. } => Some(*account),
+                _ => None,
+            },
+            principal: match &t.operation {
+                FreezePrincipal { principal, .. } | UnfreezePrincipal { principal, .. } => {
+                    Some(*principal)
                 }
                 _ => None,
             },
@@ -537,8 +647,14 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
-            Operation::Pause { .. } | Operation::Unpause { .. } | Operation::Deactivate { .. } => {
-                // ICRC-124 management operations do not affect balances or approvals.
+            Operation::Pause { .. }
+            | Operation::Unpause { .. }
+            | Operation::Deactivate { .. }
+            | Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => {
+                // ICRC-124/123 management operations do not affect balances or approvals.
                 // Treat them as no-ops when applying historical blocks so replay/upgrade
                 // does not crash the canister.
             }
@@ -732,7 +848,11 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             Operation::FeeCollector { .. }
             | Operation::Pause { .. }
             | Operation::Unpause { .. }
-            | Operation::Deactivate { .. } => None,
+            | Operation::Deactivate { .. }
+            | Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => None,
             _ => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {

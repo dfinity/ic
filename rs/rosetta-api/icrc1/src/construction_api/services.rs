@@ -549,8 +549,12 @@ mod tests {
                             }
                             ic_icrc1::Operation::Pause { .. }
                             | ic_icrc1::Operation::Unpause { .. }
-                            | ic_icrc1::Operation::Deactivate { .. } => {
-                                panic!("ICRC-124 operations not implemented")
+                            | ic_icrc1::Operation::Deactivate { .. }
+                            | ic_icrc1::Operation::FreezeAccount { .. }
+                            | ic_icrc1::Operation::UnfreezeAccount { .. }
+                            | ic_icrc1::Operation::FreezePrincipal { .. }
+                            | ic_icrc1::Operation::UnfreezePrincipal { .. } => {
+                                panic!("Management operations not implemented")
                             }
                         };
                         let args = match arg_with_caller.arg {

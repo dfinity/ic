@@ -779,6 +779,14 @@ where
                 mthd,
                 reason,
             },
+            Op::FreezeAccount { .. }
+            | Op::UnfreezeAccount { .. }
+            | Op::FreezePrincipal { .. }
+            | Op::UnfreezePrincipal { .. } => {
+                // ICRC-123 freeze operations are not yet supported in Rosetta.
+                // Full support will be added in a follow-up PR.
+                unimplemented!("ICRC-123 freeze operations are not yet supported in Rosetta")
+            }
         }
     }
 }

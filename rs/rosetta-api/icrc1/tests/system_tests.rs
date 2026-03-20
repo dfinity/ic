@@ -1540,7 +1540,11 @@ fn test_construction_submit() {
                             ic_icrc1::Operation::FeeCollector { .. }
                             | ic_icrc1::Operation::Pause { .. }
                             | ic_icrc1::Operation::Unpause { .. }
-                            | ic_icrc1::Operation::Deactivate { .. } => None,
+                            | ic_icrc1::Operation::Deactivate { .. }
+                            | ic_icrc1::Operation::FreezeAccount { .. }
+                            | ic_icrc1::Operation::UnfreezeAccount { .. }
+                            | ic_icrc1::Operation::FreezePrincipal { .. }
+                            | ic_icrc1::Operation::UnfreezePrincipal { .. } => None,
                         };
 
                         // Rosetta does not support mint and burn operations
