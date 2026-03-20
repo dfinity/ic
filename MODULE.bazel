@@ -1,6 +1,4 @@
 # Bazel modules for the IC build.
-# NOTE: Some dependencies are still listed in the WORKSPACE file. See WORKSPACE
-# for details.
 
 module(
     name = "ic",
