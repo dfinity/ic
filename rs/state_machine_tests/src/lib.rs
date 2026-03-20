@@ -38,7 +38,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusTime,
     execution_environment::{
         IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
-        TransformExecutionService,
+        Scheduler, TransformExecutionService,
     },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
@@ -137,9 +137,9 @@ use ic_test_utilities_registry::{
 use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
-    CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height,
-    NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
-    SubnetId, UserId,
+    AccumulatedPriority, CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState,
+    CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion,
+    ReplicaVersion, SnapshotId, SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
@@ -231,6 +231,93 @@ impl Verifier for FakeVerifier {
         _: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
+    }
+}
+
+/// Specifies a single message to be executed in a controlled order.
+#[derive(Clone, Debug)]
+pub enum OrderedMessage {
+    /// Execute an ingress message on the target canister.
+    Ingress(CanisterId, MessageId),
+    /// Execute a request from `source` that is in `target`'s input queue.
+    Request {
+        source: CanisterId,
+        target: CanisterId,
+    },
+    /// Execute a response from `source` that is in `target`'s input queue.
+    Response {
+        source: CanisterId,
+        target: CanisterId,
+    },
+}
+
+/// A sequence of messages to be executed in a specific order.
+pub struct MessageOrdering(pub Vec<OrderedMessage>);
+
+/// A scheduler wrapper that manipulates canister priorities to control
+/// which canister executes next. Used by the flexible message ordering
+/// feature to ensure deterministic single-canister-per-round execution.
+///
+/// When `enabled` is false, this wrapper is a transparent pass-through.
+struct FlexibleOrderingScheduler {
+    inner: Box<dyn Scheduler<State = ReplicatedState>>,
+    target: Arc<RwLock<Option<CanisterId>>>,
+    enabled: bool,
+}
+
+impl Scheduler for FlexibleOrderingScheduler {
+    type State = ReplicatedState;
+
+    fn execute_round(
+        &self,
+        mut state: ReplicatedState,
+        randomness: Randomness,
+        chain_key_data: ic_types::batch::ChainKeyData,
+        replica_version: &ReplicaVersion,
+        current_round: ic_types::ExecutionRound,
+        round_summary: Option<ic_interfaces::execution_environment::ExecutionRoundSummary>,
+        current_round_type: ic_interfaces::execution_environment::ExecutionRoundType,
+        registry_settings: &ic_interfaces::execution_environment::RegistryExecutionSettings,
+    ) -> ReplicatedState {
+        // If flexible ordering is enabled and a target is set, boost its
+        // priority so it is scheduled first. Combined with a round instruction
+        // limit that allows only one message per round, this ensures the
+        // target is the only canister that executes in this round.
+        let target = if self.enabled {
+            self.target.write().unwrap().take()
+        } else {
+            None
+        };
+        if let Some(canister_id) = target {
+            let boost = AccumulatedPriority::new(i64::MAX / 4);
+            state
+                .metadata
+                .subnet_schedule
+                .get_mut(canister_id)
+                .accumulated_priority = boost;
+        }
+        let mut result = self.inner.execute_round(
+            state,
+            randomness,
+            chain_key_data,
+            replica_version,
+            current_round,
+            round_summary,
+            current_round_type,
+            registry_settings,
+        );
+        // After a boosted round, reset the boosted canister's priority so it
+        // doesn't dominate subsequent rounds.
+        if let Some(canister_id) = target {
+            let p = result.metadata.subnet_schedule.get_mut(canister_id);
+            p.accumulated_priority = AccumulatedPriority::new(0);
+            p.priority_credit = AccumulatedPriority::new(0);
+        }
+        result
+    }
+
+    fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
+        self.inner.checkpoint_round_with_no_execution(state)
     }
 }
 
@@ -1127,6 +1214,13 @@ pub struct StateMachine {
     cycles_account_manager: Arc<CyclesAccountManager>,
     cost_schedule: CanisterCyclesCostSchedule,
     hypervisor_config: HypervisorConfig,
+    /// Whether flexible message ordering is enabled.
+    flexible_ordering: bool,
+    /// Shared handle to set ordering target for the `FlexibleOrderingScheduler`.
+    ordering_target: Arc<RwLock<Option<CanisterId>>>,
+    /// Buffer for ingress messages that will be released into the pool on demand
+    /// during ordered execution.
+    ingress_buffer: RwLock<BTreeMap<MessageId, SignedIngress>>,
 }
 
 impl Default for StateMachine {
@@ -1208,6 +1302,7 @@ pub struct StateMachineBuilder {
     create_at_registry_version: Option<RegistryVersion>,
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
+    flexible_ordering: bool,
 }
 
 impl StateMachineBuilder {
@@ -1249,6 +1344,7 @@ impl StateMachineBuilder {
             create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: vec![],
+            flexible_ordering: false,
         }
     }
 
@@ -1488,6 +1584,18 @@ impl StateMachineBuilder {
         }
     }
 
+    /// Enable flexible message ordering. When enabled:
+    /// - The scheduler instruction limits are configured to allow only one
+    ///   canister message per round (DTS is disabled).
+    /// - The `FlexibleOrderingScheduler` wrapper manipulates canister
+    ///   priorities based on `set_ordering_target` / `execute_with_ordering`.
+    pub fn with_flexible_ordering(self) -> Self {
+        Self {
+            flexible_ordering: true,
+            ..self
+        }
+    }
+
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
     /// Otherwise, no new registry records are created.
@@ -1533,6 +1641,7 @@ impl StateMachineBuilder {
             self.create_at_registry_version,
             self.cost_schedule,
             self.subnet_admins,
+            self.flexible_ordering,
         )
     }
 
@@ -1901,6 +2010,7 @@ impl StateMachine {
         create_at_registry_version: Option<RegistryVersion>,
         cost_schedule: CanisterCyclesCostSchedule,
         subnet_admins: Vec<PrincipalId>,
+        flexible_ordering: bool,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
@@ -1916,6 +2026,28 @@ impl StateMachine {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
+        // When flexible ordering is enabled, configure the scheduler so that
+        // exactly one canister message executes per round:
+        //  - max_instructions_per_slice = max_instructions_per_message (no DTS)
+        //  - max_instructions_per_round tuned so the scheduler's round_budget
+        //    (= max_round - max_slice + 1) allows one message to start but
+        //    exhausts the budget before a second can begin.
+        if flexible_ordering {
+            let max_msg = subnet_config.scheduler_config.max_instructions_per_message;
+            // Disable DTS: each message completes in a single slice.
+            subnet_config.scheduler_config.max_instructions_per_slice = max_msg;
+            // Set round_budget small enough that only 1 message executes per
+            // inner-round iteration. After the message finishes (+ 8M per-canister
+            // overhead), the budget goes very negative and the inner loop breaks.
+            let round_budget = ic_types::NumInstructions::from(1_000);
+            subnet_config.scheduler_config.max_instructions_per_round =
+                round_budget + max_msg - ic_types::NumInstructions::from(1);
+            // Use 2 scheduler cores so only 1 core is available for new
+            // canister executions (the other is reserved for long executions).
+            // Combined with priority boosting, this ensures only the target
+            // canister runs in each round.
+            subnet_config.scheduler_config.scheduler_cores = 2;
+        }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
                 .cycles_account_manager_config
@@ -2047,11 +2179,18 @@ impl StateMachine {
             )
         });
 
+        let ordering_target: Arc<RwLock<Option<CanisterId>>> = Arc::new(RwLock::new(None));
+        let scheduler = Box::new(FlexibleOrderingScheduler {
+            inner: execution_services.scheduler,
+            target: Arc::clone(&ordering_target),
+            enabled: flexible_ordering,
+        });
+
         let message_routing = SyncMessageRouting::new(
             Arc::clone(&state_manager) as _,
             Arc::clone(&state_manager) as _,
             Arc::clone(&execution_services.ingress_history_writer) as _,
-            execution_services.scheduler,
+            scheduler,
             hypervisor_config.clone(),
             Arc::clone(&execution_services.cycles_account_manager),
             subnet_id,
@@ -2281,6 +2420,9 @@ impl StateMachine {
             cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
             hypervisor_config,
+            flexible_ordering,
+            ordering_target,
+            ingress_buffer: RwLock::new(BTreeMap::new()),
         }
     }
 
@@ -2563,6 +2705,201 @@ impl StateMachine {
             .write()
             .unwrap()
             .push(msg, self.get_time(), self.nodes[0].node_id);
+    }
+
+    /// Set the ordering target canister. When set, the next `execute_round`
+    /// call will boost the target canister's `accumulated_priority` so that it
+    /// is scheduled first.
+    pub fn set_ordering_target(&self, target: Option<CanisterId>) {
+        *self.ordering_target.write().unwrap() = target;
+    }
+
+    /// Buffer an ingress message without submitting it to the ingress pool.
+    /// The message is validated but held in a separate buffer until released
+    /// via `release_buffered_ingress`.
+    pub fn buffer_ingress_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Result<MessageId, SubmitIngressError> {
+        let msg = self.ingress_message(sender, canister_id, method, payload);
+        let message_id = msg.id();
+        self.ingress_buffer
+            .write()
+            .unwrap()
+            .insert(message_id.clone(), msg);
+        Ok(message_id)
+    }
+
+    /// Release a previously buffered ingress message into the ingress pool.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `message_id` was not previously buffered.
+    pub fn release_buffered_ingress(&self, message_id: &MessageId) {
+        let msg = self
+            .ingress_buffer
+            .write()
+            .unwrap()
+            .remove(message_id)
+            .unwrap_or_else(|| panic!("No buffered ingress message with id {}", message_id));
+        self.push_signed_ingress(msg);
+    }
+
+    /// Execute messages in a user-specified order.
+    ///
+    /// For each entry in the ordering:
+    /// - `Ingress`: releases the buffered ingress into the pool, sets the
+    ///   target canister as the ordering target, and executes one round.
+    /// - `Request`/`Response`: sets the target canister and executes rounds
+    ///   until the expected message is consumed. Canister system tasks
+    ///   (heartbeats, timers) and subnet messages (e.g. `install_code`
+    ///   completions) are implicitly executed along the way — the method
+    ///   keeps ticking until the expected inter-canister message is
+    ///   actually processed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if:
+    /// - An `Ingress` message ID was not previously buffered.
+    /// - After `MAX_ORDERING_TICKS` rounds the expected message still
+    ///   hasn't appeared or been consumed.
+    pub fn execute_with_ordering(&self, ordering: MessageOrdering) {
+        assert!(
+            self.flexible_ordering,
+            "execute_with_ordering requires flexible ordering to be enabled. \
+             Use StateMachineBuilder::new().with_flexible_ordering().build()"
+        );
+        /// Maximum total ticks per ordering step — covers both waiting for
+        /// the message to appear and executing system tasks that run before it.
+        const MAX_ORDERING_TICKS: usize = 20;
+
+        for msg in ordering.0 {
+            match msg {
+                OrderedMessage::Ingress(target, ingress_id) => {
+                    // Take the buffered ingress message and inject it directly
+                    // into the payload for this tick.
+                    let signed_ingress = self
+                        .ingress_buffer
+                        .write()
+                        .unwrap()
+                        .remove(&ingress_id)
+                        .unwrap_or_else(|| {
+                            panic!("No buffered ingress message with id {}", ingress_id)
+                        });
+                    let payload = PayloadBuilder::new()
+                        .with_max_expiry_time_from_now(self.get_time().into())
+                        .signed_ingress(signed_ingress);
+                    self.set_ordering_target(Some(target));
+                    self.tick_with_config(payload);
+                    // With a restricted round instruction budget, the ingress
+                    // may be inducted (status = Received) but not yet executed.
+                    // Keep ticking with the target boosted until the ingress
+                    // transitions out of the Received state.
+                    let mut extra_ticks = 0;
+                    while matches!(
+                        self.ingress_status(&ingress_id),
+                        IngressStatus::Known {
+                            state: IngressState::Received,
+                            ..
+                        }
+                    ) {
+                        if extra_ticks >= MAX_ORDERING_TICKS {
+                            panic!(
+                                "Ingress {} still in Received state after {} extra ticks",
+                                ingress_id, extra_ticks
+                            );
+                        }
+                        self.set_ordering_target(Some(target));
+                        self.tick();
+                        extra_ticks += 1;
+                    }
+                }
+                OrderedMessage::Request { source, target }
+                | OrderedMessage::Response { source, target } => {
+                    let msg_type = match msg {
+                        OrderedMessage::Request { .. } => "request",
+                        OrderedMessage::Response { .. } => "response",
+                        _ => unreachable!(),
+                    };
+                    // Keep ticking until the message from `source` is no
+                    // longer in `target`'s sender schedule, meaning it was
+                    // consumed. System tasks (heartbeats, timers) that the
+                    // scheduler runs before popping from the input queue are
+                    // executed implicitly along the way.
+                    //
+                    // Phase 1: wait for the message to appear (it may need
+                    // prior rounds for induction / subnet message processing).
+                    let mut ticks = 0;
+                    while !self.has_message_from(target, source) {
+                        if ticks >= MAX_ORDERING_TICKS {
+                            self.panic_no_message(target, source, msg_type);
+                        }
+                        self.tick();
+                        ticks += 1;
+                    }
+                    // Phase 2: tick with the ordering target set until the
+                    // message is consumed. This loop handles the case where
+                    // canister system tasks (heartbeat / timer) execute before
+                    // the input queue message in the same or subsequent rounds.
+                    while self.has_message_from(target, source) {
+                        if ticks >= MAX_ORDERING_TICKS {
+                            self.panic_no_message(target, source, msg_type);
+                        }
+                        self.set_ordering_target(Some(target));
+                        self.tick();
+                        ticks += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Returns `true` if `target` canister has a message from `source` in its
+    /// input queue sender schedule.
+    fn has_message_from(&self, target: CanisterId, source: CanisterId) -> bool {
+        use ic_replicated_state::testing::CanisterQueuesTesting;
+
+        let state = self.get_latest_state();
+        let Some(canister_state) = state.canister_state(&target) else {
+            return false;
+        };
+        let queues = canister_state.system_state.queues();
+        queues
+            .local_sender_schedule()
+            .iter()
+            .any(|id| *id == source)
+            || queues
+                .remote_sender_schedule()
+                .iter()
+                .any(|id| *id == source)
+    }
+
+    /// Panics with a diagnostic message about a missing message.
+    fn panic_no_message(&self, target: CanisterId, source: CanisterId, msg_type: &str) -> ! {
+        use ic_replicated_state::testing::CanisterQueuesTesting;
+
+        let state = self.get_latest_state();
+        let canister_state = state.canister_state(&target).unwrap_or_else(|| {
+            panic!(
+                "Canister {} not found when looking for {} from {}",
+                target, msg_type, source
+            )
+        });
+        let queues = canister_state.system_state.queues();
+        panic!(
+            "Expected {} from {} in {}'s input queue, but {} is not in any sender schedule \
+             after draining system messages. \
+             Local senders: {:?}, Remote senders: {:?}",
+            msg_type,
+            source,
+            target,
+            source,
+            queues.local_sender_schedule(),
+            queues.remote_sender_schedule(),
+        );
     }
 
     pub fn mock_canister_http_response(
