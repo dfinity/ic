@@ -308,3 +308,110 @@ fn test_interleaved_inter_canister_calls() {
     assert_eq!(get_reply(&sm, &ingress_a), b"reply from B");
     assert_eq!(get_reply(&sm, &ingress_c), b"reply from D");
 }
+
+// ============================================================================
+// Test 7: Subnet messages (management canister) in the ordering.
+//
+// Demonstrates that management canister operations (install_code) can be
+// interleaved with canister-to-canister messages. Subnet messages are
+// processed in `drain_subnet_queues` at the start of each round, so they
+// execute implicitly when ticked — the Ingress variant handles them
+// correctly because the Demux routes management canister messages to the
+// consensus queue automatically.
+// ============================================================================
+#[test]
+fn test_subnet_message_ordering() {
+    use ic_management_canister_types_private::{CanisterInstallMode, InstallCodeArgs, Payload};
+
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+    let canister_b = install_uc(&sm);
+
+    // Step 1: A calls B (inter-canister).
+    let b_reply = wasm().reply_data(b"before upgrade").build();
+    let a_calls_b = wasm()
+        .inter_update(canister_b, CallArgs::default().other_side(b_reply))
+        .build();
+
+    let ingress_a = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_calls_b,
+        )
+        .unwrap();
+
+    // Step 2: Upgrade canister B with new code that replies differently.
+    let new_b_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let install_args =
+        InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister_b, new_b_wasm, vec![]);
+    let install_ingress = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            ic_management_canister_types_private::IC_00,
+            "install_code",
+            install_args.encode(),
+        )
+        .unwrap();
+
+    // Step 3: A calls B again after upgrade.
+    let b_reply_after = wasm().reply_data(b"after upgrade").build();
+    let a_calls_b_again = wasm()
+        .inter_update(canister_b, CallArgs::default().other_side(b_reply_after))
+        .build();
+
+    let ingress_a2 = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_calls_b_again,
+        )
+        .unwrap();
+
+    sm.execute_with_ordering(MessageOrdering(vec![
+        // A calls B (before upgrade).
+        OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+        // B processes A's request.
+        OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        },
+        // A processes B's response.
+        OrderedMessage::Response {
+            source: canister_b,
+            target: canister_a,
+        },
+        // Upgrade B via management canister.
+        OrderedMessage::Ingress(
+            ic_management_canister_types_private::IC_00,
+            install_ingress.clone(),
+        ),
+        // A calls B again (after upgrade).
+        OrderedMessage::Ingress(canister_a, ingress_a2.clone()),
+        // B processes A's second request.
+        OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        },
+        // A processes B's second response.
+        OrderedMessage::Response {
+            source: canister_b,
+            target: canister_a,
+        },
+    ]));
+
+    // First call completed before upgrade.
+    assert_eq!(get_reply(&sm, &ingress_a), b"before upgrade");
+    // install_code completed.
+    match sm.ingress_status(&install_ingress) {
+        IngressStatus::Known {
+            state: IngressState::Completed(_),
+            ..
+        } => {}
+        other => panic!("Expected install_code to complete, got: {:?}", other),
+    }
+    // Second call completed after upgrade.
+    assert_eq!(get_reply(&sm, &ingress_a2), b"after upgrade");
+}

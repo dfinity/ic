@@ -307,7 +307,9 @@ impl Scheduler for FlexibleOrderingScheduler {
             registry_settings,
         );
         // After a boosted round, reset the boosted canister's priority so it
-        // doesn't dominate subsequent rounds.
+        // doesn't dominate subsequent rounds. We only reset the boosted
+        // canister — other canisters' priorities were not artificially
+        // modified, so their `finish_round` adjustments are legitimate.
         if let Some(canister_id) = target {
             let p = result.metadata.subnet_schedule.get_mut(canister_id);
             p.accumulated_priority = AccumulatedPriority::new(0);
@@ -2027,26 +2029,32 @@ impl StateMachine {
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
         // When flexible ordering is enabled, configure the scheduler so that
-        // exactly one canister message executes per round:
-        //  - max_instructions_per_slice = max_instructions_per_message (no DTS)
-        //  - max_instructions_per_round tuned so the scheduler's round_budget
-        //    (= max_round - max_slice + 1) allows one message to start but
-        //    exhausts the budget before a second can begin.
+        // exactly one canister message (or one DTS slice) executes per round.
+        //
+        // scheduler_cores = 1: guarantees a single execution thread, so only
+        // one canister can execute per round. DTS is still supported — paused
+        // executions resume on the same single core in subsequent rounds.
+        // Note: compute_capacity_percent(1) = 0, which triggers a non-fatal
+        // debug assertion in the scheduler (logged, not panicked). This is
+        // acceptable for testing since no canister uses non-zero compute
+        // allocation.
+        //
+        // max_instructions_per_round: tuned so the round_budget
+        // (= max_round - max_slice + 1) is small enough that after one
+        // message/slice executes, the budget is exhausted and the inner loop
+        // breaks. The max_slice value (and thus DTS behavior) is left at its
+        // default — long messages will be sliced normally.
         if flexible_ordering {
-            let max_msg = subnet_config.scheduler_config.max_instructions_per_message;
-            // Disable DTS: each message completes in a single slice.
-            subnet_config.scheduler_config.max_instructions_per_slice = max_msg;
-            // Set round_budget small enough that only 1 message executes per
-            // inner-round iteration. After the message finishes (+ 8M per-canister
-            // overhead), the budget goes very negative and the inner loop breaks.
+            subnet_config.scheduler_config.scheduler_cores = 1;
+            let max_slice = std::cmp::max(
+                subnet_config.scheduler_config.max_instructions_per_slice,
+                subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code_slice,
+            );
             let round_budget = ic_types::NumInstructions::from(1_000);
             subnet_config.scheduler_config.max_instructions_per_round =
-                round_budget + max_msg - ic_types::NumInstructions::from(1);
-            // Use 2 scheduler cores so only 1 core is available for new
-            // canister executions (the other is reserved for long executions).
-            // Combined with priority boosting, this ensures only the target
-            // canister runs in each round.
-            subnet_config.scheduler_config.scheduler_cores = 2;
+                round_budget + max_slice - ic_types::NumInstructions::from(1);
         }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
