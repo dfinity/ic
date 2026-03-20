@@ -1559,8 +1559,11 @@ async fn after_validation_insufficient_cycles() {
     let sender = replaced_canister_controllers[0];
     let migrated_canister = migrated_canisters[0];
     let replaced_canister = replaced_canisters[0];
-    // Top up just enough to pass validation..
-    pic.add_cycles(migrated_canister, 10_000_000_000_000).await;
+    // Top up just enough to pass validation, keeping the surplus minimal so that
+    // the reinstall below burns enough to drop below the required amount.
+    let balance = pic.cycle_balance(migrated_canister).await;
+    pic.add_cycles(migrated_canister, 10_000_000_000_000 - balance)
+        .await;
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
         replaced_canister_id: replaced_canister,
