@@ -83,6 +83,7 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
+    "//rs/nns/governance/conversions",
     "//rs/nns/governance/init",
     "//rs/nns/handlers/lifeline/interface",
     "//rs/nns/handlers/root/interface",
@@ -260,7 +261,6 @@ rust_library(
 rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
-    add_test = True,
     noise_threshold = 5.0,
     # For some reason, the NNS Governance benchmarks are sensitive to the optimization level.
     # We would like to figure out why and fix it, but for now, we are reducing the optimization
@@ -313,7 +313,6 @@ rust_canister(
     compile_data = [":test_did"],
     crate_features = TEST_WITH_TLA,
     crate_root = "canister/canister.rs",
-    did_check = False,  # we don't check in the did so can't meaningfully check
     proc_macro_deps = MACRO_DEPENDENCIES + [
         "//rs/tla_instrumentation:proc_macros",
     ],

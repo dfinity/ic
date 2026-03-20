@@ -18,7 +18,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_test_utilities_types::messages::SignedIngressBuilder;
-use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types_cycles::CanisterCyclesCostSchedule;
 
 use crate::common::Wasm64;
 

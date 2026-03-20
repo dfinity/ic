@@ -8,10 +8,14 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
+* Added an optional field `resource_limits` to `CreateSubnetPayload` which, when present,
+  sets limits on resource usage (e.g., disk usage) of the created subnet.
 
-* Adding support for recalling replica versions for subnets.
+* Rate limit the number of subnet admin updates that can happen for a subnet.
 
 ## Changed
+
+* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
 
 ## Deprecated
 

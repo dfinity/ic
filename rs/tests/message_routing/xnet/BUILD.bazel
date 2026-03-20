@@ -94,6 +94,7 @@ system_test_nns(
     tags = [
         "long_test",
     ],
+    test_timeout = "eternal",
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",

@@ -582,6 +582,14 @@ where
         }
     }
 
+    /// Returns the total amount of maturity disbursements in progress in e8s equivalent.
+    pub fn total_maturity_disbursements_in_progress_e8s_equivalent(&self) -> u64 {
+        self.maturity_disbursements_map
+            .values()
+            .map(|maturity_disbursement| maturity_disbursement.amount_e8s)
+            .fold(0, |acc, x| acc.saturating_add(x))
+    }
+
     /// Validates that some of the data in stable storage can be read, in order to prevent broken
     /// schema. Should only be called in post_upgrade.
     pub fn validate(&self) {

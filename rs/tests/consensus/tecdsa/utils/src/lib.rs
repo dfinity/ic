@@ -1099,6 +1099,7 @@ pub async fn create_new_subnet_with_keys(
         chain_key_config: Some(chain_key_config),
         canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
         subnet_admins: Some(vec![]),
+        resource_limits: Default::default(),
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
@@ -1138,7 +1139,13 @@ pub fn await_pre_signature_stash_size(
                     let Some(sizes) = val.get(metric) else {
                         bail!("Metric {metric} not found in {val:?}");
                     };
-                    assert_eq!(sizes.len(), subnet.nodes().count());
+                    if sizes.len() != subnet.nodes().count() {
+                        bail!(
+                            "Metric {metric} only reported by {} out of {} nodes",
+                            sizes.len(),
+                            subnet.nodes().count()
+                        );
+                    }
                     for size in sizes {
                         if *size != expected_size {
                             bail!(

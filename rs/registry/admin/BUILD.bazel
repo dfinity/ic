@@ -68,6 +68,7 @@ rust_binary(
         "//rs/nns/common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
+        "//rs/nns/governance/conversions",
         "//rs/nns/handlers/root/impl:root",
         "//rs/nns/init",
         "//rs/nns/sns-wasm",

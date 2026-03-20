@@ -11,7 +11,6 @@ use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable}
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, Stream,
-    canister_state::system_state::CyclesUseCase::DroppedMessages,
     metadata_state::{StreamMap, testing::NetworkTopologyTesting},
     replicated_state::LABEL_VALUE_OUT_OF_MEMORY,
     testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
@@ -28,7 +27,10 @@ use ic_test_utilities_types::xnet::StreamHeaderBuilder;
 use ic_types::messages::{CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};
-use ic_types::{CanisterId, CountBytes, Cycles};
+use ic_types::{CanisterId, CountBytes};
+use ic_types_cycles::{
+    Cycles, CyclesUseCase::DroppedMessages, NominalCycles, NominalCyclesTesting,
+};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -1257,9 +1259,11 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
             // Cycles attached to the request / reject response are lost.
-            expected_state.observe_lost_cycles_due_to_dropped_messages(
-                message_in_stream(state.get_stream(&REMOTE_SUBNET), 21).cycles(),
-            );
+            expected_state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::new(
+                message_in_stream(state.get_stream(&REMOTE_SUBNET), 21)
+                    .cycles()
+                    .get(),
+            ));
 
             // Act and compare to expected.
             let mut available_guaranteed_response_memory =
@@ -1554,7 +1558,8 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
 
             // Cycles attached to the dropped reply are lost.
             let cycles_lost = message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1).cycles();
-            expected_state.observe_lost_cycles_due_to_dropped_messages(cycles_lost);
+            expected_state
+                .observe_lost_cycles_due_to_dropped_messages(NominalCycles::new(cycles_lost.get()));
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -2065,7 +2070,10 @@ fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_ra
             expected_state
                 .metadata
                 .subnet_metrics
-                .observe_consumed_cycles_with_use_case(DroppedMessages, refund.into());
+                .observe_consumed_cycles_with_use_case(
+                    DroppedMessages,
+                    NominalCycles::new(refund.get()),
+                );
         },
     );
 }
@@ -2150,7 +2158,8 @@ fn induct_stream_slices_partial_success() {
             let cycles_lost = message_in_slice(slices.get(&REMOTE_SUBNET), 48).cycles()
                 + message_in_slice(slices.get(&REMOTE_SUBNET), 49).cycles()
                 + message_in_slice(slices.get(&REMOTE_SUBNET), 51).cycles();
-            expected_state.observe_lost_cycles_due_to_dropped_messages(cycles_lost);
+            expected_state
+                .observe_lost_cycles_due_to_dropped_messages(NominalCycles::new(cycles_lost.get()));
 
             let initial_available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -2735,7 +2744,9 @@ fn induct_stream_slices_with_refunds() {
 
             // Cycles in refund @44 are lost
             let refund44 = refund_in_slice(slices.get(&REMOTE_SUBNET), 44);
-            expected_state.observe_lost_cycles_due_to_dropped_messages(refund44.amount());
+            expected_state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::new(
+                refund44.amount().get(),
+            ));
 
             // Act.
             let mut available_guaranteed_response_memory =

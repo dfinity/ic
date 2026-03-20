@@ -26,8 +26,10 @@ cargo_build_script(
     },
     data = [
         "proto/https_outcalls_service/v1/proto.proto",
-        "@protobuf//:protoc",
         "@rules_rust//rust/toolchain:current_rustfmt_files",
+    ],
+    tools = [
+        "@protobuf//:protoc",
     ],
     deps = [
         # Keep sorted.

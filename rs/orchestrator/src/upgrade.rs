@@ -19,7 +19,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
-use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
@@ -111,115 +110,14 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
     }
 }
 
-// TODO(NODE-1754): Remove the following trait after registry changes concerning recalled replica
-// versions are merged. This temporary implementation is to test the code behaviour even though the
-// registry does not yet support recalled replica versions.
-// Remove this trait when the changes are merged.
-#[cfg_attr(test, mockall::automock)]
-pub trait RegistryHelperWithRecalledReplicaVersions: Send + Sync {
-    fn get_recalled_replica_versions(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<ReplicaVersion>>;
-
-    fn get_latest_version(&self) -> RegistryVersion;
-
-    fn get_registry_client(&self) -> &dyn RegistryClient;
-
-    fn get_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId>;
-
-    fn get_root_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId>;
-
-    fn get_replica_version(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion>;
-
-    fn get_replica_version_record(
-        &self,
-        replica_version_id: ReplicaVersion,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersionRecord>;
-
-    fn get_api_boundary_node_version(
-        &self,
-        node_id: NodeId,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion>;
-
-    fn get_unassigned_replica_version(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion>;
-}
-
-impl RegistryHelperWithRecalledReplicaVersions for RegistryHelper {
-    fn get_recalled_replica_versions(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<ReplicaVersion>> {
-        self.get_recalled_replica_versions(subnet_id, registry_version)
-    }
-
-    fn get_latest_version(&self) -> RegistryVersion {
-        self.get_latest_version()
-    }
-
-    fn get_registry_client(&self) -> &dyn RegistryClient {
-        self.get_registry_client()
-    }
-
-    fn get_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
-        self.get_subnet_id(version)
-    }
-
-    fn get_root_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
-        self.get_root_subnet_id(version)
-    }
-
-    fn get_replica_version(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion> {
-        self.get_replica_version(subnet_id, registry_version)
-    }
-
-    fn get_replica_version_record(
-        &self,
-        replica_version_id: ReplicaVersion,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersionRecord> {
-        self.get_replica_version_record(replica_version_id, version)
-    }
-
-    fn get_api_boundary_node_version(
-        &self,
-        node_id: NodeId,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion> {
-        self.get_api_boundary_node_version(node_id, version)
-    }
-
-    fn get_unassigned_replica_version(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion> {
-        self.get_unassigned_replica_version(version)
-    }
-}
-
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
 /// extracts this release package and exec's the orchestrator binary contained
 /// within.
 pub(crate) struct Upgrade {
-    pub registry: Arc<dyn RegistryHelperWithRecalledReplicaVersions>,
+    pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
+    replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
@@ -239,9 +137,9 @@ pub(crate) struct Upgrade {
 impl Upgrade {
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn new(
-        registry: Arc<dyn RegistryHelperWithRecalledReplicaVersions>,
+        registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
+        replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
@@ -1241,6 +1139,7 @@ mod tests {
     use crate::catch_up_package_provider::tests::mock_tls_config;
 
     use super::*;
+    use crate::process_manager::tests::FakeProcessManager;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
@@ -1302,7 +1201,6 @@ mod tests {
     use slog::Level;
     use std::collections::BTreeSet;
     use std::io::Write;
-    use std::os::fd::AsRawFd;
     use std::os::unix::fs::PermissionsExt;
     use std::{collections::BTreeMap, path::Path};
     use tempfile::{TempDir, tempdir};
@@ -1310,82 +1208,6 @@ mod tests {
     impl Upgrade {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
             *self.subnet_assignment.read().unwrap()
-        }
-    }
-
-    /// TODO(NODE-1754): Remove this mock implementation after registry changes concerning recalled
-    /// replica verisons are merged. This temporary implementation is to test the code behaviour
-    /// even though the registry does not yet support recalled replica versions.
-    /// Once the changes are merged, we can use actual registry mutations instead of this mock.
-    struct MockRegistryHelper {
-        pub inner: Arc<RegistryHelper>,
-        mock: MockRegistryHelperWithRecalledReplicaVersions,
-    }
-    impl MockRegistryHelper {
-        fn new(
-            inner: Arc<RegistryHelper>,
-            mock: MockRegistryHelperWithRecalledReplicaVersions,
-        ) -> Self {
-            Self { inner, mock }
-        }
-    }
-    impl RegistryHelperWithRecalledReplicaVersions for MockRegistryHelper {
-        fn get_recalled_replica_versions(
-            &self,
-            subnet_id: SubnetId,
-            registry_version: RegistryVersion,
-        ) -> OrchestratorResult<Vec<ReplicaVersion>> {
-            // Delegate to the mock implementation.
-            self.mock
-                .get_recalled_replica_versions(subnet_id, registry_version)
-        }
-
-        fn get_latest_version(&self) -> RegistryVersion {
-            self.inner.get_latest_version()
-        }
-
-        fn get_registry_client(&self) -> &dyn RegistryClient {
-            self.inner.get_registry_client()
-        }
-
-        fn get_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
-            self.inner.get_subnet_id(version)
-        }
-
-        fn get_root_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
-            self.inner.get_root_subnet_id(version)
-        }
-
-        fn get_replica_version(
-            &self,
-            subnet_id: SubnetId,
-            registry_version: RegistryVersion,
-        ) -> OrchestratorResult<ReplicaVersion> {
-            self.inner.get_replica_version(subnet_id, registry_version)
-        }
-
-        fn get_replica_version_record(
-            &self,
-            replica_version_id: ReplicaVersion,
-            version: RegistryVersion,
-        ) -> OrchestratorResult<ReplicaVersionRecord> {
-            self.inner
-                .get_replica_version_record(replica_version_id, version)
-        }
-
-        fn get_api_boundary_node_version(
-            &self,
-            node_id: NodeId,
-            version: RegistryVersion,
-        ) -> OrchestratorResult<ReplicaVersion> {
-            self.inner.get_api_boundary_node_version(node_id, version)
-        }
-
-        fn get_unassigned_replica_version(
-            &self,
-            version: RegistryVersion,
-        ) -> OrchestratorResult<ReplicaVersion> {
-            self.inner.get_unassigned_replica_version(version)
         }
     }
 
@@ -1546,7 +1368,7 @@ mod tests {
         let membership_vec = membership.into_iter().collect::<Vec<_>>();
 
         let rng = &mut reproducible_rng();
-        let mut target_id_bytes = [0u8; 32];
+        let mut target_id_bytes = [0_u8; 32];
         rng.fill_bytes(&mut target_id_bytes);
         let target_id = NiDkgTargetId::new(target_id_bytes);
 
@@ -1585,10 +1407,12 @@ mod tests {
         subnet_id: SubnetId,
         membership: impl AsRef<[NodeId]>,
         replica_version: &ReplicaVersion,
+        recalled_replica_versions: impl AsRef<[String]>,
     ) {
         let subnet_record = SubnetRecordBuilder::new()
             .with_membership(membership.as_ref())
             .with_replica_version(replica_version.as_ref())
+            .with_recalled_replica_version_ids(recalled_replica_versions.as_ref())
             .build();
 
         data_provider
@@ -1625,31 +1449,13 @@ mod tests {
         file.write_all(bash_script.as_bytes()).unwrap();
         file.set_permissions(std::fs::Permissions::from_mode(0o755))
             .unwrap();
-
-        // The ugly hack below is to work around rstest running the tests in multiple threads but
-        // in the same process. Each of them creates their own binary file and later executes it.
-        // This means a parallel test might still have the file open for writing while the current
-        // one is trying to execute it. This yields ETXTBSY errors on Linux. To avoid this, we use
-        // the below hack, taken from https://github.com/rust-lang/rust/issues/114554, see
-        // "Implementation of the `flock` algorithm"
-        std::thread::sleep(std::time::Duration::from_micros(2));
-
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-        drop(file);
-
-        let file = std::fs::File::open(binary_path).unwrap();
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_SH) };
-        drop(file);
     }
 
     async fn create_upgrade_for_test(
         dir: &Path,
         logger: ReplicaLogger,
         test_scenario: UpgradeTestScenario,
-        _data_provider: Arc<dyn RegistryDataProvider>,
-        // TODO(NODE-1754): Remove this argument and use `_data_provider` and build the registry
-        // helper inside this function
-        registry: Arc<MockRegistryHelper>,
+        data_provider: Arc<dyn RegistryDataProvider>,
     ) -> Upgrade {
         let UpgradeTestScenario {
             node_id,
@@ -1659,14 +1465,21 @@ mod tests {
             ..
         } = test_scenario.clone();
 
+        let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
+        registry_client.update_to_latest_version();
+        let registry = Arc::new(RegistryHelper::new(
+            node_id,
+            registry_client,
+            logger.clone(),
+        ));
+
         let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
 
         let ic_binary_dir = dir.join("ic_binary");
         std::fs::create_dir_all(&ic_binary_dir).unwrap();
-        create_binary(&ic_binary_dir.join("replica"), "#!/bin/sh\nsleep 60\n");
         create_binary(&ic_binary_dir.join("manageboot.sh"), "#!/bin/sh\nexit 0\n");
 
-        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
+        let replica_process = Arc::new(Mutex::new(FakeProcessManager::new()));
         // Start the replica process if the test scenario indicates so
         if test_scenario.was_replica_process_started_previously() {
             replica_process
@@ -1693,7 +1506,7 @@ mod tests {
             std::fs::write(&cup_file, cup_proto.encode_to_vec()).unwrap();
         }
         let cup_provider = CatchUpPackageProvider::new(
-            Arc::clone(&registry.inner),
+            registry.clone(),
             LocalCUPReader::new(cup_dir, logger.clone()),
             Arc::new(CryptoReturningOk::default()),
             Arc::new(mock_tls_config()),
@@ -1907,13 +1720,8 @@ mod tests {
         }
 
         // Sets up the registry according to the test scenario
-        fn setup_registry(
-            &self,
-            logger: ReplicaLogger,
-        ) -> (Arc<MockRegistryHelper>, Arc<ProtoRegistryDataProvider>) {
+        fn setup_registry(&self) -> Arc<ProtoRegistryDataProvider> {
             let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-            let mut mock_helper = MockRegistryHelperWithRecalledReplicaVersions::new();
 
             // NNS subnet
             let nns_subnet_id = SUBNET_42;
@@ -1959,18 +1767,17 @@ mod tests {
                     RegistryVersion::from(upgrade.registry_version.get() - 1),
                     &upgrade.replica_version,
                 );
-
-                // TODO(NODE-1754): Replace this mock expectation with actual registry mutations
-                // once the registry changes concerning recalled replica versions are merged.
-                let recalled_replica_versions = if upgrade.is_recalled {
-                    vec![upgrade.replica_version.clone()]
-                } else {
-                    vec![]
-                };
-                mock_helper
-                    .expect_get_recalled_replica_versions()
-                    .returning(move |_, _| Ok(recalled_replica_versions.clone()));
             }
+            // If the upgrade is to a recalled replica version, we should add that version to the
+            // list of recalled versions in the registry at the latest registry version. To make it
+            // easier, we will add it to all following subnet record mutations.
+            let recalled_replica_versions = if let Some(upgrade) = &self.upgrade_to
+                && upgrade.is_recalled
+            {
+                vec![upgrade.replica_version.to_string()]
+            } else {
+                vec![]
+            };
 
             if let Some(local_cup) = &self.has_local_cup {
                 // The node is part of the subnet at the beginning, including the current replica
@@ -1982,6 +1789,7 @@ mod tests {
                     local_cup.subnet_id,
                     vec![self.node_id, other_node_id],
                     &self.current_replica_version,
+                    &recalled_replica_versions,
                 );
 
                 match (&self.is_leaving, &self.upgrade_to) {
@@ -1996,6 +1804,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some(leaving_registry_version), None) => {
@@ -2007,6 +1816,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &self.current_replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some(leaving_registry_version), Some(upgrade))
@@ -2019,6 +1829,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &self.current_replica_version,
+                            &recalled_replica_versions,
                         );
                         // And later upgrade the subnet
                         add_subnet_record_to_provider(
@@ -2027,6 +1838,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some(leaving_registry_version), Some(upgrade))
@@ -2040,6 +1852,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some(leaving_registry_version), Some(upgrade)) => {
@@ -2050,6 +1863,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                         // And later remove the node from the membership
                         add_subnet_record_to_provider(
@@ -2058,6 +1872,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                 }
@@ -2090,6 +1905,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &self.current_replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some((registry_cup, registry_cup_registry_version)), Some(upgrade))
@@ -2102,6 +1918,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &self.current_replica_version,
+                            &recalled_replica_versions,
                         );
                         // And later upgrade the subnet
                         add_subnet_record_to_provider(
@@ -2110,6 +1927,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some((registry_cup, registry_cup_registry_version)), Some(upgrade))
@@ -2121,6 +1939,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some((registry_cup, registry_cup_registry_version)), Some(upgrade)) => {
@@ -2137,6 +1956,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                 }
@@ -2169,13 +1989,7 @@ mod tests {
                 &ReplicaVersion::try_from("dummy_replica_version").unwrap(),
             );
 
-            let registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
-            let real_helper =
-                RegistryHelper::new(self.node_id, registry_client.clone(), logger.clone());
-            registry_client.update_to_latest_version();
-            let registry_helper =
-                Arc::new(MockRegistryHelper::new(Arc::new(real_helper), mock_helper));
-            (registry_helper, data_provider)
+            data_provider
         }
 
         // Returns the expected subnet assignment after the upgrade loop.
@@ -2679,18 +2493,16 @@ mod tests {
     }
 
     async fn test_upgrade(test_scenario: UpgradeTestScenario) {
-        let logger = InMemoryReplicaLogger::new();
-        let replica_logger = ReplicaLogger::from(&logger);
-        let (registry_helper, data_provider) = test_scenario.setup_registry(replica_logger.clone());
+        let data_provider = test_scenario.setup_registry();
 
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
         let mut upgrade_loop = create_upgrade_for_test(
             tmp_path,
-            replica_logger,
+            ReplicaLogger::from(&logger),
             test_scenario.clone(),
             data_provider,
-            registry_helper,
         )
         .await;
 
@@ -2963,18 +2775,16 @@ mod tests {
             }),
         };
 
-        let logger = InMemoryReplicaLogger::new();
-        let replica_logger = ReplicaLogger::from(&logger);
-        let (registry_helper, data_provider) = test_scenario.setup_registry(replica_logger.clone());
+        let data_provider = test_scenario.setup_registry();
 
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
         let mut upgrade_loop = create_upgrade_for_test(
             tmp_path,
-            replica_logger,
+            ReplicaLogger::from(&logger),
             test_scenario.clone(),
             data_provider,
-            registry_helper,
         )
         .await;
 
@@ -3006,18 +2816,16 @@ mod tests {
             }),
         };
 
-        let logger = InMemoryReplicaLogger::new();
-        let replica_logger = ReplicaLogger::from(&logger);
-        let (registry_helper, data_provider) = test_scenario.setup_registry(replica_logger.clone());
+        let data_provider = test_scenario.setup_registry();
 
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
         let mut upgrade_loop = create_upgrade_for_test(
             tmp_path,
-            replica_logger,
+            ReplicaLogger::from(&logger),
             test_scenario.clone(),
             data_provider,
-            registry_helper,
         )
         .await;
 

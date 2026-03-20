@@ -12,6 +12,7 @@ members = [
     "packages/ic-hpke",
     "packages/ic-http-types",
     "packages/ic-ledger-hash-of",
+    "packages/ic-management-canister-types",
     "packages/ic-metrics-assert",
     "packages/ic-pub-key",
     "packages/ic-secp256k1",
@@ -65,8 +66,9 @@ members = [
     "rs/consensus/idkg",
     "rs/consensus/mocks",
     "rs/consensus/utils",
-    "rs/consensus/vetkd",
+    "rs/consensus/chain_key",
     "rs/criterion_time",
+    "rs/cross-chain/blob_store",
     "rs/cross-chain/proposal-cli",
     "rs/crypto",
     "rs/crypto/for_verification_only",
@@ -175,9 +177,10 @@ members = [
     "rs/ic_os/guest_upgrade/shared",
     "rs/ic_os/guest_upgrade/tests",
     "rs/ic_os/linux_kernel_command_line",
-    "rs/ic_os/metrics/fstrim_tool",
-    "rs/ic_os/metrics/metrics_tool",
+    "rs/ic_os/os_tools/fstrim_tool",
+    "rs/ic_os/metrics/custom_metrics",
     "rs/ic_os/metrics/nft_exporter",
+    "rs/ic_os/metrics/utils",
     "rs/ic_os/networking/deterministic_ips",
     "rs/ic_os/networking/network",
     "rs/ic_os/networking/nss_icos",
@@ -291,6 +294,7 @@ members = [
     "rs/nns/constants",
     "rs/nns/governance",
     "rs/nns/governance/api",
+    "rs/nns/governance/conversions",
     "rs/nns/governance/init",
     "rs/nns/governance/protobuf_generator",
     "rs/nns/gtc",
@@ -358,6 +362,7 @@ members = [
     "rs/registry/proto_data_provider",
     "rs/registry/provisional_whitelist",
     "rs/registry/regedit",
+    "rs/registry/resource_limits",
     "rs/registry/routing_table",
     "rs/registry/subnet_features",
     "rs/registry/subnet_type",
@@ -509,6 +514,7 @@ members = [
     "rs/tree_deserializer",
     "rs/types/base_types",
     "rs/types/base_types/protobuf_generator",
+    "rs/types/cycles",
     "rs/types/exhaustive_derive",
     "rs/types/management_canister_types",
     "rs/types/types",
@@ -655,7 +661,7 @@ flate2 = "1.0.31"
 fs_extra = "1.2.0"
 futures = "0.3.31"
 futures-util = "0.3.31"
-get_if_addrs = "0.5.3"
+getifs = "0.4.0"
 getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
 gpt = "4.1"
@@ -680,7 +686,7 @@ ic0 = "1.0.0"
 ic-agent = { version = "0.45.0", features = ["pem", "ring"] }
 ic-bn-lib = { version = "0.1.14", features = ["acme-alpn"] }
 ic-bn-lib-common = "0.1.4"
-ic-btc-interface = "0.3.0"
+ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.0"
 ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
@@ -688,7 +694,7 @@ ic-cdk = "0.19.0"
 ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
-ic-doge-interface = "0.1.0"
+ic-doge-interface = "0.3.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4", default-features = false }
 ic-http-certification = "3.0.3"
 ic-identity-hsm = "0.45.0"
@@ -906,11 +912,11 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.243.0", features = ["wasmparser"] }
-wasmparser = "0.243.0"
-wasmprinter = "0.243.0"
-wast = "243.0.0"
-wat = "1.243.0"
+wasm-encoder = { version = "0.244.0", features = ["wasmparser"] }
+wasmparser = "0.244.0"
+wasmprinter = "0.244.0"
+wast = "244.0.0"
+wat = "~1.244.0"
 which = "6.0.3"
 wirm = { version = "2.1.0", features = ["parallel"] }
 wsl = "0.1.0"
