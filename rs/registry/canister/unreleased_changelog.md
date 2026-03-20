@@ -9,7 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 * Added an optional field `resource_limits` to `CreateSubnetPayload` which, when present,
-  sets limits on resource usage (e.g., disk usage) of the created subnet.
+  sets limits on resource usage (e.g., memory usage) of the created subnet.
 
 * Rate limit the number of subnet admin updates that can happen for a subnet.
 

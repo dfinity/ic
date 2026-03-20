@@ -83,6 +83,7 @@ type CompleteCanisterMigrationPayload = record {
 
 type ResourceLimits = record {
   maximum_state_size : opt nat64;
+  maximum_unflushed_state_size : opt nat64;
 };
 
 type CreateSubnetPayload = record {

@@ -100,7 +100,7 @@ pub struct SubnetRecord {
     /// they check the latest registry version for recalled_replica_version_ids.
     #[prost(string, repeated, tag = "33")]
     pub recalled_replica_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    /// Limits on resource consumption (e.g., disk usage).
+    /// Limits on resource consumption (e.g., memory usage).
     #[prost(message, optional, tag = "34")]
     pub resource_limits: ::core::option::Option<ResourceLimits>,
 }
@@ -417,7 +417,7 @@ pub struct ChainKeyConfig {
     #[prost(uint32, optional, tag = "4")]
     pub max_parallel_pre_signature_transcripts_in_creation: ::core::option::Option<u32>,
 }
-/// Limits on resource consumption (e.g., disk usage).
+/// Limits on resource consumption (e.g., memory usage).
 #[derive(
     serde::Serialize,
     serde::Deserialize,
@@ -431,6 +431,8 @@ pub struct ChainKeyConfig {
 pub struct ResourceLimits {
     #[prost(uint64, optional, tag = "1")]
     pub maximum_state_size: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "2")]
+    pub maximum_unflushed_state_size: ::core::option::Option<u64>,
 }
 #[derive(
     serde::Serialize,
