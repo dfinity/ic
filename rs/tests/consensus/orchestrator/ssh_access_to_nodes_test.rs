@@ -96,38 +96,44 @@ fn fetch_nodes_ips(topo_snapshot: TopologySnapshot) -> (IpAddr, IpAddr, IpAddr) 
     (nns_node_ip, app_node_ip, unassigned_node_ip)
 }
 
-fn ssh_users_cannot_authenticate_with_easy_password(env: TestEnv) {
-    let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
+fn generate_key_and_auth_mean() -> (AuthMean, String) {
+    let (private_key, public_key) = generate_key_strings();
+    (AuthMean::PrivateKey(private_key), public_key)
+}
 
+fn generate_keys_and_auth_means(n: usize) -> (Vec<AuthMean>, Vec<String>) {
+    (0..n).map(|_| generate_key_and_auth_mean()).unzip()
+}
+
+fn assert_no_user_can_authenticate_anywhere(env: &TestEnv, auth_mean_for: impl Fn(&str) -> AuthMean) {
+    let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
     for user in SSH_USERS {
-        let mean = AuthMean::Password(user.to_string());
-        assert_authentication_fails(&nns_node_ip, user, &mean);
-        assert_authentication_fails(&app_node_ip, user, &mean);
-        assert_authentication_fails(&unassigned_node_ip, user, &mean);
+        let mean = auth_mean_for(user);
+        for ip in [&nns_node_ip, &app_node_ip, &unassigned_node_ip] {
+            assert_authentication_fails(ip, user, &mean);
+        }
     }
+}
+
+fn assert_all_authenticate(ip: &IpAddr, username: &str, means: &[AuthMean]) {
+    for mean in means {
+        assert_authentication_works(ip, username, mean);
+    }
+}
+
+fn ssh_users_cannot_authenticate_with_easy_password(env: TestEnv) {
+    assert_no_user_can_authenticate_anywhere(&env, |user| AuthMean::Password(user.to_string()));
 }
 
 fn ssh_users_cannot_authenticate_without_a_key(env: TestEnv) {
-    let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
-
-    for user in SSH_USERS {
-        let mean = AuthMean::None;
-        assert_authentication_fails(&nns_node_ip, user, &mean);
-        assert_authentication_fails(&app_node_ip, user, &mean);
-        assert_authentication_fails(&unassigned_node_ip, user, &mean);
-    }
+    assert_no_user_can_authenticate_anywhere(&env, |_| AuthMean::None);
 }
 
 fn ssh_users_cannot_authenticate_with_random_key(env: TestEnv) {
-    let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
-
-    for user in SSH_USERS {
-        let (private_key, _public_key) = generate_key_strings();
-        let mean = AuthMean::PrivateKey(private_key);
-        assert_authentication_fails(&nns_node_ip, user, &mean);
-        assert_authentication_fails(&app_node_ip, user, &mean);
-        assert_authentication_fails(&unassigned_node_ip, user, &mean);
-    }
+    assert_no_user_can_authenticate_anywhere(&env, |_| {
+        let (private_key, _) = generate_key_strings();
+        AuthMean::PrivateKey(private_key)
+    });
 }
 
 fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
@@ -139,8 +145,8 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     let node_ip: IpAddr = app_node.get_ip_addr();
 
     info!(logger, "Updating the registry with new pairs of keys...");
-    let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let (backup_private_key, backup_public_key) = generate_key_strings();
+    let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
+    let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
     let payload = get_updatesubnetpayload_with_keys(
         app_subnet_id,
         Some(vec![readonly_public_key]),
@@ -148,8 +154,6 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
 
-    let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
-    let backup_mean = AuthMean::PrivateKey(backup_private_key);
     // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds. If so, it updates first the readonly, then the backup and then
     // the recovery keys. If recovery key can authenticate we know that the
@@ -184,7 +188,7 @@ fn keys_in_the_node_record_can_be_updated(env: TestEnv) {
     let node_ip: IpAddr = app_node.get_ip_addr();
 
     info!(logger, "Updating the registry with new pairs of keys...");
-    let (recovery_private_key, recovery_public_key) = generate_key_strings();
+    let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
     let payload = get_setsubnetoperationallevelpayload_with_keys(
         Some(app_subnet_id),
         None,
@@ -195,7 +199,6 @@ fn keys_in_the_node_record_can_be_updated(env: TestEnv) {
         payload,
     ));
 
-    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
     // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds.
     info!(
@@ -226,8 +229,8 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
 
     info!(logger, "Updating the registry with new pairs of keys...");
-    let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let (recovery_private_key, recovery_public_key) = generate_key_strings();
+    let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
+    let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
     let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
@@ -243,8 +246,6 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
         payload,
     ));
 
-    let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
-    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
     // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds. If so, it updates first the readonly, then the backup and then
     // the recovery keys. If recovery key can authenticate we know that the
@@ -289,55 +290,25 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
     let node_ip: IpAddr = app_node.get_ip_addr();
 
     info!(logger, "Updating the registry with new pairs of keys...");
-    let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
-    let (readonly_private_key2, readonly_public_key2) = generate_key_strings();
-    let (readonly_private_key3, readonly_public_key3) = generate_key_strings();
-    let (backup_private_key1, backup_public_key1) = generate_key_strings();
-    let (backup_private_key2, backup_public_key2) = generate_key_strings();
-    let (backup_private_key3, backup_public_key3) = generate_key_strings();
-    let (recovery_private_key1, recovery_public_key1) = generate_key_strings();
-    let (recovery_private_key2, recovery_public_key2) = generate_key_strings();
-    let (recovery_private_key3, recovery_public_key3) = generate_key_strings();
+    let (readonly_means, readonly_public_keys) = generate_keys_and_auth_means(3);
+    let (backup_means, backup_public_keys) = generate_keys_and_auth_means(3);
+    let (recovery_means, recovery_public_keys) = generate_keys_and_auth_means(3);
     let payload = get_updatesubnetpayload_with_keys(
         app_subnet_id,
-        Some(vec![
-            readonly_public_key1,
-            readonly_public_key2,
-            readonly_public_key3,
-        ]),
-        Some(vec![
-            backup_public_key1,
-            backup_public_key2,
-            backup_public_key3,
-        ]),
+        Some(readonly_public_keys),
+        Some(backup_public_keys),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
     let payload = get_setsubnetoperationallevelpayload_with_keys(
         Some(app_subnet_id),
         None,
-        Some(vec![(
-            app_node.node_id,
-            vec![
-                recovery_public_key1,
-                recovery_public_key2,
-                recovery_public_key3,
-            ],
-        )]),
+        Some(vec![(app_node.node_id, recovery_public_keys)]),
     );
     block_on(set_subnet_operational_level(
         nns_node.get_public_url(),
         payload,
     ));
 
-    let readonly_mean1 = AuthMean::PrivateKey(readonly_private_key1);
-    let readonly_mean2 = AuthMean::PrivateKey(readonly_private_key2);
-    let readonly_mean3 = AuthMean::PrivateKey(readonly_private_key3);
-    let backup_mean1 = AuthMean::PrivateKey(backup_private_key1);
-    let backup_mean2 = AuthMean::PrivateKey(backup_private_key2);
-    let backup_mean3 = AuthMean::PrivateKey(backup_private_key3);
-    let recovery_mean1 = AuthMean::PrivateKey(recovery_private_key1);
-    let recovery_mean2 = AuthMean::PrivateKey(recovery_private_key2);
-    let recovery_mean3 = AuthMean::PrivateKey(recovery_private_key3);
     // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds. If so, it updates first the readonly, then the backup and then
     // the recovery keys. If recovery key can authenticate we know that the
@@ -346,19 +317,14 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
         logger,
         "Waiting for recovery authentication to be granted..."
     );
-    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean1);
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_means[0]);
     info!(
         logger,
         "All other authentications should now also be granted."
     );
-    assert_authentication_works(&node_ip, "recovery", &recovery_mean2);
-    assert_authentication_works(&node_ip, "recovery", &recovery_mean3);
-    assert_authentication_works(&node_ip, "backup", &backup_mean1);
-    assert_authentication_works(&node_ip, "backup", &backup_mean2);
-    assert_authentication_works(&node_ip, "backup", &backup_mean3);
-    assert_authentication_works(&node_ip, "readonly", &readonly_mean1);
-    assert_authentication_works(&node_ip, "readonly", &readonly_mean2);
-    assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
+    assert_all_authenticate(&node_ip, "recovery", &recovery_means[1..]);
+    assert_all_authenticate(&node_ip, "backup", &backup_means);
+    assert_all_authenticate(&node_ip, "readonly", &readonly_means);
 }
 
 fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
@@ -368,17 +334,9 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     let node_ip: IpAddr = unassigned_node.get_ip_addr();
 
     info!(logger, "Updating the registry with new pairs of keys...");
-    let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
-    let (readonly_private_key2, readonly_public_key2) = generate_key_strings();
-    let (readonly_private_key3, readonly_public_key3) = generate_key_strings();
-    let (recovery_private_key1, recovery_public_key1) = generate_key_strings();
-    let (recovery_private_key2, recovery_public_key2) = generate_key_strings();
-    let (recovery_private_key3, recovery_public_key3) = generate_key_strings();
-    let payload = get_updatesshreadonlyaccesskeyspayload(vec![
-        readonly_public_key1,
-        readonly_public_key2,
-        readonly_public_key3,
-    ]);
+    let (readonly_means, readonly_public_keys) = generate_keys_and_auth_means(3);
+    let (recovery_means, recovery_public_keys) = generate_keys_and_auth_means(3);
+    let payload = get_updatesshreadonlyaccesskeyspayload(readonly_public_keys);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
@@ -386,26 +344,13 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     let payload = get_setsubnetoperationallevelpayload_with_keys(
         None,
         None,
-        Some(vec![(
-            unassigned_node.node_id,
-            vec![
-                recovery_public_key1,
-                recovery_public_key2,
-                recovery_public_key3,
-            ],
-        )]),
+        Some(vec![(unassigned_node.node_id, recovery_public_keys)]),
     );
     block_on(set_subnet_operational_level(
         nns_node.get_public_url(),
         payload,
     ));
 
-    let readonly_mean1 = AuthMean::PrivateKey(readonly_private_key1);
-    let readonly_mean2 = AuthMean::PrivateKey(readonly_private_key2);
-    let readonly_mean3 = AuthMean::PrivateKey(readonly_private_key3);
-    let recovery_mean1 = AuthMean::PrivateKey(recovery_private_key1);
-    let recovery_mean2 = AuthMean::PrivateKey(recovery_private_key2);
-    let recovery_mean3 = AuthMean::PrivateKey(recovery_private_key3);
     // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds. If so, it updates first the readonly, then the backup and then
     // the recovery keys. If recovery key can authenticate we know that the
@@ -414,16 +359,13 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
         logger,
         "Waiting for recovery authentication to be granted..."
     );
-    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean1);
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_means[0]);
     info!(
         logger,
         "All other authentications should now also be granted."
     );
-    assert_authentication_works(&node_ip, "recovery", &recovery_mean2);
-    assert_authentication_works(&node_ip, "recovery", &recovery_mean3);
-    assert_authentication_works(&node_ip, "readonly", &readonly_mean1);
-    assert_authentication_works(&node_ip, "readonly", &readonly_mean2);
-    assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
+    assert_all_authenticate(&node_ip, "recovery", &recovery_means[1..]);
+    assert_all_authenticate(&node_ip, "readonly", &readonly_means);
 }
 
 fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
@@ -434,24 +376,22 @@ fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
     let node_ip: IpAddr = app_node.get_ip_addr();
 
     // Add a backup key.
-    let (backup_private_key, backup_public_key) = generate_key_strings();
+    let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
     let payload1 =
         get_updatesubnetpayload_with_keys(app_subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload1));
 
     // Check that the backup key can authenticate.
-    let backup_mean = AuthMean::PrivateKey(backup_private_key);
     wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
 
     // Now add a readonly key.
-    let (readonly_private_key, readonly_public_key) = generate_key_strings();
+    let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
     let payload2 =
         get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![readonly_public_key]), None);
     block_on(update_subnet_record(nns_node.get_public_url(), payload2));
 
     // Check that the readonly key can authenticate now and the backup key can still
     // authenticate too.
-    let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     wait_until_authentication_is_granted(&logger, &node_ip, "readonly", &readonly_mean);
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 
@@ -473,8 +413,8 @@ fn updating_recovery_does_not_remove_recovery_and_backup_keys(env: TestEnv) {
     let node_ip: IpAddr = app_node.get_ip_addr();
 
     // Add a readonly and backup keys.
-    let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let (backup_private_key, backup_public_key) = generate_key_strings();
+    let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
+    let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
     let payload1 = get_updatesubnetpayload_with_keys(
         app_subnet_id,
         Some(vec![readonly_public_key]),
@@ -483,13 +423,11 @@ fn updating_recovery_does_not_remove_recovery_and_backup_keys(env: TestEnv) {
     block_on(update_subnet_record(nns_node.get_public_url(), payload1));
 
     // Check that the keys can authenticate.
-    let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
-    let backup_mean = AuthMean::PrivateKey(backup_private_key);
     wait_until_authentication_is_granted(&logger, &node_ip, "backup", &backup_mean);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
     // Now add a recovery key.
-    let (recovery_private_key, recovery_public_key) = generate_key_strings();
+    let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
     let payload2 = get_setsubnetoperationallevelpayload_with_keys(
         Some(app_subnet_id),
         None,
@@ -502,7 +440,6 @@ fn updating_recovery_does_not_remove_recovery_and_backup_keys(env: TestEnv) {
 
     // Check that the recovery key can authenticate now and the previous keys can still
     // authenticate too.
-    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
     wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean);
     assert_authentication_works(&node_ip, "backup", &backup_mean);
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
@@ -650,9 +587,9 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     let unassigned_node_ip: IpAddr = unassigned_node.get_ip_addr();
 
     info!(logger, "Updating the registry with new pairs of keys...");
-    let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let (backup_private_key, backup_public_key) = generate_key_strings();
-    let (recovery_private_key, recovery_public_key) = generate_key_strings();
+    let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
+    let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
+    let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
 
     info!(logger, "Updating app subnet record...");
     let payload = get_updatesubnetpayload_with_keys(
@@ -689,9 +626,6 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
         payload,
     ));
 
-    let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
-    let backup_mean = AuthMean::PrivateKey(backup_private_key);
-    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
     // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds. If so, it updates first the readonly, then the backup and then
     // the recovery keys. If recovery key can authenticate we know that the
@@ -770,9 +704,9 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     let node_ip: IpAddr = app_node.get_ip_addr();
 
     info!(logger, "Updating the registry with new pairs of keys...");
-    let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let (backup_private_key, backup_public_key) = generate_key_strings();
-    let (recovery_private_key, recovery_public_key) = generate_key_strings();
+    let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
+    let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
+    let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
     let payload = get_updatesubnetpayload_with_keys(
         app_subnet_id,
         Some(vec![readonly_public_key]),
@@ -790,9 +724,6 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     ));
     let topology = block_on(topology.block_for_newer_registry_version()).unwrap();
 
-    let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
-    let backup_mean = AuthMean::PrivateKey(backup_private_key);
-    let recovery_mean = AuthMean::PrivateKey(recovery_private_key);
     // Orchestrator updates checks if there is a new version of the registry every
     // 10 seconds. If so, it updates first the readonly, then the backup and then
     // the recovery keys. If recovery key can authenticate we know that the
