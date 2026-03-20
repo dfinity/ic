@@ -310,7 +310,8 @@ async fn upgrade_to(
                     .until("Orchestrator shut down gracefully")
                     .unwrap_or_else(|_| {
                         panic!(
-                            "{node_id} did not log that the orchestrator has shut down gracefully"
+                            "{} did not log that the orchestrator has shut down gracefully",
+                            node.node_id
                         )
                     }),
             )
