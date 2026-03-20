@@ -282,10 +282,8 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
 
     // Subnet read_state caching
     let subnet_read_state_cache_state =
-        if cli.subnet_read_state_cache.subnet_read_state_cache_disable {
-            None
-        } else {
-            Some(Arc::new(SubnetReadStateCacheState::new(
+        (!cli.subnet_read_state_cache.subnet_read_state_cache_disable).then(|| {
+            Arc::new(SubnetReadStateCacheState::new(
                 cli.subnet_read_state_cache.subnet_read_state_cache_ttl,
                 cli.subnet_read_state_cache.subnet_read_state_cache_size,
                 cli.subnet_read_state_cache
@@ -293,8 +291,8 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
                 cli.subnet_read_state_cache
                     .subnet_read_state_cache_body_timeout,
                 &metrics_registry,
-            )))
-        };
+            ))
+        });
 
     // Bouncer
     let bouncer = if cli.bouncer.bouncer_enable {
