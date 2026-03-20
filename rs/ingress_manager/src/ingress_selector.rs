@@ -1618,6 +1618,7 @@ pub(crate) mod tests {
                                     )
                                     .cost(),
                             )
+                            .with_log_memory_limit(0) // Don't pay for logs memory allocation.
                             .build(),
                     )
                     .with_canister(
@@ -1625,6 +1626,7 @@ pub(crate) mod tests {
                             .with_canister_id(canister_test_id(1))
                             // No cycles
                             .with_cycles(0_u128)
+                            .with_log_memory_limit(0) // Don't pay for logs memory allocation.
                             .build(),
                     )
                     .build(),
