@@ -82,7 +82,12 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
       and `<date>` with the current date in `YYYY-MM-DD` format,
       and commit your fix to that branch.
 
-   2. Submit a draft PR using `gh` with the fix.
+   2. Push the branch to `origin` (assuming it's `git@github.com:dfinity/ic.git`) using:
+      ```
+      git push --set-upstream origin HEAD
+      ```
+
+   3. Submit a draft PR using `gh` with the fix.
       Name it: `fix: deflake <label>`.
       Include the root cause analysis in the PR description
       and mention the PR was created following the steps in `.claude/skills/fix-flaky-tests/SKILL.md`.

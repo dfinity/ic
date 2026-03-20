@@ -32,7 +32,7 @@ use ic_sns_wasm::pb::v1::{
     SnsCanisterType, SnsWasm,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{NumTokens, TransferArg, TransferError},

@@ -19,7 +19,6 @@
 /BUILD.bazel                       @dfinity/idx
 /third_party/                      @dfinity/idx
 /MODULE.bazel                      @dfinity/idx
-/WORKSPACE.bazel                   @dfinity/idx
 /PULL_REQUEST_BAZEL_TARGETS        @dfinity/idx
 
 # [Rust Lang]
@@ -58,6 +57,7 @@ go.sum                    @dfinity/idx
 /packages/ic-heap-bytes-derive/                 @dfinity/team-dsm
 /packages/ic-hpke/                              @dfinity/consensus
 /packages/ic-http-types/                        @dfinity/defi
+/packages/ic-management-canister-types/         @dfinity/team-dsm
 /packages/ic-metrics-assert/                    @dfinity/defi
 /packages/ic-pub-key/                           @dfinity/consensus
 /packages/ic-secp256k1/                         @dfinity/consensus

@@ -20,11 +20,11 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
     methods::FuncRef,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
 use std::{

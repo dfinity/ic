@@ -188,13 +188,13 @@ pub fn write_compact_size(n: usize, buf: &mut impl Buffer) {
     if n < 253 {
         buf.write(&[n as u8])
     } else if n <= u16::MAX as usize {
-        buf.write(&[253u8]);
+        buf.write(&[253_u8]);
         buf.write(&u16::to_le_bytes(n as u16));
     } else if n <= u32::MAX as usize {
-        buf.write(&[254u8]);
+        buf.write(&[254_u8]);
         buf.write(&u32::to_le_bytes(n as u32))
     } else {
-        buf.write(&[255u8]);
+        buf.write(&[255_u8]);
         buf.write(&u64::to_le_bytes(n as u64))
     }
 }
