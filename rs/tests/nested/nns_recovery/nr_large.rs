@@ -24,8 +24,8 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    LARGE_DKG_INTERVAL, LARGE_F, LARGE_SUBNET_SIZE, NNS_RECOVERY_VM_RESOURCES, SetupConfig, TestConfig,
-    setup, test,
+    LARGE_DKG_INTERVAL, LARGE_F, LARGE_SUBNET_SIZE, NNS_RECOVERY_VM_RESOURCES, SetupConfig,
+    TestConfig, setup, test,
 };
 use ic_system_test_driver::{
     driver::group::SystemTestGroup,
