@@ -8,7 +8,8 @@ use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-    InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
+    InitialNiDkgTranscriptRecord, ResourceLimits as ResourceLimitsPb, SubnetListRecord,
+    SubnetRecord,
 };
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdPb, master_public_key_id::KeyId};
 use ic_registry_client_fake::FakeRegistryClient;
@@ -19,16 +20,17 @@ use ic_registry_keys::{
 };
 use ic_registry_local_store::{LocalStoreImpl, compact_delta_to_changelog};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use ic_types::{
     NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -275,6 +277,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         chain_key_config: None,
         canister_cycles_cost_schedule: CanisterCyclesCostSchedulePb::Normal as i32,
         subnet_admins: vec![],
+        resource_limits: Default::default(),
         recalled_replica_version_ids: vec![],
     }
 }
@@ -397,6 +400,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
         self.record.subnet_admins = subnet_admins.into_iter().map(PrincipalIdPb::from).collect();
+        self
+    }
+
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.record.resource_limits = Some(ResourceLimitsPb::from(resource_limits));
         self
     }
 

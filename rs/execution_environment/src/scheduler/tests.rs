@@ -15,9 +15,9 @@ use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::Cycles;
 use ic_types::messages::{CallbackId, Payload, RejectContext};
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use ic00::{CanisterHttpRequestArgs, HttpMethod};
 use proptest::prelude::*;
@@ -713,30 +713,44 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
 #[test]
 fn finalization_clears_scheduled_canister_log_delta_sizes() {
     let mut test = SchedulerTestBuilder::new().build();
+    let mut next_idx = 0;
     let canister_a = test.create_canister();
     let canister_b = test.create_canister();
 
     // Populate delta_log_sizes on canister_a's canister_log by appending two
     // non-empty delta logs.
-    fn append_delta_log(canister: &mut CanisterState, content: &str) -> usize {
-        let mut delta = ic_types::CanisterLog::default_delta();
-        delta.add_record(0, content.as_bytes().to_vec());
+    fn append_delta_log(next_idx: u64, canister: &mut CanisterState, content: &str) -> usize {
+        let mut delta = ic_types::CanisterLog::new_delta_with_next_index(next_idx, 4096);
+        delta.add_record(next_idx, content.as_bytes().to_vec());
         let size = delta.bytes_used();
-        canister
-            .system_state
-            .canister_log
-            .append_delta_log(&mut delta);
+        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister
+                .system_state
+                .log_memory_store
+                .append_delta_log(&mut delta);
+        } else {
+            canister
+                .system_state
+                .canister_log
+                .append_delta_log(&mut delta);
+        };
         size
     }
-    let size1 = append_delta_log(test.canister_state_mut(canister_a), "hello");
-    let size2 = append_delta_log(test.canister_state_mut(canister_a), "world!");
+    let size1 = append_delta_log(next_idx, test.canister_state_mut(canister_a), "hello");
+    next_idx += 1;
+    let size2 = append_delta_log(next_idx, test.canister_state_mut(canister_a), "world!");
+    next_idx += 1;
 
     // Also append a delta log to canister_b's canister_log.
-    let size3 = append_delta_log(test.canister_state_mut(canister_b), "oops");
+    let size3 = append_delta_log(next_idx, test.canister_state_mut(canister_b), "oops");
 
     // Both canisters have delta log sizes.
     fn has_delta_log_sizes(canister: &CanisterState) -> bool {
-        canister.system_state.canister_log.has_delta_log_sizes()
+        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister.system_state.log_memory_store.has_delta_log_sizes()
+        } else {
+            canister.system_state.canister_log.has_delta_log_sizes()
+        }
     }
     assert!(has_delta_log_sizes(test.canister_state(canister_a)));
     assert!(has_delta_log_sizes(test.canister_state(canister_b)));

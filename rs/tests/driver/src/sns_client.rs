@@ -46,7 +46,7 @@ use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Lifecycle};
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, SnsCanisterIds, SnsCanisterType, SnsWasm, UpdateSnsSubnetListRequest,
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::{str::FromStr, time::SystemTime};

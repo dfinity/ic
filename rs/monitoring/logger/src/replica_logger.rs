@@ -198,7 +198,7 @@ mod tests {
             ic_config::logger::Level::Critical,
         );
 
-        for i in 1u32..10u32 {
+        for i in 1_u32..10_u32 {
             assert!(
                 logger.is_n_seconds(
                     1,
@@ -210,10 +210,10 @@ mod tests {
                     }
                 ) == ((i == 1u32) || i == 6u32)
             );
-            if i == 4u32 {
+            if i == 4_u32 {
                 std::thread::sleep(Duration::from_millis(500));
             }
-            if i == 5u32 {
+            if i == 5_u32 {
                 std::thread::sleep(Duration::from_millis(5001));
             }
         }

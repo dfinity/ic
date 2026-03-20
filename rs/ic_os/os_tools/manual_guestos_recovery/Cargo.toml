@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 ratatui = { workspace = true }
+tracing = { workspace = true }
 scopeguard = { workspace = true }
 shell-escape = { workspace = true }
 tui-textarea = "0.7"

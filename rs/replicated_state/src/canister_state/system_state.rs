@@ -39,12 +39,12 @@ use ic_types::messages::{
     Response, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, Time, cycles_use_case::CyclesUseCase,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
+    NumInstructions, PrincipalId, Time,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
@@ -1900,9 +1900,7 @@ impl SystemState {
         let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
             &mut self.canister_metrics.consumed_cycles_by_use_cases;
 
-        let use_case_consumption = metric
-            .entry(use_case)
-            .or_insert_with(|| NominalCycles::from(0));
+        let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
         let nominal_amount = NominalCycles::from(amount.get());
 

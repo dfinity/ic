@@ -31,18 +31,18 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
-    SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, RawQueryStats},
+    CanisterId, ComputeAllocation, MemoryAllocation, NodeId, NumBytes, PrincipalId, SubnetId, Time,
+    batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
     methods::{Callback, WasmClosure},
-    nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
+};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -1070,7 +1070,7 @@ prop_compose! {
 
 prop_compose! {
     pub(crate) fn arb_nominal_cycles()(cycles in any::<u64>()) -> NominalCycles {
-        NominalCycles::from(cycles as u128)
+        NominalCycles::new(cycles as u128)
     }
 }
 
