@@ -34,7 +34,7 @@ use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
-    DroppedMessageMetrics, NetworkTopology, ReplicatedState, RoutingFilter, SubnetTopology,
+    DroppedMessageMetrics, FullTopology, NetworkTopology, ReplicatedState, SubnetTopology,
 };
 use ic_types::batch::{Batch, BatchContent, BatchSummary, CanisterCyclesCostSchedule};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
@@ -851,6 +851,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         ReadRegistryError,
     > {
         let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
+        let network_topology =
+            self.try_to_populate_network_topology(registry_version, own_subnet_id)?;
+
+        let provisional_whitelist = self
+            .registry
+            .get_provisional_whitelist(registry_version)
+            .map_err(|err| registry_error("provisional_whitelist", None, err))?
+            .unwrap_or_else(|| ProvisionalWhitelist::Set(BTreeSet::new()));
 
         let subnet_record = self
             .registry
@@ -858,18 +866,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("subnet record", Some(own_subnet_id), err))?
             .ok_or_else(|| not_found_error("subnet record", Some(own_subnet_id)))?;
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
-
-        let network_topology = self.try_to_populate_network_topology(
-            registry_version,
-            own_subnet_id,
-            own_subnet_type,
-        )?;
-
-        let provisional_whitelist = self
-            .registry
-            .get_provisional_whitelist(registry_version)
-            .map_err(|err| registry_error("provisional_whitelist", None, err))?
-            .unwrap_or_else(|| ProvisionalWhitelist::Set(BTreeSet::new()));
 
         let nodes = get_node_ids_from_subnet_record(&subnet_record)
             .map_err(|err| {
@@ -987,7 +983,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
     ) -> Result<NetworkTopology, ReadRegistryError> {
         use ReadRegistryError::Persistent;
 
@@ -999,15 +994,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("subnet IDs", None, err))?;
         let subnet_ids = subnet_ids_record.unwrap_or_default();
 
-        // Populate subnet topologies.
-        let mut subnets = BTreeMap::new();
+        // Populate subnet topologies for all subnets.
+        let mut all_subnets = BTreeMap::new();
 
         for subnet_id in &subnet_ids {
-            // CloudEngine subnets only need to know about themselves.
-            if own_subnet_type == SubnetType::CloudEngine && *subnet_id != own_subnet_id {
-                continue;
-            }
-
             let public_key = self
                 .registry
                 .get_initial_dkg_transcripts(*subnet_id, registry_version)
@@ -1126,7 +1116,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 );
             }
 
-            subnets.insert(
+            all_subnets.insert(
                 *subnet_id,
                 SubnetTopology {
                     public_key,
@@ -1140,24 +1130,52 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             );
         }
 
-        let routing_table = {
-            let full_table = self
-                .registry
-                .get_routing_table(registry_version)
-                .map_err(|err| registry_error("routing table", None, err))?
+        let full_routing_table = self
+            .registry
+            .get_routing_table(registry_version)
+            .map_err(|err| registry_error("routing table", None, err))?
+            .unwrap_or_default();
+
+        // Derive filtered subnets and routing table.
+        let own_subnet_type = all_subnets
+            .get(&own_subnet_id)
+            .map(|topo| topo.subnet_type)
+            .unwrap_or_default();
+        let (subnets, routing_table) = if own_subnet_type == SubnetType::CloudEngine {
+            // CloudEngine subnets only see themselves.
+            let subnets = all_subnets
+                .iter()
+                .filter(|(id, _)| **id == own_subnet_id)
+                .map(|(id, topo)| (*id, topo.clone()))
+                .collect();
+            let routing_table = full_routing_table
+                .iter()
+                .filter(|(_, sid)| **sid == own_subnet_id)
+                .map(|(range, sid)| (*range, *sid))
+                .collect::<BTreeMap<_, _>>()
+                .try_into()
                 .unwrap_or_default();
-            if own_subnet_type == SubnetType::CloudEngine {
-                // CloudEngine subnets only need their own canister ranges.
-                full_table
-                    .iter()
-                    .filter(|(_, sid)| **sid == own_subnet_id)
-                    .map(|(range, sid)| (*range, *sid))
-                    .collect::<BTreeMap<_, _>>()
-                    .try_into()
-                    .unwrap_or_default()
-            } else {
-                full_table
-            }
+            (subnets, routing_table)
+        } else {
+            // Non-engine subnets see every subnet that is *not* a CloudEngine.
+            let engine_subnet_ids: BTreeSet<SubnetId> = all_subnets
+                .iter()
+                .filter(|(_, topo)| topo.subnet_type == SubnetType::CloudEngine)
+                .map(|(id, _)| *id)
+                .collect();
+            let subnets = all_subnets
+                .iter()
+                .filter(|(id, _)| !engine_subnet_ids.contains(id))
+                .map(|(id, topo)| (*id, topo.clone()))
+                .collect();
+            let routing_table = full_routing_table
+                .iter()
+                .filter(|(_, sid)| !engine_subnet_ids.contains(sid))
+                .map(|(range, sid)| (*range, *sid))
+                .collect::<BTreeMap<_, _>>()
+                .try_into()
+                .unwrap_or_default();
+            (subnets, routing_table)
         };
         let canister_migrations = self
             .registry
@@ -1177,18 +1195,16 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
             .unwrap_or_default();
 
-        let routing_filter = if own_subnet_type == SubnetType::CloudEngine {
-            // CloudEngine subnets can only route to themselves.
-            RoutingFilter::WhiteList(std::iter::once(own_subnet_id).collect())
+        // Only the NNS subnet needs the full (unfiltered) topology so that its
+        // certified state tree contains entries for every subnet (including
+        // cloud engines).
+        let full_topology = if own_subnet_id == nns_subnet_id {
+            Some(FullTopology {
+                subnets: all_subnets,
+                routing_table: Arc::new(full_routing_table),
+            })
         } else {
-            // Non-engine subnets can route to every subnet that is *not* a CloudEngine.
-            RoutingFilter::WhiteList(
-                subnets
-                    .iter()
-                    .filter(|(_, topo)| topo.subnet_type != SubnetType::CloudEngine)
-                    .map(|(id, _)| *id)
-                    .collect(),
-            )
+            None
         };
 
         Ok(NetworkTopology::new(
@@ -1199,7 +1215,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             chain_key_enabled_subnets,
             self.bitcoin_config.testnet_canister_id,
             self.bitcoin_config.mainnet_canister_id,
-            routing_filter,
+            full_topology,
         ))
     }
 

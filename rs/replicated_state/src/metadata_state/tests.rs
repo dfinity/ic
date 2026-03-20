@@ -1102,13 +1102,82 @@ fn network_topology_ecdsa_subnets() {
 }
 
 #[test]
-fn network_topology_route_filtered_by_whitelist() {
+fn network_topology_route_uses_filtered_topology() {
     let subnet_a = subnet_test_id(1);
     let subnet_b = subnet_test_id(2);
-    let subnet_c = subnet_test_id(3);
 
-    // Build a routing table that maps canister ranges to subnets.
+    // The filtered routing table only contains subnet_a's range.
     let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0u64), end: CanisterId::from(99u64) } => subnet_a,
+        })
+        .unwrap(),
+    );
+
+    // The filtered subnets map only contains subnet_a.
+    // subnet_b exists in the network but is not visible to this subnet.
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            subnet_a => SubnetTopology::default(),
+        },
+        routing_table,
+        canister_migrations: Arc::new(CanisterMigrations::default()),
+        nns_subnet_id: subnet_test_id(42),
+        ..Default::default()
+    };
+
+    // --- Canister ID routing ---
+
+    // Canister on subnet_a: resolvable via the filtered routing table.
+    assert_eq!(
+        network_topology.route(canister_test_id(50).get()),
+        Some(subnet_a),
+    );
+    // Canister 150 is not in the filtered routing table at all.
+    assert_eq!(network_topology.route(canister_test_id(150).get()), None);
+
+    // --- Subnet ID routing ---
+
+    // subnet_a is in the filtered subnets map.
+    assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a));
+    // subnet_b is NOT in the filtered subnets map.
+    assert_eq!(network_topology.route(subnet_b.get()), None);
+}
+
+#[test]
+fn subnets_with_engines_falls_back_to_filtered() {
+    let subnet_a = subnet_test_id(1);
+
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            subnet_a => SubnetTopology::default(),
+        },
+        ..Default::default()
+    };
+
+    // Without full_topology, subnets_with_engines returns the filtered map.
+    assert_eq!(
+        network_topology.subnets_with_engines(),
+        network_topology.subnets()
+    );
+    assert_eq!(
+        network_topology.routing_table_with_engines(),
+        network_topology.routing_table()
+    );
+}
+
+#[test]
+fn subnets_with_engines_returns_full_topology_when_set() {
+    use crate::metadata_state::testing::NetworkTopologyTesting;
+
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2); // e.g., a cloud engine
+
+    let full_subnets = btreemap! {
+        subnet_a => SubnetTopology::default(),
+        subnet_b => SubnetTopology::default(),
+    };
+    let full_routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange { start: CanisterId::from(0u64), end: CanisterId::from(99u64) } => subnet_a,
             CanisterIdRange { start: CanisterId::from(100u64), end: CanisterId::from(199u64) } => subnet_b,
@@ -1116,38 +1185,25 @@ fn network_topology_route_filtered_by_whitelist() {
         .unwrap(),
     );
 
-    // Whitelist only allows subnet_a; subnet_b and subnet_c are excluded.
-    let network_topology = NetworkTopology {
+    let mut network_topology = NetworkTopology {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
-            subnet_b => SubnetTopology::default(),
-            subnet_c => SubnetTopology::default(),
         },
-        routing_table,
-        canister_migrations: Arc::new(CanisterMigrations::default()),
-        nns_subnet_id: subnet_test_id(42),
-        routing_filter: RoutingFilter::WhiteList([subnet_a].into_iter().collect()),
         ..Default::default()
     };
+    network_topology.set_full_topology(Some(FullTopology {
+        subnets: full_subnets.clone(),
+        routing_table: full_routing_table.clone(),
+    }));
 
-    // --- Canister ID routing ---
-
-    // Canister on subnet_a: allowed by whitelist.
+    // subnets() returns the filtered view.
+    assert_eq!(network_topology.subnets().len(), 1);
+    // subnets_with_engines() returns the full view.
+    assert_eq!(network_topology.subnets_with_engines(), &full_subnets);
     assert_eq!(
-        network_topology.route(canister_test_id(50).get()),
-        Some(subnet_a),
+        network_topology.routing_table_with_engines(),
+        &full_routing_table
     );
-    // Canister on subnet_b: blocked by whitelist.
-    assert_eq!(network_topology.route(canister_test_id(150).get()), None,);
-
-    // --- Subnet ID routing ---
-
-    // subnet_a is in the whitelist and in `subnets`.
-    assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a),);
-    // subnet_b is in `subnets` but NOT in the whitelist.
-    assert_eq!(network_topology.route(subnet_b.get()), None,);
-    // subnet_c is in `subnets` but NOT in the whitelist.
-    assert_eq!(network_topology.route(subnet_c.get()), None,);
 }
 
 /// Test fixture that will produce an ingress status of type completed or failed,

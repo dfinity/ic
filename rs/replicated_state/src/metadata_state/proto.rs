@@ -51,12 +51,20 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
-            routing_whitelist: match &item.routing_filter {
-                RoutingFilter::Any => None,
-                RoutingFilter::WhiteList(set) => Some(pb_metadata::RoutingWhitelist {
-                    subnet_ids: set.iter().map(|id| subnet_id_into_protobuf(*id)).collect(),
+            full_topology: item
+                .full_topology
+                .as_ref()
+                .map(|ft| pb_metadata::FullTopology {
+                    subnets: ft
+                        .subnets
+                        .iter()
+                        .map(|(subnet_id, subnet_topology)| pb_metadata::SubnetsEntry {
+                            subnet_id: Some(subnet_id_into_protobuf(*subnet_id)),
+                            subnet_topology: Some(subnet_topology.into()),
+                        })
+                        .collect(),
+                    routing_table: Some(ft.routing_table.as_ref().into()),
                 }),
-            },
         }
     }
 }
@@ -115,14 +123,26 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
-            routing_filter: match item.routing_whitelist {
-                None => RoutingFilter::Any,
-                Some(wl) => {
-                    let mut set = BTreeSet::new();
-                    for subnet_id in wl.subnet_ids {
-                        set.insert(subnet_id_try_from_protobuf(subnet_id)?);
+            full_topology: match item.full_topology {
+                None => None,
+                Some(ft) => {
+                    let mut ft_subnets = BTreeMap::new();
+                    for entry in ft.subnets {
+                        ft_subnets.insert(
+                            subnet_id_try_from_option(entry.subnet_id, "FullTopology::subnets::K")?,
+                            try_from_option_field(
+                                entry.subnet_topology,
+                                "FullTopology::subnets::V",
+                            )?,
+                        );
                     }
-                    RoutingFilter::WhiteList(set)
+                    let ft_routing_table: Arc<RoutingTable> =
+                        try_from_option_field(ft.routing_table, "FullTopology::routing_table")
+                            .map(Arc::new)?;
+                    Some(FullTopology {
+                        subnets: ft_subnets,
+                        routing_table: ft_routing_table,
+                    })
                 }
             },
         })
