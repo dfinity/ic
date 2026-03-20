@@ -590,6 +590,11 @@ pub struct Ledger {
 
     #[serde(default = "wasm_token_type")]
     pub token_type: String,
+
+    #[serde(default)]
+    paused: bool,
+    #[serde(default)]
+    deactivated: bool,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -716,6 +721,8 @@ impl Ledger {
             ledger_version: LEDGER_VERSION,
             index_principal,
             token_type: wasm_token_type(),
+            paused: false,
+            deactivated: false,
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
@@ -857,6 +864,22 @@ impl Ledger {
 
     pub fn max_take_allowances(&self) -> u64 {
         MAX_TAKE_ALLOWANCES
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    pub fn is_deactivated(&self) -> bool {
+        self.deactivated
+    }
+
+    pub fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
+    }
+
+    pub fn set_deactivated(&mut self, deactivated: bool) {
+        self.deactivated = deactivated;
     }
 
     pub fn metadata(&self) -> Vec<(MetadataKey, Value)> {

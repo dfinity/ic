@@ -558,6 +558,48 @@ type GetIndexPrincipalError = variant {
   }
 };
 
+type PauseArgs = record {
+  reason : opt text;
+  created_at_time : nat64
+};
+
+type UnpauseArgs = record {
+  reason : opt text;
+  created_at_time : nat64
+};
+
+type DeactivateArgs = record {
+  reason : opt text;
+  created_at_time : nat64
+};
+
+type PauseError = variant {
+  Unauthorized : record { message : text };
+  AlreadyPaused : record { message : text };
+  AlreadyDeactivated : record { message : text };
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type UnpauseError = variant {
+  Unauthorized : record { message : text };
+  NotPaused : record { message : text };
+  AlreadyDeactivated : record { message : text };
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type DeactivateError = variant {
+  Unauthorized : record { message : text };
+  AlreadyDeactivated : record { message : text };
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type PauseResult = variant { Ok : nat; Err : PauseError };
+type UnpauseResult = variant { Ok : nat; Err : UnpauseError };
+type DeactivateResult = variant { Ok : nat; Err : DeactivateError };
+
 service : (ledger_arg : LedgerArg) -> {
   archives : () -> (vec ArchiveInfo) query;
   get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
@@ -590,6 +632,12 @@ service : (ledger_arg : LedgerArg) -> {
   icrc103_get_allowances : (GetAllowancesArgs) -> (icrc103_get_allowances_response) query;
 
   icrc106_get_index_principal : () -> (GetIndexPrincipalResult) query;
+
+  icrc154_pause : (PauseArgs) -> (PauseResult);
+  icrc154_unpause : (UnpauseArgs) -> (UnpauseResult);
+  icrc154_deactivate : (DeactivateArgs) -> (DeactivateResult);
+  icrc154_is_paused : () -> (bool) query;
+  icrc154_is_deactivated : () -> (bool) query;
 
   is_ledger_ready : () -> (bool) query
 }

@@ -585,7 +585,7 @@ where
     assert_eq!(
         standards,
         vec![
-            "ICRC-1", "ICRC-10", "ICRC-103", "ICRC-106", "ICRC-2", "ICRC-21", "ICRC-3"
+            "ICRC-1", "ICRC-10", "ICRC-103", "ICRC-106", "ICRC-154", "ICRC-2", "ICRC-21", "ICRC-3"
         ]
     );
 }
@@ -610,7 +610,16 @@ pub fn check_icrc3_supported_block_types(
         block_types.push(supported_block_type.block_type);
     }
     block_types.sort();
-    let mut expected_block_types = vec!["1burn", "1mint", "1xfer", "2approve", "2xfer"];
+    let mut expected_block_types = vec![
+        "124deactivate",
+        "124pause",
+        "124unpause",
+        "1burn",
+        "1mint",
+        "1xfer",
+        "2approve",
+        "2xfer",
+    ];
     if supports_107 {
         expected_block_types.push(BTYPE_107);
         expected_block_types.sort();

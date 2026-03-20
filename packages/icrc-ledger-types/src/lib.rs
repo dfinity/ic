@@ -6,6 +6,7 @@ pub mod icrc103;
 pub mod icrc106;
 pub mod icrc107;
 pub mod icrc124;
+pub mod icrc154;
 pub mod icrc2;
 pub mod icrc21;
 pub mod icrc3;
