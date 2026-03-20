@@ -4009,7 +4009,11 @@ impl ExecutionEnvironment {
     /// Aborts the paused execution, if any, of the given canister.
     ///
     /// Returns true if a paused execution was aborted, false otherwise.
-    pub fn abort_canister(&self, canister: &mut Arc<CanisterState>, log: &ReplicaLogger) -> bool {
+    pub(crate) fn abort_canister(
+        &self,
+        canister: &mut Arc<CanisterState>,
+        log: &ReplicaLogger,
+    ) -> bool {
         let mut aborted = false;
         if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
             self.metrics.executions_aborted.inc();

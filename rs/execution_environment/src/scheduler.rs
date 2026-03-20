@@ -2189,7 +2189,7 @@ fn scheduled_heap_delta_limit(
 ///
 /// If a paused execution was aborted, resets the canister's priority credit to
 /// zero. Canisters must not be charged for aborted DTS executions.
-pub fn abort_canister(
+fn abort_canister(
     canister: &mut Arc<CanisterState>,
     subnet_schedule: &mut SubnetSchedule,
     exec_env: &ExecutionEnvironment,
@@ -2204,6 +2204,9 @@ pub fn abort_canister(
 }
 
 /// Aborts all paused executions in the given state.
+///
+/// Public for testing only.
+#[doc(hidden)]
 pub fn abort_all_paused_executions(
     state: &mut ReplicatedState,
     exec_env: &ExecutionEnvironment,
