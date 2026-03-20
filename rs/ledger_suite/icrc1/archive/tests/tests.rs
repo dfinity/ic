@@ -3,7 +3,7 @@ use ic_base_types::CanisterId;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_suite_state_machine_tests::{
-    check_icrc3_supported_block_types, test_http_request_decoding_quota,
+    check_icrc3_supported_block_types_ext, test_http_request_decoding_quota,
 };
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -359,5 +359,5 @@ fn test_archive_http_request_decoding_quota() {
 fn test_icrc3_supported_block_types() {
     let setup = Setup::default();
 
-    check_icrc3_supported_block_types(&setup.state_machine, setup.archive_id, true);
+    check_icrc3_supported_block_types_ext(&setup.state_machine, setup.archive_id, true, false);
 }

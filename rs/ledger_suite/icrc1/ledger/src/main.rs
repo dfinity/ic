@@ -42,6 +42,10 @@ use icrc_ledger_types::icrc103::get_allowances::{
     Allowances, GetAllowancesArgs, GetAllowancesError,
 };
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
+use icrc_ledger_types::icrc124::schema::{MTHD_154_DEACTIVATE, MTHD_154_PAUSE, MTHD_154_UNPAUSE};
+use icrc_ledger_types::icrc154::{
+    DeactivateArgs, DeactivateError, PauseArgs, PauseError, UnpauseArgs, UnpauseError,
+};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc::metadata_key::MetadataKey,
@@ -669,8 +673,24 @@ fn execute_transfer_not_async(
     })
 }
 
+fn check_not_paused_or_deactivated() -> Result<(), String> {
+    Access::with_ledger(|ledger| {
+        if ledger.is_deactivated() {
+            return Err("ledger is deactivated".to_string());
+        }
+        if ledger.is_paused() {
+            return Err("ledger is paused".to_string());
+        }
+        Ok(())
+    })
+}
+
 #[update]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
+    check_not_paused_or_deactivated().map_err(|msg| TransferError::GenericError {
+        error_code: Nat::from(0u64),
+        message: msg,
+    })?;
     let from_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
@@ -697,6 +717,10 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 
 #[update]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
+    check_not_paused_or_deactivated().map_err(|msg| TransferFromError::GenericError {
+        error_code: Nat::from(0u64),
+        message: msg,
+    })?;
     let spender_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.spender_subaccount,
@@ -775,6 +799,10 @@ fn supported_standards() -> Vec<StandardRecord> {
         StandardRecord {
             name: "ICRC-106".to_string(),
             url: "https://github.com/dfinity/ICRC/pull/106".to_string(),
+        },
+        StandardRecord {
+            name: "ICRC-154".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-154.md".to_string(),
         },
     ];
     standards
@@ -883,6 +911,10 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
 
 #[update]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    check_not_paused_or_deactivated().map_err(|msg| ApproveError::GenericError {
+        error_code: Nat::from(0u64),
+        message: msg,
+    })?;
     let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
 
     // NB. we need to set the certified data before the first async call to make sure that the
@@ -954,6 +986,18 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
         },
+        SupportedBlockType {
+            block_type: "124pause".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/135".to_string(),
+        },
+        SupportedBlockType {
+            block_type: "124unpause".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/135".to_string(),
+        },
+        SupportedBlockType {
+            block_type: "124deactivate".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/135".to_string(),
+        },
     ]
 }
 
@@ -973,6 +1017,167 @@ fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
         None => Err(Icrc106Error::IndexPrincipalNotSet),
         Some(index_principal) => Ok(index_principal),
     })
+}
+
+fn icrc154_pause_not_async(caller: Principal, arg: PauseArgs) -> Result<u64, PauseError> {
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(PauseError::Unauthorized {
+            message: "caller is not a controller".to_string(),
+        });
+    }
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if ledger.is_deactivated() {
+            return Err(PauseError::AlreadyDeactivated {
+                message: "ledger is already deactivated".to_string(),
+            });
+        }
+        if ledger.is_paused() {
+            return Err(PauseError::AlreadyPaused {
+                message: "ledger is already paused".to_string(),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::Pause {
+                caller: Some(caller),
+                mthd: Some(MTHD_154_PAUSE.to_string()),
+                reason: arg.reason,
+            },
+            created_at_time: Some(arg.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => PauseError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                other => PauseError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("{other:?}"),
+                },
+            })?;
+        ledger.set_paused(true);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc154_pause(arg: PauseArgs) -> Result<Nat, PauseError> {
+    let block_idx = icrc154_pause_not_async(ic_cdk::api::caller(), arg)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc154_unpause_not_async(caller: Principal, arg: UnpauseArgs) -> Result<u64, UnpauseError> {
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(UnpauseError::Unauthorized {
+            message: "caller is not a controller".to_string(),
+        });
+    }
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if ledger.is_deactivated() {
+            return Err(UnpauseError::AlreadyDeactivated {
+                message: "ledger is already deactivated".to_string(),
+            });
+        }
+        if !ledger.is_paused() {
+            return Err(UnpauseError::NotPaused {
+                message: "ledger is not paused".to_string(),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::Unpause {
+                caller: Some(caller),
+                mthd: Some(MTHD_154_UNPAUSE.to_string()),
+                reason: arg.reason,
+            },
+            created_at_time: Some(arg.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => UnpauseError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                other => UnpauseError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("{other:?}"),
+                },
+            })?;
+        ledger.set_paused(false);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc154_unpause(arg: UnpauseArgs) -> Result<Nat, UnpauseError> {
+    let block_idx = icrc154_unpause_not_async(ic_cdk::api::caller(), arg)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc154_deactivate_not_async(
+    caller: Principal,
+    arg: DeactivateArgs,
+) -> Result<u64, DeactivateError> {
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(DeactivateError::Unauthorized {
+            message: "caller is not a controller".to_string(),
+        });
+    }
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if ledger.is_deactivated() {
+            return Err(DeactivateError::AlreadyDeactivated {
+                message: "ledger is already deactivated".to_string(),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::Deactivate {
+                caller: Some(caller),
+                mthd: Some(MTHD_154_DEACTIVATE.to_string()),
+                reason: arg.reason,
+            },
+            created_at_time: Some(arg.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => DeactivateError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                other => DeactivateError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("{other:?}"),
+                },
+            })?;
+        ledger.set_deactivated(true);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc154_deactivate(arg: DeactivateArgs) -> Result<Nat, DeactivateError> {
+    let block_idx = icrc154_deactivate_not_async(ic_cdk::api::caller(), arg)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+#[query]
+fn icrc154_is_paused() -> bool {
+    Access::with_ledger(|ledger| ledger.is_paused())
+}
+
+#[query]
+fn icrc154_is_deactivated() -> bool {
+    Access::with_ledger(|ledger| ledger.is_deactivated())
 }
 
 #[update]
