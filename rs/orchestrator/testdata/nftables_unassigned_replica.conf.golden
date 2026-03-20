@@ -32,7 +32,6 @@ table filter {
     icmp type $icmp_v4_types_accept accept
     ip saddr {1.1.1.1,3.0.0.3,3.0.0.5,3.0.0.6,4.0.0.4,4.0.0.6,4.0.0.7} ct state { new } tcp dport {22,2497,4100,8080} accept # Automatic node whitelisting
 ip saddr {5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
-ip saddr {3.3.3.3} ct state { new } tcp dport {1003} accept # subnet_yndj2-3ybaa-aaaaa-aaaap-yai
 ip saddr {4.4.4.4} ct state { new } tcp dport {1004} accept # replica_nodes
 ip saddr {6.6.6.6} ct state { new } tcp dport {1006} accept # global
     ip saddr {1.1.1.1,3.0.0.3,3.0.0.5,3.0.0.6,4.0.0.4,4.0.0.6,4.0.0.7} udp dport {4100} accept # Automatic node whitelisting
@@ -100,7 +99,6 @@ table ip6 filter {
     # Custom templated rules
     ip6 saddr {3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e6,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e7,a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} ct state { new } tcp dport {22,2497,4100,8080} accept # Automatic node whitelisting
 ip6 saddr {::ffff:5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
-ip6 saddr {::ffff:3.3.3.3} ct state { new } tcp dport {1003} accept # subnet_yndj2-3ybaa-aaaaa-aaaap-yai
 ip6 saddr {::ffff:4.4.4.4} ct state { new } tcp dport {1004} accept # replica_nodes
 ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
     ip6 saddr {3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e6,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e7,a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} udp dport {4100} accept # Automatic node whitelisting
