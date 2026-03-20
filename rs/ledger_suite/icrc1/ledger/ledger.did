@@ -228,6 +228,10 @@ type Transaction = record {
   pause : opt ManagementAction;
   unpause : opt ManagementAction;
   deactivate : opt ManagementAction;
+  freeze_account : opt FreezeAccountAction;
+  unfreeze_account : opt FreezeAccountAction;
+  freeze_principal : opt FreezePrincipalAction;
+  unfreeze_principal : opt FreezePrincipalAction;
   timestamp : Timestamp;
   transfer : opt Transfer
 };
@@ -240,6 +244,22 @@ type FeeCollector = record {
 };
 
 type ManagementAction = record {
+  caller : opt principal;
+  reason : opt text;
+  ts : opt nat64;
+  mthd : opt text
+};
+
+type FreezeAccountAction = record {
+  account : Account;
+  caller : opt principal;
+  reason : opt text;
+  ts : opt nat64;
+  mthd : opt text
+};
+
+type FreezePrincipalAction = record {
+  "principal" : principal;
   caller : opt principal;
   reason : opt text;
   ts : opt nat64;

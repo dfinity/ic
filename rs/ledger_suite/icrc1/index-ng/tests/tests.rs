@@ -972,6 +972,10 @@ fn test_get_account_transactions_pagination() {
                     pause: None,
                     unpause: None,
                     deactivate: None,
+                    freeze_account: None,
+                    unfreeze_account: None,
+                    freeze_principal: None,
+                    unfreeze_principal: None,
                 },
                 transaction,
             );
