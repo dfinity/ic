@@ -1,7 +1,7 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
-    process_manager::{Process, ProcessManager, ProcessManagerImpl},
+    process_manager::{Process, ProcessManager},
     registry_helper::RegistryHelper,
 };
 use ic_config::crypto::CryptoConfig;
@@ -45,7 +45,7 @@ impl Process for BoundaryNodeProcess {
 pub(crate) struct BoundaryNodeManager {
     registry: Arc<RegistryHelper>,
     _metrics: Arc<OrchestratorMetrics>,
-    process: Arc<Mutex<dyn ProcessManager<BoundaryNodeProcess>>>,
+    process: Arc<Mutex<ProcessManager<BoundaryNodeProcess>>>,
     ic_binary_dir: PathBuf,
     crypto_config: CryptoConfig,
     version: ReplicaVersion,
@@ -67,7 +67,7 @@ impl BoundaryNodeManager {
         Self {
             registry,
             _metrics: metrics,
-            process: Arc::new(Mutex::new(ProcessManagerImpl::new(logger.clone()))),
+            process: Arc::new(Mutex::new(ProcessManager::new(logger.clone()))),
             ic_binary_dir,
             crypto_config,
             version,
