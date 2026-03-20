@@ -22,11 +22,11 @@ use std::convert::{From, TryFrom};
 pub struct NominalCycles(u128);
 
 impl NominalCycles {
-    pub fn new(input: u128) -> Self {
-        Self(input)
+    pub const fn zero() -> Self {
+        Self(0)
     }
 
-    pub fn from_parts(high: u64, low: u64) -> Self {
+    fn from_parts(high: u64, low: u64) -> Self {
         Self(((high as u128) << 64) | low as u128)
     }
 
@@ -49,7 +49,7 @@ impl NominalCycles {
 
 impl From<u128> for NominalCycles {
     fn from(input: u128) -> Self {
-        Self::new(input)
+        Self(input)
     }
 }
 
@@ -104,8 +104,26 @@ impl TryFrom<pb::NominalCycles> for NominalCycles {
     }
 }
 
+pub mod testing {
+    use super::NominalCycles;
+
+    /// Publicly exposes a testing only constructor for `NominalCycles`
+    /// for use in tests.
+    pub trait NominalCyclesTesting {
+        #[allow(clippy::new_ret_no_self)]
+        fn new(amount: u128) -> NominalCycles;
+    }
+
+    impl NominalCyclesTesting for NominalCycles {
+        fn new(amount: u128) -> NominalCycles {
+            NominalCycles(amount)
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use super::testing::NominalCyclesTesting;
     use super::*;
 
     #[test]
@@ -115,7 +133,7 @@ mod test {
 
         assert_eq!(
             NominalCycles::from_parts(u64::MAX, u64::MAX),
-            NominalCycles::from(u128::MAX)
+            NominalCycles::new(u128::MAX)
         );
     }
 
