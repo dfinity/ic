@@ -23,6 +23,10 @@ pub const TRANSACTION_FEE_COLLECTOR: &str = "107feecol";
 pub const TRANSACTION_124_PAUSE: &str = "124pause";
 pub const TRANSACTION_124_UNPAUSE: &str = "124unpause";
 pub const TRANSACTION_124_DEACTIVATE: &str = "124deactivate";
+pub const TRANSACTION_123_FREEZE_ACCOUNT: &str = "123freezeaccount";
+pub const TRANSACTION_123_UNFREEZE_ACCOUNT: &str = "123unfreezeaccount";
+pub const TRANSACTION_123_FREEZE_PRINCIPAL: &str = "123freezeprincipal";
+pub const TRANSACTION_123_UNFREEZE_PRINCIPAL: &str = "123unfreezeprincipal";
 
 pub type GenericTransaction = Value;
 
@@ -84,6 +88,24 @@ pub struct ManagementAction {
     pub mthd: Option<String>,
 }
 
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct FreezeAccountAction {
+    pub account: Account,
+    pub caller: Option<Principal>,
+    pub reason: Option<String>,
+    pub ts: Option<u64>,
+    pub mthd: Option<String>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct FreezePrincipalAction {
+    pub principal: Principal,
+    pub caller: Option<Principal>,
+    pub reason: Option<String>,
+    pub ts: Option<u64>,
+    pub mthd: Option<String>,
+}
+
 // Representation of a Transaction which supports the Icrc1 Standard functionalities
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
@@ -96,6 +118,10 @@ pub struct Transaction {
     pub pause: Option<ManagementAction>,
     pub unpause: Option<ManagementAction>,
     pub deactivate: Option<ManagementAction>,
+    pub freeze_account: Option<FreezeAccountAction>,
+    pub unfreeze_account: Option<FreezeAccountAction>,
+    pub freeze_principal: Option<FreezePrincipalAction>,
+    pub unfreeze_principal: Option<FreezePrincipalAction>,
     pub timestamp: u64,
 }
 
@@ -112,6 +138,10 @@ impl Transaction {
             pause: None,
             unpause: None,
             deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -127,6 +157,10 @@ impl Transaction {
             pause: None,
             unpause: None,
             deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -142,6 +176,10 @@ impl Transaction {
             pause: None,
             unpause: None,
             deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -157,6 +195,10 @@ impl Transaction {
             pause: None,
             unpause: None,
             deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -172,6 +214,10 @@ impl Transaction {
             pause: None,
             unpause: None,
             deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -187,6 +233,10 @@ impl Transaction {
             pause: Some(pause),
             unpause: None,
             deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -202,6 +252,10 @@ impl Transaction {
             pause: None,
             unpause: Some(unpause),
             deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -217,6 +271,86 @@ impl Transaction {
             pause: None,
             unpause: None,
             deactivate: Some(deactivate),
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
+        }
+    }
+
+    pub fn freeze_account(action: FreezeAccountAction, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_123_FREEZE_ACCOUNT.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: None,
+            freeze_account: Some(action),
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
+        }
+    }
+
+    pub fn unfreeze_account(action: FreezeAccountAction, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_123_UNFREEZE_ACCOUNT.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: None,
+            freeze_account: None,
+            unfreeze_account: Some(action),
+            freeze_principal: None,
+            unfreeze_principal: None,
+        }
+    }
+
+    pub fn freeze_principal(action: FreezePrincipalAction, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_123_FREEZE_PRINCIPAL.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: Some(action),
+            unfreeze_principal: None,
+        }
+    }
+
+    pub fn unfreeze_principal(action: FreezePrincipalAction, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_123_UNFREEZE_PRINCIPAL.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            pause: None,
+            unpause: None,
+            deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: Some(action),
         }
     }
 }

@@ -167,6 +167,10 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             pause: None,
             unpause: None,
             deactivate: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;

@@ -167,6 +167,10 @@ async fn test_icps_per_sns_token_client() {
                                 pause: None,
                                 unpause: None,
                                 deactivate: None,
+                                freeze_account: None,
+                                unfreeze_account: None,
+                                freeze_principal: None,
+                                unfreeze_principal: None,
                             },
                         ],
 
