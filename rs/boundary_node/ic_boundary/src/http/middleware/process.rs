@@ -4,14 +4,14 @@ use axum::{Extension, body::Body, extract::Request, middleware::Next, response::
 use bytes::Bytes;
 use candid::{Decode, Principal};
 use http::header::{CONTENT_TYPE, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::{body::buffer_body, cache::CacheStatus, headers::*};
+use ic_bn_lib::http::{cache::CacheStatus, headers::*};
 use ic_types::messages::Blob;
 use serde::de::Error as SerdeDeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
     core::{MAX_REQUEST_BODY_SIZE, decoder_config},
-    errors::{ApiError, ErrorCause},
+    errors::{ApiError, ErrorCause, buffer_body_to_bytes},
     http::{RequestType, middleware::retry::RetryResult},
     metrics::MAX_LOGGING_METHOD_NAME_LENGTH,
     routes::{HttpRequest, RequestContext},
@@ -68,9 +68,7 @@ pub async fn preprocess_request(
 ) -> Result<impl IntoResponse, ApiError> {
     // Consume body
     let (parts, body) = request.into_parts();
-    let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60))
-        .await
-        .map_err(|e| ErrorCause::from_body_error(e, MAX_REQUEST_BODY_SIZE))?;
+    let body = buffer_body_to_bytes(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60)).await?;
 
     // Parse the request body
     let envelope: ICRequestEnvelope = serde_cbor::from_slice(&body)

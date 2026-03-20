@@ -7,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
-use ic_bn_lib::http::{body::buffer_body, calc_headers_size};
+use ic_bn_lib::http::calc_headers_size;
 use ic_bn_lib::prometheus::{
     IntCounter, IntGauge, Registry, register_int_counter_with_registry,
     register_int_gauge_with_registry,
@@ -16,7 +16,7 @@ use ic_types::SubnetId;
 use moka::sync::Cache;
 
 use crate::{
-    errors::{ApiError, ErrorCause},
+    errors::{ApiError, buffer_body_to_bytes},
     routes::RequestContext,
 };
 
@@ -153,9 +153,8 @@ pub async fn subnet_read_state_cache_middleware(
 
     if response.status().is_success() {
         let (parts, body) = response.into_parts();
-        let body_bytes = buffer_body(body, state.max_item_size, state.body_timeout)
-            .await
-            .map_err(|e| ErrorCause::from_body_error(e, state.max_item_size))?;
+        let body_bytes =
+            buffer_body_to_bytes(body, state.max_item_size, state.body_timeout).await?;
 
         let cached = Response::from_parts(parts, body_bytes);
         state.cache.insert(cache_key, cached.clone());
