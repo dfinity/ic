@@ -40,7 +40,9 @@ use ic_types::{
     },
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+};
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
@@ -3043,7 +3045,7 @@ fn execute_canister_http_request() {
     assert_eq!(http_request_context.request.payment, payment - fee);
 
     assert_eq!(
-        NominalCycles::from(fee.get()),
+        NominalCycles::new(fee.get()),
         test.state()
             .metadata
             .subnet_metrics
@@ -3051,7 +3053,7 @@ fn execute_canister_http_request() {
     );
 
     assert_eq!(
-        NominalCycles::from(fee.get()),
+        NominalCycles::new(fee.get()),
         *test
             .state()
             .metadata
@@ -3855,7 +3857,7 @@ fn replicated_query_can_burn_cycles() {
         .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
-    assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn.get()));
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
 }
 
 #[test]
@@ -4028,12 +4030,12 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that consumed cycles are correct for both use cases.
     assert_eq!(
         transmission_consumption_after_response,
-        NominalCycles::from(transmission_cost.get())
+        NominalCycles::new(transmission_cost.get())
     );
 
     assert_eq!(
         instruction_consumption_after_response,
-        NominalCycles::from(execution_cost.get())
+        NominalCycles::new(execution_cost.get())
     );
 
     // Consumed cycles after the response should be smaller than before
@@ -4071,7 +4073,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
-        NominalCycles::from(test.canister_execution_cost(b_id).get())
+        NominalCycles::new(test.canister_execution_cost(b_id).get())
     );
 }
 

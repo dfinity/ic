@@ -246,12 +246,12 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 item.consumed_cycles_http_outcalls,
                 "SubnetMetrics::consumed_cycles_http_outcalls",
             )
-            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            .unwrap_or_else(|_| NominalCycles::zero()),
             consumed_cycles_ecdsa_outcalls: try_from_option_field(
                 item.consumed_cycles_ecdsa_outcalls,
                 "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
             )
-            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
             num_canisters: try_from_option_field(

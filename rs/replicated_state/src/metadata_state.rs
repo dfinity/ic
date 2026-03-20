@@ -360,7 +360,7 @@ impl SubnetMetrics {
         *self
             .consumed_cycles_by_use_case
             .entry(use_case)
-            .or_insert_with(|| NominalCycles::from(0)) += cycles;
+            .or_insert_with(NominalCycles::zero) += cycles;
     }
 
     pub fn observe_consumed_cycles_by_deleted_canisters(&mut self, cycles: NominalCycles) {
@@ -392,7 +392,7 @@ impl SubnetMetrics {
     }
 
     pub fn consumed_cycles_total(&self) -> NominalCycles {
-        let mut total = NominalCycles::from(0);
+        let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;
         total += self.consumed_cycles_http_outcalls;
