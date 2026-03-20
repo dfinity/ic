@@ -58,8 +58,7 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
         deserialize_registry_value::<FirewallRuleSet>(bytes)
     }
 
-    /// Get the IP addresses of nodes in the registry for all subnets of the given types, for
-    /// endpoints used for core protocol services (p2p, xnet, api).
+    /// Get the node IDs of all nodes that are on subnets of the given types in the registry.
     fn get_subnet_node_ids_of_types(
         &self,
         subnet_types: &[SubnetType],
