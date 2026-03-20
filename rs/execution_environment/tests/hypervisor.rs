@@ -4295,9 +4295,7 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
     // Clear `expected_compiled_wasms` so that the full execution cost is applied.
-    let expected_compiled_wasms =
-        Arc::make_mut(&mut test.state_mut().metadata.expected_compiled_wasms);
-    expected_compiled_wasms.clear();
+    test.state_mut().metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     // Compilation occurs once for original installation and again for upgrade.

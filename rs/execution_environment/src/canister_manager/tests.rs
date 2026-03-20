@@ -3927,9 +3927,7 @@ fn cycles_correct_if_upgrade_succeeds() {
     let cycles_before = test.canister_state(id).system_state.balance();
     let execution_cost_before = test.canister_execution_cost(id);
     // Clear `expected_compiled_wasms` so that the full execution cost is applied
-    let expected_compiled_wasms =
-        Arc::make_mut(&mut test.state_mut().metadata.expected_compiled_wasms);
-    expected_compiled_wasms.clear();
+    test.state_mut().metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
     test.upgrade_canister(id, wasm.clone()).unwrap();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
