@@ -4,6 +4,11 @@ use crate::ssh_access::execute_bash_command;
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 
+/// A builder for querying `journalctl` on a remote node over SSH.
+///
+/// Use the builder methods to configure the query (e.g. limit the number of entries, follow new
+/// entries, restrict the time range via cursors), then call [`search`](Self::search) to execute the
+/// query and collect matching journal messages.
 pub struct JournalStreamer {
     session: Session,
     journalctl_flags: BTreeSet<String>,
@@ -11,6 +16,8 @@ pub struct JournalStreamer {
     to_cursor: Option<String>,
 }
 
+/// Deserialization target for a single JSON record emitted by
+/// `journalctl -o json --output-fields='MESSAGE,__CURSOR'`.
 #[derive(Deserialize, Serialize)]
 struct JournalOutput {
     #[serde(alias = "MESSAGE")]
@@ -20,6 +27,8 @@ struct JournalOutput {
 }
 
 impl JournalStreamer {
+    /// Creates a new `JournalStreamer` that will run `journalctl` commands
+    /// over the given SSH `session`.
     pub fn new(session: Session) -> Self {
         Self {
             session,
@@ -29,16 +38,23 @@ impl JournalStreamer {
         }
     }
 
+    /// Limits the number of journal entries returned (maps to `journalctl -n`).
     pub fn max_lines(mut self, max_lines: usize) -> Self {
         self.journalctl_flags.insert(format!("-n{}", max_lines));
         self
     }
 
+    /// Enables follow mode (maps to `journalctl -f`), causing `journalctl` to block and wait for
+    /// new entries instead of returning immediately.
+    /// This function will return only when the SSH session is closed, i.e. when the node shuts down
+    /// or reboots.
     pub fn follow(mut self) -> Self {
         self.journalctl_flags.insert("-f".to_string());
         self
     }
 
+    /// Anchors subsequent searches to start after the current latest journal entry. This is useful
+    /// for ignoring pre-existing log lines and only matching entries that appear after this call.
     pub fn from_now(mut self) -> Self {
         let (_message, cursor) = Self::new(self.session.clone())
             .max_lines(1)
@@ -51,6 +67,10 @@ impl JournalStreamer {
         self
     }
 
+    /// Searches the journal for the first entry matching `search_regex` and sets an upper bound so
+    /// that subsequent searches only return entries up to (and including) that match.
+    ///
+    /// Returns an error if no entry matches the regex.
     pub fn until(mut self, search_regex: &str) -> anyhow::Result<Self> {
         let (_message, cursor) = self
             .search_and_return_cursors(search_regex)?
@@ -64,11 +84,15 @@ impl JournalStreamer {
         Ok(self)
     }
 
+    /// Executes the configured `journalctl` query, filters the output with `search_regex`, and
+    /// returns the matching journal messages.
     pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {
         self.search_and_return_cursors(search_regex)
             .map(|iter| iter.into_iter().map(|(message, _cursor)| message).collect())
     }
 
+    /// Builds and executes the `journalctl` command over SSH, parses the JSON output, and returns
+    /// `(message, cursor)` pairs for entries matching `search_regex`.
     fn search_and_return_cursors(
         &self,
         search_regex: &str,
