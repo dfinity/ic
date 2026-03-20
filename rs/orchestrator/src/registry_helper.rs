@@ -194,7 +194,7 @@ impl RegistryHelper {
 
     pub(crate) fn get_subnet_node_ids_of_types(
         &self,
-        subnet_types: Vec<SubnetType>,
+        subnet_types: &[SubnetType],
         version: RegistryVersion,
     ) -> OrchestratorResult<Vec<NodeId>> {
         let ids = self

@@ -405,7 +405,7 @@ impl Firewall {
             .into_iter()
             .flat_map(|registry_version| {
                 let subnet_node_ids = self.registry
-                    .get_subnet_node_ids_of_types(whitelisted_subnet_types.clone(), registry_version)
+                    .get_subnet_node_ids_of_types(&whitelisted_subnet_types, registry_version)
                     .inspect_err(|err| {
                         warn!(
                             every_n_seconds => 30,

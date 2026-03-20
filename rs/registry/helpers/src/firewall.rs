@@ -28,7 +28,7 @@ pub trait FirewallRegistry {
 
     fn get_subnet_node_ids_of_types(
         &self,
-        subnet_types: Vec<SubnetType>,
+        subnet_types: &[SubnetType],
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<NodeId>>;
 
@@ -62,7 +62,7 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
     /// endpoints used for core protocol services (p2p, xnet, api).
     fn get_subnet_node_ids_of_types(
         &self,
-        subnet_types: Vec<SubnetType>,
+        subnet_types: &[SubnetType],
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<NodeId>> {
         let Some(all_subnet_ids) = self.get_subnet_ids(version)? else {
