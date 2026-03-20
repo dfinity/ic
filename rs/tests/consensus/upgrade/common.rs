@@ -302,16 +302,17 @@ async fn upgrade_to(
 
     // Concurrently assert that all orchestrators shut down gracefully
     let journal_streamers = try_join_all(healthy_nodes.iter().map(|node| {
+        let node_cl = node.clone();
         tokio::task::spawn_blocking(move || {
             (
-                node.node_id,
-                JournalStreamer::new(node.block_on_ssh_session().unwrap())
+                node_cl.node_id,
+                JournalStreamer::new(node_cl.block_on_ssh_session().unwrap())
                     .follow()
                     .until("Orchestrator shut down gracefully")
                     .unwrap_or_else(|_| {
                         panic!(
                             "{} did not log that the orchestrator has shut down gracefully",
-                            node.node_id
+                            node_cl.node_id
                         )
                     }),
             )
