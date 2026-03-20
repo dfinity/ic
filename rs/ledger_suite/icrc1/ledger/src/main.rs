@@ -178,7 +178,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 
     let mut magic_bytes_reader = StableReader::default();
     const MAGIC_BYTES: &[u8; 3] = b"MGR";
-    let mut first_bytes = [0u8; 3];
+    let mut first_bytes = [0_u8; 3];
     let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
         Ok(_) => first_bytes == *MAGIC_BYTES,
         Err(_) => false,
@@ -198,13 +198,13 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         let state = ciborium::de::from_reader(&mut buffered_reader).expect(
             "Failed to read the Ledger state from memory manager managed stable structures",
         );
-        let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+        let mut pre_upgrade_instructions_counter_bytes = [0_u8; 8];
         pre_upgrade_instructions_consumed =
             match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                 Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                 Err(_) => {
                     // If upgrading from a version that didn't write the instructions counter to stable memory
-                    0u64
+                    0_u64
                 }
             };
         state

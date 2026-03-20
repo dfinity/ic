@@ -16,7 +16,10 @@ grub = { path = "../../boot/grub" }
 sev_host = { path = "../../sev/host" }
 
 anyhow = { workspace = true }
+ic-os-metrics-utils = { path = "../../metrics/utils" }
 arc-swap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 askama = { workspace = true }
 clap = { workspace = true }
 devicemapper = { workspace = true }

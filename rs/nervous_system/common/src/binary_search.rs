@@ -17,7 +17,7 @@ where
             (other, self)
         };
         let difference = *large - *small;
-        let two = T::from(2u8);
+        let two = T::from(2_u8);
 
         let mid = *small + (difference / two);
         if mid == *small || mid == *large {

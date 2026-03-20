@@ -1,5 +1,5 @@
 use crate::{
-    CanisterId, CountBytes, Cycles, NumBytes, Time,
+    CanisterId, CountBytes, NumBytes, Time,
     ingress::WasmResult,
     time::{CoarseTime, UNIX_EPOCH},
 };
@@ -19,6 +19,7 @@ use ic_protobuf::{
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
+use ic_types_cycles::Cycles;
 use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;

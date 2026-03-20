@@ -68,7 +68,7 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
     /// Read a `u32` at the given offset in stable memory
     pub fn stable_read_u32(&self, offset: u64) -> Result<u32, StableMemoryError> {
         let mut reader = self.get_stable_reader(offset);
-        let mut u32_bytes = [0u8; 4];
+        let mut u32_bytes = [0_u8; 4];
         reader.read(&mut u32_bytes)?;
         Ok(u32::from_be_bytes(u32_bytes))
     }
@@ -217,20 +217,20 @@ mod test {
         }];
 
         let sns_version1 = SnsVersion {
-            governance_wasm_hash: [1u8; 32].to_vec(),
-            root_wasm_hash: [2u8; 32].to_vec(),
-            ledger_wasm_hash: [3u8; 32].to_vec(),
-            swap_wasm_hash: [4u8; 32].to_vec(),
-            archive_wasm_hash: [5u8; 32].to_vec(),
-            index_wasm_hash: [6u8; 32].to_vec(),
+            governance_wasm_hash: [1_u8; 32].to_vec(),
+            root_wasm_hash: [2_u8; 32].to_vec(),
+            ledger_wasm_hash: [3_u8; 32].to_vec(),
+            swap_wasm_hash: [4_u8; 32].to_vec(),
+            archive_wasm_hash: [5_u8; 32].to_vec(),
+            index_wasm_hash: [6_u8; 32].to_vec(),
         };
         let sns_version2 = SnsVersion {
-            governance_wasm_hash: [6u8; 32].to_vec(),
-            root_wasm_hash: [7u8; 32].to_vec(),
-            ledger_wasm_hash: [8u8; 32].to_vec(),
-            swap_wasm_hash: [9u8; 32].to_vec(),
-            archive_wasm_hash: [10u8; 32].to_vec(),
-            index_wasm_hash: [6u8; 32].to_vec(),
+            governance_wasm_hash: [6_u8; 32].to_vec(),
+            root_wasm_hash: [7_u8; 32].to_vec(),
+            ledger_wasm_hash: [8_u8; 32].to_vec(),
+            swap_wasm_hash: [9_u8; 32].to_vec(),
+            archive_wasm_hash: [10_u8; 32].to_vec(),
+            index_wasm_hash: [6_u8; 32].to_vec(),
         };
 
         let upgrade_path = Some(UpgradePath {

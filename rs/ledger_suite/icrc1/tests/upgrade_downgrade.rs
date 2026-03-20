@@ -148,7 +148,7 @@ fn install_ledger(
         ledger_mainnet_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -159,7 +159,7 @@ fn install_index_ng(env: &StateMachine, init_arg: MainnetInitArg) -> CanisterId 
         index_ng_mainnet_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
