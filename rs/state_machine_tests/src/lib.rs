@@ -2739,9 +2739,11 @@ impl StateMachine {
                     self.tick_with_config(payload);
 
                     // Keep ticking until ingress reaches a terminal state or
-                    // stalls in Processing (waiting for user-controlled steps).
-                    let mut stall_count = 0;
-                    for _ in 0..MAX_TICKS {
+                    // the system is idle (no in-flight work). An idle system
+                    // in Processing means the canister is waiting for an
+                    // inter-canister callback that the user must drive via
+                    // explicit Request/Response ordering steps.
+                    for tick in 0..MAX_TICKS {
                         match self.ingress_status(ingress_id) {
                             IngressStatus::Known {
                                 state: IngressState::Completed(_) | IngressState::Failed(_),
@@ -2750,16 +2752,16 @@ impl StateMachine {
                             IngressStatus::Known {
                                 state: IngressState::Processing,
                                 ..
-                            } => {
-                                stall_count += 1;
-                                if stall_count > 10 {
-                                    break; // stalled — user handles remaining steps
-                                }
-                            }
-                            _ => {
-                                stall_count = 0;
-                            }
+                            } if !self.has_in_flight_work(target) => break,
+                            _ => {}
                         }
+                        assert!(
+                            tick < MAX_TICKS - 1,
+                            "Ingress {} did not complete after {} ticks: {:?}",
+                            ingress_id,
+                            tick,
+                            self.ingress_status(ingress_id),
+                        );
                         self.set_ordering_target(Some(target));
                         self.tick();
                     }
@@ -2781,55 +2783,52 @@ impl StateMachine {
                 OrderedMessage::Request { source, target }
                 | OrderedMessage::Response { source, target } => {
                     let is_mgmt = target == ic_management_canister_types_private::IC_00;
+                    let dts_canister = if is_mgmt { source } else { target };
+                    let mut appeared = false;
 
-                    // Wait for message to appear in target's queue.
                     for tick in 0..MAX_TICKS {
-                        if self.sender_in_queue(target, source) {
+                        let in_queue = self.sender_in_queue(target, source);
+                        let has_dts = matches!(
+                            self.get_latest_state()
+                                .canister_state(&dts_canister)
+                                .map(|c| c.next_execution()),
+                            Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode)
+                        );
+
+                        if in_queue {
+                            appeared = true;
+                        }
+
+                        // Done: message appeared, was consumed, and DTS finished.
+                        if appeared && !in_queue && !has_dts {
                             break;
                         }
-                        assert!(
-                            tick < MAX_TICKS - 1,
-                            "Message from {} never appeared in {}'s queue",
-                            source,
-                            target
-                        );
-                        self.set_ordering_target(Some(source));
-                        self.tick();
-                    }
 
-                    // Tick until message is consumed.
-                    for tick in 0..MAX_TICKS {
-                        if !self.sender_in_queue(target, source) {
-                            break;
+                        // No progress possible — message never arriving.
+                        if !appeared && !self.has_in_flight_work(source) {
+                            panic!(
+                                "Message from {} will never appear in {}'s queue (no in-flight work)",
+                                source, target
+                            );
                         }
+
                         assert!(
                             tick < MAX_TICKS - 1,
-                            "Message from {} stuck in {}'s queue",
+                            "Stuck processing message from {} in {}'s queue (appeared={}, in_queue={}, has_dts={})",
                             source,
-                            target
+                            target,
+                            appeared,
+                            in_queue,
+                            has_dts
                         );
-                        if !is_mgmt {
+
+                        if !appeared || is_mgmt {
+                            // Waiting for induction or subnet message drain.
+                            self.set_ordering_target(Some(source));
+                        } else {
                             self.set_ordering_target(Some(target));
                         }
                         self.tick();
-                    }
-
-                    // Complete DTS. For mgmt canister, DTS state is on source canister.
-                    let dts_canister = if is_mgmt { source } else { target };
-                    for _ in 0..MAX_TICKS {
-                        let state = self.get_latest_state();
-                        match state
-                            .canister_state(&dts_canister)
-                            .map(|c| c.next_execution())
-                        {
-                            Some(
-                                NextExecution::ContinueLong | NextExecution::ContinueInstallCode,
-                            ) => {
-                                self.set_ordering_target(Some(dts_canister));
-                                self.tick();
-                            }
-                            _ => break,
-                        }
                     }
                 }
             }
@@ -2838,6 +2837,46 @@ impl StateMachine {
 
     /// Check if `source` is in `target`'s sender schedule.
     /// For IC_00, checks subnet_queues.
+    /// Returns true if there is any in-flight work related to `canister`:
+    /// output messages, loopback stream messages, subnet queue messages,
+    /// pending input, or DTS executions. Used to distinguish "Processing
+    /// because the system is still working" from "Processing because the
+    /// user needs to drive the next step."
+    fn has_in_flight_work(&self, canister: CanisterId) -> bool {
+        use ic_replicated_state::canister_state::NextExecution;
+
+        let state = self.get_latest_state();
+
+        // Canister has output messages waiting for induction.
+        if let Some(c) = state.canister_state(&canister) {
+            if c.system_state.queues().has_output() {
+                return true;
+            }
+            if c.system_state.queues().has_input() {
+                return true;
+            }
+            match c.next_execution() {
+                NextExecution::ContinueLong | NextExecution::ContinueInstallCode => return true,
+                _ => {}
+            }
+        }
+
+        // Loopback stream has messages (output routed, waiting for Demux).
+        let subnet_id = self.get_subnet_id();
+        if let Some(stream) = state.streams().get(&subnet_id) {
+            if !stream.messages().is_empty() {
+                return true;
+            }
+        }
+
+        // Subnet queues have pending messages.
+        if state.subnet_queues().has_input() {
+            return true;
+        }
+
+        false
+    }
+
     fn sender_in_queue(&self, target: CanisterId, source: CanisterId) -> bool {
         use ic_replicated_state::testing::CanisterQueuesTesting;
         let state = self.get_latest_state();

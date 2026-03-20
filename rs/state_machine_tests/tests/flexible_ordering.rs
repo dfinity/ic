@@ -831,3 +831,160 @@ fn test_impossible_ordering_no_messages() {
     }));
     assert!(result.is_err(), "Should panic: no messages in queue");
 }
+
+// ============================================================================
+// Test 17: Canister with a heartbeat executes request after heartbeat.
+//
+// B has a heartbeat handler. When the ordering says Request(A→B), B's
+// heartbeat task runs first (task queue before input queue), then B
+// processes A's request on the next tick. The loop handles this
+// transparently — it keeps ticking while the message is still in B's queue.
+// ============================================================================
+#[test]
+fn test_request_with_heartbeat() {
+    // WAT canister with a heartbeat that increments memory[0] and an
+    // update method that replies with memory[0..4].
+    fn heartbeat_wasm() -> Vec<u8> {
+        wat::parse_str(
+            r#"(module
+                (import "ic0" "msg_reply" (func $msg_reply))
+                (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+                (func $heartbeat
+                    (i32.store (i32.const 0)
+                        (i32.add (i32.load (i32.const 0)) (i32.const 1))))
+                (func $read
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                    (call $msg_reply))
+                (memory 1)
+                (export "canister_heartbeat" (func $heartbeat))
+                (export "canister_update read" (func $read))
+            )"#,
+        )
+        .unwrap()
+    }
+
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+    let canister_b = sm.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+    sm.install_wasm_in_mode(
+        canister_b,
+        ic_management_canister_types_private::CanisterInstallMode::Install,
+        heartbeat_wasm(),
+        vec![],
+    )
+    .unwrap();
+
+    // A calls B's "read" method via UC's call_simple.
+    let a_payload = wasm()
+        .call_simple(canister_b, "read", CallArgs::default())
+        .build();
+    let ingress_a = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_payload,
+        )
+        .unwrap();
+
+    sm.execute_with_ordering(MessageOrdering(vec![
+        OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+        OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        },
+        OrderedMessage::Response {
+            source: canister_b,
+            target: canister_a,
+        },
+    ]));
+
+    // B's heartbeat ran before processing A's request. The reply
+    // contains memory[0..4] which is the heartbeat counter.
+    let reply = get_reply(&sm, &ingress_a);
+    let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
+    assert!(
+        counter >= 1,
+        "Heartbeat should have run at least once, counter={}",
+        counter
+    );
+}
+
+// ============================================================================
+// Test 18: Canister with a global timer executes timer before request.
+//
+// B arms a timer in canister_init. When the ordering says Request(A→B),
+// B's timer task runs first (task queue before input queue), then B
+// processes A's request on a subsequent tick.
+// ============================================================================
+#[test]
+fn test_request_with_timer() {
+    // WAT canister: init arms a timer at time 0 (fires immediately),
+    // timer handler increments memory[0], update "read" replies with memory[0..4].
+    fn timer_wasm() -> Vec<u8> {
+        wat::parse_str(
+            r#"(module
+                (import "ic0" "msg_reply" (func $msg_reply))
+                (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+                (import "ic0" "global_timer_set" (func $global_timer_set (param i64) (result i64)))
+                (func $init
+                    (drop (call $global_timer_set (i64.const 1))))
+                (func $timer
+                    (i32.store (i32.const 0)
+                        (i32.add (i32.load (i32.const 0)) (i32.const 1)))
+                    (drop (call $global_timer_set (i64.const 1))))
+                (func $read
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                    (call $msg_reply))
+                (memory 1)
+                (export "canister_init" (func $init))
+                (export "canister_global_timer" (func $timer))
+                (export "canister_update read" (func $read))
+            )"#,
+        )
+        .unwrap()
+    }
+
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+    let canister_b = sm.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+    sm.install_wasm_in_mode(
+        canister_b,
+        ic_management_canister_types_private::CanisterInstallMode::Install,
+        timer_wasm(),
+        vec![],
+    )
+    .unwrap();
+
+    let a_payload = wasm()
+        .call_simple(canister_b, "read", CallArgs::default())
+        .build();
+    let ingress_a = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_payload,
+        )
+        .unwrap();
+
+    sm.execute_with_ordering(MessageOrdering(vec![
+        OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+        OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        },
+        OrderedMessage::Response {
+            source: canister_b,
+            target: canister_a,
+        },
+    ]));
+
+    let reply = get_reply(&sm, &ingress_a);
+    let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
+    assert!(
+        counter >= 1,
+        "Timer should have fired at least once, counter={}",
+        counter
+    );
+}
