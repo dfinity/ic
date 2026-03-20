@@ -61,8 +61,6 @@ pub(crate) mod test_utilities;
 #[cfg(test)]
 pub(crate) mod tests;
 
-pub(crate) use ic_config::subnet_config::SUBNET_MESSAGES_LIMIT_FRACTION;
-
 /// Contains limits (or budget) for various resources that affect duration of
 /// an execution round.
 #[derive(Clone, Debug, Default)]

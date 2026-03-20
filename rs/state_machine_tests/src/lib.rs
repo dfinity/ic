@@ -2845,10 +2845,10 @@ impl StateMachine {
 
         // Loopback stream has messages (output routed, waiting for Demux).
         let subnet_id = self.get_subnet_id();
-        if let Some(stream) = state.streams().get(&subnet_id) {
-            if !stream.messages().is_empty() {
-                return true;
-            }
+        if let Some(stream) = state.streams().get(&subnet_id)
+            && !stream.messages().is_empty()
+        {
+            return true;
         }
 
         // Subnet queues have pending messages.
