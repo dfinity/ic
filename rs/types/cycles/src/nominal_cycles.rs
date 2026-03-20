@@ -22,7 +22,7 @@ use std::convert::{From, TryFrom};
 pub struct NominalCycles(u128);
 
 impl NominalCycles {
-    pub fn zero() -> Self {
+    pub const fn zero() -> Self {
         Self(0)
     }
 
