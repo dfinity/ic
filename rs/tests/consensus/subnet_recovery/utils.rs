@@ -94,8 +94,9 @@ pub fn halt_subnet(
     logger: &Logger,
 ) {
     info!(logger, "Halting subnet {subnet_id}...");
-    let journal_streamer =
-        JournalStreamer::new(subnet_node.block_on_ssh_session().unwrap()).from_now();
+    let journal_streamer = JournalStreamer::new(subnet_node.block_on_ssh_session().unwrap())
+        .from_now()
+        .expect("Failed to create journal streamer");
 
     AdminStep {
         logger: logger.clone(),

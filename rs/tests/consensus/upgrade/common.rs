@@ -294,7 +294,8 @@ async fn upgrade_to(
                 node.node_id,
                 JournalStreamer::new(node.block_on_ssh_session().unwrap())
                     .follow()
-                    .from_now(),
+                    .from_now()
+                    .expect("Failed to create journal streamer"),
             )
         })
         .collect::<BTreeMap<_, _>>();
