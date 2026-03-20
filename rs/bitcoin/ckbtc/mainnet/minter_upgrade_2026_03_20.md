@@ -22,10 +22,10 @@ Due to the security incident explained in this [forum post](https://forum.dfinit
 * [3489347](https://dashboard.internetcomputer.org/bitcoin/transaction/3489347) and [3489353](https://dashboard.internetcomputer.org/bitcoin/transaction/3489353) because the transaction from the minter tries to reuse the already spent output [`8942e5ef0d4ace158a4fddd5153d320701bd13370ff8fecef13795cdd8ff1dc5:1`](https://mempool.space/tx/8942e5ef0d4ace158a4fddd5153d320701bd13370ff8fecef13795cdd8ff1dc5#vout=1).
 
 This proposal should address these issues by:
-* Removing the duplicated outpoints from the minter's state.
-* Discarding any transaction sent by the minter to the Bitcoin network that uses one of the duplicated outpoints. This is safe to do because those transactions are invalid and will never be accepted by the Bitcoin network.
+* Removing the duplicate outpoints from the minter's state.
+* Discarding any transaction sent by the minter to the Bitcoin network that uses one of the duplicate outpoints. This is safe to do because those transactions are invalid and will never be accepted by the Bitcoin network.
 
-The expected result is that the aforementioned withdrawals are considered as pending by the minter, like they would be processed by the minter for the first time.
+The expected result is that the aforementioned withdrawals are considered as pending by the minter, as if they were going to be processed by the minter for the first time.
 
 ## Release Notes
 
@@ -42,7 +42,7 @@ cca3eb1c44 refactor: Group cycles related types in new ic-types-cycles crate (#9
 b34d5ed28c chore: Upgrade rustc to 1.93.1  (#9113)
 713c399a69 fix: deflake //rs/bitcoin/ckbtc/minter:ckbtc_minter_canbench_test (#9220)
 042becb616 fix(ckbtc/ckdoge): destructure init args (#9108)
- ```
+```
 
 ## Upgrade args
 
@@ -54,7 +54,7 @@ didc encode -d rs/bitcoin/ckbtc/minter/ckbtc_minter.did -t '(MinterArg)' '(varia
 
 ## Wasm Verification
 
-Verify that the hash of the gzipped WASM matches the proposed hash.
+Verify that the hash of the gzipped Wasm matches the proposed hash.
 
 ```
 git fetch
