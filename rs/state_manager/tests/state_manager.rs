@@ -5,8 +5,8 @@ use ic_canonical_state::lazy_tree_conversion::state_height_as_tree;
 use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize;
 use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, LookupStatus, MatchPattern, MixedHashTree, Path as LabelPath, flatmap,
-    recompute_digest, sparse_labeled_tree_from_paths,
+    Label, LabeledTree, LookupStatus, MatchPattern, MixedHashTree, Path as LabelPath, Witness,
+    flatmap, recompute_digest, sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
@@ -25,7 +25,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
-    canister_snapshots::CanisterSnapshot,
+    canister_state::canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::{ApiBoundaryNodeEntry, testing::NetworkTopologyTesting},
     page_map::{PageIndex, Shard, StorageLayout},
@@ -48,7 +48,7 @@ use ic_state_manager::{
     testing::StateManagerTesting,
 };
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities_consensus::fake::FakeVerifier;
+use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
@@ -62,9 +62,11 @@ use ic_test_utilities_types::ids::{
 };
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{
-    BatchSummary, CanisterCyclesCostSchedule, CanisterQueryStats, QueryStats, QueryStatsPayload,
-    RawQueryStats, TotalQueryStats,
+    BatchSummary, CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
+use ic_types::consensus::certification::{Certification, CertificationContent};
+use ic_types::crypto::Signed;
+use ic_types::signature::ThresholdSignature;
 use ic_types::state_manager::StateManagerError;
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
@@ -77,6 +79,7 @@ use ic_types::{
     time::{Time, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use maplit::{btreemap, btreeset};
 use nix::sys::stat::{UtimensatFlags, utimensat};
 use nix::sys::time::{TimeSpec, TimeValLike};
@@ -265,6 +268,24 @@ fn read_and_assert_eq(env: &StateMachine, canister_id: CanisterId, expected: i32
         ),
         expected
     );
+}
+
+fn take_canister_snapshot(
+    state: &mut ReplicatedState,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    snapshot: CanisterSnapshot,
+) {
+    let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
+    let canister = Arc::make_mut(&mut canister_arc);
+    canister
+        .canister_snapshots
+        .push(snapshot_id, Arc::new(snapshot));
+    state
+        .metadata
+        .unflushed_checkpoint_ops
+        .take_snapshot(canister_id, snapshot_id);
+    state.put_canister_state(canister_arc);
 }
 
 #[test]
@@ -1408,13 +1429,13 @@ fn first_manifest_after_restart_is_incremental() {
 
         const NEW_WASM_PAGE: u64 = 300;
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[1_u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_WASM_PAGE), &[2_u8; PAGE_SIZE]),
         ]);
         const NEW_STABLE_PAGE: u64 = 500;
         execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[1_u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_STABLE_PAGE), &[2_u8; PAGE_SIZE]),
         ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -2819,11 +2840,11 @@ fn can_state_sync_from_cache() {
         execution_state
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
 
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
         let hash1 = wait_for_checkpoint(&*src_state_manager, Height(1));
@@ -3080,11 +3101,11 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
         execution_state
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
 
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*src_state_manager, Height(1));
@@ -3262,11 +3283,11 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
         execution_state
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
 
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
 
@@ -3923,8 +3944,8 @@ fn can_archive_state_sync_checkpoints_and_recover_from_verified_checkpoints() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[42u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[43u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[42_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[43_u8; PAGE_SIZE]),
         ]);
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
         let hash_2 = wait_for_checkpoint(&*src_state_manager, Height(2));
@@ -4313,8 +4334,8 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99_u8; PAGE_SIZE]),
         ]);
 
         let canister_state = state
@@ -4326,11 +4347,11 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap()
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[255u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[255_u8; PAGE_SIZE])]);
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[100u8; PAGE_SIZE]),
-            (PageIndex::new(3000), &[100u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[100_u8; PAGE_SIZE]),
+            (PageIndex::new(3000), &[100_u8; PAGE_SIZE]),
         ]);
 
         let canister_state = state
@@ -4338,9 +4359,9 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[111u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[111_u8; PAGE_SIZE]),
             (PageIndex::new(pages_per_chunk - 1), &[0; PAGE_SIZE]),
-            (PageIndex::new(pages_per_chunk), &[112u8; PAGE_SIZE]),
+            (PageIndex::new(pages_per_chunk), &[112_u8; PAGE_SIZE]),
             (PageIndex::new(2 * pages_per_chunk - 1), &[0; PAGE_SIZE]),
         ]);
     };
@@ -4366,7 +4387,7 @@ fn can_recover_from_corruption_on_state_sync() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(3000), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(3000), &[2_u8; PAGE_SIZE])]);
 
         let canister_state = state
             .canister_state_make_mut(&canister_test_id(90))
@@ -4377,7 +4398,7 @@ fn can_recover_from_corruption_on_state_sync() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(300), &[3_u8; PAGE_SIZE])]);
 
         // Exchange pages in the canister heap to check applying chunks out of order.
         let canister_state = state
@@ -4385,8 +4406,8 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[112u8; PAGE_SIZE]),
-            (PageIndex::new(pages_per_chunk), &[111u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[112_u8; PAGE_SIZE]),
+            (PageIndex::new(pages_per_chunk), &[111_u8; PAGE_SIZE]),
         ]);
 
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -4467,7 +4488,7 @@ fn can_recover_from_corruption_on_state_sync() {
                 .unwrap()
                 .remove(0);
             make_mutable(&canister_100_memory).unwrap();
-            write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
+            write_all_at(&canister_100_memory, &[3_u8; PAGE_SIZE], 4).unwrap();
             make_readonly(&canister_100_memory).unwrap();
 
             let canister_100_stable_memory = canister_100_layout
@@ -4478,7 +4499,7 @@ fn can_recover_from_corruption_on_state_sync() {
             make_mutable(&canister_100_stable_memory).unwrap();
             write_all_at(
                 &canister_100_stable_memory,
-                &[3u8; PAGE_SIZE],
+                &[3_u8; PAGE_SIZE],
                 PAGE_SIZE as u64,
             )
             .unwrap();
@@ -4542,7 +4563,7 @@ fn state_sync_can_handle_corrupted_base_checkpoint_after_restart() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(i), &[99_u8; PAGE_SIZE])]);
         }
     };
 
@@ -4711,7 +4732,7 @@ fn can_detect_divergence_with_rehash() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(i), &[99_u8; PAGE_SIZE])]);
         }
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -4784,8 +4805,8 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99_u8; PAGE_SIZE]),
         ]);
     };
 
@@ -4797,7 +4818,7 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(300), &[3_u8; PAGE_SIZE])]);
     };
 
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
@@ -5490,6 +5511,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
         );
 
@@ -5888,6 +5910,7 @@ fn certified_read_can_exclude_canister_ranges() {
                     subnet_features: SubnetFeatures::default(),
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
                 },
             );
             routing_table
@@ -5935,6 +5958,7 @@ fn certified_read_can_exclude_canister_ranges() {
                         label(subnet_test_id(0).get_ref()) =>
                             SubTree(flatmap! {
                                 label("public_key") => Leaf(vec![0_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             }),
                         label(subnet_test_id(1).get_ref()) =>
                             SubTree(flatmap! {
@@ -5944,14 +5968,17 @@ fn certified_read_can_exclude_canister_ranges() {
                                     )
                                 ),
                                 label("public_key") => Leaf(vec![1_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             }),
                         label(subnet_test_id(2).get_ref()) =>
                             SubTree(flatmap! {
                                 label("public_key") => Leaf(vec![2_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             }),
                         label(subnet_test_id(3).get_ref()) =>
                             SubTree(flatmap! {
                                 label("public_key") => Leaf(vec![3_u8; 133]),
+                                label("type") => Leaf("application".as_bytes().to_vec()),
                             })
                     })
             })
@@ -6380,14 +6407,14 @@ fn can_reset_memory() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(2), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(3), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(4), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(5), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(6), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(7), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(2), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(3), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(4), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(5), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(6), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(7), &[99_u8; PAGE_SIZE]),
         ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6410,8 +6437,8 @@ fn can_reset_memory() {
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[100u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[100_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[100_u8; PAGE_SIZE]),
         ]);
 
         // Check no remnants of the old data remain.
@@ -6572,14 +6599,14 @@ fn can_reset_stable_memory() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(0), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(2), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(3), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(4), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(5), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(6), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(7), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(2), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(3), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(4), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(5), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(6), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(7), &[99_u8; PAGE_SIZE]),
         ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6603,8 +6630,8 @@ fn can_reset_stable_memory() {
         execution_state.stable_memory =
             Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
         execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(0), &[100u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[100_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[100_u8; PAGE_SIZE]),
         ]);
 
         // Check no remnants of the old data remain.
@@ -6692,14 +6719,14 @@ fn can_reset_wasm_chunk_store() {
             .wasm_chunk_store
             .page_map_mut()
             .update(&[
-                (PageIndex::new(0), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(2), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(3), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(4), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(5), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(6), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(7), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(0), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(2), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(3), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(4), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(5), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(6), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(7), &[99_u8; PAGE_SIZE]),
             ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6725,8 +6752,8 @@ fn can_reset_wasm_chunk_store() {
             .wasm_chunk_store
             .page_map_mut()
             .update(&[
-                (PageIndex::new(0), &[100u8; PAGE_SIZE]),
-                (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+                (PageIndex::new(0), &[100_u8; PAGE_SIZE]),
+                (PageIndex::new(1), &[100_u8; PAGE_SIZE]),
             ]);
 
         // Check no remnants of the old data remain.
@@ -6863,12 +6890,12 @@ fn can_uninstall_code() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99_u8; PAGE_SIZE]),
         ]);
         execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99_u8; PAGE_SIZE]),
         ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6992,11 +7019,11 @@ fn tip_is_initialized_correctly() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[99u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[99_u8; PAGE_SIZE])]);
         execution_state
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[99u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[99_u8; PAGE_SIZE])]);
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
 
         state_manager.flush_tip_channel();
@@ -7119,7 +7146,7 @@ fn checkpoints_are_readonly() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[1u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[1_u8; PAGE_SIZE])]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7134,7 +7161,7 @@ fn checkpoints_are_readonly() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[2_u8; PAGE_SIZE])]);
 
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
         state_manager.flush_tip_channel();
@@ -7154,7 +7181,7 @@ fn checkpoints_are_readonly() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[4u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[4_u8; PAGE_SIZE])]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7178,7 +7205,7 @@ fn can_merge_unexpected_number_of_files() {
                 execution_state
                     .wasm_memory
                     .page_map
-                    .update(&[(PageIndex::new(page as u64), &[1u8; PAGE_SIZE])]);
+                    .update(&[(PageIndex::new(page as u64), &[1_u8; PAGE_SIZE])]);
             }
 
             state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -7269,7 +7296,7 @@ fn batch_summary_is_respected_for_writing_overlay_files() {
                 execution_state
                     .wasm_memory
                     .page_map
-                    .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+                    .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
 
                 let scope = if h % checkpoint_interval == 0 {
                     CertificationScope::Full
@@ -7309,7 +7336,14 @@ fn lsmt_shard_size_is_stable() {
 
 /// Mock version of CanisterManager::load_canister_snapshot that only does the bits relevant to the state manager
 fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mut ReplicatedState) {
-    let snapshot = state.canister_snapshots.get(snapshot_id).unwrap().clone();
+    let snapshot = state
+        .canister_state(&snapshot_id.get_canister_id())
+        .unwrap()
+        .canister_snapshots
+        .get(snapshot_id)
+        .unwrap()
+        .clone();
+
     let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
     let canister = Arc::make_mut(&mut canister_arc);
 
@@ -7346,7 +7380,7 @@ fn can_create_and_delete_canister_snapshot() {
         .unwrap();
         let snapshot_id = SnapshotId::from((canister_test_id(100), 0));
 
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        take_canister_snapshot(&mut state, canister_test_id(100), snapshot_id, new_snapshot);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7388,7 +7422,10 @@ fn can_create_and_delete_canister_snapshot() {
 
         let (_height, mut state) = state_manager.take_tip();
 
-        state.canister_snapshots.remove(snapshot_id);
+        let canister = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
+        canister.canister_snapshots.remove(snapshot_id);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7423,7 +7460,7 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
         )
         .unwrap();
         let snapshot_id = SnapshotId::from((canister_id, 0));
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        take_canister_snapshot(&mut state, canister_id, snapshot_id, new_snapshot);
 
         let canister_wasm_binary = &state
             .canister_state(&canister_id)
@@ -7435,6 +7472,8 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .binary;
 
         let snapshot_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .get(snapshot_id)
             .unwrap()
@@ -7467,6 +7506,8 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .binary;
 
         let snapshot_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .get(snapshot_id)
             .unwrap()
@@ -7536,7 +7577,7 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
         )
         .unwrap();
         let snapshot_id = SnapshotId::from((canister_id, 0));
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        take_canister_snapshot(&mut state, canister_id, snapshot_id, new_snapshot);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7566,6 +7607,8 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
             .binary;
 
         let snapshot_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .get(snapshot_id)
             .unwrap()
@@ -7604,16 +7647,16 @@ fn can_create_and_restore_snapshot() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
             execution_state
                 .stable_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
             canister_state
                 .system_state
                 .wasm_chunk_store
                 .page_map_mut()
-                .update(&[(PageIndex::new(0), &[3u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[3_u8; PAGE_SIZE])]);
             state_manager.commit_and_certify(state, certification_scope.clone(), None);
 
             // Take a snapshot of the canister
@@ -7624,7 +7667,7 @@ fn can_create_and_restore_snapshot() {
             )
             .unwrap();
             let snapshot_id = SnapshotId::from((canister_id, 0));
-            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+            take_canister_snapshot(&mut state, canister_id, snapshot_id, new_snapshot);
             state_manager.commit_and_certify(state, certification_scope.clone(), None);
 
             // Modify the canister.
@@ -7634,16 +7677,16 @@ fn can_create_and_restore_snapshot() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[4u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[4_u8; PAGE_SIZE])]);
             execution_state
                 .stable_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[5u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[5_u8; PAGE_SIZE])]);
             canister_state
                 .system_state
                 .wasm_chunk_store
                 .page_map_mut()
-                .update(&[(PageIndex::new(0), &[6u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[6_u8; PAGE_SIZE])]);
             state_manager.commit_and_certify(state, certification_scope.clone(), None);
 
             // Restore the canister.
@@ -8056,7 +8099,7 @@ fn can_split_with_inflight_restore_snapshot() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
 
             // Install `CANISTER_2`.
             insert_dummy_canister(&mut state, CANISTER_2);
@@ -8068,7 +8111,7 @@ fn can_split_with_inflight_restore_snapshot() {
             )
             .unwrap();
             let snapshot_id = SnapshotId::from((CANISTER_1, 0));
-            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+            take_canister_snapshot(&mut state, CANISTER_1, snapshot_id, new_snapshot);
 
             // Commit (and optionally checkpoint) the state.
             state_manager.commit_and_certify(state, certification_scope, None);
@@ -8119,8 +8162,6 @@ fn can_split_with_inflight_restore_snapshot() {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
                 expected.remove_canister(&CANISTER_1);
-                // And the snapshot of `CANISTER_1` should be deleted.
-                expected.canister_snapshots = Default::default();
             } else {
                 unreachable!("Unexpected subnet ID: {:?}", subnet_id);
             }
@@ -8200,16 +8241,16 @@ fn can_rename_canister() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
             execution_state
                 .stable_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
             canister_state
                 .system_state
                 .wasm_chunk_store
                 .page_map_mut()
-                .update(&[(PageIndex::new(0), &[3u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[3_u8; PAGE_SIZE])]);
             state_manager.commit_and_certify(state, certification_scope.clone(), None);
 
             let (_height, mut state) = state_manager.take_tip();
@@ -8222,7 +8263,7 @@ fn can_rename_canister() {
             )
             .unwrap();
             let snapshot_id = SnapshotId::from((new_canister_id, 0));
-            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+            take_canister_snapshot(&mut state, new_canister_id, snapshot_id, new_snapshot);
 
             // Trigger a flush either at the checkpoint or by committing exactly
             // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
@@ -8910,42 +8951,62 @@ fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
     .unwrap_or_default()
 }
 
+fn fake_certification_for_height(height: Height) -> Certification {
+    fake_certification_for_height_with_hash(height, CryptoHash(vec![42; 32]))
+}
+
+fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> Certification {
+    Certification {
+        height,
+        height_witness: Some(Witness::new_for_testing_with_height()),
+        signed: Signed {
+            content: CertificationContent::new(CryptoHashOfPartialState::from(hash)),
+            signature: ThresholdSignature::fake(),
+        },
+    }
+}
+
 #[test]
 fn commit_and_certify_optimization_conditions() {
     state_manager_test(|metrics, sm| {
         // update `fast_forward_height` to enable optimization
-        sm.update_fast_forward_height(Height::new(11));
-        assert_eq!(sm.fast_forward_height(), 11);
+        sm.update_fast_forward_height(Height::new(21));
+        assert_eq!(sm.fast_forward_height(), 21);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // all conditions are satisfied => optimization triggers
-        let (height, state) = sm.take_tip();
-        assert_eq!(height, Height(0));
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, Height::new(1), CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 1);
 
         // `CertificationScope::Full` => optimization does not trigger
-        let (height, state) = sm.take_tip();
-        assert_eq!(height, Height(1));
-        sm.commit_and_certify(state, CertificationScope::Full, None);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Full, None);
         assert_eq!(no_state_clone_count(metrics), 1);
 
-        // height of 10 is divisible by 10 => optimization only triggers 8 times
-        for i in 2..10 {
-            let (height, state) = sm.take_tip();
-            assert_eq!(height, Height(i));
-            sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        // heights of 10 and 20 are divisible by 10 => optimization does not trigger at those heights
+        let mut expected_no_state_clone_count = 1;
+        for height in 3..21 {
+            let state = sm.take_tip().1;
+            sm.commit_and_certify_at_height(
+                state,
+                Height::new(height),
+                CertificationScope::Metadata,
+                None,
+            );
+            if !height.is_multiple_of(10) {
+                expected_no_state_clone_count += 1;
+            }
+            assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
         }
-        assert_eq!(no_state_clone_count(metrics), 8);
 
-        // height of 11 is not less than `fast_forward_height` => optimization does not trigger
-        assert_eq!(sm.fast_forward_height(), 11);
-        let (height, state) = sm.take_tip();
-        assert_eq!(height, Height(10));
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        assert_eq!(no_state_clone_count(metrics), 8);
+        // height of 21 is not less than `fast_forward_height` => optimization does not trigger
+        assert_eq!(sm.fast_forward_height(), 21);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, Height::new(21), CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
     });
 }
 
@@ -8963,34 +9024,39 @@ fn commit_and_certify_optimization_semantics() {
         let only_initial_state = || {
             assert_eq!(sm.state_snapshot_heights(), vec![INITIAL_STATE_HEIGHT]);
             assert!(sm.certifications_metadata_heights().is_empty());
+            assert!(sm.certifications().is_empty());
         };
         only_initial_state();
 
         // optimization triggers => no state snapshot and certifications metadata are stored => still just the initial state in `states`
+        let mut batch_time_opt = None;
+        let mut expected_no_state_clone_count = 0;
+        for opt_height in 1..10 {
+            let (height, mut state) = sm.take_tip();
+            assert_eq!(height, Height::new(opt_height - 1)); // tip height is set correctly if optimization triggers
+            if let Some(batch_time) = batch_time_opt {
+                assert_eq!(state.metadata.batch_time, batch_time); // tip is set correctly if optimization triggers
+            }
+            state.metadata.batch_time += Duration::from_secs(1);
+            batch_time_opt = Some(state.metadata.batch_time);
+            sm.commit_and_certify_at_height(
+                state,
+                Height::new(opt_height),
+                CertificationScope::Metadata,
+                None,
+            );
+            expected_no_state_clone_count += 1;
+            assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
+            only_initial_state();
+        }
+
+        // optimization does not trigger => state snapshot and certifications metadata with hash tree are stored
         let mut state = sm.take_tip().1;
         state.metadata.batch_time += Duration::from_secs(1);
-        let batch_time_opt = state.metadata.batch_time;
-        let opt_height = Height::new(1);
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        assert_eq!(no_state_clone_count(metrics), 1);
-        only_initial_state();
-
-        // optimization does not trigger at height 10 => state snapshot and certifications metadata with hash tree are stored
-        let (height, mut state) = sm.take_tip();
-        assert_eq!(height, opt_height); // tip height is set correctly if optimization triggers
-        assert_eq!(state.metadata.batch_time, batch_time_opt); // tip is set correctly if optimization triggers
-        state.metadata.batch_time += Duration::from_secs(1);
         let batch_time_no_opt = state.metadata.batch_time;
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
         let no_opt_height = Height::new(10);
-        // height was incremented in c&c, so it's now 2.
-        for _ in 2..no_opt_height.get() {
-            let (_height, state) = sm.take_tip();
-            sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        }
-        let (height, _state) = sm.take_tip();
-        assert_eq!(height, no_opt_height);
-        assert_eq!(no_state_clone_count(metrics), 9);
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
 
         assert_eq!(
             sm.state_snapshot_heights(),
@@ -9008,6 +9074,7 @@ fn commit_and_certify_optimization_semantics() {
             sm.certifications_metadata_certification(no_opt_height)
                 .is_none()
         );
+        assert!(sm.certifications().is_empty());
     });
 }
 
@@ -9029,6 +9096,54 @@ fn fast_forward_height() {
 }
 
 #[test]
+#[should_panic(
+    expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
+)]
+fn commit_and_certify_tip_set_panic() {
+    state_manager_test(|_metrics, sm| {
+        // optimization does not trigger
+        let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+        let no_opt_height = Height::new(1);
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
+    });
+}
+
+#[test]
+#[should_panic(
+    expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
+)]
+fn commit_and_certify_optimization_tip_set_panic() {
+    state_manager_test(|_metrics, sm| {
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
+
+        // optimization triggers
+        let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+        let opt_height = Height::new(1);
+        sm.commit_and_certify_at_height(state, opt_height, CertificationScope::Metadata, None);
+    });
+}
+
+#[test]
+fn deliver_state_certification_for_future_heights() {
+    state_manager_test(|_metrics, sm| {
+        // consensus delivers certification for a future height
+        let opt_height = Height::new(1);
+        let certification = fake_certification_for_height(opt_height);
+        sm.deliver_state_certification(certification.clone());
+
+        // the certification is stored in `states.certifications`
+        assert_eq!(sm.certifications_metadata_heights(), vec![]);
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![opt_height]
+        );
+        assert_eq!(sm.certifications().get(&opt_height), Some(&certification));
+    });
+}
+
+#[test]
 fn take_tip_does_not_hash_without_optimization() {
     state_manager_test(|metrics, sm| {
         // optimization has not triggered yet
@@ -9042,7 +9157,12 @@ fn take_tip_does_not_hash_without_optimization() {
 
         // optimization does not trigger
         let no_opt_height = Height::new(1);
-        sm.commit_and_certify(initial_state, CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height(
+            initial_state,
+            no_opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // the state at height 1 is not hashed in `take_tip` since certification metadata are computed
@@ -9050,6 +9170,48 @@ fn take_tip_does_not_hash_without_optimization() {
         let (height, _state) = sm.take_tip();
         assert_eq!(tip_hash_count(metrics), 1);
         assert_eq!(height, no_opt_height);
+    });
+}
+
+#[test]
+fn take_tip_does_not_hash_with_optimization() {
+    state_manager_test(|metrics, sm| {
+        // consensus delivers certification for the next height
+        let opt_height = Height::new(1);
+        let certification = fake_certification_for_height(opt_height);
+        sm.deliver_state_certification(certification);
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![opt_height]
+        );
+
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // the initial state is always hashed in `take_tip`
+        assert_eq!(tip_hash_count(metrics), 0);
+        let (initial_height, initial_state) = sm.take_tip();
+        assert_eq!(initial_height, INITIAL_STATE_HEIGHT);
+        assert_eq!(tip_hash_count(metrics), 1);
+
+        // optimization triggers
+        sm.commit_and_certify_at_height(
+            initial_state,
+            opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
+        assert_eq!(no_state_clone_count(metrics), 1);
+
+        // the state at height 1 is not hashed in `take_tip` since certification was delivered
+        assert_eq!(tip_hash_count(metrics), 1);
+        let (height, _state) = sm.take_tip();
+        assert_eq!(tip_hash_count(metrics), 1);
+        assert_eq!(height, opt_height);
     });
 }
 
@@ -9071,7 +9233,12 @@ fn take_tip_hashes_with_optimization() {
 
         // optimization triggers
         let opt_height = Height::new(1);
-        sm.commit_and_certify(initial_state, CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height(
+            initial_state,
+            opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
         assert_eq!(no_state_clone_count(metrics), 1);
 
         // the state at height 1 is hashed in `take_tip` since certification metadata are not computed
@@ -9083,17 +9250,85 @@ fn take_tip_hashes_with_optimization() {
 }
 
 #[test]
+fn remove_inmemory_states_below_prunes_certification() {
+    state_manager_test(|metrics, sm| {
+        // consensus delivers certification for the next height
+        let cert_height = Height::new(1);
+        // the state hash was derived from the panic message
+        let state_hash = CryptoHash(
+            hex::decode("4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353")
+                .unwrap(),
+        );
+        let certification = fake_certification_for_height_with_hash(cert_height, state_hash);
+        sm.deliver_state_certification(certification);
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![cert_height]
+        );
+
+        // only certifications strictly below `latest_state_height` are pruned =>
+        // optimization does not trigger in this test to make `latest_state_height` move
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, cert_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // certification at height 1 is not pruned yet since `latest_state_height` is also 1
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![cert_height]
+        );
+
+        // we commit a strictly larger height 2 without optimization
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // certification at height 1 is pruned now that `latest_state_height` advanced to 2
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![]
+        );
+    });
+}
+
+#[test]
+fn remove_inmemory_states_below_does_not_prune_certification() {
+    state_manager_test(|_metrics, sm| {
+        // consensus delivers certification for the next height
+        let opt_height = Height::new(1);
+        let certification = fake_certification_for_height(opt_height);
+        sm.deliver_state_certification(certification);
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![opt_height]
+        );
+
+        // certification at height 1 is not pruned since `latest_state_height` is 0
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![opt_height]
+        );
+    });
+}
+
+#[test]
 fn get_state_hash_at() {
     state_manager_test(|metrics, sm| {
+        // a checkpoint is characterized by `CertificationScope::Full`,
+        // the exact height is not relevant
+        let checkpoint_height = Height::new(100);
+
         // update `fast_forward_height` to enable optimization
-        sm.update_fast_forward_height(Height::new(100));
-        assert_eq!(sm.fast_forward_height(), 100);
+        sm.update_fast_forward_height(checkpoint_height);
+        assert_eq!(sm.fast_forward_height(), checkpoint_height.get());
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // future checkpoints yield transient error
-        let checkpoint_height = Height::new(100);
         assert_eq!(
             sm.get_state_hash_at(checkpoint_height),
             Err(StateHashError::Transient(
@@ -9102,29 +9337,31 @@ fn get_state_hash_at() {
         );
 
         // optimization triggers every multiple of 10
-        let no_opt_height = Height::new(80);
-        for _ in 0..no_opt_height.get() {
+        let mut expected_no_state_clone_count = 0;
+        for height in 1..checkpoint_height.get() {
             let state = sm.take_tip().1;
-            sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        }
-        assert_eq!(no_state_clone_count(metrics), 72); // 72 = 80 - 8, every 10th.
-        assert_eq!(
-            sm.get_state_hash_at(checkpoint_height),
-            Err(StateHashError::Transient(
-                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
-            ))
-        );
-
-        // optimization triggers every multiple of 10
-        for _ in no_opt_height.get()..99 {
-            let state = sm.take_tip().1;
-            sm.commit_and_certify(state, CertificationScope::Metadata, None);
+            sm.commit_and_certify_at_height(
+                state,
+                Height::new(height),
+                CertificationScope::Metadata,
+                None,
+            );
+            if !height.is_multiple_of(10) {
+                expected_no_state_clone_count += 1;
+            }
+            assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
+            assert_eq!(
+                sm.get_state_hash_at(checkpoint_height),
+                Err(StateHashError::Transient(
+                    TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+                ))
+            );
         }
 
         // optimization does not trigger on checkpoint height
         let state = sm.take_tip().1;
-        sm.commit_and_certify(state, CertificationScope::Full, None);
-        assert_eq!(no_state_clone_count(metrics), 90);
+        sm.commit_and_certify_at_height(state, checkpoint_height, CertificationScope::Full, None);
+        assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
 
         // finally hash for checkpoint height is available
         wait_for_checkpoint(&sm, checkpoint_height);
@@ -9153,7 +9390,12 @@ fn flush_with_optimization() {
                 + Height::new(NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY),
             current_interval_length: Height(500),
         };
-        sm.commit_and_certify(state, CertificationScope::Metadata, Some(batch_summary));
+        sm.commit_and_certify_at_height(
+            state,
+            opt_height,
+            CertificationScope::Metadata,
+            Some(batch_summary),
+        );
         assert_eq!(no_state_clone_count(metrics), 1);
 
         // delta has been flushed
@@ -9167,7 +9409,7 @@ fn valid_witness_in_list_state_hashes_to_certify() {
     state_manager_test(|_metrics, sm| {
         let state = sm.take_tip().1;
         let height = Height::new(1);
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height(state, height, CertificationScope::Metadata, None);
 
         let state_hashes = sm.list_state_hashes_to_certify();
         assert_eq!(state_hashes.len(), 1);
@@ -9177,5 +9419,112 @@ fn valid_witness_in_list_state_hashes_to_certify() {
         let labeled_tree = materialize(&state_height_as_tree(&height), None);
         let actual_digest = recompute_digest(&labeled_tree, &witness).unwrap().to_vec();
         assert_eq!(actual_digest, expected_digest);
+    });
+}
+
+#[test]
+fn list_state_heights_to_certify() {
+    state_manager_test(|_metrics, sm| {
+        // commit a state at height 1
+        // (optimization does not trigger, but it does not matter here)
+        let state = sm.take_tip().1;
+        let no_opt_height = Height::new(1);
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
+
+        // `fast_forward_height` is less than `tip_height`
+        // and thus `list_state_heights_to_certify` does not return any height
+        assert!(sm.list_state_heights_to_certify().is_empty());
+
+        // advance `fast_forward_height` to 3
+        sm.update_fast_forward_height(Height::new(3));
+        assert_eq!(sm.fast_forward_height(), 3);
+
+        // now `list_state_heights_to_certify` returns all heights starting at `tip_height`
+        // and up until `fast_forward_height`
+        assert_eq!(
+            sm.list_state_heights_to_certify(),
+            (1..3).map(Height::new).collect::<Vec<_>>()
+        );
+
+        // advance `fast_forward_height` further to 42
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
+
+        // now `list_state_heights_to_certify` returns 20 heights starting at `tip_height`
+        let mut state_heights_to_certify: Vec<_> = (1..21).map(Height::new).collect();
+        assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
+
+        // deliver a certification for the tip height (optimization did not trigger)
+        // the state hash was derived from the panic message
+        let state_hash = CryptoHash(
+            hex::decode("4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353")
+                .unwrap(),
+        );
+        let certification = fake_certification_for_height_with_hash(no_opt_height, state_hash);
+        sm.deliver_state_certification(certification);
+
+        // now `list_state_heights_to_certify` omits the height with a certification delivered
+        state_heights_to_certify.retain(|h| *h != no_opt_height);
+        assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
+
+        // deliver a certification for a future height after the tip height
+        let certification_height = Height::new(2);
+        let certification = fake_certification_for_height(certification_height);
+        sm.deliver_state_certification(certification);
+
+        // now `list_state_heights_to_certify` omits both heights with a certification delivered
+        state_heights_to_certify.retain(|h| *h != certification_height);
+        assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
+    });
+}
+
+#[test]
+fn commit_and_certify_reuses_certification() {
+    state_manager_test(|metrics, sm| {
+        // consensus delivers certification for the next height
+        let no_opt_height = Height::new(1);
+        // the state hash was derived from the panic message
+        let state_hash = CryptoHash(
+            hex::decode("4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353")
+                .unwrap(),
+        );
+        let certification = fake_certification_for_height_with_hash(no_opt_height, state_hash);
+        sm.deliver_state_certification(certification);
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // `commit_and_certify` reused certification from `states.certifications`
+        assert!(
+            sm.certifications_metadata_certification(no_opt_height)
+                .is_some()
+        );
+
+        // `list_state_hashes_to_certify` does not include `no_opt_height` because certification was reused
+        assert!(
+            !sm.list_state_hashes_to_certify()
+                .into_iter()
+                .any(|state_hash_metadata| state_hash_metadata.height == no_opt_height)
+        );
+    });
+}
+
+#[test]
+#[should_panic(
+    expected = "Committed state @1 with hash CryptoHash(0x4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353) which is different from previously computed or delivered hash CryptoHash(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a)"
+)]
+fn commit_and_certify_panic_on_delivered_fake_certification() {
+    state_manager_test(|metrics, sm| {
+        // consensus delivers certification for a future height
+        let no_opt_height = Height::new(1);
+        let certification = fake_certification_for_height(no_opt_height);
+        sm.deliver_state_certification(certification);
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
     });
 }

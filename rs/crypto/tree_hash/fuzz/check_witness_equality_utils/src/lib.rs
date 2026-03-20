@@ -326,7 +326,7 @@ pub fn rng_from_u32(seed: u32) -> ChaCha20Rng {
     let seed_bytes: Vec<u8> = seed
         .to_le_bytes()
         .into_iter()
-        .chain([0u8; CHACHA_SEED_LEN - std::mem::size_of::<u32>()])
+        .chain([0_u8; CHACHA_SEED_LEN - std::mem::size_of::<u32>()])
         .collect();
     ChaCha20Rng::from_seed(
         seed_bytes
@@ -508,7 +508,7 @@ fn add_subtree_in_path(
                 let mut label = label;
                 while children.contains_key(&label) {
                     let mut data = label.into_vec();
-                    data.push(0u8);
+                    data.push(0_u8);
                     label = Label::from(data);
                 }
                 let new_children = FlatMap::from_key_values(

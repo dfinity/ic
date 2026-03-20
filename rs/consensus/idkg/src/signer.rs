@@ -631,7 +631,7 @@ impl ThresholdSigner for ThresholdSignerImpl {
     }
 }
 
-pub(crate) trait ThresholdSignatureBuilder {
+pub(crate) trait ThresholdSignatureBuilder: Send + Sync {
     /// Returns the signature for the given context, if it can be successfully
     /// built from the current sig shares in the IDKG pool
     fn get_completed_signature(
@@ -1892,7 +1892,6 @@ mod tests {
                     pseudo_random_id: [1; 32],
                     derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: Some((pre_sig_id, req_id.height)),
                     nonce: Some(nonce),
                 };
 
@@ -2022,7 +2021,6 @@ mod tests {
                     pseudo_random_id: [1; 32],
                     derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: Some((pre_sig_id, req_id.height)),
                     nonce: Some(nonce),
                 };
 
@@ -2117,7 +2115,6 @@ mod tests {
                     pseudo_random_id: [1; 32],
                     derivation_path: Arc::new(vec![vec![]]),
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: None,
                     nonce: None,
                 };
 

@@ -159,7 +159,7 @@ use_repo(oci, "dogecoind", "dogecoind_linux_amd64")
 # IC HTTP Gateway container used in tests
 oci.pull(
     name = "ic_gatewayd",
-    image = "ghcr.io/dfinity/ic-gateway@sha256:cae4b7950987048d84914e4b5604b3d48277f660ae6553a97c9e69e9380ea8ef",
+    image = "ghcr.io/dfinity/ic-gateway@sha256:ae2de90b6224fcbe1fdfcadd033159b3a6a2c2f4e9174311d6fc18a0dd06e024",
     platforms = [
         "linux/amd64",
     ],
@@ -334,7 +334,7 @@ http_file(
     name = "long_asset_canister",
     downloaded_file_path = "http_gateway_canister_custom_assets.wasm.gz",
     sha256 = "eedcbf986c67fd4ebe3042094604a9a5703e825e56433e2509a6a4d0384ccf95",
-    url = "https://github.com/dfinity/http-gateway/raw/refs/heads/main/examples/http-gateway/canister/http_gateway_canister_custom_assets.wasm.gz",
+    url = "https://github.com/dfinity/ic-http-gateway-protocol/raw/refs/heads/main/examples/http-gateway/canister/http_gateway_canister_custom_assets.wasm.gz",
 )
 
 # Old version of wallet canister
@@ -466,15 +466,6 @@ http_file(
     downloaded_file_path = "doge_headers_testnet_293100_308099_auxpow_parsed.csv",
     sha256 = "2aeb78d9564153607900a8e86d2e0fae72fb9fda362c2ce475e60c5d3e43f5e2",
     url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_293100_308099_auxpow_parsed.csv",
-)
-
-# Internet Identity canister (test build)
-
-http_file(
-    name = "ii_dev_canister",
-    downloaded_file_path = "internet_identity_dev.wasm.gz",
-    sha256 = "2357d822cd451f25c0edab3e45db52ab140a2ac8c4b0170201c78acc5bc11779",
-    url = "https://github.com/dfinity/internet-identity/releases/download/release-2024-05-13/internet_identity_dev.wasm.gz",
 )
 
 # NNS frontend dapp canister
@@ -760,22 +751,22 @@ http_archive(
 http_archive(
     name = "trivy-x86_64-linux",
     build_file = "@//third_party:BUILD.trivy.bazel",
-    sha256 = "ebc1dd4d4c0594028d6a501dfc1a73d56add20b29d3dee5ab6e64aac94b1d526",
-    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_Linux-64bit.tar.gz",
+    sha256 = "affa59a1e37d86e4b8ab2cd02f0ab2e63d22f1bf9cf6a7aa326c884e25e26ce3",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.69.2/trivy_0.69.2_Linux-64bit.tar.gz",
 )
 
 http_archive(
     name = "trivy-aarch64-darwin",
     build_file = "@//third_party:BUILD.trivy.bazel",
-    sha256 = "343fb01737e886bde797f30e5e6359fc1a7b7e1e9807f0e62ae3aea3f9508a1a",
-    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-ARM64.tar.gz",
+    sha256 = "320c0e6af90b5733b9326da0834240e944c6f44091e50019abdf584237ff4d0c",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.69.2/trivy_0.69.2_macOS-ARM64.tar.gz",
 )
 
 http_archive(
     name = "trivy-x86_64-darwin",
     build_file = "@//third_party:BUILD.trivy.bazel",
-    sha256 = "165c501451ab91a486678107c34bfb7b0b9e117c8ed5bba746ebda31923d9330",
-    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-64bit.tar.gz",
+    sha256 = "41f6eac3ebe3a00448a16f08038b55ce769fe2d5128cb0d64bdf282cdad4831a",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.69.2/trivy_0.69.2_macOS-64bit.tar.gz",
 )
 
 http_archive(
@@ -1134,7 +1125,8 @@ canisters(
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
         "node-rewards": "node-rewards-canister.wasm.gz",
-        "internet_identity_test": "internet_identity_dev.wasm.gz",
+        "internet_identity_backend": "internet_identity_production.wasm.gz",
+        "internet_identity_frontend": "internet_identity_frontend.wasm.gz",
         "nns_dapp_test": "nns-dapp_test.wasm.gz",
         "sns_aggregator_test": "sns_aggregator_dev.wasm.gz",
         "cycles_ledger": "cycles-ledger.wasm.gz",
@@ -1147,7 +1139,8 @@ canisters(
     path = "//:mainnet-canister-revisions.json",
     repositories = {
         "cycles_ledger": "dfinity/cycles-ledger",
-        "internet_identity_test": "dfinity/internet-identity",
+        "internet_identity_backend": "dfinity/internet-identity",
+        "internet_identity_frontend": "dfinity/internet-identity",
         "nns_dapp_test": "dfinity/nns-dapp",
         "sns_aggregator_test": "dfinity/nns-dapp",
         "bitcoin_testnet": "dfinity/bitcoin-canister",

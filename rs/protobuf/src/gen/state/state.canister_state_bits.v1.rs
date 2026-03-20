@@ -314,7 +314,7 @@ pub mod execution_task {
         #[prost(message, optional, tag = "4")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
-        #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 6, 3, 5")]
+        #[prost(oneof = "aborted_execution::Input", tags = "1, 6, 3, 5")]
         pub input: ::core::option::Option<aborted_execution::Input>,
     }
     /// Nested message and enum types in `AbortedExecution`.
@@ -330,9 +330,6 @@ pub mod execution_task {
         pub enum Input {
             #[prost(message, tag = "1")]
             Request(super::super::super::super::queues::v1::Request),
-            /// TODO(DSM-95): Remove after we have switched to `AbortedResponse`.
-            #[prost(message, tag = "2")]
-            Response(super::super::super::super::queues::v1::Response),
             #[prost(message, tag = "6")]
             AbortedResponse(AbortedResponse),
             #[prost(message, tag = "3")]
@@ -594,6 +591,28 @@ pub mod log_visibility_v2 {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnapshotVisibilityAllowedViewers {
+    #[prost(message, repeated, tag = "1")]
+    pub principals: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnapshotVisibility {
+    #[prost(oneof = "snapshot_visibility::SnapshotVisibility", tags = "1, 2, 3")]
+    pub snapshot_visibility: ::core::option::Option<snapshot_visibility::SnapshotVisibility>,
+}
+/// Nested message and enum types in `SnapshotVisibility`.
+pub mod snapshot_visibility {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum SnapshotVisibility {
+        #[prost(int32, tag = "1")]
+        Controllers(i32),
+        #[prost(int32, tag = "2")]
+        Public(i32),
+        #[prost(message, tag = "3")]
+        AllowedViewers(super::SnapshotVisibilityAllowedViewers),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterLogRecord {
     #[prost(uint64, tag = "1")]
     pub idx: u64,
@@ -620,7 +639,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 64
+/// Next ID: 65
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -743,6 +762,9 @@ pub struct CanisterStateBits {
         ::prost::alloc::string::String,
         ::prost::alloc::string::String,
     >,
+    /// Snapshot visibility for the canister.
+    #[prost(message, optional, tag = "64")]
+    pub snapshot_visibility: ::core::option::Option<SnapshotVisibility>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

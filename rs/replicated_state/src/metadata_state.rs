@@ -7,7 +7,7 @@ mod tests;
 use self::subnet_call_context_manager::SubnetCallContextManager;
 use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
-use crate::{CheckpointLoadingMetrics, canister_state::system_state::CyclesUseCase};
+use crate::CheckpointLoadingMetrics;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
@@ -22,7 +22,6 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
@@ -30,7 +29,6 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{CanisterCall, MessageId, Payload, RejectContext, Response, StreamMessage},
     node_id_into_protobuf, node_id_try_from_option,
-    nominal_cycles::NominalCycles,
     state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion},
     subnet_id_into_protobuf,
     time::{Time, UNIX_EPOCH},
@@ -39,6 +37,7 @@ use ic_types::{
         StreamSlice,
     },
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
@@ -317,13 +316,26 @@ pub struct SubnetTopology {
     /// holding the key as backup to actually produce signatures or VetKd key derivations.
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
+    pub subnet_admins: BTreeSet<PrincipalId>,
+}
+
+/// Only rented subnets, i.e., application subnets on a "free" cost schedule,
+/// and cloud engines on a "free" cost schedule can have subnet admins set.
+#[allow(clippy::nonminimal_bool)]
+pub fn can_have_subnet_admins(
+    subnet_type: SubnetType,
+    cost_schedule: CanisterCyclesCostSchedule,
+) -> bool {
+    (subnet_type == SubnetType::Application && cost_schedule == CanisterCyclesCostSchedule::Free)
+        || (subnet_type == SubnetType::CloudEngine
+            && cost_schedule == CanisterCyclesCostSchedule::Free)
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetMetrics {
-    pub consumed_cycles_by_deleted_canisters: NominalCycles,
-    pub consumed_cycles_http_outcalls: NominalCycles,
-    pub consumed_cycles_ecdsa_outcalls: NominalCycles,
+    consumed_cycles_by_deleted_canisters: NominalCycles,
+    consumed_cycles_http_outcalls: NominalCycles,
+    consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
@@ -349,6 +361,30 @@ impl SubnetMetrics {
             .consumed_cycles_by_use_case
             .entry(use_case)
             .or_insert_with(|| NominalCycles::from(0)) += cycles;
+    }
+
+    pub fn observe_consumed_cycles_by_deleted_canisters(&mut self, cycles: NominalCycles) {
+        self.consumed_cycles_by_deleted_canisters += cycles;
+    }
+
+    pub fn get_consumed_cycles_by_deleted_canisters(&self) -> NominalCycles {
+        self.consumed_cycles_by_deleted_canisters
+    }
+
+    pub fn observe_consumed_cycles_http_outcalls(&mut self, cycles: NominalCycles) {
+        self.consumed_cycles_http_outcalls += cycles;
+    }
+
+    pub fn get_consumed_cycles_http_outcalls(&self) -> NominalCycles {
+        self.consumed_cycles_http_outcalls
+    }
+
+    pub fn observe_consumed_cycles_ecdsa_outcalls(&mut self, cycles: NominalCycles) {
+        self.consumed_cycles_ecdsa_outcalls += cycles;
+    }
+
+    pub fn get_consumed_cycles_ecdsa_outcalls(&self) -> NominalCycles {
+        self.consumed_cycles_ecdsa_outcalls
     }
 
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {

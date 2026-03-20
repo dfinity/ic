@@ -1,20 +1,17 @@
 #![allow(dead_code)]
 use crate::driver::{
+    action_graph::ActionGraph,
+    context::{GroupContext, ProcessContext},
+    dsl::{SubprocessFn, TestFunction},
+    event::TaskId,
     farm::{Farm, HostFeature},
-    task_scheduler::TaskScheduler,
+    plan::{EvalOrder, Plan},
+    report::Outcome,
+    task::{DebugKeepaliveTask, EmptyTask},
+    task_scheduler::{TaskScheduler, TaskTable},
     test_env_api::{
         FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
-        IcNodeSnapshot,
-    },
-    {
-        action_graph::ActionGraph,
-        context::{GroupContext, ProcessContext},
-        dsl::{SubprocessFn, TestFunction},
-        event::TaskId,
-        plan::{EvalOrder, Plan},
-        report::Outcome,
-        task::{DebugKeepaliveTask, EmptyTask},
-        task_scheduler::TaskTable,
+        IcNodeSnapshot, ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT,
     },
 };
 use crate::driver::{
@@ -423,13 +420,14 @@ impl SystemTestSubGroup {
 
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
-    teardown: Option<Box<dyn PotSetupFn>>,
+    teardowns: Vec<Box<dyn PotSetupFn>>,
     assert_no_replica_restarts: bool,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
     with_farm: bool,
-    metrics_to_check: Vec<String>,
+    replica_metrics_to_check: Vec<String>,
+    orchestrator_metrics_to_check: Vec<String>,
 }
 
 impl Default for SystemTestGroup {
@@ -463,19 +461,24 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             setup: Default::default(),
-            teardown: Default::default(),
+            teardowns: Default::default(),
             assert_no_replica_restarts: true,
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
-            metrics_to_check: vec![
+            replica_metrics_to_check: vec![
                 String::from("critical_errors"),
                 String::from("consensus_invalidated_artifacts"),
                 String::from("dkg_invalidated_artifacts"),
                 String::from("idkg_invalidated_artifacts"),
                 String::from("certification_invalidated_artifacts"),
                 String::from("canister_http_invalidated_artifacts"),
+            ],
+            orchestrator_metrics_to_check: vec![
+                String::from("orchestrator_cup_deserialization_failed_total"),
+                String::from("orchestrator_state_removal_failed_total"),
+                String::from("orchestrator_tasks_failed_total"),
             ],
         }
     }
@@ -499,22 +502,31 @@ impl SystemTestGroup {
         self
     }
 
-    pub fn with_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
-        self.teardown = Some(Box::new(teardown));
+    pub fn add_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
+        self.teardowns.push(Box::new(teardown));
         self
     }
 
     /// If the provided metric will have a non-zero value for any of the nodes, the test will
     /// fail.
-    pub fn add_metrics_to_check(mut self, metric_name: impl ToString) -> Self {
-        self.metrics_to_check.push(metric_name.to_string());
+    pub fn add_replica_metrics_to_check(mut self, metric_name: impl ToString) -> Self {
+        self.replica_metrics_to_check.push(metric_name.to_string());
         self
     }
 
     pub fn remove_metrics_to_check(mut self, metric_name: impl ToString) -> Self {
         let metric_name_to_remove = metric_name.to_string();
-        self.metrics_to_check
+        self.replica_metrics_to_check
             .retain(|metric_name| *metric_name != metric_name_to_remove);
+        self.orchestrator_metrics_to_check
+            .retain(|metric_name| *metric_name != metric_name_to_remove);
+        self
+    }
+
+    pub fn remove_all_metrics_to_check(mut self) -> Self {
+        self.replica_metrics_to_check = Vec::new();
+        self.orchestrator_metrics_to_check = Vec::new();
+
         self
     }
 
@@ -715,36 +727,40 @@ impl SystemTestGroup {
             false,
         );
 
-        let assert_no_metric_errors_fn: Option<(String, Box<dyn PotSetupFn>)> = if !self
-            .metrics_to_check
-            .is_empty()
-        {
-            let teardown_fn = move |env: TestEnv| {
-                let topology = match env.safe_topology_snapshot() {
-                    Ok(topology) => topology,
-                    Err(e) => {
-                        info!(
-                            env.logger(),
-                            "Could not get topology ({e:?}) => skipping checks of critical errors."
+        let assert_no_metric_errors_fn: Option<(String, Box<dyn PotSetupFn>)> =
+            if !self.replica_metrics_to_check.is_empty()
+                || !self.orchestrator_metrics_to_check.is_empty()
+            {
+                let teardown_fn = move |env: TestEnv| {
+                    let topology = match env.safe_topology_snapshot() {
+                        Ok(topology) => topology,
+                        Err(e) => {
+                            info!(
+                                env.logger(),
+                                "Could not get topology ({e:?}) => skipping checks of metrics."
+                            );
+                            return;
+                        }
+                    };
+
+                    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
+                        node.assert_no_metrics_errors(
+                            self.replica_metrics_to_check.clone(),
+                            REPLICA_METRICS_PORT,
                         );
-                        return;
+                        node.assert_no_metrics_errors(
+                            self.orchestrator_metrics_to_check.clone(),
+                            ORCHESTRATOR_METRICS_PORT,
+                        );
                     }
                 };
-                let nodes: Vec<IcNodeSnapshot> = topology
-                    .subnets()
-                    .flat_map(|subnet| subnet.nodes())
-                    .collect();
-                for node in nodes {
-                    node.assert_no_metrics_errors(self.metrics_to_check.clone());
-                }
+                Some((
+                    ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
+                    Box::new(teardown_fn),
+                ))
+            } else {
+                None
             };
-            Some((
-                ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
-                Box::new(teardown_fn),
-            ))
-        } else {
-            None
-        };
 
         let assert_no_replica_restarts_fn: Option<(String, Box<dyn PotSetupFn>)> = if self
             .assert_no_replica_restarts
@@ -777,9 +793,10 @@ impl SystemTestGroup {
         };
 
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
-            .teardown
+            .teardowns
             .into_iter()
-            .map(|teardown| (TEARDOWN_TASK_NAME.to_string(), teardown))
+            .enumerate()
+            .map(|(i, teardown)| (format!("{TEARDOWN_TASK_NAME}_{i}"), teardown))
             .chain(assert_no_metric_errors_fn)
             .chain(assert_no_replica_restarts_fn)
             .map(|(teardown_name, teardown_fn)| {

@@ -4,11 +4,12 @@ use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
 use ic_types::Time;
 use ic_types::{
-    CanisterId, Cycles, NumBytes, PrincipalId,
+    CanisterId, NumBytes, PrincipalId,
     messages::{CallContextId, NO_DEADLINE, Request},
     methods::{Callback, WasmClosure},
     time::CoarseTime,
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::doc_ref;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};

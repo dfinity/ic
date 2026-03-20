@@ -11,7 +11,7 @@ pub fn ecdsa_public_key_to_address(pubkey: &PublicKey) -> ic_ethereum_types::Add
     let key_bytes = pubkey.serialize_sec1(/*compressed=*/ false);
     debug_assert_eq!(key_bytes[0], 0x04);
     let hash = keccak(&key_bytes[1..]);
-    let mut addr = [0u8; 20];
+    let mut addr = [0_u8; 20];
     addr[..].copy_from_slice(&hash[12..32]);
     ic_ethereum_types::Address::new(addr)
 }

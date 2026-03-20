@@ -171,6 +171,7 @@ fn nns_ui_requires_other_icp_features() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let icp_features = IcpFeatures {
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
@@ -190,6 +191,7 @@ fn test_ii_nns_ui() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
@@ -201,7 +203,7 @@ fn test_ii_nns_ui() {
     let nns_dapp_canister_id = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
     let nns_dapp_title = "Network Nervous System";
     let internet_identity_canister_id =
-        Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+        Principal::from_text("uqzsh-gqaaa-aaaaq-qaada-cai").unwrap();
     let internet_identity_title = "Internet Identity";
     for (canister_id, expected_title) in [
         (nns_dapp_canister_id.to_string(), nns_dapp_title),
@@ -214,7 +216,12 @@ fn test_ii_nns_ui() {
             frontend_canister(&pic, Principal::from_text(canister_id).unwrap(), false, "/");
         let resp = client.get(url).send().unwrap();
         let body = String::from_utf8(decode_gzipped_bytes(resp.bytes().unwrap().to_vec())).unwrap();
-        assert!(body.contains(&format!("<title>{}</title>", expected_title)));
+        assert!(
+            body.contains(&format!("<title>{}</title>", expected_title)),
+            "Expected title '{}' not found in response body (first 2000 chars): {}",
+            expected_title,
+            &body[..body.len().min(2000)]
+        );
     }
 }
 
@@ -225,6 +232,7 @@ fn test_no_canister_http_without_auto_progress() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
@@ -626,8 +634,9 @@ fn test_cycles_ledger() {
                 .0;
         assert_eq!(balance, expected_balance);
 
-        // The cycles ledger index only syncs with the cycles ledger once per second.
-        pic.advance_time(Duration::from_secs(1));
+        // The cycles ledger index employs a backoff algorithm, and may, by default, only sync with
+        // the cycles ledger every 10 seconds if the ledger transaction rate is low.
+        pic.advance_time(Duration::from_secs(10));
         pic.tick();
 
         // Check balance via cycles ledger index.

@@ -32,6 +32,7 @@ message SubnetTopology {
   reserved "ecdsa_keys_held";
   repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
   registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
+  repeated types.v1.PrincipalId subnet_admins = 8;
 }
 
 message SubnetsEntry {
@@ -101,13 +102,12 @@ message ThresholdArguments {
 }
 
 message SignWithThresholdContext {
+  reserved 6, 7;
   state.queues.v1.Request request = 1;
   ThresholdArguments args = 2;
   repeated bytes derivation_path_vec = 3;
   bytes pseudo_random_id = 4;
   uint64 batch_time = 5;
-  optional uint64 pre_signature_id = 6;
-  optional uint64 height = 7;
   optional bytes nonce = 8;
 }
 

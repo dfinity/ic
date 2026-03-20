@@ -11,18 +11,15 @@ on the process that this file is part of, see
 
 ## Changed
 
-* Lowered the maximum page size of list_neurons to 50. The vast majority (> 95%)
-  have no more than 50 neurons, so for them, this has no noticeable impact.
+- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
+  where the sum of developer-allocated tokens exceeds
+  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
+  validation is no longer needed.
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
-
-* The Bitcoin and Dogecoin Watchdog canisters are now considered "protocol"
-  canisters; thus, proposals to upgrade these canisters now fall into the
-  "Protocol Canister Management" topic, instead of the "Application Canister
-  Management" topic.
 
 ## Security

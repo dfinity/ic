@@ -81,10 +81,15 @@ type CompleteCanisterMigrationPayload = record {
   migration_trace : vec principal;
 };
 
+type ResourceLimits = record {
+  maximum_state_size : opt nat64;
+};
+
 type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
   features : SubnetFeatures;
   max_ingress_bytes_per_message : nat64;
+  max_ingress_bytes_per_block: opt nat64;
   dkg_dealings_per_block : nat64;
   max_block_payload_size : nat64;
   start_as_nns : bool;
@@ -104,6 +109,8 @@ type CreateSubnetPayload = record {
   canister_cycles_cost_schedule: opt CanisterCyclesCostSchedule;
 
   subnet_admins: opt vec principal;
+
+  resource_limits : opt ResourceLimits;
 
   // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
   ingress_bytes_per_block_soft_cap : nat64;
@@ -453,6 +460,7 @@ type UpdateSubnetPayload = record {
   start_as_nns : opt bool;
   is_halted : opt bool;
   max_ingress_messages_per_block : opt nat64;
+  max_ingress_bytes_per_block: opt nat64;
   max_number_of_canisters : opt nat64;
   retransmission_request_ms : opt nat32;
   dkg_interval_length : opt nat64;
@@ -503,6 +511,11 @@ type SetSubnetOperationalLevelPayload = record {
   // Similar to ssh_read_only_access, except that this targets one node at a
   // time, not all the nodes in the subnet.
   ssh_node_state_write_access : opt vec NodeSshAccess;
+
+  // Replica version IDs to recall for this subnet. If specified, these versions
+  // will replace the subnet's recalled_replica_version_ids list, preventing
+  // the subnet from upgrading to these versions.
+  recalled_replica_version_ids : opt vec text;
 };
 
 type NodeSshAccess = record {
@@ -511,6 +524,24 @@ type NodeSshAccess = record {
 
   // Doesn't make sense without this. (opt for future compatibility.)
   public_keys : opt vec text;
+};
+
+type SplitSubnetPayload = record {
+  source_subnet_id: principal;
+  destination_canister_ranges: vec CanisterIdRange;
+  destination_node_ids: vec principal;
+};
+
+type OperationType = variant {
+  Add: vec principal;
+  Remove: vec principal;
+  Clear: record {};
+};
+
+type UpdateSubnetAdminsPayload = record {
+  subnet_id: principal;
+  // opt for future compatibility when removing operation types.
+  operation_type: opt OperationType;
 };
 
 service : {
@@ -571,6 +602,8 @@ service : {
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
   ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
+  update_subnet_admins : (UpdateSubnetAdminsPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
   swap_node_in_subnet_directly : (SwapNodeInSubnetDirectlyPayload) -> ();
+  split_subnet : (SplitSubnetPayload) -> ();
 };

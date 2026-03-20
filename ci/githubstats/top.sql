@@ -3,6 +3,8 @@ WITH
     SELECT
       label,
       COUNT(*) AS "total",
+      MAX(CASE WHEN overall_status <> 1 THEN bt.first_start_time END) AS "last_non_success_at",
+      MAX(CASE WHEN overall_status = 2 THEN bt.first_start_time END) AS "last_flaky_at",
       SUM(CASE WHEN overall_status <> 1 THEN 1 ELSE 0 END) AS "non_success",
       SUM(CASE WHEN overall_status = 2 THEN 1 ELSE 0 END)  AS "flaky",
       SUM(CASE WHEN overall_status = 3 THEN 1 ELSE 0 END)  AS "timeout",
@@ -27,6 +29,8 @@ WITH
     SELECT
       label,
       "total",
+      "last_non_success_at",
+      "last_flaky_at",
       "non_success",
       "flaky",
       "timeout",
@@ -42,7 +46,7 @@ WITH
     FROM
       "core"
 
-    ORDER BY {order_by} DESC
+    ORDER BY {order_by} DESC NULLS LAST
 
     LIMIT {N}
   )

@@ -20,7 +20,7 @@ HARDWARE_GENERATION=
 ###############################################################################
 
 GEN1_CPU_MODEL="AMD EPYC 7302"
-GEN1_CPU_CAPABILITIES=("sev")
+GEN1_CPU_CAPABILITIES=("svm" "sev")
 GEN1_CPU_SOCKETS=2
 GEN1_CPU_THREADS=64
 # Gen1 Dell has 10 * 3.2TB drives and Gen1 SuperMicro has 5 * 6.4 TB drives = 32TB
@@ -28,7 +28,7 @@ GEN1_MINIMUM_DISK_SIZE=3200000000000
 GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
 GEN2_CPU_MODEL="AMD EPYC 7..3"
-GEN2_CPU_CAPABILITIES=("sev_snp")
+GEN2_CPU_CAPABILITIES=("svm" "sev_snp")
 GEN2_MINIMUM_CPU_SOCKETS=2
 GEN2_MINIMUM_CPU_THREADS=64
 # Gen2 has 5 * 6.4 TB drives = 32TB
@@ -57,11 +57,13 @@ function detect_hardware_generation() {
 
     local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
-    # All type0.* and type1.* are considered gen1, all type3.* are gen2
+    # All type0.* and type1.* are considered gen1, all type3.* are gen2, all type4.* are cloud engine nodes
     if [[ $node_reward_type =~ ^type(0|1)(\.[0-9]+)?$ ]]; then
         HARDWARE_GENERATION=1
     elif [[ $node_reward_type =~ ^type3(\.[0-9]+)?$ ]]; then
         HARDWARE_GENERATION=2
+    elif [[ $node_reward_type =~ ^type4(\.[0-9]+)?$ ]]; then
+        HARDWARE_GENERATION=3
     else
         log_and_halt_installation_on_error "1" "Unknown or unsupported node reward type '${node_reward_type}'."
     fi
@@ -85,37 +87,60 @@ function check_num_cpus() {
     fi
 }
 
+function verify_capability_for_all_sockets() {
+    local cpu_json="$1"
+    local capability_name="$2"
+
+    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
+        local capability=$(echo "${cpu_json}" | jq -r \
+            --arg socket "${socket_id}" \
+            --arg capability "${capability_name}" \
+            '.[] | select(.id==$socket) | .capabilities[$capability]')
+        log_and_halt_installation_on_error "$?" "Failed to query CPU capabilities"
+
+        echo -n "* Socket ${socket_id}: capability '${capability_name}' "
+        if [[ ${capability} =~ .*true.* ]]; then
+            echo "is present"
+        else
+            echo "is missing"
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+function verify_model_for_all_sockets() {
+    local cpu_json="$1"
+    local required_model="$2"
+
+    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
+        local model=$(echo "${cpu_json}" | jq -r --arg socket "${socket_id}" '.[] | select(.id==$socket) | .product')
+
+        echo -n "* CPU model '${model}' "
+        if [[ ${model} =~ .*${required_model}.* ]]; then
+            echo "meets system requirements"
+        else
+            echo "does NOT meet system requirements"
+            return 1
+        fi
+    done
+
+    return 0
+}
+
 function verify_model_and_capabilities_for_all_sockets() {
     local cpu_json="$1"
     local required_model="$2"
     shift 2
     local required_capabilities=("$@")
 
-    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
-        local unit=$(echo "${socket_id}" | awk -F ':' '{ print $2 }')
+    verify_model_for_all_sockets "${cpu_json}" "${required_model}"
+    log_and_halt_installation_on_error "$?" "One or more CPU's model does NOT meet system requirements"
 
-        echo "* Verifying CPU socket ${unit}..."
-        local model=$(echo "${cpu_json}" | jq -r --arg socket "${socket_id}" '.[] | select(.id==$socket) | .product')
-        if [[ ${model} =~ .*${required_model}.* ]]; then
-            echo "Model meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Model does NOT meet system requirements.."
-        fi
-
-        echo "* Verifying CPU capabilities..."
-        for capability_name in "${required_capabilities[@]}"; do
-            local capability=$(echo "${cpu_json}" | jq -r \
-                --arg socket "${socket_id}" \
-                --arg capability "${capability_name}" \
-                '.[] | select(.id==$socket) | .capabilities[$capability]')
-            log_and_halt_installation_on_error "$?" "Failed to query CPU capabilities"
-
-            if [[ ${capability} =~ .*true.* ]]; then
-                echo "Capability '${capability_name}' meets system requirements."
-            else
-                log_and_halt_installation_on_error "$?" "Capability '${capability_name}' does NOT meet system requirements.."
-            fi
-        done
+    for capability_name in "${required_capabilities[@]}"; do
+        verify_capability_for_all_sockets "${cpu_json}" "${capability_name}"
+        log_and_halt_installation_on_error "$?" "CPU capabilities do NOT meet system requirements"
     done
 }
 
@@ -153,13 +178,25 @@ function verify_gen2_cpu() {
     fi
 }
 
+function verify_generic_cpu() {
+    local cpu_json="$(get_cpu_info_json)"
+
+    # Check if AMD or Intel virtualization technology is present & enabled in BIOS/UEFI
+    verify_capability_for_all_sockets "${cpu_json}" "svm" || verify_capability_for_all_sockets "${cpu_json}" "vmx"
+    log_and_halt_installation_on_error "$?" "CPU does not have virtualization extensions enabled"
+
+    echo "CPU capabilities meet system requirements"
+}
+
 function verify_cpu() {
     echo "* Verifying hardware generation ${HARDWARE_GENERATION} CPU..."
 
     if [[ "${HARDWARE_GENERATION}" == "1" ]]; then
         verify_gen1_cpu
-    else
+    elif [[ "${HARDWARE_GENERATION}" == "2" ]]; then
         verify_gen2_cpu
+    else
+        verify_generic_cpu
     fi
 }
 
@@ -303,11 +340,16 @@ main() {
     if check_cmdline_var ic.setupos.run_checks; then
         detect_hardware_generation
         verify_cpu
-        verify_memory
-        verify_disks
-        verify_drive_health
-        verify_deployment_path
-        verify_sev_snp
+
+        if [[ "${HARDWARE_GENERATION}" == "3" ]]; then
+            echo "* Cloud Engine node detected, skipping most checks"
+        else
+            verify_memory
+            verify_disks
+            verify_drive_health
+            verify_deployment_path
+            verify_sev_snp
+        fi
     else
         echo "* Hardware checks skipped by request via kernel command line"
     fi

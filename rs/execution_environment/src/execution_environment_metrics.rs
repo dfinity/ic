@@ -7,9 +7,10 @@ use ic_management_canister_types_private as ic00;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
+use ic_types::CanisterId;
 use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
 use ic_types::messages::Response;
-use ic_types::{CanisterId, Cycles};
+use ic_types_cycles::Cycles;
 use prometheus::{Histogram, HistogramVec, IntCounter};
 use std::str::FromStr;
 
@@ -59,9 +60,6 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Critical error for attempting to execute new message
     /// while already in progress a long-running message.
     pub(crate) long_execution_already_in_progress: IntCounter,
-    /// Critical error for attempting to load a canister snapshot
-    /// when the snapshot exists but there is no associated canister.
-    pub(crate) snapshot_exists_without_associated_canister: IntCounter,
 
     /// Metrics for HTTP outcalls costs.
     /// This is
@@ -129,7 +127,6 @@ impl ExecutionEnvironmentMetrics {
                 "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
             ),
             long_execution_already_in_progress: metrics_registry.error_counter("execution_environment_long_execution_already_in_progress"),
-            snapshot_exists_without_associated_canister: metrics_registry.error_counter("execution_environment_snapshot_exists_without_associated_canister"),
             // The minimum price of an outcall is ~50 million cycles, while the maximum price is ~30 billion.
             http_outcalls_metrics: HttpOutcallMetrics {
                 old_price: metrics_registry.histogram(

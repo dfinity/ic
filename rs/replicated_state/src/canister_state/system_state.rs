@@ -28,7 +28,7 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
-    LogVisibilityV2,
+    LogVisibilityV2, SnapshotVisibility,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
@@ -39,23 +39,21 @@ use ic_types::messages::{
     Response, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, Time,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 use std::sync::Arc;
-use strum_macros::EnumIter;
 
 lazy_static! {
     static ref DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS: PrincipalId =
@@ -66,50 +64,6 @@ lazy_static! {
 
 /// Maximum number of canister changes stored in the canister history.
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
-
-/// Enumerates use cases of consumed cycles.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, EnumIter, Serialize)]
-pub enum CyclesUseCase {
-    Memory = 1,
-    ComputeAllocation = 2,
-    IngressInduction = 3,
-    Instructions = 4,
-    RequestAndResponseTransmission = 5,
-    Uninstall = 6,
-    CanisterCreation = 7,
-    ECDSAOutcalls = 8,
-    HTTPOutcalls = 9,
-    DeletedCanisters = 10,
-    NonConsumed = 11,
-    BurnedCycles = 12,
-    SchnorrOutcalls = 13,
-    VetKd = 14,
-    DroppedMessages = 15,
-}
-
-impl CyclesUseCase {
-    /// Returns a string slice representation of the enum variant name for use
-    /// e.g. as a metric label.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Memory => "Memory",
-            Self::ComputeAllocation => "ComputeAllocation",
-            Self::IngressInduction => "IngressInduction",
-            Self::Instructions => "Instructions",
-            Self::RequestAndResponseTransmission => "RequestAndResponseTransmission",
-            Self::Uninstall => "Uninstall",
-            Self::CanisterCreation => "CanisterCreation",
-            Self::ECDSAOutcalls => "ECDSAOutcalls",
-            Self::HTTPOutcalls => "HTTPOutcalls",
-            Self::DeletedCanisters => "DeletedCanisters",
-            Self::NonConsumed => "NonConsumed",
-            Self::BurnedCycles => "BurnedCycles",
-            Self::SchnorrOutcalls => "SchnorrOutcalls",
-            Self::VetKd => "VetKd",
-            Self::DroppedMessages => "DroppedMessages",
-        }
-    }
-}
 
 enum ConsumingCycles {
     Yes,
@@ -482,6 +436,9 @@ pub struct SystemState {
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
 
+    /// Snapshot visibility of the canister.
+    pub snapshot_visibility: SnapshotVisibility,
+
     /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
@@ -498,12 +455,6 @@ pub struct SystemState {
 
     /// Next local snapshot id.
     next_snapshot_id: u64,
-
-    /// Cumulative memory usage of all snapshots that belong to this canister.
-    ///
-    /// This amount contributes to the total `memory_usage` of the canister as
-    /// reported by `CanisterState::memory_usage`.
-    pub snapshots_memory_usage: NumBytes,
 
     /// Environment variables.
     pub environment_variables: EnvironmentVariables,
@@ -675,6 +626,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
+            snapshot_visibility: Default::default(),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
@@ -682,7 +634,6 @@ impl SystemState {
             log_memory_store,
             wasm_memory_limit: None,
             next_snapshot_id: 0,
-            snapshots_memory_usage: NumBytes::new(0),
         }
     }
 
@@ -711,11 +662,11 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
+        snapshot_visibility: SnapshotVisibility,
         canister_log: CanisterLog,
         log_memory_store_data: Option<PageMap>,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
-        snapshots_memory_usage: NumBytes,
         environment_variables: BTreeMap<String, String>,
         metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
@@ -745,6 +696,7 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
+            snapshot_visibility,
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 LOG_MEMORY_STORE_FEATURE,
@@ -752,7 +704,6 @@ impl SystemState {
             ),
             wasm_memory_limit,
             next_snapshot_id,
-            snapshots_memory_usage,
             environment_variables: EnvironmentVariables::new(environment_variables),
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
@@ -1953,7 +1904,7 @@ impl SystemState {
             .entry(use_case)
             .or_insert_with(|| NominalCycles::from(0));
 
-        let nominal_amount = amount.into();
+        let nominal_amount = NominalCycles::from(amount.get());
 
         match consuming_cycles {
             ConsumingCycles::Yes => {
@@ -2442,6 +2393,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
+            snapshot_visibility: Default::default(),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
@@ -2449,7 +2401,6 @@ pub mod testing {
             log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
-            snapshots_memory_usage: Default::default(),
             environment_variables: Default::default(),
         };
     }
