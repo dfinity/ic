@@ -19,7 +19,9 @@ impl From<ResourceLimits> for pb::ResourceLimits {
     fn from(resource_limits: ResourceLimits) -> Self {
         Self {
             maximum_state_size: resource_limits.maximum_state_size.map(|x| x.get()),
-            maximum_unflushed_state_size: resource_limits.maximum_unflushed_state_size.map(|x| x.get()),
+            maximum_unflushed_state_size: resource_limits
+                .maximum_unflushed_state_size
+                .map(|x| x.get()),
         }
     }
 }
@@ -28,7 +30,9 @@ impl From<pb::ResourceLimits> for ResourceLimits {
     fn from(resource_limits: pb::ResourceLimits) -> Self {
         Self {
             maximum_state_size: resource_limits.maximum_state_size.map(NumBytes::from),
-            maximum_unflushed_state_size: resource_limits.maximum_unflushed_state_size.map(NumBytes::from),
+            maximum_unflushed_state_size: resource_limits
+                .maximum_unflushed_state_size
+                .map(NumBytes::from),
         }
     }
 }
