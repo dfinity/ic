@@ -11,6 +11,7 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_test_utils::registry::invariant_compliant_mutation_as_atomic_req;
 use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord};
 use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
+use ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content;
 use ic_registry_transport::{
     deserialize_get_value_response,
     pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
@@ -18,6 +19,7 @@ use ic_registry_transport::{
 };
 use ic_types::NodeId;
 use pocket_ic::PocketIcBuilder;
+use pocket_ic::nonblocking::PocketIc;
 use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -85,10 +87,8 @@ fn decode_get_value_response<T: Message + Default>(
     response: ic_registry_transport::pb::v1::HighCapacityRegistryGetValueResponse,
 ) -> T {
     let content = match response.content.unwrap() {
-        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::Value(
-            items,
-        ) => items,
-        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(_) => {
+        Content::Value(items) => items,
+        Content::LargeValueChunkKeys(_) => {
             panic!("Didn't expect large value chunk keys")
         }
     };
@@ -98,7 +98,7 @@ fn decode_get_value_response<T: Message + Default>(
 /// Checks whether a key exists in the registry via a raw `get_value` query.
 ///
 /// Unlike `get_value`, this does not panic when the key is absent.
-async fn key_exists_in_registry(pocket_ic: &pocket_ic::nonblocking::PocketIc, key: &str) -> bool {
+async fn key_exists_in_registry(pocket_ic: &PocketIc, key: &str) -> bool {
     let result = pocket_ic
         .query_call(
             REGISTRY_CANISTER_ID.get().0,
@@ -339,9 +339,8 @@ async fn old_operator_rate_limit() {
     );
 
     // Advance time past the 12-hour rate limit (13 hours)
-    let current_time = pocket_ic.get_time().await;
     pocket_ic
-        .set_time(current_time + Duration::from_secs(13 * 60 * 60))
+        .advance_time(Duration::from_secs(13 * 60 * 60))
         .await;
 
     // Now the migration should succeed
@@ -382,9 +381,8 @@ async fn node_provider_mismatch() {
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), false).await;
 
     // Advance time past the rate limit
-    let current_time = pocket_ic.get_time().await;
     pocket_ic
-        .set_time(current_time + Duration::from_secs(13 * 60 * 60))
+        .advance_time(Duration::from_secs(13 * 60 * 60))
         .await;
 
     let response = migrate_node_operator_directly(
@@ -439,9 +437,8 @@ async fn data_center_mismatch() {
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), false).await;
 
     // Advance time past the rate limit
-    let current_time = pocket_ic.get_time().await;
     pocket_ic
-        .set_time(current_time + Duration::from_secs(13 * 60 * 60))
+        .advance_time(Duration::from_secs(13 * 60 * 60))
         .await;
 
     let response = migrate_node_operator_directly(
@@ -504,9 +501,8 @@ async fn e2e_successful_migration_new_operator_does_not_exist() {
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), false).await;
 
     // Advance time past the rate limit
-    let current_time = pocket_ic.get_time().await;
     pocket_ic
-        .set_time(current_time + Duration::from_secs(13 * 60 * 60))
+        .advance_time(Duration::from_secs(13 * 60 * 60))
         .await;
 
     let response = migrate_node_operator_directly(
@@ -626,9 +622,8 @@ async fn e2e_successful_migration_new_operator_exists() {
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), false).await;
 
     // Advance time past the rate limit
-    let current_time = pocket_ic.get_time().await;
     pocket_ic
-        .set_time(current_time + Duration::from_secs(13 * 60 * 60))
+        .advance_time(Duration::from_secs(13 * 60 * 60))
         .await;
 
     let response = migrate_node_operator_directly(
