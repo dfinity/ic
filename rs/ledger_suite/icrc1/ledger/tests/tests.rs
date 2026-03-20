@@ -760,6 +760,74 @@ fn test_cycles_for_archive_creation_default_spawns_archive() {
     );
 }
 
+// ---- ICRC-153 Freeze/Unfreeze tests ----
+
+#[test]
+fn test_freeze_account_happy_path() {
+    ic_ledger_suite_state_machine_tests::test_freeze_account_happy_path(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_freeze_principal_happy_path() {
+    ic_ledger_suite_state_machine_tests::test_freeze_principal_happy_path(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_freeze_unauthorized() {
+    ic_ledger_suite_state_machine_tests::test_freeze_unauthorized(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_freeze_already_frozen() {
+    ic_ledger_suite_state_machine_tests::test_freeze_already_frozen(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_unfreeze_not_frozen() {
+    ic_ledger_suite_state_machine_tests::test_unfreeze_not_frozen(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_freeze_guard_transfer() {
+    ic_ledger_suite_state_machine_tests::test_freeze_guard_transfer(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_freeze_principal_compositional() {
+    ic_ledger_suite_state_machine_tests::test_freeze_principal_compositional(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_freeze_deactivated_rejects() {
+    ic_ledger_suite_state_machine_tests::test_freeze_deactivated_rejects(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_list_frozen_accounts_pagination() {
+    ic_ledger_suite_state_machine_tests::test_list_frozen_accounts_pagination(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;

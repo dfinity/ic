@@ -595,6 +595,11 @@ pub struct Ledger {
     paused: bool,
     #[serde(default)]
     deactivated: bool,
+
+    #[serde(default)]
+    frozen_accounts: std::collections::BTreeSet<Account>,
+    #[serde(default)]
+    frozen_principals: std::collections::BTreeSet<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -723,6 +728,8 @@ impl Ledger {
             token_type: wasm_token_type(),
             paused: false,
             deactivated: false,
+            frozen_accounts: std::collections::BTreeSet::new(),
+            frozen_principals: std::collections::BTreeSet::new(),
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
@@ -880,6 +887,61 @@ impl Ledger {
 
     pub fn set_deactivated(&mut self, deactivated: bool) {
         self.deactivated = deactivated;
+    }
+
+    pub fn is_account_frozen(&self, account: &Account) -> bool {
+        self.frozen_accounts.contains(account)
+    }
+
+    pub fn is_principal_frozen(&self, principal: &Principal) -> bool {
+        self.frozen_principals.contains(principal)
+    }
+
+    /// Returns true if the account is directly frozen or its owner principal is frozen.
+    pub fn is_effectively_frozen(&self, account: &Account) -> bool {
+        self.frozen_accounts.contains(account) || self.frozen_principals.contains(&account.owner)
+    }
+
+    pub fn freeze_account(&mut self, account: Account) {
+        self.frozen_accounts.insert(account);
+    }
+
+    pub fn unfreeze_account(&mut self, account: &Account) {
+        self.frozen_accounts.remove(account);
+    }
+
+    pub fn freeze_principal(&mut self, principal: Principal) {
+        self.frozen_principals.insert(principal);
+    }
+
+    pub fn unfreeze_principal(&mut self, principal: &Principal) {
+        self.frozen_principals.remove(principal);
+    }
+
+    pub fn list_frozen_accounts(&self, start_after: Option<&Account>, max: usize) -> Vec<Account> {
+        use std::ops::Bound;
+        let iter = match start_after {
+            Some(start) => self
+                .frozen_accounts
+                .range((Bound::Excluded(*start), Bound::Unbounded)),
+            None => self.frozen_accounts.range(..),
+        };
+        iter.take(max).copied().collect()
+    }
+
+    pub fn list_frozen_principals(
+        &self,
+        start_after: Option<&Principal>,
+        max: usize,
+    ) -> Vec<Principal> {
+        use std::ops::Bound;
+        let iter = match start_after {
+            Some(start) => self
+                .frozen_principals
+                .range((Bound::Excluded(*start), Bound::Unbounded)),
+            None => self.frozen_principals.range(..),
+        };
+        iter.take(max).copied().collect()
     }
 
     pub fn metadata(&self) -> Vec<(MetadataKey, Value)> {
