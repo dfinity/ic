@@ -12,7 +12,7 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    ImageUpgrader, Rebooting,
+    ImageUpgrader, ManagebootCommand, Rebooting,
     error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -32,6 +32,7 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, HashMap},
+    ffi::{OsStr, OsString},
     path::PathBuf,
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
@@ -60,8 +61,8 @@ pub(crate) enum OrchestratorControlFlow {
 
 pub struct ReplicaProcess {
     version: ReplicaVersion,
-    binary: String,
-    args: Vec<String>,
+    binary: OsString,
+    args: Vec<OsString>,
 }
 
 impl Process for ReplicaProcess {
@@ -73,15 +74,36 @@ impl Process for ReplicaProcess {
         &self.version
     }
 
-    fn get_binary(&self) -> &str {
+    fn get_binary(&self) -> &OsStr {
         &self.binary
     }
 
-    fn get_args(&self) -> &[String] {
+    fn get_args(&self) -> &[OsString] {
         &self.args
     }
 
-    fn get_env(&self) -> HashMap<String, String> {
+    fn get_env(&self) -> HashMap<OsString, OsString> {
+        HashMap::new()
+    }
+}
+
+impl Process for ManagebootCommand {
+    const NAME: &'static str = "manageboot.sh";
+    type Version = ();
+
+    fn get_version(&self) -> &Self::Version {
+        &()
+    }
+
+    fn get_binary(&self) -> &OsStr {
+        &self.binary
+    }
+
+    fn get_args(&self) -> &[OsString] {
+        &self.args
+    }
+
+    fn get_env(&self) -> HashMap<OsString, OsString> {
         HashMap::new()
     }
 }
@@ -118,6 +140,7 @@ pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
     replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    manageboot_command: Box<dyn ProcessManager<ManagebootCommand>>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
@@ -140,6 +163,7 @@ impl Upgrade {
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
         replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        manageboot_command: Box<dyn ProcessManager<ManagebootCommand>>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
@@ -158,6 +182,7 @@ impl Upgrade {
             registry,
             metrics,
             replica_process,
+            manageboot_command,
             cup_provider,
             subnet_assignment,
             node_id,
@@ -647,26 +672,22 @@ impl Upgrade {
         info!(self.logger, "Starting new replica process");
         self.metrics.replica_process_start_attempts.inc();
         let cup_path = self.cup_provider.get_cup_path();
-        let replica_binary = self
-            .ic_binary_dir
-            .join("replica")
-            .as_path()
-            .display()
-            .to_string();
+        let replica_binary = self.ic_binary_dir.join("replica").into_os_string();
         let cmd = vec![
-            format!("--replica-version={}", replica_version.as_ref()),
+            format!("--replica-version={}", replica_version.as_ref()).into(),
             format!(
                 "--config-file={}",
                 self.replica_config_file.as_path().display()
-            ),
-            format!("--catch-up-package={}", cup_path.as_path().display()),
-            format!("--force-subnet={}", subnet_id),
+            )
+            .into(),
+            format!("--catch-up-package={}", cup_path.as_path().display()).into(),
+            format!("--force-subnet={}", subnet_id).into(),
         ];
 
         self.replica_process
             .lock()
             .unwrap()
-            .start(ReplicaProcess {
+            .spawn(ReplicaProcess {
                 version: replica_version.clone(),
                 binary: replica_binary,
                 args: cmd,
@@ -699,6 +720,13 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
 
     fn data_dir(&self) -> Option<&PathBuf> {
         Some(&self.orchestrator_data_directory)
+    }
+
+    async fn run_manageboot(
+        &self,
+        command: ManagebootCommand,
+    ) -> std::io::Result<std::process::Output> {
+        self.manageboot_command.start_and_wait(command).await
     }
 
     fn get_release_package_urls_and_hash(
@@ -1200,8 +1228,6 @@ mod tests {
     use rstest::rstest;
     use slog::Level;
     use std::collections::BTreeSet;
-    use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
     use std::{collections::BTreeMap, path::Path};
     use tempfile::{TempDir, tempdir};
 
@@ -1443,14 +1469,6 @@ mod tests {
             .unwrap();
     }
 
-    // Create a fake binary file with the given bash script content
-    fn create_binary(binary_path: &Path, bash_script: &str) {
-        let mut file = std::fs::File::create(binary_path).unwrap();
-        file.write_all(bash_script.as_bytes()).unwrap();
-        file.set_permissions(std::fs::Permissions::from_mode(0o755))
-            .unwrap();
-    }
-
     async fn create_upgrade_for_test(
         dir: &Path,
         logger: ReplicaLogger,
@@ -1477,7 +1495,6 @@ mod tests {
 
         let ic_binary_dir = dir.join("ic_binary");
         std::fs::create_dir_all(&ic_binary_dir).unwrap();
-        create_binary(&ic_binary_dir.join("manageboot.sh"), "#!/bin/sh\nexit 0\n");
 
         let replica_process = Arc::new(Mutex::new(FakeProcessManager::new()));
         // Start the replica process if the test scenario indicates so
@@ -1485,13 +1502,15 @@ mod tests {
             replica_process
                 .lock()
                 .unwrap()
-                .start(ReplicaProcess {
+                .spawn(ReplicaProcess {
                     version: current_replica_version.clone(),
-                    binary: ic_binary_dir.join("replica").display().to_string(),
+                    binary: ic_binary_dir.join("replica").into_os_string(),
                     args: vec![],
                 })
                 .unwrap();
         }
+
+        let manageboot_command = Box::new(FakeProcessManager::new());
 
         let cup_dir = dir.join("cups");
         std::fs::create_dir_all(&cup_dir).unwrap();
@@ -1546,6 +1565,7 @@ mod tests {
             registry,
             metrics,
             replica_process,
+            manageboot_command,
             cup_provider,
             subnet_assignment,
             current_replica_version.clone(),

@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use ic_logger::{ReplicaLogger, debug, info, warn};
 use nix::{
     sys::signal::{self, Signal},
@@ -5,8 +6,10 @@ use nix::{
 };
 use std::{
     collections::HashMap,
+    ffi::{OsStr, OsString},
     fmt::Debug,
     io::Result,
+    process::Output,
     sync::{Arc, Mutex},
 };
 
@@ -30,19 +33,25 @@ pub(crate) trait Process {
     fn get_version(&self) -> &Self::Version;
 
     /// Return the path to the binary of the [`Process`]
-    fn get_binary(&self) -> &str;
+    fn get_binary(&self) -> &OsStr;
 
     /// Return the arguments passed to the [`Process`]
-    fn get_args(&self) -> &[String];
+    fn get_args(&self) -> &[OsString];
 
     /// Return the env vars passed to the [`Process`]
-    fn get_env(&self) -> HashMap<String, String>;
+    fn get_env(&self) -> HashMap<OsString, OsString>;
 }
 
 /// Trait for managing a single versioned [`Process`]
-pub(crate) trait ProcessManager<P: Process>: Send {
-    /// Start the given process.
-    fn start(&mut self, process: P) -> Result<()>;
+#[async_trait]
+pub(crate) trait ProcessManager<P: Process>: Send + Sync {
+    /// Spawn the given process in the background.
+    fn spawn(&mut self, process: P) -> Result<()>;
+
+    /// Start the given process, wait for it to complete, and return its output.
+    async fn start_and_wait(&self, process: P) -> Result<Output>
+    where
+        P: 'async_trait;
 
     /// Stop the currently running process.
     fn stop(&mut self) -> Result<()>;
@@ -123,8 +132,9 @@ impl<P: Process> ProcessManagerImpl<P> {
     }
 }
 
-impl<P: Process + Send> ProcessManager<P> for ProcessManagerImpl<P> {
-    fn start(&mut self, process: P) -> Result<()> {
+#[async_trait]
+impl<P: Process + Send + Sync> ProcessManager<P> for ProcessManagerImpl<P> {
+    fn spawn(&mut self, process: P) -> Result<()> {
         // Do nothing if we're already running a process with the requested version
         if let Some(current_version) = self.process.as_ref().map(|p| p.get_version())
             && self.get_pid().is_some()
@@ -180,6 +190,17 @@ impl<P: Process + Send> ProcessManager<P> for ProcessManagerImpl<P> {
         Ok(())
     }
 
+    async fn start_and_wait(&self, process: P) -> Result<Output>
+    where
+        P: 'async_trait,
+    {
+        tokio::process::Command::new(process.get_binary())
+            .args(process.get_args())
+            .envs(process.get_env())
+            .output()
+            .await
+    }
+
     fn stop(&mut self) -> Result<()> {
         self.kill()
     }
@@ -225,10 +246,23 @@ pub(crate) mod tests {
         }
     }
 
-    impl<P: Process> ProcessManager<P> for FakeProcessManager {
-        fn start(&mut self, _process: P) -> Result<()> {
+    #[async_trait]
+    impl<P: Process + Send> ProcessManager<P> for FakeProcessManager {
+        fn spawn(&mut self, _process: P) -> Result<()> {
             self.running = true;
             Ok(())
+        }
+
+        async fn start_and_wait(&self, _process: P) -> Result<Output>
+        where
+            P: 'async_trait,
+        {
+            use std::os::unix::process::ExitStatusExt;
+            Ok(Output {
+                status: std::process::ExitStatus::from_raw(0),
+                stdout: vec![],
+                stderr: vec![],
+            })
         }
 
         fn stop(&mut self) -> Result<()> {

@@ -279,6 +279,7 @@ impl Orchestrator {
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
                 Arc::clone(&replica_process) as _,
+                Box::new(ProcessManagerImpl::new(logger.clone())),
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),

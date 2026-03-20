@@ -1,18 +1,26 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{ReplicaLogger, error, info, warn};
+use std::ffi::OsString;
 use std::str::FromStr;
 use std::{
     fmt::Debug,
     io::Write,
     path::PathBuf,
+    process::Output,
     time::{Duration, SystemTime},
 };
-use tokio::process::Command;
 
 use crate::error::{UpgradeError, UpgradeResult};
 
 pub mod error;
+
+/// Describes a manageboot.sh command to be executed.
+#[derive(Clone, Debug)]
+pub struct ManagebootCommand {
+    pub binary: OsString,
+    pub args: Vec<OsString>,
+}
 
 /// Used to signal that the system is rebooting.
 pub struct Rebooting;
@@ -97,6 +105,10 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     fn set_prepared_version(&mut self, _version: Option<V>) {}
     /// Path to the directory containing boot scripts.
     fn binary_dir(&self) -> &PathBuf;
+    /// Return the path to the manageboot.sh binary.
+    fn manageboot_binary(&self) -> OsString {
+        self.binary_dir().join("manageboot.sh").into_os_string()
+    }
     /// Path to the image image download and unpacking destination.
     fn image_path(&self) -> &PathBuf;
     /// Optional data path, used for storing latest reboot time. Default is None.
@@ -115,14 +127,18 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// Runs the disk encryption key exchange process if SEV is active. NOOP otherwise.
     async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()>;
 
+    /// Runs a manageboot command.
+    async fn run_manageboot(&self, command: ManagebootCommand) -> std::io::Result<Output>;
+
     /// Calls a corresponding script to "confirm" that the base OS could boot
     /// successfully. Without a confirmation the image will be reverted on the next
     /// restart.
     async fn confirm_boot(&self) {
-        if let Err(err) = Command::new(self.binary_dir().join("manageboot.sh").into_os_string())
-            .arg("guestos")
-            .arg("confirm")
-            .output()
+        if let Err(err) = self
+            .run_manageboot(ManagebootCommand {
+                binary: self.manageboot_binary(),
+                args: vec!["guestos".into(), "confirm".into()],
+            })
             .await
         {
             error!(self.log(), "Could not confirm the boot: {:?}", err);
@@ -195,16 +211,18 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         // clear it here.
         self.set_prepared_version(None);
 
-        let mut script = self.binary_dir().clone();
-        script.push("manageboot.sh");
-        let mut c = Command::new(script.clone().into_os_string());
-        let out = c
-            .arg("guestos")
-            .arg("upgrade-install")
-            .arg(self.image_path())
-            .output()
+        let manageboot = ManagebootCommand {
+            binary: self.manageboot_binary(),
+            args: vec![
+                "guestos".into(),
+                "upgrade-install".into(),
+                self.image_path().into(),
+            ],
+        };
+        let out = self
+            .run_manageboot(manageboot.clone())
             .await
-            .map_err(|e| UpgradeError::file_command_error(e, &c))?;
+            .map_err(|e| UpgradeError::manageboot_error(e, &manageboot))?;
 
         if !out.status.success() {
             warn!(self.log(), "upgrade-install has failed");
@@ -245,14 +263,14 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
             .map_err(|e| UpgradeError::IoError("Couldn't delete the image".to_string(), e))?;
 
         info!(self.log(), "Attempting to reboot");
-        let script = self.binary_dir().join("manageboot.sh");
-        let mut cmd = Command::new(script.into_os_string());
-        let out = cmd
-            .arg("guestos")
-            .arg("upgrade-commit")
-            .output()
+        let manageboot = ManagebootCommand {
+            binary: self.manageboot_binary(),
+            args: vec!["guestos".into(), "upgrade-commit".into()],
+        };
+        let out = self
+            .run_manageboot(manageboot.clone())
             .await
-            .map_err(|e| UpgradeError::file_command_error(e, &cmd))?;
+            .map_err(|e| UpgradeError::manageboot_error(e, &manageboot))?;
 
         if !out.status.success() {
             warn!(self.log(), "upgrade-commit has failed: {:?}", out.status);
