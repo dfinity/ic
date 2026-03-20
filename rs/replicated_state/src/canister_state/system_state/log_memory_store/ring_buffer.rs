@@ -124,26 +124,21 @@ impl RingBuffer {
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
         for record in iter.map(LogRecord::from) {
-            // Validate monotonic ordering for new records to maintain index integrity.
-            // This check is skipped during buffer resizing since existing records
-            // are being re-inserted rather than newly generated.
-            if check_idx_when_adding_new_records {
-                if record.idx < h.next_idx {
-                    debug_assert!(
-                        false,
-                        "Log record idx {} must be >= than next idx {}",
-                        record.idx, h.next_idx
-                    );
-                    continue;
-                }
-                if record.timestamp < h.max_timestamp {
-                    debug_assert!(
-                        false,
-                        "Log record timestamp {} must be >= than max timestamp {}",
-                        record.timestamp, h.max_timestamp
-                    );
-                    continue;
-                }
+            if record.idx < h.next_idx {
+                debug_assert!(
+                    false,
+                    "Log record idx {} must be >= than next idx {}",
+                    record.idx, h.next_idx
+                );
+                continue;
+            }
+            if record.timestamp < h.max_timestamp {
+                debug_assert!(
+                    false,
+                    "Log record timestamp {} must be >= than max timestamp {}",
+                    record.timestamp, h.max_timestamp
+                );
+                continue;
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
@@ -423,7 +418,7 @@ mod tests {
 
     #[test]
     fn test_eviction_when_adding_exceeds_capacity() {
-        let r0 = log_record(0, 100, "12345");
+        let r0 = log_record(TEST_NEXT_IDX, 100, "12345");
         let r1 = log_record(TEST_NEXT_IDX + 1, 200, "12345");
         let r2 = log_record(TEST_NEXT_IDX + 2, 300, "12345");
         let r3 = log_record(TEST_NEXT_IDX + 3, 400, "123456"); // one byte longer than r0..r2, forces eviction.
@@ -579,11 +574,11 @@ mod tests {
         // Regression: records(None) would loop infinitely on an exactly-full buffer
         // (data_head == data_tail, data_size == data_capacity) because is_alive()
         // returns true for every position in that state.
-        let r0 = log_record(0, 100, "12345");
-        let r1 = log_record(1, 200, "12345");
-        let r2 = log_record(2, 300, "12345");
+        let r0 = log_record(TEST_NEXT_IDX, 100, "12345");
+        let r1 = log_record(TEST_NEXT_IDX + 1, 200, "12345");
+        let r2 = log_record(TEST_NEXT_IDX + 2, 300, "12345");
         let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
-        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity, TEST_NEXT_IDX);
 
         rb.append(&r0);
         rb.append(&r1);
