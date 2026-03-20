@@ -103,12 +103,14 @@ pub async fn buffer_body_to_bytes(
     max_size: usize,
     timeout: Duration,
 ) -> Result<Bytes, ErrorCause> {
-    buffer_body(body, max_size, timeout).await.map_err(|e| match e {
-        HttpError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
-        HttpError::BodyTooBig => ErrorCause::PayloadTooLarge(max_size),
-        HttpError::BodyTimedOut => ErrorCause::BodyTimedOut,
-        _ => ErrorCause::Other(e.to_string()),
-    })
+    buffer_body(body, max_size, timeout)
+        .await
+        .map_err(|e| match e {
+            HttpError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
+            HttpError::BodyTooBig => ErrorCause::PayloadTooLarge(max_size),
+            HttpError::BodyTimedOut => ErrorCause::BodyTimedOut,
+            _ => ErrorCause::Other(e.to_string()),
+        })
 }
 
 // Creates the response from ErrorCause and injects itself into extensions to be visible by middleware
