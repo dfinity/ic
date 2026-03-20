@@ -107,8 +107,19 @@ impl SubnetReadStateCacheState {
     }
 }
 
+fn should_cache_paths(paths: &ReadStatePaths) -> bool {
+    !paths.is_empty()
+        && paths.iter().all(|path| {
+            let slices: Vec<&[u8]> = path.iter().map(|l| l.as_slice()).collect();
+            matches!(slices.as_slice(), [b"canister_ranges", _] | [b"subnet", _])
+        })
+}
+
 fn build_cache_key(subnet_id: SubnetId, ctx: &RequestContext) -> Option<CacheKey> {
     let mut paths = ctx.read_state_paths.clone()?;
+    if !should_cache_paths(&paths) {
+        return None;
+    }
     paths.sort();
     Some(CacheKey { subnet_id, paths })
 }
@@ -215,12 +226,19 @@ mod tests {
         (app, state)
     }
 
+    fn cacheable_paths() -> ReadStatePaths {
+        vec![
+            vec![b"canister_ranges".to_vec(), b"subnet_id_1".to_vec()],
+            vec![b"subnet".to_vec(), b"subnet_id_1".to_vec()],
+        ]
+    }
+
     #[tokio::test]
     async fn test_cache_hit_and_miss() {
         let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
         let subnet = test_subnet_id(1);
-        let paths = vec![vec![b"time".to_vec()]];
+        let paths = cacheable_paths();
 
         // First request: cache miss
         let req = make_request(subnet, paths.clone());
@@ -253,13 +271,19 @@ mod tests {
 
         let subnet = test_subnet_id(1);
 
-        // Request with path A
-        let req = make_request(subnet, vec![vec![b"time".to_vec()]]);
+        // Request with canister_ranges for subnet A
+        let req = make_request(
+            subnet,
+            vec![vec![b"canister_ranges".to_vec(), b"aaa".to_vec()]],
+        );
         app.call(req).await.unwrap();
         assert_eq!(state.misses.get(), 1);
 
-        // Request with path B: different paths = cache miss
-        let req = make_request(subnet, vec![vec![b"subnet".to_vec(), b"pk".to_vec()]]);
+        // Request with canister_ranges for subnet B: different paths = cache miss
+        let req = make_request(
+            subnet,
+            vec![vec![b"canister_ranges".to_vec(), b"bbb".to_vec()]],
+        );
         app.call(req).await.unwrap();
         assert_eq!(state.misses.get(), 2);
         assert_eq!(state.hits.get(), 0);
@@ -269,7 +293,7 @@ mod tests {
     async fn test_different_subnets_are_separate_entries() {
         let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
-        let paths = vec![vec![b"time".to_vec()]];
+        let paths = cacheable_paths();
 
         // Subnet 1
         let req = make_request(test_subnet_id(1), paths.clone());
@@ -289,13 +313,16 @@ mod tests {
 
         let subnet = test_subnet_id(1);
 
+        let path_a = vec![b"canister_ranges".to_vec(), b"id_a".to_vec()];
+        let path_b = vec![b"subnet".to_vec(), b"id_b".to_vec()];
+
         // Paths in order [A, B]
-        let req = make_request(subnet, vec![vec![b"a".to_vec()], vec![b"b".to_vec()]]);
+        let req = make_request(subnet, vec![path_a.clone(), path_b.clone()]);
         app.call(req).await.unwrap();
         assert_eq!(state.misses.get(), 1);
 
         // Same paths in order [B, A]: should be a cache hit due to sorting
-        let req = make_request(subnet, vec![vec![b"b".to_vec()], vec![b"a".to_vec()]]);
+        let req = make_request(subnet, vec![path_b, path_a]);
         app.call(req).await.unwrap();
         assert_eq!(state.hits.get(), 1);
     }
@@ -322,11 +349,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_non_cacheable_paths_bypass_cache() {
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
+
+        let subnet = test_subnet_id(1);
+
+        // "time" is not a cacheable path pattern
+        let req = make_request(subnet, vec![vec![b"time".to_vec()]]);
+        let resp = app.call(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(state.misses.get(), 0);
+        assert_eq!(state.hits.get(), 0);
+
+        // Repeat: still no cache interaction
+        let req = make_request(subnet, vec![vec![b"time".to_vec()]]);
+        let resp = app.call(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(state.misses.get(), 0);
+        assert_eq!(state.hits.get(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_mixed_cacheable_and_non_cacheable_bypasses_cache() {
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
+
+        let subnet = test_subnet_id(1);
+
+        // Mix of cacheable (canister_ranges) and non-cacheable (time)
+        let paths = vec![
+            vec![b"canister_ranges".to_vec(), b"subnet_id".to_vec()],
+            vec![b"time".to_vec()],
+        ];
+
+        let req = make_request(subnet, paths.clone());
+        let resp = app.call(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(state.misses.get(), 0);
+        assert_eq!(state.hits.get(), 0);
+    }
+
+    #[tokio::test]
     async fn test_ttl_expiration() {
         let (mut app, state) = setup_app(Duration::from_millis(50), DEFAULT_CACHE_SIZE);
 
         let subnet = test_subnet_id(1);
-        let paths = vec![vec![b"time".to_vec()]];
+        let paths = cacheable_paths();
 
         // First request: miss
         let req = make_request(subnet, paths.clone());
