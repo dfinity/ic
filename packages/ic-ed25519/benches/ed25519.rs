@@ -47,7 +47,7 @@ fn bench_batch_verify(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_verify");
 
     for batch_size in [13, 34, 40] {
-        for msg_len in [32, 1000000] {
+        for msg_len in [32, 1024, 16*1024, 1024*1024] {
             let mut key_rng = rng();
             let keys: Vec<PrivateKey> = (0..batch_size)
                 .map(|_| PrivateKey::generate_using_rng(&mut key_rng))
@@ -71,7 +71,7 @@ fn bench_batch_verify(c: &mut Criterion) {
 
             group.throughput(Throughput::Elements(batch_size as u64));
             group.bench_with_input(
-                format!("batch_verify(size={},len={})", batch_size, msg_len),
+                format!("batch_verify(sigs={},msg_len={})", batch_size, msg_len),
                 &(&messages_ref, &signatures_ref, &public_keys),
                 |b, (msgs, sigs, pks)| {
                     b.iter_batched(
