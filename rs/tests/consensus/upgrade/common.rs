@@ -293,7 +293,7 @@ async fn upgrade_to(
             (
                 node.node_id,
                 JournalStreamer::new(node.block_on_ssh_session().unwrap())
-                    .until_reboot()
+                    .follow()
                     .from_now()
                     .expect("Failed to set from cursor to now"),
             )
@@ -314,26 +314,25 @@ async fn upgrade_to(
     );
 
     // Concurrently assert that all orchestrators shut down gracefully
-    let post_boot_cursors = try_join_all(journal_streamers.into_values().map(|streamer| {
-        tokio::task::spawn_blocking(move || {
-            streamer.search_and_return_cursors("Orchestrator shut down gracefully")
-        })
-    }))
-    .await
-    .unwrap()
-    .into_iter()
-    .collect::<Result<Vec<_>, _>>()
-    .expect("Failed to search for log entries")
-    .into_iter()
-    .map(|matches| {
-        matches
-            .into_iter()
-            .map(|(_message, cursor)| cursor)
-            .next_back()
-            .expect("Not all orchestrators shut down gracefully")
-            .to_string()
-    })
-    .collect::<Vec<_>>();
+    let journal_streamers =
+        try_join_all(journal_streamers.into_iter().map(|(node_id, streamer)| {
+            tokio::task::spawn_blocking(move || {
+                (
+                    node_id,
+                    streamer
+                        .until("Orchestrator shut down gracefully")
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "{node_id} did not log that the orchestrator has shut down gracefully"
+                            )
+                        })
+                )
+            })
+        }))
+        .await
+        .unwrap()
+        .into_iter()
+        .collect::<BTreeMap<_>>();
     info!(logger, "All orchestrators shut down the tasks gracefully");
 
     for node in &healthy_nodes {
@@ -341,19 +340,8 @@ async fn upgrade_to(
     }
 
     // Fetch the latest computed root hash from logs of each node
-    let state_hashes_from_logs = find_latest_computed_root_hashes_from_logs(
-        logger,
-        healthy_nodes
-            .into_iter()
-            .zip(post_boot_cursors.into_iter())
-            .map(|(node, cursor)| {
-                (
-                    node.node_id,
-                    JournalStreamer::new(node.block_on_ssh_session().unwrap()).until(&cursor),
-                )
-            })
-            .collect(),
-    );
+    let state_hashes_from_logs =
+        find_latest_computed_root_hashes_from_logs(logger, journal_streamers);
     // Find all nodes that logged the same latest computed root hash and pick the most common one
     let mut state_hashes_counts = BTreeMap::new();
     for (node_id, hash) in state_hashes_from_logs.iter() {

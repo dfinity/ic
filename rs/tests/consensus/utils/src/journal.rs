@@ -34,18 +34,8 @@ impl JournalStreamer {
         self
     }
 
-    pub fn until_reboot(mut self) -> Self {
+    pub fn follow(mut self) -> Self {
         self.journalctl_flags.insert("-f".to_string());
-        self
-    }
-
-    pub fn from(mut self, cursor: &str) -> Self {
-        self.from_cursor = Some(cursor.to_string());
-        self
-    }
-
-    pub fn until(mut self, cursor: &str) -> Self {
-        self.to_cursor = Some(cursor.to_string());
         self
     }
 
@@ -57,7 +47,21 @@ impl JournalStreamer {
             .next()
             .ok_or_else(|| anyhow::anyhow!("No journal entries found"))?;
 
-        Ok(self.from(&cursor))
+        self.from_cursor = Some(cursor.to_string());
+        Ok(self)
+    }
+
+    pub fn until(mut self, search_regex: &str) -> anyhow::Result<Self> {
+        let (_message, cursor) = self
+            .search_and_return_cursors(search_regex)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                anyhow::anyhow!("No journal entries found matching the regex '{search_regex}'")
+            })?;
+
+        self.to_cursor = Some(cursor.to_string());
+        self
     }
 
     pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {
@@ -65,7 +69,7 @@ impl JournalStreamer {
             .map(|iter| iter.into_iter().map(|(message, _cursor)| message).collect())
     }
 
-    pub fn search_and_return_cursors(
+    fn search_and_return_cursors(
         &self,
         search_regex: &str,
     ) -> anyhow::Result<Vec<(String, String)>> {
