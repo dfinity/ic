@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul, Rem, Sub};
 
-/// MemoryAddress is an absolute address in the log memory store PageMap.
+/// `MemoryAddress` is an absolute address in the log memory store PageMap.
 ///
 /// It is used to read/write data from/to the memory store.
 #[repr(transparent)]
