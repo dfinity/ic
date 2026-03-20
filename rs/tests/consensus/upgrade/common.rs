@@ -332,7 +332,7 @@ async fn upgrade_to(
         .await
         .unwrap()
         .into_iter()
-        .collect::<BTreeMap<_>>();
+        .collect::<BTreeMap<_, _>>();
     info!(logger, "All orchestrators shut down the tasks gracefully");
 
     for node in &healthy_nodes {
