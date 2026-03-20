@@ -23,7 +23,7 @@ use canister_http::*;
 use canister_test::{Canister, Runtime};
 use ic_agent::{
     Agent, AgentError,
-    agent::{RejectCode, RejectResponse},
+    agent::{CallResponse, RejectCode, RejectResponse},
 };
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_cdk::api::call::RejectionCode;
@@ -37,16 +37,16 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::HasTopologySnapshot,
     },
-    systest,
+    retry_agent_on_transport_errors, systest,
     util::{block_on, get_app_subnet_and_node},
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use proxy_canister::{
     RemoteHttpRequest, RemoteHttpResponse, ResponseWithRefundedCycles,
     UnvalidatedCanisterHttpRequestArgs,
@@ -2560,11 +2560,28 @@ where
     let principal_id: PrincipalId = handlers.proxy_canister().effective_canister_id();
     let principal: Principal = principal_id.into();
 
-    let canister_response = agent
-        .update(&principal, "send_request_with_refund_callback")
-        .with_arg(args)
-        .call_and_wait()
-        .await;
+    let log = handlers.env.logger();
+    let canister_response = match retry_agent_on_transport_errors!(
+        "submit_outcall: call",
+        &log,
+        agent
+            .update(&principal, "send_request_with_refund_callback")
+            .with_arg(args.clone())
+            .call()
+    )
+    .await
+    .expect("submit_outcall retries exhausted")
+    {
+        Ok(CallResponse::Response(response)) => Ok(response),
+        Ok(CallResponse::Poll(request_id)) => retry_agent_on_transport_errors!(
+            "submit_outcall: wait",
+            &log,
+            agent.wait(&request_id, principal)
+        )
+        .await
+        .expect("submit_outcall retries exhausted"),
+        Err(err) => Err(err),
+    };
 
     match canister_response {
         Err(agent_error) => {
@@ -2583,7 +2600,7 @@ where
         }
         Ok(serialized_bytes) => {
             let response_with_refund =
-                decode_one::<ProxyCanisterResponseWithRefund>(&serialized_bytes)
+                decode_one::<ProxyCanisterResponseWithRefund>(&serialized_bytes.0)
                     .expect("Decoding the canister serialized response should succeed.");
 
             let refunded_cycles = response_with_refund.refunded_cycles;

@@ -15,9 +15,9 @@ use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::Cycles;
 use ic_types::messages::{CallbackId, Payload, RejectContext};
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use ic00::{CanisterHttpRequestArgs, HttpMethod};
 use proptest::prelude::*;
@@ -39,13 +39,11 @@ fn state_sync_clears_paused_execution_registry() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -550,9 +548,7 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_slice: NumInstructions::from(1),
             max_instructions_per_install_code_slice: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     test.advance_to_round(ExecutionRound::new(2));
@@ -635,9 +631,7 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_slice: NumInstructions::from(1),
             max_instructions_per_install_code_slice: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     test.advance_to_round(ExecutionRound::new(2));
@@ -716,6 +710,148 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
     assert!(test.state().subnet_queues().has_output());
 }
 
+#[test]
+fn finalization_clears_scheduled_canister_log_delta_sizes() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let mut next_idx = 0;
+    let canister_a = test.create_canister();
+    let canister_b = test.create_canister();
+
+    // Populate delta_log_sizes on canister_a's canister_log by appending two
+    // non-empty delta logs.
+    fn append_delta_log(next_idx: u64, canister: &mut CanisterState, content: &str) -> usize {
+        let mut delta = ic_types::CanisterLog::new_delta_with_next_index(next_idx, 4096);
+        delta.add_record(next_idx, content.as_bytes().to_vec());
+        let size = delta.bytes_used();
+        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister
+                .system_state
+                .log_memory_store
+                .append_delta_log(&mut delta);
+        } else {
+            canister
+                .system_state
+                .canister_log
+                .append_delta_log(&mut delta);
+        };
+        size
+    }
+    let size1 = append_delta_log(next_idx, test.canister_state_mut(canister_a), "hello");
+    next_idx += 1;
+    let size2 = append_delta_log(next_idx, test.canister_state_mut(canister_a), "world!");
+    next_idx += 1;
+
+    // Also append a delta log to canister_b's canister_log.
+    let size3 = append_delta_log(next_idx, test.canister_state_mut(canister_b), "oops");
+
+    // Both canisters have delta log sizes.
+    fn has_delta_log_sizes(canister: &CanisterState) -> bool {
+        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister.system_state.log_memory_store.has_delta_log_sizes()
+        } else {
+            canister.system_state.canister_log.has_delta_log_sizes()
+        }
+    }
+    assert!(has_delta_log_sizes(test.canister_state(canister_a)));
+    assert!(has_delta_log_sizes(test.canister_state(canister_b)));
+
+    // Only schedule canister_a. This is not realistic behavior (canister_b would
+    // not have produced logs if it had not been scheduled), but it's useful for
+    // testing.
+    test.send_ingress(canister_a, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // After the round, delta_log_sizes have been cleared for both canisters.
+    assert!(!has_delta_log_sizes(test.canister_state(canister_a)));
+    assert!(!has_delta_log_sizes(test.canister_state(canister_b)));
+
+    // The metric must have recorded all delta sizes we appended.
+    let canister_log_delta_memory_usage = &test.scheduler().metrics.canister_log_delta_memory_usage;
+    assert_eq!(canister_log_delta_memory_usage.get_sample_count(), 3);
+    assert_eq!(
+        canister_log_delta_memory_usage.get_sample_sum() as usize,
+        size1 + size2 + size3
+    );
+}
+
+#[test]
+#[should_panic(expected = "scheduler_canister_invariant_broken")]
+fn check_canister_invariants_detects_wasm_memory_exceeding_limit() {
+    use ic_replicated_state::NumWasmPages;
+
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    // Inflate the canister's wasm memory size beyond `max_wasm_memory_size`
+    // (default 4 GiB = 65536 wasm pages of 64 KiB each).
+    test.canister_state_mut(canister)
+        .execution_state
+        .as_mut()
+        .unwrap()
+        .wasm_memory
+        .size = NumWasmPages::from(65536 + 1);
+
+    // Send a message so the canister is scheduled, then execute a round.
+    // The invariant check during finalization detects the violation and
+    // panics via debug_assert.
+    test.send_ingress(canister, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+}
+
+#[test]
+fn finalization_prunes_expired_ingress_history_entries() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1_000_000);
+    let mut test = SchedulerTestBuilder::new()
+        .with_batch_time(initial_time)
+        .build();
+
+    let canister = test.create_canister();
+
+    // Execute two ingress messages so they reach a terminal state
+    // (Failed / CanisterDidNotReply) and are recorded in the ingress history.
+    let msg_a = test.send_ingress(canister, ingress(1));
+    let msg_b = test.send_ingress(canister, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Both messages should be in a terminal (Failed) state.
+    assert!(matches!(
+        test.ingress_state(&msg_a),
+        IngressState::Failed(_)
+    ));
+    assert!(matches!(
+        test.ingress_state(&msg_b),
+        IngressState::Failed(_)
+    ));
+    // The ingress history should have two entries.
+    assert_eq!(test.state().metadata.ingress_history.len(), 2);
+
+    // Advance time just short of MAX_INGRESS_TTL and execute a round.
+    // The entries must still be present.
+    let before_deadline = initial_time + (ic_limits::MAX_INGRESS_TTL - Duration::from_secs(1));
+    test.set_time(before_deadline);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert!(matches!(
+        test.ingress_state(&msg_a),
+        IngressState::Failed(_)
+    ));
+    assert!(matches!(
+        test.ingress_state(&msg_b),
+        IngressState::Failed(_)
+    ));
+
+    // Advance time past MAX_INGRESS_TTL so the pruning time is exceeded.
+    let after_deadline = initial_time + ic_limits::MAX_INGRESS_TTL + Duration::from_secs(1);
+    test.set_time(after_deadline);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // After pruning, the statuses must be gone (Unknown).
+    assert_eq!(test.ingress_status(&msg_a), IngressStatus::Unknown);
+    assert_eq!(test.ingress_status(&msg_b), IngressStatus::Unknown);
+    // The ingress history should be empty.
+    assert_eq!(test.state().metadata.ingress_history.len(), 0);
+}
+
 fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
     let instructions_consumed_per_message = fetch_histogram_vec_buckets(
         metrics_registry,
@@ -725,6 +861,16 @@ fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
     .unwrap();
 
     *instructions_consumed_per_message.get("0").unwrap()
+}
+
+fn zero_instruction_overhead_config() -> SchedulerConfig {
+    SchedulerConfig {
+        instruction_overhead_per_execution: NumInstructions::from(0),
+        instruction_overhead_per_canister: NumInstructions::from(0),
+        instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+        dirty_page_overhead: NumInstructions::from(0),
+        ..SchedulerConfig::application_subnet()
+    }
 }
 
 pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {

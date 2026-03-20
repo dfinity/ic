@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, ops::Add};
 
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 
 /// Represents a change in the cycles balance.
@@ -117,7 +117,7 @@ impl Add for CyclesBalanceChange {
 #[cfg(test)]
 mod tests {
     use super::CyclesBalanceChange;
-    use ic_types::Cycles;
+    use ic_types_cycles::Cycles;
 
     fn cc(value: u128) -> Cycles {
         Cycles::from(value)

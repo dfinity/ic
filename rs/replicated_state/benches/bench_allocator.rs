@@ -15,7 +15,7 @@ const NUM_THREADS: u32 = 6;
 const NUM_ALLOCATIONS: usize = 1;
 
 fn bench_allocator(c: &mut Criterion) {
-    let page = &[1u8; PAGE_SIZE];
+    let page = &[1_u8; PAGE_SIZE];
     let mut group = c.benchmark_group("Allocate");
     for page_delta_mib in [2, 8, 32, 128, 512, 2048].iter().cloned() {
         let num_pages = page_delta_mib * 1024 * 1024 / PAGE_SIZE;

@@ -874,7 +874,7 @@ async fn test_query_block_range() {
         .sender()
         .expect("test identity sender not found!");
     let mut block_indices: Vec<Nat> = vec![];
-    for i in 0..100u64 {
+    for i in 0..100_u64 {
         let mint_arg = TransferArg {
             from_subaccount: None,
             to: Account::from(Principal::anonymous()),

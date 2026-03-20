@@ -30,12 +30,12 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
-    CanisterId, Cycles, NumInstructions, SnapshotId,
-    batch::CanisterCyclesCostSchedule,
+    CanisterId, NumInstructions, SnapshotId,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
@@ -335,17 +335,6 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .system_state
             .wasm_chunk_store
     );
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
-    );
 
     // Grow the canister's memory before taking another snapshot.
     test.ingress(
@@ -383,18 +372,6 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .unwrap()
             .canister_snapshots
             .contains(&new_snapshot_id)
-    );
-
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
     );
 }
 
@@ -613,7 +590,7 @@ fn canister_snapshot_reserves_cycles_difference() {
 
 #[test]
 fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_snapshot() {
-    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(39_200_000_000_000);
     const CAPACITY: u64 = 500 * MIB;
     const THRESHOLD: u64 = CAPACITY / 2;
 
@@ -724,7 +701,7 @@ fn take_canister_snapshot_does_not_reduce_subnet_available_memory_when_failing_t
 
 #[test]
 fn take_canister_snapshot_increases_heap_delta() {
-    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(39_200_000_000_000);
     const CAPACITY: u64 = 1_000_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
 
@@ -764,7 +741,7 @@ fn take_canister_snapshot_increases_heap_delta() {
 
 #[test]
 fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
-    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(39_200_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
@@ -850,7 +827,7 @@ fn take_snapshot_with_maximal_chunk_store() {
     // The chunk store may have no more than 100 entries.
     // If this test fails, the wasm chunk store size or the
     // max number of stored chunks may have changed.
-    for i in 0..100u32 {
+    for i in 0..100_u32 {
         let chunk = i.to_be_bytes().to_vec();
         let upload_args = UploadChunkArgs {
             canister_id: canister_id.into(),
@@ -1056,18 +1033,6 @@ fn delete_canister_snapshot_succeeds() {
     let subnet_available_memory_after_taking_snapshot =
         test.subnet_available_memory().get_execution_memory() as u64;
 
-    // Confirm that `snapshots_memory_usage` is updated correctly.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
-    );
-
     // Deletes canister snapshot successfully.
     let args: DeleteCanisterSnapshotArgs =
         DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
@@ -1085,17 +1050,6 @@ fn delete_canister_snapshot_succeeds() {
             .is_none()
     );
     assert!(test.state().canister_state(&canister_id).is_some());
-
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .snapshots_memory_usage,
-        test.state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .canister_snapshots
-            .compute_memory_usage_by_canister(canister_id),
-    );
 
     assert_gt!(
         subnet_available_memory_after_deleting_snapshot,
@@ -1155,13 +1109,9 @@ fn list_canister_snapshot_fails_invalid_controller() {
     if let RequestOrResponse::Response(res) = response {
         assert_eq!(res.originator, *receiver);
         res.response_payload.assert_contains_reject(
-            RejectCode::CanisterError,
+            RejectCode::CanisterReject,
             &format!(
-                "Only the controllers of the canister {} can control it.\n\
-                    Canister's controllers: {}\n\
-                    Sender's ID: {}",
-                canister_id,
-                test.user_id().get(),
+                "Caller {} is not allowed to call list_canister_snapshots",
                 caller_canister.get(),
             ),
         );
@@ -1215,7 +1165,7 @@ fn list_canister_snapshot_succeeds() {
 fn load_canister_snapshot_decode_round_trip() {
     let canister_id = canister_test_id(4);
     let snapshot_id = SnapshotId::from((canister_id, 6));
-    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5u64));
+    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5_u64));
     let encoded_args = args.encode();
     assert_eq!(
         args,
@@ -1298,6 +1248,34 @@ fn load_canister_snapshot_fails_invalid_controller() {
 }
 
 #[test]
+fn load_canister_snapshot_fails_snapshot_canister_not_found() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // Create canister onto which a snapshot is supposed to be loaded.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Loading canister snapshot fails because the canister holding the snapshot does not exist.
+    let snapshot_canister_id = canister_test_id(2);
+    let snapshot_id = SnapshotId::from((snapshot_canister_id, 3));
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let error = test
+        .subnet_message("load_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
+    let message = format!(
+        "Could not find the snapshot ID {snapshot_id} for canister {snapshot_canister_id}",
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id).is_some());
+    assert!(test.state().canister_state(&snapshot_canister_id).is_none());
+}
+
+#[test]
 fn load_canister_snapshot_fails_snapshot_not_found() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
     let own_subnet = subnet_test_id(1);
@@ -1325,6 +1303,38 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
             .to_string();
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id).is_some());
+}
+
+#[test]
+fn load_canister_snapshot_fails_snapshot_not_found_on_another_canister() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // Create canister onto which a snapshot is supposed to be loaded.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Create the canister from which the snapshot is supposed to be loaded.
+    let snapshot_canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Loading canister snapshot fails because the snapshot does not exist (on another canister).
+    let snapshot_id = SnapshotId::from((snapshot_canister_id, 3));
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let error = test
+        .subnet_message("load_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
+    let message = format!(
+        "Could not find the snapshot ID {snapshot_id} for canister {snapshot_canister_id}",
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id).is_some());
+    assert!(test.state().canister_state(&snapshot_canister_id).is_some());
 }
 
 #[test]
@@ -1396,7 +1406,7 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
 
 #[test]
 fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
-    const CYCLES: Cycles = Cycles::new(28_000_000_000_000);
+    const CYCLES: Cycles = Cycles::new(39_200_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const WASM_PAGE_SIZE: u64 = 65_536;
@@ -1538,6 +1548,17 @@ fn load_canister_snapshot_succeeds() {
 
     // Load an existing snapshot.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
+
+    // Verify that the snapshot still exists,
+    // i.e., loading a snapshot should not consume it.
+    assert_eq!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .canister_snapshots
+            .len(),
+        1
+    );
 
     // Verify chunk store contains data.
     assert!(
@@ -2103,7 +2124,7 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 fn read_canister_snapshot_data(
@@ -2473,7 +2494,7 @@ fn read_canister_snapshot_data_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_data", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 }
 
 #[test]

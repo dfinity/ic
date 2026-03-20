@@ -46,6 +46,7 @@ ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 rand = { workspace = true }
+rstest = { workspace = true }
 
 [[bin]]
 name = "ic-registry-replicator"

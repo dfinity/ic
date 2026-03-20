@@ -36,7 +36,8 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
-use ic_types::{CanisterId, Cycles, Height};
+use ic_types::{CanisterId, Height};
+use ic_types_cycles::Cycles;
 use slog::{Logger, info};
 
 const KIB: usize = 1024;
