@@ -7662,7 +7662,9 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
+ "flate2",
  "hex",
+ "ic-agent",
  "ic-base-types",
  "ic-cdk",
  "ic-ckbtc-minter",
@@ -13251,6 +13253,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-resource-limits"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-protobuf",
+ "ic-types",
+ "serde",
+]
+
+[[package]]
 name = "ic-registry-routing-table"
 version = "0.9.0"
 dependencies = [
@@ -15102,6 +15114,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-local-store-artifacts",
  "ic-registry-proto-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-types",
@@ -21317,6 +21330,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-node-provider-rewards",
  "ic-registry-proto-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",

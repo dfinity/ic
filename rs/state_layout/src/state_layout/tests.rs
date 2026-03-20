@@ -46,7 +46,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         executed: 0,
         interrupted_during_execution: 0,
         certified_data: vec![],
-        consumed_cycles: NominalCycles::from(0),
+        consumed_cycles: NominalCycles::zero(),
         stable_memory_size: NumWasmPages::from(0),
         heap_delta_debit: NumBytes::from(0),
         install_code_debit: NumInstructions::from(0),

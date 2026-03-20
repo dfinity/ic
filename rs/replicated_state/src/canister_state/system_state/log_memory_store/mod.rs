@@ -19,12 +19,12 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 /// Upper bound on stored delta-log sizes used for metrics.
 /// Limits memory growth, 10k covers expected per-round
 /// number of messages per canister (and so delta log appends).
 const DELTA_LOG_SIZES_CAP: usize = 10_000;
-use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
@@ -165,7 +165,7 @@ impl LogMemoryStore {
     /// Returns the total virtual memory usage of the ring buffer.
     ///
     /// Includes header, index table and data region.
-    /// It is 'virtual' because it is not alligned to actual OS page size.
+    /// It is 'virtual' because it is not aligned to actual OS page size.
     pub fn total_virtual_memory_usage(&self) -> usize {
         self.get_header()
             .map(|h| {
@@ -224,7 +224,7 @@ impl LogMemoryStore {
 
         // Migrate records.
         if let Some(old_buffer) = self.load_ring_buffer() {
-            new_buffer.append_log_iter_unchecked(old_buffer.iter());
+            new_buffer.append_log(old_buffer.iter());
         }
 
         // Update of the state.
@@ -277,7 +277,7 @@ impl LogMemoryStore {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.bytes_used());
         // Append the delta records and persist the ring buffer.
-        ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
+        ring_buffer.append_log(delta_log.records_mut().drain(..));
         self.save_ring_buffer(ring_buffer);
     }
 
