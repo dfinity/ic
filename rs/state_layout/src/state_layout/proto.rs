@@ -6,7 +6,6 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
-use ic_replicated_state::CallContextManager;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -60,6 +59,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
+            snapshot_visibility: pb_canister_state_bits::SnapshotVisibility::from(
+                &item.snapshot_visibility,
+            )
+            .into(),
             log_memory_limit: item.log_memory_limit.get(),
             canister_log_records: item
                 .canister_log
@@ -131,21 +134,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let tasks: pb_canister_state_bits::TaskQueue =
             try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
-
-        let mut status: CanisterStatus =
-            try_from_option_field(value.canister_status, "CanisterStateBits::canister_status")?;
-        let call_context_manager = match &mut status {
-            CanisterStatus::Running {
-                call_context_manager,
-                ..
-            }
-            | CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => call_context_manager,
-            CanisterStatus::Stopped => &mut CallContextManager::default(),
-        };
-        let task_queue = TaskQueue::try_from((tasks, call_context_manager))?;
+        let task_queue = TaskQueue::try_from(tasks)?;
 
         Ok(Self {
             controllers,
@@ -171,7 +160,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_debit,
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
-            status,
+            status: try_from_option_field(
+                value.canister_status,
+                "CanisterStateBits::canister_status",
+            )?,
             rounds_scheduled: value.rounds_scheduled,
             scheduled_as_first: value.scheduled_as_first,
             executed: value.executed,
@@ -207,6 +199,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             log_visibility: try_from_option_field(
                 value.log_visibility_v2,
                 "CanisterStateBits::log_visibility_v2",
+            )
+            .unwrap_or_default(),
+            snapshot_visibility: try_from_option_field(
+                value.snapshot_visibility,
+                "CanisterStateBits::snapshot_visibility",
             )
             .unwrap_or_default(),
             log_memory_limit: NumBytes::from(value.log_memory_limit),
@@ -299,7 +296,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
     fn from(item: CanisterSnapshotBits) -> Self {
         Self {
             snapshot_id: item.snapshot_id.get_local_snapshot_id(),
-            canister_id: Some((item.canister_id).into()),
+            canister_id: Some(item.snapshot_id.get_canister_id().into()),
             taken_at_timestamp: item.taken_at_timestamp.as_nanos_since_unix_epoch(),
             canister_version: item.canister_version,
             binary_hash: item.binary_hash.to_vec(),
@@ -358,7 +355,6 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
         let source = SnapshotSource::try_from(source).unwrap_or_default();
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
-            canister_id,
             taken_at_timestamp: Time::from_nanos_since_unix_epoch(item.taken_at_timestamp),
             canister_version: item.canister_version,
             binary_hash: WasmHash::from(binary_hash),

@@ -3,6 +3,7 @@ use devicemapper::{Bytes, DM, DevId, DmName, DmOptions, Sectors};
 use ic_device::device_mapping::{BaseDevice, LinearSegment, MappedDevice, TempDevice};
 use std::path::Path;
 use std::sync::Arc;
+use tracing::warn;
 
 const UPGRADE_DM_NAME: &str = "upgrade-guestos";
 const DATA_PARTITION_DM_NAME: &str = "guestos-data";
@@ -121,7 +122,7 @@ fn cleanup_devices(dev_mapper: &DM) {
     let devices = match dev_mapper.list_devices() {
         Ok(devices) => devices,
         Err(err) => {
-            eprintln!("Failed to list devices: {err}");
+            warn!("Failed to list devices: {err}");
             return;
         }
     };
@@ -143,7 +144,7 @@ fn try_remove_device(dev_mapper: &DM, name: &DmName) {
         match dev_mapper.device_remove(&DevId::Name(name), DmOptions::default()) {
             Ok(_) => return,
             Err(err) => {
-                eprintln!("Failed to remove device {name} (attempt {retry}/{MAX_RETRIES}): {err}");
+                warn!("Failed to remove device {name} (attempt {retry}/{MAX_RETRIES}): {err}");
                 std::thread::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS));
             }
         }

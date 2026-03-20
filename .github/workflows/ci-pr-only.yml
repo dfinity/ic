@@ -37,9 +37,9 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:62ef680d95901d1c191442d2a5f382315ed4b916e97a81335c8d13baba2fe30d
+      image: ghcr.io/dfinity/ic-build@sha256:0a0cff0b12c7586c2f312c739176924edf0c9e71df92f382eba836913da9f1c6
       options: >-
-         -e NODE_NAME --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+         -e NODE_NAME --mount type=tmpfs,target="/tmp/containers"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,15 +47,14 @@ jobs:
           # Ensures we fetch the merge-base, which we compare against
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.commit-sha }}
+      - uses: ./.github/actions/netrc
       - name: Run candid compatibility checks
         uses: ./.github/actions/bazel
         with:
           run: |
             export DID_CHECK_REV="$(git merge-base HEAD 'origin/${{ inputs.base-ref }}')"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
-            bazel test //... \
-              --build_tag_filters="didc" \
-              --test_tag_filters="didc"
+            bazel run //pre-commit:did-check
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
 # Runs linters and formatters on code to automatically fix issues
@@ -77,6 +76,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
           token: ${{ steps.app-token.outputs.token }}
+      - uses: ./.github/actions/netrc
       - name: Run Linter
         id: linter
         uses: ./.github/actions/bazel
@@ -86,9 +86,30 @@ jobs:
 
             EXIT_STATUS=0
 
-            bazel run :buildifier
-            bazel run :shfmt-format
-            bazel run :ruff-format
+            checks=(
+              //pre-commit:{shfmt-check,ruff-check,buf-check,DFINITY-capitalization-check,do-not-merge-check,buildifier-check,gazelle-check}
+            )
+
+            # if the CI_OVERRIDE_BUF_BREAKING label is not set on the PR, then run the buf compatibility checks
+            if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' != 'true' ]]; then
+              checks+=( //pre-commit:buf-breaking-check )
+            fi
+
+            # First run all checks and record any potential error
+            for check in ${checks[@]} ; do
+              echo -n "Checking $check ... "
+              if bazel run "$check"; then
+                echo "ok"
+              else
+                echo "failed"
+                EXIT_STATUS=1
+              fi
+            done
+
+            # Then try to autofix whenever possible
+            bazel run //pre-commit:buildifier-fix
+            bazel run //pre-commit:shfmt-fix
+            bazel run //pre-commit:ruff-fix
             bazel run :rustfmt
             bazel run :gazelle
 

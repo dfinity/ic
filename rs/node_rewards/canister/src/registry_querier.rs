@@ -7,25 +7,19 @@ use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-use ic_registry_canister_client::{CanisterRegistryClient, get_decoded_value};
+use ic_registry_canister_client::CanisterRegistryClient;
 use ic_registry_keys::{
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, make_data_center_record_key,
-    make_node_operator_record_key, make_subnet_list_record_key,
+    DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY, make_subnet_list_record_key,
 };
 use ic_types::registry::RegistryClientError;
-use rewards_calculation::types::{Region, RewardableNode, UnixTsNanos};
-use std::collections::BTreeMap;
+use rewards_calculation::types::{RewardableNode, UnixTsNanos};
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use std::sync::Arc;
 
 pub struct RegistryQuerier {
     registry_client: Arc<dyn CanisterRegistryClient>,
-}
-
-struct NodeOperatorData {
-    node_provider_id: PrincipalId,
-    dc_id: String,
-    region: Region,
 }
 
 impl RegistryQuerier {
@@ -79,6 +73,51 @@ impl RegistryQuerier {
             })
             .unwrap_or_default()
     }
+
+    /// Returns all NodeOperatorRecords at the specified version, keyed by operator PrincipalId.
+    ///
+    /// This uses a single bulk prefix scan instead of individual lookups per operator,
+    /// which is significantly cheaper in terms of instructions.
+    fn all_node_operators(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<HashMap<PrincipalId, NodeOperatorRecord>, RegistryClientError> {
+        let prefix_len = NODE_OPERATOR_RECORD_KEY_PREFIX.len();
+        let records = self
+            .registry_client
+            .get_key_family_with_values(NODE_OPERATOR_RECORD_KEY_PREFIX, version)?;
+        let mut result = HashMap::with_capacity(records.len());
+        for (key, value) in records {
+            let principal =
+                PrincipalId::from_str(&key[prefix_len..]).expect("Invalid node operator key");
+            let record = NodeOperatorRecord::decode(value.as_slice())
+                .expect("Failed to decode NodeOperatorRecord");
+            result.insert(principal, record);
+        }
+        Ok(result)
+    }
+
+    /// Returns all DataCenterRecords at the specified version, keyed by DC ID.
+    ///
+    /// This uses a single bulk prefix scan instead of individual lookups per data center,
+    /// which is significantly cheaper in terms of instructions.
+    fn all_data_centers(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<HashMap<String, DataCenterRecord>, RegistryClientError> {
+        let prefix_len = DATA_CENTER_KEY_PREFIX.len();
+        let records = self
+            .registry_client
+            .get_key_family_with_values(DATA_CENTER_KEY_PREFIX, version)?;
+        let mut result = HashMap::with_capacity(records.len());
+        for (key, value) in records {
+            let dc_id = key[prefix_len..].to_string();
+            let record = DataCenterRecord::decode(value.as_slice())
+                .expect("Failed to decode DataCenterRecord");
+            result.insert(dc_id, record);
+        }
+        Ok(result)
+    }
 }
 
 // Exposed API Methods
@@ -87,6 +126,9 @@ impl RegistryQuerier {
     ///
     /// A node is considered rewardable on a specific UTC day if it exists in the last registry
     /// version of that day.
+    ///
+    /// Performance: This method bulk-fetches all NodeOperatorRecords and DataCenterRecords
+    /// in two prefix scans rather than doing individual lookups per node
     pub fn get_rewardable_nodes_per_provider(
         &self,
         date: &NaiveDate,
@@ -96,7 +138,11 @@ impl RegistryQuerier {
         let registry_version = self
             .version_for_timestamp_nanoseconds(last_unix_timestamp_nanoseconds(date))
             .unwrap();
+
+        // Bulk-fetch all data upfront instead of per-node individual lookups.
         let nodes = self.nodes_in_version(registry_version)?;
+        let all_operators = self.all_node_operators(registry_version)?;
+        let all_data_centers = self.all_data_centers(registry_version)?;
 
         for (node_id, node_record) in nodes {
             let node_operator_id: PrincipalId = node_record
@@ -104,16 +150,26 @@ impl RegistryQuerier {
                 .try_into()
                 .expect("Failed to parse PrincipalId from node operator ID");
 
-            let Some(NodeOperatorData {
-                node_provider_id,
-                dc_id,
-                region,
-                ..
-            }) = self.node_operator_data(node_operator_id, registry_version)?
-            else {
-                ic_cdk::println!("Node {} has no NodeOperatorData: skipping", node_id);
+            let Some(node_operator_record) = all_operators.get(&node_operator_id) else {
+                ic_cdk::println!("Node {} has no NodeOperatorRecord: skipping", node_id);
                 continue;
             };
+
+            let Some(data_center_record) = all_data_centers.get(&node_operator_record.dc_id) else {
+                ic_cdk::println!(
+                    "Node {} has NodeOperator but no DataCenterRecord for dc_id {}: skipping",
+                    node_id,
+                    node_operator_record.dc_id
+                );
+                continue;
+            };
+
+            let node_provider_id: PrincipalId = node_operator_record
+                .node_provider_principal_id
+                .clone()
+                .try_into()
+                .expect("Failed to parse PrincipalId");
+
             if let Some(provider_filter) = provider_filter
                 && &node_provider_id != provider_filter
             {
@@ -133,8 +189,8 @@ impl RegistryQuerier {
                 .push(RewardableNode {
                     node_id,
                     node_reward_type,
-                    dc_id: dc_id.clone(),
-                    region: region.clone(),
+                    dc_id: node_operator_record.dc_id.clone(),
+                    region: data_center_record.region.clone(),
                 });
         }
         Ok(rewardable_nodes_per_provider)
@@ -162,49 +218,6 @@ impl RegistryQuerier {
             })
             .collect();
         Ok(nodes)
-    }
-
-    fn node_operator_data(
-        &self,
-        node_operator: PrincipalId,
-        version: RegistryVersion,
-    ) -> Result<Option<NodeOperatorData>, RegistryClientError> {
-        let node_operator_record_key = make_node_operator_record_key(node_operator);
-        let Some(node_operator_record) = get_decoded_value::<NodeOperatorRecord>(
-            &*self.registry_client,
-            node_operator_record_key.as_str(),
-            version,
-        )
-        .map_err(|e| RegistryClientError::DecodeError {
-            error: format!("Failed to decode NodeOperatorRecord: {}", e),
-        })?
-        else {
-            return Ok(None);
-        };
-
-        let data_center_key = make_data_center_record_key(node_operator_record.dc_id.as_str());
-        let Some(data_center_record) = get_decoded_value::<DataCenterRecord>(
-            &*self.registry_client,
-            data_center_key.as_str(),
-            version,
-        )
-        .map_err(|e| RegistryClientError::DecodeError {
-            error: format!("Failed to decode DataCenterRecord: {}", e),
-        })?
-        else {
-            return Ok(None);
-        };
-
-        let node_provider_id: PrincipalId = node_operator_record
-            .node_provider_principal_id
-            .try_into()
-            .expect("Failed to parse PrincipalId");
-
-        Ok(Some(NodeOperatorData {
-            node_provider_id,
-            dc_id: node_operator_record.dc_id,
-            region: data_center_record.region.clone(),
-        }))
     }
 }
 

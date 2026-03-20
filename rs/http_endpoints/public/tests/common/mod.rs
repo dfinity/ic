@@ -9,7 +9,7 @@ use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -42,7 +42,6 @@ use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
-    canister_snapshots::CanisterSnapshots,
 };
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -132,6 +131,7 @@ pub fn default_read_certified_state(
     let mht = MixedHashTree::Leaf(Vec::new());
     let cert = Certification {
         height: Height::from(1),
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             signature: ThresholdSignature {
                 signer: NiDkgId {
@@ -205,7 +205,6 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             CanisterQueues::default(),
             RefundPool::default(),
             RawQueryStats::default(),
-            CanisterSnapshots::default(),
         )),
     )
 }

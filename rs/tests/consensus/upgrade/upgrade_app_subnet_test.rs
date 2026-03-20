@@ -18,7 +18,7 @@ use ic_system_test_driver::driver::test_env_api::{
 use ic_system_test_driver::systest;
 use ic_types::Height;
 
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);

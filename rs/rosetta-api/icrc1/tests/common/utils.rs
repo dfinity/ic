@@ -63,7 +63,7 @@ pub async fn wait_for_rosetta_block(
     network_identifier: NetworkIdentifier,
     block_index: u64,
 ) -> Option<u64> {
-    const MAX_ATTEMPTS: u8 = 20;
+    const MAX_ATTEMPTS: u8 = 60;
     let mut last_block = None;
     for _ in 0..MAX_ATTEMPTS {
         let response = rosetta_client.ready().await;

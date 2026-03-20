@@ -130,6 +130,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
             canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
                 item.cost_schedule,
             )),
+            subnet_admins: item.subnet_admins.iter().map(|sa| (*sa).into()).collect(),
         }
     }
 }
@@ -156,6 +157,10 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 },
             )?,
         );
+        let mut subnet_admins = BTreeSet::new();
+        for subnet_admin in item.subnet_admins {
+            subnet_admins.insert(PrincipalId::try_from(subnet_admin)?);
+        }
 
         Ok(Self {
             public_key: item.public_key,
@@ -170,6 +175,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .unwrap_or_default(),
             chain_keys_held,
             cost_schedule,
+            subnet_admins,
         })
     }
 }
@@ -240,12 +246,12 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 item.consumed_cycles_http_outcalls,
                 "SubnetMetrics::consumed_cycles_http_outcalls",
             )
-            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            .unwrap_or_else(|_| NominalCycles::zero()),
             consumed_cycles_ecdsa_outcalls: try_from_option_field(
                 item.consumed_cycles_ecdsa_outcalls,
                 "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
             )
-            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
             num_canisters: try_from_option_field(

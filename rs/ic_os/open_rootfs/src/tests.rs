@@ -1,5 +1,5 @@
 use crate::partitions::{A_BOOT_UUID, A_ROOT_UUID, B_BOOT_UUID, B_ROOT_UUID};
-use crate::recovery::{CONFIG_PARTITION_LABEL, RECOVERY_PROPOSAL_FILE_NAME};
+use crate::recovery::{CONFIG_DEVICE_LABEL, RECOVERY_PROPOSAL_FILE_NAME};
 use anyhow::{Context, Result};
 use candid::Encode;
 use command_runner::MockCommandRunner;
@@ -30,8 +30,8 @@ use uuid::Uuid;
 const BASE_ROOTFS_HASH: &str = "ba5e";
 const RECOVERY_ROOTFS_HASH: &str =
     "1d0dad2a5a983ae4be9a401b0aac325d2a38f1ba217efe0c43bc68806d2ba54a";
-const CHIP_ID: [u8; 64] = [42u8; 64];
-const MEASUREMENT: [u8; 48] = [66u8; 48];
+const CHIP_ID: [u8; 64] = [42_u8; 64];
+const MEASUREMENT: [u8; 48] = [66_u8; 48];
 
 const A_ROOT_PATH: &str = "/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7";
 const B_ROOT_PATH: &str = "/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5";
@@ -72,7 +72,7 @@ impl TestFixture {
             Arc::new(TempDir::with_prefix("b_boot").unwrap()),
         );
         partitions.insert(
-            PartitionSelector::ByLabel(CONFIG_PARTITION_LABEL.to_string()),
+            PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()),
             config_media,
         );
 
@@ -124,28 +124,31 @@ impl TestFixture {
     /// Set up the expectation for the veritysetup command for `device` and `hash`
     /// with the expectation that veritysetup will succeed or fail as specified
     fn expect_verity(&mut self, device_str: &str, hash: &str, success: bool) -> &mut Self {
-        let verifysetup_verify = format!(
-            r#""veritysetup" "verify" "{device_str}" "{device_str}" "{hash}" "--hash-offset" "10603200512""#
-        );
-        self.command_runner
-            .expect_output()
-            .withf(move |cmd| format!("{cmd:?}") == verifysetup_verify)
-            .once()
-            .returning(move |_| {
-                if success {
-                    Ok(std::process::Output {
-                        status: std::process::ExitStatus::from_raw(0),
-                        stdout: vec![],
-                        stderr: vec![],
-                    })
-                } else {
-                    Ok(std::process::Output {
-                        status: std::process::ExitStatus::from_raw(1),
-                        stdout: vec![],
-                        stderr: b"Mock veritysetup was configured to fail".to_vec(),
-                    })
-                }
-            });
+        // Expect that 'veritysetup verify' is called if we have an SEV firmware defined
+        if self.sev_firmware.is_some() {
+            let verifysetup_verify = format!(
+                r#""veritysetup" "verify" "{device_str}" "{device_str}" "{hash}" "--hash-offset" "10603200512""#
+            );
+            self.command_runner
+                .expect_output()
+                .withf(move |cmd| format!("{cmd:?}") == verifysetup_verify)
+                .once()
+                .returning(move |_| {
+                    if success {
+                        Ok(std::process::Output {
+                            status: std::process::ExitStatus::from_raw(0),
+                            stdout: vec![],
+                            stderr: vec![],
+                        })
+                    } else {
+                        Ok(std::process::Output {
+                            status: std::process::ExitStatus::from_raw(1),
+                            stdout: vec![],
+                            stderr: b"Mock veritysetup was configured to fail".to_vec(),
+                        })
+                    }
+                });
+        }
 
         // If success, expect a following open command
         let verifysetup_open = format!(
@@ -198,7 +201,7 @@ impl TestFixture {
             Label::from("time") => LabeledTree::Leaf(vec![0u8; 8])
         ]);
 
-        let mut rng = rand::rngs::StdRng::from_seed([42u8; 32]);
+        let mut rng = rand::rngs::StdRng::from_seed([42_u8; 32]);
         let (_cert, root_pk, cert_cbor) =
             CertificateBuilder::new_with_rng(CertificateData::CustomTree(tree), &mut rng).build();
 
@@ -219,9 +222,7 @@ impl TestFixture {
         // Write NNS public key override to CONFIG media
         fs::write(
             self.partition_provider
-                .get_partition(PartitionSelector::ByLabel(
-                    CONFIG_PARTITION_LABEL.to_string(),
-                ))
+                .get_partition(PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()))
                 .unwrap()
                 .join("nns_public_key_override.pem"),
             &nns_public_key,
@@ -437,9 +438,7 @@ fn test_nns_root_key_mismatch() {
     fs::remove_file(
         fixture
             .partition_provider
-            .get_partition(PartitionSelector::ByLabel(
-                CONFIG_PARTITION_LABEL.to_string(),
-            ))
+            .get_partition(PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()))
             .unwrap()
             .join("nns_public_key_override.pem"),
     )

@@ -26,9 +26,10 @@ use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterLog, CanisterTimer, Cycles, Height, MemoryAllocation, NumInstructions, Time,
+    CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::WasmHash;
 
 use crate::{
@@ -389,21 +390,24 @@ impl InstallCodeHelper {
                 }
             }
 
-            let threshold = round.cycles_account_manager.freeze_threshold_cycles(
-                self.canister.system_state.freeze_threshold,
-                self.canister.memory_allocation(),
-                self.canister.memory_usage(),
-                self.canister.message_memory_usage(),
-                self.canister.compute_allocation(),
-                original.subnet_size,
-                round.cost_schedule,
-                self.canister.system_state.reserved_balance(),
-            );
-            if self.canister.system_state.balance() < threshold {
+            let reveal_top_up = self.canister.controllers().contains(&original.sender);
+            if let Err(err) = round
+                .cycles_account_manager
+                .can_withdraw_cycles_with_threshold(
+                    &self.canister.system_state,
+                    Cycles::zero(),
+                    self.canister.memory_usage(),
+                    self.canister.message_memory_usage(),
+                    self.canister.system_state.reserved_balance(),
+                    original.subnet_size,
+                    round.cost_schedule,
+                    reveal_top_up,
+                )
+            {
                 let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
                     bytes,
-                    available: self.canister.system_state.balance(),
-                    required: threshold,
+                    available: err.available,
+                    required: err.threshold,
                 };
                 return finish_err(
                     clean_canister,

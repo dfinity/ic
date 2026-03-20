@@ -11,8 +11,9 @@ use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
     Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
+        canister_snapshots::CanisterSnapshots,
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-        system_state::{CyclesUseCase, TaskQueue},
+        system_state::TaskQueue,
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
@@ -32,15 +33,16 @@ use ic_test_utilities_types::{
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
-    SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, RawQueryStats},
+    CanisterId, ComputeAllocation, MemoryAllocation, NodeId, NumBytes, PrincipalId, SubnetId, Time,
+    batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
     methods::{Callback, WasmClosure},
-    nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
+};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -57,6 +59,7 @@ pub use history::MockIngressHistory;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
 
 /// Valid, but minimal wasm code.
 const EMPTY_WASM: &[u8] = &[
@@ -157,6 +160,7 @@ impl ReplicatedStateBuilder {
                 subnet_features: self.subnet_features,
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
         );
 
@@ -226,6 +230,7 @@ pub struct CanisterStateBuilder {
     time_of_last_allocation_charge: Time,
     certified_data: Vec<u8>,
     log_visibility: LogVisibilityV2,
+    log_memory_limit: usize,
 }
 
 impl CanisterStateBuilder {
@@ -319,6 +324,11 @@ impl CanisterStateBuilder {
         self
     }
 
+    pub fn with_log_memory_limit(mut self, log_memory_limit: usize) -> Self {
+        self.log_memory_limit = log_memory_limit;
+        self
+    }
+
     pub fn build(self) -> CanisterState {
         let mut system_state = match self.status {
             CanisterStatusType::Running => SystemState::new_running_for_testing(
@@ -345,6 +355,10 @@ impl CanisterStateBuilder {
         system_state.compute_allocation = self.compute_allocation;
         system_state.certified_data = self.certified_data;
         system_state.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
+        // Allocate log memory store according to log_memory_limit.
+        system_state
+            .log_memory_store
+            .resize_for_testing(self.log_memory_limit);
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
@@ -387,6 +401,7 @@ impl CanisterStateBuilder {
             system_state,
             execution_state,
             scheduler_state: SchedulerState::default(),
+            canister_snapshots: CanisterSnapshots::default(),
         }
     }
 }
@@ -410,6 +425,7 @@ impl Default for CanisterStateBuilder {
             time_of_last_allocation_charge: UNIX_EPOCH,
             certified_data: vec![],
             log_visibility: Default::default(),
+            log_memory_limit: TEST_DEFAULT_LOG_MEMORY_LIMIT,
         }
     }
 }
@@ -628,6 +644,7 @@ pub fn canister_from_exec_state(
             .build(),
         execution_state: Some(execution_state),
         scheduler_state: Default::default(),
+        canister_snapshots: CanisterSnapshots::default(),
     }
 }
 
@@ -656,6 +673,7 @@ pub fn get_running_canister_with_args(
         ),
         execution_state: None,
         scheduler_state: Default::default(),
+        canister_snapshots: CanisterSnapshots::default(),
     }
 }
 
@@ -680,6 +698,7 @@ pub fn get_stopping_canister_with_controller(
         ),
         execution_state: None,
         scheduler_state: Default::default(),
+        canister_snapshots: CanisterSnapshots::default(),
     }
 }
 
@@ -704,6 +723,7 @@ pub fn get_stopped_canister_with_controller(
         ),
         execution_state: None,
         scheduler_state: Default::default(),
+        canister_snapshots: CanisterSnapshots::default(),
     }
 }
 
@@ -794,7 +814,8 @@ pub fn new_canister_state(
         initial_cycles,
         freeze_threshold,
     );
-    CanisterState::new(system_state, None, scheduler_state)
+    let canister_snapshots = CanisterSnapshots::default();
+    CanisterState::new(system_state, None, scheduler_state, canister_snapshots)
 }
 
 pub fn new_canister_state_with_execution(
@@ -813,7 +834,13 @@ pub fn new_canister_state_with_execution(
     let execution_state = ExecutionStateBuilder::default()
         .with_wasm_binary(empty_wasm())
         .build();
-    CanisterState::new(system_state, Some(execution_state), scheduler_state)
+    let canister_snapshots = CanisterSnapshots::default();
+    CanisterState::new(
+        system_state,
+        Some(execution_state),
+        scheduler_state,
+        canister_snapshots,
+    )
 }
 
 /// Helper function to register a callback.
@@ -1043,7 +1070,7 @@ prop_compose! {
 
 prop_compose! {
     pub(crate) fn arb_nominal_cycles()(cycles in any::<u64>()) -> NominalCycles {
-        NominalCycles::from(cycles as u128)
+        NominalCycles::new(cycles as u128)
     }
 }
 
@@ -1112,9 +1139,9 @@ prop_compose! {
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
-        metrics.consumed_cycles_by_deleted_canisters = consumed_cycles_by_deleted_canisters;
-        metrics.consumed_cycles_http_outcalls = consumed_cycles_http_outcalls;
-        metrics.consumed_cycles_ecdsa_outcalls = consumed_cycles_ecdsa_outcalls;
+        metrics.observe_consumed_cycles_by_deleted_canisters(consumed_cycles_by_deleted_canisters);
+        metrics.observe_consumed_cycles_http_outcalls(consumed_cycles_http_outcalls);
+        metrics.observe_consumed_cycles_ecdsa_outcalls(consumed_cycles_ecdsa_outcalls);
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;

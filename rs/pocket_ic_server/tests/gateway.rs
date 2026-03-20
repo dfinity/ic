@@ -6,6 +6,7 @@ use pocket_ic::common::rest::{
     HttpsConfig, Topology,
 };
 use pocket_ic::{PocketIc, PocketIcBuilder};
+use pocket_ic_server::external_canister_types::InternetIdentityFrontendInit;
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::Url;
 use reqwest::blocking::Client;
@@ -19,23 +20,75 @@ use tempfile::NamedTempFile;
 mod common;
 
 fn deploy_ii(pic: &PocketIc) -> Principal {
-    let canister_id = pic.create_canister();
+    // Deploy II backend.
+    let backend_id = pic.create_canister();
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 1_000_000_000_000);
-    let arg = Encode!(&()).unwrap();
-    pic.install_canister(canister_id, ii_wasm, arg, None);
-    canister_id
+
+    pic.add_cycles(backend_id, 2_000_000_000_000);
+    pic.install_canister(backend_id, ii_wasm, Encode!(&()).unwrap(), None);
+
+    // Deploy II frontend.
+    let frontend_id = pic.create_canister();
+    let frontend_path = std::env::var_os("II_FRONTEND_WASM")
+        .expect("Missing II_FRONTEND_WASM (path to II frontend wasm) in env.");
+    let frontend_wasm =
+        std::fs::read(frontend_path).expect("Could not read II frontend wasm file.");
+    pic.add_cycles(frontend_id, 2_000_000_000_000);
+    // The backend_origin is mocked out since it's only used by the frontend for browser-side
+    // redirects to the backend, which these tests don't exercise.
+    let frontend_arg = Encode!(&InternetIdentityFrontendInit {
+        backend_canister_id: backend_id,
+        backend_origin: "dummy_backend_origin".to_string(),
+        related_origins: None,
+        fetch_root_key: Some(true),
+        analytics_config: None,
+        dummy_auth: None,
+        dev_csp: Some(true),
+    })
+    .unwrap();
+
+    pic.add_cycles(frontend_id, 2_800_000_000_000);
+    pic.install_canister(frontend_id, frontend_wasm, frontend_arg, None);
+
+    frontend_id
 }
 
 async fn deploy_ii_async(pic: &pocket_ic::nonblocking::PocketIc) -> Principal {
-    let canister_id = pic.create_canister().await;
+    // Deploy II backend.
+    let backend_id = pic.create_canister().await;
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 1_000_000_000_000).await;
-    let arg = Encode!(&()).unwrap();
-    pic.install_canister(canister_id, ii_wasm, arg, None).await;
-    canister_id
+
+    pic.add_cycles(backend_id, 2_000_000_000_000).await;
+    pic.install_canister(backend_id, ii_wasm, Encode!(&()).unwrap(), None)
+        .await;
+
+    // Deploy II frontend.
+    let frontend_id = pic.create_canister().await;
+    let frontend_path = std::env::var_os("II_FRONTEND_WASM")
+        .expect("Missing II_FRONTEND_WASM (path to II frontend wasm) in env.");
+    let frontend_wasm =
+        std::fs::read(frontend_path).expect("Could not read II frontend wasm file.");
+    pic.add_cycles(frontend_id, 2_000_000_000_000).await;
+    // The backend_origin is mocked out since it's only used by the frontend for browser-side
+    // redirects to the backend, which these tests don't exercise.
+    let frontend_arg = Encode!(&InternetIdentityFrontendInit {
+        backend_canister_id: backend_id,
+        backend_origin: "dummy_backend_origin".to_string(),
+        related_origins: None,
+        fetch_root_key: Some(true),
+        analytics_config: None,
+        dummy_auth: None,
+        dev_csp: Some(true),
+    })
+    .unwrap();
+
+    pic.add_cycles(frontend_id, 2_800_000_000_000).await;
+    pic.install_canister(frontend_id, frontend_wasm, frontend_arg, None)
+        .await;
+
+    frontend_id
 }
 
 // Test the server endpoint to list HTTP gateways and the following HTTP gateway endpoints:
@@ -410,6 +463,7 @@ fn test_unresponsive_gateway_backend() {
         forward_to: HttpGatewayBackend::Replica(backend_instance_url.to_string()),
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let res = client
         .post(create_gateway_endpoint)
@@ -431,11 +485,11 @@ fn test_unresponsive_gateway_backend() {
     // Query a few endpoints on the HTTP gateway:
     // - a custom dashboard endpoint (handled by the PocketIC server);
     // - an /api endpoint (proxied by `ic-gateway`);
-    // - an asset endpoint (handled by `ic-http-gateway`).
+    // - an asset endpoint (handled by `ic-http-gateway-protocol`).
     let paths = vec![
         "_/dashboard".to_string(),
         "api/v2/status".to_string(),
-        format!("favicon.ico?canisterId={}", canister_id),
+        format!("?canisterId={}", canister_id),
     ];
     for path in &paths {
         let resp = client.get(endpoint.join(path).unwrap()).send().unwrap();
@@ -478,6 +532,7 @@ fn test_gateway_invalid_forward_to() {
             forward_to,
             domains: None,
             https_config: None,
+            domain_custom_provider_local_file: None,
         };
         let client = Client::builder()
             .timeout(Duration::from_secs(300)) // same as bazel test timeout for this test
@@ -502,6 +557,187 @@ fn test_gateway_invalid_forward_to() {
     }
 }
 
+// Test that the HTTP gateway accepts a `domain_custom_provider_local_file` configuration.
+// Three domain forms for the same canister are verified, all driven exclusively by entries
+// in the provider file (no canister ID appears in any URL — that is the whole point of
+// custom domains). None of the domains are added to `domains`; `DomainResolver` falls
+// through to `CustomDomainStorage` for an exact-match lookup in each case.
+//
+//   custom  →  test
+//   apex    →  domain.test
+//   subdomain → www.domain.test
+
+#[tokio::test]
+async fn test_gateway_custom_domain_provider_file() {
+    let server_url = start_server();
+
+    // Create a PocketIC instance with NNS and application subnets.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+
+    // Deploy II onto that instance.
+    let canister_id = deploy_ii_async(&pic).await;
+
+    // Enable auto progress for asset certification to work.
+    pic.auto_progress().await;
+
+    // Three domain forms, all mapping to the same canister — the canister ID is hidden in the file.
+    let custom_domain = "test";
+    let apex_domain = "domain.test";
+    let sub_domain = "www.domain.test";
+    let bind_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+    let (mut mapping_file, mapping_file_path) = NamedTempFile::new().unwrap().keep().unwrap();
+    mapping_file
+        .write_all(
+            format!(
+                "{}:{}\n{}:{}\n{}:{}",
+                custom_domain, canister_id, apex_domain, canister_id, sub_domain, canister_id,
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    // Create an HTTP gateway with the custom domain provider file.
+    let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
+    let http_gateway_config = HttpGatewayConfig {
+        ip_addr: Some(bind_address.to_string()),
+        port: None,
+        forward_to: HttpGatewayBackend::PocketIcInstance(pic.instance_id),
+        domains: Some(vec!["localhost".to_string()]),
+        https_config: None,
+        domain_custom_provider_local_file: Some(mapping_file_path.to_str().unwrap().to_string()),
+    };
+    let client = NonblockingClient::new();
+    let res = client
+        .post(create_gateway_endpoint)
+        .json(&http_gateway_config)
+        .send()
+        .await
+        .unwrap()
+        .json::<CreateHttpGatewayResponse>()
+        .await
+        .unwrap();
+    let port = match res {
+        CreateHttpGatewayResponse::Created(info) => info.port,
+        CreateHttpGatewayResponse::Error { message } => {
+            panic!("Failed to create HTTP gateway: {message}")
+        }
+    };
+
+    // Build a reqwest client that resolves both domains to the gateway's address.
+    let client = NonblockingClient::builder()
+        .resolve(custom_domain, SocketAddr::new(bind_address, port))
+        .resolve(apex_domain, SocketAddr::new(bind_address, port))
+        .resolve(sub_domain, SocketAddr::new(bind_address, port))
+        .build()
+        .unwrap();
+
+    // Verify all three domains: custom (www), apex, and subdomain (app).
+    // No canister ID appears in any URL; the file mapping provides it in each case.
+    //
+    // Custom domain mappings are loaded asynchronously by a background polling
+    // task in the gateway, so they may not be available immediately after the
+    // gateway starts listening. We retry each request until the
+    // `x-ic-canister-id` header appears (with a generous timeout).
+    for domain in [custom_domain, apex_domain, sub_domain] {
+        let url = format!("http://{}:{}", domain, port);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let res = loop {
+            let res = client.get(&url).send().await.unwrap();
+            if res.headers().get("x-ic-canister-id").is_some() {
+                break res;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "Timed out waiting for x-ic-canister-id header for domain {domain}",
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+        assert_eq!(
+            res.headers()
+                .get("x-ic-canister-id")
+                .expect("x-ic-canister-id header missing")
+                .to_str()
+                .unwrap(),
+            canister_id.to_string(),
+            "unexpected canister ID for domain {domain}",
+        );
+        let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+        assert!(
+            page.contains("<title>Internet Identity</title>"),
+            "II title not found for domain {domain}",
+        );
+    }
+
+    pic.drop().await;
+}
+
+// Test that the HTTP gateway's authority validation is skipped (--domain-skip-authority-validation
+// is enabled in PocketIC if `domains` is `None`). Requests from any domain
+// should still succeed when the canister ID is resolvable from the URL.
+
+#[tokio::test]
+async fn test_gateway_skip_authority_validation() {
+    let server_url = start_server();
+
+    // Create a PocketIC instance with NNS and application subnets.
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+
+    // Deploy II onto that instance.
+    let canister_id = deploy_ii_async(&pic).await;
+
+    // Start an HTTP gateway configured with only the default domain (localhost).
+    let bind_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let port = pic
+        .make_live_with_params(Some(bind_address), None, None, None)
+        .await
+        .port_or_known_default()
+        .unwrap();
+
+    // Use a domain that is NOT in the configured `domains` list.
+    let unlisted_domain = "not-configured-domain.test";
+
+    // Build a reqwest client that resolves the unlisted domain to the gateway's address.
+    let client = NonblockingClient::builder()
+        .resolve(unlisted_domain, SocketAddr::new(bind_address, port))
+        .build()
+        .unwrap();
+
+    // With `--domain-skip-authority-validation` always enabled in PocketIC, a request from an
+    // unlisted domain with the canister ID in query parameters should succeed.
+    let url = format!(
+        "http://{}:{}/?canisterId={}",
+        unlisted_domain, port, canister_id
+    );
+    let res = client.get(&url).send().await.unwrap();
+    let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+    assert!(page.contains("<title>Internet Identity</title>"));
+
+    // Requests with canister ID as a subdomain of the unlisted domain should also succeed.
+    let sub_unlisted_domain = format!("{canister_id}.{unlisted_domain}");
+    let client = NonblockingClient::builder()
+        .resolve(&sub_unlisted_domain, SocketAddr::new(bind_address, port))
+        .build()
+        .unwrap();
+    let url = format!("http://{}:{}", sub_unlisted_domain, port);
+    let res = client.get(&url).send().await.unwrap();
+    let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+    assert!(page.contains("<title>Internet Identity</title>"));
+
+    pic.stop_live().await;
+    pic.drop().await;
+}
+
 // Test that trying to bind the HTTP gateway to the same port twice fails gracefully.
 
 fn create_gateway(
@@ -516,6 +752,7 @@ fn create_gateway(
         forward_to,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let res = reqwest::blocking::Client::new()
         .post(endpoint)

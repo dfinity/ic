@@ -218,7 +218,7 @@ fn test_self_transfer() {
         agent
             .transfer(TransferArg {
                 to: account,
-                amount: 1000u64.into(),
+                amount: 1000_u64.into(),
                 fee: Some(DEFAULT_TRANSFER_FEE.into()),
                 from_subaccount: None,
                 created_at_time: None,
@@ -300,13 +300,13 @@ fn test_burn_and_mint_fee() {
 
         // Create mint and burn blocks with fees, and add them to the ledger
         let block0 = BlockBuilder::new(0, 1000)
-            .with_fee(Tokens::from(50u64))
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .with_fee(Tokens::from(50_u64))
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000_u64))
             .build();
         let block1 = BlockBuilder::new(1, 2000)
             .with_parent_hash(block0.clone().hash().to_vec())
-            .with_fee(Tokens::from(50u64))
-            .burn(*TEST_ACCOUNT, Tokens::from(50u64))
+            .with_fee(Tokens::from(50_u64))
+            .burn(*TEST_ACCOUNT, Tokens::from(50_u64))
             .build();
         let result0 = add_block(&agent, &block0).await.unwrap();
         assert_eq!(result0, Nat::from(0u64));
@@ -344,15 +344,15 @@ fn test_burn_and_mint_fee() {
         // Create mint and burn blocks with fees and fee collector, and add them to the ledger
         let block2 = BlockBuilder::new(2, 3000)
             .with_parent_hash(block1.clone().hash().to_vec())
-            .with_fee(Tokens::from(50u64))
+            .with_fee(Tokens::from(50_u64))
             .with_fee_collector(FEE_COLLECTOR)
-            .mint(*TEST_ACCOUNT, Tokens::from(100u64))
+            .mint(*TEST_ACCOUNT, Tokens::from(100_u64))
             .build();
         let block3 = BlockBuilder::new(3, 4000)
             .with_parent_hash(block2.clone().hash().to_vec())
             .with_fee_collector_block(2)
-            .with_fee(Tokens::from(50u64))
-            .burn(*TEST_ACCOUNT, Tokens::from(50u64))
+            .with_fee(Tokens::from(50_u64))
+            .burn(*TEST_ACCOUNT, Tokens::from(50_u64))
             .build();
         let result2 = add_block(&agent, &block2).await.unwrap();
         assert_eq!(result2, Nat::from(2u64));

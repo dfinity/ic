@@ -983,3 +983,8 @@ fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
         SubnetType::CloudEngine => "cloud_engine",
     }
 }
+
+pub fn state_height_as_tree(height: &Height) -> LazyTree<'_> {
+    let metadata_lazy_tree = fork(FiniteMap::default().with_tree(HEIGHT_LABEL, num(height.get())));
+    fork(FiniteMap::default().with_tree(METADATA_LABEL, metadata_lazy_tree))
+}

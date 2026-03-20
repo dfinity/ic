@@ -142,24 +142,27 @@ impl Registry {
         }
     }
 
-    /// Validates that the SEV (AMD Secure Encrypted Virtualization) feature is not changed on
-    /// an existing subnet.
+    /// Validates that AMD Secure Encrypted Virtualization (SEV) is never disabled on a subnet.
     ///
-    /// Panics if the SEV feature is attempted to be changed.
+    /// Panics when attempting to turn off SEV for an SEV-enabled subnet
     fn validate_update_sev_feature(&self, payload: &UpdateSubnetPayload) {
         let subnet_id = payload.subnet_id;
 
-        // Ensure the subnet record exists for this subnet ID.
-        let _subnet_record = self.get_subnet_or_panic(subnet_id);
-
-        let Some(features) = payload.features else {
+        let Some(subnet_features) = self.get_subnet_or_panic(subnet_id).features else {
             return;
         };
 
-        if let Some(sev_enabled) = features.sev_enabled {
+        let Some(update_features) = payload.features else {
+            return;
+        };
+
+        // panic if SEV is enable and the update tries to disable it
+        let attempting_to_disable =
+            subnet_features.sev_enabled == Some(true) && update_features.sev_enabled == Some(false);
+        if attempting_to_disable {
             panic!(
-                "{LOG_PREFIX}Proposal attempts to change sev_enabled for Subnet '{subnet_id}' to {sev_enabled}, \
-                 but sev_enabled can only be set during subnet creation.",
+                "{LOG_PREFIX}Proposal attempts to disable SEV for Subnet '{subnet_id}', \
+                but SEV cannot be turned off once enabled.",
             );
         }
     }
@@ -215,6 +218,7 @@ pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,
 
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_ingress_bytes_per_block: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
     pub unit_delay_millis: Option<u64>,
@@ -428,6 +432,7 @@ fn merge_subnet_record(
     let UpdateSubnetPayload {
         subnet_id: _subnet_id,
         max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block,
         max_ingress_messages_per_block,
         max_block_payload_size,
         unit_delay_millis,
@@ -460,6 +465,7 @@ fn merge_subnet_record(
     let features: Option<SubnetFeaturesPb> = features.map(|v| SubnetFeatures::from(v).into());
 
     maybe_set!(subnet_record, max_ingress_bytes_per_message);
+    maybe_set!(subnet_record, max_ingress_bytes_per_block);
     maybe_set!(subnet_record, max_ingress_messages_per_block);
     maybe_set!(subnet_record, max_block_payload_size);
     maybe_set!(subnet_record, unit_delay_millis);
@@ -498,7 +504,7 @@ mod tests {
     use super::*;
     use crate::common::test_helpers::{
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
-        prepare_registry_with_nodes,
+        prepare_registry_with_nodes, prepare_registry_with_nodes_and_chip_id,
     };
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
@@ -521,6 +527,7 @@ mod tests {
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -555,6 +562,7 @@ mod tests {
         let subnet_record = SubnetRecordPb {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -573,6 +581,8 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            resource_limits: Default::default(),
+            recalled_replica_version_ids: vec![],
         };
 
         let key_id = EcdsaKeyId {
@@ -599,6 +609,7 @@ mod tests {
             ),
             max_ingress_bytes_per_message: Some(256),
             max_ingress_messages_per_block: Some(256),
+            max_ingress_bytes_per_block: Some(257),
             max_block_payload_size: Some(200),
             unit_delay_millis: Some(300),
             initial_notary_delay_millis: Some(200),
@@ -640,6 +651,7 @@ mod tests {
                 membership: vec![],
                 max_ingress_bytes_per_message: 256,
                 max_ingress_messages_per_block: 256,
+                max_ingress_bytes_per_block: 257,
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
@@ -666,6 +678,8 @@ mod tests {
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: Default::default(),
+                recalled_replica_version_ids: vec![],
             }
         );
     }
@@ -675,6 +689,7 @@ mod tests {
         let subnet_record = SubnetRecordPb {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -693,6 +708,8 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            resource_limits: Default::default(),
+            recalled_replica_version_ids: vec![],
         };
 
         let payload = UpdateSubnetPayload {
@@ -704,6 +721,7 @@ mod tests {
             ),
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
@@ -736,6 +754,7 @@ mod tests {
             SubnetRecordPb {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_bytes_per_block: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
@@ -754,6 +773,8 @@ mod tests {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: Default::default(),
+                recalled_replica_version_ids: vec![],
             }
         );
     }
@@ -962,7 +983,7 @@ mod tests {
     fn make_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -985,40 +1006,69 @@ mod tests {
         (registry, subnet_id)
     }
 
-    #[test]
-    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
-                    'ge6io-epiam-aaaaa-aaaap-yai' to true, but sev_enabled can only be set during \
-                    subnet creation.")]
-    fn test_sev_enabled_cannot_be_changed_to_true() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
-
+    fn update_sev(subnet_id: SubnetId, enabled: bool) -> UpdateSubnetPayload {
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
             canister_sandboxing: false,
             http_requests: false,
-            sev_enabled: Some(true),
+            sev_enabled: Some(enabled),
         });
-
-        registry.do_update_subnet(payload);
+        payload
     }
 
     #[test]
-    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
-                    'ge6io-epiam-aaaaa-aaaap-yai' to false, but sev_enabled can only be set during \
-                    subnet creation.")]
-    fn test_sev_enabled_cannot_be_changed_to_false() {
+    fn test_can_enable_sev_if_disabled() {
         let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
 
-        let mut payload = make_empty_update_payload(subnet_id);
-        payload.features = Some(SubnetFeaturesPb {
-            canister_sandboxing: false,
-            http_requests: false,
-            // The only difference compared to test_sev_enabled_cannot_be_changed_to_true
-            sev_enabled: Some(false),
-        });
+        // transition from unset -> false -> true
+        registry.do_update_subnet(update_sev(subnet_id, false));
+        registry.do_update_subnet(update_sev(subnet_id, true));
 
-        // Should panic because we are changing SEV-related subnet features.
-        registry.do_update_subnet(payload);
+        let subnet_features = registry
+            .get_subnet_or_panic(subnet_id)
+            .features
+            .expect("failed to get subnet features");
+
+        assert_eq!(
+            subnet_features.sev_enabled,
+            Some(true),
+            "Expected SEV enabled to be Some(true), but was {:?}",
+            subnet_features.sev_enabled
+        );
+    }
+
+    #[test]
+    fn test_can_enable_sev_if_unset() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        // transition from unset (implicitly) -> true
+        registry.do_update_subnet(update_sev(subnet_id, true));
+
+        let subnet_features = registry
+            .get_subnet_or_panic(subnet_id)
+            .features
+            .expect("failed to get subnet features");
+
+        assert_eq!(
+            subnet_features.sev_enabled,
+            Some(true),
+            "Expected SEV enabled to be Some(true), but was {:?}",
+            subnet_features.sev_enabled
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
+        but SEV cannot be turned off once enabled."
+    )]
+    fn test_cannot_disable_sev_if_enabled() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        // Enable SEV first as it is initially unset.
+        registry.do_update_subnet(update_sev(subnet_id, true));
+        // This should trigger the panic
+        registry.do_update_subnet(update_sev(subnet_id, false));
     }
 
     #[test]

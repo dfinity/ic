@@ -8,6 +8,11 @@
   </metadata>
   <memory unit='GiB'>{{vm_memory}}</memory>
   <currentMemory unit='GiB'>{{vm_memory}}</currentMemory>
+  {%- if use_hugepages %}
+  <memoryBacking>
+      <hugepages/>
+  </memoryBacking>
+  {%- endif %}
   <vcpu placement='static'>{{nr_of_vcpus}}</vcpu>
 
   {%- if cpu_domain == "qemu" %}

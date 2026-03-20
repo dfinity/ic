@@ -18,9 +18,9 @@ fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
     let n = get_bit(&naf.negative_bits[..]);
 
     match (p, n) {
-        (false, true) => -1i8,
-        (false, false) => 0i8,
-        (true, false) => 1i8,
+        (false, true) => -1_i8,
+        (false, false) => 0_i8,
+        (true, false) => 1_i8,
         (true, true) => panic!("NAF is true for both positive and negative bit at position {i}"),
     }
 }
@@ -42,7 +42,7 @@ fn test_range_to_i8_is_correct() -> CanisterThresholdResult<()> {
                 let len = rng.gen_range(1..std::cmp::min(8, naf.bit_len() - pos + 1));
                 let computed_result = naf.range_as_i8(pos, len);
                 // compute the expected result by pulling and aggregating single bits
-                let mut expected_result = 0i8;
+                let mut expected_result = 0_i8;
                 for i in (pos..(pos + len)).rev() {
                     expected_result = expected_result * 2 + to_i8_at_pos(&naf, i);
                 }
@@ -62,9 +62,9 @@ fn naf_reconstruction_helper<R: num_traits::int::PrimInt>(naf: &Naf) -> R {
         // `value_j` is in [-1, 0, 1]
         let value_j = to_i8_at_pos(naf, i);
         match value_j {
-            -1i8 => result = result - (one << i),
-            0i8 => {}
-            1i8 => result = result + (one << i),
+            -1_i8 => result = result - (one << i),
+            0_i8 => {}
+            1_i8 => result = result + (one << i),
             _ => panic!("this should never happen"),
         };
     }
@@ -130,9 +130,9 @@ fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples()
                 // `value_j` is in [-1, 0, 1]
                 let value_j = to_i8_at_pos(&naf[i], j);
                 match value_j {
-                    -1i8 => result = result.sub(&term)?,
-                    0i8 => {}
-                    1i8 => {
+                    -1_i8 => result = result.sub(&term)?,
+                    0_i8 => {}
+                    1_i8 => {
                         result = result.add(&term)?;
                     }
                     _ => panic!("this should never happen"),

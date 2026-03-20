@@ -5,7 +5,8 @@ use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
-use ic_types::{CanisterId, Cycles};
+use ic_types::CanisterId;
+use ic_types_cycles::Cycles;
 
 const T: u128 = 1_000_000_000_000;
 
@@ -114,7 +115,7 @@ fn reserved_cycles_stable_memory_grow_to_full_capacity() {
 
     // The total amount of reserved cycles to claim the full subnet memory capacity.
     const NUM_CANISTERS: usize = 5; // we need multiple canisters since the stable memory of a single canister cannot fill the subnet
-    const EXPECTED_RESERVED_CYCLES: u128 = 24_954 * T;
+    const EXPECTED_RESERVED_CYCLES: u128 = 48_911 * T;
     reserved_cycles_memory_grow_to_full_capacity(
         stable_grow,
         NUM_CANISTERS,
@@ -153,7 +154,7 @@ fn reserved_cycles_memory_allocation_grow_to_full_capacity() {
     // The total amount of reserved cycles to claim the full subnet memory capacity
     // while reserving a lot of memory at once.
     const NUM_CANISTERS: usize = 1; // a single canister can fill the subnet with its memory allocation
-    const EXPECTED_RESERVED_CYCLES: u128 = 35_135 * T;
+    const EXPECTED_RESERVED_CYCLES: u128 = 68_866 * T;
     reserved_cycles_memory_grow_to_full_capacity(
         ic00_grow,
         NUM_CANISTERS,

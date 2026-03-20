@@ -84,7 +84,10 @@ fn upgrade_ledger(
 fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
     IndexInitArg {
         ledger_id: Principal::from(ledger_id),
+        #[allow(deprecated)]
         retrieve_blocks_from_ledger_interval_seconds: None,
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
     }
 }
 
@@ -498,14 +501,14 @@ fn verify_unknown_block_handling(
 
     for i in 0..NUM_BLOCKS {
         let block = BlockBuilder::new(i, i)
-            .mint(TEST_ACCOUNT, Tokens::from(1u64))
+            .mint(TEST_ACCOUNT, Tokens::from(1_u64))
             .build();
         let block = if i == bad_block_index {
             let mut bad_block = match block {
                 ICRC3Value::Map(btree_map) => btree_map,
                 _ => panic!("block should be a map"),
             };
-            bad_block.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
+            bad_block.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0_u64)));
             ICRC3Value::Map(bad_block)
         } else {
             block
@@ -659,7 +662,7 @@ fn test_get_account_transactions() {
     // List of the transactions that the test is going to add. This exists to make
     // the test easier to read.
     let tx0 = TransactionWithId {
-        id: 0u8.into(),
+        id: 0_u8.into(),
         transaction: Transaction::mint(
             Mint {
                 to: account(1, 0),
@@ -672,13 +675,13 @@ fn test_get_account_transactions() {
         ),
     };
     let tx1 = TransactionWithId {
-        id: 1u8.into(),
+        id: 1_u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(1, 0),
                 to: account(2, 0),
                 spender: None,
-                amount: 1_000_000u32.into(),
+                amount: 1_000_000_u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -687,13 +690,13 @@ fn test_get_account_transactions() {
         ),
     };
     let tx2 = TransactionWithId {
-        id: 2u8.into(),
+        id: 2_u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(1, 0),
                 to: account(2, 0),
                 spender: None,
-                amount: 2_000_000u32.into(),
+                amount: 2_000_000_u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -702,13 +705,13 @@ fn test_get_account_transactions() {
         ),
     };
     let tx3 = TransactionWithId {
-        id: 3u8.into(),
+        id: 3_u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(2, 0),
                 to: account(1, 1),
                 spender: None,
-                amount: 1_000_000u32.into(),
+                amount: 1_000_000_u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -794,7 +797,7 @@ fn test_get_account_transactions_self_transfer() {
     // List of the transactions that the test is going to add. This exists to make
     // the test easier to read.
     let tx0 = TransactionWithId {
-        id: 0u8.into(),
+        id: 0_u8.into(),
         transaction: Transaction::mint(
             Mint {
                 to: account(1, 0),
@@ -807,13 +810,13 @@ fn test_get_account_transactions_self_transfer() {
         ),
     };
     let tx1 = TransactionWithId {
-        id: 1u8.into(),
+        id: 1_u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(1, 0),
                 to: account(1, 0),
                 spender: None,
-                amount: 1_000_000u32.into(),
+                amount: 1_000_000_u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -856,7 +859,7 @@ fn test_get_account_transactions_start_length() {
         minter,
     );
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-    let expected_txs: Vec<_> = (0..10u32)
+    let expected_txs: Vec<_> = (0..10_u32)
         .map(|i| TransactionWithId {
             id: i.into(),
             transaction: Transaction::mint(
@@ -1347,7 +1350,7 @@ fn test_fee_collector_107() {
     let mut block_id = 0;
 
     let add_mint_block = |block_id: u64, fc: Option<Account>, fc_id: Option<u64>| {
-        let mint = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+        let mint = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1_u64));
         let mint = match fc {
             Some(fc) => mint.with_fee_collector(fc),
             None => mint,
@@ -1356,7 +1359,7 @@ fn test_fee_collector_107() {
             Some(fc_id) => mint.with_fee_collector_block(fc_id),
             None => mint,
         };
-        let mint = mint.mint(regular_account, Tokens::from(1000u64)).build();
+        let mint = mint.mint(regular_account, Tokens::from(1000_u64)).build();
 
         assert_eq!(
             Nat::from(block_id),
@@ -1368,13 +1371,13 @@ fn test_fee_collector_107() {
     };
 
     let add_approve_block = |block_id: u64, fc: Option<Account>| {
-        let approve = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+        let approve = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1_u64));
         let approve = match fc {
             Some(fc) => approve.with_fee_collector(fc),
             None => approve,
         };
         let approve = approve
-            .approve(regular_account, regular_account, Tokens::from(1u64))
+            .approve(regular_account, regular_account, Tokens::from(1_u64))
             .build();
 
         assert_eq!(
@@ -1460,7 +1463,7 @@ fn add_custom_block(
     btype: Option<&str>,
     tx_fields: Vec<(&str, ICRC3Value)>,
 ) {
-    let mut block_builder = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+    let mut block_builder = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1_u64));
     if let Some(btype) = btype {
         block_builder = block_builder.with_btype(String::from(btype));
     }
@@ -1781,7 +1784,10 @@ mod metrics {
     fn encode_init_args(ledger_id: Principal) -> Option<IndexArg> {
         Some(IndexArg::Init(InitArg {
             ledger_id,
+            #[allow(deprecated)]
             retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: None,
+            max_retrieve_blocks_from_ledger_interval_seconds: None,
         }))
     }
 }
