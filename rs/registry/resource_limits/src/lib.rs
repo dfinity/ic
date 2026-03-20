@@ -11,17 +11,15 @@ use serde::{Deserialize, Serialize};
 pub struct ResourceLimits {
     // The maximum size of the (replicated) state in bytes.
     pub maximum_state_size: Option<NumBytes>,
-    // The maximum size of unflushed (kept in main memory) state in bytes.
-    pub maximum_unflushed_state_size: Option<NumBytes>,
+    // The maximum size of the (replicated) state *delta* (kept in main memory) in bytes.
+    pub maximum_state_delta: Option<NumBytes>,
 }
 
 impl From<ResourceLimits> for pb::ResourceLimits {
     fn from(resource_limits: ResourceLimits) -> Self {
         Self {
             maximum_state_size: resource_limits.maximum_state_size.map(|x| x.get()),
-            maximum_unflushed_state_size: resource_limits
-                .maximum_unflushed_state_size
-                .map(|x| x.get()),
+            maximum_state_delta: resource_limits.maximum_state_delta.map(|x| x.get()),
         }
     }
 }
@@ -30,9 +28,7 @@ impl From<pb::ResourceLimits> for ResourceLimits {
     fn from(resource_limits: pb::ResourceLimits) -> Self {
         Self {
             maximum_state_size: resource_limits.maximum_state_size.map(NumBytes::from),
-            maximum_unflushed_state_size: resource_limits
-                .maximum_unflushed_state_size
-                .map(NumBytes::from),
+            maximum_state_delta: resource_limits.maximum_state_delta.map(NumBytes::from),
         }
     }
 }

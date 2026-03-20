@@ -405,5 +405,5 @@ enum CanisterCyclesCostSchedule {
 // Limits on resource consumption (e.g., memory usage).
 message ResourceLimits {
   optional uint64 maximum_state_size = 1;
-  optional uint64 maximum_unflushed_state_size = 2;
+  optional uint64 maximum_state_delta = 2;
 }

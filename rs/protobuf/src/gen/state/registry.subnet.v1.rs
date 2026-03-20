@@ -414,7 +414,7 @@ pub struct ResourceLimits {
     #[prost(uint64, optional, tag = "1")]
     pub maximum_state_size: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "2")]
-    pub maximum_unflushed_state_size: ::core::option::Option<u64>,
+    pub maximum_state_delta: ::core::option::Option<u64>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
