@@ -7,7 +7,7 @@ use crate::{
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
-    process_manager::ProcessManagerImpl,
+    process_manager::ProcessManager,
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
@@ -240,7 +240,7 @@ impl Orchestrator {
             Arc::clone(&crypto) as _,
         );
 
-        let replica_process = Arc::new(Mutex::new(ProcessManagerImpl::new(logger.clone())));
+        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
         let ic_binary_directory = args
             .ic_binary_directory
             .as_ref()
@@ -278,7 +278,7 @@ impl Orchestrator {
             Upgrade::new(
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
-                Arc::clone(&replica_process) as _,
+                Arc::clone(&replica_process),
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),
