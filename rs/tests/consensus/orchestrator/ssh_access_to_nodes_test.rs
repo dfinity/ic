@@ -105,7 +105,10 @@ fn generate_keys_and_auth_means(n: usize) -> (Vec<AuthMean>, Vec<String>) {
     (0..n).map(|_| generate_key_and_auth_mean()).unzip()
 }
 
-fn assert_no_user_can_authenticate_anywhere(env: &TestEnv, auth_mean_for: impl Fn(&str) -> AuthMean) {
+fn assert_no_user_can_authenticate_anywhere(
+    env: &TestEnv,
+    auth_mean_for: impl Fn(&str) -> AuthMean,
+) {
     let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
     for user in SSH_USERS {
         let mean = auth_mean_for(user);
