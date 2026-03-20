@@ -1232,7 +1232,11 @@ mod test {
                                         IcrcOperation::FeeCollector { .. }
                                         | IcrcOperation::Pause { .. }
                                         | IcrcOperation::Unpause { .. }
-                                        | IcrcOperation::Deactivate { .. } => None,
+                                        | IcrcOperation::Deactivate { .. }
+                                        | IcrcOperation::FreezeAccount { .. }
+                                        | IcrcOperation::UnfreezeAccount { .. }
+                                        | IcrcOperation::FreezePrincipal { .. }
+                                        | IcrcOperation::UnfreezePrincipal { .. } => None,
                                     };
                                 if search_transactions_request.account_identifier.is_some() {
                                     break;
@@ -1289,7 +1293,11 @@ mod test {
                                     IcrcOperation::FeeCollector { .. }
                                     | IcrcOperation::Pause { .. }
                                     | IcrcOperation::Unpause { .. }
-                                    | IcrcOperation::Deactivate { .. } => false,
+                                    | IcrcOperation::Deactivate { .. }
+                                    | IcrcOperation::FreezeAccount { .. }
+                                    | IcrcOperation::UnfreezeAccount { .. }
+                                    | IcrcOperation::FreezePrincipal { .. }
+                                    | IcrcOperation::UnfreezePrincipal { .. } => false,
                                 })
                                 .count();
 

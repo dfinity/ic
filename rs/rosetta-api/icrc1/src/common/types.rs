@@ -204,6 +204,10 @@ pub enum OperationType {
     Pause,
     Unpause,
     Deactivate,
+    FreezeAccount,
+    UnfreezeAccount,
+    FreezePrincipal,
+    UnfreezePrincipal,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -467,5 +471,87 @@ impl TryFrom<ObjectMap> for ManagementActionMetadata {
     fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
         serde_json::from_value(serde_json::Value::Object(o))
             .context("Could not parse ManagementActionMetadata from JSON object")
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct FreezeAccountMetadata {
+    pub account: Account,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caller: Option<Principal>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mthd: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl TryFrom<FreezeAccountMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: FreezeAccountMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!(
+                    "Could not convert FreezeAccountMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!(
+                "Could not convert FreezeAccountMetadata to ObjectMap: {:?}",
+                err
+            ),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for FreezeAccountMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o))
+            .context("Could not parse FreezeAccountMetadata from JSON object")
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct FreezePrincipalMetadata {
+    pub principal: Principal,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caller: Option<Principal>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mthd: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl TryFrom<FreezePrincipalMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: FreezePrincipalMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!(
+                    "Could not convert FreezePrincipalMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!(
+                "Could not convert FreezePrincipalMetadata to ObjectMap: {:?}",
+                err
+            ),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for FreezePrincipalMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o))
+            .context("Could not parse FreezePrincipalMetadata from JSON object")
     }
 }

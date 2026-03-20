@@ -7,6 +7,10 @@ use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
+use icrc_ledger_types::icrc123::schema::{
+    BTYPE_123_FREEZE_ACCOUNT, BTYPE_123_FREEZE_PRINCIPAL, BTYPE_123_UNFREEZE_ACCOUNT,
+    BTYPE_123_UNFREEZE_PRINCIPAL,
+};
 use icrc_ledger_types::icrc124::schema::{
     BTYPE_124_DEACTIVATE, BTYPE_124_PAUSE, BTYPE_124_UNPAUSE,
 };
@@ -470,7 +474,11 @@ pub fn update_account_balances(
                 }
                 crate::common::storage::types::IcrcOperation::Pause { .. }
                 | crate::common::storage::types::IcrcOperation::Unpause { .. }
-                | crate::common::storage::types::IcrcOperation::Deactivate { .. } => {
+                | crate::common::storage::types::IcrcOperation::Deactivate { .. }
+                | crate::common::storage::types::IcrcOperation::FreezeAccount { .. }
+                | crate::common::storage::types::IcrcOperation::UnfreezeAccount { .. }
+                | crate::common::storage::types::IcrcOperation::FreezePrincipal { .. }
+                | crate::common::storage::types::IcrcOperation::UnfreezePrincipal { .. } => {
                     // Does not affect balances
                 }
             }
@@ -649,6 +657,58 @@ pub fn store_blocks(
             ),
             crate::common::storage::types::IcrcOperation::Deactivate { .. } => (
                 BTYPE_124_DEACTIVATE,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::FreezeAccount { .. } => (
+                BTYPE_123_FREEZE_ACCOUNT,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::UnfreezeAccount { .. } => (
+                BTYPE_123_UNFREEZE_ACCOUNT,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::FreezePrincipal { .. } => (
+                BTYPE_123_FREEZE_PRINCIPAL,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::UnfreezePrincipal { .. } => (
+                BTYPE_123_UNFREEZE_PRINCIPAL,
                 None,
                 None,
                 None,
