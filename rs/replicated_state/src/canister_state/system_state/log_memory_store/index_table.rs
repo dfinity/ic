@@ -232,7 +232,7 @@ impl IndexTable {
             MemorySize::new(to_pos - from_pos) // no wrap
         } else {
             debug_assert_gt!(self.data_capacity.get(), 0);
-            MemorySize::new(self.data_capacity.get() - from_pos + to_pos) // wrap
+            MemorySize::new(self.data_capacity.get() + to_pos - from_pos) // wrap
         }
     }
 
