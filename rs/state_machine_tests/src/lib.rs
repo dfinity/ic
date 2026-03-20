@@ -258,6 +258,17 @@ pub struct MessageOrdering(pub Vec<OrderedMessage>);
 /// which canister executes next. Used by the flexible message ordering
 /// feature to ensure deterministic single-canister-per-round execution.
 ///
+/// When a target is set (via [`ordering_target`]):
+/// - All canisters' `accumulated_priority` is cleared to zero.
+/// - The target canister's priority is set to `i64::MAX / 4`.
+/// - All `priority_credit` is cleared.
+/// - After execution, all priorities and credits are zeroed to provide a
+///   clean slate for the next round.
+///
+/// Combined with `scheduler_cores = 1` and a tight round instruction budget,
+/// this guarantees that only the target canister executes one message (or one
+/// DTS slice) per round.
+///
 /// When `enabled` is false, this wrapper is a transparent pass-through.
 struct FlexibleOrderingScheduler {
     inner: Box<dyn Scheduler<State = ReplicatedState>>,
@@ -279,22 +290,23 @@ impl Scheduler for FlexibleOrderingScheduler {
         current_round_type: ic_interfaces::execution_environment::ExecutionRoundType,
         registry_settings: &ic_interfaces::execution_environment::RegistryExecutionSettings,
     ) -> ReplicatedState {
-        // If flexible ordering is enabled and a target is set, boost its
-        // priority so it is scheduled first. Combined with a round instruction
-        // limit that allows only one message per round, this ensures the
-        // target is the only canister that executes in this round.
         let target = if self.enabled {
             self.target.write().unwrap().take()
         } else {
             None
         };
         if let Some(canister_id) = target {
-            let boost = AccumulatedPriority::new(i64::MAX / 4);
+            // Clear all priorities and credits, then boost the target.
+            let zero = AccumulatedPriority::new(0);
+            for (_, priority) in state.metadata.subnet_schedule.iter_mut() {
+                priority.accumulated_priority = zero;
+                priority.priority_credit = zero;
+            }
             state
                 .metadata
                 .subnet_schedule
                 .get_mut(canister_id)
-                .accumulated_priority = boost;
+                .accumulated_priority = AccumulatedPriority::new(i64::MAX / 4);
         }
         let mut result = self.inner.execute_round(
             state,
@@ -306,14 +318,18 @@ impl Scheduler for FlexibleOrderingScheduler {
             current_round_type,
             registry_settings,
         );
-        // After a boosted round, reset the boosted canister's priority so it
-        // doesn't dominate subsequent rounds. We only reset the boosted
-        // canister — other canisters' priorities were not artificially
-        // modified, so their `finish_round` adjustments are legitimate.
-        if let Some(canister_id) = target {
-            let p = result.metadata.subnet_schedule.get_mut(canister_id);
-            p.accumulated_priority = AccumulatedPriority::new(0);
-            p.priority_credit = AccumulatedPriority::new(0);
+        // Zero all priorities and credits after the round. The inner
+        // scheduler's `finish_round` produces skewed values because it
+        // redistributes free allocation based on the artificial boost.
+        // Since execution order is fully user-controlled, the scheduler's
+        // fairness tracking is irrelevant — a clean zero slate prevents
+        // any residual priority from affecting subsequent rounds.
+        if target.is_some() {
+            let zero = AccumulatedPriority::new(0);
+            for (_, priority) in result.metadata.subnet_schedule.iter_mut() {
+                priority.accumulated_priority = zero;
+                priority.priority_credit = zero;
+            }
         }
         result
     }
@@ -2758,109 +2774,183 @@ impl StateMachine {
 
     /// Execute messages in a user-specified order.
     ///
-    /// For each entry in the ordering:
-    /// - `Ingress`: releases the buffered ingress into the pool, sets the
-    ///   target canister as the ordering target, and executes one round.
-    /// - `Request`/`Response`: sets the target canister and executes rounds
-    ///   until the expected message is consumed. Canister system tasks
-    ///   (heartbeats, timers) and subnet messages (e.g. `install_code`
-    ///   completions) are implicitly executed along the way — the method
-    ///   keeps ticking until the expected inter-canister message is
-    ///   actually processed.
+    /// For each entry in the ordering, the method:
+    /// 1. Verifies the expected message exists (or injects it for ingress).
+    /// 2. Boosts the target canister's priority and ticks one round.
+    /// 3. If DTS sliced the execution, keeps ticking until the canister's
+    ///    paused execution completes (`NextExecution` returns to `None` or
+    ///    `StartNew`).
+    /// 4. System tasks (heartbeats, timers) that the scheduler runs before
+    ///    the input queue message are consumed implicitly.
+    ///
+    /// Subnet messages (management canister) are handled via the `Ingress`
+    /// variant — the Demux routes them to the consensus queue automatically,
+    /// and `drain_subnet_queues` processes them at the start of each round.
     ///
     /// # Panics
     ///
-    /// Panics if:
     /// - An `Ingress` message ID was not previously buffered.
-    /// - After `MAX_ORDERING_TICKS` rounds the expected message still
-    ///   hasn't appeared or been consumed.
+    /// - After `MAX_ORDERING_TICKS` rounds the expected message still hasn't
+    ///   appeared, been consumed, or DTS hasn't completed.
     pub fn execute_with_ordering(&self, ordering: MessageOrdering) {
         assert!(
             self.flexible_ordering,
             "execute_with_ordering requires flexible ordering to be enabled. \
              Use StateMachineBuilder::new().with_flexible_ordering().build()"
         );
-        /// Maximum total ticks per ordering step — covers both waiting for
-        /// the message to appear and executing system tasks that run before it.
-        const MAX_ORDERING_TICKS: usize = 20;
+        const MAX_ORDERING_TICKS: usize = 100;
 
         for msg in ordering.0 {
             match msg {
                 OrderedMessage::Ingress(target, ingress_id) => {
-                    // Take the buffered ingress message and inject it directly
-                    // into the payload for this tick.
-                    let signed_ingress = self
-                        .ingress_buffer
-                        .write()
-                        .unwrap()
-                        .remove(&ingress_id)
-                        .unwrap_or_else(|| {
-                            panic!("No buffered ingress message with id {}", ingress_id)
-                        });
-                    let payload = PayloadBuilder::new()
-                        .with_max_expiry_time_from_now(self.get_time().into())
-                        .signed_ingress(signed_ingress);
-                    self.set_ordering_target(Some(target));
-                    self.tick_with_config(payload);
-                    // With a restricted round instruction budget, the ingress
-                    // may be inducted (status = Received) but not yet executed.
-                    // Keep ticking with the target boosted until the ingress
-                    // transitions out of the Received state.
-                    let mut extra_ticks = 0;
-                    while matches!(
-                        self.ingress_status(&ingress_id),
-                        IngressStatus::Known {
-                            state: IngressState::Received,
-                            ..
-                        }
-                    ) {
-                        if extra_ticks >= MAX_ORDERING_TICKS {
-                            panic!(
-                                "Ingress {} still in Received state after {} extra ticks",
-                                ingress_id, extra_ticks
-                            );
-                        }
-                        self.set_ordering_target(Some(target));
-                        self.tick();
-                        extra_ticks += 1;
-                    }
+                    self.execute_ordered_ingress(target, &ingress_id, MAX_ORDERING_TICKS);
                 }
                 OrderedMessage::Request { source, target }
                 | OrderedMessage::Response { source, target } => {
-                    let msg_type = match msg {
-                        OrderedMessage::Request { .. } => "request",
-                        OrderedMessage::Response { .. } => "response",
-                        _ => unreachable!(),
+                    let msg_type = if matches!(msg, OrderedMessage::Request { .. }) {
+                        "request"
+                    } else {
+                        "response"
                     };
-                    // Keep ticking until the message from `source` is no
-                    // longer in `target`'s sender schedule, meaning it was
-                    // consumed. System tasks (heartbeats, timers) that the
-                    // scheduler runs before popping from the input queue are
-                    // executed implicitly along the way.
-                    //
-                    // Phase 1: wait for the message to appear (it may need
-                    // prior rounds for induction / subnet message processing).
-                    let mut ticks = 0;
-                    while !self.has_message_from(target, source) {
-                        if ticks >= MAX_ORDERING_TICKS {
-                            self.panic_no_message(target, source, msg_type);
-                        }
-                        self.tick();
-                        ticks += 1;
-                    }
-                    // Phase 2: tick with the ordering target set until the
-                    // message is consumed. This loop handles the case where
-                    // canister system tasks (heartbeat / timer) execute before
-                    // the input queue message in the same or subsequent rounds.
-                    while self.has_message_from(target, source) {
-                        if ticks >= MAX_ORDERING_TICKS {
-                            self.panic_no_message(target, source, msg_type);
-                        }
-                        self.set_ordering_target(Some(target));
-                        self.tick();
-                        ticks += 1;
-                    }
+                    self.execute_ordered_canister_message(
+                        target,
+                        source,
+                        msg_type,
+                        MAX_ORDERING_TICKS,
+                    );
                 }
+            }
+        }
+    }
+
+    /// Execute an ingress message as part of the ordering.
+    ///
+    /// Injects the ingress into the batch payload and ticks. If the ingress
+    /// targets a management canister method, the scheduler's
+    /// `drain_subnet_queues` will process it. Otherwise, the boosted
+    /// canister executes it.
+    ///
+    /// If DTS slices the execution (e.g. `install_code`), keeps ticking
+    /// until the ingress leaves the `Received` state.
+    fn execute_ordered_ingress(
+        &self,
+        target: CanisterId,
+        ingress_id: &MessageId,
+        max_ticks: usize,
+    ) {
+        let signed_ingress = self
+            .ingress_buffer
+            .write()
+            .unwrap()
+            .remove(ingress_id)
+            .unwrap_or_else(|| panic!("No buffered ingress message with id {}", ingress_id));
+        let payload = PayloadBuilder::new()
+            .with_max_expiry_time_from_now(self.get_time().into())
+            .signed_ingress(signed_ingress);
+        self.set_ordering_target(Some(target));
+        self.tick_with_config(payload);
+
+        // The ingress may need multiple ticks to execute:
+        // - With a restricted round budget, the canister may not have been
+        //   scheduled yet (status = Received).
+        // - DTS may have sliced the execution (e.g. install_code).
+        // - System tasks (heartbeat/timer) may execute before the ingress.
+        // Keep ticking with the target boosted until the ingress transitions
+        // out of `Received`.
+        let mut ticks = 0;
+        while matches!(
+            self.ingress_status(ingress_id),
+            IngressStatus::Known {
+                state: IngressState::Received,
+                ..
+            }
+        ) {
+            if ticks >= max_ticks {
+                panic!(
+                    "Ingress {} still in Received state after {} ticks",
+                    ingress_id, ticks
+                );
+            }
+            self.set_ordering_target(Some(target));
+            self.tick();
+            ticks += 1;
+        }
+
+        // If the ingress started a DTS execution (e.g. inter-canister call
+        // that's now in Processing, or a long install_code), the canister
+        // may have a paused execution. Keep ticking to let it complete.
+        self.complete_dts_execution(target, max_ticks - ticks);
+    }
+
+    /// Execute a canister-to-canister request or response as part of the
+    /// ordering.
+    ///
+    /// Waits for the message to appear in `target`'s input queue from
+    /// `source`, then boosts `target` and ticks until the message is
+    /// consumed. Handles system tasks (heartbeat/timer) that may execute
+    /// before the input queue message.
+    fn execute_ordered_canister_message(
+        &self,
+        target: CanisterId,
+        source: CanisterId,
+        msg_type: &str,
+        max_ticks: usize,
+    ) {
+        // Phase 1: wait for the message to appear in target's input queue.
+        // This may require ticks for induction (same-subnet message routing
+        // that happens at the end of inner-round iterations) or for subnet
+        // message processing that produces the expected message.
+        let mut ticks = 0;
+        while !self.has_message_from(target, source) {
+            if ticks >= max_ticks {
+                self.panic_no_message(target, source, msg_type);
+            }
+            // Tick with target boosted to avoid executing other canisters.
+            self.set_ordering_target(Some(target));
+            self.tick();
+            ticks += 1;
+        }
+
+        // Phase 2: boost target and tick until the message from source is
+        // consumed. System tasks (heartbeat/timer) in the target's task
+        // queue execute before input queue messages, so multiple ticks may
+        // be needed.
+        while self.has_message_from(target, source) {
+            if ticks >= max_ticks {
+                self.panic_no_message(target, source, msg_type);
+            }
+            self.set_ordering_target(Some(target));
+            self.tick();
+            ticks += 1;
+        }
+
+        // If the message execution was DTS-sliced, complete it.
+        self.complete_dts_execution(target, max_ticks - ticks);
+    }
+
+    /// If the target canister has a paused/aborted DTS execution, keep
+    /// ticking with it boosted until the execution completes.
+    fn complete_dts_execution(&self, target: CanisterId, max_ticks: usize) {
+        let mut ticks = 0;
+        loop {
+            let state = self.get_latest_state();
+            let Some(canister) = state.canister_state(&target) else {
+                break;
+            };
+            match canister.next_execution() {
+                ic_replicated_state::canister_state::NextExecution::ContinueLong
+                | ic_replicated_state::canister_state::NextExecution::ContinueInstallCode => {
+                    if ticks >= max_ticks {
+                        panic!(
+                            "DTS execution on canister {} did not complete after {} ticks",
+                            target, ticks
+                        );
+                    }
+                    self.set_ordering_target(Some(target));
+                    self.tick();
+                    ticks += 1;
+                }
+                _ => break,
             }
         }
     }
