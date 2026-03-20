@@ -258,7 +258,6 @@ pub struct MessageOrdering(pub Vec<OrderedMessage>);
 struct FlexibleOrderingScheduler {
     inner: Box<dyn Scheduler<State = ReplicatedState>>,
     target: Arc<RwLock<Option<CanisterId>>>,
-    enabled: bool,
 }
 
 impl Scheduler for FlexibleOrderingScheduler {
@@ -275,11 +274,7 @@ impl Scheduler for FlexibleOrderingScheduler {
         current_round_type: ic_interfaces::execution_environment::ExecutionRoundType,
         registry_settings: &ic_interfaces::execution_environment::RegistryExecutionSettings,
     ) -> ReplicatedState {
-        let target = if self.enabled {
-            self.target.write().unwrap().take()
-        } else {
-            None
-        };
+        let target = self.target.write().unwrap().take();
         if let Some(canister_id) = target {
             let zero = AccumulatedPriority::new(0);
             for (_, p) in state.metadata.subnet_schedule.iter_mut() {
@@ -2161,11 +2156,14 @@ impl StateMachine {
         });
 
         let ordering_target: Arc<RwLock<Option<CanisterId>>> = Arc::new(RwLock::new(None));
-        let scheduler = Box::new(FlexibleOrderingScheduler {
-            inner: execution_services.scheduler,
-            target: Arc::clone(&ordering_target),
-            enabled: flexible_ordering,
-        });
+        let scheduler: Box<dyn Scheduler<State = ReplicatedState>> = if flexible_ordering {
+            Box::new(FlexibleOrderingScheduler {
+                inner: execution_services.scheduler,
+                target: Arc::clone(&ordering_target),
+            })
+        } else {
+            execution_services.scheduler
+        };
 
         let message_routing = SyncMessageRouting::new(
             Arc::clone(&state_manager) as _,

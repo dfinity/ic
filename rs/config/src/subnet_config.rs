@@ -286,7 +286,7 @@ pub struct SchedulerConfig {
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
 
     /// Per-round subnet message instruction budget.
-    /// Defaults to `max_instructions_per_round / 16`.
+    /// Defaults to `max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION`.
     pub subnet_messages_per_round_instruction_limit: NumInstructions,
 }
 
