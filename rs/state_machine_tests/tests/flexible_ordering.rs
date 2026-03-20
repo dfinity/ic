@@ -988,3 +988,32 @@ fn test_request_with_timer() {
         counter
     );
 }
+
+// ============================================================================
+// Test 19: Canister calls itself. The self-call goes through the output
+// queue → induction → input queue pipeline within the same canister.
+// The ingress loop handles this automatically via has_in_flight_work.
+// ============================================================================
+#[test]
+fn test_self_call() {
+    let sm = setup();
+    let canister = install_uc(&sm);
+
+    // A calls itself: the "other_side" runs on A and replies.
+    let self_reply = wasm().reply_data(b"self-reply").build();
+    let payload = wasm()
+        .inter_update(canister, CallArgs::default().other_side(self_reply))
+        .build();
+
+    let ingress_id = sm
+        .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "update", payload)
+        .unwrap();
+
+    // The entire self-call round-trip completes within the Ingress step.
+    sm.execute_with_ordering(MessageOrdering(vec![OrderedMessage::Ingress(
+        canister,
+        ingress_id.clone(),
+    )]));
+
+    assert_eq!(get_reply(&sm, &ingress_id), b"self-reply");
+}

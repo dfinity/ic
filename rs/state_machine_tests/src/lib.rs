@@ -2762,19 +2762,6 @@ impl StateMachine {
                         self.set_ordering_target(Some(target));
                         self.tick();
                     }
-                    // Complete any DTS slices.
-                    for _ in 0..MAX_TICKS {
-                        let state = self.get_latest_state();
-                        match state.canister_state(&target).map(|c| c.next_execution()) {
-                            Some(
-                                NextExecution::ContinueLong | NextExecution::ContinueInstallCode,
-                            ) => {
-                                self.set_ordering_target(Some(target));
-                                self.tick();
-                            }
-                            _ => break,
-                        }
-                    }
                 }
 
                 OrderedMessage::Request { source, target }
@@ -2819,10 +2806,7 @@ impl StateMachine {
                             has_dts
                         );
 
-                        if !appeared || is_mgmt {
-                            // Waiting for induction or subnet message drain.
-                            self.set_ordering_target(Some(source));
-                        } else {
+                        if appeared && !is_mgmt {
                             self.set_ordering_target(Some(target));
                         }
                         self.tick();
@@ -2849,6 +2833,7 @@ impl StateMachine {
             if c.system_state.queues().has_output() {
                 return true;
             }
+            // Self-calls land directly in the canister's own input queue.
             if c.system_state.queues().has_input() {
                 return true;
             }
@@ -2889,10 +2874,6 @@ impl StateMachine {
             .local_sender_schedule()
             .iter()
             .any(|id| *id == source)
-            || queues
-                .remote_sender_schedule()
-                .iter()
-                .any(|id| *id == source)
     }
 
     pub fn mock_canister_http_response(
