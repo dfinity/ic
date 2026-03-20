@@ -18,13 +18,13 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    batch::CanisterCyclesCostSchedule,
+    ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     messages::{SignedIngress, extract_effective_canister_id},
-    nominal_cycles::NominalCycles,
     time::{CoarseTime, UNIX_EPOCH},
+};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
 };
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
@@ -1165,7 +1165,7 @@ fn consume_cycles_updates_consumed_cycles() {
 
     assert_eq!(
         consumed_cycles_after - consumed_cycles_before,
-        NominalCycles::from(1_000_000)
+        NominalCycles::new(1_000_000)
     );
 }
 

@@ -101,11 +101,11 @@ fn ed25519_rejects_non_canonical_points_search() {
         }
     }
 
-    let mut pt_00 = [0u8; 32];
-    let mut pt_ff = [0xFFu8; 32];
+    let mut pt_00 = [0_u8; 32];
+    let mut pt_ff = [0xFF_u8; 32];
 
-    for x in 0u8..=255 {
-        for y in 0u8..=255 {
+    for x in 0_u8..=255 {
+        for y in 0_u8..=255 {
             pt_00[0] = x;
             pt_00[31] = y;
 

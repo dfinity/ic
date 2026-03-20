@@ -9,11 +9,12 @@ on the process that this file is part of, see
 
 ## Added
 
-* Add a `total_maturity_disbursements_in_progress_e8s_equivalent` metric (calculated daily).
-* Added a new `do_split_subnet` method interface, the implementation of the method will be done in the next PR.
-* Added `cup_type` field to `CatchUpPackageContents` denoting the type of a `CUP`.
-
 ## Changed
+
+- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
+  where the sum of developer-allocated tokens exceeds
+  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
+  validation is no longer needed.
 
 ## Deprecated
 

@@ -136,7 +136,7 @@ fn threshold_signatures_should_work(
 /// have a different scope.  The presence of this key can be demonstrated by
 /// successfully reloading the transcript.
 pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
-    let seed = [69u8; 32];
+    let seed = [69_u8; 32];
     let network_size = 4;
     let rng = &mut ChaCha20Rng::from_seed(seed);
     let network = MockNetwork::random(rng, network_size, csp_vault_factory);

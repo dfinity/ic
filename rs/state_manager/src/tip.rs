@@ -1002,7 +1002,7 @@ fn merge(
     merge_candidates.sort_by_key(|m| {
         if m.write_size_bytes() != 0 {
             // Fixed point to compute overhead ratio for sort.
-            -1000i64 * (m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
+            -1000_i64 * (m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
                 / m.write_size_bytes() as i64
         } else {
             0
@@ -1373,7 +1373,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id(),
-            snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
+            snapshots_memory_usage: canister_state.snapshots_memory_usage(),
             environment_variables: canister_state
                 .system_state
                 .environment_variables
@@ -1406,7 +1406,6 @@ fn serialize_snapshot_protos_to_checkpoint_readwrite(
     snapshot_layout.snapshot().serialize(
         CanisterSnapshotBits {
             snapshot_id: *snapshot_id,
-            canister_id: canister_snapshot.canister_id(),
             taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
             canister_version: canister_snapshot.canister_version(),
             binary_hash: canister_snapshot.canister_module().module_hash().into(),

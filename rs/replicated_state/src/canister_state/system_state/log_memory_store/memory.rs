@@ -1,5 +1,8 @@
 use std::ops::{Add, Mul, Rem, Sub};
 
+/// `MemoryAddress` is an absolute address in the log memory store PageMap.
+///
+/// It is used to read/write data from/to the memory store.
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
 pub(super) struct MemoryAddress(u64);
@@ -35,10 +38,14 @@ impl Add<MemorySize> for MemoryAddress {
     }
 }
 
+/// `MemoryPosition` represents a position in the data region of the log memory store.
+///
+/// It is used to manage the head and tail positions of the circular buffer where log records are stored.
+/// Belongs in the range of [0, data_capacity), and wraps around when it reaches the end of the data region.
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
 pub(super) struct MemoryPosition(u64);
-const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
+const _: () = assert!(std::mem::size_of::<MemoryPosition>() == 8);
 
 impl MemoryPosition {
     pub const fn new(v: u64) -> Self {
@@ -66,18 +73,14 @@ impl Rem<MemorySize> for MemoryPosition {
     }
 }
 
-// position - position = size
-impl Sub<MemoryPosition> for MemoryPosition {
-    type Output = MemorySize;
-    fn sub(self, rhs: MemoryPosition) -> MemorySize {
-        MemorySize(self.0 - rhs.0)
-    }
-}
-
+/// `MemorySize` represents the size of a memory region in the log memory store.
+///
+/// It is used to manage the capacity and size of the data region in the memory store,
+/// where log records are stored in a circular buffer manner.
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
 pub(super) struct MemorySize(u64);
-const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
+const _: () = assert!(std::mem::size_of::<MemorySize>() == 8);
 
 impl MemorySize {
     pub const fn new(v: u64) -> Self {
@@ -109,22 +112,6 @@ impl Add<MemorySize> for MemorySize {
 impl Sub<MemorySize> for MemorySize {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
-        Self(self.0 - rhs.0)
-    }
-}
-
-// size + position = size
-impl Add<MemoryPosition> for MemorySize {
-    type Output = Self;
-    fn add(self, rhs: MemoryPosition) -> Self {
-        Self(self.0 + rhs.0)
-    }
-}
-
-// size - position = size
-impl Sub<MemoryPosition> for MemorySize {
-    type Output = Self;
-    fn sub(self, rhs: MemoryPosition) -> Self {
         Self(self.0 - rhs.0)
     }
 }

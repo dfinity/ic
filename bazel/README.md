@@ -136,8 +136,6 @@ the test suite with `bazel test`
 
 ## MODULES.bazel and bazel/rust.MODULE.bazel
 
-[WORKSPACE.bazel](https://github.com/dfinity/ic/blob/master/WORKSPACE.bazel)
-
 The MODULE.bazel lists dependencies used in the Bazel build and includes rust-specific
 dependencies listed in `bazel/rust.MODULE.bazel`.
 

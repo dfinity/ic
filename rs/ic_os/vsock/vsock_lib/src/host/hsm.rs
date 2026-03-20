@@ -125,8 +125,8 @@ pub mod tests {
         use super::*;
 
         let hsm_info = HSMInfo {
-            hsm_bus_num: 11u8,
-            hsm_address: 12u8,
+            hsm_bus_num: 11_u8,
+            hsm_address: 12_u8,
         };
         let actual = get_hsm_xml_string(&hsm_info);
 

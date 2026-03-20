@@ -39,7 +39,7 @@ use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
-    rw_message::{install_nns_and_check_progress, store_message},
+    rw_message::{install_nns_and_check_progress, store_message_with_retries},
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
@@ -484,7 +484,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     info!(logger, "Ensure app subnet is functional");
     let init_msg = "subnet recovery works!";
-    let app_can_id = store_message(
+    let app_can_id = store_message_with_retries(
         &download_state_node.get_public_url(),
         download_state_node.effective_canister_id(),
         init_msg,

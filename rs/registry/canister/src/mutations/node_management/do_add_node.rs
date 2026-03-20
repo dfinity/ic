@@ -346,12 +346,6 @@ fn valid_keys_from_payload(
     if payload.transport_tls_cert.is_empty() {
         return Err(String::from("transport_tls_cert is empty"));
     };
-    // TODO(NNS1-1197): Refactor this when nodes are provisioned for threshold ECDSA subnets
-    if let Some(idkg_dealing_encryption_pk) = &payload.idkg_dealing_encryption_pk
-        && idkg_dealing_encryption_pk.is_empty()
-    {
-        return Err(String::from("idkg_dealing_encryption_pk is empty"));
-    };
 
     // 2. get the keys for verification -- for that, we need to create
     // NodePublicKeys first
@@ -365,15 +359,18 @@ fn valid_keys_from_payload(
         .map_err(|e| {
             format!("ni_dkg_dealing_encryption_pk is not in the expected format: {e:?}")
         })?;
+
     // TODO(NNS1-1197): Refactor when nodes are provisioned for threshold ECDSA subnets
-    let idkg_dealing_encryption_pk =
-        if let Some(idkg_de_pk_bytes) = &payload.idkg_dealing_encryption_pk {
-            Some(PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {
-                format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
-            })?)
-        } else {
-            None
-        };
+    let idkg_dealing_encryption_pk = match &payload.idkg_dealing_encryption_pk {
+        None => return Err(String::from("idkg_dealing_encryption_pk is missing")),
+        Some(pk) if pk.is_empty() => {
+            return Err(String::from("idkg_dealing_encryption_pk is empty"));
+        }
+
+        Some(pk) => PublicKey::decode(&pk[..]).map_err(|e| {
+            format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
+        })?,
+    };
 
     // 3. get the node id from the node_signing_pk
     let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk)
@@ -385,7 +382,7 @@ fn valid_keys_from_payload(
         committee_signing_public_key: Some(committee_signing_pk),
         tls_certificate: Some(tls_certificate),
         dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_pk),
-        idkg_dealing_encryption_public_key: idkg_dealing_encryption_pk,
+        idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_pk),
     };
 
     // 5. validate the keys and the node_id

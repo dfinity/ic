@@ -377,7 +377,7 @@ fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
                 id: id.clone(),
                 block: ICRC3Value::from(block),
             });
-            id += 1u64;
+            id += 1_u64;
         }
     }
     GetBlocksResult {

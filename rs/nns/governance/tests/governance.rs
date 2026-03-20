@@ -4364,7 +4364,7 @@ fn governance_with_staked_neuron(
 fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, api::Neuron) {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
@@ -4697,8 +4697,8 @@ fn claim_neuron_by_memo(
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_claim_neuron_by_memo_only() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
-    let memo = 1234u64;
-    let stake = Tokens::from_tokens(10u64).unwrap();
+    let memo = 1234_u64;
+    let stake = Tokens::from_tokens(10_u64).unwrap();
     let (_, mut gov, _) = governance_with_staked_unclaimed_neuron(&owner, memo, stake);
 
     let manage_neuron_response = claim_neuron_by_memo(&mut gov, owner, memo);
@@ -4720,8 +4720,8 @@ fn test_claim_neuron_by_memo_only() {
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_claim_neuron_without_minimum_stake_fails() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
-    let memo = 1234u64;
-    let stake = Tokens::from_e8s(50000000u64);
+    let memo = 1234_u64;
+    let stake = Tokens::from_e8s(50000000_u64);
     let (_, mut gov, _) = governance_with_staked_unclaimed_neuron(&owner, memo, stake);
 
     let manage_neuron_response = claim_neuron_by_memo(&mut gov, owner, memo);
@@ -4738,10 +4738,10 @@ fn test_claim_neuron_without_minimum_stake_fails() {
 }
 
 fn do_test_claim_neuron_by_memo_and_controller(owner: PrincipalId, caller: PrincipalId) {
-    let memo = 1234u64;
-    let stake = Tokens::from_tokens(10u64).unwrap();
+    let memo = 1234_u64;
+    let stake = Tokens::from_tokens(10_u64).unwrap();
     let (_, mut gov, _) =
-        governance_with_staked_unclaimed_neuron(&owner, memo, Tokens::from_tokens(10u64).unwrap());
+        governance_with_staked_unclaimed_neuron(&owner, memo, Tokens::from_tokens(10_u64).unwrap());
 
     let manage_neuron_response = gov
         .manage_neuron(
@@ -4798,9 +4798,9 @@ fn test_claim_neuron_memo_and_controller_by_proxy() {
 fn test_non_controller_cant_claim_neuron_for_themselves() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let claimer = *TEST_NEURON_2_OWNER_PRINCIPAL;
-    let memo = 1234u64;
+    let memo = 1234_u64;
     let (_, mut gov, _) =
-        governance_with_staked_unclaimed_neuron(&owner, memo, Tokens::from_tokens(10u64).unwrap());
+        governance_with_staked_unclaimed_neuron(&owner, memo, Tokens::from_tokens(10_u64).unwrap());
 
     let manage_neuron_response = gov
         .manage_neuron(
@@ -4826,8 +4826,8 @@ fn test_non_controller_cant_claim_neuron_for_themselves() {
 }
 
 fn refresh_neuron_by_memo(owner: PrincipalId, caller: PrincipalId) {
-    let stake = Tokens::from_tokens(10u64).unwrap();
-    let memo = Memo(1234u64);
+    let stake = Tokens::from_tokens(10_u64).unwrap();
+    let memo = Memo(1234_u64);
     let (mut driver, mut gov, nid, subaccount) = governance_with_staked_neuron(
         INITIAL_NEURON_DISSOLVE_DELAY,
         stake.get_e8s(),
@@ -4905,8 +4905,8 @@ fn refresh_neuron_by_id_or_subaccount(
     caller: PrincipalId,
     refresh_by: RefreshBy,
 ) {
-    let stake = Tokens::from_tokens(10u64).unwrap();
-    let memo = Memo(1234u64);
+    let stake = Tokens::from_tokens(10_u64).unwrap();
+    let memo = Memo(1234_u64);
     let (mut driver, mut gov, nid, subaccount) = governance_with_staked_neuron(
         INITIAL_NEURON_DISSOLVE_DELAY,
         stake.get_e8s(),
@@ -5034,7 +5034,7 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
     let _block_height = 543212234;
     // Note that the nonce must match the nonce chosen in the original
     // transfer.
-    let _nonce = 1234u64;
+    let _nonce = 1234_u64;
 
     driver.add_funds_to_account(
         AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount)),
@@ -5043,7 +5043,7 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
 
     // Note that the nonce must match the nonce chosen in the original
     // transfer.
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
     let nid_result = claim_or_refresh_neuron_by_memo(
         &mut gov,
         &TEST_NEURON_1_OWNER_PRINCIPAL,
@@ -5072,7 +5072,7 @@ fn test_rate_limiting_neuron_creation() {
     let staked_neurons = (1..=(current_peak - 1))
         .map(|i| {
             let controller = PrincipalId::new_user_test_id(i);
-            let nonce = 1234u64;
+            let nonce = 1234_u64;
             api::Neuron {
                 id: Some(NeuronId::from_u64(i)),
                 account: ledger::compute_neuron_staking_subaccount(controller, nonce).into(),
@@ -5337,7 +5337,7 @@ fn test_cant_disburse_without_paying_fees() {
 fn test_neuron_split_fails() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
@@ -5468,7 +5468,7 @@ fn test_neuron_split_fails() {
 fn test_neuron_split() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
@@ -5614,7 +5614,7 @@ fn test_neuron_split() {
 fn test_seed_neuron_split() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
@@ -5703,7 +5703,7 @@ fn run_periodic_tasks_often_enough_to_update_maturity_modulation(gov: &mut Gover
 fn test_neuron_spawn() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
@@ -5891,7 +5891,7 @@ fn test_neuron_spawn() {
 fn test_neuron_spawn_with_subaccount() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
@@ -6047,7 +6047,7 @@ fn test_neuron_spawn_with_subaccount() {
 fn test_maturity_correctly_reset_if_spawn_fails() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
@@ -6190,7 +6190,7 @@ fn assert_neuron_spawn_partial(
 
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
@@ -6313,7 +6313,7 @@ fn assert_neuron_spawn_partial(
 async fn test_staked_maturity() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
@@ -6533,7 +6533,7 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
 fn test_disburse_to_neuron() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
+    let nonce = 1234_u64;
 
     let block_height = 543212234;
     let dissolve_delay_seconds =
