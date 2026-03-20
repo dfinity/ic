@@ -187,7 +187,7 @@ async fn setup(
         if enough_cycles {
             pic.add_cycles(migrated_canister, u128::MAX / 2).await;
         } else {
-            pic.add_cycles(migrated_canister, 9_500_000).await;
+            pic.add_cycles(migrated_canister, 9_200_000).await;
         }
         pic.stop_canister(migrated_canister, Some(c1))
             .await
@@ -215,7 +215,7 @@ async fn setup(
         if enough_cycles {
             pic.add_cycles(replaced_canister, u128::MAX / 2).await;
         } else {
-            pic.add_cycles(replaced_canister, 9_500_000).await;
+            pic.add_cycles(replaced_canister, 9_200_000).await;
         }
         pic.stop_canister(replaced_canister, Some(c1))
             .await
@@ -1542,14 +1542,14 @@ async fn after_validation_insufficient_cycles() {
     let sender = replaced_canister_controllers[0];
     let migrated_canister = migrated_canisters[0];
     let replaced_canister = replaced_canisters[0];
-    // Top up just enough to pass validation..
+    // Top up just enough to pass validation...
     pic.add_cycles(migrated_canister, 10_000_000_000_000).await;
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
         replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
-    // ..but then burn some cycles by reinstalling to get under the required amount.
+    // ...but then burn some cycles by reinstalling to get under the required amount.
     pic.reinstall_canister(
         migrated_canister,
         b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
@@ -1563,8 +1563,8 @@ async fn after_validation_insufficient_cycles() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
-        panic!()
+    let MigrationStatus::Failed { ref reason, .. } = status.clone().unwrap() else {
+        panic!("Unexpected status: {:?}", status.unwrap())
     };
     assert!(reason.contains("Migrated canister does not have sufficient cycles"));
 }
