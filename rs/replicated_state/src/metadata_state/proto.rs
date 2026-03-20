@@ -465,7 +465,7 @@ impl
                 Some(subnet_metrics) => subnet_metrics.try_into()?,
                 None => SubnetMetrics::default(),
             },
-            expected_compiled_wasms: BTreeSet::new(),
+            expected_compiled_wasms: Arc::new(BTreeSet::new()),
             bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series: match item.blockmaker_metrics_time_series {
                 Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,
