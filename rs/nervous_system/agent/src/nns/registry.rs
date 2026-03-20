@@ -2,7 +2,10 @@ use crate::CallCanisters;
 use ic_base_types::{CanisterId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use registry_canister::{
-    mutations::do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
+    mutations::{
+        do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
+        do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
+    },
     pb::v1::GetSubnetForCanisterRequest,
 };
 
@@ -35,6 +38,13 @@ pub async fn get_subnet_for_canister<C: CallCanisters>(
 pub async fn swap_node_in_subnet_directly<C: CallCanisters>(
     agent: &C,
     payload: SwapNodeInSubnetDirectlyPayload,
+) -> Result<(), C::Error> {
+    agent.call(REGISTRY_CANISTER_ID, payload).await
+}
+
+pub async fn migrate_node_operator_directly<C: CallCanisters>(
+    agent: &C,
+    payload: MigrateNodeOperatorPayload,
 ) -> Result<(), C::Error> {
     agent.call(REGISTRY_CANISTER_ID, payload).await
 }
