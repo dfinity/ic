@@ -2,8 +2,16 @@
 pub use ic_management_canister_types_private::CanisterSettingsArgs;
 
 use candid::{CandidType, Nat};
-use ic_cdk::api::call::{CallResult, RejectionCode};
+use ic_cdk::call::Call;
 use std::time::{Duration, SystemTime};
+
+// Compatibility types for the old ic_cdk API removed in v0.20.
+pub type CallResult<T> = Result<T, (RejectionCode, String)>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RejectionCode {
+    Unknown,
+}
 
 use dfn_protobuf::{ProtoBuf, ToProto};
 
@@ -60,7 +68,7 @@ pub fn ic0_mint_cycles128(amount: Cycles) -> Cycles {
 
 /// caller that returns principalId instead of Principal
 pub fn caller() -> PrincipalId {
-    PrincipalId::from(ic_cdk::caller())
+    PrincipalId::from(ic_cdk::api::msg_caller())
 }
 
 // Duplicating some functionality that is no longer available
@@ -78,8 +86,11 @@ where
         .into_bytes()
         .map_err(|e| (RejectionCode::Unknown, e.to_string()))?;
 
-    let res: CallResult<Vec<u8>> =
-        ic_cdk::api::call::call_raw(canister_id.get().0, method_name, bytes.as_slice(), 0).await;
+    let res: CallResult<Vec<u8>> = Call::unbounded_wait(canister_id.get().0, method_name)
+        .with_raw_args(bytes.as_slice())
+        .await
+        .map(|r| r.into_bytes())
+        .map_err(|e| (RejectionCode::Unknown, e.to_string()));
 
     res.and_then(|bytes| {
         Ok(ProtoBuf::<Res>::from_bytes(bytes)

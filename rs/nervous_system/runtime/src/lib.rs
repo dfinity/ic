@@ -104,6 +104,15 @@ impl Runtime for DfnRuntime {
     }
 }
 
+fn call_failed_to_i32_string(e: ic_cdk::call::CallFailed) -> (i32, String) {
+    match e {
+        ic_cdk::call::CallFailed::CallRejected(r) => {
+            (r.raw_reject_code() as i32, r.reject_message().to_string())
+        }
+        other => (0, other.to_string()),
+    }
+}
+
 pub struct CdkRuntime;
 
 #[async_trait]
@@ -131,9 +140,15 @@ impl Runtime for CdkRuntime {
         Out: for<'a> ArgumentDecoder<'a>,
     {
         let principal_id = PrincipalId::from(id);
-        ic_cdk::api::call::call(principal_id.into(), method, args)
+        ic_cdk::call::Call::unbounded_wait(principal_id.into(), method)
+            .with_args(&args)
             .await
-            .map_err(|(code, msg)| (code as i32, msg))
+            .map_err(call_failed_to_i32_string)
+            .and_then(|response| {
+                response
+                    .candid_tuple::<Out>()
+                    .map_err(|e| (0, e.to_string()))
+            })
     }
 
     async fn call_bytes_with_cleanup(
@@ -142,13 +157,15 @@ impl Runtime for CdkRuntime {
         args: &[u8],
     ) -> Result<Vec<u8>, (i32, String)> {
         let principal_id = PrincipalId::from(id);
-        ic_cdk::api::call::call_raw(principal_id.into(), method, args, 0)
+        ic_cdk::call::Call::unbounded_wait(principal_id.into(), method)
+            .with_raw_args(args)
             .await
-            .map_err(|(code, msg)| (code as i32, msg))
+            .map(|response| response.into_bytes())
+            .map_err(call_failed_to_i32_string)
     }
 
     fn spawn_future<F: 'static + Future<Output = ()>>(future: F) {
-        ic_cdk::spawn(future);
+        ic_cdk::futures::spawn(future);
     }
 
     fn canister_version() -> u64 {

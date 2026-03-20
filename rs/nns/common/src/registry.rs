@@ -1,6 +1,6 @@
 #![allow(deprecated)]
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_cdk::api::call::call_raw;
+use ic_cdk::call::Call;
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
@@ -27,14 +27,11 @@ pub async fn get_value<T: Message + Default>(
     key: &[u8],
     version: Option<u64>,
 ) -> Result<(T, u64), Error> {
-    let current_result: Vec<u8> = call_raw(
-        REGISTRY_CANISTER_ID.get().0,
-        "get_value",
-        serialize_get_value_request(key.to_vec(), version).unwrap(),
-        0,
-    )
-    .await
-    .unwrap();
+    let current_result: Vec<u8> = Call::unbounded_wait(REGISTRY_CANISTER_ID.get().0, "get_value")
+        .with_raw_args(&serialize_get_value_request(key.to_vec(), version).unwrap())
+        .await
+        .unwrap()
+        .into_bytes();
 
     let response = deserialize_get_value_response(current_result)?;
 
@@ -59,19 +56,13 @@ pub async fn mutate_registry(
     preconditions: Vec<Precondition>,
 ) -> Result<u64, String> {
     let mutation_bytes = serialize_atomic_mutate_request(mutations, preconditions);
-    let response_bytes = call_raw(
-        REGISTRY_CANISTER_ID.get().0,
-        "atomic_mutate",
-        mutation_bytes,
-        0,
-    )
-    .await
-    .map_err(|e| {
-        format!(
-            "The call to the registry's 'atomic_mutate' method failed due to: {}",
-            e.1
-        )
-    })?;
+    let response_bytes = Call::unbounded_wait(REGISTRY_CANISTER_ID.get().0, "atomic_mutate")
+        .with_raw_args(&mutation_bytes)
+        .await
+        .map(|r| r.into_bytes())
+        .map_err(|e| {
+            format!("The call to the registry's 'atomic_mutate' method failed due to: {e}",)
+        })?;
     let response = RegistryAtomicMutateResponse::decode(response_bytes.as_slice())
         .map_err(|e| format!("The registry's response to 'atomic_mutate' could not be decoded as a RegistryAtomicMutateResponse due to: {e} "))?;
     match response.errors.len() {
@@ -116,13 +107,10 @@ pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<Sub
 
 /// Returns the latest version of the registry
 pub async fn get_latest_version() -> u64 {
-    let response: Vec<u8> = call_raw(
-        REGISTRY_CANISTER_ID.get().0,
-        "get_latest_version",
-        vec![],
-        0,
-    )
-    .await
-    .unwrap();
+    let response: Vec<u8> =
+        Call::unbounded_wait(REGISTRY_CANISTER_ID.get().0, "get_latest_version")
+            .await
+            .unwrap()
+            .into_bytes();
     deserialize_get_latest_version_response(response).unwrap()
 }

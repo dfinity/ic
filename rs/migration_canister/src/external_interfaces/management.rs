@@ -3,13 +3,12 @@ use std::convert::Infallible;
 use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
     api::{canister_self, canister_version},
-    call::{Call, CallFailed, Error as CallError, RejectCode},
-    management_canister::{
-        CanisterInfoArgs, CanisterInfoResult, canister_info, list_canister_snapshots,
-    },
+    call::{Call, CallFailed, RejectCode},
     println,
 };
-use ic_management_canister_types::ListCanisterSnapshotsArgs;
+use ic_management_canister_types::{
+    CanisterInfoArgs, CanisterInfoResult, ListCanisterSnapshotsArgs, ListCanisterSnapshotsResult,
+};
 use serde::Deserialize;
 
 use crate::{ValidationError, processing::ProcessingResult};
@@ -178,12 +177,24 @@ pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<Canis
         num_requested_changes: None,
     };
 
-    match canister_info(&args).await {
-        Ok(canister_info) => ProcessingResult::Success(canister_info),
+    match Call::bounded_wait(Principal::management_canister(), "canister_info")
+        .with_arg(args)
+        .await
+    {
+        Ok(response) => match response.candid::<CanisterInfoResult>() {
+            Ok(info) => ProcessingResult::Success(info),
+            Err(e) => {
+                println!(
+                    "Decoding `CanisterInfoResult` for canister: {} failed: {:?}",
+                    canister_id, e
+                );
+                ProcessingResult::NoProgress
+            }
+        },
         Err(e) => {
             println!("Call `canister_info` for {} failed: {:?}", canister_id, e);
             match e {
-                CallError::CallRejected(e) => {
+                CallFailed::CallRejected(e) => {
                     if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
                         ProcessingResult::FatalFailure(())
                     } else {
@@ -263,16 +274,28 @@ pub async fn rename_canister(
 // `list_canister_snapshots`
 
 pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(), ValidationError> {
-    match list_canister_snapshots(&ListCanisterSnapshotsArgs { canister_id }).await {
-        Ok(snapshots) => {
-            if snapshots.is_empty() {
-                ProcessingResult::Success(())
-            } else {
-                ProcessingResult::FatalFailure(ValidationError::ReplacedCanisterHasSnapshots(
-                    Reserved,
-                ))
+    match Call::bounded_wait(Principal::management_canister(), "list_canister_snapshots")
+        .with_arg(ListCanisterSnapshotsArgs { canister_id })
+        .await
+    {
+        Ok(response) => match response.candid::<ListCanisterSnapshotsResult>() {
+            Ok(snapshots) => {
+                if snapshots.is_empty() {
+                    ProcessingResult::Success(())
+                } else {
+                    ProcessingResult::FatalFailure(ValidationError::ReplacedCanisterHasSnapshots(
+                        Reserved,
+                    ))
+                }
             }
-        }
+            Err(e) => {
+                println!(
+                    "Decoding `ListCanisterSnapshotsResult` for canister: {} failed: {:?}",
+                    canister_id, e
+                );
+                ProcessingResult::NoProgress
+            }
+        },
         Err(e) => {
             println!(
                 "Call `list_canister_snapshots` for {} failed: {:?}",
