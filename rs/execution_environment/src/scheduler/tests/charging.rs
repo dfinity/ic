@@ -11,6 +11,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::CyclesUseCase;
@@ -44,12 +45,14 @@ fn only_charge_for_allocation_after_specified_duration() {
 
     let initial_cycles = 1_000_000;
 
-    let canister = test.create_canister_with(
+    let canister = test.create_canister_with_controller(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(bytes_per_cycle)),
+        Some(NumBytes::new(0)), // Don't allocate log memory.
         None,
         Some(initial_time),
+        None,
         None,
     );
 
@@ -91,12 +94,14 @@ fn charging_for_message_memory_works() {
     test.set_time(initial_time);
 
     let initial_cycles = 1_000_000_000_000;
-    let canister = test.create_canister_with(
+    let canister = test.create_canister_with_controller(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
+        Some(NumBytes::new(0)), // Don't allocate log memory.
         None,
         Some(initial_time),
+        None,
         None,
     );
 
@@ -121,11 +126,67 @@ fn charging_for_message_memory_works() {
 
     // The balance of the canister should have been reduced by the cost of
     // message memory during the charge period.
+    let canister_state = test.canister_state(canister);
     assert_eq!(
-        test.canister_state(canister).system_state.balance(),
+        canister_state.system_state.balance(),
         balance_before
             - test.memory_cost(
-                test.canister_state(canister).message_memory_usage().total(),
+                canister_state.message_memory_usage().total(),
+                charge_duration,
+            ),
+    );
+}
+
+#[test]
+fn charging_for_logging_memory_works() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_slice: NumInstructions::new(1),
+            max_instructions_per_install_code_slice: NumInstructions::new(1),
+            max_instructions_per_round: NumInstructions::from(1),
+            ..zero_instruction_overhead_config()
+        })
+        .build();
+
+    // Charging handles time=0 as a special case, so it should be set to some
+    // non-zero time.
+    let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
+    test.set_time(initial_time);
+
+    let initial_cycles = 1_000_000_000_000;
+    let canister = test.create_canister_with_controller(
+        Cycles::new(initial_cycles),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        Some(NumBytes::new(4_096)), // Set log_memory_limit to 4KiB.
+        None,
+        Some(initial_time),
+        None,
+        None,
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let balance_before = test.canister_state(canister).system_state.balance();
+
+    // Set time to at least one interval between charges to trigger a charge
+    // because of log memory consumption.
+    let charge_duration = test
+        .scheduler()
+        .cycles_account_manager
+        .duration_between_allocation_charges();
+    test.set_time(initial_time + charge_duration);
+    test.charge_for_resource_allocations();
+
+    // The balance of the canister should have been reduced by the cost of
+    // log memory during the charge period.
+    let canister_state = test.canister_state(canister);
+    assert_eq!(
+        canister_state.system_state.balance(),
+        balance_before
+            - test.memory_cost(
+                canister_state.log_memory_store_memory_usage(),
                 charge_duration,
             ),
     );
@@ -173,6 +234,60 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             .num_canisters_uninstalled_out_of_cycles
             .get(),
         3
+    );
+}
+
+#[test]
+fn open_call_contexts_produce_reject_responses_when_out_of_cycles() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    let mut test = SchedulerTestBuilder::new().build();
+
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+    );
+
+    // Make a XNet call, so the call context stays open, awaiting response from the
+    // remote subnet).
+    let message_id = test.send_ingress(
+        canister,
+        ingress(1).call(other_side(test.xnet_canister_id(), 1), on_response(1)),
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_output());
+    assert!(test.canister_state(canister).execution_state.is_some());
+
+    // Drain all cycles so the next allocation charge triggers uninstall.
+    test.canister_state_mut(canister)
+        .system_state
+        .set_balance(Cycles::zero());
+
+    let duration_between_allocation_charges = test
+        .scheduler()
+        .cycles_account_manager
+        .duration_between_allocation_charges();
+    test.set_time(initial_time + duration_between_allocation_charges);
+
+    test.charge_for_resource_allocations();
+
+    // Canister was uninstalled.
+    assert!(test.canister_state(canister).execution_state.is_none());
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        1
+    );
+    // And the ingress was rejected.
+    assert_eq!(
+        test.ingress_error(&message_id).code(),
+        ErrorCode::CanisterRejectedMessage,
     );
 }
 

@@ -65,7 +65,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion, ReplicaVersion,
     SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, ChainKeyData},
+    batch::ChainKeyData,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{
@@ -83,7 +83,7 @@ use ic_types::{
     methods::{Callback, SystemMethod},
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;

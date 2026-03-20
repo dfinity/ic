@@ -142,9 +142,9 @@ use ic_types::{
     SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics,
-        CanisterCyclesCostSchedule, ChainKeyData, ConsensusResponse, QueryStatsPayload,
-        SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
+        ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
+        ValidationContext, XNetPayload,
     },
     canister_http::{
         CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
@@ -177,7 +177,7 @@ use ic_types::{
     time::{GENESIS, Time},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
     RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,

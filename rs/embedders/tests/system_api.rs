@@ -26,14 +26,13 @@ use ic_test_utilities_types::{
 use ic_types::{
     CanisterTimer, CountBytes, MAX_STABLE_MEMORY_IN_BYTES, NumInstructions, PrincipalId, SubnetId,
     Time,
-    batch::CanisterCyclesCostSchedule,
     messages::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, RejectContext, RequestOrResponse,
     },
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use maplit::btreemap;
 use more_asserts::assert_le;
 use std::{

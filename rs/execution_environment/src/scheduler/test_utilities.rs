@@ -56,7 +56,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     CanisterTimer, ComputeAllocation, ExecutionRound, MemoryAllocation, NumInstructions,
     Randomness, ReplicaVersion, Time, UserId,
-    batch::{AvailablePreSignatures, CanisterCyclesCostSchedule, ChainKeyData},
+    batch::{AvailablePreSignatures, ChainKeyData},
     consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus},
@@ -65,7 +65,7 @@ use ic_types::{
     },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use std::{collections::BTreeSet, time::Duration};

@@ -62,8 +62,7 @@ use ic_test_utilities_types::ids::{
 };
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{
-    BatchSummary, CanisterCyclesCostSchedule, CanisterQueryStats, QueryStats, QueryStatsPayload,
-    RawQueryStats, TotalQueryStats,
+    BatchSummary, CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
 use ic_types::consensus::certification::{Certification, CertificationContent};
 use ic_types::crypto::Signed;
@@ -80,6 +79,7 @@ use ic_types::{
     time::{Time, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use maplit::{btreemap, btreeset};
 use nix::sys::stat::{UtimensatFlags, utimensat};
 use nix::sys::time::{TimeSpec, TimeValLike};

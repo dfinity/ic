@@ -132,7 +132,7 @@ pub fn test(env: TestEnv) {
 
         let init_args = InitArgsBuilder::for_tests()
             .with_minting_account(minting_account)
-            .with_initial_balance(account1, 1_000_000_000u64)
+            .with_initial_balance(account1, 1_000_000_000_u64)
             .with_transfer_fee(1_000_u16)
             .with_feature_flags(FeatureFlags { icrc2: true })
             .with_archive_options(ArchiveOptions {
@@ -249,7 +249,7 @@ pub fn test(env: TestEnv) {
         );
 
         // transfer
-        let amount = 10_000_000u64;
+        let amount = 10_000_000_u64;
         let _block = agent
             .transfer(TransferArg {
                 from_subaccount: None,
