@@ -144,7 +144,7 @@ fn should_be_able_to_send_fresh_transaction() {
         pending_withdrawals.len(),
         state.pending_retrieve_btc_requests.len()
     );
-    assert_eq!(pending_withdrawals.len(), 6);
+    assert_eq!(pending_withdrawals.len(), 5);
     let stuck_withdrawals = btreeset! { 3459007_u64, 3459009, 3459013, 3489347, 3489353 };
     assert!(stuck_withdrawals.is_subset(&pending_withdrawals));
 
@@ -194,14 +194,14 @@ fn should_be_able_to_send_fresh_transaction() {
         .collect();
     assert_eq!(
         input_outpoints,
+        //not used as of 2026.03.20 12:58:20 UTC
         vec![
-            "68c6e98741cee0ceca94c9e34b93fac64a1ad70c0fc134aa22936d321f3432f3:4",
-            "9114688b68c51906adbc44b09896a259ffccc5e3e974906afe7a2444cfa62a28:0",
-            "b1a328a6ef7c92df7c92dca15b345b1d66cfe5c7b7637fe82a69aef1b211ad36:0",
-            "3895d99d362f362993c2137dafb92c99887b36fbbb1a81f7f2f11cad974e11e4:1",
-            "ed307192ef1e09c51d6276357ddb31f65fdbcb502c5047a6d8d68443eb5c06a4:21",
-            "76e17e2941e80e8d25e01abce53b87f2cb1c12f9d86d0578ccf3e67426b17b2e:0",
-            "f3ad7d7befd989a4724ced75a8eed451aeee6ecf4f161b0bd59071e52545fe79:1"
+            "9e33c64e0ae428a5352a07de09d00414704e9afc13e22f8d3f1e9bc18c82ce56:2",
+            "ecef36ebb4ed186210f8b90a17bf0650d375a94ea066fe1645eb5d31b1520f2b:1",
+            "b1e209f9ce7a5bfa5ab218d6a953bde02ffe711fbb627993cb53326e9fea83fa:1",
+            "e5bb841e95a37f7be05ff6b8699a617702dcd8b9874a91f8738e525732a45047:0",
+            "087cf212f20d5449e22b74b7c49ebcdba2eb3fed552b33a00acead89948bf782:3",
+            "e044bc5e024e70086691b037a0f4e024fcaebd1872beb4914908feef7770bfcd:8"
         ]
     );
 
