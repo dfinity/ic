@@ -6,7 +6,7 @@ use super::super::test_utilities::{
 use super::super::*;
 use super::{zero_instruction_messages, zero_instruction_overhead_config};
 use crate::scheduler::test_utilities::EMPTY_WASM;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::subnet_config::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerConfig};
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::{NumWasmPages, num_bytes_try_from};
 use proptest::prelude::*;
@@ -535,14 +535,17 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     // - 3 subnet messages should run (using 30 out of 400 instructions).
     // - 10 input messages should run (using 100 out of 400 instructions).
 
+    let max_instructions_per_round = NumInstructions::new(400);
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::new(400),
+            max_instructions_per_round,
             max_instructions_per_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
+            subnet_messages_per_round_instruction_limit: max_instructions_per_round
+                / SUBNET_MESSAGES_LIMIT_FRACTION,
             ..zero_instruction_overhead_config()
         })
         .build();
