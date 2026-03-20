@@ -79,7 +79,9 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule, WasmHash};
@@ -1606,7 +1608,7 @@ impl ExecutionTest {
                 self.expected_cycles_balance_change(message, instructions_used);
             assert_eq!(
                 cycles_used,
-                NominalCycles::from(expected_cycles_balance_change.get())
+                NominalCycles::new(expected_cycles_balance_change.get())
             );
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
@@ -1618,7 +1620,7 @@ impl ExecutionTest {
             // the base cost could still be charged in some cases even if no instructions
             // were used (e.g., depending on how early validation fails)
             assert!(
-                cycles_used.get() == 0 || cycles_used == NominalCycles::from(baseline_cost.get())
+                cycles_used.get() == 0 || cycles_used == NominalCycles::new(baseline_cost.get())
             );
         }
     }
