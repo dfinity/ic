@@ -106,11 +106,11 @@ impl RingBuffer {
     /// Convenience method for adding a single log record in tests.
     #[cfg(test)]
     fn append(&mut self, record: &CanisterLogRecord) {
-        self.append_log_iter(vec![record.clone()]);
+        self.append_log(vec![record.clone()]);
     }
 
     /// Appends records from an iterator.
-    pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
+    pub fn append_log(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
         let mut iter = records.into_iter().peekable();
         if iter.peek().is_none() {
             return; // Exit early if no records.
