@@ -5341,9 +5341,8 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
     test.subnet_message("upload_chunk", upload_args.encode())
         .unwrap_err()
         .assert_contains(
-            ErrorCode::CanisterContractViolation,
-            "Error from Wasm chunk store: Canister is heap delta rate limited. \
-        Current delta debit: 1048576, limit: 1048576.",
+            ErrorCode::CanisterHeapDeltaRateLimited,
+            &format!("Canister {canister_id} is heap delta rate limited: current delta debit is 1048576, but limit is 1048576")
         );
 
     assert_eq!(
