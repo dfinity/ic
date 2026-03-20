@@ -106,7 +106,7 @@ impl Registry {
             ssh_backup_access: source_subnet_record.ssh_backup_access.clone(),
             canister_cycles_cost_schedule: source_subnet_record.canister_cycles_cost_schedule,
             subnet_admins: source_subnet_record.subnet_admins.clone(),
-            resource_limits: source_subnet_record.resource_limits.clone(),
+            resource_limits: source_subnet_record.resource_limits,
             start_as_nns: false,
             is_halted: false,
             halt_at_cup_height: false,
