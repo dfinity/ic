@@ -231,7 +231,7 @@ mod tests {
 
     impl LowerBounded for TestNeuronId {
         fn min_value() -> Self {
-            TestNeuronId([0u8; 32])
+            TestNeuronId([0_u8; 32])
         }
     }
 
@@ -328,7 +328,7 @@ mod tests {
     }
 
     fn test_remove_add_principal_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
-        let neuron_id = TestNeuronId([1u8; 32]);
+        let neuron_id = TestNeuronId([1_u8; 32]);
         let principal_id_1 = PrincipalId::new_user_test_id(1);
         let principal_id_2 = PrincipalId::new_user_test_id(2);
         let principal_id_3 = PrincipalId::new_user_test_id(3);
@@ -374,7 +374,7 @@ mod tests {
     }
 
     fn test_add_existing_neuron_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
-        let neuron_id = TestNeuronId([1u8; 32]);
+        let neuron_id = TestNeuronId([1_u8; 32]);
         let principal_id_1 = PrincipalId::new_user_test_id(1);
         let principal_id_2 = PrincipalId::new_user_test_id(2);
 
@@ -396,7 +396,7 @@ mod tests {
     }
 
     fn test_remove_absent_neuron_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
-        let neuron_id = TestNeuronId([1u8; 32]);
+        let neuron_id = TestNeuronId([1_u8; 32]);
         let principal_id_1 = PrincipalId::new_user_test_id(1);
         let principal_id_2 = PrincipalId::new_user_test_id(2);
         assert_eq!(

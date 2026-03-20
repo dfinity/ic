@@ -6,10 +6,11 @@ use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
 use ic_types::{
-    Cycles, SubnetId,
+    SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, RequestOrResponse},
 };
+use ic_types_cycles::Cycles;
 use messaging_test::{Call, Reply};
 use messaging_test_utils::{from_blob, to_encoded_ingress};
 use proptest::prelude::*;

@@ -195,14 +195,14 @@ impl Scalar {
         up to provide space, followed by a scalar addition.
         */
 
-        let mut bytes = [0u8; 64];
+        let mut bytes = [0_u8; 64];
 
         // We can't use fill_bytes here because that results in incompatible output.
         for i in 0..64 {
             bytes[i] = rng.r#gen::<u8>();
         }
 
-        let mut rbuf = [0u8; 64];
+        let mut rbuf = [0_u8; 64];
         for j in 0..63 {
             rbuf[j] = bytes[62 - j].reverse_bits();
         }
@@ -326,7 +326,7 @@ impl Scalar {
             rejection sampling by creating a 255 bit random bitstring then
             checking if it is less than the group order.
             */
-            let mut buf = [0u8; Self::BYTES];
+            let mut buf = [0_u8; Self::BYTES];
             rng.fill_bytes(&mut buf);
             buf[0] &= 0b0111_1111; // clear the 256th bit
 
@@ -380,7 +380,7 @@ impl Scalar {
             bytes[Scalar::BYTES - (i as usize / 8) - 1] |= 1 << (i % 8);
         };
 
-        let mut scalar = [0u8; Scalar::BYTES];
+        let mut scalar = [0_u8; Scalar::BYTES];
         const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
 
         for i in Self::random_bit_indices(rng, num_bits, SCALAR_FLOORED_BIT_LENGTH) {
@@ -443,7 +443,7 @@ impl Scalar {
         let n = Scalar::from_u64(n);
 
         loop {
-            let mut buf = [0u8; Self::BYTES];
+            let mut buf = [0_u8; Self::BYTES];
             rng.fill_bytes(&mut buf[Self::BYTES - n_bytes..]);
             buf[Self::BYTES - n_bytes] &= n_mask;
 
@@ -460,7 +460,7 @@ impl Scalar {
     ///
     /// Out of range elements are reduced modulo the group order
     pub fn deserialize_unchecked(bytes: &[u8; Self::BYTES]) -> Self {
-        let mut le_bytes = [0u8; 64];
+        let mut le_bytes = [0_u8; 64];
 
         for i in 0..Self::BYTES {
             le_bytes[i] = bytes[Self::BYTES - i - 1];
@@ -2552,7 +2552,7 @@ impl Gt {
     /// Do not serialize this value, or use it as an index in storage.
     pub fn short_hash_for_linear_search(&self) -> u32 {
         fn extract4(tag: &[u8], idx: usize) -> u32 {
-            let mut fbytes = [0u8; 4];
+            let mut fbytes = [0_u8; 4];
             fbytes.copy_from_slice(&tag[idx..idx + 4]);
             u32::from_le_bytes(fbytes)
         }
@@ -2850,7 +2850,7 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     const SIZE: usize = WINDOW_SIZE;
     const WINDOWS: usize = (Scalar::BYTES * 8).div_ceil(Self::SIZE);
 
-    const MASK: u8 = 0xFFu8 >> (8 - Self::SIZE);
+    const MASK: u8 = 0xFF_u8 >> (8 - Self::SIZE);
     const ELEMENTS: usize = (1 << Self::SIZE) as usize;
 
     #[inline(always)]

@@ -10,11 +10,6 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
-## Added
-
-* Added an optional field `resource_limits` to `CreateSubnetPayload` which, when present,
-sets limits on resource usage (e.g., disk usage) of the created subnet.
-
 
 # 2026-03-13: Proposal 140861
 

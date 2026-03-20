@@ -28,6 +28,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
+    "//rs/interfaces/mocks",
     "//rs/registry/subnet_features",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",

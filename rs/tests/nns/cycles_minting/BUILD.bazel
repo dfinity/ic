@@ -16,6 +16,7 @@ rust_library(
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",

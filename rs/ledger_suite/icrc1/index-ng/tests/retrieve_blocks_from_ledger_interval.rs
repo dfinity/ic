@@ -9,7 +9,8 @@ use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
 use ic_icrc1_test_utils::minter_identity;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
-use ic_types::{Cycles, Time};
+use ic_types::Time;
+use ic_types_cycles::Cycles;
 use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
 use std::time::{Duration, SystemTime};
@@ -119,7 +120,7 @@ fn should_install_and_upgrade_with_valid_values() {
     // Generate optional values in [1, MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS]. This
     // range ensures that when any value is None and falls back to its default (1 or 10),
     // the resulting configuration has a reasonable chance of being valid.
-    let opt_val = || proptest::option::of(1u64..=MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS);
+    let opt_val = || proptest::option::of(1_u64..=MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECONDS);
 
     let mut runner = TestRunner::new(proptest::test_runner::Config::with_cases(4));
     runner

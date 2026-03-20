@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/registry/resource_limits",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:tempfile",

@@ -10,7 +10,7 @@ use icp_ledger::AccountIdentifier;
 #[test]
 fn add_single_neuron() {
     let mut index = NeuronAccountIdIndex::new(VectorMemory::default());
-    let account_id = AccountIdentifier::from_slice(&[1u8; 28]).unwrap();
+    let account_id = AccountIdentifier::from_slice(&[1_u8; 28]).unwrap();
 
     assert!(
         index
@@ -27,7 +27,7 @@ fn add_single_neuron() {
 #[test]
 fn add_and_remove_neuron() {
     let mut index = NeuronAccountIdIndex::new(VectorMemory::default());
-    let account_id = AccountIdentifier::from_slice(&[1u8; 28]).unwrap();
+    let account_id = AccountIdentifier::from_slice(&[1_u8; 28]).unwrap();
 
     assert!(
         index
@@ -46,7 +46,7 @@ fn add_and_remove_neuron() {
 #[test]
 fn add_neuron_with_same_account_id_fails() {
     let mut index = NeuronAccountIdIndex::new(VectorMemory::default());
-    let account_id = AccountIdentifier::from_slice(&[1u8; 28]).unwrap();
+    let account_id = AccountIdentifier::from_slice(&[1_u8; 28]).unwrap();
 
     assert!(
         index
@@ -69,7 +69,7 @@ fn add_neuron_with_same_account_id_fails() {
 #[test]
 fn remove_neuron_already_absent_fails() {
     let mut index = NeuronAccountIdIndex::new(VectorMemory::default());
-    let account_id = AccountIdentifier::from_slice(&[1u8; 28]).unwrap();
+    let account_id = AccountIdentifier::from_slice(&[1_u8; 28]).unwrap();
 
     // The index is empty so remove should fail.
     assert_matches!(
@@ -82,7 +82,7 @@ fn remove_neuron_already_absent_fails() {
 #[test]
 fn remove_neuron_with_wrong_neuron_id_fails() {
     let mut index = NeuronAccountIdIndex::new(VectorMemory::default());
-    let account_id = AccountIdentifier::from_slice(&[1u8; 28]).unwrap();
+    let account_id = AccountIdentifier::from_slice(&[1_u8; 28]).unwrap();
 
     assert!(
         index
@@ -105,8 +105,8 @@ fn remove_neuron_with_wrong_neuron_id_fails() {
 #[test]
 fn add_multiple_neurons() {
     let mut index = NeuronAccountIdIndex::new(VectorMemory::default());
-    let account_id_1 = AccountIdentifier::from_slice(&[1u8; 28]).unwrap();
-    let account_id_2 = AccountIdentifier::from_slice(&[2u8; 28]).unwrap();
+    let account_id_1 = AccountIdentifier::from_slice(&[1_u8; 28]).unwrap();
+    let account_id_2 = AccountIdentifier::from_slice(&[2_u8; 28]).unwrap();
 
     assert!(
         index
@@ -132,7 +132,7 @@ fn add_multiple_neurons() {
 #[test]
 fn index_num_entries() {
     let mut index = NeuronAccountIdIndex::new(VectorMemory::default());
-    let account_id = AccountIdentifier::from_slice(&[1u8; 28]).unwrap();
+    let account_id = AccountIdentifier::from_slice(&[1_u8; 28]).unwrap();
 
     assert_eq!(index.num_entries(), 0);
 

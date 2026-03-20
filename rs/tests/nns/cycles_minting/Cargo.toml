@@ -17,6 +17,7 @@ ic-nns-constants = { path = "../../../nns/constants" }
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 on_wire = { path = "../../../rust_canisters/on_wire" }
+ic-types-cycles = { path = "../../../types/cycles" }
 ic-types = { path = "../../../types/types" }
 candid = { workspace = true }
 rand = { workspace = true }

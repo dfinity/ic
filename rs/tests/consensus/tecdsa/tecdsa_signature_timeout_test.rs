@@ -66,7 +66,7 @@ fn test(env: TestEnv) {
             let expected_message = if key_id.is_idkg_key() {
                 "Signature request expired"
             } else {
-                "VetKD request expired"
+                "Chain key request expired"
             };
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,

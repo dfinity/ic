@@ -13,8 +13,8 @@ use ic_protobuf::{
         node::v1::NodeRecord,
         subnet::v1::{
             CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-            ChainKeyConfig as ChainKeyConfigPb, GenesisArgs, SubnetFeatures as SubnetFeaturesPb,
-            SubnetRecord, catch_up_package_contents::CupType,
+            ChainKeyConfig as ChainKeyConfigPb, GenesisArgs, ResourceLimits as ResourceLimitsPb,
+            SubnetFeatures as SubnetFeaturesPb, SubnetRecord, catch_up_package_contents::CupType,
         },
     },
     types::v1::PrincipalId as PrincipalIdPb,
@@ -575,7 +575,9 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .map(PrincipalIdPb::from)
                 .collect(),
 
-            resource_limits: Some(val.resource_limits.unwrap_or_default().into()),
+            resource_limits: Some(ResourceLimitsPb::from(
+                val.resource_limits.unwrap_or_default(),
+            )),
 
             recalled_replica_version_ids: vec![],
         }

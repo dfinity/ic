@@ -63,11 +63,10 @@ use ic_replicated_state::{
         StopCanisterCall, SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
 };
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
-    ReplicaVersion, SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, ChainKeyData},
+    CanisterId, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion, ReplicaVersion,
+    SubnetId, Time,
+    batch::ChainKeyData,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{
@@ -83,9 +82,9 @@ use ic_types::{
         extract_effective_canister_id,
     },
     methods::{Callback, SystemMethod},
-    nominal_cycles::NominalCycles,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
@@ -2652,12 +2651,9 @@ impl ExecutionEnvironment {
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(args.get_canister_id(), state)?;
 
-        let result = self
-            .canister_manager
+        self.canister_manager
             .list_canister_snapshot(sender, canister)
-            .map_err(UserError::from)?;
-
-        Ok(Encode!(&result).unwrap())
+            .map(|result| Encode!(&result).unwrap())
     }
 
     /// Deletes the specified canister snapshot if it exists.
@@ -2721,18 +2717,18 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
-        let result = match self.canister_manager.read_snapshot_data(
-            sender,
-            Arc::make_mut(&mut canister),
-            args.get_snapshot_id(),
-            args.kind,
-            state,
-            subnet_size,
-            round_limits,
-        ) {
-            Ok(result) => Ok(Encode!(&result).unwrap()),
-            Err(err) => Err(UserError::from(err)),
-        };
+        let result = self
+            .canister_manager
+            .read_snapshot_data(
+                sender,
+                Arc::make_mut(&mut canister),
+                args.get_snapshot_id(),
+                args.kind,
+                state,
+                subnet_size,
+                round_limits,
+            )
+            .map(|response| Encode!(&response).unwrap());
 
         // Put canister back.
         state.put_canister_state(canister);
@@ -2794,13 +2790,9 @@ impl ExecutionEnvironment {
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(args.get_canister_id(), state)?;
         let snapshot_id = args.get_snapshot_id();
-        match self
-            .canister_manager
+        self.canister_manager
             .read_snapshot_metadata(sender, snapshot_id, canister)
-        {
-            Ok(response) => Ok(Encode!(&response).unwrap()),
-            Err(e) => Err(UserError::from(e)),
-        }
+            .map(|response| Encode!(&response).unwrap())
     }
 
     fn create_snapshot_from_metadata(
@@ -3289,7 +3281,7 @@ impl ExecutionEnvironment {
             Ok(settings) => match settings.get_set_of_node_ids() {
                 Err(err) => Err(err),
                 Ok(nodes_in_target_subnet) => {
-                    let mut target_id = [0u8; 32];
+                    let mut target_id = [0_u8; 32];
                     rng.fill_bytes(&mut target_id);
 
                     info!(
@@ -3536,7 +3528,7 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let mut pseudo_random_id = [0u8; 32];
+        let mut pseudo_random_id = [0_u8; 32];
         rng.fill_bytes(&mut pseudo_random_id);
 
         state.metadata.subnet_call_context_manager.push_context(
@@ -3546,7 +3538,6 @@ impl ExecutionEnvironment {
                 derivation_path: Arc::new(derivation_path),
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
-                matched_pre_signature: None,
                 nonce: None,
             }),
         );
@@ -3567,7 +3558,7 @@ impl ExecutionEnvironment {
             &args.key_id,
         )?;
 
-        let mut target_id = [0u8; 32];
+        let mut target_id = [0_u8; 32];
         rng.fill_bytes(&mut target_id);
 
         let nodes = args.get_set_of_nodes()?;

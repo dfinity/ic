@@ -1,3 +1,6 @@
+//! This crate contains types used both as registry canister API types
+//! and internal replica implementation types.
+
 use candid::CandidType;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_types::NumBytes;

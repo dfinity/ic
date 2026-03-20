@@ -48,8 +48,8 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "f9048ef265113604d2879d6c93114a18c804b217",
-    "sha256": "9afc0b12240539d4b5c7f209698fb01f74fd2550e4bda625dfd7c583e8482136"
+    "rev": "e114e3d7f4efef3dc9876b619e71deb79868640e",
+    "sha256": "6ef07db375180b081b2e992c9b67e1aca941b63ffbad8ac9ac68d2de8d332912"
   },
   "cycles_ledger": {
     "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
@@ -60,28 +60,32 @@
     "sha256": "8df72887ab235f4533ee613b1bc7293ec8d62c866525b1425934cf992ef894a7"
   },
   "dogecoin": {
-    "sha256": "5d61d0fbccca7bb7e86b9c914a36c2cacbf4c01dcaee9c4fae04b54bfca4802c",
-    "tag": "release/2026-02-06"
+    "sha256": "1fe3ce73e9422a0a3e0444ea7b5a615d2b36c4b940d3cbcfe9e3d5c6cdc32494",
+    "tag": "release/2026-03-12"
   },
   "genesis-token": {
     "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "dc2f56c7ae4b1bc1ee1718bde2d2e939c058ca97",
-    "sha256": "b05e9284b4fe172dc05a2eceb55fe4cecbec9e1a7b649321b616fe8bd4f3242c"
+    "rev": "e114e3d7f4efef3dc9876b619e71deb79868640e",
+    "sha256": "85d10aa4617adc0ab9d8c57e615408c70e543ac02af24f9bc1051974fa131a21"
   },
   "governance-canister_test": {
-    "rev": "dc2f56c7ae4b1bc1ee1718bde2d2e939c058ca97",
-    "sha256": "f877c16a1c5015164285ad1f4f307a51373cd2a42d2fbd525e86322f0c82b0dc"
+    "rev": "e114e3d7f4efef3dc9876b619e71deb79868640e",
+    "sha256": "432ee8f35c4c204197fbfc515d847a3251667a18fd5664c9ed8d62afff9bd70a"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
-  "internet_identity_test": {
-    "sha256": "640fecd6d70a5c22dda0615b2c73390abfb4648014e39d8557fa92bb37752425",
-    "tag": "release-2026-03-06"
+  "internet_identity_backend": {
+    "sha256": "448f2c0370124da72e22b3b4462edd50a5a7be52f564311721fbc2798c70f643",
+    "tag": "release-2026-03-13"
+  },
+  "internet_identity_frontend": {
+    "sha256": "f1e53c9f0799425e5bd18768d9b48108b7ac246983a149f8aee3d47394f4d653",
+    "tag": "release-2026-03-16"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -104,16 +108,16 @@
     "sha256": "4511bdb31e19a1ab304d897075abba82f46cc0629e6bc0f036f364f1fd7b26b7"
   },
   "registry": {
-    "rev": "dc2f56c7ae4b1bc1ee1718bde2d2e939c058ca97",
-    "sha256": "7b1b346d4dad5605fee1950c5e21adba639c172fa972b75eb74aea9aa409b379"
+    "rev": "e114e3d7f4efef3dc9876b619e71deb79868640e",
+    "sha256": "6b1aab61372185ff90a31e81400711f7ab9db5578b89beab1548d38e83de25d9"
   },
   "root": {
     "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
     "sha256": "ff1c24eb7467c048a4cbc11d043e74f8aaf7652188e4a9986ec367a06bcb065b"
   },
   "sns-wasm": {
-    "rev": "82974651eec2cd06daac3ff0658918e5e28f6f00",
-    "sha256": "d46236608fe8c5fd391f545d4dd75185a238af6fe3b74d1a39de0b4d8fc6c9e8"
+    "rev": "e114e3d7f4efef3dc9876b619e71deb79868640e",
+    "sha256": "a6f115c6ec5b54f1cf9392e5f6f0f2fb0a7846ccabfe2c221f8530998d366226"
   },
   "sns_aggregator_test": {
     "sha256": "58f3cdf3320adb0864ff2e7d880af5c9b75e056240ff47a9f3e6eda3b17066f1",
