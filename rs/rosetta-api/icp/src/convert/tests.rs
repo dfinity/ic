@@ -256,7 +256,9 @@ fn from_account_ai_to_ai_test() {
     assert_eq!(result, account_id);
 
     // Incorrect account id
-    let incorrect_ai = icp_ledger::protobuf::AccountIdentifier { hash: vec![1_u8; 2] };
+    let incorrect_ai = icp_ledger::protobuf::AccountIdentifier {
+        hash: vec![1_u8; 2],
+    };
     let error = from_account_or_account_identifier(None, Some(incorrect_ai)).unwrap_err();
     assert_eq!(
         error,
