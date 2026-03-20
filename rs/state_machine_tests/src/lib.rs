@@ -2768,50 +2768,87 @@ impl StateMachine {
                 | OrderedMessage::Response { source, target } => {
                     let is_mgmt = target == ic_management_canister_types_private::IC_00;
                     let dts_canister = if is_mgmt { source } else { target };
-                    let mut appeared = false;
 
+                    // Phase 1: wait for message to appear.
                     for tick in 0..MAX_TICKS {
-                        let in_queue = self.sender_in_queue(target, source);
+                        if self.sender_in_queue(target, source) {
+                            break;
+                        }
+                        if !self.has_in_flight_work(source) {
+                            panic!(
+                                "Message from {} will never appear in {}'s queue",
+                                source, target
+                            );
+                        }
+                        assert!(
+                            tick < MAX_TICKS - 1,
+                            "Timed out waiting for message from {} in {}'s queue",
+                            source,
+                            target
+                        );
+                        self.tick();
+                    }
+
+                    // Phase 2: consume exactly one message. message_count only
+                    // counts input queue messages (requests/responses/ingress).
+                    // Heartbeats and timers live in the separate task_queue, so
+                    // executing them doesn't change this count — the loop
+                    // naturally ticks through system tasks until an actual
+                    // input message is consumed.
+                    let count_before = self.message_count(target);
+                    for tick in 0..MAX_TICKS {
+                        if self.message_count(target) < count_before {
+                            break;
+                        }
+                        assert!(
+                            tick < MAX_TICKS - 1,
+                            "Message from {} stuck in {}'s queue",
+                            source,
+                            target
+                        );
+                        if !is_mgmt {
+                            self.set_ordering_target(Some(target));
+                        }
+                        self.tick();
+                    }
+
+                    // Phase 3: complete DTS if the message was sliced.
+                    for tick in 0..MAX_TICKS {
                         let has_dts = matches!(
                             self.get_latest_state()
                                 .canister_state(&dts_canister)
                                 .map(|c| c.next_execution()),
                             Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode)
                         );
-
-                        if in_queue {
-                            appeared = true;
-                        }
-
-                        // Done: message appeared, was consumed, and DTS finished.
-                        if appeared && !in_queue && !has_dts {
+                        if !has_dts {
                             break;
                         }
-
-                        // No progress possible — message never arriving.
-                        if !appeared && !self.has_in_flight_work(source) {
-                            panic!(
-                                "Message from {} will never appear in {}'s queue (no in-flight work)",
-                                source, target
-                            );
-                        }
-
                         assert!(
                             tick < MAX_TICKS - 1,
-                            "Stuck processing message from {} in {}'s queue (appeared={}, in_queue={}, has_dts={})",
-                            source,
-                            target,
-                            appeared,
-                            in_queue,
-                            has_dts
+                            "DTS on {} did not complete",
+                            dts_canister
                         );
-
-                        if appeared && !is_mgmt {
-                            self.set_ordering_target(Some(target));
-                        }
+                        self.set_ordering_target(Some(dts_canister));
                         self.tick();
                     }
                 }
+            }
+        }
+    }
+
+    /// Total input message count for a canister (or subnet_queues for IC_00).
+    fn message_count(&self, target: CanisterId) -> usize {
+        let state = self.get_latest_state();
+        if target == ic_management_canister_types_private::IC_00 {
+            state.subnet_queues().input_queues_message_count()
+                + state.subnet_queues().ingress_queue_message_count()
+        } else {
+            match state.canister_state(&target) {
+                Some(c) => {
+                    c.system_state.queues().input_queues_message_count()
+                        + c.system_state.queues().ingress_queue_message_count()
+                }
+                None => 0,
             }
         }
     }

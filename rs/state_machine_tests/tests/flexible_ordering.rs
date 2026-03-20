@@ -618,14 +618,13 @@ fn test_panics_without_flexible_ordering() {
 }
 
 // ============================================================================
-// Test 12: Two calls from A to B, processed in batch.
+// Test 12: Two calls from A to B, each Request/Response handled separately.
 //
-// When two requests from A are in B's queue simultaneously,
-// sender_in_queue can't distinguish them — both get consumed in one
-// Request step. We verify the overall result is correct.
+// Ingress(A,a) → Ingress(A,b) → Request(A→B) → Request(A→B) →
+// Response(B→A) → Response(B→A)
 // ============================================================================
 #[test]
-fn test_batched_calls_same_source() {
+fn test_two_calls_same_source_separate_steps() {
     let sm = setup();
     let canister_a = install_uc(&sm);
     let canister_b = install_uc(&sm);
@@ -656,15 +655,20 @@ fn test_batched_calls_same_source() {
         )
         .unwrap();
 
-    // Both ingress messages make calls A→B. We process them fully: the
-    // Request step consumes all pending A→B messages, and the Response
-    // step consumes all pending B→A responses.
     sm.execute_with_ordering(MessageOrdering(vec![
         OrderedMessage::Ingress(canister_a, ingress_a.clone()),
         OrderedMessage::Ingress(canister_a, ingress_b.clone()),
         OrderedMessage::Request {
             source: canister_a,
             target: canister_b,
+        },
+        OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        },
+        OrderedMessage::Response {
+            source: canister_b,
+            target: canister_a,
         },
         OrderedMessage::Response {
             source: canister_b,
