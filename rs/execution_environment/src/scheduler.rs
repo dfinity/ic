@@ -28,6 +28,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
 use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
@@ -1059,8 +1060,7 @@ impl SchedulerImpl {
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
                 let canister = canister_states.get_mut(&rs.canister_id()).unwrap();
-                self.exec_env
-                    .abort_canister(canister, subnet_schedule, &self.log);
+                abort_canister(canister, subnet_schedule, &self.exec_env, &self.log);
             });
     }
 
@@ -1087,7 +1087,7 @@ impl SchedulerImpl {
                 state.metadata.expected_compiled_wasms.clear();
 
                 // Abort all paused execution before the checkpoint.
-                self.exec_env.abort_all_paused_executions(state, &self.log);
+                abort_all_paused_executions(state, &self.exec_env, &self.log);
             }
             ExecutionRoundType::OrdinaryRound => {
                 self.abort_paused_executions_above_limit(state);
@@ -2103,4 +2103,37 @@ fn scheduled_heap_delta_limit(
         .get()
         .saturating_sub(remaining_heap_delta_reserve)
         .into()
+}
+
+/// Aborts the paused execution, if any, of the given canister.
+///
+/// If a paused execution was aborted, resets the canister's priority credit to
+/// zero. Canisters must not be charged for aborted DTS executions.
+fn abort_canister(
+    canister: &mut Arc<CanisterState>,
+    subnet_schedule: &mut SubnetSchedule,
+    exec_env: &ExecutionEnvironment,
+    log: &ReplicaLogger,
+) {
+    if exec_env.abort_canister(canister, log) {
+        // Reset the priority credit to zero.
+        subnet_schedule
+            .get_mut(canister.canister_id())
+            .priority_credit = Default::default();
+    }
+}
+
+/// Aborts all paused executions in the given state.
+///
+/// Public for testing only.
+#[doc(hidden)]
+pub fn abort_all_paused_executions(
+    state: &mut ReplicatedState,
+    exec_env: &ExecutionEnvironment,
+    log: &ReplicaLogger,
+) {
+    let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
+    for canister in canister_states.values_mut() {
+        abort_canister(canister, subnet_schedule, exec_env, log);
+    }
 }
