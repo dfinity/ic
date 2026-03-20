@@ -18,9 +18,6 @@ use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-mod ordered_utxoset;
-use ordered_utxoset::OrderedUtxoSet;
-
 #[derive(Deserialize, candid::CandidType)]
 pub struct GetEventsArg {
     pub start: u64,
@@ -356,7 +353,6 @@ impl EventLogger for CkBtcEventLogger {
             None => return Err(ReplayLogError::EmptyLog),
         };
 
-        let mut received_utxos = OrderedUtxoSet::new(100);
         let mut dup_received = BTreeSet::new();
         let mut rejected_sent = BTreeSet::new();
 
@@ -385,12 +381,11 @@ impl EventLogger for CkBtcEventLogger {
                     let utxos = utxos
                         .into_iter()
                         .filter(|utxo| {
-                            if received_utxos.contains(utxo) {
+                            if state.minted_outpoints.contains(&utxo.outpoint) {
                                 state.checked_utxos.remove(utxo);
                                 dup_received.insert(utxo.clone());
                                 false
                             } else {
-                                received_utxos.insert(utxo.clone());
                                 true
                             }
                         })
