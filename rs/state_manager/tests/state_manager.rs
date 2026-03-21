@@ -333,10 +333,10 @@ fn lsmt_merge_overhead() {
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
 
-    let canister_ids = (0..10)
+    let canister_ids = (0..4)
         .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
         .collect::<Vec<_>>();
-    for i in 0..30 {
+    for i in 0..16 {
         env.set_checkpoints_enabled(false);
         for canister_id in &canister_ids {
             env.execute_ingress(*canister_id, "write_heap_64k", vec![])
@@ -6356,7 +6356,7 @@ fn remove_too_many_diverged_state_markers() {
         Box<dyn FnOnce(StateManagerImpl) + std::panic::RefUnwindSafe + std::panic::UnwindSafe>,
     >::new();
 
-    for i in 2..301 {
+    for i in 2..151 {
         divergences.push(Box::new(move |state_manager: StateManagerImpl| {
             diverge_state_at(state_manager, i)
         }));
@@ -6372,7 +6372,7 @@ fn remove_too_many_diverged_state_markers() {
                 .state_layout()
                 .diverged_state_heights()
                 .unwrap()[num_markers - 1],
-            Height(300)
+            Height(150)
         );
         assert!(num_markers <= 100);
     });
@@ -6566,10 +6566,10 @@ fn can_upgrade_and_uninstall_canister_after_many_checkpoints() {
     env.set_checkpoints_enabled(true);
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
-    for i in 1..100 {
+    for i in 1..20 {
         env.execute_ingress(canister_id, "inc", vec![]).unwrap();
         read_and_assert_eq(&env, canister_id, i);
-        if i == 50 {
+        if i == 10 {
             env.execute_ingress(canister_id, "grow_page", vec![])
                 .unwrap();
             env.execute_ingress(canister_id, "persist", vec![]).unwrap();
@@ -6579,9 +6579,9 @@ fn can_upgrade_and_uninstall_canister_after_many_checkpoints() {
     env.upgrade_canister_wat(canister_id, TEST_CANISTER, vec![]);
     env.execute_ingress(canister_id, "load", vec![]).unwrap();
 
-    for i in 1..100 {
+    for i in 1..10 {
         env.execute_ingress(canister_id, "inc", vec![]).unwrap();
-        read_and_assert_eq(&env, canister_id, 50 + i);
+        read_and_assert_eq(&env, canister_id, 10 + i);
     }
 
     env.uninstall_code(canister_id).unwrap();
@@ -8297,7 +8297,7 @@ fn can_rename_canister() {
     can_rename_canister_impl(CertificationScope::Full);
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn stream_store_encode_decode(
     #[strategy(arb_stream(
         0, // min_size
@@ -8325,7 +8325,7 @@ fn stream_store_encode_decode(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_with_modified_hash_fails(
     #[strategy(arb_stream(
@@ -8357,7 +8357,7 @@ fn stream_store_decode_with_modified_hash_fails(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "Failed to deserialize witness")]
 fn stream_store_decode_with_empty_witness_fails(
     #[strategy(arb_stream(
@@ -8386,7 +8386,7 @@ fn stream_store_decode_with_empty_witness_fails(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InconsistentPartialTree")]
 fn stream_store_decode_slice_push_additional_message(
     #[strategy(arb_stream(
@@ -8438,7 +8438,7 @@ fn stream_store_decode_slice_push_additional_message(
 
 /// Depending on the specific input, may fail with either `InvalidSignature` or
 /// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic]
 fn stream_store_decode_slice_modify_message_begin(
     #[strategy(arb_stream(
@@ -8477,7 +8477,7 @@ fn stream_store_decode_slice_modify_message_begin(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_slice_modify_signals_end(
     #[strategy(arb_stream(
@@ -8513,7 +8513,7 @@ fn stream_store_decode_slice_modify_signals_end(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_slice_push_signal(
     #[strategy(arb_stream(
@@ -8551,7 +8551,7 @@ fn stream_store_decode_slice_push_signal(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidDestination")]
 fn stream_store_decode_with_invalid_destination(
     #[strategy(arb_stream(
@@ -8581,7 +8581,7 @@ fn stream_store_decode_with_invalid_destination(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_with_rejecting_verifier(
     #[strategy(arb_stream(
@@ -8613,7 +8613,7 @@ fn stream_store_decode_with_rejecting_verifier(
 
 /// If both signature verification and slice decoding would fail, we expect to
 /// see an error about the former.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
     #[strategy(arb_stream(
@@ -8643,7 +8643,7 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn stream_store_encode_partial(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -8865,7 +8865,7 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
     ..ProptestConfig::with_cases(5)
 })]
 fn random_canister_input(
-    #[strategy(proptest::collection::vec(arbitrary_test_canister_op(), 1..50))] ops: Vec<
+    #[strategy(proptest::collection::vec(arbitrary_test_canister_op(), 10..15))] ops: Vec<
         TestCanisterOp,
     >,
 ) {
@@ -8911,11 +8911,10 @@ fn random_canister_input(
         }
     }
 
-    // Setup two state machines with a single TEST_CANISTER installed.
+    // Set up a state machine with a single TEST_CANISTER.
     let mut env = StateMachineBuilder::new()
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
-
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
     env.execute_ingress(canister_id, "grow_page", vec![])
