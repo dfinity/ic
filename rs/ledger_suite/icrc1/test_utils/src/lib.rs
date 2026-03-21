@@ -246,7 +246,11 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::FeeCollector { .. }
                 | Operation::Pause { .. }
                 | Operation::Unpause { .. }
-                | Operation::Deactivate { .. } => None,
+                | Operation::Deactivate { .. }
+                | Operation::FreezeAccount { .. }
+                | Operation::UnfreezeAccount { .. }
+                | Operation::FreezePrincipal { .. }
+                | Operation::UnfreezePrincipal { .. } => None,
             };
             let btype = match transaction.operation {
                 Operation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
@@ -610,7 +614,13 @@ impl TransactionsAndBalances {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
-            Operation::Pause { .. } | Operation::Unpause { .. } | Operation::Deactivate { .. } => {
+            Operation::Pause { .. }
+            | Operation::Unpause { .. }
+            | Operation::Deactivate { .. }
+            | Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => {
                 // No balance changes
             }
         };
@@ -643,7 +653,13 @@ impl TransactionsAndBalances {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
-            Operation::Pause { .. } | Operation::Unpause { .. } | Operation::Deactivate { .. } => {
+            Operation::Pause { .. }
+            | Operation::Unpause { .. }
+            | Operation::Deactivate { .. }
+            | Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => {
                 // No balance changes
             }
         }

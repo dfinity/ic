@@ -543,7 +543,11 @@ where
                 }
                 Operation::Pause { .. }
                 | Operation::Unpause { .. }
-                | Operation::Deactivate { .. } => {
+                | Operation::Deactivate { .. }
+                | Operation::FreezeAccount { .. }
+                | Operation::UnfreezeAccount { .. }
+                | Operation::FreezePrincipal { .. }
+                | Operation::UnfreezePrincipal { .. } => {
                     // No balance changes
                 }
             }

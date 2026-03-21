@@ -7,9 +7,12 @@ use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc3::transactions::{
-    Approve, Burn, FeeCollector, ManagementAction, Mint, TRANSACTION_124_DEACTIVATE,
-    TRANSACTION_124_PAUSE, TRANSACTION_124_UNPAUSE, TRANSACTION_APPROVE, TRANSACTION_BURN,
-    TRANSACTION_FEE_COLLECTOR, TRANSACTION_MINT, TRANSACTION_TRANSFER, Transaction, Transfer,
+    Approve, Burn, FeeCollector, FreezeAccountAction, FreezePrincipalAction, ManagementAction,
+    Mint, TRANSACTION_123_FREEZE_ACCOUNT, TRANSACTION_123_FREEZE_PRINCIPAL,
+    TRANSACTION_123_UNFREEZE_ACCOUNT, TRANSACTION_123_UNFREEZE_PRINCIPAL,
+    TRANSACTION_124_DEACTIVATE, TRANSACTION_124_PAUSE, TRANSACTION_124_UNPAUSE,
+    TRANSACTION_APPROVE, TRANSACTION_BURN, TRANSACTION_FEE_COLLECTOR, TRANSACTION_MINT,
+    TRANSACTION_TRANSFER, Transaction, Transfer,
 };
 use serde::Deserialize;
 
@@ -289,6 +292,66 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             } => {
                 tx.kind = TRANSACTION_124_DEACTIVATE.to_string();
                 tx.deactivate = Some(ManagementAction {
+                    caller,
+                    reason,
+                    ts: created_at_time,
+                    mthd,
+                });
+            }
+            Operation::FreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_123_FREEZE_ACCOUNT.to_string();
+                tx.freeze_account = Some(FreezeAccountAction {
+                    account,
+                    caller,
+                    reason,
+                    ts: created_at_time,
+                    mthd,
+                });
+            }
+            Operation::UnfreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_123_UNFREEZE_ACCOUNT.to_string();
+                tx.unfreeze_account = Some(FreezeAccountAction {
+                    account,
+                    caller,
+                    reason,
+                    ts: created_at_time,
+                    mthd,
+                });
+            }
+            Operation::FreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_123_FREEZE_PRINCIPAL.to_string();
+                tx.freeze_principal = Some(FreezePrincipalAction {
+                    principal,
+                    caller,
+                    reason,
+                    ts: created_at_time,
+                    mthd,
+                });
+            }
+            Operation::UnfreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_123_UNFREEZE_PRINCIPAL.to_string();
+                tx.unfreeze_principal = Some(FreezePrincipalAction {
+                    principal,
                     caller,
                     reason,
                     ts: created_at_time,

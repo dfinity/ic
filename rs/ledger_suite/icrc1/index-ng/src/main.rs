@@ -1113,7 +1113,11 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
             }
             | Operation::Pause { .. }
             | Operation::Unpause { .. }
-            | Operation::Deactivate { .. } => {
+            | Operation::Deactivate { .. }
+            | Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => {
                 // Does not affect the balance
             }
         },
@@ -1161,7 +1165,11 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
         Operation::FeeCollector { .. }
         | Operation::Pause { .. }
         | Operation::Unpause { .. }
-        | Operation::Deactivate { .. } => vec![],
+        | Operation::Deactivate { .. }
+        | Operation::FreezeAccount { .. }
+        | Operation::UnfreezeAccount { .. }
+        | Operation::FreezePrincipal { .. }
+        | Operation::UnfreezePrincipal { .. } => vec![],
     }
 }
 
