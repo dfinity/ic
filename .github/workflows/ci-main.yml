@@ -151,6 +151,37 @@ jobs:
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
           echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
+  bazel-test-orchestrator:
+    name: Bazel Test orchestrator_test
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 150
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: ./.github/actions/netrc
+      - name: "Node Name"
+        run: |
+          echo "::notice::Node Name: ${NODE_NAME}"
+
+      - name: Run Bazel Commands
+        uses: ./.github/actions/bazel
+        with:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          execlogs-artifact-name: execlogs-bazel-test-orchestrator
+          invocation-names: |
+            test
+          run: |
+            set -euo pipefail
+
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
+
+            bazel test //rs/orchestrator:orchestrator_test --cache_test_results=no --runs_per_test=100 --jobs=10
+
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
