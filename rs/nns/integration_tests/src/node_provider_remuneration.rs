@@ -1112,9 +1112,10 @@ fn add_node(
 /// This avoids date-boundary flakiness: `wait_for_rewards_minting` advances
 /// time by up to 500 seconds, which can push governance's `end_date` past a
 /// date boundary when the time-of-day happens to be close to midnight.
+const NOON_OFFSET_SECONDS: u64 = ONE_DAY_SECONDS / 2;
 fn advance_to_next_noon(state_machine: &StateMachine) {
     let secs = state_machine.get_time().as_secs_since_unix_epoch();
-    let next_noon = (secs / ONE_DAY_SECONDS + 1) * ONE_DAY_SECONDS + 43200;
+    let next_noon = (secs / ONE_DAY_SECONDS + 1) * ONE_DAY_SECONDS + NOON_OFFSET_SECONDS;
     state_machine.set_time(SystemTime::UNIX_EPOCH + Duration::from_secs(next_noon));
 }
 
