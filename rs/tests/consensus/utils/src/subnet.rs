@@ -67,7 +67,7 @@ pub fn assert_subnet_is_healthy(
         node.get_ip_addr()
     );
     // Wait until all nodes answer with the new message.
-    // Use 30 retries (5s each = 150s) to give nodes enough time to sync state,
+    // Use 30 retries (up to ~155s total with 5s sleeps) to give nodes enough time to sync state,
     // especially after recovery operations.
     for node in subnet {
         assert!(
