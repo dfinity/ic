@@ -90,7 +90,6 @@ impl XNetPayloadBuilderFixture {
             Some(0), // Always try to add one more slice.
             slice_pool,
             refill_task_handle,
-            SubnetType::Application,
             metrics,
             fixture.log,
         );

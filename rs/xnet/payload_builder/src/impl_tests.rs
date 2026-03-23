@@ -60,7 +60,6 @@ async fn expected_stream_indices() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            SubnetType::Application,
             &MetricsRegistry::new(),
             log,
         );
@@ -401,7 +400,7 @@ async fn validate_slice_invalid_signature() {
         let state_manager = FakeStateManager::new();
         let state_manager = Arc::new(state_manager);
         let tls_handshake = Arc::new(MockTlsConfig::new());
-        let registry = get_empty_registry_for_test();
+        let registry = get_simple_registry_for_test();
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             state_manager,
             certified_stream_store,
@@ -410,7 +409,6 @@ async fn validate_slice_invalid_signature() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            SubnetType::Application,
             &MetricsRegistry::new(),
             log,
         );
@@ -743,7 +741,7 @@ fn get_xnet_payload_builder_for_test(
     state_manager: FakeStateManager,
     log: ReplicaLogger,
 ) -> XNetPayloadBuilderImpl {
-    let registry = get_empty_registry_for_test();
+    let registry = get_simple_registry_for_test();
     let state_manager = Arc::new(state_manager);
     let tls_handshake = Arc::new(MockTlsConfig::new());
     XNetPayloadBuilderImpl::new(
@@ -754,7 +752,6 @@ fn get_xnet_payload_builder_for_test(
         tokio::runtime::Handle::current(),
         LOCAL_NODE,
         LOCAL_SUBNET,
-        SubnetType::Application,
         &MetricsRegistry::new(),
         log,
     )

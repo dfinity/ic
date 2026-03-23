@@ -67,6 +67,13 @@ pub(crate) const OPERATOR_2: PrincipalId = PrincipalId::new(1, [2; 29]);
 pub(crate) fn get_xnet_state_for_testing(
     state_manager: &FakeStateManager,
 ) -> (Vec<XNetPayload>, BTreeMap<SubnetId, ExpectedIndices>) {
+    get_xnet_state_for_testing_with_subnet_type(state_manager, None)
+}
+
+pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
+    state_manager: &FakeStateManager,
+    own_subnet_type: Option<SubnetType>,
+) -> (Vec<XNetPayload>, BTreeMap<SubnetId, ExpectedIndices>) {
     // A `ReplicatedState` with existing streams for `SUBNET_1` and `SUBNET_2`.
     let stream_1 = generate_stream(&StreamConfig {
         message_begin: 10,
@@ -80,9 +87,10 @@ pub(crate) fn get_xnet_state_for_testing(
         signal_end: 5,
     });
 
-    put_replicated_state_for_testing(
+    put_replicated_state_for_testing_with_subnet_type(
         state_manager,
         btreemap![SUBNET_1 => stream_1, SUBNET_2 => stream_2],
+        own_subnet_type,
     );
 
     // An `XNetPayload` with `CertifiedStreamSlices` from `SUBNET_1` and `SUBNET_3`.
@@ -168,12 +176,23 @@ pub(crate) fn put_replicated_state_for_testing(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     streams: StreamMap,
 ) {
+    put_replicated_state_for_testing_with_subnet_type(state_manager, streams, None);
+}
+
+pub(crate) fn put_replicated_state_for_testing_with_subnet_type(
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    streams: StreamMap,
+    own_subnet_type: Option<SubnetType>,
+) {
     let (mut height, mut state) = state_manager.take_tip();
     while height < CERTIFIED_HEIGHT.decrement() {
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
         (height, state) = state_manager.take_tip();
     }
     state.with_streams(streams);
+    if let Some(subnet_type) = own_subnet_type {
+        state.metadata.own_subnet_type = subnet_type;
+    }
     state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 }
 
@@ -324,6 +343,24 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
         ));
     }
 
+    // Register subnet records for any additional subnets in `subnet_types` that
+    // were not already covered by `subnet_count`.
+    for (&subnet_id, &subnet_type) in &subnet_types {
+        if subnets.iter().any(|s| s == &subnet_id.get().into_vec()) {
+            continue;
+        }
+        subnets.push(subnet_id.get().into_vec());
+        let mut subnet_record = test_subnet_record();
+        subnet_record.subnet_type = i32::from(subnet_type);
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id),
+                REGISTRY_VERSION,
+                Some(subnet_record),
+            )
+            .expect("Could not add subnet record.");
+    }
+
     // Add lists of subnets.
     data_provider
         .add(
@@ -338,21 +375,20 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
     (registry_client, urls)
 }
 
-/// Generates a `RegistryClient` at version zero, i.e. with no records.
-pub fn get_empty_registry_for_test() -> Arc<dyn RegistryClient> {
-    let data_provider = ProtoRegistryDataProvider::new();
-    // We add a node record for the local node as this is required for the
-    // XNetPayloadBuilder to start.
-    data_provider
-        .add(
-            &make_node_record_key(LOCAL_NODE),
-            REGISTRY_VERSION,
-            Some(NodeRecord::default()),
-        )
-        .expect("Could not add node record.");
-    let registry_client = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
-    registry_client.update_to_latest_version();
-    registry_client
+/// Generates a `RegistryClient` with a local node record and subnet records
+/// for `SUBNET_1` through `SUBNET_4` (all as `Application`).
+pub fn get_simple_registry_for_test() -> Arc<dyn RegistryClient> {
+    let (registry, _) = get_registry_and_urls_for_test_with_subnet_types(
+        0,
+        btreemap![],
+        btreemap![
+            SUBNET_1 => SubnetType::Application,
+            SUBNET_2 => SubnetType::Application,
+            SUBNET_3 => SubnetType::Application,
+            SUBNET_4 => SubnetType::Application,
+        ],
+    );
+    registry
 }
 
 /// Adds a node record with the given values to the given data provider.
