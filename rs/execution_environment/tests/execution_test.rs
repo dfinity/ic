@@ -2987,7 +2987,6 @@ fn maximum_state_delta() {
     );
     for _ in 0..350 {
         env.tick();
-        println!("status: {:?}", env.ingress_status(&msg_id));
     }
     assert!(!has_completed(&env, &msg_id));
     for _ in 0..100 {
