@@ -523,6 +523,10 @@ impl ReplicatedState {
             .map(|canister| canister.as_ref())
     }
 
+    pub fn canister_state_arc(&self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
+        self.canister_states.get(canister_id).cloned()
+    }
+
     /// Makes a mutable reference to the canister state, cloning it if necessary.
     ///
     /// Make sure to only call this when actually mutating the canister state.
