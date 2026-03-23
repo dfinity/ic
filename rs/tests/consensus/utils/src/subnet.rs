@@ -69,13 +69,35 @@ pub fn assert_subnet_is_healthy(
     // Wait until all nodes answer with the new message.
     // Use 30 retries (up to ~155s total with 5s sleeps) to give nodes enough time to sync state,
     // especially after recovery operations.
-    for node in subnet {
-        assert!(
-            can_read_msg_with_retries(logger, &node.get_public_url(), can_id, new_msg, 30),
-            "Failed to read new message on {}",
-            node.get_ip_addr()
-        );
-    }
+    let failures: Vec<_> = std::thread::scope(|s| {
+        let handles: Vec<_> = subnet
+            .iter()
+            .map(|node| {
+                s.spawn(|| {
+                    let ok = can_read_msg_with_retries(
+                        logger,
+                        &node.get_public_url(),
+                        can_id,
+                        new_msg,
+                        30,
+                    );
+                    (ok, node.get_ip_addr())
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .filter_map(|h| {
+                let (ok, ip) = h.join().expect("thread panicked");
+                if ok { None } else { Some(ip) }
+            })
+            .collect()
+    });
+    assert!(
+        failures.is_empty(),
+        "Failed to read new message on: {:?}",
+        failures
+    );
 }
 
 /// Enable Chain key and signing on the subnet using the given NNS node.
