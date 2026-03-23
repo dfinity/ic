@@ -28,6 +28,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
 use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
@@ -1083,12 +1084,13 @@ impl SchedulerImpl {
             .collect::<Vec<_>>();
         paused_round_states.sort();
 
+        let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         paused_round_states
             .iter()
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
-                let canister = state.canister_state_mut_arc(&rs.canister_id()).unwrap();
-                self.exec_env.abort_canister(canister, &self.log);
+                let canister = canister_states.get_mut(&rs.canister_id()).unwrap();
+                abort_canister(canister, subnet_schedule, &self.exec_env, &self.log);
             });
     }
 
@@ -1109,10 +1111,10 @@ impl SchedulerImpl {
                 // The set of compiled Wasms must be cleared when taking a
                 // checkpoint to keep it in sync with the protobuf serialization
                 // of `ReplicatedState` which doesn't store this field.
-                state.metadata.expected_compiled_wasms.clear();
+                state.metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
 
                 // Abort all paused execution before the checkpoint.
-                self.exec_env.abort_all_paused_executions(state, &self.log);
+                abort_all_paused_executions(state, &self.exec_env, &self.log);
             }
             ExecutionRoundType::OrdinaryRound => {
                 self.abort_paused_executions_above_limit(state);
@@ -1595,6 +1597,12 @@ impl Scheduler for SchedulerImpl {
                 );
             }
 
+            // Update canister priorities.
+            {
+                let _timer = self.metrics.round_finalization_scheduling.start_timer();
+                round_schedule.finish_round(&mut final_state, fully_executed_canister_ids);
+            }
+
             self.finish_round(
                 &mut final_state,
                 current_round,
@@ -1607,12 +1615,6 @@ impl Scheduler for SchedulerImpl {
                 .update_transactions_total += root_measurement_scope.messages().get();
             final_state.metadata.subnet_metrics.num_canisters =
                 final_state.canister_states().len() as u64;
-        }
-
-        // Update canister priorities.
-        {
-            let _timer = self.metrics.round_scheduling_duration.start_timer();
-            round_schedule.finish_round(&mut final_state, fully_executed_canister_ids);
         }
 
         final_state
@@ -2181,4 +2183,37 @@ fn scheduled_heap_delta_limit(
         .get()
         .saturating_sub(remaining_heap_delta_reserve)
         .into()
+}
+
+/// Aborts the paused execution, if any, of the given canister.
+///
+/// If a paused execution was aborted, resets the canister's priority credit to
+/// zero. Canisters must not be charged for aborted DTS executions.
+fn abort_canister(
+    canister: &mut Arc<CanisterState>,
+    subnet_schedule: &mut SubnetSchedule,
+    exec_env: &ExecutionEnvironment,
+    log: &ReplicaLogger,
+) {
+    if exec_env.abort_canister(canister, log) {
+        // Reset the priority credit to zero.
+        subnet_schedule
+            .get_mut(canister.canister_id())
+            .priority_credit = Default::default();
+    }
+}
+
+/// Aborts all paused executions in the given state.
+///
+/// Public for testing only.
+#[doc(hidden)]
+pub fn abort_all_paused_executions(
+    state: &mut ReplicatedState,
+    exec_env: &ExecutionEnvironment,
+    log: &ReplicaLogger,
+) {
+    let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
+    for canister in canister_states.values_mut() {
+        abort_canister(canister, subnet_schedule, exec_env, log);
+    }
 }
