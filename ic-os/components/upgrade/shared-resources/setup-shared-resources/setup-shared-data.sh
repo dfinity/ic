@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ex
+set -e
 
 DEVICE=/dev/mapper/store-shared--data
 
