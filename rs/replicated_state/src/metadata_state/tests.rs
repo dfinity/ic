@@ -1210,7 +1210,7 @@ fn network_topology_route_uses_filtered_topology() {
     // The filtered routing table only contains subnet_a's range.
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0u64), end: CanisterId::from(99u64) } => subnet_a,
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
         })
         .unwrap(),
     );
@@ -1249,10 +1249,18 @@ fn network_topology_route_uses_filtered_topology() {
 fn subnets_with_engines_falls_back_to_filtered() {
     let subnet_a = subnet_test_id(1);
 
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+        })
+        .unwrap(),
+    );
+
     let network_topology = NetworkTopology {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
         },
+        routing_table,
         ..Default::default()
     };
 
@@ -1280,8 +1288,15 @@ fn subnets_with_engines_returns_full_topology_when_set() {
     };
     let full_routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0u64), end: CanisterId::from(99u64) } => subnet_a,
-            CanisterIdRange { start: CanisterId::from(100u64), end: CanisterId::from(199u64) } => subnet_b,
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+            CanisterIdRange { start: CanisterId::from(100_u64), end: CanisterId::from(199_u64) } => subnet_b,
+        })
+        .unwrap(),
+    );
+
+    let filtered_routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
         })
         .unwrap(),
     );
@@ -1290,6 +1305,7 @@ fn subnets_with_engines_returns_full_topology_when_set() {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
         },
+        routing_table: filtered_routing_table,
         ..Default::default()
     };
     network_topology.set_full_topology(Some(FullTopology {

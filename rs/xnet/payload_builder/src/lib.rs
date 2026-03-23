@@ -20,6 +20,7 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
 use ic_config::message_routing::MAX_STREAM_MESSAGES;
 use ic_crypto_tls_interfaces::TlsConfig;
+use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces::messaging::{
     InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
     XNetPayloadValidationFailure,
@@ -652,11 +653,22 @@ impl XNetPayloadBuilderImpl {
                 ));
             }
             Ok(Some(_)) => {}
-            other => {
+            Ok(None) => {
                 return SliceValidationResult::Invalid(format!(
-                    "Unable to determine subnet type of subnet {}: {:?}",
-                    subnet_id, other
+                    "No subnet type for subnet {}",
+                    subnet_id
                 ));
+            }
+            Err(err) => {
+                let msg = format!(
+                    "Unable to determine subnet type of subnet {}: Err({})",
+                    subnet_id, err
+                );
+                if err.is_reproducible() {
+                    return SliceValidationResult::Invalid(msg);
+                } else {
+                    return SliceValidationResult::TransientRegistryError(msg);
+                }
             }
         }
 
@@ -933,7 +945,8 @@ impl XNetPayloadBuilderImpl {
                         return Some((slice, message_count, slice_bytes));
                     }
 
-                    SliceValidationResult::Invalid(_) => {
+                    SliceValidationResult::Invalid(_)
+                    | SliceValidationResult::TransientRegistryError(_) => {
                         info!(
                             self.log,
                             "Invalid slice from {}: {:?}. Referenced certified height {}. Gap to chain tip {}.",
@@ -1253,6 +1266,13 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                         .observe_validate_duration(VALIDATION_STATUS_INVALID, since);
                     return Err(ValidationError::InvalidArtifact(
                         InvalidXNetPayload::InvalidSlice(reason),
+                    ));
+                }
+                SliceValidationResult::TransientRegistryError(reason) => {
+                    self.metrics
+                        .observe_validate_duration(VALIDATION_STATUS_ERROR, since);
+                    return Err(ValidationError::ValidationFailed(
+                        XNetPayloadValidationFailure::TransientRegistryError(reason),
                     ));
                 }
                 SliceValidationResult::Empty => {
@@ -1643,6 +1663,8 @@ enum SliceValidationResult {
     },
     /// Slice is invalid for the given reason.
     Invalid(String),
+    /// Validation could not be completed due to a transient registry error.
+    TransientRegistryError(String),
     /// Slice is empty.
     Empty,
 }
@@ -1655,6 +1677,7 @@ impl SliceValidationResult {
         match self {
             SliceValidationResult::Valid { .. } => "Valid",
             SliceValidationResult::Invalid(_) => "Invalid",
+            SliceValidationResult::TransientRegistryError(_) => "TransientRegistryError",
             SliceValidationResult::Empty => "Empty",
         }
     }

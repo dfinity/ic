@@ -660,7 +660,7 @@ async fn validate_rejects_slice_from_unknown_subnet() {
             ),
             Err(ValidationError::InvalidArtifact(
                 InvalidXNetPayload::InvalidSlice(msg)
-            )) if msg.contains("Unable to determine subnet type")
+            )) if msg.contains("No subnet type for subnet")
         );
     });
 }
