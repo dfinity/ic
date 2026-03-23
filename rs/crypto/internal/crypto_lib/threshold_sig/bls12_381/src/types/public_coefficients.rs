@@ -82,8 +82,8 @@ impl PublicCoefficients {
     ) -> Result<G1Projective, ThresholdError> {
         let all_x: Vec<NodeIndex> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
-        let pts: Vec<_> = samples.iter().map(|(_, pt)| pt.clone()).collect();
-        Ok(G1Projective::muln_affine_vartime(&pts, &coefficients))
+        let pts: Vec<_> = samples.iter().map(|(_, pt)| pt).collect();
+        Ok(G1Projective::muln_affine_vartime_ref(&pts, &coefficients))
     }
 
     /// Given a list of samples `(x, f(x) * g)` for a polynomial `f` in the scalar field, and a generator g of G2 returns
@@ -98,8 +98,8 @@ impl PublicCoefficients {
     ) -> Result<G2Projective, ThresholdError> {
         let all_x: Vec<NodeIndex> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
-        let pts: Vec<_> = samples.iter().map(|(_, pt)| pt.clone()).collect();
-        Ok(G2Projective::muln_affine_vartime(&pts, &coefficients))
+        let pts: Vec<_> = samples.iter().map(|(_, pt)| pt).collect();
+        Ok(G2Projective::muln_affine_vartime_ref(&pts, &coefficients))
     }
 
     /// Compute the Lagrange coefficients at x=0.
@@ -123,9 +123,7 @@ impl PublicCoefficients {
 
         let indices = NodeIndices::from_slice(samples).map_err(|_| ThresholdError::DuplicateX)?;
 
-        Ok(LagrangeCoefficients::at_zero(&indices)
-            .coefficients()
-            .to_vec())
+        Ok(LagrangeCoefficients::at_zero(&indices).into_coefficients())
     }
 }
 

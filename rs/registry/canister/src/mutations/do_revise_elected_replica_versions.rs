@@ -185,26 +185,6 @@ impl Registry {
         })
         .expect("BlessedReplicaVersions key not found in registry")
     }
-
-    pub fn get_all_blessed_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
-        let version = self.latest_version();
-        self.get_blessed_replica_version_ids()
-            .iter()
-            .filter_map(|version_id| {
-                self.get(make_replica_version_key(version_id).as_bytes(), version)
-                    .and_then(|reg_value| {
-                        ReplicaVersionRecord::decode(reg_value.value.as_slice())
-                            .ok()?
-                            .guest_launch_measurements
-                    })
-            })
-            .flat_map(|glm| {
-                glm.guest_launch_measurements
-                    .into_iter()
-                    .map(|m| m.measurement)
-            })
-            .collect()
-    }
 }
 
 /// The payload of a proposal to update elected replica versions.

@@ -16,6 +16,7 @@ path = "bin/principal_to_hex.rs"
 
 [dependencies]
 askama = { workspace = true }
+canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
 evm_rpc_client = { workspace = true }
@@ -74,4 +75,5 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [features]
+canbench-rs = ["dep:canbench-rs"]
 debug_checks = []

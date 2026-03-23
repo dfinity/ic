@@ -65,7 +65,7 @@ impl TryFrom<ConsensusMessage> for BackupArtifact {
             RandomBeacon(artifact) => Ok(BackupArtifact::RandomBeacon(artifact)),
             CatchUpPackage(artifact) => Ok(BackupArtifact::CatchUpPackage((
                 artifact.height(),
-                pb::CatchUpPackage::from(&artifact),
+                pb::CatchUpPackage::from(artifact),
             ))),
             // Do not replace by a `_` so that we evaluate at this place if we want to
             // backup a new artifact!
@@ -572,7 +572,7 @@ impl Drop for Backup {
 impl BackupArtifact {
     /// Writes the protobuf serialization of the artifact into a file in the given
     /// directory.
-    pub fn write_to_disk(&self, path: &Path) -> Result<(), std::io::Error> {
+    pub fn write_to_disk(self, path: &Path) -> Result<(), std::io::Error> {
         let (file_directory, file_name) = self.file_location(path);
         // Create the path if necessary.
         fs::create_dir_all(&file_directory)?;
@@ -584,7 +584,7 @@ impl BackupArtifact {
     }
 
     /// Serializes the artifact to protobuf.
-    pub fn serialize(&self) -> Result<Vec<u8>, io::Error> {
+    pub fn serialize(self) -> Result<Vec<u8>, io::Error> {
         let mut buf = Vec::new();
         use BackupArtifact::*;
         match self {
@@ -645,7 +645,9 @@ mod tests {
     fn test_random_tape_conversion() {
         let artifact = RandomTape::fake(RandomTapeContent::new(Height::from(22)));
         let mut buf = Vec::new();
-        pb::RandomTape::from(&artifact).encode(&mut buf).unwrap();
+        pb::RandomTape::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             RandomTape::try_from(pb::RandomTape::decode(buf.as_slice()).unwrap()).unwrap()
@@ -659,7 +661,9 @@ mod tests {
             CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
         ));
         let mut buf = Vec::new();
-        pb::Finalization::from(&artifact).encode(&mut buf).unwrap();
+        pb::Finalization::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             Finalization::try_from(pb::Finalization::decode(buf.as_slice()).unwrap()).unwrap()
@@ -673,7 +677,9 @@ mod tests {
             CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
         ));
         let mut buf = Vec::new();
-        pb::Notarization::from(&artifact).encode(&mut buf).unwrap();
+        pb::Notarization::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             Notarization::try_from(pb::Notarization::decode(buf.as_slice()).unwrap()).unwrap()
@@ -700,7 +706,9 @@ mod tests {
             node_test_id(333),
         );
         let mut buf = Vec::new();
-        pb::BlockProposal::from(&artifact).encode(&mut buf).unwrap();
+        pb::BlockProposal::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             BlockProposal::try_from(pb::BlockProposal::decode(buf.as_slice()).unwrap()).unwrap()

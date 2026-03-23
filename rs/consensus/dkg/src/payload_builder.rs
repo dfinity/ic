@@ -158,7 +158,7 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
-    let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
+    let (all_dealings, _) = utils::get_dkg_dealings(pool_reader, parent);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
@@ -1152,7 +1152,7 @@ mod tests {
                     )],
                 );
 
-                let target_id = NiDkgTargetId::new([0u8; 32]);
+                let target_id = NiDkgTargetId::new([0_u8; 32]);
                 // The first two times, the context will have a request for the given target and
                 // not afterwards.
                 complement_state_manager_with_setup_initial_dkg_request(

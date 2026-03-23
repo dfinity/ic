@@ -16,9 +16,9 @@ use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_types::Cycles;
 use ic_types::messages::CanisterTask;
 use ic_types::{CanisterId, NumBytes};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
@@ -473,7 +473,7 @@ fn global_timer_can_be_reactivated_in_canister_global_timer_method() {
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
-    for i in 1..20u64 {
+    for i in 1..20_u64 {
         // In every third execution, NextScheduledMethod is Message, hence in such
         // executions only the message will be executed.
         // While in the other executions, NextScheduledMethod is either GlobalTimer
@@ -1225,8 +1225,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     // Hence hook should be executed next.
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -1248,8 +1247,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     // The hook status is still `Ready`.
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -1270,8 +1268,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
 
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -2023,8 +2020,7 @@ fn low_wasm_memory_hook_is_run_when_memory_limit_is_exceeded() {
     // The update will also satisfy condition for `low_wasm_memory` hook.
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -2042,8 +2038,7 @@ fn low_wasm_memory_hook_is_run_when_memory_limit_is_exceeded() {
 
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue

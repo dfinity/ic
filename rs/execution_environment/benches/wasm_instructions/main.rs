@@ -21,10 +21,10 @@ use ic_execution_environment::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 mod basic;
 mod helper;
 mod simd;

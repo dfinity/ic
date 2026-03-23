@@ -390,7 +390,7 @@ fn route_chain_key_message(
     }
 
     match requested_subnet {
-        Some(subnet_id) => match network_topology.subnets.get(subnet_id) {
+        Some(subnet_id) => match network_topology.subnets().get(subnet_id) {
             None => Err(ResolveDestinationError::ChainKeyError(format!(
                 "Requested threshold key {key_id} from unknown subnet {subnet_id}"
             ))),
@@ -437,7 +437,7 @@ fn route_chain_key_message(
                 }
                 ChainKeySubnetKind::OnlyHoldsKey => {
                     let mut keys = BTreeSet::new();
-                    for (subnet_id, topology) in &network_topology.subnets {
+                    for (subnet_id, topology) in network_topology.subnets() {
                         if topology.chain_keys_held.contains(key_id) {
                             return Ok((*subnet_id).get());
                         }
@@ -496,7 +496,7 @@ mod tests {
         DerivationPath, EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAArgs,
         VetKdCurve, VetKdKeyId,
     };
-    use ic_replicated_state::SubnetTopology;
+    use ic_replicated_state::{SubnetTopology, metadata_state::testing::NetworkTopologyTesting};
     use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id};
     use maplit::btreemap;
     use serde_bytes::ByteBuf;
@@ -543,26 +543,24 @@ mod tests {
         key_id2: MasterPublicKeyId,
     ) -> NetworkTopology {
         let subnet_id0 = subnet_test_id(0);
-        NetworkTopology {
-            // The first key is enabled only on subnet 0.
-            chain_key_enabled_subnets: btreemap! {
-                key_id1.clone() => vec![subnet_id0],
+        let mut network_topology = NetworkTopology::default();
+        network_topology.chain_key_enabled_subnets = btreemap! {
+            key_id1.clone() => vec![subnet_id0],
+        };
+        network_topology.set_subnets(btreemap! {
+            // Subnet 0 holds both keys
+            subnet_id0 => SubnetTopology {
+                chain_keys_held: vec![key_id1.clone(), key_id2].into_iter().collect(),
+                ..SubnetTopology::default()
             },
-            subnets: btreemap! {
-                // Subnet 0 holds both keys
-                subnet_id0 => SubnetTopology {
-                    chain_keys_held: vec![key_id1.clone(), key_id2].into_iter().collect(),
-                    ..SubnetTopology::default()
-                },
-                // Subnet 1 holds only the first key.
-                subnet_test_id(1) => SubnetTopology {
-                    chain_keys_held: vec![key_id1].into_iter().collect(),
-                    ..SubnetTopology::default()
-                },
-                subnet_test_id(2) => SubnetTopology::default(),
+            // Subnet 1 holds only the first key.
+            subnet_test_id(1) => SubnetTopology {
+                chain_keys_held: vec![key_id1].into_iter().collect(),
+                ..SubnetTopology::default()
             },
-            ..NetworkTopology::default()
-        }
+            subnet_test_id(2) => SubnetTopology::default(),
+        });
+        network_topology
     }
 
     fn network_with_ecdsa_subnets() -> NetworkTopology {

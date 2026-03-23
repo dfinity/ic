@@ -35,7 +35,7 @@ def test_cargo_bazel_lock_exists(bazel_test):
 
 
 def test_transitive_bazel_string_to_dependency_random(bazel_test):
-    bazel_string = "@com_google_protobuf_protoc_linux_aarch64//"
+    bazel_string = "@protobuf_protoc_linux_aarch64//"
     dependency = bazel_test._BazelRustDependencyManager__transitive_bazel_string_to_dependency(bazel_string)
     assert dependency is None
 

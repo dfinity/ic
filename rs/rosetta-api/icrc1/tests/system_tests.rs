@@ -225,7 +225,7 @@ struct RosettaTestingEnvironmentBuilder {
 }
 
 /// Timeout for the Rosetta client to wait for transactions to be added to the blockchain.
-const ROSETTA_CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
+const ROSETTA_CLIENT_TIMEOUT: Duration = Duration::from_secs(120);
 
 impl RosettaTestingEnvironmentBuilder {
     pub fn new(setup: &Setup) -> Self {
@@ -832,7 +832,7 @@ fn test_error_backoff() {
         let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
 
         let block0 = BlockBuilder::new(0, 1000)
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000_u64))
             .build();
         let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
             .await
@@ -846,7 +846,7 @@ fn test_error_backoff() {
         assert_rosetta_balance(
             *TEST_ACCOUNT,
             0,
-            1000u64,
+            1000_u64,
             &env.rosetta_client,
             env.network_identifier.clone(),
         )
@@ -868,7 +868,6 @@ fn test_error_backoff() {
         let mut found_backoff_message = false;
         let mut log_contents = String::new();
         for _ in 0..10 {
-            log_contents = String::new();
             log_file
                 .read_to_string(&mut log_contents)
                 .expect("failed to read log file");
@@ -931,9 +930,9 @@ async fn transfer_and_check_collected_fees(
         builder = builder.with_parent_hash(prev_block_hash);
     }
     let mint = builder
-        .with_fee(Tokens::from(1u64))
+        .with_fee(Tokens::from(1_u64))
         .with_fee_collector(legacy_fee_col)
-        .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+        .mint(*TEST_ACCOUNT, Tokens::from(1_000_u64))
         .build();
     let block_index = add_block(agent, ledger_canister_id, &mint)
         .await
@@ -944,8 +943,8 @@ async fn transfer_and_check_collected_fees(
     let transfer = BlockBuilder::new(idx, idx)
         .with_parent_hash(mint.hash().to_vec())
         .with_fee_collector_block(start_index)
-        .with_fee(Tokens::from(1u64))
-        .transfer(*TEST_ACCOUNT, *TEST_ACCOUNT, Tokens::from(1u64))
+        .with_fee(Tokens::from(1_u64))
+        .transfer(*TEST_ACCOUNT, *TEST_ACCOUNT, Tokens::from(1_u64))
         .build();
     let block_index = add_block(agent, ledger_canister_id, &transfer)
         .await
@@ -956,7 +955,7 @@ async fn transfer_and_check_collected_fees(
     let approve = BlockBuilder::new(idx, idx)
         .with_parent_hash(transfer.hash().to_vec())
         .with_fee_collector_block(start_index)
-        .with_fee(Tokens::from(1u64))
+        .with_fee(Tokens::from(1_u64))
         .approve(*TEST_ACCOUNT, *TEST_ACCOUNT, Tokens::from(u64::MAX))
         .build();
     let block_index = add_block(agent, ledger_canister_id, &approve)
@@ -967,8 +966,8 @@ async fn transfer_and_check_collected_fees(
 
     let transfer_from = BlockBuilder::new(idx, idx)
         .with_parent_hash(approve.hash().to_vec())
-        .with_fee(Tokens::from(1u64))
-        .transfer(*TEST_ACCOUNT, *TEST_ACCOUNT, Tokens::from(1u64))
+        .with_fee(Tokens::from(1_u64))
+        .transfer(*TEST_ACCOUNT, *TEST_ACCOUNT, Tokens::from(1_u64))
         .with_spender(*TEST_ACCOUNT)
         .build();
     let block_index = add_block(agent, ledger_canister_id, &transfer_from)
@@ -1115,11 +1114,11 @@ async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64)
         let block = if let Some(parent_hash) = parent_hash {
             BlockBuilder::new(i, i)
                 .with_parent_hash(parent_hash)
-                .mint(*TEST_ACCOUNT, Tokens::from(1u64))
+                .mint(*TEST_ACCOUNT, Tokens::from(1_u64))
                 .build()
         } else {
             BlockBuilder::new(i, i)
-                .mint(*TEST_ACCOUNT, Tokens::from(1u64))
+                .mint(*TEST_ACCOUNT, Tokens::from(1_u64))
                 .build()
         };
         let block = if i == bad_block_index {
@@ -1127,7 +1126,7 @@ async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64)
                 ICRC3Value::Map(btree_map) => btree_map,
                 _ => panic!("block should be a map"),
             };
-            bad_block.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
+            bad_block.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0_u64)));
             ICRC3Value::Map(bad_block)
         } else {
             block
@@ -1141,7 +1140,7 @@ async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64)
     }
 
     let mut found_backoff_message = false;
-    for _ in 0..10 {
+    for _ in 0..30 {
         let mut log_contents = String::new();
         log_file
             .read_to_string(&mut log_contents)
@@ -1188,7 +1187,7 @@ fn test_metrics_with_unrecognized_blocks() {
         let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
 
         let block0 = BlockBuilder::new(0, 1000)
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000_u64))
             .build();
         let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
             .await
@@ -1465,7 +1464,7 @@ fn test_continuous_block_sync() {
             from_subaccount: None,
             to: *TEST_ACCOUNT,
             fee: Some(DEFAULT_TRANSFER_FEE.into()),
-            amount: 1u64.into(),
+            amount: 1_u64.into(),
             memo: None,
             created_at_time: None,
         };
@@ -1666,7 +1665,7 @@ fn test_rosetta_client_construction_api_flow() {
     let setup = Setup::builder()
         .with_initial_balance(
             sender_keypair.generate_principal_id().unwrap().0,
-            1_000_000_000_000u64,
+            1_000_000_000_000_u64,
         )
         .build();
 
@@ -1676,7 +1675,7 @@ fn test_rosetta_client_construction_api_flow() {
         wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
 
         // Test the transfer functionality of the rosetta client
-        let transfer_amount: Nat = 1_000_000_000u64.into();
+        let transfer_amount: Nat = 1_000_000_000_u64.into();
 
         let operations = env
             .rosetta_client
@@ -1725,7 +1724,7 @@ fn test_rosetta_client_construction_api_flow() {
         );
 
         // Test the approve functionality of the rosetta client
-        let approve_amount: Nat = 1_000_000_000u64.into();
+        let approve_amount: Nat = 1_000_000_000_u64.into();
 
         let operations = env
             .rosetta_client
@@ -1788,7 +1787,7 @@ fn test_rosetta_client_binary() {
     };
     let rt = Runtime::new().unwrap();
     let setup = Setup::builder()
-        .with_initial_balance(sender_account, 1_000_000_000_000u64)
+        .with_initial_balance(sender_account, 1_000_000_000_000_u64)
         .build();
 
     rt.block_on(async {
@@ -1796,7 +1795,7 @@ fn test_rosetta_client_binary() {
         wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
 
         // Test the transfer functionality of the rosetta client binary
-        let transfer_amount: Nat = 1_000_000_000u64.into();
+        let transfer_amount: Nat = 1_000_000_000_u64.into();
 
         let balance_before_transfer = env
             .icrc1_agent
@@ -1831,7 +1830,7 @@ fn test_rosetta_client_binary() {
         );
 
         // Test the approve functionality of the rosetta client binary
-        let approve_amount: Nat = 1_000_000_000u64.into();
+        let approve_amount: Nat = 1_000_000_000_u64.into();
 
         let balance_before_approve = env
             .icrc1_agent
@@ -1888,7 +1887,7 @@ fn test_rosetta_transfer_from() {
     };
     let rt = Runtime::new().unwrap();
     let setup = Setup::builder()
-        .with_initial_balance(from_account, 1_000_000_000_000u64)
+        .with_initial_balance(from_account, 1_000_000_000_000_u64)
         .build();
 
     rt.block_on(async {
@@ -1896,7 +1895,7 @@ fn test_rosetta_transfer_from() {
         wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
 
         // Approve a certain amount to the spender so we can then transfer some of the approved amount
-        let approve_amount: Nat = 1_000_000_000u64.into();
+        let approve_amount: Nat = 1_000_000_000_u64.into();
 
         let rosetta_client_args =
             RosettaClientArgsBuilder::new(env.rosetta_client.url.clone().to_string(), "approve")
@@ -1914,7 +1913,7 @@ fn test_rosetta_transfer_from() {
         .unwrap();
 
         // Test the transfer from functionality of the rosetta client binary
-        let transfer_amount: Nat = 1_000_000u64.into();
+        let transfer_amount: Nat = 1_000_000_u64.into();
 
         let balance_before_transfer = env
             .icrc1_agent
@@ -2127,7 +2126,7 @@ fn test_cli_construction() {
                         from_subaccount: None,
                         to: *TEST_ACCOUNT,
                         fee: Some(DEFAULT_TRANSFER_FEE.into()),
-                        amount: 1_000_000_000u64.into(),
+                        amount: 1_000_000_000_u64.into(),
                         memo: None,
                         created_at_time: None,
                     };

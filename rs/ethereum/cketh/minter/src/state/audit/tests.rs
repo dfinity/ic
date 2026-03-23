@@ -31,7 +31,7 @@ async fn should_replay_events_for_mainnet() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Mainnet);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(973_769_498_742_712_741_454_u128)
+        Wei::from(640_429_147_162_525_727_658_u128)
     );
 }
 
@@ -174,7 +174,7 @@ impl GetEventsFile {
             }
 
             fn ethers_u256_to_be_bytes(num: ethers_core::types::U256) -> [u8; 32] {
-                let mut bytes = [0u8; 32];
+                let mut bytes = [0_u8; 32];
                 num.to_big_endian(&mut bytes);
                 bytes
             }

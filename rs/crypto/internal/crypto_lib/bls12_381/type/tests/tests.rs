@@ -60,7 +60,7 @@ fn scalar_random_is_stable() {
     let seed = 802;
 
     let rng = &mut ChaCha20Rng::seed_from_u64(seed);
-    let mut bytes = [0u8; 32];
+    let mut bytes = [0_u8; 32];
     rng.fill_bytes(&mut bytes);
     assert_eq!(
         hex::encode(bytes),
@@ -118,7 +118,7 @@ fn test_scalar_batch_random_generates_unique_values() {
 
 #[test]
 fn test_polynomial_random_is_stable() {
-    let seed = [1u8; 32];
+    let seed = [1_u8; 32];
     let rng = &mut ChaCha20Rng::from_seed(seed);
     let poly = Polynomial::random(3, rng);
 
@@ -282,7 +282,7 @@ fn test_scalar_from_integer_type() {
         assert_eq!(Scalar::from_u32(r), Scalar::from_u64(r as u64));
 
         let bytes = Scalar::from_u32(r).serialize();
-        let mut expected = [0u8; 32];
+        let mut expected = [0_u8; 32];
         expected[28..].copy_from_slice(&r.to_be_bytes());
         assert_eq!(bytes, expected);
     }
@@ -467,7 +467,6 @@ fn test_gt_mul_u16_is_correct() {
 }
 
 #[test]
-#[ignore]
 fn test_gt_mul_u16_is_correct_exhaustive_test() {
     // This takes several minutes to run in debug mode
 
@@ -587,7 +586,7 @@ fn test_g1_generator_is_expected_value() {
     .unwrap();
 
     fn x4() -> [u8; 48] {
-        let mut x4 = [0u8; 48];
+        let mut x4 = [0_u8; 48];
         x4[0] = 0x80; // set compressed bit
         x4[47] = 4;
         x4
@@ -2012,6 +2011,16 @@ test_point_operation!(muln, [g1, g2], {
 
     assert_eq!(Projective::muln_vartime(&[], &[]), Projective::identity());
 
+    // Verify that extra arguments for either points or scalars are ignored
+    assert_eq!(
+        Projective::muln_vartime(&[], &[Scalar::random(rng)]),
+        Projective::identity()
+    );
+    assert_eq!(
+        Projective::muln_vartime(&[Projective::biased(rng)], &[]),
+        Projective::identity()
+    );
+
     for t in 1..100 {
         let mut points = Vec::with_capacity(t);
         let mut scalars = Vec::with_capacity(t);
@@ -2019,6 +2028,18 @@ test_point_operation!(muln, [g1, g2], {
         for _ in 0..t {
             points.push(Projective::biased(rng));
             scalars.push(Scalar::biased(rng));
+        }
+
+        // Verify that extra arguments for either points or scalars are ignored
+        let extra_terms = rng.r#gen::<u8>() % 8;
+        if t % 2 == 0 {
+            for _extra in 0..extra_terms {
+                points.push(Projective::biased(rng));
+            }
+        } else {
+            for _extra in 0..extra_terms {
+                scalars.push(Scalar::biased(rng));
+            }
         }
 
         let reference_val = points
@@ -2040,6 +2061,12 @@ test_point_operation!(muln_affine, [g1, g2], {
         Projective::identity()
     );
 
+    // Verify that extra arguments are ignored
+    assert_eq!(
+        Projective::muln_vartime(&[], &[Scalar::random(rng)]),
+        Projective::identity()
+    );
+
     for t in 1..100 {
         let mut points = Vec::with_capacity(t);
         let mut scalars = Vec::with_capacity(t);
@@ -2047,6 +2074,19 @@ test_point_operation!(muln_affine, [g1, g2], {
         for _ in 0..t {
             points.push(Projective::biased(rng));
             scalars.push(Scalar::biased(rng));
+        }
+
+        // Verify that extra arguments for either points or scalars are ignored
+
+        let extra_terms = rng.r#gen::<u8>() % 8;
+        if t % 2 == 0 {
+            for _extra in 0..extra_terms {
+                points.push(Projective::biased(rng));
+            }
+        } else {
+            for _extra in 0..extra_terms {
+                scalars.push(Scalar::biased(rng));
+            }
         }
 
         let points = Projective::batch_normalize(&points);

@@ -393,7 +393,7 @@ impl ThresholdSignatureBuilder for TestThresholdSignatureBuilder {
         callback_id: CallbackId,
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
-        let height = context.matched_pre_signature.map(|(_, h)| h)?;
+        let height = context.height()?;
         self.signatures
             .get(&RequestId {
                 callback_id,
@@ -408,7 +408,13 @@ pub(crate) fn create_idkg_pool(
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> IDkgPoolImpl {
-    IDkgPoolImpl::new(config, log, metrics_registry, Box::new(IDkgStatsNoOp {}))
+    IDkgPoolImpl::new(
+        NODE_1,
+        config,
+        log,
+        metrics_registry,
+        Box::new(IDkgStatsNoOp {}),
+    )
 }
 
 // Sets up the dependencies and creates the pre signer

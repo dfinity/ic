@@ -121,16 +121,16 @@ fn test_basic_add_and_get_blocks() {
 
     // Create some test blocks
     let block0 = BlockBuilder::new(0, 1000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000_u64))
         .build();
     let block1 = BlockBuilder::new(1, 2000)
-        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000u64))
+        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000_u64))
         .build();
     let block2 = BlockBuilder::new(2, 3000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(500_000u64))
+        .mint(TEST_ACCOUNT_1, Tokens::from(500_000_u64))
         .build();
     let block3 = BlockBuilder::new(3, 4000)
-        .burn(TEST_ACCOUNT_1, Tokens::from(50_000u64))
+        .burn(TEST_ACCOUNT_1, Tokens::from(50_000_u64))
         .build();
 
     // Add blocks to the ledger
@@ -185,7 +185,7 @@ fn test_get_blocks_with_different_ranges() {
             .transfer(
                 TEST_ACCOUNT_1,
                 TEST_ACCOUNT_2,
-                Tokens::from(1000u64 + i * 100u64),
+                Tokens::from(1000_u64 + i * 100_u64),
             )
             .build();
         add_block(&env, canister_id, &block).expect("Failed to add block");
@@ -242,7 +242,7 @@ fn test_get_blocks_with_multiple_requests() {
             .transfer(
                 TEST_ACCOUNT_1,
                 TEST_ACCOUNT_2,
-                Tokens::from(1000u64 + i * 100u64),
+                Tokens::from(1000_u64 + i * 100_u64),
             )
             .build();
         add_block(&env, canister_id, &block).expect("Failed to add block");
@@ -309,7 +309,7 @@ fn test_get_blocks_empty_request() {
 
     // Add a block
     let block = BlockBuilder::new(0, 1000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000_u64))
         .build();
     add_block(&env, canister_id, &block).expect("Failed to add block");
 
@@ -325,7 +325,7 @@ fn test_get_blocks_zero_length() {
 
     // Add a block
     let block = BlockBuilder::new(0, 1000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000_u64))
         .build();
     add_block(&env, canister_id, &block).expect("Failed to add block");
 
@@ -348,8 +348,8 @@ fn test_add_complex_block() {
 
     // Create a complex block with multiple fields
     let mut block_map = BTreeMap::new();
-    block_map.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(1000u64)));
-    block_map.insert("fee".to_string(), ICRC3Value::Nat(Nat::from(10000u64)));
+    block_map.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(1000_u64)));
+    block_map.insert("fee".to_string(), ICRC3Value::Nat(Nat::from(10000_u64)));
 
     // Add a complex transaction with memo
     let mut tx_map = BTreeMap::new();
@@ -367,7 +367,7 @@ fn test_add_complex_block() {
         "to".to_string(),
         ICRC3Value::Array(vec![ICRC3Value::Blob(ByteBuf::from(TEST_USER_2))]),
     );
-    tx_map.insert("amt".to_string(), ICRC3Value::Nat(Nat::from(500000u64)));
+    tx_map.insert("amt".to_string(), ICRC3Value::Nat(Nat::from(500000_u64)));
 
     block_map.insert("tx".to_string(), ICRC3Value::Map(tx_map));
 
@@ -506,10 +506,10 @@ fn test_icrc3_get_tip_certificate() {
 
     // Create some test blocks, we only care that they are different.
     let block0 = BlockBuilder::new(0, 1000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000_u64))
         .build();
     let block1 = BlockBuilder::new(1, 2000)
-        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000u64))
+        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000_u64))
         .build();
     assert_ne!(block0.clone().hash(), block1.clone().hash());
 
@@ -580,7 +580,7 @@ fn test_archiving() {
 
     for block_id in 0..NUM_BLOCKS {
         let block = BlockBuilder::new(block_id as u64, block_id as u64)
-            .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(block_id)))
+            .mint(TEST_ACCOUNT_1, Tokens::from(2_u64.pow(block_id)))
             .build();
         let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
         assert_eq!(result, Nat::from(block_id));
@@ -639,7 +639,10 @@ fn test_archiving() {
     let test_blocks_with_index = || {
         let index_init_arg = IndexArg::Init(InitArg {
             ledger_id: Principal::from(ledger_id),
+            #[allow(deprecated)]
             retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: None,
+            max_retrieve_blocks_from_ledger_interval_seconds: None,
         });
         let index = env
             .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)
@@ -665,7 +668,7 @@ fn test_archiving_all_blocks() {
 
     for block_id in 0..NUM_BLOCKS {
         let block = BlockBuilder::new(block_id, block_id)
-            .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(block_id as u32)))
+            .mint(TEST_ACCOUNT_1, Tokens::from(2_u64.pow(block_id as u32)))
             .build();
         let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
         assert_eq!(result, Nat::from(block_id));
@@ -686,7 +689,7 @@ fn test_archiving_all_blocks() {
     verify_blocks_in_ledger(&env, ledger_id, 0, 0);
 
     let blocks_req = GetBlocksRequest {
-        start: Nat::from(0u64),
+        start: Nat::from(0_u64),
         length: Nat::from(u64::MAX),
     };
 
@@ -697,7 +700,10 @@ fn test_archiving_all_blocks() {
 
     let index_init_arg = IndexArg::Init(InitArg {
         ledger_id: Principal::from(ledger_id),
+        #[allow(deprecated)]
         retrieve_blocks_from_ledger_interval_seconds: None,
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
     });
     let index = env
         .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)
@@ -708,7 +714,7 @@ fn test_archiving_all_blocks() {
     assert_eq!(balance, 2u64.pow(NUM_BLOCKS as u32) - 1);
 
     let block = BlockBuilder::new(NUM_BLOCKS, NUM_BLOCKS)
-        .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(NUM_BLOCKS as u32)))
+        .mint(TEST_ACCOUNT_1, Tokens::from(2_u64.pow(NUM_BLOCKS as u32)))
         .build();
     let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
     assert_eq!(result, Nat::from(NUM_BLOCKS));

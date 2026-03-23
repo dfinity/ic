@@ -27,8 +27,8 @@ use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{ComputeAllocation, MemoryAllocation, NumInstructions, time::UNIX_EPOCH};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_wasm_types::BinaryEncodedWasm;
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
@@ -155,6 +155,7 @@ impl WasmtimeInstanceBuilder {
             SubnetType::Application => SchedulerConfig::application_subnet(),
             SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
             SubnetType::System => SchedulerConfig::system_subnet(),
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
         }
         .dirty_page_overhead;
         let subnet_available_callbacks =

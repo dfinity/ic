@@ -10,10 +10,13 @@ on:
         description: 'The version of the crate to publish'
         required: true
       dry-run:
-        description: 'If true, run publish in dry-run mode'
+        description: "If true, run publish in dry-run mode (don't actually publish the crate)"
         required: false
         default: 'false'
         type: boolean
+
+run-name: >-
+  ${{ format('Publish Crate {0} {1}', github.event.inputs.crate-name, github.event.inputs.crate-version) }}
 
 permissions:
   contents: read
@@ -21,7 +24,7 @@ permissions:
 
 jobs:
   publish-crates:
-    name: Publish Crates
+    name: Publish Crate ${{ github.event.inputs.crate-name }} ${{ github.event.inputs.crate-version }}
     runs-on: ubuntu-latest
     environment: publish-crates
     steps:

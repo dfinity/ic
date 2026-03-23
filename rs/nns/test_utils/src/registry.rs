@@ -537,8 +537,6 @@ pub fn create_subnet_threshold_signing_pubkey_and_cup_mutations(
     subnet_id: SubnetId,
     receiver_keys: &BTreeMap<NodeId, PublicKey>,
 ) -> Vec<RegistryMutation> {
-    // TODO: CRP-2345: Refactor such that the `ReproducibleRng` is not instantiated here, but at
-    //  the test initialization, and passed down to this function.
     let rng = &mut ReproducibleRng::new();
     let subnet_transcript = generate_nidkg_initial_transcript(
         receiver_keys,
@@ -888,7 +886,7 @@ pub fn generate_nidkg_initial_transcript(
     registry_version: RegistryVersion,
     rng: &mut ReproducibleRng,
 ) -> NiDkgTranscript {
-    let mut target_id_bytes = [0u8; 32];
+    let mut target_id_bytes = [0_u8; 32];
     rng.fill_bytes(&mut target_id_bytes);
     let target_id = NiDkgTargetId::new(target_id_bytes);
     let nodes_set: BTreeSet<NodeId> = receiver_keys.keys().cloned().collect();

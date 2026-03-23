@@ -52,6 +52,8 @@ mock! {
 
         fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
 
+        fn list_state_heights_to_certify(&self) -> Vec<Height>;
+
         fn deliver_state_certification(&self, certification: Certification);
 
         fn remove_states_below(&self, height: Height);
@@ -63,7 +65,6 @@ mock! {
         fn commit_and_certify(
             &self,
             state: ReplicatedState,
-            height: Height,
             scope: CertificationScope,
             batch_summary: Option<BatchSummary>,
         );

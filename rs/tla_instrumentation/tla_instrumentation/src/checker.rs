@@ -156,22 +156,16 @@ fn run_apalache(
     // TODO: There's a race condition when running multiple instances of Apalache in parallel,
     // as they all seem to try to write to the same file in /tmp. So we create a new temporary
     // directory for each run of Apalache based on the Bazel-provided temporary directory
-    // and then feed that to the JRE.
+    // and then feed that to the binary via TEST_TMPDIR (rules_java seemingly reads this).
     // https://github.com/tlaplus/tlaplus/issues/688
     let tmp_subdir_str = unique_tmp_dir();
-    // Construct JVM args so that Apalache uses the new temporary subdirectory as well as
-    // some memory options from apalache-mc's bash wrapper
-    // https://github.com/apalache-mc/apalache/blob/18e8a0b748b913c7df66013226b15660ee670301/src/universal/bin/apalache-mc#L48-L48
-    let jvm_args = format!(
-        "-Djava.io.tmpdir={tmp_subdir_str} -Xmx4096m  -XX:+UseG1GC -XX:G1PeriodicGCInterval=600000 -XX:+G1PeriodicGCInvokesConcurrent"
-    );
 
     cmd.arg("check")
         .arg(format!("--init={init_predicate}"))
         .arg(format!("--next={next_predicate}"))
         .arg("--length=1")
         .arg(tla_module)
-        .env("JDK_JAVA_OPTIONS", jvm_args);
+        .env("TEST_TMPDIR", &tmp_subdir_str);
     cmd.status()
         .map_err(|e| ApalacheError::SetupError(e.to_string()))
         .and_then(|e| {

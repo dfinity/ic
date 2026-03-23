@@ -104,6 +104,25 @@ rust_test(
 ]
 
 rust_test(
+    name = "ckdoge_minter_replay_events_tests",
+    timeout = "long",
+    srcs = ["tests/replay_events.rs"],
+    data = [
+        "test_resources/mainnet_events.gz",
+    ],
+    deps = [
+        # Keep sorted.
+        ":ckdoge_minter_lib",
+        "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
+        "@crate_index//:candid",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_test(
     name = "ckdoge_candid_api_tests",
     crate = ":_wasm_ckdoge_minter",
     data = [":ckdoge_minter.did"],
@@ -118,6 +137,7 @@ rust_test(
 
 rust_ic_test(
     name = "integration_tests",
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         ":ckdoge_minter_debug.wasm.gz",
@@ -129,6 +149,9 @@ rust_ic_test(
         "IC_CKDOGE_MINTER_WASM_PATH": "$(rootpath :ckdoge_minter_debug.wasm.gz)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256)",
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
+        # Limit parallelism to avoid resource contention from many concurrent
+        # dogecoind daemon processes competing for ports and system resources.
+        "RUST_TEST_THREADS": "4",
     },
     # Because dogecoind binary package is not available on darwin or arm64.
     target_compatible_with = [

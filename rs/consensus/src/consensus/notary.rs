@@ -60,6 +60,7 @@ const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 1;
 /// for each height that the latest finalized block is ahead of the latest certified state.
 /// The value was chosen empirically.
 const BACKLOG_DELAY_MILLIS: u64 = 2_000;
+
 pub(crate) struct Notary {
     time_source: Arc<dyn TimeSource>,
     replica_config: ReplicaConfig,
@@ -113,6 +114,7 @@ impl Notary {
                 }
             }
         }
+
         notarization_shares
     }
 

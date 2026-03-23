@@ -9,7 +9,8 @@ use dfn_protobuf::{ProtoBuf, ToProto};
 
 use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types_cycles::Cycles;
 use ic_xrc_types::ExchangeRate;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount, Tokens,
@@ -18,7 +19,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire, NewType};
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
+pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000_u128; // 1T cycles = 1 XDR
 
 pub const PERMYRIAD_DECIMAL_PLACES: u32 = 4;
 
@@ -50,7 +51,7 @@ pub unsafe fn mint_cycles128(_amount_high: u64, _amount_low: u64, _dst: usize) {
 /// It is not exposed in ic-cdk because it can't be called from anywhere else.
 pub fn ic0_mint_cycles128(amount: Cycles) -> Cycles {
     let (amount_high, amount_low) = amount.into_parts();
-    let mut dst = 0u128;
+    let mut dst = 0_u128;
     unsafe {
         mint_cycles128(amount_high, amount_low, &mut dst as *mut u128 as usize);
     }
@@ -505,7 +506,7 @@ impl From<ExchangeRate> for IcpXdrConversionRate {
                 std::cmp::Ordering::Less => u64::saturating_mul,
                 std::cmp::Ordering::Equal => |rate, _| rate,
             };
-        let xdr_permyriad_per_icp = operation(value.rate, 10u64.pow(power_diff));
+        let xdr_permyriad_per_icp = operation(value.rate, 10_u64.pow(power_diff));
 
         Self {
             timestamp_seconds: value.timestamp,

@@ -58,7 +58,7 @@ impl From<ThresholdSignError> for CryptoError {
                 algorithm,
                 key_id,
             } => {
-                // ThresholdSigDataNotFound must not be used here, see CRP-586.
+                // ThresholdSigDataNotFound must not be used here.
                 CryptoError::SecretKeyNotFound { algorithm, key_id }
             }
             ThresholdSignError::TransientInternalError(internal_error) => {

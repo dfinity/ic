@@ -11,6 +11,36 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-13: Proposal 140860
+
+http://dashboard.internetcomputer.org/proposal/140860
+
+## Changed
+
+- Use the default values for `min_retrieve_blocks_from_ledger_interval_seconds` and
+  `max_retrieve_blocks_from_ledger_interval_seconds` for the SNS index-ng canister
+  polling interval when creating a new SNS (previously used the fixed value of 5s).
+
+
+# 2026-02-27: Proposal 140598
+
+http://dashboard.internetcomputer.org/proposal/140598
+
+## Changed
+
+- Set `retrieve_blocks_from_ledger_interval_seconds` to 5s for the SNS index-ng
+  canister when creating a new SNS (previously used the default of 1s).
+
+
+# 2026-02-10: Proposal 140315
+
+http://dashboard.internetcomputer.org/proposal/140315
+
+## Added
+
+- Pass through a `CustomProposalCriticality` field so that SNSes can specify additional critical proposal types at launch.
+
+
 # 2026-01-23: Proposal 140098
 
 http://dashboard.internetcomputer.org/proposal/140098

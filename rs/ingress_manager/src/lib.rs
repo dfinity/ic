@@ -7,7 +7,7 @@ mod ingress_handler;
 mod ingress_selector;
 mod metrics;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
@@ -18,7 +18,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{ReplicaLogger, error, warn};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
@@ -179,40 +179,31 @@ impl IngressManager {
     fn get_ingress_message_settings(
         &self,
         registry_version: RegistryVersion,
-    ) -> Option<IngressMessageSettings> {
+    ) -> Result<IngressMessageSettings, String> {
         match self
             .registry_client
             .get_ingress_message_settings(self.subnet_id, registry_version)
         {
-            Ok(None) => {
-                error!(
-                    self.log,
-                    "No subnet record found for registry version={:?} and subnet_id={:?}",
-                    registry_version,
-                    self.subnet_id,
-                );
-                None
-            }
-            Err(err) => {
-                error!(
-                    self.log,
-                    "Could not retrieve ingress message param max_ingress_bytes_per_message: {:?}",
-                    err
-                );
-                None
-            }
-            Ok(settings) => settings.map(|mut settings| {
+            Ok(Some(mut settings)) => {
                 // Make sure that we always allow a single message per block
                 if settings.max_ingress_messages_per_block == 0 {
                     warn!(
                         every_n_seconds => 300,
                         self.log,
-                        "max_ingress_messages_per_block configured incorrectly (set to 0, should be set to at least 1)"
+                        "max_ingress_messages_per_block configured incorrectly \
+                        (set to 0, should be set to at least 1)"
                     );
                     settings.max_ingress_messages_per_block = 1;
                 }
-                settings
-            }),
+                Ok(settings)
+            }
+            Ok(None) => Err(format!(
+                "No subnet record found for registry version={:?} and subnet_id={:?}",
+                registry_version, self.subnet_id,
+            )),
+            Err(err) => Err(format!(
+                "Could not retrieve ingress_message_settings from the registry: {err}",
+            )),
         }
     }
 
@@ -244,8 +235,9 @@ pub(crate) mod tests {
     use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager_mocks::MockStateManager;
+    use ic_limits::MAX_INGRESS_MESSAGES_PER_BLOCK;
     use ic_metrics::MetricsRegistry;
-    use ic_registry_client::client::RegistryClientImpl;
+    use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_subnet_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::{
@@ -260,13 +252,19 @@ pub(crate) mod tests {
     use ic_types::{Height, RegistryVersion, SubnetId, ingress::IngressStatus};
     use std::{ops::DerefMut, sync::Arc};
 
-    pub(crate) fn setup_registry(
+    pub(crate) fn set_up_registry(
         subnet_id: SubnetId,
+        memory_bytes_limit: Option<usize>,
+        ingress_messages_limit: u64,
         max_ingress_bytes_per_message: usize,
     ) -> Arc<dyn RegistryClient> {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let mut subnet_record = test_subnet_record();
+        if let Some(memory_bytes_limit) = memory_bytes_limit {
+            subnet_record.max_ingress_bytes_per_block = memory_bytes_limit as u64;
+        }
         subnet_record.max_ingress_bytes_per_message = max_ingress_bytes_per_message as u64;
+        subnet_record.max_ingress_messages_per_block = ingress_messages_limit;
 
         registry_data_provider
             .add(
@@ -275,22 +273,21 @@ pub(crate) mod tests {
                 Some(subnet_record),
             )
             .expect("Failed to add subnet record.");
-        let registry = Arc::new(RegistryClientImpl::new(
-            Arc::clone(&registry_data_provider) as Arc<_>,
-            None,
+        let registry = Arc::new(FakeRegistryClient::new(
+            Arc::clone(&registry_data_provider) as Arc<_>
         ));
-        registry.fetch_and_start_polling().unwrap();
+        registry.update_to_latest_version();
         registry
     }
 
-    pub(crate) fn setup_with_params(
+    pub(crate) fn setup_with_params<T>(
         ingress_hist_reader: Option<Box<dyn IngressHistoryReader>>,
         registry_and_subnet_id: Option<(Arc<dyn RegistryClient>, SubnetId)>,
         consensus_time: Option<Arc<dyn ConsensusTime>>,
         state: Option<ReplicatedState>,
         ingress_pool_max_count: Option<usize>,
-        run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>),
-    ) {
+        run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>) -> T,
+    ) -> T {
         let ingress_hist_reader = ingress_hist_reader.unwrap_or_else(|| {
             let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
             ingress_hist_reader
@@ -300,7 +297,15 @@ pub(crate) mod tests {
         });
         let (registry, subnet_id) = registry_and_subnet_id.unwrap_or_else(|| {
             let subnet_id = subnet_test_id(0);
-            (setup_registry(subnet_id, 60 * 1024 * 1024), subnet_id)
+            (
+                set_up_registry(
+                    subnet_id,
+                    None,
+                    MAX_INGRESS_MESSAGES_PER_BLOCK,
+                    60 * 1024 * 1024,
+                ),
+                subnet_id,
+            )
         });
         let consensus_time = consensus_time.unwrap_or_else(|| Arc::new(MockConsensusTime::new()));
 

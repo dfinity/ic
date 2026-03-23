@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use more_asserts::debug_assert_le;
 
 use ic_embedders::{
@@ -20,7 +19,6 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, error, info};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
-use ic_types::Cycles;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
@@ -28,6 +26,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
+use ic_types_cycles::{Cycles, CyclesUseCase};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -385,7 +384,7 @@ impl ResponseHelper {
                 canister_id: self.canister.canister_id(),
                 available: old_balance,
                 requested,
-                threshold: original.freezing_threshold,
+                threshold: Cycles::zero(),
                 reveal_top_up,
             };
             info!(
@@ -671,7 +670,6 @@ struct OriginalContext {
     message_instruction_limit: NumInstructions,
     message: Arc<Response>,
     subnet_size: usize,
-    freezing_threshold: Cycles,
     canister_id: CanisterId,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
@@ -937,17 +935,6 @@ pub fn execute_response(
         }
     };
 
-    let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-        clean_canister.system_state.freeze_threshold,
-        clean_canister.system_state.memory_allocation,
-        clean_canister.memory_usage(),
-        clean_canister.message_memory_usage(),
-        clean_canister.compute_allocation(),
-        subnet_size,
-        round.cost_schedule,
-        clean_canister.system_state.reserved_balance(),
-    );
-
     let original = OriginalContext {
         callback,
         call_context_id,
@@ -959,7 +946,6 @@ pub fn execute_response(
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: Arc::clone(&response),
         subnet_size,
-        freezing_threshold,
         canister_id: clean_canister.canister_id(),
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,

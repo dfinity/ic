@@ -25,6 +25,9 @@ rs/.cargo-home
 # DFX (https://github.com/dfinity/sdk) state files
 **/.dfx/
 
+# ICP CLI (https://github.com/dfinity/icp-cli) state files
+**/.icp/
+
 # The configuration file that bazel generates for rust-analyzer.
 rust-project.json
 
@@ -137,7 +140,8 @@ profile.json
 test_tmpdir/**
 
 # Bare metal deployment secrets files
-zh2-dll01.*
+/zh2*
+/dm1*
 
 # Claude Code settings
 .claude/settings.local.json

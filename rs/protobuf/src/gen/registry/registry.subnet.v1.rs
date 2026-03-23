@@ -37,7 +37,22 @@ pub struct SubnetRecord {
     /// Max number of ingress messages per block.
     #[prost(uint64, tag = "18")]
     pub max_ingress_messages_per_block: u64,
-    /// The maximum combined size of the ingress and xnet messages that fit into a block.
+    /// How big an ingress payload can be *when stored in memory*. Setting this value too high
+    /// could lead to large memory usage of replicas.
+    /// Note that with hashes-in-blocks feature enabled, increasing this value doesn't necessarily mean
+    /// that we would send more data to peers when transmitting a block, because ingress messages are
+    /// stripped before disseminating blocks.
+    /// Note that this value can be larger than \[`Self::max_block_payload_size`\].
+    /// A value of 0 means that the default value \[`ic_limits::MAX_INGRESS_BYTES_PER_BLOCK`\] will be
+    /// used.
+    #[prost(uint64, tag = "32")]
+    pub max_ingress_bytes_per_block: u64,
+    /// Maximum size, in bytes, a \[`BatchPayload`\] can have *when sent over wire*.
+    /// Setting this value too hight could result in longer delivery times of blocks to peers, which
+    /// could lead to forks as higher rank blocks could be proposed meanwhile.
+    /// Note that with hashes-in-blocks feature enabled, the blocks sent over wire are typically smaller
+    /// than their representation in memory, because we strip some of the data before broadcasting them
+    /// to peers.
     #[prost(uint64, tag = "19")]
     pub max_block_payload_size: u64,
     /// Information on whether a feature is supported by this subnet.
@@ -73,6 +88,21 @@ pub struct SubnetRecord {
     /// means to behave according to the `subnet_type` field.
     #[prost(enumeration = "CanisterCyclesCostSchedule", tag = "30")]
     pub canister_cycles_cost_schedule: i32,
+    /// List of principals that have admin privileges on the subnet.
+    #[prost(message, repeated, tag = "31")]
+    pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    /// List of replica version IDs that are recalled/blocked for this subnet.
+    /// Nodes in this subnet will not upgrade to any version in this list.
+    /// If the replica_version_id of a subnet points to a broken GuestOS and the subnet is stalled,
+    /// even if we manage to rollback the GuestOS locally, the GuestOS would automatically try
+    /// to upgrade to the broken GuestOS again. We can use this field to prevent that.
+    /// While nodes read the replica_version_id from the registry vesion from the CUP,
+    /// they check the latest registry version for recalled_replica_version_ids.
+    #[prost(string, repeated, tag = "33")]
+    pub recalled_replica_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Limits on resource consumption (e.g., disk usage).
+    #[prost(message, optional, tag = "34")]
+    pub resource_limits: ::core::option::Option<ResourceLimits>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
@@ -112,12 +142,15 @@ pub struct CatchUpPackageContents {
     pub initial_ni_dkg_transcript_high_threshold:
         ::core::option::Option<InitialNiDkgTranscriptRecord>,
     /// The blockchain height that the CUP should have
+    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
     #[prost(uint64, tag = "3")]
     pub height: u64,
     /// Block time for the CUP's block
+    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
     #[prost(uint64, tag = "4")]
     pub time: u64,
     /// The hash of the state that the subnet should use
+    /// TODO(CON-1671): deprecate this field in favor of `cup_type`
     #[prost(bytes = "vec", tag = "5")]
     pub state_hash: ::prost::alloc::vec::Vec<u8>,
     /// A uri from which data to replace the registry local store should be downloaded
@@ -129,6 +162,49 @@ pub struct CatchUpPackageContents {
     /// / The initial IDkg dealings for boot strapping target chain key subnets.
     #[prost(message, repeated, tag = "8")]
     pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
+    /// / The purpose of the CUP.
+    #[prost(oneof = "catch_up_package_contents::CupType", tags = "9, 10, 11")]
+    pub cup_type: ::core::option::Option<catch_up_package_contents::CupType>,
+}
+/// Nested message and enum types in `CatchUpPackageContents`.
+pub mod catch_up_package_contents {
+    /// / The purpose of the CUP.
+    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    pub enum CupType {
+        /// / Initial CUP used to bootstrap a subnet.
+        #[prost(message, tag = "9")]
+        Genesis(super::GenesisArgs),
+        /// / A CUP used to recover a subnet during a disaster.
+        #[prost(message, tag = "10")]
+        Recovery(super::RecoveryArgs),
+        /// / A CUP used to split a subnet into two.
+        #[prost(message, tag = "11")]
+        SubnetSplitting(super::SubnetSplittingArgs),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, ::prost::Message)]
+pub struct GenesisArgs {
+    /// Initial height of the subnet
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct RecoveryArgs {
+    /// The blockchain height that the CUP should have
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+    /// Block time for the CUP's block
+    #[prost(uint64, tag = "2")]
+    pub time: u64,
+    /// The hash of the state that the subnet should use
+    #[prost(bytes = "vec", tag = "3")]
+    pub state_hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct SubnetSplittingArgs {
+    /// / The ID of the subnet created by the split.
+    #[prost(message, optional, tag = "1")]
+    pub destination_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct RegistryStoreUri {
@@ -341,6 +417,21 @@ pub struct ChainKeyConfig {
     #[prost(uint32, optional, tag = "4")]
     pub max_parallel_pre_signature_transcripts_in_creation: ::core::option::Option<u32>,
 }
+/// Limits on resource consumption (e.g., disk usage).
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    candid::CandidType,
+    Eq,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResourceLimits {
+    #[prost(uint64, optional, tag = "1")]
+    pub maximum_state_size: ::core::option::Option<u64>,
+}
 #[derive(
     serde::Serialize,
     serde::Deserialize,
@@ -419,6 +510,9 @@ pub enum SubnetType {
     /// A subnet type that is like application subnets but can have some
     /// additional features.
     VerifiedApplication = 4,
+    /// A subnet type for cloud engines, which are configurable, application-specific
+    /// private subnets under the auspices of the NNS and its rules for safety.
+    CloudEngine = 5,
 }
 impl SubnetType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -431,6 +525,7 @@ impl SubnetType {
             Self::Application => "SUBNET_TYPE_APPLICATION",
             Self::System => "SUBNET_TYPE_SYSTEM",
             Self::VerifiedApplication => "SUBNET_TYPE_VERIFIED_APPLICATION",
+            Self::CloudEngine => "SUBNET_TYPE_CLOUD_ENGINE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -440,6 +535,7 @@ impl SubnetType {
             "SUBNET_TYPE_APPLICATION" => Some(Self::Application),
             "SUBNET_TYPE_SYSTEM" => Some(Self::System),
             "SUBNET_TYPE_VERIFIED_APPLICATION" => Some(Self::VerifiedApplication),
+            "SUBNET_TYPE_CLOUD_ENGINE" => Some(Self::CloudEngine),
             _ => None,
         }
     }

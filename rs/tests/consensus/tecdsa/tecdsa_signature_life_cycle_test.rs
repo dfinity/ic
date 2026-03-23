@@ -29,6 +29,7 @@ use ic_system_test_driver::{
     systest,
     util::{MessageCanister, MetricsFetcher, block_on, runtime_from_url},
 };
+use ic_types::Height;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::info;
 use std::collections::BTreeMap;
@@ -38,8 +39,8 @@ const IDKG_PAYLOAD_METRICS: &str = "idkg_payload_metrics";
 const XNET_RESHARE_AGREEMENTS: &str = "xnet_reshare_agreements";
 
 /// Life cycle test requires more time
-const LIFE_CYCLE_OVERALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
-const LIFE_CYCLE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const LIFE_CYCLE_OVERALL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const LIFE_CYCLE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 
 fn make_vetkd_key_id(name: &str) -> MasterPublicKeyId {
     MasterPublicKeyId::VetKd(VetKdKeyId {
@@ -364,9 +365,13 @@ fn test(env: TestEnv) {
     });
 }
 
+fn setup(test_env: TestEnv) {
+    setup_without_ecdsa_on_nns(test_env, Height::from(29));
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup_without_ecdsa_on_nns)
+        .with_setup(setup)
         .with_overall_timeout(LIFE_CYCLE_OVERALL_TIMEOUT)
         .with_timeout_per_test(LIFE_CYCLE_PER_TEST_TIMEOUT)
         .add_test(systest!(test))

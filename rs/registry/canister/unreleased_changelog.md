@@ -8,17 +8,25 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
+* Added an optional field `resource_limits` to `CreateSubnetPayload` which, when present,
+  sets limits on resource usage (e.g., disk usage) of the created subnet.
 
-* Enabling direct node swapping feature on all subnets for all node operators.
+* Rate limit the number of subnet admin updates that can happen for a subnet.
+
+### Node operator migration
+
+Node providers can now migrate nodes from one node operator to another within the same data center without reinstalling nodes or disrupting subnet membership. The source and destination node operators must belong to the same node provider.
+
+If the destination node operator does not yet exist, it is created automatically, effectively allowing a node provider to rotate to a fresh node operator identity.
 
 ## Changed
+
+* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
-
-* When performing `RemoveNodes`, generate 1 update mutation per node operator key. Before this change, a single node operator record would be changed multiple times in a single version if the remove nodes proposal removed multiple nodes from the same node operator, which caused confusion. This bug resulted in incorrect tracking of node operator allowance depending on how they are fetched from the registry (given the different implementations in the registry utility functions).
 
 ## Security

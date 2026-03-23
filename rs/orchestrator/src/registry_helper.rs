@@ -3,14 +3,21 @@ use ic_consensus_cup_utils::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, firewall::v1::FirewallRuleSet,
-    hostos_version::v1::HostosVersionRecord, node::v1::IPv4InterfaceConfig,
-    replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
+    firewall::v1::FirewallRuleSet,
+    hostos_version::v1::HostosVersionRecord,
+    node::v1::IPv4InterfaceConfig,
+    replica_version::v1::ReplicaVersionRecord,
+    subnet::v1::{SubnetRecord, SubnetType},
 };
 use ic_registry_client_helpers::{
-    api_boundary_node::ApiBoundaryNodeRegistry, firewall::FirewallRegistry,
-    hostos_version::HostosRegistry, node::NodeRegistry, node_operator::NodeOperatorRegistry,
-    subnet::SubnetRegistry, unassigned_nodes::UnassignedNodeRegistry,
+    api_boundary_node::ApiBoundaryNodeRegistry,
+    firewall::FirewallRegistry,
+    hostos_version::HostosRegistry,
+    node::{NodeRecord, NodeRegistry},
+    node_operator::NodeOperatorRegistry,
+    subnet::SubnetRegistry,
+    unassigned_nodes::UnassignedNodeRegistry,
 };
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::{
@@ -162,43 +169,39 @@ impl RegistryHelper {
 
     pub(crate) fn get_firewall_rules(
         &self,
-        version: RegistryVersion,
         scope: &FirewallRulesScope,
+        version: RegistryVersion,
     ) -> OrchestratorResult<Option<FirewallRuleSet>> {
         self.registry_client
-            .get_firewall_rules(version, scope)
+            .get_firewall_rules(scope, version)
             .map_err(OrchestratorError::RegistryClientError)
     }
 
-    pub(crate) fn get_all_nodes_ip_addresses(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<IpAddr>> {
-        let ips = self.registry_client.get_all_nodes_ip_addresses(version)?;
-
-        Ok(ips.unwrap_or_default())
+    pub(crate) fn get_node_ids(&self, version: RegistryVersion) -> OrchestratorResult<Vec<NodeId>> {
+        self.registry_client
+            .get_node_ids(version)
+            .map_err(OrchestratorError::RegistryClientError)
     }
 
-    pub(crate) fn get_app_subnet_nodes_ip_addresses(
+    pub(crate) fn get_available_ip_addresses_for_node_ids(
         &self,
+        node_ids: impl IntoIterator<Item = NodeId>,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<IpAddr>> {
-        let ips = self
-            .registry_client
-            .get_app_subnet_nodes_ip_addresses(version)?;
-
-        Ok(ips.unwrap_or_default())
+    ) -> Vec<IpAddr> {
+        self.registry_client
+            .get_available_ip_addresses_for_node_ids(node_ids, version)
     }
 
-    pub(crate) fn get_system_subnet_nodes_ip_addresses(
+    pub(crate) fn get_subnet_node_ids_of_types(
         &self,
+        subnet_types: &[SubnetType],
         version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<IpAddr>> {
-        let ips = self
+    ) -> OrchestratorResult<Vec<NodeId>> {
+        let ids = self
             .registry_client
-            .get_system_subnet_nodes_ip_addresses(version)?;
+            .get_subnet_node_ids_of_types(subnet_types, version)?;
 
-        Ok(ips.unwrap_or_default())
+        Ok(ids.unwrap_or_default())
     }
 
     pub(crate) fn get_subnet_id_from_node_id(
@@ -227,22 +230,18 @@ impl RegistryHelper {
     /// version
     pub(crate) fn get_recalled_replica_versions(
         &self,
-        _subnet_id: SubnetId,
-        _registry_version: RegistryVersion,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
     ) -> OrchestratorResult<Vec<ReplicaVersion>> {
-        // TODO(NODE-1754): Remove this placeholder and replace with the commented code below once
-        // registry changes were merged
-        Ok(vec![])
-
-        // let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
-        // subnet_record
-        //     .recalled_replica_version_ids
-        //     .iter()
-        //     .map(|version_str| {
-        //         ReplicaVersion::try_from(version_str.as_ref())
-        //             .map_err(OrchestratorError::ReplicaVersionParseError)
-        //     })
-        //     .collect()
+        let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
+        subnet_record
+            .recalled_replica_version_ids
+            .iter()
+            .map(|version_str| {
+                ReplicaVersion::try_from(version_str.as_ref())
+                    .map_err(OrchestratorError::ReplicaVersionParseError)
+            })
+            .collect()
     }
 
     pub(crate) fn get_expected_replica_version(
@@ -294,6 +293,16 @@ impl RegistryHelper {
             .map_err(OrchestratorError::RegistryClientError)
     }
 
+    pub(crate) fn get_node_record(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<NodeRecord>> {
+        self.registry_client
+            .get_node_record(node_id, version)
+            .map_err(OrchestratorError::RegistryClientError)
+    }
+
     /// Return the DC ID where the current replica is located.
     pub fn dc_id(&self) -> Option<String> {
         let registry_version = self.get_latest_version();
@@ -313,6 +322,22 @@ impl RegistryHelper {
         });
 
         node_operator_record.map(|v| v.dc_id)
+    }
+
+    pub(crate) fn get_ssh_recovery_access(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> OrchestratorResult<Vec<String>> {
+        match self
+            .registry_client
+            .get_node_record(self.node_id, registry_version)?
+        {
+            Some(record) => Ok(record.ssh_node_state_write_access),
+            None => Err(OrchestratorError::NodeRecordMissingError(
+                self.node_id,
+                registry_version,
+            )),
+        }
     }
 
     /// Get the HostOS version of this node in the given registry version

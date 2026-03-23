@@ -31,8 +31,8 @@ use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
-    batch::{CanisterCyclesCostSchedule, QueryStats},
+    CanisterId, NumInstructions, NumMessages, NumSlices, Time,
+    batch::QueryStats,
     ingress::WasmResult,
     messages::{
         CallContextId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext, Request,
@@ -40,6 +40,7 @@ use ic_types::{
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -398,16 +399,19 @@ impl<'a> QueryContext<'a> {
             .network_topology
             .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
-        if self.cycles_account_manager.freeze_threshold_cycles(
-            canister.system_state.freeze_threshold,
-            canister.system_state.memory_allocation,
-            canister.memory_usage(),
-            canister.message_memory_usage(),
-            canister.compute_allocation(),
-            subnet_size,
-            self.get_cost_schedule(),
-            canister.system_state.reserved_balance(),
-        ) > canister.system_state.balance()
+        if self
+            .cycles_account_manager
+            .can_withdraw_cycles_with_threshold(
+                &canister.system_state,
+                Cycles::zero(),
+                canister.memory_usage(),
+                canister.message_memory_usage(),
+                canister.system_state.reserved_balance(),
+                subnet_size,
+                self.get_cost_schedule(),
+                false,
+            )
+            .is_err()
         {
             let canister_id = canister.canister_id();
             return (

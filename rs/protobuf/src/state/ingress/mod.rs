@@ -42,6 +42,7 @@ pub mod v1 {
                 ErrorCodePublic::CanisterRejectedMessage => ErrorCode::CanisterRejectedMessage,
                 ErrorCodePublic::UnknownManagementMessage => ErrorCode::UnknownManagementMessage,
                 ErrorCodePublic::InvalidManagementPayload => ErrorCode::InvalidManagementPayload,
+                ErrorCodePublic::InvalidSubnetAdmin => ErrorCode::InvalidSubnetAdmin,
                 ErrorCodePublic::CanisterTrapped => ErrorCode::CanisterTrapped,
                 ErrorCodePublic::CanisterCalledTrap => ErrorCode::CanisterCalledTrap,
                 ErrorCodePublic::CanisterContractViolation => ErrorCode::CanisterContractViolation,
@@ -53,6 +54,9 @@ pub mod v1 {
                 ErrorCodePublic::CanisterNotStopped => ErrorCode::CanisterNotStopped,
                 ErrorCodePublic::CanisterStoppingCancelled => ErrorCode::CanisterStoppingCancelled,
                 ErrorCodePublic::CanisterInvalidController => ErrorCode::CanisterInvalidController,
+                ErrorCodePublic::CanisterInvalidControllerOrSubnetAdmin => {
+                    ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+                }
                 ErrorCodePublic::CanisterFunctionNotFound => ErrorCode::CanisterFunctionNotFound,
                 ErrorCodePublic::CanisterNonEmpty => ErrorCode::CanisterNonEmpty,
                 ErrorCodePublic::QueryCallGraphLoopDetected => {
@@ -164,6 +168,7 @@ pub mod v1 {
                 ErrorCode::InvalidManagementPayload => {
                     Ok(ErrorCodePublic::InvalidManagementPayload)
                 }
+                ErrorCode::InvalidSubnetAdmin => Ok(ErrorCodePublic::InvalidSubnetAdmin),
                 ErrorCode::CanisterTrapped => Ok(ErrorCodePublic::CanisterTrapped),
                 ErrorCode::CanisterCalledTrap => Ok(ErrorCodePublic::CanisterCalledTrap),
                 ErrorCode::CanisterContractViolation => {
@@ -180,6 +185,9 @@ pub mod v1 {
                 }
                 ErrorCode::CanisterInvalidController => {
                     Ok(ErrorCodePublic::CanisterInvalidController)
+                }
+                ErrorCode::CanisterInvalidControllerOrSubnetAdmin => {
+                    Ok(ErrorCodePublic::CanisterInvalidControllerOrSubnetAdmin)
                 }
                 ErrorCode::CanisterFunctionNotFound => {
                     Ok(ErrorCodePublic::CanisterFunctionNotFound)

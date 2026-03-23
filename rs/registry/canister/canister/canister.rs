@@ -7,7 +7,9 @@ use dfn_core::{
 use ic_base_types::{NodeId, PrincipalId};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nervous_system_string::clamp_debug_len;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node_operator::v1::NodeOperatorRecord,
@@ -44,6 +46,7 @@ use registry_canister::{
         do_create_subnet::{CreateSubnetPayload, NewSubnet},
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
+        do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_node_operators::RemoveNodeOperatorsPayload,
@@ -51,6 +54,7 @@ use registry_canister::{
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_set_subnet_operational_level::SetSubnetOperationalLevelPayload,
+        do_split_subnet::SplitSubnetPayload,
         do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
         do_update_api_boundary_nodes_version::{
             DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
@@ -65,6 +69,7 @@ use registry_canister::{
         },
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
+        do_update_subnet_admins::UpdateSubnetAdminsPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
         firewall::{
             AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
@@ -131,6 +136,16 @@ fn check_caller_is_canister_migration_orchestrator_and_log(method_name: &str) {
     assert_eq!(
         caller,
         MIGRATION_CANISTER_ID.into(),
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
+    );
+}
+
+fn check_caller_is_subnet_rental_canister_and_log(method_name: &str) {
+    let caller = dfn_core::api::caller();
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
+    assert_eq!(
+        caller,
+        SUBNET_RENTAL_CANISTER_ID.into(),
         "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
@@ -227,9 +242,9 @@ fn canister_post_upgrade() {
     println!("{LOG_PREFIX}canister_post_upgrade");
     // call stable_storage APIs and get registry instance in canister context
     // Look for MemoryManager magic bytes
-    let mut magic_bytes = [0u8; 3];
+    let mut magic_bytes = [0_u8; 3];
     stable64_read(&mut magic_bytes, 0, 3);
-    let mut mgr_version_byte = [0u8; 1];
+    let mut mgr_version_byte = [0_u8; 1];
     stable64_read(&mut mgr_version_byte, 3, 1);
 
     let registry_storage: RegistryCanisterStableStorage =
@@ -797,6 +812,19 @@ fn swap_node_in_subnet_directly_(payload: SwapNodeInSubnetDirectlyPayload) {
     recertify_registry();
 }
 
+#[unsafe(export_name = "canister_update migrate_node_operator_directly")]
+fn migrate_node_operator_directly() {
+    over(candid_one, |payload: MigrateNodeOperatorPayload| {
+        migrate_node_operator_directly_(payload)
+    });
+}
+
+#[candid_method(update, rename = "migrate_node_operator_directly")]
+fn migrate_node_operator_directly_(payload: MigrateNodeOperatorPayload) {
+    registry_mut().do_migrate_node_operator_directly(payload);
+    recertify_registry();
+}
+
 #[unsafe(export_name = "canister_update remove_node_operators")]
 fn remove_node_operators() {
     check_caller_is_governance_and_log("remove_node_operators");
@@ -1000,6 +1028,26 @@ fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
                 "{LOG_PREFIX} Reroute canister ranges failed: {error_message}"
             ))
         });
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update split_subnet")]
+fn split_subnet() {
+    check_caller_is_governance_and_log("split_subnet");
+    over_async(candid_one, split_subnet_);
+}
+
+#[candid_method(update, rename = "split_subnet")]
+async fn split_subnet_(payload: SplitSubnetPayload) -> () {
+    registry_mut()
+        .split_subnet(payload)
+        .await
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "Failed to trigger the subnet splitting: {error_message}"
+            ))
+        });
+
     recertify_registry();
 }
 
@@ -1227,6 +1275,19 @@ fn set_subnet_operational_level() {
 #[candid_method(update, rename = "set_subnet_operational_level")]
 fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
     registry_mut().do_set_subnet_operational_level(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update update_subnet_admins")]
+fn update_subnet_admins() {
+    check_caller_is_subnet_rental_canister_and_log("update_subnet_admins");
+    over(candid_one, update_subnet_admins_);
+}
+
+#[candid_method(update, rename = "update_subnet_admins")]
+fn update_subnet_admins_(payload: UpdateSubnetAdminsPayload) {
+    registry_mut().do_update_subnet_admins(payload);
+    recertify_registry();
 }
 
 fn recertify_registry() {

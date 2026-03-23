@@ -36,9 +36,9 @@ use ic_types::{
     consensus::{
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
         CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
-        EquivocationProof, FinalizationContent, HasCommittee, HasHash, HasHeight, HasRank,
-        HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape,
-        RandomTapeShare, Rank,
+        EquivocationProof, FinalizationContent, HasBlockHash, HasCommittee, HasHash, HasHeight,
+        HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare,
+        RandomTape, RandomTapeShare, Rank,
         dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
     },
     crypto::{CryptoError, CryptoHashOf, Signed, threshold_sig::ni_dkg::NiDkgId},
@@ -408,7 +408,7 @@ impl NotaryIssued for NotarizationContent {
         if self.height == Height::from(0) {
             return Err("Cannot validate height 0 notarization: ");
         }
-        if pool.get_block(&self.block, self.height).is_err() {
+        if pool.get_block(&self.block, self.height).is_none() {
             return Err("Cannot validate notarization without valid proposal: ");
         }
         if get_previous_beacon(pool, self.height).is_err() {
@@ -449,7 +449,7 @@ impl NotaryIssued for FinalizationContent {
         if self.height == Height::from(0) {
             return Err("Cannot validate height 0 finalization: ");
         }
-        if pool.get_notarized_block(&self.block, self.height).is_err() {
+        if pool.get_notarized_block(&self.block, self.height).is_none() {
             return Err("Cannot validate finalization without valid notarization: ");
         }
         if get_previous_beacon(pool, self.height).is_err() {
@@ -595,7 +595,7 @@ fn get_notarized_parent(
     let height = proposal.height().decrement();
     pool.get_notarized_block(parent, height)
         .map(|block| block.into_inner())
-        .map_err(|_| ValidationFailure::BlockNotFound(parent.clone(), height).into())
+        .ok_or_else(|| ValidationFailure::BlockNotFound(parent.clone(), height).into())
 }
 
 /// Returns rank map of disqualified ranks in the given range. A rank is
@@ -629,6 +629,7 @@ fn get_disqualified_ranks(
 }
 
 /// A data structure for storing ranks and proposal metadata.
+#[derive(Debug)]
 struct RankMap {
     map: BTreeMap<Height, BTreeMap<Rank, BasicSigned<BlockMetadata>>>,
     subnet_id: SubnetId,
@@ -975,6 +976,19 @@ impl Validator {
             .block_proposal()
             .get_by_height_range(range)
         {
+            // If we already have the block proposal in the validated pool, remove the duplicate.
+            if pool_reader
+                .get_block(proposal.block_hash(), proposal.height())
+                .is_some()
+            {
+                change_set.push(ChangeAction::RemoveFromUnvalidated(proposal.into_message()));
+                self.metrics
+                    .duplicate_artifact
+                    .with_label_values(&["block_proposal"])
+                    .inc();
+                continue;
+            }
+
             // Handle integrity check and verification errors early
             let verification_result = self.verify_artifact(pool_reader, &proposal);
             if let Err(error) = verification_result {
@@ -1010,37 +1024,42 @@ impl Validator {
             {
                 // Verify notarization signature. If the signature is valid, both
                 // artifacts may be validated.
-                let verification = self.verify_artifact(pool_reader, &notarization);
-                if let Err(ValidationError::InvalidArtifact(e)) = verification {
-                    change_set.push(ChangeAction::HandleInvalid(
-                        notarization.into_message(),
-                        format!("{e:?}"),
-                    ));
-                } else if verification.is_ok() {
-                    if get_notarized_parent(pool_reader, &proposal).is_ok() {
-                        // A successful verification is enough to validate this block,
-                        // because from the notarization we know that the block validity
-                        // was already checked.
-
-                        // Only add proposal's rank to the set of valid ranks if
-                        // it's not already disqualified.
-                        if disqualified_ranks
-                            .get_block_metadata(proposal.height(), proposal.rank())
-                            .is_none()
-                        {
-                            valid_ranks.add(&proposal);
-                        }
-                        change_set.push(ChangeAction::MoveToValidated(notarization.into_message()));
-                        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
+                match self.verify_artifact(pool_reader, &notarization) {
+                    Err(ValidationError::InvalidArtifact(e)) => {
+                        change_set.push(ChangeAction::HandleInvalid(
+                            notarization.into_message(),
+                            format!("{e:?}"),
+                        ));
                     }
-                    // If the parent is notarized, this block and its notarization are
-                    // validated. If not, this block currently cannot be
-                    // validated through parent either.
-                    continue;
+                    Ok(()) => {
+                        if get_notarized_parent(pool_reader, &proposal).is_ok() {
+                            // A successful verification is enough to validate this block,
+                            // because from the notarization we know that the block validity
+                            // was already checked.
+
+                            // Only add proposal's rank to the set of valid ranks if
+                            // it's not already disqualified.
+                            if disqualified_ranks
+                                .get_block_metadata(proposal.height(), proposal.rank())
+                                .is_none()
+                            {
+                                valid_ranks.add(&proposal);
+                            }
+                            change_set
+                                .push(ChangeAction::MoveToValidated(notarization.into_message()));
+                            change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
+                        }
+                        // If the parent is notarized, this block and its notarization are
+                        // validated. If not, this block currently cannot be
+                        // validated through parent either.
+                        continue;
+                    }
+                    Err(ValidationError::ValidationFailed(_)) => {
+                        // Note that transient errors on notarization signature
+                        // verification should cause fall through, and the block
+                        // proposals proceed to be checked normally.
+                    }
                 }
-                // Note that transient errors on notarization signature
-                // verification should cause fall through, and the block
-                // proposals proceed to be checked normally.
             }
 
             // Skip validation if proposal has a higher rank than a known
@@ -1097,9 +1116,8 @@ impl Validator {
             // Disqualify rank if equivocation was found. If there already
             // exists a validated block of the same rank as the current
             // proposal, we must generate an equivocation proof.
-            if let Some(existing_metadata) = valid_ranks
-                .get_block_metadata(proposal.height(), proposal.rank())
-                .cloned()
+            if let Some(existing_metadata) =
+                valid_ranks.get_block_metadata(proposal.height(), proposal.rank())
             {
                 // Ensure the proposal has a different hash from the validated
                 // block of same rank. Then we can construct the proof.
@@ -1112,7 +1130,7 @@ impl Validator {
                         hash1: proposal.content.get_hash().clone(),
                         signature1: proposal.signature.signature.clone(),
                         hash2: CryptoHashOf::new(existing_metadata.content.hash().clone()),
-                        signature2: existing_metadata.signature.signature,
+                        signature2: existing_metadata.signature.signature.clone(),
                     };
                     warn!(self.log, "Equivocation found. Proof: {:?}", proof,);
                     change_set.push(ChangeAction::AddToValidated(ValidatedArtifact {
@@ -1151,7 +1169,7 @@ impl Validator {
             }
         }
         self.metrics.observe_and_reset_dkg_time_per_validator_run();
-        change_set
+        self.dedup_move_to_validated_actions("block_proposal", change_set)
     }
 
     /// Check whether or not the provided `BlockProposal` can be moved into the
@@ -1663,34 +1681,20 @@ impl Validator {
             .get_finalized_block(height)
             .ok_or(ValidationFailure::FinalizedBlockNotFound(height))?;
         if ic_types::crypto::crypto_hash(&block) != share_content.block {
-            warn!(
-                self.log,
-                "Block from received CatchUpShareContent does not match finalized block in the pool: {:?} {:?}",
-                share_content,
-                block
-            );
             return Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare.into());
         }
-        if !block.payload.is_summary() {
-            warn!(
-                self.log,
-                "Block from received CatchUpShareContent is not a summary block: {:?} {:?}",
-                share_content,
-                block
-            );
-            return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
-        }
+
+        let summary = match block.payload.as_ref() {
+            BlockPayload::Summary(summary_payload) => summary_payload,
+            BlockPayload::Data(_) => {
+                return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
+            }
+        };
 
         let beacon = pool_reader
             .get_random_beacon(height)
             .ok_or(ValidationFailure::RandomBeaconNotFound(height))?;
         if &beacon != share_content.random_beacon.get_value() {
-            warn!(
-                self.log,
-                "RandomBeacon from received CatchUpContent does not match RandomBeacon in the pool: {:?} {:?}",
-                share_content,
-                beacon
-            );
             return Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare.into());
         }
 
@@ -1699,16 +1703,9 @@ impl Validator {
             .get_state_hash_at(height)
             .map_err(ValidationFailure::StateHashError)?;
         if hash != share_content.state_hash {
-            warn!(
-                self.log,
-                "State hash from received CatchUpContent does not match local state hash: {:?} {:?}",
-                share_content,
-                hash
-            );
             return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
-        let summary = block.payload.as_ref().as_summary();
         let registry_version = if summary.idkg.is_some() {
             // Should succeed as we already got the hash above
             let state = self
@@ -1720,12 +1717,6 @@ impl Validator {
             None
         };
         if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
-            warn!(
-                self.log,
-                "Oldest registry version from received CatchUpContent does not match local one: {:?} {:?}",
-                share_content,
-                registry_version
-            );
             return Err(
                 InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
             );
@@ -1812,6 +1803,27 @@ impl Validator {
                 )
             }
         }
+        change_set
+    }
+
+    /// Same as [`Self::dedup_change_actions`] but only deduplicates
+    /// [`ChangeAction::MoveToValidated`] mutations.
+    fn dedup_move_to_validated_actions(&self, name: &str, actions: Mutations) -> Mutations {
+        let mut change_set = Mutations::new();
+
+        for action in actions {
+            if let ChangeAction::MoveToValidated(_) = action {
+                if change_set.dedup_push(action).is_some() {
+                    self.metrics
+                        .duplicate_artifact
+                        .with_label_values(&[name])
+                        .inc();
+                }
+            } else {
+                change_set.push(action)
+            }
+        }
+
         change_set
     }
 
@@ -1989,6 +2001,8 @@ pub mod test {
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
     };
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use rstest::rstest;
     use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
@@ -2620,7 +2634,7 @@ pub mod test {
             let rank = Rank(1);
             let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
 
-            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
+            let node_id = pool.get_block_maker_by_rank(test_block.height(), Some(rank));
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
@@ -2722,7 +2736,7 @@ pub mod test {
             let parent: &Block = block_chain.last().unwrap().as_ref();
             let rank = Rank(1);
             let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
-            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
+            let node_id = pool.get_block_maker_by_rank(test_block.height(), Some(rank));
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
@@ -2795,7 +2809,7 @@ pub mod test {
 
             let mut test_block = pool.make_next_block();
             test_block.signature.signer =
-                pool.get_block_maker_by_rank(test_block.height(), Rank(0));
+                pool.get_block_maker_by_rank(test_block.height(), Some(Rank(0)));
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             test_block.content.as_mut().context.certified_height = Height::from(1);
             test_block.content.as_mut().rank = Rank(0);
@@ -2811,7 +2825,8 @@ pub mod test {
 
             let rank = Rank(0);
             let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
-            next_block.signature.signer = pool.get_block_maker_by_rank(next_block.height(), rank);
+            next_block.signature.signer =
+                pool.get_block_maker_by_rank(next_block.height(), Some(rank));
             next_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             next_block.content.as_mut().context.certified_height = Height::from(1);
             next_block.content.as_mut().rank = rank;
@@ -2998,7 +3013,8 @@ pub mod test {
 
     fn make_next_block(pool: &TestConsensusPool) -> BlockProposal {
         let mut next_block = pool.make_next_block();
-        next_block.signature.signer = pool.get_block_maker_by_rank(next_block.height(), Rank(0));
+        next_block.signature.signer =
+            pool.get_block_maker_by_rank(next_block.height(), Some(Rank(0)));
         next_block.content.as_mut().rank = Rank(0);
         next_block.update_content();
         next_block
@@ -3603,7 +3619,8 @@ pub mod test {
             );
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
+            test_block.signature.signer =
+                pool.get_block_maker_by_rank(test_block.height(), Some(rank));
             test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
@@ -3655,7 +3672,8 @@ pub mod test {
             );
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
+            test_block.signature.signer =
+                pool.get_block_maker_by_rank(test_block.height(), Some(rank));
             test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
@@ -3709,7 +3727,7 @@ pub mod test {
             let parent_block = pool.make_next_block();
             let rank = Rank(0);
             let mut block = pool.make_next_block_from_parent(parent_block.as_ref(), rank);
-            block.signature.signer = pool.get_block_maker_by_rank(block.height(), rank);
+            block.signature.signer = pool.get_block_maker_by_rank(block.height(), Some(rank));
 
             block.update_content();
             let content = NotarizationContent::new(
@@ -3743,7 +3761,7 @@ pub mod test {
         })
     }
 
-    /// Returns a consensus pool and validator, along with a valid equivocation proof.
+    /// Returns a consensus pool, validator, and a valid equivocation proof.
     fn setup_equivocation_proof_test(
         pool_config: ArtifactPoolConfig,
     ) -> (TestConsensusPool, Validator, EquivocationProof) {
@@ -3760,7 +3778,7 @@ pub mod test {
 
         let original = pool.make_next_block();
         let mut block = original.clone();
-        let correct_signer = pool.get_block_maker_by_rank(block.height(), Rank(0));
+        let correct_signer = pool.get_block_maker_by_rank(block.height(), Some(Rank(0)));
 
         // Create two different blocks from the same block maker
         let ingress = IngressPayload::from(vec![
@@ -3866,8 +3884,8 @@ pub mod test {
     fn test_equivocation_invalid_for_signer_not_blockmaker() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
-            // Some test id that's different from the block maker, but still part of the subnet
-            let non_blockmaker_node = node_test_id(3);
+            // Use a node that's not a blockmaker at this height
+            let non_blockmaker_node = pool.get_block_maker_by_rank(proof.height, None);
             assert!(non_blockmaker_node != proof.signer);
 
             proof.signer = non_blockmaker_node;
@@ -3949,6 +3967,9 @@ pub mod test {
 
             let mut block = pool.make_next_block();
 
+            // Use a node that is NOT a block maker at this height.
+            let incorrect_signer = pool.get_block_maker_by_rank(block.height(), None);
+
             // Insert notarization into unvalidated pool, not the block
             let mut notarization = Notarization::fake(NotarizationContent::new(
                 block.height(),
@@ -3959,8 +3980,8 @@ pub mod test {
             pool.insert_unvalidated(notarization);
 
             // Insert tampered block into unvalidated pool
-            assert_ne!(block.signature.signer, node_test_id(100));
-            block.signature.signer = node_test_id(3);
+            assert_ne!(block.signature.signer, incorrect_signer);
+            block.signature.signer = incorrect_signer;
             pool.insert_unvalidated(block);
 
             // Incorrect block proposals should not get validated
@@ -4008,8 +4029,8 @@ pub mod test {
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_matches!(
                 changeset[..],
-                [ChangeAction::MoveToValidated(
-                    ConsensusMessage::BlockProposal(_)
+                [ChangeAction::RemoveFromUnvalidated(
+                    ConsensusMessage::BlockProposal(_),
                 )]
             );
             pool.apply(changeset);
@@ -4054,7 +4075,7 @@ pub mod test {
             block_with_malicious_signer.content.as_mut().context.time += Duration::from_nanos(1);
             block_with_malicious_signer.update_content();
             block_with_malicious_signer.signature.signer =
-                pool.get_block_maker_by_rank(block.height(), Rank(1));
+                pool.get_block_maker_by_rank(block.height(), Some(Rank(1)));
 
             pool.insert_validated(block.clone());
             pool.insert_unvalidated(block_with_malicious_signer.clone());
@@ -4193,6 +4214,285 @@ pub mod test {
                     ConsensusMessage::BlockProposal(ref proposal)
                 )] if proposal.rank() == block.rank()
             );
+        });
+    }
+
+    #[derive(Debug)]
+    struct TestBlockBuilder {
+        signature: Option<Vec<u8>>,
+        increment_timestamp: bool,
+        validated: bool,
+        notarized: bool,
+    }
+
+    impl TestBlockBuilder {
+        fn validated() -> Self {
+            Self::new(true)
+        }
+
+        fn unvalidated() -> Self {
+            Self::new(false)
+        }
+
+        fn new(validated: bool) -> Self {
+            Self {
+                validated,
+                signature: None,
+                increment_timestamp: false,
+                notarized: false,
+            }
+        }
+
+        fn with_notarization(mut self) -> Self {
+            self.notarized = true;
+
+            self
+        }
+
+        fn with_altered_content(mut self) -> Self {
+            self.increment_timestamp = true;
+
+            self
+        }
+
+        fn with_altered_signature(mut self, signature: Vec<u8>) -> Self {
+            self.signature = Some(signature);
+
+            self
+        }
+
+        fn build(&self, pool: &TestConsensusPool) -> BlockProposal {
+            let mut block = pool.make_next_block();
+
+            if let Some(signature) = &self.signature {
+                block.signature.signature = BasicSigOf::new(BasicSig(signature.clone()));
+            }
+
+            if self.increment_timestamp {
+                block.content.as_mut().context.time += Duration::from_nanos(1);
+                block.update_content();
+            }
+
+            block
+        }
+    }
+
+    #[derive(Debug)]
+    struct EquivocationProofTestCase {
+        artifacts: Vec<TestBlockBuilder>,
+        expected_equivocations_count: usize,
+        expected_validated_blocks_count: usize,
+        expected_removed_blocks_count: usize,
+    }
+
+    #[rstest]
+    #[case::issue_equivocation_proof_when_we_have_multiple_unvalidated_blocks(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::unvalidated(),
+            TestBlockBuilder::unvalidated().with_altered_content(),
+        ],
+        expected_equivocations_count: 1,
+        expected_validated_blocks_count: 1,
+        expected_removed_blocks_count: 0,
+    })]
+    #[case::issue_equivocation_proof_when_we_have_multiple_unvalidated_blocks_deduplicated(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::unvalidated(),
+            TestBlockBuilder::unvalidated().with_altered_signature(vec![0, 0, 1]),
+            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 2]),
+            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 3]),
+        ],
+        expected_equivocations_count: 1,
+        expected_validated_blocks_count: 1,
+        expected_removed_blocks_count: 0,
+    })]
+    #[case::issue_equivocation_proof_when_we_already_have_a_valid_block(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::validated(),
+            TestBlockBuilder::unvalidated().with_altered_content(),
+        ],
+        expected_equivocations_count: 1,
+        expected_validated_blocks_count: 0,
+        expected_removed_blocks_count: 0,
+    })]
+    #[case::issue_equivocation_proof_when_we_already_have_a_valid_block_deduplicated(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::validated(),
+            TestBlockBuilder::unvalidated().with_altered_content(),
+            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 2]),
+        ],
+        expected_equivocations_count: 1,
+        expected_validated_blocks_count: 0,
+        expected_removed_blocks_count: 0,
+    })]
+    #[case::dont_issue_equivocation_proof_when_valid_notarization(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::validated(),
+            TestBlockBuilder::unvalidated().with_altered_content().with_notarization(),
+        ],
+        expected_equivocations_count: 0,
+        expected_validated_blocks_count: 1,
+        expected_removed_blocks_count: 0,
+    })]
+    #[case::dont_issue_equivocation_proof_when_valid_notarization_deduplicated(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::validated(),
+            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 0]).with_notarization(),
+            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 1]).with_notarization(),
+        ],
+        expected_equivocations_count: 0,
+        expected_validated_blocks_count: 1,
+        expected_removed_blocks_count: 0,
+    })]
+    #[case(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::validated().with_altered_signature(vec![0, 0, 1]),
+            TestBlockBuilder::unvalidated().with_altered_signature(vec![0, 0, 2]),
+        ],
+        expected_equivocations_count: 0,
+        expected_validated_blocks_count: 0,
+        expected_removed_blocks_count: 1,
+    })]
+    #[case(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::unvalidated(),
+            TestBlockBuilder::unvalidated().with_altered_content().with_notarization(),
+        ],
+        expected_equivocations_count: 0,
+        expected_validated_blocks_count: 2,
+        expected_removed_blocks_count: 0,
+    })]
+    #[case(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::validated().with_altered_signature(vec![0, 0, 1]),
+            TestBlockBuilder::unvalidated().with_altered_signature(vec![0, 0, 2]).with_notarization(),
+            TestBlockBuilder::unvalidated().with_altered_signature(vec![0, 0, 3]).with_notarization(),
+        ],
+        expected_equivocations_count: 0,
+        expected_validated_blocks_count: 0,
+        expected_removed_blocks_count: 2,
+    })]
+    #[case(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::validated(),
+            TestBlockBuilder::unvalidated(),
+        ],
+        expected_equivocations_count: 0,
+        expected_validated_blocks_count: 0,
+        expected_removed_blocks_count: 1,
+    })]
+    #[case::dont_issue_equivocation_when_two_blocks_with_different_signatures(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::unvalidated().with_altered_signature(vec![0, 0, 1]),
+            TestBlockBuilder::unvalidated().with_altered_signature(vec![0, 0, 2]),
+        ],
+        expected_equivocations_count: 0,
+        expected_validated_blocks_count: 1,
+        expected_removed_blocks_count: 0,
+    })]
+    #[trace]
+    fn equivocation_proofs_test(#[case] test_case: EquivocationProofTestCase) {
+        ic_test_utilities_logger::with_test_replica_logger(|logger| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let ValidatorAndDependencies {
+                    mut validator,
+                    state_manager,
+                    time_source,
+                    payload_builder,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &[NODE_1, NODE_2]);
+                validator.log = logger;
+
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(Height::from(0));
+
+                for artifact in test_case.artifacts {
+                    let block = artifact.build(&pool);
+
+                    let maybe_notarization = if artifact.notarized {
+                        let content = NotarizationContent::new(
+                            block.height(),
+                            block.content.get_hash().clone(),
+                        );
+                        let mut notarization = Notarization::fake(content);
+                        notarization.signature.signers = vec![NODE_2];
+                        Some(notarization)
+                    } else {
+                        None
+                    };
+
+                    if artifact.validated {
+                        pool.insert_validated(block);
+                        if let Some(notarization) = maybe_notarization {
+                            pool.insert_validated(notarization);
+                        }
+                    } else {
+                        pool.insert_unvalidated(block);
+                        if let Some(notarization) = maybe_notarization {
+                            pool.insert_unvalidated(notarization);
+                        }
+                    }
+                }
+
+                time_source
+                    .set_time(Time::from_nanos_since_unix_epoch(u64::MAX))
+                    .unwrap();
+
+                let changeset = validator.validate_blocks(&PoolReader::new(&pool));
+
+                let equivocations_count = changeset
+                    .iter()
+                    .filter(|change| {
+                        matches!(
+                            change,
+                            ChangeAction::AddToValidated(ValidatedArtifact {
+                                msg: ConsensusMessage::EquivocationProof(_),
+                                timestamp: _,
+                            })
+                        )
+                    })
+                    .count();
+
+                let validated_blocks_count = changeset
+                    .iter()
+                    .filter(|change| {
+                        matches!(
+                            change,
+                            ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(_))
+                        )
+                    })
+                    .count();
+
+                let removed_blocks_count = changeset
+                    .iter()
+                    .filter(|change| {
+                        matches!(
+                            change,
+                            ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(_),)
+                        )
+                    })
+                    .count();
+
+                assert_eq!(
+                    equivocations_count, test_case.expected_equivocations_count,
+                    "Wrong number of equivocations"
+                );
+                assert_eq!(
+                    validated_blocks_count, test_case.expected_validated_blocks_count,
+                    "Wrong number of validated blocks"
+                );
+                assert_eq!(
+                    removed_blocks_count, test_case.expected_removed_blocks_count,
+                    "Wrong number of removed blocks"
+                );
+            })
         });
     }
 }

@@ -173,6 +173,13 @@ impl TaskQueue {
         }
     }
 
+    /// Returns true if the task queue has a `Heartbeat` or `GlobalTimer` task.
+    pub fn has_heartbeat_or_global_timer(&self) -> bool {
+        self.queue
+            .iter()
+            .any(|task| *task == ExecutionTask::Heartbeat || *task == ExecutionTask::GlobalTimer)
+    }
+
     /// Removes `Heartbeat` and `GlobalTimer` tasks.
     pub fn remove_heartbeat_and_global_timer(&mut self) {
         for task in self.queue.iter() {
@@ -182,7 +189,9 @@ impl TaskQueue {
             );
         }
 
-        self.queue.clear();
+        self.queue.retain(|task| {
+            *task != ExecutionTask::Heartbeat && *task != ExecutionTask::GlobalTimer
+        });
     }
 
     /// Returns `PausedExecution` or `PausedInstallCode` task.
@@ -279,10 +288,8 @@ mod tests {
     use crate::canister_state::system_state::PausedExecutionId;
     use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
     use ic_test_utilities_types::messages::IngressBuilder;
-    use ic_types::{
-        Cycles,
-        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
-    };
+    use ic_types::messages::{CanisterCall, CanisterMessageOrTask, CanisterTask};
+    use ic_types_cycles::Cycles;
 
     #[test]
     fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {

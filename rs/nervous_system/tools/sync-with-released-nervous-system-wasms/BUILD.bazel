@@ -1,5 +1,4 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel:defs.bzl", "symlink_dir")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -33,15 +32,8 @@ rust_binary(
     ],
     args = ["$(location //:mainnet-canister-revisions.json) $(location @crate_index//:ic-wasm__ic-wasm)"],
     data = [
-        ":tools",
         "//:mainnet-canister-revisions.json",
+        "@crate_index//:ic-wasm__ic-wasm",
     ],
     deps = DEPENDENCIES,
-)
-
-symlink_dir(
-    name = "tools",
-    targets = {
-        "@crate_index//:ic-wasm__ic-wasm": "ic-wasm",
-    },
 )

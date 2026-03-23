@@ -78,8 +78,6 @@ fn main() {
         let stream = unsafe { incoming_from_nth_systemd_socket(METRICS_SOCKET_NUM) };
         start_metrics_grpc(global_metrics, logger.clone(), stream);
     }
-
-    // TODO(CRP-2915): remove canister SKS cleanup logic
     cleanup_obsolete_canister_sks_file_if_it_exists(sks_dir, &logger, &metrics);
 
     rt.block_on(ic_crypto_internal_csp::run_csp_vault_server(

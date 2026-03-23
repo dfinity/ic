@@ -11,11 +11,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 13.0.0 - 2026-03-23
+
 ### Added
 - The endpoint `/instances/` takes an additional optional field `mainnet_nns_subnet_id` specifying that the NNS subnet should be created with the mainnet NNS subnet ID.
+- The CLI option `--hard-ttl` to specify that the PocketIC server should perform a hard exit after the provided number of seconds since its launch.
+- The HTTP gateway configuration (used in the `/http_gateway` endpoint and the `http_gateway_config` field of the `/instances/` endpoint)
+  takes a new optional field `domain_custom_provider_local_file` specifying a path to a local file that maps custom domain names to canister IDs.
+  The file format is one mapping per line: `<domain>:<canister-id>` (e.g., `my-app.example.com:rdmx6-jaaaa-aaaaa-aaadq-cai`).
+- A new cloud engine subnet kind: a new variant in `SubnetKind` and a new field in `SubnetConfigSet` and `ExtendedSubnetConfigSet`.
+- A new optional field to specify subnet admins in `SubnetSpec` and `SubnetConfig`.
+  The field can only be set for application subnets and cloud engines on a "free" cost schedule (see below)!
+- A new field to specify subnet cost schedule in `SubnetSpec` and `SubnetConfig`.
+  The field can only be set to a non-default value for application subnets and cloud engines!
+  Moreover, the field has to be set to the "free" cost schedule on cloud engines!
 
 ### Changed
 - All subnets with mainnet canister ranges but the NNS subnet are always created with mainnet subnet IDs.
+- The HTTP gateway skips authority validation (`--domain-skip-authority-validation`) when the `domains` field of the HTTP gateway
+  configuration is not set (i.e., `null`/`None`), allowing requests from any domain to be served as long as the canister ID can be
+  resolved from the request (e.g., via a subdomain or the `canisterId` query parameter). When `domains` is explicitly provided,
+  authority validation is enforced and only requests matching the configured domains are accepted.
 
 
 

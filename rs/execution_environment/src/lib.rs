@@ -17,10 +17,13 @@ pub mod units;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
+pub use canister_manager::types::WasmSource;
+pub use canister_manager::wasm_execution_mode;
 use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
-    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse,
-    RoundInstructions, RoundLimits, as_num_instructions, as_round_instructions, execute_canister,
+    CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,
+    ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits, as_num_instructions,
+    as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
@@ -46,8 +49,8 @@ use ic_types::{
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::{DataCertificateWithDelegationMetadata, InternalHttpQueryHandler};
 use query_handler::{HttpQueryHandler, QueryScheduler};
-pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
+pub use scheduler::{RoundSchedule, abort_all_paused_executions};
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
@@ -342,7 +345,6 @@ fn setup_execution_helper(
         ic_query_stats::init_query_stats(logger.clone(), &config, metrics_registry);
 
     let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
-        config.subnet_memory_capacity,
         config.default_provisional_cycles_balance,
         config.default_freeze_threshold,
         own_subnet_id,
