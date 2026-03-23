@@ -102,7 +102,9 @@ CMD ["/bin/bash"]
 FROM base as build
 
 # Create user groups needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier
+RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
+    # CI before script requires sudo \
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 USER buildifier
 
 FROM base as dev
