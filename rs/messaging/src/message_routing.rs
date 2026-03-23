@@ -855,16 +855,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         ),
         ReadRegistryError,
     > {
-        let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
-        let network_topology =
-            self.try_to_populate_network_topology(registry_version, own_subnet_id)?;
-
-        let provisional_whitelist = self
-            .registry
-            .get_provisional_whitelist(registry_version)
-            .map_err(|err| registry_error("provisional_whitelist", None, err))?
-            .unwrap_or_else(|| ProvisionalWhitelist::Set(BTreeSet::new()));
-
         let subnet_record = self
             .registry
             .get_subnet_record(own_subnet_id, registry_version)
@@ -875,6 +865,19 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .subnet_type
             .try_into()
             .unwrap_or(SubnetType::CloudEngine);
+
+        let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
+        let network_topology = self.try_to_populate_network_topology(
+            registry_version,
+            own_subnet_id,
+            own_subnet_type,
+        )?;
+
+        let provisional_whitelist = self
+            .registry
+            .get_provisional_whitelist(registry_version)
+            .map_err(|err| registry_error("provisional_whitelist", None, err))?
+            .unwrap_or_else(|| ProvisionalWhitelist::Set(BTreeSet::new()));
 
         let nodes = get_node_ids_from_subnet_record(&subnet_record)
             .map_err(|err| {
@@ -994,6 +997,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
+        own_subnet_type: SubnetType,
     ) -> Result<NetworkTopology, ReadRegistryError> {
         use ReadRegistryError::Persistent;
 
@@ -1148,10 +1152,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .unwrap_or_default();
 
         // Derive filtered subnets and routing table.
-        let own_subnet_type = all_subnets
-            .get(&own_subnet_id)
-            .map(|topo| topo.subnet_type)
-            .unwrap_or_default();
         let (subnets, routing_table) = if own_subnet_type == SubnetType::CloudEngine {
             // CloudEngine subnets only see themselves.
             let subnets = all_subnets

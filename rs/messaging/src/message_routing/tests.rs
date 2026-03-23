@@ -1209,6 +1209,8 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
         // Corrupted Subnet Ids.
         // Any string of u8 can be successfully parsed into a Subnet Id.
         // However, reading a subnet record for a faulty Subnet Id triggers an error.
+        // The own subnet record is written separately because the own subnet record
+        // is read before the subnet list.
         let fixture = RegistryFixture::new();
         fixture
             .write_test_records(&TestRecords {
@@ -1216,6 +1218,10 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
                 ..minimal_input
             })
             .unwrap();
+        fixture
+            .write_subnet_record(own_subnet_id, Valid(&own_subnet_record))
+            .unwrap();
+        fixture.registry.update_to_latest_version();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
             Err(ReadRegistryError::Persistent(err)) if err.contains("subnet IDs") && err.contains("failed to decode")
