@@ -12,6 +12,7 @@ use ssh2::Session;
 pub struct JournalStreamer {
     session: Session,
     journalctl_flags: BTreeSet<String>,
+    grep_flags: BTreeSet<String>,
     from_cursor: Option<String>,
     to_cursor: Option<String>,
 }
@@ -33,23 +34,28 @@ impl JournalStreamer {
         Self {
             session,
             journalctl_flags: BTreeSet::new(),
+            grep_flags: BTreeSet::new(),
             from_cursor: None,
             to_cursor: None,
         }
     }
 
-    /// Limits the number of journal entries returned (maps to `journalctl -n`).
+    /// Limits the number of journal entries returned (maps to `journalctl --lines=`).
     pub fn max_lines(mut self, max_lines: usize) -> Self {
-        self.journalctl_flags.insert(format!("-n{}", max_lines));
+        self.journalctl_flags
+            .insert(format!("--lines={}", max_lines));
+        self.grep_flags.insert(format!("--max-count={}", max_lines));
         self
     }
 
-    /// Enables follow mode (maps to `journalctl -f`), causing `journalctl` to block and wait for
-    /// new entries instead of returning immediately.
-    /// This function will return only when the SSH session is closed, i.e. when the node shuts down
-    /// or reboots.
+    /// Enables follow mode (maps to `journalctl --follow`), causing `journalctl` to block and wait
+    /// for new entries instead of returning immediately.
+    /// Searching for a string after calling this function will return only when the SSH session is
+    /// closed, i.e. when the node shuts down or reboots. Even then, it will probably return an
+    /// error with `transport read`. Thus, it is recommended to also call `max_lines` to return as
+    /// soon as the expected number of lines have been read.
     pub fn follow(mut self) -> Self {
-        self.journalctl_flags.insert("-f".to_string());
+        self.journalctl_flags.insert("--follow".to_string());
         self
     }
 
@@ -66,15 +72,16 @@ impl JournalStreamer {
             .next()
             .ok_or_else(|| anyhow::anyhow!("No journal entries found"))?;
 
-        self.from_cursor = Some(cursor.to_string());
+        self.from_cursor = Some(cursor);
         Ok(self)
     }
 
-    /// Searches the journal for the first entry matching `search_regex` and sets an upper bound so
-    /// that subsequent searches only return entries up to (and including) that match.
+    /// Searches the journal for the first entry matching `search_regex` and returns the cursor of
+    /// that entry. This is useful for anchoring subsequent searches to start or end at a specific
+    /// log line.
     ///
     /// Returns an error if no entry matches the regex.
-    pub fn until(mut self, search_regex: &str) -> anyhow::Result<Self> {
+    pub fn get_cursor_at(&self, search_regex: &str) -> anyhow::Result<String> {
         let (_message, cursor) = self
             .search_and_return_cursors(search_regex)?
             .into_iter()
@@ -83,8 +90,13 @@ impl JournalStreamer {
                 anyhow::anyhow!("No journal entries found matching the regex '{search_regex}'")
             })?;
 
-        self.to_cursor = Some(cursor.to_string());
-        Ok(self)
+        Ok(cursor)
+    }
+
+    /// Returns the cursor that subsequent searches will end at, if any.
+    pub fn until_cursor(mut self, cursor: String) -> Self {
+        self.to_cursor = Some(cursor);
+        self
     }
 
     /// Executes the configured `journalctl` query, filters the output with `search_regex`, and
@@ -105,7 +117,7 @@ impl JournalStreamer {
             "Cannot specify both from and to cursors"
         );
 
-        let mut command = "journalctl -o json --output-fields='MESSAGE,__CURSOR'".to_string();
+        let mut command = "journalctl --output json --output-fields='MESSAGE,__CURSOR'".to_string();
 
         if !self.journalctl_flags.is_empty() {
             command.push(' ');
@@ -113,14 +125,19 @@ impl JournalStreamer {
         }
 
         if let Some(from_cursor) = &self.from_cursor {
-            command.push_str(&format!(" --after-cursor='{}'", from_cursor));
+            command.push_str(&format!(" --after-cursor='{from_cursor}'"));
         }
 
         if let Some(to_cursor) = &self.to_cursor {
-            command.push_str(&format!(" --cursor='{}' --reverse", to_cursor));
+            command.push_str(&format!(" --cursor='{to_cursor}' --reverse"));
         }
 
-        command.push_str(&format!(" | grep -E '{}'", search_regex));
+        let mut grep = "grep --extended-regexp".to_string();
+        if !self.grep_flags.is_empty() {
+            grep.push(' ');
+            grep.push_str(&Vec::from_iter(self.grep_flags.iter().cloned()).join(" "));
+        }
+        command.push_str(&format!(" | {grep} '{search_regex}'"));
 
         let output =
             execute_bash_command(&self.session, command).map_err(|e| anyhow::anyhow!(e))?;

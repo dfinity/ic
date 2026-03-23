@@ -301,27 +301,23 @@ async fn upgrade_to(
     );
 
     // Concurrently assert that all orchestrators shut down gracefully
-    let journal_streamers = try_join_all(healthy_nodes.iter().map(|node| {
-        let node_cl = node.clone();
+    let journal_cursors = try_join_all(healthy_nodes.iter().map(|node| {
+        let session = node.block_on_ssh_session().unwrap();
+        let node_id = node.node_id;
         tokio::task::spawn_blocking(move || {
-            (
-                node_cl.node_id,
-                JournalStreamer::new(node_cl.block_on_ssh_session().unwrap())
-                    .follow()
-                    .until("Orchestrator shut down gracefully")
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "{} did not log that the orchestrator has shut down gracefully",
-                            node_cl.node_id
-                        )
-                    }),
-            )
+            JournalStreamer::new(session)
+                .follow()
+                .max_lines(1)
+                .get_cursor_at("Orchestrator shut down gracefully")
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "{node_id} did not log that the orchestrator has shut down gracefully: {err}",
+                    )
+                })
         })
     }))
     .await
-    .unwrap()
-    .into_iter()
-    .collect::<BTreeMap<_, _>>();
+    .unwrap();
     info!(logger, "All orchestrators shut down the tasks gracefully");
 
     for node in &healthy_nodes {
@@ -329,8 +325,13 @@ async fn upgrade_to(
     }
 
     // Fetch the latest computed root hash from logs of each node
-    let state_hashes_from_logs =
-        find_latest_computed_root_hashes_from_logs(logger, journal_streamers);
+    let state_hashes_from_logs = find_latest_computed_root_hashes_from_logs(
+        logger,
+        healthy_nodes
+            .into_iter()
+            .zip(journal_cursors.into_iter())
+            .collect(),
+    );
     // Find all nodes that logged the same latest computed root hash and pick the most common one
     let mut state_hashes_counts = BTreeMap::new();
     for (node_id, hash) in state_hashes_from_logs.iter() {
@@ -394,15 +395,17 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
 /// Returns the last computed root hash found in the logs for every node.
 fn find_latest_computed_root_hashes_from_logs(
     logger: &Logger,
-    journal_streamers: BTreeMap<NodeId, JournalStreamer>,
+    reboot_cursors: Vec<(IcNodeSnapshot, String)>,
 ) -> BTreeMap<NodeId, String> {
-    let computed_root_hash_regex =
-        regex::Regex::new(r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\) of state @(\d*)"#)
-            .unwrap();
+    let computed_root_hash_regex = regex::Regex::new(
+        r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\) of state @([0-9]*)"#,
+    )
+    .unwrap();
 
     let mut latest_root_hash_per_node = BTreeMap::new();
-    for (node_id, streamer) in journal_streamers.into_iter() {
-        let matches = streamer
+    for (node, reboot_cursor) in reboot_cursors {
+        let matches = JournalStreamer::new(node.block_on_ssh_session().unwrap())
+            .until_cursor(reboot_cursor)
             .search(computed_root_hash_regex.as_str())
             .expect("Failed to fetch log entries");
         let last_hash = matches
@@ -415,7 +418,10 @@ fn find_latest_computed_root_hashes_from_logs(
                 let height = caps.get(2).unwrap().as_str().parse::<u64>().ok().unwrap();
                 info!(
                     logger,
-                    "Found computed root hash log entry for node {} @{}: {}", node_id, height, hash
+                    "Found computed root hash log entry for node {} @{}: {}",
+                    node.node_id,
+                    height,
+                    hash
                 );
                 hash
             })
@@ -423,10 +429,10 @@ fn find_latest_computed_root_hashes_from_logs(
             .unwrap_or_else(|| {
                 panic!(
                     "No log entry with computed root hash found for node {}",
-                    node_id
+                    node.node_id
                 )
             });
-        latest_root_hash_per_node.insert(node_id, last_hash);
+        latest_root_hash_per_node.insert(node.node_id, last_hash);
     }
 
     latest_root_hash_per_node
