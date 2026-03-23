@@ -2,6 +2,8 @@ use crate::{
     pb::v1::{
         GovernanceError, SelfDescribingValue, Topic, UpdateCanisterSettings,
         update_canister_settings::{CanisterSettings, LogVisibility, SnapshotVisibility},
+        CanisterSettings, GovernanceError, SelfDescribingValue, Topic, UpdateCanisterSettings,
+        canister_settings::LogVisibility,
     },
     proposals::{
         call_canister::CallCanister,
@@ -220,9 +222,9 @@ mod tests {
     use super::*;
 
     use crate::pb::v1::{
-        SelfDescribingValue as SelfDescribingValuePb,
+        CanisterSettings, SelfDescribingValue as SelfDescribingValuePb,
+        canister_settings::Controllers,
         governance_error::ErrorType,
-        update_canister_settings::{CanisterSettings, Controllers},
     };
 
     use candid::Decode;
