@@ -5,8 +5,8 @@ use self::threshold_signatures::*;
 use crate::ExecuteSubnetMessageResultType;
 use crate::canister_manager::uninstall_canister;
 use crate::execution_environment::{
-    ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
-    as_num_instructions, as_round_instructions, execute_canister,
+    ConsumedCyclesForInstructions, ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions,
+    RoundLimits, as_num_instructions, as_round_instructions, execute_canister,
 };
 use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::metrics::MeasurementScope;
@@ -904,7 +904,10 @@ impl SchedulerImpl {
         }
 
         for canister_id in canisters_to_uninstall {
-            let op = |mut canister, round_limits, state_time: Time| {
+            let op = |mut canister,
+                      round_limits,
+                      _consumed_cycles: &mut ConsumedCyclesForInstructions<'_>,
+                      state_time: Time| {
                 let responses = uninstall_canister(
                     &mut canister,
                     None, /* we're at the end of a round so no need to update round limits */
