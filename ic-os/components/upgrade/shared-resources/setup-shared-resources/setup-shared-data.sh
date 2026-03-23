@@ -36,5 +36,4 @@ else
             fi
         fi
     fi
-    rmdir "${TESTMOUNT}" 2>/dev/null || true
 fi
