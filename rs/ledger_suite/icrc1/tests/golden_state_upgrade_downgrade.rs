@@ -11,7 +11,7 @@ use ic_ledger_suite_in_memory_ledger::{
 };
 use ic_ledger_suite_state_machine_helpers::{
     TransactionGenerationParameters, generate_transactions, get_all_ledger_and_archive_blocks,
-    get_blocks, list_archives, retrieve_metrics,
+    get_blocks, list_archives, retrieve_metrics, stop_and_upgrade_canister_as_controller,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::{StateMachine, UserError};
@@ -321,11 +321,13 @@ impl LedgerSuiteConfig {
         for archive in archives {
             let archive_canister_id =
                 CanisterId::unchecked_from_principal(PrincipalId(archive.canister_id));
-            state_machine
-                .upgrade_canister(archive_canister_id, wasm.clone().bytes(), vec![])
-                .unwrap_or_else(|e| {
-                    panic!("should successfully upgrade archive '{archive_canister_id}': {e}")
-                });
+            stop_and_upgrade_canister_as_controller(
+                state_machine,
+                archive_canister_id,
+                wasm.clone().bytes(),
+                vec![],
+            )
+            .expect("should successfully stop, upgrade, and restart archive canister");
         }
         println!("Upgraded {num_archives} archive(s)");
     }
@@ -341,9 +343,13 @@ impl LedgerSuiteConfig {
             max_retrieve_blocks_from_ledger_interval_seconds: None,
         });
         let args = Encode!(&index_upgrade_arg).unwrap();
-        state_machine
-            .upgrade_canister(canister_id, wasm.clone().bytes(), args.clone())
-            .expect("should successfully upgrade index canister");
+        stop_and_upgrade_canister_as_controller(
+            state_machine,
+            canister_id,
+            wasm.clone().bytes(),
+            args.clone(),
+        )
+        .expect("should successfully stop, upgrade, and restart index canister");
         println!("Upgraded {} index '{}'", self.canister_name, self.index_id);
     }
 
@@ -352,12 +358,22 @@ impl LedgerSuiteConfig {
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
         let args = Encode!(&args).unwrap();
+        let controller = state_machine
+            .get_controllers(canister_id)
+            .and_then(|cs| cs.into_iter().next())
+            .expect("should have at least one controller");
+        state_machine
+            .stop_canister_as(controller, canister_id)
+            .expect("should successfully stop ledger canister");
         match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args.clone()) {
             Ok(_) => {
                 println!(
                     "Upgraded {} ledger '{}'",
                     self.canister_name, self.ledger_id
                 );
+                state_machine
+                    .start_canister_as(controller, canister_id)
+                    .expect("should successfully start ledger canister");
                 self.print_ledger_metrics(state_machine);
                 Ok(())
             }
@@ -608,8 +624,6 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
-    stop_noisy_canister(&state_machine);
-
     LedgerSuiteConfig::new_with_params(
         (
             CK_BTC_LEDGER_CANISTER_ID,
@@ -751,30 +765,8 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
-    stop_noisy_canister(&state_machine);
-
     for canister_config in canister_configs {
         canister_config.perform_upgrade_downgrade_testing(&state_machine);
-    }
-}
-
-fn stop_noisy_canister(state_machine: &StateMachine) {
-    let canister_id = CanisterId::unchecked_from_principal(
-        PrincipalId::from_str("72ch2-fiaaa-aaaar-qbsvq-cai").unwrap(),
-    );
-    let controllers = state_machine.get_controllers(canister_id).unwrap();
-    match controllers.first() {
-        None => {
-            panic!("Canister {canister_id} has no controllers, cannot be stopped");
-        }
-        Some(controller) => {
-            state_machine
-                .stop_canister_as(*controller, canister_id)
-                .unwrap_or_else(|e| {
-                    panic!("should successfully stop canister '{canister_id}': {e}")
-                });
-            println!("Stopped canister {canister_id}");
-        }
     }
 }
 

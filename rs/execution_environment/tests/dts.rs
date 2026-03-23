@@ -1011,6 +1011,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             .unwrap();
 
         env.set_checkpoints_enabled(true);
+        // With checkpoints enabled, the update call will be aborted.
         let long_execution_id = env.send_ingress(
             user_id,
             aborted_canister_id,
@@ -1020,12 +1021,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 .reply_data(&[42])
                 .build(),
         );
-
-        for _ in 0..5 {
-            // With checkpoints enabled, the update message will be repeatedly
-            // aborted, so there will be no progress.
-            env.tick();
-        }
 
         let (method, args) = f(aborted_canister_id);
         if method == Method::DeleteCanisterSnapshot
@@ -1067,7 +1062,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         let subnet_message_id =
             env.send_ingress(user_id, other_canister_id, "update", subnet_message);
 
-        for _ in 0..5 {
+        // Need 2 rounds for the response to the subnet message to be inducted.
+        for _ in 0..2 {
             env.tick();
         }
 
