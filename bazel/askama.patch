@@ -1,10 +1,9 @@
 # Patch for determinism issues
 # https://github.com/askama-rs/askama/issues/708
-diff --git a/askama_derive/src/generator.rs b/askama_derive/src/generator.rs
-index 417bec0d..66131ff9 100644
+index 37c4fcb8..cb626c89 100644
 --- a/askama_derive/src/generator.rs
 +++ b/askama_derive/src/generator.rs
-@@ -179,10 +179,7 @@ impl<'a, 'h> Generator<'a, 'h> {
+@@ -141,10 +141,9 @@ impl<'a, 'h> Generator<'a, 'h> {
          {
              local_file.pop();
              if !local_file.is_absolute() {
@@ -12,7 +11,9 @@ index 417bec0d..66131ff9 100644
 -                    .as_deref()
 -                    .unwrap_or(Path::new("."))
 -                    .join(local_file);
-+                local_file = Path::new(".").join(local_file);
++                if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
++                    local_file = Path::new(&manifest_dir).join(local_file);
++                }
              }
  
              self.caller_dir = CallerDir::Valid(clean_path(&local_file));
