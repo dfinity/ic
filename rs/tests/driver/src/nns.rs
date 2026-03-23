@@ -85,7 +85,7 @@ pub async fn await_proposal_execution(
     retry_delay: Duration,
     timeout: Duration,
 ) -> bool {
-    let mut i = 0usize;
+    let mut i = 0_usize;
     let start_time = std::time::Instant::now();
     loop {
         i += 1;

@@ -1004,7 +1004,7 @@ impl ExecutionEnvironment {
                     let res = match EmptyBlob::decode(payload) {
                         Err(err) => Err(err),
                         Ok(EmptyBlob) => {
-                            let mut buffer = vec![0u8; 32];
+                            let mut buffer = vec![0_u8; 32];
                             rng.fill_bytes(&mut buffer);
                             Ok(Encode!(&buffer).unwrap())
                         }
