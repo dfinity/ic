@@ -41,7 +41,9 @@ use ic_types::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+};
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
 use std::{
@@ -1068,7 +1070,7 @@ prop_compose! {
 
 prop_compose! {
     pub(crate) fn arb_nominal_cycles()(cycles in any::<u64>()) -> NominalCycles {
-        NominalCycles::from(cycles as u128)
+        NominalCycles::new(cycles as u128)
     }
 }
 

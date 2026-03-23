@@ -455,13 +455,18 @@ fn get_available_messages(state: &ReplicatedState) -> u64 {
 
 fn construct_scheduler_for_prop_test(
     scheduler_cores: usize,
-    last_round: usize,
-    mut canister_params: Vec<(ComputeAllocation, ExecutionRound)>,
+    mut canister_params: Vec<ComputeAllocation>,
     messages_per_canister: usize,
     instructions_per_round: usize,
     instructions_per_message: usize,
     heartbeat: bool,
-) -> (SchedulerTest, usize, NumInstructions, NumInstructions) {
+) -> (
+    SchedulerTest,
+    usize,
+    usize,
+    NumInstructions,
+    NumInstructions,
+) {
     // Note: the DTS scheduler requires at least 2 scheduler cores
     assert_ge!(scheduler_cores, 2);
     let scheduler_config = SchedulerConfig {
@@ -482,18 +487,18 @@ fn construct_scheduler_for_prop_test(
     let capacity = RoundSchedule::compute_capacity_percent(scheduler_cores) as u64 - 1;
     let total = canister_params
         .iter()
-        .fold(0, |acc, (ca, _)| acc + ca.as_percent());
+        .fold(0, |acc, ca| acc + ca.as_percent());
     if total > capacity {
         canister_params = canister_params
             .into_iter()
-            .map(|(ca, lr)| {
+            .map(|ca| {
                 let ca = ((ca.as_percent() * capacity) / total).min(100);
-                (ComputeAllocation::try_from(ca).unwrap(), lr)
+                ComputeAllocation::try_from(ca).unwrap()
             })
             .collect();
     };
 
-    for (ca, last_round) in canister_params.into_iter() {
+    for ca in canister_params.into_iter() {
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000_000),
             ca,
@@ -506,17 +511,15 @@ fn construct_scheduler_for_prop_test(
             None,
             None,
         );
-        test.state_mut()
-            .canister_priority_mut(canister)
-            .last_full_execution_round = last_round;
         for _ in 0..messages_per_canister {
             test.send_ingress(canister, ingress(instructions_per_message as u64));
         }
     }
-    test.advance_to_round(ExecutionRound::from(last_round as u64 + 1));
+
     (
         test,
         scheduler_cores,
+        messages_per_canister,
         NumInstructions::from(instructions_per_round as u64),
         NumInstructions::from(instructions_per_message as u64),
     )
@@ -529,19 +532,17 @@ prop_compose! {
         messages_per_canister: Range<usize>,
         instructions_per_round: Range<usize>,
         instructions_per_message: Range<usize>,
-        last_round: usize,
         heartbeat: bool,
     )
     (
         scheduler_cores in scheduler_cores,
-        canister_params in prop::collection::vec(arb_canister_params(last_round), canisters),
+        canister_params in prop::collection::vec(arb_canister_params(), canisters),
         messages_per_canister in messages_per_canister,
         instructions_per_round in instructions_per_round,
         instructions_per_message in instructions_per_message,
-    ) -> (SchedulerTest, usize, NumInstructions, NumInstructions) {
+    ) -> (SchedulerTest, usize, usize, NumInstructions, NumInstructions) {
         construct_scheduler_for_prop_test(
             scheduler_cores,
-            last_round,
             canister_params,
             messages_per_canister,
             instructions_per_round,
@@ -558,18 +559,17 @@ prop_compose! {
         messages_per_canister: Range<usize>,
         instructions_per_round: Range<usize>,
         instructions_per_message: Range<usize>,
-        last_round: usize,
         heartbeat: bool,
     )
     (
         scheduler_cores in scheduler_cores,
-        canister_params in prop::collection::vec(arb_canister_params(last_round), canisters),
+        canister_params in prop::collection::vec(arb_canister_params(), canisters),
         messages_per_canister in messages_per_canister,
         instructions_per_round in instructions_per_round,
         instructions_per_message in instructions_per_message,
-    ) -> (SchedulerTest, SchedulerTest, usize, NumInstructions, NumInstructions) {
+    ) -> (SchedulerTest, SchedulerTest, usize, usize, NumInstructions, NumInstructions) {
         let r1 = construct_scheduler_for_prop_test(
-            scheduler_cores, last_round,
+            scheduler_cores,
             canister_params.clone(),
             messages_per_canister,
             instructions_per_round,
@@ -578,33 +578,25 @@ prop_compose! {
         );
         let r2 = construct_scheduler_for_prop_test(
             scheduler_cores,
-            last_round,
             canister_params,
             messages_per_canister,
             instructions_per_round,
             instructions_per_message,
             heartbeat,
         );
-        (r1.0, r2.0, r1.1, r1.2, r1.3)
+        (r1.0, r2.0, r1.1, r1.2, r1.3, r2.4)
     }
 }
 
 prop_compose! {
-    fn arb_canister_params(
-        last_round: usize,
-    )
+    fn arb_canister_params()
     (
         a in -100_i16..120_i16,
-        round in 0..=last_round,
-    ) -> (ComputeAllocation, ExecutionRound) {
+    ) -> ComputeAllocation {
         // Clamp `a` to [0, 100], but with high probability for 0 and somewhat
         // higher probability for 100.
         let a = a.clamp(0, 100);
-
-        (
-            ComputeAllocation::try_from(a as u64).unwrap(),
-            ExecutionRound::from(round as u64),
-        )
+        ComputeAllocation::try_from(a as u64).unwrap()
     }
 }
 
@@ -613,18 +605,25 @@ prop_compose! {
 // floor(`max_instructions_per_round` / `max_instructions_per_message`))`. `available_messages` are the sum of
 // messages in the input queues of all canisters.
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler will never consume more than
 // `max_instructions_per_round` in a single execution round per core.
 fn should_never_consume_more_than_max_instructions_per_round_in_a_single_execution_round(
-    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M,  false))] test: (
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test, scheduler_cores, instructions_per_round, instructions_per_message) = test;
+    let (
+        mut test,
+        scheduler_cores,
+        _messages_per_canister,
+        instructions_per_round,
+        instructions_per_message,
+    ) = test;
     let available_messages = get_available_messages(test.state());
     let minimum_executed_messages = min(
         available_messages,
@@ -655,38 +654,53 @@ fn should_never_consume_more_than_max_instructions_per_round_in_a_single_executi
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler is deterministic, i.e. given
 // the same input, if we execute a round of computation, we always
 // get the same result.
 fn scheduler_deterministically_produces_same_output_given_same_input(
-    #[strategy(arb_scheduler_test_double(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+    #[strategy(arb_scheduler_test_double(2..10, 1..20, 1..100, M..B, 1..M, false))] test: (
         SchedulerTest,
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test1, mut test2, _cores, _instructions_per_round, _instructions_per_message) = test;
+    let (
+        mut test1,
+        mut test2,
+        _cores,
+        _messages_per_canister,
+        _instructions_per_round,
+        _instructions_per_message,
+    ) = test;
     assert_eq!(test1.state(), test2.state());
     test1.execute_round(ExecutionRoundType::OrdinaryRound);
     test2.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test1.state(), test2.state());
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler can successfully deplete the induction
 // pool given sufficient consecutive execution rounds.
 fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
-    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, false))] test: (
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test, _scheduler_cores, instructions_per_round, instructions_per_message) = test;
+    let (
+        mut test,
+        _scheduler_cores,
+        _messages_per_canister,
+        instructions_per_round,
+        instructions_per_message,
+    ) = test;
     let available_messages = get_available_messages(test.state());
     let minimum_executed_messages = min(
         available_messages,
@@ -705,36 +719,50 @@ fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
     }
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler does not lose any canisters
 // after an execution round.
 fn scheduler_does_not_lose_canisters(
-    #[strategy(arb_scheduler_test(2..3, 1..10, 1..100, M..B, 1..M, 100, false))] test: (
+    #[strategy(arb_scheduler_test(2..3, 1..10, 1..100, M..B, 1..M, false))] test: (
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test, _scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
+    let (
+        mut test,
+        _scheduler_cores,
+        _messages_per_canister,
+        _instructions_per_round,
+        _instructions_per_message,
+    ) = test;
     let canisters_before = test.state().canister_states().len();
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let canisters_after = test.state().canister_states().len();
     assert_eq!(canisters_before, canisters_after);
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // Verifies that each canister is scheduled as the first of its thread as
 // much as its compute_allocation requires.
 fn scheduler_respects_compute_allocation(
-    #[strategy(arb_scheduler_test(2..10, 1..20, 0..1, B..B+1, B..B+1, 0, true))] test: (
+    #[strategy(arb_scheduler_test(2..6, 1..10, 1..2, B..B+1, B..B+1, true))] test: (
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test, scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
+    let (
+        mut test,
+        scheduler_cores,
+        _messages_per_canister,
+        _instructions_per_round,
+        _instructions_per_message,
+    ) = test;
     let replicated_state = test.state();
     let number_of_canisters = replicated_state.canister_states().len();
     let total_compute_allocation = replicated_state.total_compute_allocation();

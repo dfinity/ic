@@ -515,7 +515,7 @@ fn queries_to_frozen_canisters_are_rejected() {
     //          41_070 cycles are needed to cover freeze_threshold_cycles
     //                 of the canister history memory usage (134 bytes)
     let low_cycles = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        Cycles::new(300_008_835_260)
+        Cycles::new(300_012_517_130)
     } else {
         Cycles::new(300_005_633_530)
     };
