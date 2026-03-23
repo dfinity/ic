@@ -1600,7 +1600,6 @@ impl CanisterManager {
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))
     }
 
-    #[allow(clippy::result_large_err)]
     pub(crate) fn upload_chunk(
         &self,
         sender: PrincipalId,
@@ -1614,7 +1613,7 @@ impl CanisterManager {
     ) -> Result<UploadChunkResult, CanisterManagerError> {
         // Allow the canister itself to perform this operation.
         if sender != canister.canister_id().into() {
-            validate_controller(canister, &sender)?;
+            validate_controller(canister, &sender)?
         }
 
         // Charge for the upload. We charge before checking if the chunk has already been uploaded
@@ -1966,8 +1965,6 @@ impl CanisterManager {
     /// while the `canister` is taken out of `ReplicatedState`.
     ///
     /// If the new snapshot cannot be created, an appropriate error will be returned.
-    #[allow(clippy::result_large_err)]
-    #[allow(clippy::type_complexity)]
     pub(crate) fn take_canister_snapshot(
         &self,
         subnet_size: usize,
@@ -2151,7 +2148,6 @@ impl CanisterManager {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::result_large_err)]
     pub(crate) fn load_canister_snapshot(
         &self,
         subnet_size: usize,
@@ -2292,7 +2288,8 @@ impl CanisterManager {
             let mut new_execution_state = match new_execution_state {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
-                    return Err(CanisterManagerError::from((canister_id, err)));
+                    let err = CanisterManagerError::from((canister_id, err));
+                    return Err(err);
                 }
             };
 
@@ -2342,7 +2339,6 @@ impl CanisterManager {
                 };
                 new_execution_state.wasm_memory = new_wasm_memory;
             }
-
             Some(new_execution_state)
         };
 
@@ -2810,7 +2806,6 @@ impl CanisterManager {
     /// The memory used is already accounted for during `create_snapshot_from_metadata` (except
     /// for the wasm chunk store), but the instructions used to write the data must be taken
     /// into account here in any case.
-    #[allow(clippy::result_large_err)]
     pub(crate) fn write_snapshot_data(
         &self,
         sender: PrincipalId,
