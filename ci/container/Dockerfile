@@ -13,6 +13,7 @@ COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
 RUN echo "[storage]\nrootless_storage_path=\"/tmp/containers\"" > /etc/containers/storage.conf
 # marker for scripts to check if they are running in this container
 RUN touch /home/ubuntu/.ic-build-container
+RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Todo: split out essential packages from application-level packages
 RUN apt -yq update && \
@@ -102,19 +103,11 @@ RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
 WORKDIR /
-# Use buildifier (uid 1001) if /entrypoint.sh is overriden
-# In GitHub that is the case and we need 1001 and we set it via ARG.
-ARG CI_USER="root"
-USER $CI_USER
 CMD ["/bin/bash"]
 
 FROM base as build
 
 FROM base as dev
-
-# Temporarily switch to root to install development packages.
-# We will switch back to the non-root user at the end of this stage.
-USER root
 
 # Install additional packages for development but not needed on CI:
 ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
@@ -133,5 +126,3 @@ RUN (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
 	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
 	&& sudo apt update \
 	&& sudo apt install gh -y
-
-USER $CI_USER
