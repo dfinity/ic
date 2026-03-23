@@ -982,7 +982,7 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation_cost() {
     // Check linear scaling.
     for subnet_size in TEST_SUBNET_SIZES {
         let simulated_cost =
-            calculate_one_gib_per_second_cost(&config, subnet_size, compute_allocation);
+            simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation);
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
@@ -1017,7 +1017,7 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation_cost() {
         // Check linear scaling.
         for subnet_size in TEST_SUBNET_SIZES {
             let simulated_cost =
-                calculate_one_gib_per_second_cost(&config, subnet_size, compute_allocation);
+                simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation);
             let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
             assert!(
                 is_almost_eq(simulated_cost, calculated_cost),
