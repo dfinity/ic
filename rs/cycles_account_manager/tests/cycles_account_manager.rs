@@ -97,11 +97,12 @@ fn test_can_charge_application_subnets() {
                             .memory_cost(memory, duration, subnet_size, cost_schedule)
                             .real();
                     let initial_cycles = expected_fee;
-                    canister.system_state.add_cycles(CompoundCycles::new(
-                        initial_cycles,
-                        NonConsumed,
-                        cost_schedule,
-                    ));
+                    canister
+                        .system_state
+                        .add_cycles(CompoundCycles::<NonConsumed>::new(
+                            initial_cycles,
+                            cost_schedule,
+                        ));
                     assert_eq!(canister.system_state.balance(), initial_cycles);
                     cycles_account_manager
                         .charge_canister_for_resource_allocation_and_usage(
@@ -762,7 +763,7 @@ fn test_consume_with_threshold() {
         cycles_account_manager
             .consume_with_threshold(
                 &mut system_state,
-                CompoundCycles::new(Cycles::zero(), Memory, cost_schedule),
+                CompoundCycles::<Memory>::new(Cycles::zero(), cost_schedule),
                 threshold,
                 false,
                 cost_schedule,
@@ -774,7 +775,7 @@ fn test_consume_with_threshold() {
 
     // u128::MAX == 2 * i128::MAX + 1
     // withdraw i128::MAX and verify correctness
-    let amount = CompoundCycles::new(Cycles::from(i128::MAX as u128), Memory, cost_schedule);
+    let amount = CompoundCycles::<Memory>::new(Cycles::from(i128::MAX as u128), cost_schedule);
     assert!(
         cycles_account_manager
             .consume_with_threshold(&mut system_state, amount, threshold, false, cost_schedule,)
@@ -794,7 +795,7 @@ fn test_consume_with_threshold() {
     cycles_balance_expected -= amount.real();
     assert_eq!(system_state.balance(), Cycles::new(1));
 
-    let amount = CompoundCycles::new(Cycles::new(1), Memory, cost_schedule);
+    let amount = CompoundCycles::<Memory>::new(Cycles::new(1), cost_schedule);
     assert!(
         cycles_account_manager
             .consume_with_threshold(&mut system_state, amount, threshold, false, cost_schedule,)
@@ -845,11 +846,8 @@ fn cycles_withdraw_for_execution() {
         system_state.reserved_balance(),
     );
 
-    let amount = CompoundCycles::new(
-        Cycles::from(initial_amount / 2),
-        Instructions,
-        cost_schedule,
-    );
+    let amount =
+        CompoundCycles::<Instructions>::new(Cycles::from(initial_amount / 2), cost_schedule);
     assert!(
         cycles_account_manager
             .consume_cycles(
@@ -880,7 +878,7 @@ fn cycles_withdraw_for_execution() {
 
     let exec_cycles_max = system_state.balance() - freeze_threshold_cycles;
     let compound_exec_cycles_max =
-        CompoundCycles::new(exec_cycles_max, Instructions, cost_schedule);
+        CompoundCycles::<Instructions>::new(exec_cycles_max, cost_schedule);
 
     assert!(
         cycles_account_manager
@@ -950,7 +948,7 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                CompoundCycles::new(Cycles::new(10), Instructions, cost_schedule),
+                CompoundCycles::<Instructions>::new(Cycles::new(10), cost_schedule),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
                 false,
@@ -963,7 +961,7 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                CompoundCycles::new(Cycles::new(1), Instructions, cost_schedule),
+                CompoundCycles::<Instructions>::new(Cycles::new(1), cost_schedule),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
                 false,
@@ -976,7 +974,7 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                CompoundCycles::new(Cycles::zero(), Instructions, cost_schedule),
+                CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
                 false,
@@ -1019,11 +1017,8 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
         system_state.reserved_balance(),
     );
 
-    let amount = CompoundCycles::new(
-        Cycles::from(initial_amount / 2),
-        Instructions,
-        cost_schedule,
-    );
+    let amount =
+        CompoundCycles::<Instructions>::new(Cycles::from(initial_amount / 2), cost_schedule);
     assert!(
         cycles_account_manager
             .consume_cycles(
@@ -1128,7 +1123,7 @@ fn consume_cycles_updates_consumed_cycles() {
             &mut system_state,
             NumBytes::from(0),
             MessageMemoryUsage::ZERO,
-            CompoundCycles::new(Cycles::new(1_000_000), Memory, cost_schedule),
+            CompoundCycles::<Memory>::new(Cycles::new(1_000_000), cost_schedule),
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
             false,
@@ -1151,15 +1146,14 @@ fn consume_cycles_for_memory_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::new(
+    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
         Cycles::new(4_000_000),
-        NonConsumed,
         cost_schedule,
     ));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
-        CompoundCycles::new(Cycles::new(2_000_000), Memory, cost_schedule),
+        CompoundCycles::<Memory>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
         false,
         cost_schedule,
@@ -1178,17 +1172,15 @@ fn consume_cycles_for_compute_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::new(
+    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
         Cycles::new(4_000_000),
-        NonConsumed,
         cost_schedule,
     ));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
-        CompoundCycles::new(
+        CompoundCycles::<ic_types_cycles::ComputeAllocation>::new(
             Cycles::new(2_000_000),
-            ic_types_cycles::ComputeAllocation,
             cost_schedule,
         ),
         Cycles::new(0),
@@ -1209,15 +1201,14 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::new(
+    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
         Cycles::new(4_000_000),
-        NonConsumed,
         cost_schedule,
     ));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
-        CompoundCycles::new(Cycles::new(2_000_000), Uninstall, cost_schedule),
+        CompoundCycles::<Uninstall>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
         false,
         cost_schedule,
@@ -1236,15 +1227,14 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::new(
+    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
         Cycles::new(4_000_000),
-        NonConsumed,
         cost_schedule,
     ));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
-        CompoundCycles::new(Cycles::new(2_000_000), Instructions, cost_schedule),
+        CompoundCycles::<Instructions>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
         false,
         cost_schedule,

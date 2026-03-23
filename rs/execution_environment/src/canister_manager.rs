@@ -1407,11 +1407,7 @@ impl CanisterManager {
             Ok(validated_settings) => self.create_canister_helper(
                 origin,
                 cycles,
-                CompoundCycles::new(
-                    Cycles::zero(),
-                    CanisterCreation,
-                    state.get_own_cost_schedule(),
-                ),
+                CompoundCycles::new(Cycles::zero(), state.get_own_cost_schedule()),
                 validated_settings,
                 max_number_of_canisters,
                 state,
@@ -1585,11 +1581,12 @@ impl CanisterManager {
             None => self.config.default_provisional_cycles_balance,
         };
 
-        canister.system_state.add_cycles(CompoundCycles::new(
-            cycles_amount,
-            NonConsumed,
-            cost_schedule,
-        ));
+        canister
+            .system_state
+            .add_cycles(CompoundCycles::<NonConsumed>::new(
+                cycles_amount,
+                cost_schedule,
+            ));
 
         Ok(())
     }
@@ -1966,9 +1963,8 @@ impl CanisterManager {
                 &mut canister.system_state,
                 validated_cycles_and_memory_usage.new_memory_usage,
                 message_memory_usage,
-                CompoundCycles::new(
+                CompoundCycles::<Instructions>::new(
                     validated_cycles_and_memory_usage.cycles_for_instructions,
-                    Instructions,
                     cost_schedule,
                 ),
                 subnet_size,

@@ -573,10 +573,10 @@ impl SystemStateModifications {
         // Apply the main cycles balance change without the consumed and reserved cycles.
         match adjusted_balance_change {
             CyclesBalanceChange::Added(added) => {
-                state.add_cycles(CompoundCycles::new(added, NonConsumed, cost_schedule))
+                state.add_cycles(CompoundCycles::<NonConsumed>::new(added, cost_schedule))
             }
             CyclesBalanceChange::Removed(removed) => {
-                state.remove_cycles(CompoundCycles::new(removed, NonConsumed, cost_schedule))
+                state.remove_cycles(CompoundCycles::<NonConsumed>::new(removed, cost_schedule))
             }
         }
 
@@ -584,13 +584,13 @@ impl SystemStateModifications {
         for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
             match use_case {
                 CyclesUseCase::BurnedCycles => {
-                    state.remove_cycles(CompoundCycles::new(*amount, BurnedCycles, cost_schedule))
+                    state.remove_cycles(CompoundCycles::<BurnedCycles>::new(*amount, cost_schedule))
                 }
                 CyclesUseCase::Instructions => {
-                    state.remove_cycles(CompoundCycles::new(*amount, Instructions, cost_schedule))
+                    state.remove_cycles(CompoundCycles::<Instructions>::new(*amount, cost_schedule))
                 }
                 CyclesUseCase::RequestAndResponseTransmission => state.remove_cycles(
-                    CompoundCycles::new(*amount, RequestAndResponseTransmission, cost_schedule),
+                    CompoundCycles::<RequestAndResponseTransmission>::new(*amount, cost_schedule),
                 ),
                 _ => panic!("Unexpected cycles use case in System API"),
             }
@@ -1169,16 +1169,8 @@ impl SandboxSafeSystemState {
                 canister_current_message_memory_usage,
                 self.compute_allocation,
                 &msg,
-                CompoundCycles::new(
-                    prepayment_for_response_execution,
-                    Instructions,
-                    self.cost_schedule,
-                ),
-                CompoundCycles::new(
-                    prepayment_for_response_transmission,
-                    RequestAndResponseTransmission,
-                    self.cost_schedule,
-                ),
+                CompoundCycles::new(prepayment_for_response_execution, self.cost_schedule),
+                CompoundCycles::new(prepayment_for_response_transmission, self.cost_schedule),
                 self.subnet_size,
                 self.cost_schedule,
                 self.reserved_balance(),

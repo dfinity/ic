@@ -888,9 +888,8 @@ impl SystemState {
             // Continue the execution by dropping the remaining debit, which makes
             // some of the postponed charges free.
         }
-        self.remove_cycles(CompoundCycles::new(
+        self.remove_cycles(CompoundCycles::<IngressInduction>::new(
             self.ingress_induction_cycles_debit,
-            IngressInduction,
             cost_schedule,
         ));
         self.ingress_induction_cycles_debit = Cycles::zero();
@@ -1801,9 +1800,8 @@ impl SystemState {
         debug_assert!(response.is_best_effort());
 
         if !response.refund.is_zero() {
-            self.add_cycles(CompoundCycles::new(
+            self.add_cycles(CompoundCycles::<NonConsumed>::new(
                 response.refund,
-                NonConsumed,
                 cost_schedule,
             ));
         }
@@ -1811,7 +1809,7 @@ impl SystemState {
 
     /// Increments 'cycles_balance' and in case of refund for consumed cycles
     /// decrements the metric `consumed_cycles`.
-    pub fn add_cycles<T: CyclesUseCaseKind + Copy + Clone>(&mut self, amount: CompoundCycles<T>) {
+    pub fn add_cycles<T: CyclesUseCaseKind>(&mut self, amount: CompoundCycles<T>) {
         self.cycles_balance += amount.real();
         self.observe_consumed_cycles_with_use_case(
             amount.nominal(),
@@ -1823,10 +1821,7 @@ impl SystemState {
     /// Decreases 'cycles_balance' for 'requested_amount'.
     /// The resource use cases first drain the `reserved_balance` and only after
     /// that drain the main `cycles_balance`.
-    pub fn remove_cycles<T: CyclesUseCaseKind + Copy + Clone>(
-        &mut self,
-        requested_amount: CompoundCycles<T>,
-    ) {
+    pub fn remove_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
         let requested_real = requested_amount.real();
         let use_case = requested_amount.use_case();
         let remaining_amount = match use_case {
@@ -1901,7 +1896,7 @@ impl SystemState {
         cost_schedule: CanisterCyclesCostSchedule,
     ) {
         let balance = self.cycles_balance + self.reserved_balance;
-        self.remove_cycles(CompoundCycles::new(balance, Uninstall, cost_schedule));
+        self.remove_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
     }
 
     fn observe_consumed_cycles_with_use_case(

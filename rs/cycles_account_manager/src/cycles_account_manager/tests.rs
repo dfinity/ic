@@ -43,43 +43,42 @@ fn test_scale_cost() {
 
     let cost = Cycles::new(13_000);
     assert_eq!(
-        cam.scale_cost(cost, 0, Memory, CanisterCyclesCostSchedule::Normal)
+        cam.scale_cost::<Memory>(cost, 0, CanisterCyclesCostSchedule::Normal)
             .real(),
         Cycles::new(0)
     );
     assert_eq!(
-        cam.scale_cost(cost, 1, Memory, CanisterCyclesCostSchedule::Normal)
+        cam.scale_cost::<Memory>(cost, 1, CanisterCyclesCostSchedule::Normal)
             .real(),
         Cycles::new(1_000)
     );
     assert_eq!(
-        cam.scale_cost(cost, 6, Memory, CanisterCyclesCostSchedule::Normal)
+        cam.scale_cost::<Memory>(cost, 6, CanisterCyclesCostSchedule::Normal)
             .real(),
         Cycles::new(6_000)
     );
     assert_eq!(
-        cam.scale_cost(cost, 13, Memory, CanisterCyclesCostSchedule::Normal)
+        cam.scale_cost::<Memory>(cost, 13, CanisterCyclesCostSchedule::Normal)
             .real(),
         Cycles::new(13_000)
     );
     assert_eq!(
-        cam.scale_cost(cost, 26, Memory, CanisterCyclesCostSchedule::Normal)
+        cam.scale_cost::<Memory>(cost, 26, CanisterCyclesCostSchedule::Normal)
             .real(),
         Cycles::new(26_000)
     );
 
     assert_eq!(
-        cam.scale_cost(cost, 26, Memory, CanisterCyclesCostSchedule::Free)
+        cam.scale_cost::<Memory>(cost, 26, CanisterCyclesCostSchedule::Free)
             .real(),
         Cycles::new(0)
     );
 
     // Check overflow case.
     assert_eq!(
-        cam.scale_cost(
+        cam.scale_cost::<Memory>(
             Cycles::new(u128::MAX),
             1_000_000,
-            Memory,
             CanisterCyclesCostSchedule::Normal
         )
         .real(),

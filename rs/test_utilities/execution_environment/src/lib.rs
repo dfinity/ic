@@ -2260,7 +2260,7 @@ impl ExecutionTest {
         cycles_account_manager
             .consume_with_threshold(
                 system_state,
-                CompoundCycles::new(cycles, ic_types_cycles::Memory, cost_schedule),
+                CompoundCycles::<ic_types_cycles::Memory>::new(cycles, cost_schedule),
                 Cycles::zero(),
                 false,
                 cost_schedule,

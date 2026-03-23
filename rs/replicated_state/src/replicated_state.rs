@@ -1030,13 +1030,12 @@ impl ReplicatedState {
                         // Best-effort responses are silently dropped if the canister is not found.
                         RequestOrResponse::Response(response) if response.is_best_effort() => {
                             if !response.refund.is_zero() {
-                                self.observe_lost_cycles_due_to_dropped_messages(
-                                    CompoundCycles::new(
-                                        response.refund,
-                                        DroppedMessages,
-                                        own_cost_schedule,
-                                    ),
-                                );
+                                self.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::<
+                                    DroppedMessages,
+                                >::new(
+                                    response.refund,
+                                    own_cost_schedule,
+                                ));
                             }
                             Ok(false)
                         }
@@ -1073,11 +1072,12 @@ impl ReplicatedState {
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> bool {
         if let Some(canister) = self.canister_state_make_mut(&refund.recipient()) {
-            canister.system_state.add_cycles(CompoundCycles::new(
-                refund.amount(),
-                NonConsumed,
-                cost_schedule,
-            ));
+            canister
+                .system_state
+                .add_cycles(CompoundCycles::<NonConsumed>::new(
+                    refund.amount(),
+                    cost_schedule,
+                ));
             true
         } else {
             false

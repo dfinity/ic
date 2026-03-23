@@ -81,12 +81,8 @@ pub struct CompoundCycles<T: CyclesUseCaseKind> {
 }
 
 impl<T: CyclesUseCaseKind> CompoundCycles<T> {
-    pub fn new(
-        amount: Cycles,
-        use_case_kind: T,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) -> Self {
-        let use_case = use_case_kind.cycles_use_case();
+    pub fn new(amount: Cycles, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        let use_case = T::cycles_use_case();
         let amount = match (use_case, cost_schedule) {
             (_, CanisterCyclesCostSchedule::Normal)
             // NonConsumed represents the amounts attached on inter-canister

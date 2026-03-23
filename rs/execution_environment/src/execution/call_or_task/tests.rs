@@ -760,9 +760,8 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
         let balance = test.canister_state(a_id).system_state.balance();
         test.canister_state_mut(a_id)
             .system_state
-            .add_cycles(CompoundCycles::new(
+            .add_cycles(CompoundCycles::<NonConsumed>::new(
                 balance + Cycles::new(1),
-                NonConsumed,
                 CanisterCyclesCostSchedule::Normal,
             ));
 

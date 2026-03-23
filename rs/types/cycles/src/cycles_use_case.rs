@@ -105,7 +105,7 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
 /// first generic argument to `CompoundCycles` that represent the various
 /// use cases for cycles accounting.
 pub trait CyclesUseCaseKind: Copy + Clone {
-    fn cycles_use_case(&self) -> CyclesUseCase;
+    fn cycles_use_case() -> CyclesUseCase;
 }
 
 /*
@@ -119,7 +119,7 @@ pub trait CyclesUseCaseKind: Copy + Clone {
 pub struct Memory;
 
 impl CyclesUseCaseKind for Memory {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::Memory
     }
 }
@@ -128,7 +128,7 @@ impl CyclesUseCaseKind for Memory {
 pub struct ComputeAllocation;
 
 impl CyclesUseCaseKind for ComputeAllocation {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::ComputeAllocation
     }
 }
@@ -137,7 +137,7 @@ impl CyclesUseCaseKind for ComputeAllocation {
 pub struct IngressInduction;
 
 impl CyclesUseCaseKind for IngressInduction {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::IngressInduction
     }
 }
@@ -146,7 +146,7 @@ impl CyclesUseCaseKind for IngressInduction {
 pub struct Instructions;
 
 impl CyclesUseCaseKind for Instructions {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::Instructions
     }
 }
@@ -155,7 +155,7 @@ impl CyclesUseCaseKind for Instructions {
 pub struct RequestAndResponseTransmission;
 
 impl CyclesUseCaseKind for RequestAndResponseTransmission {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::RequestAndResponseTransmission
     }
 }
@@ -164,7 +164,7 @@ impl CyclesUseCaseKind for RequestAndResponseTransmission {
 pub struct Uninstall;
 
 impl CyclesUseCaseKind for Uninstall {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::Uninstall
     }
 }
@@ -173,7 +173,7 @@ impl CyclesUseCaseKind for Uninstall {
 pub struct CanisterCreation;
 
 impl CyclesUseCaseKind for CanisterCreation {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::CanisterCreation
     }
 }
@@ -182,7 +182,7 @@ impl CyclesUseCaseKind for CanisterCreation {
 pub struct ECDSAOutcalls;
 
 impl CyclesUseCaseKind for ECDSAOutcalls {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::ECDSAOutcalls
     }
 }
@@ -191,7 +191,7 @@ impl CyclesUseCaseKind for ECDSAOutcalls {
 pub struct HTTPOutcalls;
 
 impl CyclesUseCaseKind for HTTPOutcalls {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::HTTPOutcalls
     }
 }
@@ -200,7 +200,7 @@ impl CyclesUseCaseKind for HTTPOutcalls {
 pub struct DeletedCanisters;
 
 impl CyclesUseCaseKind for DeletedCanisters {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::DeletedCanisters
     }
 }
@@ -209,7 +209,7 @@ impl CyclesUseCaseKind for DeletedCanisters {
 pub struct NonConsumed;
 
 impl CyclesUseCaseKind for NonConsumed {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::NonConsumed
     }
 }
@@ -218,7 +218,7 @@ impl CyclesUseCaseKind for NonConsumed {
 pub struct BurnedCycles;
 
 impl CyclesUseCaseKind for BurnedCycles {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::BurnedCycles
     }
 }
@@ -227,7 +227,7 @@ impl CyclesUseCaseKind for BurnedCycles {
 pub struct SchnorrOutcalls;
 
 impl CyclesUseCaseKind for SchnorrOutcalls {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::SchnorrOutcalls
     }
 }
@@ -236,7 +236,7 @@ impl CyclesUseCaseKind for SchnorrOutcalls {
 pub struct VetKd;
 
 impl CyclesUseCaseKind for VetKd {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::VetKd
     }
 }
@@ -245,7 +245,7 @@ impl CyclesUseCaseKind for VetKd {
 pub struct DroppedMessages;
 
 impl CyclesUseCaseKind for DroppedMessages {
-    fn cycles_use_case(&self) -> CyclesUseCase {
+    fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::DroppedMessages
     }
 }

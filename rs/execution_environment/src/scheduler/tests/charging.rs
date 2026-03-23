@@ -403,9 +403,8 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
-        .add_cycles(CompoundCycles::new(
+        .add_cycles(CompoundCycles::<NonConsumed>::new(
             expected_charge,
-            NonConsumed,
             CanisterCyclesCostSchedule::Normal,
         ));
 
@@ -525,9 +524,8 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
-        .add_cycles(CompoundCycles::new(
+        .add_cycles(CompoundCycles::<NonConsumed>::new(
             expected_charge,
-            NonConsumed,
             CanisterCyclesCostSchedule::Normal,
         ));
 

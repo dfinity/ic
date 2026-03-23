@@ -4891,11 +4891,12 @@ impl StateMachine {
         let canister_state = state
             .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
-        canister_state.system_state.add_cycles(CompoundCycles::new(
-            Cycles::from(amount),
-            NonConsumed,
-            self.cost_schedule,
-        ));
+        canister_state
+            .system_state
+            .add_cycles(CompoundCycles::<NonConsumed>::new(
+                Cycles::from(amount),
+                self.cost_schedule,
+            ));
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);

@@ -1098,9 +1098,8 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         None,
     );
 
-    let removed_cycles = CompoundCycles::new(
+    let removed_cycles = CompoundCycles::<Instructions>::new(
         Cycles::from(1000_u128),
-        Instructions,
         CanisterCyclesCostSchedule::Normal,
     );
     test.canister_state_mut(canister_id)
@@ -1139,9 +1138,8 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         Some(CanisterStatusType::Stopped),
     );
 
-    let removed_cycles = CompoundCycles::new(
+    let removed_cycles = CompoundCycles::<Instructions>::new(
         Cycles::from(1000_u128),
-        Instructions,
         CanisterCyclesCostSchedule::Normal,
     );
     test.canister_state_mut(canister_id)

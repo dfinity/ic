@@ -23,7 +23,7 @@ use ic_types::messages::{
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CanisterId, SubnetId};
-use ic_types_cycles::{CompoundCycles, DroppedMessages};
+use ic_types_cycles::CompoundCycles;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
@@ -823,7 +823,6 @@ impl StreamHandlerImpl {
                 // Cycles are lost.
                 state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                     rep.refund,
-                    DroppedMessages,
                     own_cost_schedule,
                 ));
             }
@@ -912,11 +911,7 @@ impl StreamHandlerImpl {
                                 self.metrics.critical_error_induct_response_failed.inc();
                                 // Cycles are lost.
                                 state.observe_lost_cycles_due_to_dropped_messages(
-                                    CompoundCycles::new(
-                                        response.refund,
-                                        DroppedMessages,
-                                        own_cost_schedule,
-                                    ),
+                                    CompoundCycles::new(response.refund, own_cost_schedule),
                                 );
                                 Accept
                             }
@@ -1020,7 +1015,6 @@ impl StreamHandlerImpl {
                     );
                     state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                         refund.amount(),
-                        DroppedMessages,
                         cost_schedule,
                     ));
                 }

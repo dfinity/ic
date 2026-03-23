@@ -27,8 +27,7 @@ use ic_types::messages::{
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, NonConsumed,
-    RequestAndResponseTransmission,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, NonConsumed, RequestAndResponseTransmission,
 };
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
@@ -176,7 +175,6 @@ impl ResponseHelper {
                 &response.response_payload,
                 CompoundCycles::new(
                     original.callback.prepayment_for_response_transmission,
-                    RequestAndResponseTransmission,
                     round.cost_schedule,
                 ),
                 original.subnet_size,
@@ -206,17 +204,19 @@ impl ResponseHelper {
     /// These are the only state changes to the initial canister state before
     /// executing Wasm code.
     fn apply_initial_refunds(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
-        self.canister.system_state.add_cycles(CompoundCycles::new(
-            self.refund_for_sent_cycles,
-            NonConsumed,
-            cost_schedule,
-        ));
+        self.canister
+            .system_state
+            .add_cycles(CompoundCycles::<NonConsumed>::new(
+                self.refund_for_sent_cycles,
+                cost_schedule,
+            ));
 
-        self.canister.system_state.add_cycles(CompoundCycles::new(
-            self.refund_for_response_transmission,
-            RequestAndResponseTransmission,
-            cost_schedule,
-        ));
+        self.canister.system_state.add_cycles(
+            CompoundCycles::<RequestAndResponseTransmission>::new(
+                self.refund_for_response_transmission,
+                cost_schedule,
+            ),
+        );
     }
 
     /// Checks that the canister has not been uninstalled:
@@ -582,7 +582,6 @@ impl ResponseHelper {
             original.message_instruction_limit,
             CompoundCycles::new(
                 original.callback.prepayment_for_response_execution,
-                Instructions,
                 round.cost_schedule,
             ),
             round.counters.execution_refund_error,

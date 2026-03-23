@@ -2333,11 +2333,9 @@ impl ExecutionEnvironment {
 
             Some(canister_state) => {
                 let cycles = msg.take_cycles();
-                canister_state.system_state.add_cycles(CompoundCycles::new(
-                    cycles,
-                    NonConsumed,
-                    cost_schedule,
-                ));
+                canister_state
+                    .system_state
+                    .add_cycles(CompoundCycles::<NonConsumed>::new(cycles, cost_schedule));
                 if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     info!(
                         self.log,

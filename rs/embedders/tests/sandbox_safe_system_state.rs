@@ -400,9 +400,8 @@ fn mint_cycles_large_value() {
         .canister_id(CYCLES_MINTING_CANISTER_ID)
         .build();
 
-    system_state.add_cycles(CompoundCycles::new(
+    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
         Cycles::from(1_000_000_000_000_000_u128),
-        NonConsumed,
         CanisterCyclesCostSchedule::Normal,
     ));
 

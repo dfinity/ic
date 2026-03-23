@@ -29,8 +29,8 @@ use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};
 use ic_types::{CanisterId, CountBytes};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, DroppedMessages,
-    NominalCycles, NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
+    NominalCyclesTesting,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -1262,7 +1262,6 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
             // Cycles attached to the request / reject response are lost.
             expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                 message_in_stream(state.get_stream(&REMOTE_SUBNET), 21).cycles(),
-                DroppedMessages,
                 CanisterCyclesCostSchedule::Normal,
             ));
 
@@ -1561,7 +1560,6 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
             let cycles_lost = message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1).cycles();
             expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                 cycles_lost,
-                DroppedMessages,
                 CanisterCyclesCostSchedule::Normal,
             ));
 
@@ -2164,7 +2162,6 @@ fn induct_stream_slices_partial_success() {
                 + message_in_slice(slices.get(&REMOTE_SUBNET), 51).cycles();
             expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                 cycles_lost,
-                DroppedMessages,
                 CanisterCyclesCostSchedule::Normal,
             ));
 
@@ -2753,7 +2750,6 @@ fn induct_stream_slices_with_refunds() {
             let refund44 = refund_in_slice(slices.get(&REMOTE_SUBNET), 44);
             expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                 refund44.amount(),
-                DroppedMessages,
                 CanisterCyclesCostSchedule::Normal,
             ));
 

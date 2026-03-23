@@ -539,9 +539,8 @@ fn query_cache_ignores_balance_changes_when_query_does_not_read_balance() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(CompoundCycles::new(
+            .remove_cycles(CompoundCycles::<Memory>::new(
                 1_u64.into(),
-                Memory,
                 CanisterCyclesCostSchedule::Normal,
             ));
 
@@ -573,9 +572,8 @@ fn query_cache_ignores_balance_and_time_changes_when_query_is_static() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(CompoundCycles::new(
+            .remove_cycles(CompoundCycles::<Memory>::new(
                 1_u64.into(),
-                Memory,
                 CanisterCyclesCostSchedule::Normal,
             ));
         // Change the time.
@@ -730,9 +728,8 @@ fn query_cache_returns_different_results_for_different_canister_balances() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(CompoundCycles::new(
+            .remove_cycles(CompoundCycles::<Memory>::new(
                 1_u64.into(),
-                Memory,
                 CanisterCyclesCostSchedule::Normal,
             ));
 
@@ -761,9 +758,8 @@ fn query_cache_returns_different_results_for_different_canister_balance128s() {
         // Change the canister balance.
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(CompoundCycles::new(
+            .remove_cycles(CompoundCycles::<Memory>::new(
                 1_u64.into(),
-                Memory,
                 CanisterCyclesCostSchedule::Normal,
             ));
 
@@ -803,9 +799,8 @@ fn query_cache_returns_different_results_on_combined_invalidation() {
             .bump_canister_version();
         test.canister_state_mut(b_id)
             .system_state
-            .remove_cycles(CompoundCycles::new(
+            .remove_cycles(CompoundCycles::<Memory>::new(
                 1_u64.into(),
-                Memory,
                 CanisterCyclesCostSchedule::Normal,
             ));
 
@@ -855,9 +850,8 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     // Set the canister balance to 42, so the second reply will have just 42 bytes.
     test.canister_state_mut(id)
         .system_state
-        .remove_cycles(CompoundCycles::new(
+        .remove_cycles(CompoundCycles::<Memory>::new(
             ((BIG_RESPONSE_SIZE - SMALL_RESPONSE_SIZE) as u64).into(),
-            Memory,
             CanisterCyclesCostSchedule::Normal,
         ));
 

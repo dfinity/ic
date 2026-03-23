@@ -14,7 +14,7 @@ use ic_types::messages::{
     Request, RequestOrResponse, Response, StreamMessage,
 };
 use ic_types::{CountBytes, SubnetId};
-use ic_types_cycles::{CompoundCycles, Cycles, DroppedMessages};
+use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
@@ -260,7 +260,6 @@ impl StreamBuilderImpl {
                 self.metrics.critical_error_induct_response_failed.inc();
                 state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                     req.payment,
-                    DroppedMessages,
                     own_cost_schedule,
                 ));
             });
@@ -729,7 +728,6 @@ impl StreamBuilderImpl {
         });
         state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
             cycles_lost,
-            DroppedMessages,
             own_cost_schedule,
         ));
     }

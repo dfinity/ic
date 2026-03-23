@@ -29,7 +29,7 @@ use ic_types::{
     CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
-use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
+use ic_types_cycles::{CompoundCycles, Cycles};
 use ic_wasm_types::WasmHash;
 
 use crate::{
@@ -303,11 +303,7 @@ impl InstallCodeHelper {
             &mut self.canister.system_state,
             instructions_left,
             message_instruction_limit,
-            CompoundCycles::new(
-                original.prepaid_execution_cycles,
-                Instructions,
-                round.cost_schedule,
-            ),
+            CompoundCycles::new(original.prepaid_execution_cycles, round.cost_schedule),
             round.counters.execution_refund_error,
             original.subnet_size,
             round.cost_schedule,
@@ -889,11 +885,7 @@ pub(crate) fn finish_err(
         &mut new_canister.system_state,
         instructions_left,
         message_instruction_limit,
-        CompoundCycles::new(
-            original.prepaid_execution_cycles,
-            Instructions,
-            round.cost_schedule,
-        ),
+        CompoundCycles::new(original.prepaid_execution_cycles, round.cost_schedule),
         round.counters.execution_refund_error,
         original.subnet_size,
         round.cost_schedule,

@@ -29,7 +29,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, NumBytes, NumInstructions, Time};
-use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
+use ic_types_cycles::{CompoundCycles, Cycles};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -278,11 +278,7 @@ fn finish_err(
         &mut canister.system_state,
         instructions_left,
         instruction_limit,
-        CompoundCycles::new(
-            original.prepaid_execution_cycles,
-            Instructions,
-            round.cost_schedule,
-        ),
+        CompoundCycles::new(original.prepaid_execution_cycles, round.cost_schedule),
         round.counters.execution_refund_error,
         original.subnet_size,
         round.cost_schedule,
@@ -650,11 +646,7 @@ impl CallOrTaskHelper {
             &mut self.canister.system_state,
             output.num_instructions_left,
             original.execution_parameters.instruction_limits.message(),
-            CompoundCycles::new(
-                original.prepaid_execution_cycles,
-                Instructions,
-                round.cost_schedule,
-            ),
+            CompoundCycles::new(original.prepaid_execution_cycles, round.cost_schedule),
             round.counters.execution_refund_error,
             original.subnet_size,
             round.cost_schedule,

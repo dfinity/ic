@@ -922,9 +922,8 @@ fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let initial_consumed_cycles = Cycles::new(1000);
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    system_state.remove_cycles(CompoundCycles::new(
+    system_state.remove_cycles(CompoundCycles::<ic_types_cycles::Memory>::new(
         initial_consumed_cycles,
-        ic_types_cycles::Memory,
         cost_schedule,
     ));
     assert_eq!(
@@ -937,9 +936,8 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
 
     let cycles = Cycles::new(100);
-    system_state.add_cycles(CompoundCycles::new(
+    system_state.add_cycles(CompoundCycles::<ic_types_cycles::Memory>::new(
         cycles,
-        ic_types_cycles::Memory,
         cost_schedule,
     ));
     assert_eq!(
@@ -957,16 +955,14 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let cycles_to_consume = Cycles::from(1000u128);
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    system_state.remove_cycles(CompoundCycles::new(
+    system_state.remove_cycles(CompoundCycles::<ic_types_cycles::Memory>::new(
         cycles_to_consume,
-        ic_types_cycles::Memory,
         cost_schedule,
     ));
 
     let cycles_to_add = Cycles::from(100u128);
-    system_state.add_cycles(CompoundCycles::new(
+    system_state.add_cycles(CompoundCycles::<ic_types_cycles::Memory>::new(
         cycles_to_add,
-        ic_types_cycles::Memory,
         cost_schedule,
     ));
     assert_eq!(
