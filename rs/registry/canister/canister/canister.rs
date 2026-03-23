@@ -649,7 +649,7 @@ fn delete_subnet() {
 
 #[candid_method(update, rename = "delete_subnet")]
 async fn delete_subnet_(payload: DeleteSubnetPayload) -> Result<(), String> {
-    registry_mut().do_delete_subnet(payload).await?;
+    registry_mut().do_delete_subnet(payload)?;
     recertify_registry();
     Ok(())
 }
