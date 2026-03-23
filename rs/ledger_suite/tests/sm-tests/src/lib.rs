@@ -6466,8 +6466,12 @@ where
     ));
 }
 
-pub fn test_unfreeze_not_frozen<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
+/// Unfreezing a non-frozen target must succeed (ICRC-123 latest-action-wins:
+/// the unfreeze block can lift account-level freezes at another level).
+pub fn test_unfreeze_not_frozen_succeeds<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
     T: CandidType,
 {
     let p1 = PrincipalId::new_user_test_id(1);
@@ -6491,16 +6495,16 @@ where
         now,
         None,
     );
-    assert!(matches!(
-        result,
-        Err(UnfreezeAccountError::NotFrozen { .. })
-    ));
+    assert!(
+        result.is_ok(),
+        "unfreeze_account on non-frozen account should succeed"
+    );
 
     let result = unfreeze_principal_call(&env, canister_id, controller.0, p1.0, now + 1, None);
-    assert!(matches!(
-        result,
-        Err(UnfreezePrincipalError::NotFrozen { .. })
-    ));
+    assert!(
+        result.is_ok(),
+        "unfreeze_principal on non-frozen principal should succeed"
+    );
 }
 
 pub fn test_freeze_guard_transfer<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)

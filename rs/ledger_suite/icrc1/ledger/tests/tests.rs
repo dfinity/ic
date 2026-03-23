@@ -792,8 +792,11 @@ fn test_freeze_already_frozen() {
 }
 
 #[test]
-fn test_unfreeze_not_frozen() {
-    ic_ledger_suite_state_machine_tests::test_unfreeze_not_frozen(ledger_wasm(), encode_init_args);
+fn test_unfreeze_not_frozen_succeeds() {
+    ic_ledger_suite_state_machine_tests::test_unfreeze_not_frozen_succeeds(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]

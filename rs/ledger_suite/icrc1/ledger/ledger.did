@@ -655,7 +655,6 @@ type FreezeAccountError = variant {
 type UnfreezeAccountError = variant {
   Unauthorized : record { message : text };
   InvalidAccount : record { message : text };
-  NotFrozen : record { message : text };
   Duplicate : record { duplicate_of : nat };
   GenericError : record { error_code : nat; message : text }
 };
@@ -671,7 +670,6 @@ type FreezePrincipalError = variant {
 type UnfreezePrincipalError = variant {
   Unauthorized : record { message : text };
   InvalidPrincipal : record { message : text };
-  NotFrozen : record { message : text };
   Duplicate : record { duplicate_of : nat };
   GenericError : record { error_code : nat; message : text }
 };

@@ -45,7 +45,6 @@ pub enum FreezeAccountError {
 pub enum UnfreezeAccountError {
     Unauthorized { message: String },
     InvalidAccount { message: String },
-    NotFrozen { message: String },
     Duplicate { duplicate_of: Nat },
     GenericError { error_code: Nat, message: String },
 }
@@ -63,7 +62,6 @@ pub enum FreezePrincipalError {
 pub enum UnfreezePrincipalError {
     Unauthorized { message: String },
     InvalidPrincipal { message: String },
-    NotFrozen { message: String },
     Duplicate { duplicate_of: Nat },
     GenericError { error_code: Nat, message: String },
 }

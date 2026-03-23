@@ -1330,11 +1330,6 @@ fn icrc153_unfreeze_account_not_async(
                 message: "ledger is deactivated".to_string(),
             });
         }
-        if !ledger.is_account_frozen(&arg.account) {
-            return Err(UnfreezeAccountError::NotFrozen {
-                message: format!("account {} is not frozen", arg.account),
-            });
-        }
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let tx = Transaction {
             operation: Operation::UnfreezeAccount {
@@ -1454,11 +1449,6 @@ fn icrc153_unfreeze_principal_not_async(
             return Err(UnfreezePrincipalError::GenericError {
                 error_code: Nat::from(0u64),
                 message: "ledger is deactivated".to_string(),
-            });
-        }
-        if !ledger.is_principal_frozen(&arg.principal) {
-            return Err(UnfreezePrincipalError::NotFrozen {
-                message: format!("principal {} is not frozen", arg.principal),
             });
         }
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
