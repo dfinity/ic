@@ -56,11 +56,6 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
 ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# Create user groups needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
-    # CI before script requires sudo \
-    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
 # Install AFLplusplus for fuzzing
 # LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
