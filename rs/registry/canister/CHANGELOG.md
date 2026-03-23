@@ -11,6 +11,32 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-13: Proposal 140861
+
+http://dashboard.internetcomputer.org/proposal/140861
+
+## Added
+
+* Adding support for recalling replica versions for subnets.
+* CloudEngines can have a Free cycles cost schedule. 
+* **SEV invariant:** Enforced that SEV-enabled subnets contain only SEV-enabled nodes (i.e., nodes with a chip ID in their node record).
+* New invariant to check that subnet admins can be non-empty only for rented subnets.
+* New endpoint to update the subnet admins field in the SubnetRecord.
+
+## Changed
+
+* **SEV on existing subnets:** Enabled SEV activation for existing subnets. Once enabled, SEV cannot be disabled.
+
+
+# 2026-03-07: Proposal 140777
+
+http://dashboard.internetcomputer.org/proposal/140777
+
+## Added
+
+* Adding support for recalling replica versions for subnets.
+
+
 # 2026-02-27: Proposal 140599
 
 http://dashboard.internetcomputer.org/proposal/140599

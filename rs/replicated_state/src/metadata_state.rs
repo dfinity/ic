@@ -7,7 +7,7 @@ mod tests;
 use self::subnet_call_context_manager::SubnetCallContextManager;
 use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
-use crate::{CheckpointLoadingMetrics, canister_state::system_state::CyclesUseCase};
+use crate::CheckpointLoadingMetrics;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
@@ -16,13 +16,13 @@ use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
     IC_00, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRanges, CanisterMigrations, RoutingTable,
     canister_id_into_u64, difference, intersection,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
@@ -30,7 +30,6 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{CanisterCall, MessageId, Payload, RejectContext, Response, StreamMessage},
     node_id_into_protobuf, node_id_try_from_option,
-    nominal_cycles::NominalCycles,
     state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion},
     subnet_id_into_protobuf,
     time::{Time, UNIX_EPOCH},
@@ -39,6 +38,7 @@ use ic_types::{
         StreamSlice,
     },
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
@@ -94,6 +94,8 @@ pub struct SystemMetadata {
     pub own_subnet_type: SubnetType,
 
     pub own_subnet_features: SubnetFeatures,
+
+    pub own_resource_limits: ResourceLimits,
 
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
@@ -163,7 +165,7 @@ pub struct SystemMetadata {
     ///
     /// Each time a canister is installed, its Wasm is inserted and the set is
     /// cleared at each checkpoint.
-    pub expected_compiled_wasms: BTreeSet<WasmHash>,
+    pub expected_compiled_wasms: Arc<BTreeSet<WasmHash>>,
 
     /// Responses to `BitcoinGetSuccessors` can be larger than the max inter-canister
     /// response limit. To work around this limitation, large responses are paginated
@@ -334,9 +336,9 @@ pub fn can_have_subnet_admins(
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetMetrics {
-    pub consumed_cycles_by_deleted_canisters: NominalCycles,
-    pub consumed_cycles_http_outcalls: NominalCycles,
-    pub consumed_cycles_ecdsa_outcalls: NominalCycles,
+    consumed_cycles_by_deleted_canisters: NominalCycles,
+    consumed_cycles_http_outcalls: NominalCycles,
+    consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
@@ -361,7 +363,31 @@ impl SubnetMetrics {
         *self
             .consumed_cycles_by_use_case
             .entry(use_case)
-            .or_insert_with(|| NominalCycles::from(0)) += cycles;
+            .or_insert_with(NominalCycles::zero) += cycles;
+    }
+
+    pub fn observe_consumed_cycles_by_deleted_canisters(&mut self, cycles: NominalCycles) {
+        self.consumed_cycles_by_deleted_canisters += cycles;
+    }
+
+    pub fn get_consumed_cycles_by_deleted_canisters(&self) -> NominalCycles {
+        self.consumed_cycles_by_deleted_canisters
+    }
+
+    pub fn observe_consumed_cycles_http_outcalls(&mut self, cycles: NominalCycles) {
+        self.consumed_cycles_http_outcalls += cycles;
+    }
+
+    pub fn get_consumed_cycles_http_outcalls(&self) -> NominalCycles {
+        self.consumed_cycles_http_outcalls
+    }
+
+    pub fn observe_consumed_cycles_ecdsa_outcalls(&mut self, cycles: NominalCycles) {
+        self.consumed_cycles_ecdsa_outcalls += cycles;
+    }
+
+    pub fn get_consumed_cycles_ecdsa_outcalls(&self) -> NominalCycles {
+        self.consumed_cycles_ecdsa_outcalls
     }
 
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
@@ -369,7 +395,7 @@ impl SubnetMetrics {
     }
 
     pub fn consumed_cycles_total(&self) -> NominalCycles {
-        let mut total = NominalCycles::from(0);
+        let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;
         total += self.consumed_cycles_http_outcalls;
@@ -419,6 +445,7 @@ impl SystemMetadata {
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
+            own_resource_limits: Default::default(),
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
@@ -432,7 +459,7 @@ impl SystemMetadata {
 
             heap_delta_estimate: NumBytes::from(0),
             subnet_metrics: Default::default(),
-            expected_compiled_wasms: BTreeSet::new(),
+            expected_compiled_wasms: Arc::new(BTreeSet::new()),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
@@ -711,6 +738,8 @@ impl SystemMetadata {
             // Overwritten as soon as the round begins, no explicit action needed.
             own_subnet_features: _,
             // Overwritten as soon as the round begins, no explicit action needed.
+            own_resource_limits: _,
+            // Overwritten as soon as the round begins, no explicit action needed.
             node_public_keys: _,
             api_boundary_nodes: _,
             ref mut split_from,
@@ -816,6 +845,7 @@ impl SystemMetadata {
             own_subnet_id,
             own_subnet_type,
             own_subnet_features,
+            own_resource_limits,
             node_public_keys,
             api_boundary_nodes,
             split_from,
@@ -919,6 +949,7 @@ impl SystemMetadata {
             own_subnet_id: subnet_id,
             own_subnet_type,
             own_subnet_features,
+            own_resource_limits,
             // Already populated from the registry.
             node_public_keys,
             api_boundary_nodes,
@@ -2015,6 +2046,7 @@ pub mod testing {
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
+            own_resource_limits: Default::default(),
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,

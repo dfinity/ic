@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 use crate::{
-    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled, decoder_config,
+    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled,
+    are_subnet_splitting_proposals_enabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -837,13 +838,13 @@ mod test_wait_for_quiet {
         /// `evaluate_wait_for_quiet` fire, and that the wait-for-quiet
         /// deadline is only ever increased, if at all.
         #[test]
-        fn test_evaluate_wait_for_quiet(voting_period_seconds in 3600u64..604_800,
-                                        now_seconds in 0u64..1_000_000,
-                                        old_yes in 0u64..1_000_000,
-                                        old_no in 0u64..1_000_000,
-                                        old_total in 10_000_000u64..100_000_000,
-                                        yes_votes in 0u64..1_000_000,
-                                        no_votes in 0u64..1_000_000,
+        fn test_evaluate_wait_for_quiet(voting_period_seconds in 3600_u64..604_800,
+                                        now_seconds in 0_u64..1_000_000,
+                                        old_yes in 0_u64..1_000_000,
+                                        old_no in 0_u64..1_000_000,
+                                        old_total in 10_000_000_u64..100_000_000,
+                                        yes_votes in 0_u64..1_000_000,
+                                        no_votes in 0_u64..1_000_000,
     ) {
             let current_deadline_timestamp_seconds = voting_period_seconds;
             let proposal_timestamp_seconds = 0; // initial timestamp is always 0
@@ -2599,7 +2600,7 @@ impl Governance {
 
         // Check if the least possible stake this neuron would be spawned with
         // is more than the minimum neuron stake.
-        let least_possible_stake = (maturity_to_spawn as f64 * (1f64 - 0.05)) as u64;
+        let least_possible_stake = (maturity_to_spawn as f64 * (1_f64 - 0.05)) as u64;
 
         if least_possible_stake < economics.neuron_minimum_stake_e8s {
             return Err(GovernanceError::new_with_message(
@@ -4851,6 +4852,13 @@ impl Governance {
             ValidNnsFunction::AddOrRemoveDataCenters => {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
+            }
+            ValidNnsFunction::SplitSubnet => {
+                if !are_subnet_splitting_proposals_enabled() {
+                    return Err(invalid_proposal_error(String::from(
+                        "Subnet Splitting proposals not yet enabled",
+                    )));
+                }
             }
             _ => {}
         };

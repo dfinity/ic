@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/on_wire",
     "//rs/state_machine_tests",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:backoff",

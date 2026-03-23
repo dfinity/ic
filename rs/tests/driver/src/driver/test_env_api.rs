@@ -829,10 +829,17 @@ impl SubnetSnapshot {
     }
 
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
+        self.raw_subnet_record_at_version(self.registry_version)
+    }
+
+    pub fn raw_subnet_record_at_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> pb_subnet::SubnetRecord {
         self.local_registry
-            .get_subnet_record(self.subnet_id, self.registry_version)
+            .get_subnet_record(self.subnet_id, registry_version)
             .unwrap_result(
-                self.registry_version,
+                registry_version,
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
@@ -1078,14 +1085,14 @@ impl IcNodeSnapshot {
         .expect("Could not install canister");
     }
 
-    pub fn create_and_install_canister_with_arg_and_cycles(
+    pub fn create_and_install_canister_with_effetive_id_with_arg_and_cycles(
         &self,
         name: &str,
         arg: Option<Vec<u8>>,
         cycles_amount: Option<u128>,
+        effective_canister_id: Principal,
     ) -> Principal {
         let canister_bytes = load_wasm(name);
-        let effective_canister_id = self.effective_canister_id();
 
         self.with_default_agent(move |agent| async move {
             // Create a canister.
@@ -1112,6 +1119,21 @@ impl IcNodeSnapshot {
         .expect("Could not install canister")
     }
 
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
+        let effective_canister_id = self.effective_canister_id();
+        self.create_and_install_canister_with_effetive_id_with_arg_and_cycles(
+            name,
+            arg,
+            cycles_amount,
+            effective_canister_id.0,
+        )
+    }
+
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
         let result = retry_with_msg!(
             "wait_for_orchestrator_rule",
@@ -1125,13 +1147,14 @@ impl IcNodeSnapshot {
     }
 
     fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
-        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
-        // This is a hardcoded rule that is applied regardless of what is in the registry
-        // Hence a change in the registry won't affect this check
+        // This checks that the rule to block access from the ic-http-adapter to
+        // all locally-configured addressess was applied.
+        // This is a hardcoded rule that is applied regardless of what is in the registry.
+        // Hence a change in the registry won't affect this check.
         let script = r#"
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
-            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            RULE_PATTERN="meta skuid $ADAPTER_UID fib daddr type local"
 
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
@@ -2297,11 +2320,18 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
+    // Set a timeout for the SSH handshake and authentication to prevent
+    // indefinite hangs when the remote host accepts TCP but stalls during
+    // the SSH protocol exchange.
+    sess.set_timeout(30_000);
     sess.handshake()?;
     let priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
     sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
+    // Clear the timeout so subsequent operations on this session
+    // (e.g. long-running commands) are not subject to the handshake timeout.
+    sess.set_timeout(0);
     Ok(sess)
 }
 
@@ -2412,6 +2442,27 @@ macro_rules! retry_with_msg_async_quiet {
             $timeout,
             $backoff,
             $f,
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! retry_agent_on_transport_errors {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        $crate::retry_with_msg_async!($msg, $log, $timeout, $backoff, || async {
+            match $f.await {
+                Err(AgentError::TransportError(e)) => Err(anyhow::anyhow!("transport error: {e}")),
+                other => Ok(other),
+            }
+        })
+    };
+    ($msg:expr, $log:expr, $f:expr) => {
+        $crate::retry_agent_on_transport_errors!(
+            $msg,
+            $log,
+            std::time::Duration::from_secs(120),
+            std::time::Duration::from_secs(5),
+            $f
         )
     };
 }
@@ -2831,6 +2882,10 @@ pub fn scp_recv_from(
         || {
             let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
             let size = scp_file_stat.size();
+            info!(
+                log,
+                "scp-ing remote {from_remote:?} of {size:?} B to local {to_local:?} ..."
+            );
             let mut to_file = std::fs::File::create(to_local)?;
             std::io::copy(&mut remote_file, &mut to_file)?;
             remote_file.send_eof()?;

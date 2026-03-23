@@ -83,7 +83,7 @@ pub fn init_ic(
     logger: &Logger,
     specific_ids: bool,
 ) -> Result<InitializedIc> {
-    let mut next_node_index = 0u64;
+    let mut next_node_index = 0_u64;
     let ic_name = ic.name();
     let working_dir = test_env.create_prep_dir(&ic_name)?;
 
@@ -555,7 +555,6 @@ fn create_guestos_config_for_node(
         mgmt_mac,
         deployment_environment,
         nns_urls,
-        use_node_operator_private_key: false,
         node_operator_private_key: None,
         enable_trusted_execution_environment: false,
         use_ssh_authorized_keys: true,

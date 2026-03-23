@@ -25,7 +25,7 @@ where
                 arb_account(),
                 arb_account(),
                 arb_account(),
-                1..10_000_000u64,
+                1..10_000_000_u64,
             )
                 .prop_filter("The three accounts must be different", |(a1, a2, a3, _)| {
                     HashSet::from([a1, a2, a3]).len() == 3

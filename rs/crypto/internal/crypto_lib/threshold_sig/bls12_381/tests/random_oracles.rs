@@ -84,7 +84,7 @@ mod unique_hashing {
         const INTEGER_HASH_HEX: &str =
             "f0496c68b3a9652a454e53dc157f70567e49232df7ae2b0bc95d0e28a41abe1a";
 
-        let int = 42usize;
+        let int = 42_usize;
         let hash = int.unique_hash();
 
         assert_eq!(
@@ -111,7 +111,7 @@ mod unique_hashing {
         const BYTES_HASH_HEX: &str =
             "1dad75ea20c2f7f58939a1f905148f3554bf24c14528ff6cd0527dffbd10e431";
 
-        let bytes = vec![1u8, 2u8, 3u8, 4u8];
+        let bytes = vec![1_u8, 2_u8, 3_u8, 4_u8];
         let hash = bytes.unique_hash();
 
         assert_eq!(
@@ -207,7 +207,7 @@ mod unique_hashing {
         let hashable_struct = StructToBeHashed {
             point: G1Affine::generator().clone(),
             string: "some string".to_string(),
-            integer: 4usize,
+            integer: 4_usize,
             scalar: Scalar::from_usize(36),
             bytes: vec![1, 2, 3, 4],
         };
@@ -227,7 +227,7 @@ mod unique_hashing {
         let hashable_struct = StructToBeHashed {
             point: G1Affine::generator().clone(),
             string: "some string".to_string(),
-            integer: 4usize,
+            integer: 4_usize,
             scalar: Scalar::from_usize(36),
             bytes: vec![1, 2, 3, 4],
         };
@@ -249,7 +249,7 @@ mod unique_hashing {
         let hashable_struct = StructToBeHashed {
             point: G1Affine::generator().clone(),
             string: "some string".to_string(),
-            integer: 4usize,
+            integer: 4_usize,
             scalar: Scalar::from_usize(36),
             bytes: vec![1, 2, 3, 4],
         };
@@ -284,7 +284,7 @@ mod random_oracles {
             let hashable_struct = StructToBeHashed {
                 point: G1Affine::generator().clone(),
                 string: "some string".to_string(),
-                integer: 4usize,
+                integer: 4_usize,
                 scalar: Scalar::from_usize(36),
                 bytes: vec![1, 2, 3, 4],
             };
@@ -302,7 +302,7 @@ mod random_oracles {
             let hashable_struct = StructToBeHashed {
                 point: G1Affine::generator().clone(),
                 string: "some string".to_string(),
-                integer: 4usize,
+                integer: 4_usize,
                 scalar: Scalar::from_usize(36),
                 bytes: vec![1, 2, 3, 4],
             };

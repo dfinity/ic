@@ -2,9 +2,9 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_management_canister_types_private::{CanisterIdRecord, Payload};
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_types::Cycles;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);

@@ -98,7 +98,7 @@ where
             .cloned()
             .unwrap_or(T::default());
         let right = values.get(mid).cloned().unwrap_or(T::default());
-        (left + right) / 2u8.into()
+        (left + right) / 2_u8.into()
     } else {
         values.get(mid).cloned().unwrap_or(T::default())
     }

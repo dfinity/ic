@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-13: Proposal 140860
+
+http://dashboard.internetcomputer.org/proposal/140860
+
+## Changed
+
+- Use the default values for `min_retrieve_blocks_from_ledger_interval_seconds` and
+  `max_retrieve_blocks_from_ledger_interval_seconds` for the SNS index-ng canister
+  polling interval when creating a new SNS (previously used the fixed value of 5s).
+
+
 # 2026-02-27: Proposal 140598
 
 http://dashboard.internetcomputer.org/proposal/140598

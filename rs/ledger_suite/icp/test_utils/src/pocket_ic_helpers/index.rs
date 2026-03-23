@@ -11,7 +11,7 @@ const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);
 
 pub fn get_blocks(pocket_ic: &PocketIc) -> Vec<icp_ledger::Block> {
     let req = GetBlocksRequest {
-        start: BlockIndex::from(0u64),
+        start: BlockIndex::from(0_u64),
         length: Nat::from(MAX_BLOCKS_PER_REQUEST),
     };
     let get_blocks_response: ic_icp_index::GetBlocksResponse = super::query_or_panic(

@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
     "//rs/canister_client/sender",
+    "//rs/types/cycles",
     "//rs/types/types",
     "//rs/types/types_test_utils",
     "@crate_index//:rand",
