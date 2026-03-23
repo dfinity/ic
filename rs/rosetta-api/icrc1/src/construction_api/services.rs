@@ -554,7 +554,7 @@ mod tests {
                             | ic_icrc1::Operation::UnfreezeAccount { .. }
                             | ic_icrc1::Operation::FreezePrincipal { .. }
                             | ic_icrc1::Operation::UnfreezePrincipal { .. } => {
-                                panic!("ICRC-124 operations not implemented")
+                                panic!("Management and freeze operations not implemented")
                             }
                         };
                         let args = match arg_with_caller.arg {

@@ -284,7 +284,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         }
 
         pub fn build(self) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
-            Ok(match self.icrc_operation.context("Icrc Operation type must be one of Mint, Burn, Transfer, Approve, FeeCollector, Pause, Unpause, or Deactivate")? {
+            Ok(match self.icrc_operation.context("Icrc Operation type must be one of Mint, Burn, Transfer, Approve, FeeCollector, FreezeAccount, UnfreezeAccount, FreezePrincipal, UnfreezePrincipal, Pause, Unpause, or Deactivate")? {
                 IcrcOperation::Mint => {
                     if self.from.is_some() {
                         bail!("From AccountIdentifier field is not allowed for Mint operation")
