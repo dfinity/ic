@@ -19,7 +19,7 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-# Create user groups needed for github actions runner
+# Create buildifier user so runner can have necessary permissions with sudo access
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # both buildifier and ubuntu users need to be able to access root permissions
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -78,10 +78,9 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
-# Set PATH and Rust install locations so toolchains are available to the ubuntu user
-ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH \
-    CARGO_HOME=/home/ubuntu/.cargo \
-    RUSTUP_HOME=/home/ubuntu/.rustup
+# install cargo with the ubuntu user
+USER ubuntu
+ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
 
 # Add Rust/Cargo support
 RUN mkdir -p /tmp/rust-version/
@@ -100,9 +99,8 @@ RUN rm -rf /tmp/rust-version
 ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 
-# Ensure the ubuntu user has permissions to the rust toolchain files
-RUN chown -R ubuntu:ubuntu /home/ubuntu/.cargo /home/ubuntu/.rustup && \
-    chmod -R g+w /home/ubuntu/.cargo /home/ubuntu/.rustup
+# switch back to root user after cargo install so that we have permissions to install additional packages
+USER root
 
 WORKDIR /
 CMD ["/bin/bash"]
