@@ -21,8 +21,6 @@ If the destination node operator does not yet exist, it is created automatically
 
 ## Changed
 
-* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
-
 ## Deprecated
 
 ## Removed

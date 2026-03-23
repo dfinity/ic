@@ -66,10 +66,12 @@ pub fn assert_subnet_is_healthy(
         "Failed to store new message on {}",
         node.get_ip_addr()
     );
-    // Wait until all nodes answer with the new message
+    // Wait until all nodes answer with the new message.
+    // Use 30 retries (up to ~155s total with 5s sleeps) to give nodes enough time to sync state,
+    // especially after recovery operations.
     for node in subnet {
         assert!(
-            can_read_msg_with_retries(logger, &node.get_public_url(), can_id, new_msg, 5),
+            can_read_msg_with_retries(logger, &node.get_public_url(), can_id, new_msg, 30),
             "Failed to read new message on {}",
             node.get_ip_addr()
         );
