@@ -597,9 +597,11 @@ pub struct Ledger {
     deactivated: bool,
 
     #[serde(default)]
-    frozen_accounts: std::collections::BTreeSet<Account>,
+    /// Maps accounts to (block_index, is_frozen) of the latest account-level action.
+    account_freeze_status: std::collections::BTreeMap<Account, (u64, bool)>,
     #[serde(default)]
-    frozen_principals: std::collections::BTreeSet<Principal>,
+    /// Maps principals to (block_index, is_frozen) of the latest principal-level action.
+    principal_freeze_status: std::collections::BTreeMap<Principal, (u64, bool)>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -728,8 +730,8 @@ impl Ledger {
             token_type: wasm_token_type(),
             paused: false,
             deactivated: false,
-            frozen_accounts: std::collections::BTreeSet::new(),
-            frozen_principals: std::collections::BTreeSet::new(),
+            account_freeze_status: std::collections::BTreeMap::new(),
+            principal_freeze_status: std::collections::BTreeMap::new(),
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
@@ -889,46 +891,77 @@ impl Ledger {
         self.deactivated = deactivated;
     }
 
+    /// Returns true if the latest account-level action was a freeze.
     pub fn is_account_frozen(&self, account: &Account) -> bool {
-        self.frozen_accounts.contains(account)
+        self.account_freeze_status
+            .get(account)
+            .is_some_and(|(_, frozen)| *frozen)
     }
 
+    /// Returns true if the latest principal-level action was a freeze.
     pub fn is_principal_frozen(&self, principal: &Principal) -> bool {
-        self.frozen_principals.contains(principal)
+        self.principal_freeze_status
+            .get(principal)
+            .is_some_and(|(_, frozen)| *frozen)
     }
 
-    /// Returns true if the account is directly frozen or its owner principal is frozen.
+    /// Returns true if the account is effectively frozen under ICRC-123
+    /// latest-action-wins semantics: the most recent freeze/unfreeze block
+    /// affecting this account (at either account or principal level) determines
+    /// the effective status.
     pub fn is_effectively_frozen(&self, account: &Account) -> bool {
-        self.frozen_accounts.contains(account) || self.frozen_principals.contains(&account.owner)
+        let acct = self.account_freeze_status.get(account).copied();
+        let princ = self.principal_freeze_status.get(&account.owner).copied();
+        match (acct, princ) {
+            (Some((a_idx, a_frozen)), Some((p_idx, p_frozen))) => {
+                if a_idx > p_idx {
+                    a_frozen
+                } else {
+                    p_frozen
+                }
+            }
+            (Some((_, frozen)), None) => frozen,
+            (None, Some((_, frozen))) => frozen,
+            (None, None) => false,
+        }
     }
 
-    pub fn freeze_account(&mut self, account: Account) {
-        self.frozen_accounts.insert(account);
+    pub fn freeze_account(&mut self, account: Account, block_idx: u64) {
+        self.account_freeze_status
+            .insert(account, (block_idx, true));
     }
 
-    pub fn unfreeze_account(&mut self, account: &Account) {
-        self.frozen_accounts.remove(account);
+    pub fn unfreeze_account(&mut self, account: &Account, block_idx: u64) {
+        self.account_freeze_status
+            .insert(*account, (block_idx, false));
     }
 
-    pub fn freeze_principal(&mut self, principal: Principal) {
-        self.frozen_principals.insert(principal);
+    pub fn freeze_principal(&mut self, principal: Principal, block_idx: u64) {
+        self.principal_freeze_status
+            .insert(principal, (block_idx, true));
     }
 
-    pub fn unfreeze_principal(&mut self, principal: &Principal) {
-        self.frozen_principals.remove(principal);
+    pub fn unfreeze_principal(&mut self, principal: &Principal, block_idx: u64) {
+        self.principal_freeze_status
+            .insert(*principal, (block_idx, false));
     }
 
+    /// Lists accounts whose latest account-level action was a freeze.
     pub fn list_frozen_accounts(&self, start_after: Option<&Account>, max: usize) -> Vec<Account> {
         use std::ops::Bound;
         let iter = match start_after {
             Some(start) => self
-                .frozen_accounts
+                .account_freeze_status
                 .range((Bound::Excluded(*start), Bound::Unbounded)),
-            None => self.frozen_accounts.range(..),
+            None => self.account_freeze_status.range(..),
         };
-        iter.take(max).copied().collect()
+        iter.filter(|(_, (_, frozen))| *frozen)
+            .take(max)
+            .map(|(k, _)| *k)
+            .collect()
     }
 
+    /// Lists principals whose latest principal-level action was a freeze.
     pub fn list_frozen_principals(
         &self,
         start_after: Option<&Principal>,
@@ -937,11 +970,14 @@ impl Ledger {
         use std::ops::Bound;
         let iter = match start_after {
             Some(start) => self
-                .frozen_principals
+                .principal_freeze_status
                 .range((Bound::Excluded(*start), Bound::Unbounded)),
-            None => self.frozen_principals.range(..),
+            None => self.principal_freeze_status.range(..),
         };
-        iter.take(max).copied().collect()
+        iter.filter(|(_, (_, frozen))| *frozen)
+            .take(max)
+            .map(|(k, _)| *k)
+            .collect()
     }
 
     pub fn metadata(&self) -> Vec<(MetadataKey, Value)> {

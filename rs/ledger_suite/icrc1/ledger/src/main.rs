@@ -1295,7 +1295,7 @@ fn icrc153_freeze_account_not_async(
                     message: format!("{other:?}"),
                 },
             })?;
-        ledger.freeze_account(arg.account);
+        ledger.freeze_account(arg.account, block_idx);
         Ok(block_idx)
     })?;
     Ok(block_idx)
@@ -1358,7 +1358,7 @@ fn icrc153_unfreeze_account_not_async(
                     message: format!("{other:?}"),
                 },
             })?;
-        ledger.unfreeze_account(&arg.account);
+        ledger.unfreeze_account(&arg.account, block_idx);
         Ok(block_idx)
     })?;
     Ok(block_idx)
@@ -1421,7 +1421,7 @@ fn icrc153_freeze_principal_not_async(
                     message: format!("{other:?}"),
                 },
             })?;
-        ledger.freeze_principal(arg.principal);
+        ledger.freeze_principal(arg.principal, block_idx);
         Ok(block_idx)
     })?;
     Ok(block_idx)
@@ -1484,7 +1484,7 @@ fn icrc153_unfreeze_principal_not_async(
                     message: format!("{other:?}"),
                 },
             })?;
-        ledger.unfreeze_principal(&arg.principal);
+        ledger.unfreeze_principal(&arg.principal, block_idx);
         Ok(block_idx)
     })?;
     Ok(block_idx)

@@ -6643,6 +6643,109 @@ pub fn test_freeze_principal_compositional<T>(
     assert!(result.is_ok());
 }
 
+/// Tests ICRC-123 latest-action-wins semantics: a principal unfreeze lifts
+/// an earlier account-level freeze, and a subsequent account freeze re-freezes
+/// only that specific account.
+pub fn test_freeze_latest_action_wins<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p1_sub = Account {
+        owner: p1.0,
+        subaccount: Some([1u8; 32]),
+    };
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![
+            (Account::from(p1.0), 10_000_000),
+            (p1_sub, 5_000_000),
+            (Account::from(p2.0), 10_000_000),
+        ],
+    );
+    let controller = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .controllers()[0];
+    let now = system_time_to_nanos(env.time());
+
+    // 1. Freeze account p1 (account-level, block N)
+    freeze_account(
+        &env,
+        canister_id,
+        controller.0,
+        Account::from(p1.0),
+        now,
+        None,
+    )
+    .unwrap();
+    assert!(is_frozen_account(&env, canister_id, Account::from(p1.0)));
+
+    // 2. Freeze principal p1 (block N+1), then unfreeze principal (block N+2).
+    //    The principal unfreeze is the latest action affecting p1's accounts,
+    //    so it overrides the earlier account-level freeze.
+    freeze_principal_call(&env, canister_id, controller.0, p1.0, now + 1, None).unwrap();
+    unfreeze_principal_call(&env, canister_id, controller.0, p1.0, now + 2, None).unwrap();
+    assert!(
+        !is_frozen_account(&env, canister_id, Account::from(p1.0)),
+        "principal unfreeze should lift earlier account freeze (latest-action-wins)"
+    );
+
+    // p1 can transfer again
+    let result = transfer(
+        &env,
+        canister_id,
+        Account::from(p1.0),
+        Account::from(p2.0),
+        1000,
+    );
+    assert!(
+        result.is_ok(),
+        "account should be able to transfer after principal unfreeze lifts account freeze"
+    );
+
+    // 3. Freeze principal p1 (block N+3)
+    freeze_principal_call(&env, canister_id, controller.0, p1.0, now + 3, None).unwrap();
+    assert!(is_frozen_account(&env, canister_id, Account::from(p1.0)));
+    assert!(is_frozen_account(&env, canister_id, p1_sub));
+
+    // 4. Unfreeze specific account p1 (block N+4) — only the default account is unfrozen,
+    //    the subaccount is still frozen via the principal freeze at block N+3
+    unfreeze_account(
+        &env,
+        canister_id,
+        controller.0,
+        Account::from(p1.0),
+        now + 4,
+        None,
+    )
+    .unwrap();
+    assert!(
+        !is_frozen_account(&env, canister_id, Account::from(p1.0)),
+        "account unfreeze should lift principal freeze for that specific account"
+    );
+    assert!(
+        is_frozen_account(&env, canister_id, p1_sub),
+        "subaccount should still be frozen via principal freeze"
+    );
+
+    // Default account can transfer, subaccount cannot
+    let result = transfer(
+        &env,
+        canister_id,
+        Account::from(p1.0),
+        Account::from(p2.0),
+        1000,
+    );
+    assert!(result.is_ok());
+
+    let result = transfer(&env, canister_id, p1_sub, Account::from(p2.0), 1000);
+    assert!(result.is_err(), "subaccount should still be frozen");
+}
+
 pub fn test_freeze_deactivated_rejects<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,

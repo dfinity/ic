@@ -813,6 +813,14 @@ fn test_freeze_principal_compositional() {
 }
 
 #[test]
+fn test_freeze_latest_action_wins() {
+    ic_ledger_suite_state_machine_tests::test_freeze_latest_action_wins(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_freeze_deactivated_rejects() {
     ic_ledger_suite_state_machine_tests::test_freeze_deactivated_rejects(
         ledger_wasm(),
