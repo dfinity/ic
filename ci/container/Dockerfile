@@ -80,6 +80,7 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
 
 # Set PATH and Rust install locations so toolchains are available to the ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
+
 # Add Rust/Cargo support
 RUN mkdir -p /tmp/rust-version/
 COPY rust-toolchain.toml /tmp/rust-version/rust-toolchain.toml
