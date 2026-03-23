@@ -19,7 +19,7 @@ else
     trap cleanup EXIT
     if MOUNT_OUTPUT=$(mount -t xfs "${DEVICE}" "${TESTMOUNT}" 2>&1); then
         # Mount succeeded, filesystem is healthy.
-        umount "${TESTMOUNT}"
+        umount "${TESTMOUNT}" || echo "Warning: umount ${TESTMOUNT} failed, EXIT trap will retry." >&2
     else
         # Mount failed, filesystem is corrupted.
         # Log the mount failure output to aid diagnostics.
