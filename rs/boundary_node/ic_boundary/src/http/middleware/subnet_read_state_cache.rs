@@ -107,12 +107,12 @@ impl SubnetReadStateCacheState {
     }
 }
 
+fn is_cacheable_path(path: &ReadStatePath) -> bool {
+    path.len() == 2 && (path[0] == b"canister_ranges" || path[0] == b"subnet")
+}
+
 fn should_cache_paths(paths: &ReadStatePaths) -> bool {
-    !paths.is_empty()
-        && paths.iter().all(|path| {
-            let slices: Vec<&[u8]> = path.iter().map(|l| l.as_slice()).collect();
-            matches!(slices.as_slice(), [b"canister_ranges", _] | [b"subnet", _])
-        })
+    !paths.is_empty() && paths.iter().all(is_cacheable_path)
 }
 
 fn build_cache_key(subnet_id: SubnetId, ctx: &RequestContext) -> Option<CacheKey> {
