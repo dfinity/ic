@@ -115,13 +115,10 @@ fn should_cache_paths(paths: &ReadStatePaths) -> bool {
     !paths.is_empty() && paths.iter().all(is_cacheable_path)
 }
 
-fn build_cache_key(subnet_id: SubnetId, ctx: &RequestContext) -> Option<CacheKey> {
-    let mut paths = ctx.read_state_paths.clone()?;
-    if !should_cache_paths(&paths) {
-        return None;
-    }
+fn build_cache_key(subnet_id: SubnetId, paths: &ReadStatePaths) -> CacheKey {
+    let mut paths = paths.clone();
     paths.sort();
-    Some(CacheKey { subnet_id, paths })
+    CacheKey { subnet_id, paths }
 }
 
 pub async fn subnet_read_state_cache_middleware(
@@ -131,15 +128,14 @@ pub async fn subnet_read_state_cache_middleware(
 ) -> Result<impl IntoResponse, ApiError> {
     let subnet_id = request.extensions().get::<SubnetId>().copied();
     let ctx = request.extensions().get::<Arc<RequestContext>>().cloned();
+    let paths = ctx.as_ref().and_then(|ctx| ctx.read_state_paths.as_ref());
 
-    let cache_key = subnet_id
-        .zip(ctx.as_ref())
-        .and_then(|(sid, ctx)| build_cache_key(sid, ctx));
-
-    let cache_key = match cache_key {
-        Some(k) => k,
-        None => return Ok(next.run(request).await),
+    let (subnet_id, paths) = match (&subnet_id, &paths) {
+        (Some(sid), Some(paths)) if should_cache_paths(paths) => (*sid, *paths),
+        _ => return Ok(next.run(request).await),
     };
+
+    let cache_key = build_cache_key(subnet_id, paths);
 
     if let Some(cached) = state.cache.get(&cache_key) {
         state.hits.inc();
