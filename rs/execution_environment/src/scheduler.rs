@@ -27,6 +27,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
 use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
@@ -532,6 +533,7 @@ impl SchedulerImpl {
                 cost_schedule,
                 is_first_iteration,
                 &mut round_limits,
+                state.resource_limits(),
                 &measurement_scope,
             );
             let instructions_consumed = instructions_before - round_limits.instructions;
@@ -685,6 +687,7 @@ impl SchedulerImpl {
         cost_schedule: CanisterCyclesCostSchedule,
         is_first_iteration: bool,
         round_limits: &mut RoundLimits,
+        resource_limits: ResourceLimits,
         measurement_scope: &MeasurementScope,
     ) -> (
         Vec<Arc<CanisterState>>,
@@ -745,6 +748,7 @@ impl SchedulerImpl {
                         cost_schedule,
                         is_first_iteration,
                         round_limits,
+                        resource_limits,
                         metrics,
                         logger,
                     );
@@ -1179,7 +1183,9 @@ impl SchedulerImpl {
                 .memory_allocation()
                 .allocated_bytes(canister.memory_usage());
         }
-        let subnet_memory_capacity = self.exec_env.subnet_memory_capacity();
+        let subnet_memory_capacity = self
+            .exec_env
+            .subnet_memory_capacity(state.resource_limits());
 
         // Check that subnet memory usage invariant still holds after the round execution.
         // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
@@ -1742,6 +1748,7 @@ fn execute_canisters_on_thread(
     cost_schedule: CanisterCyclesCostSchedule,
     is_first_iteration: bool,
     mut round_limits: RoundLimits,
+    resource_limits: ResourceLimits,
     metrics: Arc<SchedulerMetrics>,
     logger: ReplicaLogger,
 ) -> ExecutionThreadResult {
@@ -1814,6 +1821,7 @@ fn execute_canisters_on_thread(
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
+                resource_limits,
                 subnet_size,
                 cost_schedule,
             );

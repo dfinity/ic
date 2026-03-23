@@ -320,7 +320,7 @@ pub async fn assert_ecdsa_signatures_work(
     let public_key = get_public_key_with_logger(&key_id, &msg_can, logger)
         .await
         .unwrap();
-    let message_hash = vec![0xabu8; 32];
+    let message_hash = vec![0xab_u8; 32];
     let signature = get_signature_with_logger(
         message_hash.clone(),
         ECDSA_SIGNATURE_FEE,

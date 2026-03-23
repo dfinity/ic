@@ -5,10 +5,11 @@ use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
-use ic_types::CanisterId;
+use ic_types::{CanisterId, NumBytes};
 use ic_types_cycles::Cycles;
 
 const T: u128 = 1_000_000_000_000;
+const GIB: u64 = 1_u64 << 30;
 
 fn reserved_cycles_memory_grow_to_full_capacity<F>(
     grow: F,
@@ -19,8 +20,17 @@ fn reserved_cycles_memory_grow_to_full_capacity<F>(
 {
     // Create application subnet `StateMachine`.
     let subnet_type = SubnetType::Application;
-    let subnet_config = SubnetConfig::new(subnet_type);
-    let execution_config = ExecutionConfig::default();
+    let mut subnet_config = SubnetConfig::new(subnet_type);
+    // 2 cores, so we don't have to retry every allocation 4 times (due to the
+    // memory being split 4 ways).
+    subnet_config.scheduler_config.scheduler_cores = 2;
+    // Lower capacity and threshold, so the test does not take forever.
+    let execution_config = ExecutionConfig {
+        subnet_memory_capacity: NumBytes::new(4 * GIB),
+        subnet_memory_threshold: NumBytes::new(2 * GIB),
+        subnet_memory_reservation: NumBytes::new(0),
+        ..ExecutionConfig::default()
+    };
     let config = StateMachineConfig::new(subnet_config, execution_config);
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
@@ -96,6 +106,10 @@ fn reserved_cycles_stable_memory_grow_to_full_capacity() {
                     .append_and_reply()
                     .build(),
             );
+            // With multiple canisters, we may run out of memory after only a few of them.
+            if res.is_err() {
+                break;
+            }
             // if `ic0.stable64_grow` returns -1 (i.e., fails)
             if res
                 == Ok(WasmResult::Reply(vec![
@@ -114,8 +128,8 @@ fn reserved_cycles_stable_memory_grow_to_full_capacity() {
     };
 
     // The total amount of reserved cycles to claim the full subnet memory capacity.
-    const NUM_CANISTERS: usize = 5; // we need multiple canisters since the stable memory of a single canister cannot fill the subnet
-    const EXPECTED_RESERVED_CYCLES: u128 = 48_911 * T;
+    const NUM_CANISTERS: usize = 1;
+    const EXPECTED_RESERVED_CYCLES: u128 = 96 * T;
     reserved_cycles_memory_grow_to_full_capacity(
         stable_grow,
         NUM_CANISTERS,
@@ -154,7 +168,7 @@ fn reserved_cycles_memory_allocation_grow_to_full_capacity() {
     // The total amount of reserved cycles to claim the full subnet memory capacity
     // while reserving a lot of memory at once.
     const NUM_CANISTERS: usize = 1; // a single canister can fill the subnet with its memory allocation
-    const EXPECTED_RESERVED_CYCLES: u128 = 68_866 * T;
+    const EXPECTED_RESERVED_CYCLES: u128 = 136 * T;
     reserved_cycles_memory_grow_to_full_capacity(
         ic00_grow,
         NUM_CANISTERS,

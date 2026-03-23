@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 13.0.0 - 2026-03-23
+
 ### Added
 - The endpoint `/instances/` takes an additional optional field `mainnet_nns_subnet_id` specifying that the NNS subnet should be created with the mainnet NNS subnet ID.
 - The CLI option `--hard-ttl` to specify that the PocketIC server should perform a hard exit after the provided number of seconds since its launch.

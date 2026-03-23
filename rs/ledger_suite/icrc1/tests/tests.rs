@@ -219,7 +219,7 @@ mod block_encoding_stability {
             subaccount: Some([0x71_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(2, 0x68686767)
-            .with_parent_hash(vec![0x22u8; 32])
+            .with_parent_hash(vec![0x22_u8; 32])
             .approve(account1, account2, Tokens::from_e8s(0x991199119911_u64));
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
@@ -233,7 +233,7 @@ mod block_encoding_stability {
             subaccount: Some([0x51_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(3, 0x58585757)
-            .with_parent_hash(vec![27u8; 32])
+            .with_parent_hash(vec![27_u8; 32])
             .burn(account, Tokens::from_e8s(0x441144114411_u64));
 
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
@@ -249,7 +249,7 @@ mod block_encoding_stability {
         };
         let builder = BlockBuilder::<Tokens>::new(1, 12345678)
             .with_btype(BTYPE_107.to_string())
-            .with_parent_hash(vec![67u8; 32])
+            .with_parent_hash(vec![67_u8; 32])
             .fee_collector(
                 Some(account),
                 Some(PrincipalId::new_user_test_id(2).0),
@@ -268,7 +268,7 @@ mod block_encoding_stability {
             subaccount: Some([37_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(2, 68686767)
-            .with_parent_hash(vec![43u8; 32])
+            .with_parent_hash(vec![43_u8; 32])
             .mint(account, Tokens::from_e8s(998899889988_u64));
 
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
@@ -287,7 +287,7 @@ mod block_encoding_stability {
             subaccount: Some([0x38_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(7, 0x10102020)
-            .with_parent_hash(vec![0xb8u8; 32])
+            .with_parent_hash(vec![0xb8_u8; 32])
             .transfer(account1, account2, Tokens::from_e8s(0x55215521_u64));
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
@@ -309,7 +309,7 @@ mod block_encoding_stability {
             subaccount: Some([0x47_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(7, 0x31313131)
-            .with_parent_hash(vec![0xa6u8; 32])
+            .with_parent_hash(vec![0xa6_u8; 32])
             .transfer(account1, account2, Tokens::from_e8s(0x73377337_u64))
             .with_spender(account3);
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
