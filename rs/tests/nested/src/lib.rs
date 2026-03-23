@@ -22,15 +22,6 @@ use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnvAttribute};
 pub const HOST_VM_NAME: &str = "host-1";
 const BARE_METAL_HOST_SECRETS: &str = "BARE_METAL_HOST_SECRETS";
 
-#[derive(Serialize, Deserialize)]
-pub struct IpmiProcessId(i32);
-
-impl TestEnvAttribute for IpmiProcessId {
-    fn attribute_name() -> String {
-        "ipmi_process_id".to_string()
-    }
-}
-
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
 pub fn setup(env: TestEnv) {
@@ -75,10 +66,6 @@ fn simple_bare_metal_with_trusted_execution_environment_setup(env: TestEnv) {
         /*enable_trusted_execution_environment*/ true,
     );
     nodes.setup_and_start(&env).unwrap();
-
-    // Remember process ID of the IMPI session so we can clean it up in teardown()
-    IpmiProcessId(bare_metal.process_id()).write_attribute(&env);
-    bare_metal.keep_alive_after_drop();
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -124,11 +111,4 @@ pub fn registration(env: TestEnv) {
         }
     ).unwrap();
     info!(logger, "All {n} nodes successfully came up and registered.");
-}
-
-/// Clean up the environment after nested tests.
-pub fn teardown(env: TestEnv) {
-    if let Ok(pid) = IpmiProcessId::try_read_attribute(&env) {
-        let _ = nix::sys::signal::kill(Pid::from_raw(pid.0), Signal::SIGTERM);
-    }
 }
