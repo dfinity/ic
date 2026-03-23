@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+
+# usage: ./hunt //my-target [n_runs]
+
+set -euo pipefail
+
+filter='map
+    (reduce . as $target
+        ([]; . +
+            $target.actualOutputs
+        )
+    ) | flatten'
+
+
+target="$1"
+n_runs="${2:-2}"
+
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+run_build() {
+    local run_n="$1"
+
+    echo "$(date) Running build $run_n/$n_runs"
+
+    output_base="$repo_root/,output-base-$run_n"
+    checkout_path="$repo_root/,checkout-$run_n"
+
+    for i in $(seq 1 "$run_n"); do
+        output_base="$output_base/nest-$i"
+        checkout_path="$checkout_path/nest-$i"
+    done
+
+
+    echo "using output base '$output_base'"
+    mkdir -p "$output_base"
+    echo "using checkout path '$checkout_path'"
+    mkdir -p "$checkout_path"
+    rm -rf "$output_base"
+
+    pushd "$checkout_path"
+    git clone "$repo_root" .
+
+    # add extra startup_options if necessary
+    startup_options=(
+        --output_base="$output_base"
+        --noworkspace_rc
+        --bazelrc=./bazel/conf/.bazelrc.build
+     )
+
+    mkdir -p target # arbitrary dir where execlogs should be placed
+    bazel \
+        "${startup_options[@]}" \
+        build \
+        "--execution_log_json_file=$repo_root/target/exec$run_n.json" \
+        "$target"
+
+    popd
+}
+
+compare_runs() {
+
+    local run_a="$1"
+    local run_b="$2"
+
+    res=$(jq --slurp '(.[0] - .[1])' \
+        <(jq -Mr <"$repo_root/target/exec$run_a.json" --slurp "$filter") \
+        <(jq -Mr <"$repo_root/target/exec$run_b.json" --slurp "$filter")
+    )
+
+
+    if [ "$res" != "[]" ]; then
+        echo "$(date) mismatch"
+        echo "$res"
+        exit 1
+    fi
+
+    echo "$(date) builds $run_a - $run_b: no diff 👌"
+}
+
+for run_n in $(seq 1 "$n_runs"); do
+    run_build "$run_n"
+
+    if [[ $run_n != "1" ]]; then
+        compare_runs "1" "$run_n"
+    fi
+done
