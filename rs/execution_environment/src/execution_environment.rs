@@ -56,7 +56,8 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
-    canister_state::{NextExecution, system_state::PausedExecutionId},
+    canister_state::NextExecution,
+    canister_state::system_state::PausedExecutionId,
     metadata_state::UnflushedCheckpointOp,
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash,
@@ -4441,38 +4442,39 @@ impl ExecutionEnvironment {
         id
     }
 
-    /// Aborts paused execution in the given state.
-    pub fn abort_canister(&self, canister: &mut Arc<CanisterState>, log: &ReplicaLogger) {
-        if !canister.system_state.task_queue.is_empty() {
-            if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
-                self.metrics.executions_aborted.inc();
-                // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
-                // paused execution on the canister without requesting ID from TaskQueue.
-                let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
-
-                Arc::make_mut(canister)
-                    .system_state
-                    .task_queue
-                    .replace_paused_with_aborted_task(aborted_task);
-            }
-            if canister.system_state.ingress_induction_cycles_debit() > Cycles::zero() {
-                let canister_id = canister.canister_id();
-                Arc::make_mut(canister)
-                    .system_state
-                    .apply_ingress_induction_cycles_debit(
-                        canister_id,
-                        log,
-                        &self.metrics.charging_from_balance_error,
-                    );
-            }
-        };
-    }
-
-    /// Aborts all paused execution in the given state.
-    pub fn abort_all_paused_executions(&self, state: &mut ReplicatedState, log: &ReplicaLogger) {
-        for canister in state.canisters_iter_mut() {
-            self.abort_canister(canister, log);
+    /// Aborts the paused execution, if any, of the given canister.
+    ///
+    /// Returns true if a paused execution was aborted, false otherwise.
+    pub(crate) fn abort_canister(
+        &self,
+        canister: &mut Arc<CanisterState>,
+        log: &ReplicaLogger,
+    ) -> bool {
+        let mut aborted = false;
+        if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
+            self.metrics.executions_aborted.inc();
+            // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
+            // paused execution on the canister without requesting ID from TaskQueue.
+            let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
+            Arc::make_mut(canister)
+                .system_state
+                .task_queue
+                .replace_paused_with_aborted_task(aborted_task);
+            aborted = true;
         }
+
+        if canister.system_state.ingress_induction_cycles_debit() > Cycles::zero() {
+            let canister_id = canister.canister_id();
+            Arc::make_mut(canister)
+                .system_state
+                .apply_ingress_induction_cycles_debit(
+                    canister_id,
+                    log,
+                    &self.metrics.charging_from_balance_error,
+                );
+        }
+
+        aborted
     }
 
     /// Aborts all paused executions known to the execution environment. This
