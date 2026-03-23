@@ -11,7 +11,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::ReplicatedStateTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5, SUBNET_42};
+use ic_test_utilities_types::ids::{
+    SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5, SUBNET_6, SUBNET_42,
+};
 use ic_types::xnet::RejectReason;
 use maplit::btreemap;
 
@@ -73,13 +75,71 @@ async fn expected_stream_indices() {
             .take();
 
         let computed_indices = xnet_payload_builder
-            .expected_stream_indices(
+            .expected_stream_indices_without_engines(
                 &validation_context,
                 state.as_ref(),
                 past_payloads.as_slice(),
             )
             .unwrap();
         assert_eq!(expected_indices, computed_indices);
+    });
+}
+
+/// `expected_stream_indices_without_engines` should not include `SUBNET_6`
+/// (registered as `CloudEngine` in `get_simple_registry_for_test`).
+#[tokio::test]
+async fn expected_stream_indices_excludes_engine_subnets() {
+    with_test_replica_logger(|log| {
+        let state_manager = FakeStateManager::new();
+        let (payloads, _expected_indices) = get_xnet_state_for_testing(&state_manager);
+
+        // `get_simple_registry_for_test` registers SUBNET_1..SUBNET_4 as Application
+        // and SUBNET_6 as CloudEngine.
+        let registry = get_simple_registry_for_test();
+        let tls_handshake = Arc::new(MockTlsConfig::new());
+        let state_manager = Arc::new(state_manager);
+        let xnet_payload_builder = XNetPayloadBuilderImpl::new(
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
+            tls_handshake as Arc<_>,
+            registry,
+            tokio::runtime::Handle::current(),
+            LOCAL_NODE,
+            LOCAL_SUBNET,
+            &MetricsRegistry::new(),
+            log,
+        );
+
+        let validation_context = get_validation_context_for_test();
+        let past_payloads: Vec<&XNetPayload> = payloads.iter().collect();
+
+        let state = state_manager
+            .get_state_at(validation_context.certified_height)
+            .unwrap()
+            .take();
+
+        let computed_indices = xnet_payload_builder
+            .expected_stream_indices_without_engines(
+                &validation_context,
+                state.as_ref(),
+                past_payloads.as_slice(),
+            )
+            .unwrap();
+
+        // SUBNET_6 is a CloudEngine and must be excluded.
+        assert!(
+            !computed_indices.contains_key(&SUBNET_6),
+            "CloudEngine subnet SUBNET_6 should be excluded from expected stream indices"
+        );
+
+        // Application subnets should still be present.
+        for subnet in &[SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4] {
+            assert!(
+                computed_indices.contains_key(subnet),
+                "Application subnet {:?} should be present in expected stream indices",
+                subnet
+            );
+        }
     });
 }
 

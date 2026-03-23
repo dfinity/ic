@@ -20,7 +20,7 @@ use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_types::{
     ids::{
         NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_0, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
-        canister_test_id, node_test_id, subnet_test_id,
+        SUBNET_6, canister_test_id, node_test_id, subnet_test_id,
     },
     messages::RequestBuilder,
 };
@@ -376,7 +376,8 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
 }
 
 /// Generates a `RegistryClient` with a local node record and subnet records
-/// for `SUBNET_1` through `SUBNET_4` (all as `Application`).
+/// for `SUBNET_1` through `SUBNET_4` (all as `Application`), plus a cloud engine
+/// `SUBNET_6` which should be ignored by the payload builder.
 pub fn get_simple_registry_for_test() -> Arc<dyn RegistryClient> {
     let (registry, _) = get_registry_and_urls_for_test_with_subnet_types(
         0,
@@ -386,6 +387,7 @@ pub fn get_simple_registry_for_test() -> Arc<dyn RegistryClient> {
             SUBNET_2 => SubnetType::Application,
             SUBNET_3 => SubnetType::Application,
             SUBNET_4 => SubnetType::Application,
+            SUBNET_6 => SubnetType::CloudEngine,
         ],
     );
     registry

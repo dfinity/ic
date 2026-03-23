@@ -865,7 +865,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .get_subnet_record(own_subnet_id, registry_version)
             .map_err(|err| registry_error("subnet record", Some(own_subnet_id), err))?
             .ok_or_else(|| not_found_error("subnet record", Some(own_subnet_id)))?;
-        let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
+        // In case of version mismatch the default is cloud engine, as this is the most restrictive.
+        let own_subnet_type: SubnetType = subnet_record
+            .subnet_type
+            .try_into()
+            .unwrap_or(SubnetType::CloudEngine);
 
         let nodes = get_node_ids_from_subnet_record(&subnet_record)
             .map_err(|err| {
