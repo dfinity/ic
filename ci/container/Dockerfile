@@ -55,11 +55,6 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
 ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# Create user groups needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
-    # CI before script requires sudo \
-    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
 # Install AFLplusplus for fuzzing
 # LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
@@ -78,9 +73,10 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
-USER ubuntu
-# Set PATH for ubuntu user
-ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
+# Set PATH and Rust install locations so toolchains are available to the ubuntu user
+ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH \
+    CARGO_HOME=/home/ubuntu/.cargo \
+    RUSTUP_HOME=/home/ubuntu/.rustup
 
 # Add Rust/Cargo support
 RUN mkdir -p /tmp/rust-version/
@@ -98,23 +94,21 @@ RUN rm -rf /tmp/rust-version
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
-# Add zshrc generated from zsh-newuser-install (option 2)
-COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
+RUN chown -R ubuntu:ubuntu /home/ubuntu/.cargo /home/ubuntu/.rustup
 
 WORKDIR /
-# Use buildifier (uid 1001) if /entrypoint.sh is overriden
-# In GitHub that is the case and we need 1001 and we set it via ARG.
-ARG CI_USER="root"
-USER $CI_USER
 CMD ["/bin/bash"]
 
 FROM base as build
 
+# Create user groups needed for github actions runner
+RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier
+USER buildifier
+
 FROM base as dev
 
-# Temporarily switch to root to install development packages.
-# We will switch back to the non-root user at the end of this stage.
-USER root
+# Add zshrc generated from zsh-newuser-install (option 2)
+COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
 # Install additional packages for development but not needed on CI:
 ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
@@ -134,4 +128,4 @@ RUN (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
 	&& sudo apt update \
 	&& sudo apt install gh -y
 
-USER $CI_USER
+USER ubuntu
