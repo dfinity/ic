@@ -99,6 +99,8 @@ RUN rm -rf /tmp/rust-version
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
+
+# Ensure the ubuntu user has permissions to the rust toolchain files
 RUN chown -R ubuntu:ubuntu /home/ubuntu/.cargo /home/ubuntu/.rustup && \
     chmod -R g+w /home/ubuntu/.cargo /home/ubuntu/.rustup
 
