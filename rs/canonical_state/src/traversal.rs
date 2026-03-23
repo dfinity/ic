@@ -74,11 +74,10 @@ mod tests {
     };
     use ic_types::{
         CanisterId, CryptoHashOfPartialState, Height,
-        batch::CanisterCyclesCostSchedule,
         crypto::CryptoHash,
         xnet::{StreamFlags, StreamHeader},
     };
-    use ic_types_cycles::Cycles;
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::{BTreeSet, VecDeque};

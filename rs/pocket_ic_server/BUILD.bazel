@@ -150,7 +150,8 @@ ALIASES = {}
 
 EXTERNAL_CANISTER_DATA = [
     "@mainnet_canisters//:cycles_ledger.wasm.gz",
-    "@mainnet_canisters//:internet_identity_test.wasm.gz",
+    "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+    "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
     "@mainnet_canisters//:sns_aggregator_test.wasm.gz",
     "@mainnet_canisters//:nns_dapp_test.wasm.gz",
     "@mainnet_canisters//:bitcoin_testnet.wasm.gz",
@@ -159,7 +160,8 @@ EXTERNAL_CANISTER_DATA = [
 
 EXTERNAL_CANISTER_ENV = {
     "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:cycles_ledger.wasm.gz)",
-    "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:internet_identity_test.wasm.gz)",
+    "INTERNET_IDENTITY_BACKEND_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:internet_identity_backend.wasm.gz)",
+    "INTERNET_IDENTITY_FRONTEND_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:internet_identity_frontend.wasm.gz)",
     "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_aggregator_test.wasm.gz)",
     "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:nns_dapp_test.wasm.gz)",
     "BITCOIN_TESTNET_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:bitcoin_testnet.wasm.gz)",
@@ -275,7 +277,7 @@ MAINNET_NNS_CANISTER_ENV = {
         crate_name = "pocket_ic_server",
         proc_macro_deps = MACRO_DEPENDENCIES,
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "12.0.0",
+        version = "13.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [
@@ -341,13 +343,15 @@ rust_test(
         aliases = {},
         data = [
             ":pocket-ic-server",
-            "@ii_dev_canister//file",
+            "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+            "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
             "@mozilla_root_ca_store//file",
         ],
         env = {
             "RUST_TEST_THREADS": "2",
             "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-            "II_WASM": "$(rootpath @ii_dev_canister//file)",
+            "II_WASM": "$(rootpath @mainnet_canisters//:internet_identity_backend.wasm.gz)",
+            "II_FRONTEND_WASM": "$(rootpath @mainnet_canisters//:internet_identity_frontend.wasm.gz)",
             "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         },
         tags = [
@@ -357,7 +361,7 @@ rust_test(
             "requires-network",
             "test_all_platforms",
         ],
-        deps = TEST_DEPENDENCIES,
+        deps = [":pocket-ic-server-lib"] + TEST_DEPENDENCIES,
     )
     for name in [
         "test",

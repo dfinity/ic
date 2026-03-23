@@ -27,7 +27,6 @@ use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     CanisterId,
-    batch::CanisterCyclesCostSchedule,
     messages::{CallbackId, NO_DEADLINE, RequestMetadata},
     time::UNIX_EPOCH,
 };
@@ -35,7 +34,7 @@ use ic_types::{
     ComputeAllocation, MemoryAllocation, NumBytes,
     methods::{FuncRef, WasmMethod},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
