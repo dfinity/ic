@@ -1189,10 +1189,8 @@ fn load_canister_snapshot_fails_canister_not_found() {
     let error = test
         .subnet_message("load_canister_snapshot", args.encode())
         .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
-    let message =
-        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id}")
-            .to_string();
+    assert_eq!(error.code(), ErrorCode::CanisterNotFound);
+    let message = format!("Canister {canister_id} not found.",).to_string();
     assert!(error.description().contains(&message));
 }
 
