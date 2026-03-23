@@ -29,28 +29,13 @@ lazy_static! {
     pub static ref MINTING_IDENTITY: Arc<BasicIdentity> = Arc::new(minter_identity());
 }
 
-fn single_batch_valid_transactions_strategy() -> impl Strategy<Value = Vec<ArgWithCaller>> {
+fn valid_transactions_strategy_with_batch_size_multiplier(
+    batch_size_multiplier: usize,
+) -> impl Strategy<Value = Vec<ArgWithCaller>> {
     valid_transactions_strategy_with_options(
         (*MINTING_IDENTITY).clone(),
         DEFAULT_TRANSFER_FEE,
-        *MAX_NUM_GENERATED_BLOCKS,
-        SystemTime::now(),
-        TransactionStrategyOptions {
-            excluded_transaction_types: vec![],
-            // ICP Rosetta requires created_at_time and memo to be set for
-            // deterministic dedup keys, enabling safe retries on timeout.
-            require_created_at_time: true,
-            require_memo: true,
-        },
-    )
-    .no_shrink()
-}
-
-fn double_batch_valid_transactions_strategy() -> impl Strategy<Value = Vec<ArgWithCaller>> {
-    valid_transactions_strategy_with_options(
-        (*MINTING_IDENTITY).clone(),
-        DEFAULT_TRANSFER_FEE,
-        *MAX_NUM_GENERATED_BLOCKS * 2,
+        *MAX_NUM_GENERATED_BLOCKS * batch_size_multiplier,
         SystemTime::now(),
         TransactionStrategyOptions {
             excluded_transaction_types: vec![],
@@ -65,7 +50,9 @@ fn double_batch_valid_transactions_strategy() -> impl Strategy<Value = Vec<ArgWi
 
 #[test_strategy::proptest(ProptestConfig { cases: 1, max_shrink_iters: 0, ..ProptestConfig::default() })]
 fn test_block_synchronization(
-    #[strategy(single_batch_valid_transactions_strategy())] args_with_caller: Vec<ArgWithCaller>,
+    #[strategy(valid_transactions_strategy_with_batch_size_multiplier(1))] args_with_caller: Vec<
+        ArgWithCaller,
+    >,
 ) {
     let rt = Runtime::new().unwrap();
     rt.block_on(async {
@@ -94,7 +81,9 @@ fn test_block_synchronization(
 
 #[test_strategy::proptest(ProptestConfig { cases: 1, max_shrink_iters: 0, ..ProptestConfig::default() })]
 fn test_ledger_upgrade_synchronization(
-    #[strategy(double_batch_valid_transactions_strategy())] args_with_caller: Vec<ArgWithCaller>,
+    #[strategy(valid_transactions_strategy_with_batch_size_multiplier(2))] args_with_caller: Vec<
+        ArgWithCaller,
+    >,
 ) {
     let rt = Runtime::new().unwrap();
     rt.block_on(async {
@@ -213,7 +202,9 @@ fn test_ledger_upgrade_synchronization(
 
 #[test_strategy::proptest(ProptestConfig { cases: 1, max_shrink_iters: 0, ..ProptestConfig::default() })]
 fn test_load_from_storage(
-    #[strategy(double_batch_valid_transactions_strategy())] args_with_caller: Vec<ArgWithCaller>,
+    #[strategy(valid_transactions_strategy_with_batch_size_multiplier(2))] args_with_caller: Vec<
+        ArgWithCaller,
+    >,
 ) {
     // We split up the transactions into two batches to make sure we have a valid blockchain
     let (first_block_batch, second_block_batch) =
