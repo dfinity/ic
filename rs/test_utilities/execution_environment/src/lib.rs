@@ -20,7 +20,7 @@ use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
     IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits, WasmSource,
-    execute_canister, wasm_execution_mode,
+    abort_all_paused_executions, execute_canister, wasm_execution_mode,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -80,7 +80,9 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule, WasmHash};
@@ -1610,7 +1612,7 @@ impl ExecutionTest {
                 self.expected_cycles_balance_change(message, instructions_used);
             assert_eq!(
                 cycles_used,
-                NominalCycles::from(expected_cycles_balance_change.get())
+                NominalCycles::new(expected_cycles_balance_change.get())
             );
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
@@ -1622,7 +1624,7 @@ impl ExecutionTest {
             // the base cost could still be charged in some cases even if no instructions
             // were used (e.g., depending on how early validation fails)
             assert!(
-                cycles_used.get() == 0 || cycles_used == NominalCycles::from(baseline_cost.get())
+                cycles_used.get() == 0 || cycles_used == NominalCycles::new(baseline_cost.get())
             );
         }
     }
@@ -1948,8 +1950,7 @@ impl ExecutionTest {
     /// Aborts all paused executions.
     pub fn abort_all_paused_executions(&mut self) {
         let mut state = self.state.take().unwrap();
-        self.exec_env
-            .abort_all_paused_executions(&mut state, &self.log);
+        abort_all_paused_executions(&mut state, &self.exec_env, &self.log);
         for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
             paused_subnet_message.instructions = NumInstructions::new(0);
         }
