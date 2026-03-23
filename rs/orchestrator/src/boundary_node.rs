@@ -185,7 +185,7 @@ impl BoundaryNodeManager {
         ];
 
         process
-            .spawn(BoundaryNodeProcess {
+            .start(BoundaryNodeProcess {
                 version: version.clone(),
                 binary,
                 args,

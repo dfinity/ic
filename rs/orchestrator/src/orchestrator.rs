@@ -24,7 +24,7 @@ use ic_config::{
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_image_upgrader::ImageUpgrader;
+use ic_image_upgrader::{ImageUpgrader, ManagebootRunnerImpl};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
@@ -279,7 +279,7 @@ impl Orchestrator {
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
                 Arc::clone(&replica_process) as _,
-                Box::new(ProcessManagerImpl::new(logger.clone())),
+                Box::new(ManagebootRunnerImpl),
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),

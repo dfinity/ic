@@ -10,6 +10,7 @@ use std::{
     process::Output,
     time::{Duration, SystemTime},
 };
+use tokio::process::Command;
 
 use crate::error::{UpgradeError, UpgradeResult};
 
@@ -20,6 +21,27 @@ pub mod error;
 pub struct ManagebootCommand {
     pub binary: OsString,
     pub args: Vec<OsString>,
+}
+
+/// Trait for running manageboot.sh commands.
+#[async_trait]
+pub trait ManagebootRunner: Send + Sync {
+    /// Run the given manageboot command and return its output.
+    async fn run(&self, command: &ManagebootCommand) -> std::io::Result<Output>;
+}
+
+/// Production implementation of [`ManagebootRunner`] that executes the command
+/// as a child process.
+pub struct ManagebootRunnerImpl;
+
+#[async_trait]
+impl ManagebootRunner for ManagebootRunnerImpl {
+    async fn run(&self, command: &ManagebootCommand) -> std::io::Result<Output> {
+        Command::new(&command.binary)
+            .args(&command.args)
+            .output()
+            .await
+    }
 }
 
 /// Used to signal that the system is rebooting.
@@ -127,15 +149,17 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// Runs the disk encryption key exchange process if SEV is active. NOOP otherwise.
     async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()>;
 
-    /// Runs a manageboot command.
-    async fn run_manageboot(&self, command: ManagebootCommand) -> std::io::Result<Output>;
+    /// Return the implementation of [`ManagebootRunner`] to be used for running the
+    /// `manageboot.sh` commands.
+    fn manageboot_runner(&self) -> &dyn ManagebootRunner;
 
     /// Calls a corresponding script to "confirm" that the base OS could boot
     /// successfully. Without a confirmation the image will be reverted on the next
     /// restart.
     async fn confirm_boot(&self) {
         if let Err(err) = self
-            .run_manageboot(ManagebootCommand {
+            .manageboot_runner()
+            .run(&ManagebootCommand {
                 binary: self.manageboot_binary(),
                 args: vec!["guestos".into(), "confirm".into()],
             })
@@ -220,7 +244,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
             ],
         };
         let out = self
-            .run_manageboot(manageboot.clone())
+            .manageboot_runner()
+            .run(&manageboot)
             .await
             .map_err(|e| UpgradeError::manageboot_error(e, &manageboot))?;
 
@@ -268,7 +293,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
             args: vec!["guestos".into(), "upgrade-commit".into()],
         };
         let out = self
-            .run_manageboot(manageboot.clone())
+            .manageboot_runner()
+            .run(&manageboot)
             .await
             .map_err(|e| UpgradeError::manageboot_error(e, &manageboot))?;
 
@@ -327,4 +353,23 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
     async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
+}
+
+pub mod tests {
+    use super::*;
+
+    pub struct FakeManagebootRunner;
+
+    #[async_trait]
+    impl ManagebootRunner for FakeManagebootRunner {
+        async fn run(&self, _command: &ManagebootCommand) -> std::io::Result<Output> {
+            // Mock implementation that simulates a successful execution of the manageboot command.
+            use std::os::unix::process::ExitStatusExt;
+            Ok(Output {
+                status: std::process::ExitStatus::from_raw(0),
+                stdout: vec![],
+                stderr: vec![],
+            })
+        }
+    }
 }

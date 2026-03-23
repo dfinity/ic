@@ -12,7 +12,7 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    ImageUpgrader, ManagebootCommand, Rebooting,
+    ImageUpgrader, ManagebootRunner, Rebooting,
     error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -87,27 +87,6 @@ impl Process for ReplicaProcess {
     }
 }
 
-impl Process for ManagebootCommand {
-    const NAME: &'static str = "manageboot.sh";
-    type Version = ();
-
-    fn get_version(&self) -> &Self::Version {
-        &()
-    }
-
-    fn get_binary(&self) -> &OsStr {
-        &self.binary
-    }
-
-    fn get_args(&self) -> &[OsString] {
-        &self.args
-    }
-
-    fn get_env(&self) -> HashMap<OsString, OsString> {
-        HashMap::new()
-    }
-}
-
 /// Trait for the registry replicator used by the upgrade module.
 #[async_trait]
 #[cfg_attr(test, mockall::automock)]
@@ -140,7 +119,7 @@ pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
     replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
-    manageboot_command: Box<dyn ProcessManager<ManagebootCommand>>,
+    manageboot_runner: Box<dyn ManagebootRunner>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
@@ -163,7 +142,7 @@ impl Upgrade {
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
         replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
-        manageboot_command: Box<dyn ProcessManager<ManagebootCommand>>,
+        manageboot_runner: Box<dyn ManagebootRunner>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
@@ -182,7 +161,7 @@ impl Upgrade {
             registry,
             metrics,
             replica_process,
-            manageboot_command,
+            manageboot_runner,
             cup_provider,
             subnet_assignment,
             node_id,
@@ -687,7 +666,7 @@ impl Upgrade {
         self.replica_process
             .lock()
             .unwrap()
-            .spawn(ReplicaProcess {
+            .start(ReplicaProcess {
                 version: replica_version.clone(),
                 binary: replica_binary,
                 args: cmd,
@@ -722,11 +701,8 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         Some(&self.orchestrator_data_directory)
     }
 
-    async fn run_manageboot(
-        &self,
-        command: ManagebootCommand,
-    ) -> std::io::Result<std::process::Output> {
-        self.manageboot_command.start_and_wait(command).await
+    fn manageboot_runner(&self) -> &dyn ManagebootRunner {
+        self.manageboot_runner.as_ref()
     }
 
     fn get_release_package_urls_and_hash(
@@ -1178,6 +1154,7 @@ mod tests {
         run_ni_dkg_and_create_single_transcript,
     };
     use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
+    use ic_image_upgrader::tests::FakeManagebootRunner;
     use ic_interfaces_registry::{
         RegistryClientVersionedResult, RegistryDataProvider, RegistryVersionedRecord,
     };
@@ -1502,7 +1479,7 @@ mod tests {
             replica_process
                 .lock()
                 .unwrap()
-                .spawn(ReplicaProcess {
+                .start(ReplicaProcess {
                     version: current_replica_version.clone(),
                     binary: ic_binary_dir.join("replica").into_os_string(),
                     args: vec![],
@@ -1510,7 +1487,7 @@ mod tests {
                 .unwrap();
         }
 
-        let manageboot_command = Box::new(FakeProcessManager::new());
+        let manageboot_runner = Box::new(FakeManagebootRunner);
 
         let cup_dir = dir.join("cups");
         std::fs::create_dir_all(&cup_dir).unwrap();
@@ -1565,7 +1542,7 @@ mod tests {
             registry,
             metrics,
             replica_process,
-            manageboot_command,
+            manageboot_runner,
             cup_provider,
             subnet_assignment,
             current_replica_version.clone(),
