@@ -29,6 +29,7 @@ use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
 use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
 use ic_registry_resource_limits::ResourceLimits;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
@@ -1366,10 +1367,17 @@ impl Scheduler for SchedulerImpl {
             // does not exceed one half of the heap delta capacity.
             let subnet_heap_delta_capacity =
                 subnet_heap_delta_capacity(&self.config, state.resource_limits());
-            let heap_delta_initial_reserve = std::cmp::min(
-                self.config.heap_delta_initial_reserve,
-                subnet_heap_delta_capacity / 2,
-            );
+            let heap_delta_initial_reserve = if state.metadata.own_subnet_type == SubnetType::System
+            {
+                // On system subnets, the initial reserve should not be overriden
+                // for backward-compatibility.
+                self.config.heap_delta_initial_reserve
+            } else {
+                std::cmp::min(
+                    self.config.heap_delta_initial_reserve,
+                    subnet_heap_delta_capacity / 2,
+                )
+            };
             let scheduled_heap_delta_limit = scheduled_heap_delta_limit(
                 current_round,
                 round_summary,
