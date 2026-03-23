@@ -80,7 +80,7 @@ crate.spec(
         "serde_json",
     ],
     package = "askama",
-    version = "0.15",
+    version = "0.15.5",
 )
 crate.spec(
     package = "assert-json-diff",
@@ -2025,11 +2025,6 @@ crate.annotation(
         "OPENSSL_STATIC": "1",
     },
     crate = "openssl-sys",
-)
-crate.annotation(
-    crate = "askama_derive",
-    patch_args = ["-p2"],
-    patches = ["@@//bazel:askama.patch"],
 )
 crate.annotation(
     crate = "canbench",
