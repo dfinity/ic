@@ -8,6 +8,10 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
+use icrc_ledger_types::icrc123::schema::{
+    BTYPE_123_FREEZE_ACCOUNT, BTYPE_123_FREEZE_PRINCIPAL, BTYPE_123_UNFREEZE_ACCOUNT,
+    BTYPE_123_UNFREEZE_PRINCIPAL,
+};
 use icrc_ledger_types::icrc124::schema::{
     BTYPE_124_DEACTIVATE, BTYPE_124_PAUSE, BTYPE_124_UNPAUSE,
 };
@@ -144,7 +148,11 @@ impl RosettaBlock {
                 IcrcOperation::FeeCollector { .. }
                 | IcrcOperation::Pause { .. }
                 | IcrcOperation::Unpause { .. }
-                | IcrcOperation::Deactivate { .. } => None,
+                | IcrcOperation::Deactivate { .. }
+                | IcrcOperation::FreezeAccount { .. }
+                | IcrcOperation::UnfreezeAccount { .. }
+                | IcrcOperation::FreezePrincipal { .. }
+                | IcrcOperation::UnfreezePrincipal { .. } => None,
             }))
     }
 
@@ -399,6 +407,30 @@ pub enum IcrcOperation {
         mthd: Option<String>,
         reason: Option<String>,
     },
+    FreezeAccount {
+        account: Account,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    UnfreezeAccount {
+        account: Account,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    FreezePrincipal {
+        principal: Principal,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    UnfreezePrincipal {
+        principal: Principal,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
 }
 
 impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
@@ -501,6 +533,54 @@ impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
                     let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
                     let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
                     Ok(Self::Deactivate {
+                        caller,
+                        mthd,
+                        reason,
+                    })
+                }
+                BTYPE_123_FREEZE_ACCOUNT => {
+                    let account: Account = get_field(&map, FIELD_PREFIX, "account")?;
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::FreezeAccount {
+                        account,
+                        caller,
+                        mthd,
+                        reason,
+                    })
+                }
+                BTYPE_123_UNFREEZE_ACCOUNT => {
+                    let account: Account = get_field(&map, FIELD_PREFIX, "account")?;
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::UnfreezeAccount {
+                        account,
+                        caller,
+                        mthd,
+                        reason,
+                    })
+                }
+                BTYPE_123_FREEZE_PRINCIPAL => {
+                    let principal: Principal = get_field(&map, FIELD_PREFIX, "principal")?;
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::FreezePrincipal {
+                        principal,
+                        caller,
+                        mthd,
+                        reason,
+                    })
+                }
+                BTYPE_123_UNFREEZE_PRINCIPAL => {
+                    let principal: Principal = get_field(&map, FIELD_PREFIX, "principal")?;
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::UnfreezePrincipal {
+                        principal,
                         caller,
                         mthd,
                         reason,
@@ -620,6 +700,52 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 mthd,
                 reason,
             } => {
+                if let Some(caller) = caller {
+                    map.insert("caller".to_string(), Value::from(caller));
+                }
+                if let Some(mthd) = mthd {
+                    map.insert("mthd".to_string(), Value::text(mthd));
+                }
+                if let Some(reason) = reason {
+                    map.insert("reason".to_string(), Value::text(reason));
+                }
+            }
+            Op::FreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            }
+            | Op::UnfreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            } => {
+                map.insert("account".to_string(), Value::from(account));
+                if let Some(caller) = caller {
+                    map.insert("caller".to_string(), Value::from(caller));
+                }
+                if let Some(mthd) = mthd {
+                    map.insert("mthd".to_string(), Value::text(mthd));
+                }
+                if let Some(reason) = reason {
+                    map.insert("reason".to_string(), Value::text(reason));
+                }
+            }
+            Op::FreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            }
+            | Op::UnfreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            } => {
+                map.insert("principal".to_string(), Value::from(principal));
                 if let Some(caller) = caller {
                     map.insert("caller".to_string(), Value::from(caller));
                 }
@@ -779,14 +905,50 @@ where
                 mthd,
                 reason,
             },
-            Op::FreezeAccount { .. }
-            | Op::UnfreezeAccount { .. }
-            | Op::FreezePrincipal { .. }
-            | Op::UnfreezePrincipal { .. } => {
-                // ICRC-123 freeze operations are not yet supported in Rosetta.
-                // Full support will be added in a follow-up PR.
-                unimplemented!("ICRC-123 freeze operations are not yet supported in Rosetta")
-            }
+            Op::FreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            } => Self::FreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            },
+            Op::UnfreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            } => Self::UnfreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            },
+            Op::FreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            } => Self::FreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            },
+            Op::UnfreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            } => Self::UnfreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            },
         }
     }
 }
@@ -962,6 +1124,50 @@ mod tests {
         })
     }
 
+    fn arb_freeze_account() -> impl Strategy<Value = IcrcOperation> {
+        (arb_account(), arb_management_action()).prop_map(|(account, (caller, mthd, reason))| {
+            IcrcOperation::FreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            }
+        })
+    }
+
+    fn arb_unfreeze_account() -> impl Strategy<Value = IcrcOperation> {
+        (arb_account(), arb_management_action()).prop_map(|(account, (caller, mthd, reason))| {
+            IcrcOperation::UnfreezeAccount {
+                account,
+                caller,
+                mthd,
+                reason,
+            }
+        })
+    }
+
+    fn arb_freeze_principal() -> impl Strategy<Value = IcrcOperation> {
+        (arb_principal(), arb_management_action()).prop_map(
+            |(principal, (caller, mthd, reason))| IcrcOperation::FreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            },
+        )
+    }
+
+    fn arb_unfreeze_principal() -> impl Strategy<Value = IcrcOperation> {
+        (arb_principal(), arb_management_action()).prop_map(
+            |(principal, (caller, mthd, reason))| IcrcOperation::UnfreezePrincipal {
+                principal,
+                caller,
+                mthd,
+                reason,
+            },
+        )
+    }
+
     fn arb_op() -> impl Strategy<Value = IcrcOperation> {
         prop_oneof![
             arb_approve(),
@@ -972,6 +1178,10 @@ mod tests {
             arb_pause(),
             arb_unpause(),
             arb_deactivate(),
+            arb_freeze_account(),
+            arb_unfreeze_account(),
+            arb_freeze_principal(),
+            arb_unfreeze_principal(),
         ]
     }
 
@@ -1018,6 +1228,18 @@ mod tests {
                         IcrcOperation::Pause { .. } => Some(BTYPE_124_PAUSE.to_string()),
                         IcrcOperation::Unpause { .. } => Some(BTYPE_124_UNPAUSE.to_string()),
                         IcrcOperation::Deactivate { .. } => Some(BTYPE_124_DEACTIVATE.to_string()),
+                        IcrcOperation::FreezeAccount { .. } => {
+                            Some(BTYPE_123_FREEZE_ACCOUNT.to_string())
+                        }
+                        IcrcOperation::UnfreezeAccount { .. } => {
+                            Some(BTYPE_123_UNFREEZE_ACCOUNT.to_string())
+                        }
+                        IcrcOperation::FreezePrincipal { .. } => {
+                            Some(BTYPE_123_FREEZE_PRINCIPAL.to_string())
+                        }
+                        IcrcOperation::UnfreezePrincipal { .. } => {
+                            Some(BTYPE_123_UNFREEZE_PRINCIPAL.to_string())
+                        }
                         _ => None,
                     },
                 },
@@ -1032,6 +1254,10 @@ mod tests {
                 IcrcOperation::Pause { .. } => Some(BTYPE_124_PAUSE.to_string()),
                 IcrcOperation::Unpause { .. } => Some(BTYPE_124_UNPAUSE.to_string()),
                 IcrcOperation::Deactivate { .. } => Some(BTYPE_124_DEACTIVATE.to_string()),
+                IcrcOperation::FreezeAccount { .. } => Some(BTYPE_123_FREEZE_ACCOUNT.to_string()),
+                IcrcOperation::UnfreezeAccount { .. } => Some(BTYPE_123_UNFREEZE_ACCOUNT.to_string()),
+                IcrcOperation::FreezePrincipal { .. } => Some(BTYPE_123_FREEZE_PRINCIPAL.to_string()),
+                IcrcOperation::UnfreezePrincipal { .. } => Some(BTYPE_123_UNFREEZE_PRINCIPAL.to_string()),
                 _ => None,
             };
             let actual_op = match IcrcOperation::try_from((btype, BTreeMap::from(op.clone()))) {
@@ -1050,6 +1276,10 @@ mod tests {
                 IcrcOperation::Pause { .. } => Some(BTYPE_124_PAUSE.to_string()),
                 IcrcOperation::Unpause { .. } => Some(BTYPE_124_UNPAUSE.to_string()),
                 IcrcOperation::Deactivate { .. } => Some(BTYPE_124_DEACTIVATE.to_string()),
+                IcrcOperation::FreezeAccount { .. } => Some(BTYPE_123_FREEZE_ACCOUNT.to_string()),
+                IcrcOperation::UnfreezeAccount { .. } => Some(BTYPE_123_UNFREEZE_ACCOUNT.to_string()),
+                IcrcOperation::FreezePrincipal { .. } => Some(BTYPE_123_FREEZE_PRINCIPAL.to_string()),
+                IcrcOperation::UnfreezePrincipal { .. } => Some(BTYPE_123_UNFREEZE_PRINCIPAL.to_string()),
                 _ => None,
             };
             let actual_tx = match IcrcTransaction::try_from((btype, Value::from(tx.clone()))) {
@@ -1285,6 +1515,72 @@ mod tests {
                     reason: r_reason,
                 },
             ) => {
+                assert_eq!(caller, r_caller, "caller");
+                assert_eq!(mthd, r_mthd, "mthd");
+                assert_eq!(reason, r_reason, "reason");
+            }
+            (
+                ic_icrc1::Operation::FreezeAccount {
+                    account,
+                    caller,
+                    mthd,
+                    reason,
+                },
+                IcrcOperation::FreezeAccount {
+                    account: r_account,
+                    caller: r_caller,
+                    mthd: r_mthd,
+                    reason: r_reason,
+                },
+            )
+            | (
+                ic_icrc1::Operation::UnfreezeAccount {
+                    account,
+                    caller,
+                    mthd,
+                    reason,
+                },
+                IcrcOperation::UnfreezeAccount {
+                    account: r_account,
+                    caller: r_caller,
+                    mthd: r_mthd,
+                    reason: r_reason,
+                },
+            ) => {
+                assert_eq!(account, r_account, "account");
+                assert_eq!(caller, r_caller, "caller");
+                assert_eq!(mthd, r_mthd, "mthd");
+                assert_eq!(reason, r_reason, "reason");
+            }
+            (
+                ic_icrc1::Operation::FreezePrincipal {
+                    principal,
+                    caller,
+                    mthd,
+                    reason,
+                },
+                IcrcOperation::FreezePrincipal {
+                    principal: r_principal,
+                    caller: r_caller,
+                    mthd: r_mthd,
+                    reason: r_reason,
+                },
+            )
+            | (
+                ic_icrc1::Operation::UnfreezePrincipal {
+                    principal,
+                    caller,
+                    mthd,
+                    reason,
+                },
+                IcrcOperation::UnfreezePrincipal {
+                    principal: r_principal,
+                    caller: r_caller,
+                    mthd: r_mthd,
+                    reason: r_reason,
+                },
+            ) => {
+                assert_eq!(principal, r_principal, "principal");
                 assert_eq!(caller, r_caller, "caller");
                 assert_eq!(mthd, r_mthd, "mthd");
                 assert_eq!(reason, r_reason, "reason");

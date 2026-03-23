@@ -1,6 +1,7 @@
 use crate::common::storage::types::{IcrcOperation, RosettaBlock};
 use crate::common::types::{
-    FeeCollectorMetadata, FeeMetadata, FeeSetter, ManagementActionMetadata,
+    FeeCollectorMetadata, FeeMetadata, FeeSetter, FreezeAccountMetadata, FreezePrincipalMetadata,
+    ManagementActionMetadata,
 };
 use crate::{
     AppState, MultiTokenAppState,
@@ -161,6 +162,10 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         Pause,
         Unpause,
         Deactivate,
+        FreezeAccount,
+        UnfreezeAccount,
+        FreezePrincipal,
+        UnfreezePrincipal,
     }
 
     // A builder which helps depict the icrc1 Operation and allows for an arbitrary order of rosetta_core Operations
@@ -178,6 +183,8 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         caller: Option<Principal>,
         mthd: Option<String>,
         reason: Option<String>,
+        freeze_account: Option<Account>,
+        freeze_principal: Option<Principal>,
     }
 
     impl IcrcOperationBuilder {
@@ -196,6 +203,8 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 caller: None,
                 mthd: None,
                 reason: None,
+                freeze_account: None,
+                freeze_principal: None,
             }
         }
 
@@ -264,8 +273,18 @@ pub fn rosetta_core_operations_to_icrc1_operation(
             self
         }
 
+        pub fn with_freeze_account(mut self, account: Account) -> Self {
+            self.freeze_account = Some(account);
+            self
+        }
+
+        pub fn with_freeze_principal(mut self, principal: Principal) -> Self {
+            self.freeze_principal = Some(principal);
+            self
+        }
+
         pub fn build(self) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
-            Ok(match self.icrc_operation.context("Icrc Operation type must be one of Mint, Burn, Transfer, Approve, FeeCollector, Pause, Unpause, or Deactivate")? {
+            Ok(match self.icrc_operation.context("Icrc Operation type must be one of Mint, Burn, Transfer, Approve, FeeCollector, FreezeAccount, UnfreezeAccount, FreezePrincipal, UnfreezePrincipal, Pause, Unpause, or Deactivate")? {
                 IcrcOperation::Mint => {
                     if self.from.is_some() {
                         bail!("From AccountIdentifier field is not allowed for Mint operation")
@@ -323,6 +342,30 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     reason: self.reason,
                 },
                 IcrcOperation::Deactivate => crate::common::storage::types::IcrcOperation::Deactivate{
+                    caller: self.caller,
+                    mthd: self.mthd,
+                    reason: self.reason,
+                },
+                IcrcOperation::FreezeAccount => crate::common::storage::types::IcrcOperation::FreezeAccount{
+                    account: self.freeze_account.context("Account field needs to be populated for FreezeAccount operation")?,
+                    caller: self.caller,
+                    mthd: self.mthd,
+                    reason: self.reason,
+                },
+                IcrcOperation::UnfreezeAccount => crate::common::storage::types::IcrcOperation::UnfreezeAccount{
+                    account: self.freeze_account.context("Account field needs to be populated for UnfreezeAccount operation")?,
+                    caller: self.caller,
+                    mthd: self.mthd,
+                    reason: self.reason,
+                },
+                IcrcOperation::FreezePrincipal => crate::common::storage::types::IcrcOperation::FreezePrincipal{
+                    principal: self.freeze_principal.context("Principal field needs to be populated for FreezePrincipal operation")?,
+                    caller: self.caller,
+                    mthd: self.mthd,
+                    reason: self.reason,
+                },
+                IcrcOperation::UnfreezePrincipal => crate::common::storage::types::IcrcOperation::UnfreezePrincipal{
+                    principal: self.freeze_principal.context("Principal field needs to be populated for UnfreezePrincipal operation")?,
                     caller: self.caller,
                     mthd: self.mthd,
                     reason: self.reason,
@@ -476,6 +519,54 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     .with_caller(ma_metadata.caller)
                     .with_mthd(ma_metadata.mthd)
                     .with_reason(ma_metadata.reason)
+            }
+            OperationType::FreezeAccount => {
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for freeze account operations")?;
+                let fa_metadata = FreezeAccountMetadata::try_from(metadata)?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::FreezeAccount)
+                    .with_freeze_account(fa_metadata.account)
+                    .with_caller(fa_metadata.caller)
+                    .with_mthd(fa_metadata.mthd)
+                    .with_reason(fa_metadata.reason)
+            }
+            OperationType::UnfreezeAccount => {
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for unfreeze account operations")?;
+                let fa_metadata = FreezeAccountMetadata::try_from(metadata)?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::UnfreezeAccount)
+                    .with_freeze_account(fa_metadata.account)
+                    .with_caller(fa_metadata.caller)
+                    .with_mthd(fa_metadata.mthd)
+                    .with_reason(fa_metadata.reason)
+            }
+            OperationType::FreezePrincipal => {
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for freeze principal operations")?;
+                let fp_metadata = FreezePrincipalMetadata::try_from(metadata)?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::FreezePrincipal)
+                    .with_freeze_principal(fp_metadata.principal)
+                    .with_caller(fp_metadata.caller)
+                    .with_mthd(fp_metadata.mthd)
+                    .with_reason(fp_metadata.reason)
+            }
+            OperationType::UnfreezePrincipal => {
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for unfreeze principal operations")?;
+                let fp_metadata = FreezePrincipalMetadata::try_from(metadata)?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::UnfreezePrincipal)
+                    .with_freeze_principal(fp_metadata.principal)
+                    .with_caller(fp_metadata.caller)
+                    .with_mthd(fp_metadata.mthd)
+                    .with_reason(fp_metadata.reason)
             }
         };
     }
@@ -785,6 +876,98 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 None,
                 Some(
                     ManagementActionMetadata {
+                        caller,
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::FreezeAccount {
+            account,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::FreezeAccount.to_string(),
+                None,
+                None,
+                None,
+                Some(
+                    FreezeAccountMetadata {
+                        account,
+                        caller,
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::UnfreezeAccount {
+            account,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::UnfreezeAccount.to_string(),
+                None,
+                None,
+                None,
+                Some(
+                    FreezeAccountMetadata {
+                        account,
+                        caller,
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::FreezePrincipal {
+            principal,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::FreezePrincipal.to_string(),
+                None,
+                None,
+                None,
+                Some(
+                    FreezePrincipalMetadata {
+                        principal,
+                        caller,
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::UnfreezePrincipal {
+            principal,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::UnfreezePrincipal.to_string(),
+                None,
+                None,
+                None,
+                Some(
+                    FreezePrincipalMetadata {
+                        principal,
                         caller,
                         mthd,
                         reason,
