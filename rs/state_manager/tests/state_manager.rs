@@ -5505,7 +5505,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
         subnets.insert(
             subnet_test_id(42), // its own subnet id
             SubnetTopology {
-                public_key: vec![1u8; 133],
+                public_key: vec![1_u8; 133],
                 nodes: node_public_keys.keys().cloned().collect(),
                 subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
@@ -5555,7 +5555,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                                 label("node") => SubTree(
                                     flatmap! {
                                         label(node_test_id(39).get_ref()) => SubTree(
-                                            flatmap!(label("public_key") => Leaf(vec![39u8; 44]))
+                                            flatmap!(label("public_key") => Leaf(vec![39_u8; 44]))
                                         ),
                                     })
                         })
@@ -6447,14 +6447,14 @@ fn can_reset_memory() {
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6481,14 +6481,14 @@ fn can_reset_memory() {
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         // Wipe data completely.
@@ -6640,14 +6640,14 @@ fn can_reset_stable_memory() {
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6674,14 +6674,14 @@ fn can_reset_stable_memory() {
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         // Wipe data completely.
@@ -6763,7 +6763,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             canister_state
@@ -6771,7 +6771,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6798,7 +6798,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             canister_state
@@ -6806,7 +6806,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         // Wipe data completely.
@@ -7702,14 +7702,14 @@ fn can_create_and_restore_snapshot() {
                         .wasm_memory
                         .page_map
                         .get_page(PageIndex::new(0)),
-                    &[1u8; PAGE_SIZE]
+                    &[1_u8; PAGE_SIZE]
                 );
                 assert_eq!(
                     execution_state
                         .stable_memory
                         .page_map
                         .get_page(PageIndex::new(0)),
-                    &[2u8; PAGE_SIZE]
+                    &[2_u8; PAGE_SIZE]
                 );
                 assert_eq!(
                     canister_state
@@ -7717,7 +7717,7 @@ fn can_create_and_restore_snapshot() {
                         .wasm_chunk_store
                         .page_map()
                         .get_page(PageIndex::new(0)),
-                    &[3u8; PAGE_SIZE]
+                    &[3_u8; PAGE_SIZE]
                 );
             };
 
@@ -8127,7 +8127,7 @@ fn can_split_with_inflight_restore_snapshot() {
                     .wasm_memory
                     .page_map
                     .get_page(PageIndex::new(0)),
-                &[1u8; PAGE_SIZE]
+                &[1_u8; PAGE_SIZE]
             );
 
             // Commit the state without checkpointing, so there is an unflushed "load
@@ -8306,7 +8306,7 @@ fn stream_store_encode_decode(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8335,7 +8335,7 @@ fn stream_store_decode_with_modified_hash_fails(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8367,7 +8367,7 @@ fn stream_store_decode_with_empty_witness_fails(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8561,7 +8561,7 @@ fn stream_store_decode_with_invalid_destination(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8591,7 +8591,7 @@ fn stream_store_decode_with_rejecting_verifier(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8623,7 +8623,7 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8652,7 +8652,7 @@ fn stream_store_encode_partial(
         10, // max_signal_count
     ))]
     test_slice: (Stream, StreamIndex, usize),
-    #[strategy(0..1000usize)] byte_limit: usize,
+    #[strategy(0..1000_usize)] byte_limit: usize,
 ) {
     let (stream, begin, count) = test_slice;
     // Partial slice with messages beginning at `begin + 1`.
@@ -8670,7 +8670,7 @@ fn stream_store_encode_partial_bad_indices(
         10, // max_signal_count
     ))]
     test_slice: (Stream, StreamIndex, usize),
-    #[strategy(0..1000usize)] byte_limit: usize,
+    #[strategy(0..1000_usize)] byte_limit: usize,
 ) {
     let (stream, begin, count) = test_slice;
     // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).

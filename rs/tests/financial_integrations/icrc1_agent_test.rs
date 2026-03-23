@@ -226,9 +226,9 @@ pub fn test(env: TestEnv) {
             Value::entry(MetadataKey::ICRC1_NAME, init_args.token_name).unwrap(),
             Value::entry(MetadataKey::ICRC1_SYMBOL, init_args.token_symbol).unwrap(),
             Value::entry(MetadataKey::ICRC1_FEE, init_args.transfer_fee.clone()).unwrap(),
-            Value::entry(MetadataKey::ICRC1_MAX_MEMO_LENGTH, 32u64).unwrap(),
+            Value::entry(MetadataKey::ICRC1_MAX_MEMO_LENGTH, 32_u64).unwrap(),
             Value::entry(MetadataKey::ICRC103_PUBLIC_ALLOWANCES, "true").unwrap(),
-            Value::entry(MetadataKey::ICRC103_MAX_TAKE_VALUE, 500u64).unwrap(),
+            Value::entry(MetadataKey::ICRC103_MAX_TAKE_VALUE, 500_u64).unwrap(),
         ];
         assert_eq!(
             expected_metadata,
@@ -240,11 +240,11 @@ pub fn test(env: TestEnv) {
         );
         // balance_of
         assert_eq!(
-            Nat::from(1_000_000_000u64),
+            Nat::from(1_000_000_000_u64),
             agent.balance_of(account1, CallMode::Query).await.unwrap()
         );
         assert_eq!(
-            Nat::from(1_000_000_000u64),
+            Nat::from(1_000_000_000_u64),
             agent.balance_of(account1, CallMode::Update).await.unwrap()
         );
 
@@ -264,7 +264,7 @@ pub fn test(env: TestEnv) {
             .unwrap();
 
         assert_eq!(
-            Nat::from(1_000_000_000u64 - amount) - init_args.transfer_fee.clone(),
+            Nat::from(1_000_000_000_u64 - amount) - init_args.transfer_fee.clone(),
             agent.balance_of(account1, CallMode::Query).await.unwrap()
         );
         assert_eq!(
@@ -352,7 +352,7 @@ pub fn test(env: TestEnv) {
         };
         let blocks_response = agent.get_blocks(blocks_request).await.unwrap();
         assert_eq!(last_block_hash, blocks_response.blocks[0].hash());
-        assert_eq!(last_block_index, 2u8);
+        assert_eq!(last_block_index, 2_u8);
 
         ledger
             .upgrade_to_self_binary(CandidOne(UpgradeArgs::default()).into_bytes().unwrap())

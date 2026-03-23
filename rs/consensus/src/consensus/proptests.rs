@@ -54,7 +54,7 @@ fn proptest_payload_size_validation() {
                 ..ProptestConfig::default()
             },
             |(
-                height in 0..10u64,
+                height in 0..10_u64,
                 ingress in prop_ingress_vec(MAX_MESSAGES, MAX_SIZE),
                 xnet in prop_xnet_slice(MAX_MESSAGES, MAX_SIZE),
             )| {

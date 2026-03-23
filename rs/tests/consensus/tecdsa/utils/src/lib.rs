@@ -253,7 +253,7 @@ pub fn run_chain_key_signature_test(
     existing_key: Vec<u8>,
 ) {
     info!(logger, "Run through Chain key signature test.");
-    let message_hash = vec![0xabu8; 32];
+    let message_hash = vec![0xab_u8; 32];
     block_on(async {
         let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
             .await
@@ -299,7 +299,7 @@ pub async fn get_public_key_and_test_signature(
         scale_cycles(ECDSA_SIGNATURE_FEE)
     };
 
-    let message_hash = vec![0xabu8; 32];
+    let message_hash = vec![0xab_u8; 32];
 
     info!(logger, "Getting the public key for {}", key_id);
     let public_key = get_public_key_with_logger(key_id, message_canister, logger).await?;

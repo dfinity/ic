@@ -351,7 +351,7 @@ fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
     let rng = &mut reproducible_rng();
     let mut inputs_owned = valid_tecdsa_inputs(rng);
 
-    let hashed_message_invalid_length = vec![1u8; 33];
+    let hashed_message_invalid_length = vec![1_u8; 33];
     inputs_owned.hashed_message = hashed_message_invalid_length;
 
     let ecdsa_inputs: Result<ThresholdEcdsaSigInputs, _> = inputs_owned.to_ref();
@@ -807,7 +807,7 @@ fn derivation_path() -> ExtendedDerivationPath {
 }
 
 fn nonce() -> [u8; 32] {
-    [42u8; 32]
+    [42_u8; 32]
 }
 
 fn hashed_message() -> Vec<u8> {

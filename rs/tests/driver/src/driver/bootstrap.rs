@@ -83,7 +83,7 @@ pub fn init_ic(
     logger: &Logger,
     specific_ids: bool,
 ) -> Result<InitializedIc> {
-    let mut next_node_index = 0u64;
+    let mut next_node_index = 0_u64;
     let ic_name = ic.name();
     let working_dir = test_env.create_prep_dir(&ic_name)?;
 
