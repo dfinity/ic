@@ -14,7 +14,6 @@ pub struct JournalStreamer {
     journalctl_flags: BTreeSet<String>,
     grep_flags: BTreeSet<String>,
     from_cursor: Option<String>,
-    to_cursor: Option<String>,
 }
 
 /// Deserialization target for a single JSON record emitted by
@@ -36,7 +35,6 @@ impl JournalStreamer {
             journalctl_flags: BTreeSet::new(),
             grep_flags: BTreeSet::new(),
             from_cursor: None,
-            to_cursor: None,
         }
     }
 
@@ -56,6 +54,13 @@ impl JournalStreamer {
     /// soon as the expected number of lines have been read.
     pub fn follow(mut self) -> Self {
         self.journalctl_flags.insert("--follow".to_string());
+        self
+    }
+
+    /// Restricts the search to the previous boot's journal entries (maps to `journalctl
+    /// --boot=-1`).
+    pub fn previous_boot(mut self) -> Self {
+        self.journalctl_flags.insert("--boot=-1".to_string());
         self
     }
 
@@ -93,12 +98,6 @@ impl JournalStreamer {
         Ok(cursor)
     }
 
-    /// Returns the cursor that subsequent searches will end at, if any.
-    pub fn until_cursor(mut self, cursor: String) -> Self {
-        self.to_cursor = Some(cursor);
-        self
-    }
-
     /// Executes the configured `journalctl` query, filters the output with `search_regex`, and
     /// returns the matching journal messages.
     pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {
@@ -112,11 +111,6 @@ impl JournalStreamer {
         &self,
         search_regex: &str,
     ) -> anyhow::Result<Vec<(String, String)>> {
-        assert!(
-            self.from_cursor.is_none() || self.to_cursor.is_none(),
-            "Cannot specify both from and to cursors"
-        );
-
         let mut command = "journalctl --output json --output-fields='MESSAGE,__CURSOR'".to_string();
 
         if !self.journalctl_flags.is_empty() {
@@ -126,10 +120,6 @@ impl JournalStreamer {
 
         if let Some(from_cursor) = &self.from_cursor {
             command.push_str(&format!(" --after-cursor='{from_cursor}'"));
-        }
-
-        if let Some(to_cursor) = &self.to_cursor {
-            command.push_str(&format!(" --cursor='{to_cursor}' --reverse"));
         }
 
         let mut grep = "grep --extended-regexp".to_string();

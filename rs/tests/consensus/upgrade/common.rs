@@ -305,15 +305,14 @@ async fn upgrade_to(
         let session = node.block_on_ssh_session().unwrap();
         let node_id = node.node_id;
         tokio::task::spawn_blocking(move || {
-            JournalStreamer::new(session)
+            if !JournalStreamer::new(session)
                 .follow()
                 .max_lines(1)
-                .get_cursor_at("Orchestrator shut down gracefully")
-                .unwrap_or_else(|err| {
-                    panic!(
-                        "{node_id} did not log that the orchestrator has shut down gracefully: {err}",
-                    )
-                })
+                .search("Orchestrator shut down gracefully")
+                .is_ok_and(|matches| !matches.is_empty())
+            {
+                panic!("{node_id} did not log that the orchestrator has shut down gracefully");
+            }
         })
     }))
     .await
@@ -325,13 +324,7 @@ async fn upgrade_to(
     }
 
     // Fetch the latest computed root hash from logs of each node
-    let state_hashes_from_logs = find_latest_computed_root_hashes_from_logs(
-        logger,
-        healthy_nodes
-            .into_iter()
-            .zip(journal_cursors.into_iter())
-            .collect(),
-    );
+    let state_hashes_from_logs = find_latest_computed_root_hashes_from_logs(logger, healthy_nodes);
     // Find all nodes that logged the same latest computed root hash and pick the most common one
     let mut state_hashes_counts = BTreeMap::new();
     for (node_id, hash) in state_hashes_from_logs.iter() {
@@ -395,7 +388,7 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
 /// Returns the last computed root hash found in the logs for every node.
 fn find_latest_computed_root_hashes_from_logs(
     logger: &Logger,
-    reboot_cursors: Vec<(IcNodeSnapshot, String)>,
+    nodes: Vec<IcNodeSnapshot>,
 ) -> BTreeMap<NodeId, String> {
     let computed_root_hash_regex = regex::Regex::new(
         r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\) of state @([0-9]*)"#,
@@ -403,9 +396,9 @@ fn find_latest_computed_root_hashes_from_logs(
     .unwrap();
 
     let mut latest_root_hash_per_node = BTreeMap::new();
-    for (node, reboot_cursor) in reboot_cursors {
+    for node in nodes {
         let matches = JournalStreamer::new(node.block_on_ssh_session().unwrap())
-            .until_cursor(reboot_cursor)
+            .previous_boot()
             .search(computed_root_hash_regex.as_str())
             .expect("Failed to fetch log entries");
         let last_hash = matches
