@@ -142,9 +142,6 @@ pub struct DeterministicState {
     /// A list of accessed Wasm pages.
     /// The order of Wasm pages is non-deterministic, so this list must
     /// be sorted before use.
-    ///
-    /// WARNING: If the accessed page limit is reached, the list may be
-    /// incomplete and should not be used.
     accessed_wasm_pages_list: Vec<WasmPageIndex>,
     /// Number of accessed Wasm pages.
     accessed_wasm_pages_count: NumWasmPages,
@@ -158,9 +155,6 @@ pub struct DeterministicState {
     /// A list of dirty Wasm pages (used only when tracking dirty pages).
     /// The order of Wasm pages is non-deterministic, so this list must
     /// be sorted before use.
-    ///
-    /// WARNING: If the accessed page limit is reached, the list may be
-    /// incomplete and should not be used.
     dirty_wasm_pages_list: Vec<WasmPageIndex>,
     /// Number of dirty Wasm pages.
     dirty_wasm_pages_count: NumWasmPages,
@@ -191,7 +185,6 @@ impl DeterministicState {
     pub(crate) fn new(num_os_pages: NumOsPages, memory_limits: MemoryLimits) -> DeterministicState {
         let MemoryLimits {
             max_memory_size,
-            max_accessed_pages,
             max_dirty_pages,
         } = memory_limits;
 
@@ -208,12 +201,11 @@ impl DeterministicState {
 
         let max_wasm_pages = NumWasmPages::from_num_bytes(max_memory_size);
         assert!(max_wasm_pages.get() > 0);
-        let max_accessed_wasm_pages = NumWasmPages::from_num_os_pages(max_accessed_pages);
         let max_dirty_wasm_pages = NumWasmPages::from_num_os_pages(max_dirty_pages);
 
         DeterministicState {
             accessed_wasm_pages_bitmap: BitVec::from_elem(max_wasm_pages.get(), false),
-            accessed_wasm_pages_list: Vec::with_capacity(max_accessed_wasm_pages.get()),
+            accessed_wasm_pages_list: Vec::new(),
             accessed_wasm_pages_count: NumWasmPages::new(0),
             #[cfg(feature = "sigsegv_handler_checksum")]
             accessed_wasm_pages_digest: WasmPageIndexDigest::new(0),
@@ -234,10 +226,7 @@ impl DeterministicState {
         #[cfg(feature = "sigsegv_handler_checksum")]
         self.accessed_wasm_pages_digest.hash(wasm_page_idx);
 
-        // Avoid growing the list beyond the limits set in capacity.
-        if self.accessed_wasm_pages_list.len() < self.accessed_wasm_pages_list.capacity() {
-            self.accessed_wasm_pages_list.push(wasm_page_idx);
-        }
+        self.accessed_wasm_pages_list.push(wasm_page_idx);
     }
 
     /// Returns true if specified Wasm page is marked as accessed.
@@ -255,10 +244,7 @@ impl DeterministicState {
         #[cfg(feature = "sigsegv_handler_checksum")]
         self.dirty_wasm_pages_digest.hash(wasm_page_idx);
 
-        // Avoid growing the list beyond the limits set in capacity.
-        if self.dirty_wasm_pages_list.len() < self.dirty_wasm_pages_list.capacity() {
-            self.dirty_wasm_pages_list.push(wasm_page_idx);
-        }
+        self.dirty_wasm_pages_list.push(wasm_page_idx);
     }
 
     /// Tries to write-protect an accessed Wasm page. Returns true if successful.

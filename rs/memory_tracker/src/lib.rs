@@ -83,7 +83,6 @@ pub use prefetching::basic_signal_handler;
 #[derive(Clone, Copy, Default)]
 pub struct MemoryLimits {
     pub max_memory_size: NumBytes,
-    pub max_accessed_pages: NumOsPages,
     pub max_dirty_pages: NumOsPages,
 }
 
