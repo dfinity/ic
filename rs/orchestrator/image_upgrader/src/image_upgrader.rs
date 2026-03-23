@@ -19,8 +19,8 @@ pub mod error;
 /// Describes a manageboot.sh command to be executed.
 #[derive(Clone, Debug)]
 pub struct ManagebootCommand {
-    pub binary: OsString,
-    pub args: Vec<OsString>,
+    binary: OsString,
+    args: Vec<OsString>,
 }
 
 /// Trait for running manageboot.sh commands.
