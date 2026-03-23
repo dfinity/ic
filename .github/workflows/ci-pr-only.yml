@@ -159,7 +159,6 @@ jobs:
           cd "${GITHUB_WORKSPACE}"/bin/fuzzing/
           ./build-all-fuzzers.sh --zip
 
-# trigger lock-generate
   lock-generate:
     name: Lock Generate
     runs-on: ubuntu-latest
