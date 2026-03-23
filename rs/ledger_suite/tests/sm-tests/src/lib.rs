@@ -612,25 +612,10 @@ pub fn check_icrc3_supported_block_types(
     canister_id: CanisterId,
     supports_107: bool,
 ) {
-    check_icrc3_supported_block_types_ext(env, canister_id, supports_107, true)
+    check_icrc3_supported_block_types_ext(env, canister_id, supports_107, true, true)
 }
 
 pub fn check_icrc3_supported_block_types_ext(
-    env: &StateMachine,
-    canister_id: CanisterId,
-    supports_107: bool,
-    supports_124: bool,
-) {
-    check_icrc3_supported_block_types_ext2(
-        env,
-        canister_id,
-        supports_107,
-        supports_124,
-        supports_124,
-    )
-}
-
-pub fn check_icrc3_supported_block_types_ext2(
     env: &StateMachine,
     canister_id: CanisterId,
     supports_107: bool,

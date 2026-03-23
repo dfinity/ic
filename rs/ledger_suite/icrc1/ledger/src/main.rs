@@ -1257,6 +1257,11 @@ fn icrc153_freeze_account_not_async(
             message: "caller is not a controller".to_string(),
         });
     }
+    if arg.account.owner == Principal::anonymous() {
+        return Err(FreezeAccountError::InvalidAccount {
+            message: "cannot freeze the anonymous principal's account".to_string(),
+        });
+    }
     let block_idx = Access::with_ledger_mut(|ledger| {
         if ledger.is_deactivated() {
             return Err(FreezeAccountError::GenericError {
@@ -1311,6 +1316,11 @@ fn icrc153_unfreeze_account_not_async(
     if !ic_cdk::api::is_controller(&caller) {
         return Err(UnfreezeAccountError::Unauthorized {
             message: "caller is not a controller".to_string(),
+        });
+    }
+    if arg.account.owner == Principal::anonymous() {
+        return Err(UnfreezeAccountError::InvalidAccount {
+            message: "cannot unfreeze the anonymous principal's account".to_string(),
         });
     }
     let block_idx = Access::with_ledger_mut(|ledger| {
@@ -1371,6 +1381,11 @@ fn icrc153_freeze_principal_not_async(
             message: "caller is not a controller".to_string(),
         });
     }
+    if arg.principal == Principal::anonymous() {
+        return Err(FreezePrincipalError::InvalidPrincipal {
+            message: "cannot freeze the anonymous principal".to_string(),
+        });
+    }
     let block_idx = Access::with_ledger_mut(|ledger| {
         if ledger.is_deactivated() {
             return Err(FreezePrincipalError::GenericError {
@@ -1427,6 +1442,11 @@ fn icrc153_unfreeze_principal_not_async(
     if !ic_cdk::api::is_controller(&caller) {
         return Err(UnfreezePrincipalError::Unauthorized {
             message: "caller is not a controller".to_string(),
+        });
+    }
+    if arg.principal == Principal::anonymous() {
+        return Err(UnfreezePrincipalError::InvalidPrincipal {
+            message: "cannot unfreeze the anonymous principal".to_string(),
         });
     }
     let block_idx = Access::with_ledger_mut(|ledger| {
