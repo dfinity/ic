@@ -81,23 +81,6 @@ impl JournalStreamer {
         Ok(self)
     }
 
-    /// Searches the journal for the first entry matching `search_regex` and returns the cursor of
-    /// that entry. This is useful for anchoring subsequent searches to start or end at a specific
-    /// log line.
-    ///
-    /// Returns an error if no entry matches the regex.
-    pub fn get_cursor_at(&self, search_regex: &str) -> anyhow::Result<String> {
-        let (_message, cursor) = self
-            .search_and_return_cursors(search_regex)?
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                anyhow::anyhow!("No journal entries found matching the regex '{search_regex}'")
-            })?;
-
-        Ok(cursor)
-    }
-
     /// Executes the configured `journalctl` query, filters the output with `search_regex`, and
     /// returns the matching journal messages.
     pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {
