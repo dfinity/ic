@@ -109,7 +109,7 @@ impl DerivationPath {
 
         // If iL >= order, try again with the "next" index as described in SLIP-10
         if next_offset.to_bytes().to_vec() != hmac_output[..32] {
-            let mut next_input = [0u8; 33];
+            let mut next_input = [0_u8; 33];
             next_input[0] = 0x01;
             next_input[1..].copy_from_slice(&next_chain_key);
             Self::ckd(idx, &next_input, chain_code)
@@ -509,7 +509,7 @@ impl PrivateKey {
     /// bit cleared, this derivation scheme matches SLIP-10
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -574,7 +574,7 @@ impl PublicKey {
             ));
         }
 
-        let mut sec1 = [0u8; 1 + FIELD_BYTES * 2];
+        let mut sec1 = [0_u8; 1 + FIELD_BYTES * 2];
         sec1[0] = 0x04;
         sec1[1..(1 + FIELD_BYTES)].copy_from_slice(x);
         sec1[(1 + FIELD_BYTES)..(1 + 2 * FIELD_BYTES)].copy_from_slice(y);
@@ -689,7 +689,7 @@ impl PublicKey {
     /// Derive a public key from this public key using a derivation path
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 

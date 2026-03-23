@@ -217,9 +217,9 @@ pub mod tests {
     #[test]
     fn preserves_input() -> Result<()> {
         let entries = vec![
-            ("first.txt", vec![0u8; 1024 * 1024]),
-            ("second.txt", vec![1u8; 512 * 1024]),
-            ("third.txt", vec![0u8; 2000 * 1000]),
+            ("first.txt", vec![0_u8; 1024 * 1024]),
+            ("second.txt", vec![1_u8; 512 * 1024]),
+            ("third.txt", vec![0_u8; 2000 * 1000]),
         ];
 
         let mut output_builder = Builder::new(vec![]);

@@ -837,7 +837,7 @@ fn test_error_backoff() {
         let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
             .await
             .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(0u64));
+        assert_eq!(block_index, Nat::from(0_u64));
 
         let block_index =
             wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
@@ -863,7 +863,7 @@ fn test_error_backoff() {
         let block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
             .await
             .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(1u64));
+        assert_eq!(block_index, Nat::from(1_u64));
 
         let mut found_backoff_message = false;
         let mut log_contents = String::new();
@@ -1192,7 +1192,7 @@ fn test_metrics_with_unrecognized_blocks() {
         let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
             .await
             .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(0u64));
+        assert_eq!(block_index, Nat::from(0_u64));
 
         let block_index =
             wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0)
@@ -1223,7 +1223,7 @@ fn test_metrics_with_unrecognized_blocks() {
         let bad_block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
             .await
             .expect("failed to add block");
-        assert_eq!(bad_block_index, Nat::from(1u64));
+        assert_eq!(bad_block_index, Nat::from(1_u64));
 
         let await_updated_metrics = async || {
             const MAX_RETRIES: usize = 10;

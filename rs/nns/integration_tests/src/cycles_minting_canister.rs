@@ -141,7 +141,7 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
         // Assert that the expected amount of cycles were added to governance.
         assert_eq!(
             governance_cycles_final - governance_cycles_initial,
-            Nat::from(1000000000000000u64)
+            Nat::from(1000000000000000_u64)
         );
 
         Ok(())
@@ -1306,7 +1306,7 @@ fn cmc_notify_mint_cycles() {
         &state_machine,
         Tokens::new(1, 0).unwrap(),
         main_account.subaccount,
-        Some(vec![1u8; 32]),
+        Some(vec![1_u8; 32]),
     )
     .unwrap();
     assert_eq!(
@@ -1592,10 +1592,10 @@ fn cmc_notify_top_up_valid() {
     .unwrap();
     let total_minted_after = total_cycles_minted(&state_machine);
 
-    assert_eq!(cycles, Cycles::new(100_000_000_000_000u128));
+    assert_eq!(cycles, Cycles::new(100_000_000_000_000_u128));
     assert_eq!(
         total_minted_after - total_minted_before,
-        100_000_000_000_000u64
+        100_000_000_000_000_u64
     );
 }
 
@@ -1623,7 +1623,7 @@ fn cmc_notify_top_up_invalid() {
     assert_matches!(error, NotifyError::Refunded { .. });
     assert_eq!(
         total_minted_after - total_minted_before,
-        100_000_000_000_000u64
+        100_000_000_000_000_u64
     );
 
     let total_minted_before = total_cycles_minted(&state_machine);
@@ -1635,7 +1635,7 @@ fn cmc_notify_top_up_invalid() {
     .unwrap_err();
     let total_minted_after = total_cycles_minted(&state_machine);
     assert_matches!(error, NotifyError::Refunded { .. });
-    assert_eq!(total_minted_after - total_minted_before, 0u64);
+    assert_eq!(total_minted_after - total_minted_before, 0_u64);
 }
 
 #[test]
@@ -1708,7 +1708,7 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
         Tokens::new(4, 0).unwrap(),
     )
     .unwrap();
-    assert_eq!(cycles, Cycles::new(400_000_000_000_000u128));
+    assert_eq!(cycles, Cycles::new(400_000_000_000_000_u128));
 
     // Advance time by 1 hour to make sure the rate limit is reset.
     state_machine.advance_time(Duration::from_secs(60 * 60));
@@ -1736,7 +1736,7 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
         Tokens::new(4, 0).unwrap(),
     )
     .unwrap();
-    assert_eq!(cycles, Cycles::new(400_000_000_000_000u128));
+    assert_eq!(cycles, Cycles::new(400_000_000_000_000_u128));
 }
 
 #[test]

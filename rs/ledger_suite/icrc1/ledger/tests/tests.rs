@@ -886,7 +886,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
     assert_eq!(
         Account::get_allowance(&env, ledger_id, user1, user2),
         Allowance {
-            allowance: 0u32.into(),
+            allowance: 0_u32.into(),
             expires_at: None
         }
     );
@@ -909,7 +909,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
     assert_eq!(
         approval_result,
         Err(ApproveError::InsufficientFunds {
-            balance: 0u32.into()
+            balance: 0_u32.into()
         })
     );
 
@@ -930,7 +930,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
     assert_eq!(
         transfer_from_result,
         Err(TransferFromError::InsufficientAllowance {
-            allowance: 0u32.into()
+            allowance: 0_u32.into()
         })
     );
 }
@@ -1075,11 +1075,11 @@ fn test_icrc3_get_archives() {
     assert_eq!(2, actual.len());
     actual.sort_by(|i1, i2| i1.start.cmp(&i2.start));
     // the first archive contains blocks 0 and 1
-    assert_eq!(0u64, actual[0].start);
-    assert_eq!(1u64, actual[0].end);
+    assert_eq!(0_u64, actual[0].start);
+    assert_eq!(1_u64, actual[0].end);
     // the second archive contains blocks 2 and 3
-    assert_eq!(2u64, actual[1].start);
-    assert_eq!(3u64, actual[1].end);
+    assert_eq!(2_u64, actual[1].start);
+    assert_eq!(3_u64, actual[1].end);
 
     // query all the archives after the first one
     let from = actual.iter().map(|info| info.canister_id).min();
@@ -1179,13 +1179,13 @@ fn test_icrc3_get_blocks() {
 
     // query empty range
     let res = icrc3_get_blocks_(vec![]);
-    assert_eq!(res.log_length, 0u64);
+    assert_eq!(res.log_length, 0_u64);
     assert_eq!(res.blocks, vec![]);
     assert_eq!(res.archived_blocks, vec![]);
 
     // query the full range
     let res = icrc3_get_blocks_(vec![(0, u64::MAX)]);
-    assert_eq!(res.log_length, 0u64);
+    assert_eq!(res.log_length, 0_u64);
     assert_eq!(res.blocks, vec![]);
     assert_eq!(res.archived_blocks, vec![]);
 
@@ -1215,14 +1215,14 @@ fn test_icrc3_get_blocks() {
 
     // Query empty range
     let actual_res = icrc3_get_blocks_(vec![]);
-    assert_eq!(actual_res.log_length, 14u64);
+    assert_eq!(actual_res.log_length, 14_u64);
     assert_eq!(actual_res.blocks, vec![]);
     assert_eq!(actual_res.archived_blocks, vec![]);
 
     // Query the full range and check everything in the response.
     // This set of check is the baseline for further testing
     let actual_res = icrc3_get_blocks_(vec![(0, u64::MAX)]);
-    assert_eq!(actual_res.log_length, 14u64);
+    assert_eq!(actual_res.log_length, 14_u64);
 
     // check the local blocks
     assert_eq!(actual_res.blocks.len(), 4);
@@ -1277,7 +1277,7 @@ fn test_icrc3_get_blocks() {
     // the archive has no archived blocks
     assert_eq!(actual_archived_blocks.archived_blocks.len(), 0);
     // the archive only knows the length of its local chain
-    assert_eq!(actual_archived_blocks.log_length, 10u64);
+    assert_eq!(actual_archived_blocks.log_length, 10_u64);
 
     for (block_index, (actual_block, expected_block)) in actual_archived_blocks
         .blocks
