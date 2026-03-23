@@ -38,6 +38,9 @@ const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
     boot_image_minimal_size_gibibytes: None,
 };
 
+pub const HOSTOS_VCPUS_RESERVED: u64 = 4;
+pub const HOSTOS_MEMORY_RESERVED_GIB: u64 = 8;
+
 /// A declaration of resources needed to instantiate a InternetComputer.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct ResourceRequest {
