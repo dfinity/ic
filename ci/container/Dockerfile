@@ -79,7 +79,9 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     cd .. && rm -rf AFLplusplus
 
 # Set PATH and Rust install locations so toolchains are available to the ubuntu user
-ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
+ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH \
+    CARGO_HOME=/home/ubuntu/.cargo \
+    RUSTUP_HOME=/home/ubuntu/.rustup
 
 # Add Rust/Cargo support
 RUN mkdir -p /tmp/rust-version/
