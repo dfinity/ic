@@ -52,6 +52,7 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -434,7 +435,7 @@ impl ExecutionEnvironment {
     pub fn scaled_subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
         let memory_taken = state.memory_taken();
         SubnetAvailableMemory::new_scaled(
-            self.config.subnet_memory_capacity.get() as i64
+            self.subnet_memory_capacity(state.resource_limits()).get() as i64
                 - self.config.subnet_memory_reservation.get() as i64
                 - memory_taken.execution().get() as i64,
             self.config
@@ -763,14 +764,18 @@ impl ExecutionEnvironment {
                                     response: Err(err.into()),
                                     refund: cycles,
                                 },
-                                Ok(settings) => self.create_canister(
-                                    msg.canister_change_origin(sender_canister_version),
-                                    cycles,
-                                    settings,
-                                    registry_settings,
-                                    &mut state,
-                                    round_limits,
-                                ),
+                                Ok(settings) => {
+                                    let resource_limits = state.resource_limits();
+                                    self.create_canister(
+                                        msg.canister_change_origin(sender_canister_version),
+                                        cycles,
+                                        settings,
+                                        registry_settings,
+                                        &mut state,
+                                        round_limits,
+                                        resource_limits,
+                                    )
+                                }
                             };
                             info!(
                                 self.log,
@@ -1004,7 +1009,7 @@ impl ExecutionEnvironment {
                     let res = match EmptyBlob::decode(payload) {
                         Err(err) => Err(err),
                         Ok(EmptyBlob) => {
-                            let mut buffer = vec![0u8; 32];
+                            let mut buffer = vec![0_u8; 32];
                             rng.fill_bytes(&mut buffer);
                             Ok(Encode!(&buffer).unwrap())
                         }
@@ -1400,30 +1405,33 @@ impl ExecutionEnvironment {
                         let cycles_amount = args.to_u128();
                         let sender_canister_version = args.get_sender_canister_version();
                         match CanisterSettings::try_from(args.settings) {
-                            Ok(settings) => self
-                                .canister_manager
-                                .create_canister_with_cycles(
-                                    msg.canister_change_origin(sender_canister_version),
-                                    cycles_amount,
-                                    settings,
-                                    args.specified_id,
-                                    &mut state,
-                                    &registry_settings.provisional_whitelist,
-                                    registry_settings.max_number_of_canisters,
-                                    round_limits,
-                                    self.subnet_memory_saturation(
-                                        &round_limits.subnet_available_memory,
-                                    ),
-                                    registry_settings.subnet_size,
-                                    &self.metrics.canister_creation_error,
-                                )
-                                .map(|canister_id| {
-                                    (
-                                        CanisterIdRecord::from(canister_id).encode(),
-                                        Some(canister_id),
+                            Ok(settings) => {
+                                let saturation = self.subnet_memory_saturation(
+                                    &round_limits.subnet_available_memory,
+                                    state.resource_limits(),
+                                );
+                                self.canister_manager
+                                    .create_canister_with_cycles(
+                                        msg.canister_change_origin(sender_canister_version),
+                                        cycles_amount,
+                                        settings,
+                                        args.specified_id,
+                                        &mut state,
+                                        &registry_settings.provisional_whitelist,
+                                        registry_settings.max_number_of_canisters,
+                                        round_limits,
+                                        saturation,
+                                        registry_settings.subnet_size,
+                                        &self.metrics.canister_creation_error,
                                     )
-                                })
-                                .map_err(|err| err.into()),
+                                    .map(|canister_id| {
+                                        (
+                                            CanisterIdRecord::from(canister_id).encode(),
+                                            Some(canister_id),
+                                        )
+                                    })
+                                    .map_err(|err| err.into())
+                            }
                             Err(err) => Err(err.into()),
                         }
                     });
@@ -1510,8 +1518,10 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::UploadChunk) => {
-                let resource_saturation =
-                    self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+                let resource_saturation = self.subnet_memory_saturation(
+                    &round_limits.subnet_available_memory,
+                    state.resource_limits(),
+                );
                 let res = UploadChunkArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
                     self.upload_chunk(
@@ -1531,8 +1541,10 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ClearChunkStore) => {
-                let resource_saturation =
-                    self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+                let resource_saturation = self.subnet_memory_saturation(
+                    &round_limits.subnet_available_memory,
+                    state.resource_limits(),
+                );
                 let res = ClearChunkStoreArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
                     self.clear_chunk_store(
@@ -1722,8 +1734,10 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::DeleteCanisterSnapshot) => {
-                let resource_saturation =
-                    self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+                let resource_saturation = self.subnet_memory_saturation(
+                    &round_limits.subnet_available_memory,
+                    state.resource_limits(),
+                );
                 let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
                     self.delete_canister_snapshot(
@@ -1990,6 +2004,7 @@ impl ExecutionEnvironment {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
+        resource_limits: ResourceLimits,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> ExecuteMessageResult {
@@ -2035,6 +2050,7 @@ impl ExecutionEnvironment {
                     instruction_limits,
                     round,
                     round_limits,
+                    resource_limits,
                     subnet_size,
                 );
             }
@@ -2047,6 +2063,7 @@ impl ExecutionEnvironment {
                     time,
                     network_topology,
                     round_limits,
+                    resource_limits,
                     subnet_size,
                     cost_schedule,
                 );
@@ -2120,7 +2137,10 @@ impl ExecutionEnvironment {
                     &canister,
                     instruction_limits,
                     ExecutionMode::Replicated,
-                    self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+                    self.subnet_memory_saturation(
+                        &round_limits.subnet_available_memory,
+                        resource_limits,
+                    ),
                 );
                 execute_call_or_task(
                     canister,
@@ -2152,13 +2172,14 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        resource_limits: ResourceLimits,
         subnet_size: usize,
     ) -> ExecuteMessageResult {
         let execution_parameters = self.execution_parameters(
             &canister,
             instruction_limits,
             ExecutionMode::Replicated,
-            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory, resource_limits),
         );
         execute_call_or_task(
             canister,
@@ -2177,8 +2198,8 @@ impl ExecutionEnvironment {
     }
 
     /// Returns the subnet memory capacity.
-    pub fn subnet_memory_capacity(&self) -> NumBytes {
-        self.config.subnet_memory_capacity
+    pub fn subnet_memory_capacity(&self, resource_limits: ResourceLimits) -> NumBytes {
+        subnet_memory_capacity(&self.config, resource_limits)
     }
 
     /// Builds execution parameters for the given canister with the given
@@ -2211,6 +2232,7 @@ impl ExecutionEnvironment {
         registry_settings: &RegistryExecutionSettings,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
+        resource_limits: ResourceLimits,
     ) -> ExecuteSubnetMessageResult {
         let (res, cycles) = self.canister_manager.create_canister(
             origin,
@@ -2220,7 +2242,7 @@ impl ExecutionEnvironment {
             state,
             registry_settings.subnet_size,
             round_limits,
-            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory, resource_limits),
             &self.metrics.canister_creation_error,
         );
         ExecuteSubnetMessageResult::Finished {
@@ -2245,6 +2267,10 @@ impl ExecutionEnvironment {
         subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
+        let saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         let canister = canister_make_mut(canister_id, state)?;
         self.canister_manager
             .update_settings(
@@ -2253,7 +2279,7 @@ impl ExecutionEnvironment {
                 settings,
                 canister,
                 round_limits,
-                self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+                saturation,
                 subnet_size,
                 cost_schedule,
             )
@@ -2529,8 +2555,10 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
-        let resource_saturation =
-            self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         let replace_snapshot = args.replace_snapshot();
         let uninstall_code = args.uninstall_code().unwrap_or_default();
         let result = self.canister_manager.take_canister_snapshot(
@@ -2608,8 +2636,10 @@ impl ExecutionEnvironment {
         // that the canister exists so it is safe to unwrap here.
         let mut old_canister = state.take_canister_state(&canister_id).unwrap();
 
-        let resource_saturation =
-            self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         let result = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
@@ -2810,8 +2840,10 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
-        let resource_saturation =
-            self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         let result = self.canister_manager.create_snapshot_from_metadata(
             sender,
             Arc::make_mut(&mut canister),
@@ -2851,8 +2883,10 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
-        let resource_saturation =
-            self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         let result = self.canister_manager.write_snapshot_data(
             sender,
             Arc::make_mut(&mut canister),
@@ -2930,6 +2964,7 @@ impl ExecutionEnvironment {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
+        resource_limits: ResourceLimits,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> ExecuteMessageResult {
@@ -2937,7 +2972,7 @@ impl ExecutionEnvironment {
             &canister,
             instruction_limits,
             ExecutionMode::Replicated,
-            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory, resource_limits),
         );
 
         let round_counters = RoundCounters {
@@ -3084,7 +3119,8 @@ impl ExecutionEnvironment {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory = full_subnet_memory_capacity(&self.config);
+        let subnet_available_memory =
+            full_subnet_memory_capacity(&self.config, state.resource_limits());
         let execution_parameters = self.execution_parameters(
             canister_state,
             instruction_limits,
@@ -3730,7 +3766,10 @@ impl ExecutionEnvironment {
             &old_canister,
             instruction_limits,
             ExecutionMode::Replicated,
-            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+            self.subnet_memory_saturation(
+                &round_limits.subnet_available_memory,
+                state.resource_limits(),
+            ),
         );
         let round_counters = RoundCounters {
             execution_refund_error: &self.metrics.execution_cycles_refund_error,
@@ -4335,6 +4374,7 @@ impl ExecutionEnvironment {
     pub fn subnet_memory_saturation(
         &self,
         subnet_available_memory: &SubnetAvailableMemory,
+        resource_limits: ResourceLimits,
     ) -> ResourceSaturation {
         // We apply the scaling factor `self.scheduler_cores`
         // consistently with the scaling factor of `SubnetAvailableMemory`
@@ -4344,7 +4384,7 @@ impl ExecutionEnvironment {
         // Compute the scaled memory usage as the scaled capacity minus the scaled available memory.
         debug_assert_ne!(scaling_factor, 0);
         let scaled_subnet_memory_capacity: u64 =
-            self.config.subnet_memory_capacity.get() / scaling_factor;
+            self.subnet_memory_capacity(resource_limits).get() / scaling_factor;
         let scaled_subnet_available_memory =
             subnet_available_memory.get_execution_memory().max(0) as u64;
         let scaled_subnet_memory_usage: u64 =
@@ -4432,10 +4472,29 @@ impl CompilationCostHandling {
     }
 }
 
+/// Returns the subnet memory capacity.
+/// A value of `Some(0)` for a resource limit means that the default value from `ExecutionConfig`
+/// should be used.
+fn subnet_memory_capacity(config: &ExecutionConfig, resource_limits: ResourceLimits) -> NumBytes {
+    resource_limits
+        .maximum_state_size
+        .and_then(|maximum_state_size| {
+            if maximum_state_size.get() != 0 {
+                Some(maximum_state_size)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(config.subnet_memory_capacity)
+}
+
 /// Returns the subnet's configured memory capacity (ignoring current usage).
-pub(crate) fn full_subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailableMemory {
+pub(crate) fn full_subnet_memory_capacity(
+    config: &ExecutionConfig,
+    resource_limits: ResourceLimits,
+) -> SubnetAvailableMemory {
     SubnetAvailableMemory::new_scaled(
-        config.subnet_memory_capacity.get() as i64,
+        subnet_memory_capacity(config, resource_limits).get() as i64,
         config.guaranteed_response_message_memory_capacity.get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
         NonZeroU64::new(1).expect("scaling_factor must be non zero"),
@@ -4494,6 +4553,7 @@ fn execute_canister_input(
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
+    resource_limits: ResourceLimits,
     subnet_size: usize,
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
@@ -4537,6 +4597,7 @@ fn execute_canister_input(
         time,
         network_topology,
         round_limits,
+        resource_limits,
         subnet_size,
         cost_schedule,
     );
@@ -4560,6 +4621,7 @@ pub fn execute_canister(
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
+    resource_limits: ResourceLimits,
     subnet_size: usize,
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
@@ -4658,6 +4720,7 @@ pub fn execute_canister(
         network_topology,
         time,
         round_limits,
+        resource_limits,
         subnet_size,
         cost_schedule,
     )
