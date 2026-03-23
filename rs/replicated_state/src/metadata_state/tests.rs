@@ -1294,6 +1294,9 @@ fn subnets_with_engines_returns_full_topology_when_set() {
         .unwrap(),
     );
 
+    let filtered_subnets = btreemap! {
+        subnet_a => SubnetTopology::default(),
+    };
     let filtered_routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
@@ -1302,9 +1305,7 @@ fn subnets_with_engines_returns_full_topology_when_set() {
     );
 
     let mut network_topology = NetworkTopology {
-        subnets: btreemap! {
-            subnet_a => SubnetTopology::default(),
-        },
+        subnets: filtered_subnets.clone(),
         routing_table: filtered_routing_table,
         ..Default::default()
     };
@@ -1314,7 +1315,7 @@ fn subnets_with_engines_returns_full_topology_when_set() {
     }));
 
     // subnets() returns the filtered view.
-    assert_eq!(network_topology.subnets().len(), 1);
+    assert_eq!(network_topology.subnets(), &filtered_subnets);
     // subnets_with_engines() returns the full view.
     assert_eq!(network_topology.subnets_with_engines(), &full_subnets);
     assert_eq!(
