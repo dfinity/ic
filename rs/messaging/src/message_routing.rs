@@ -1161,8 +1161,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect();
             let routing_table = full_routing_table
                 .iter()
-                .filter(|(_, sid)| **sid == own_subnet_id)
-                .map(|(range, sid)| (*range, *sid))
+                .filter(|(_, id)| **id == own_subnet_id)
+                .map(|(range, id)| (*range, *id))
                 .collect::<BTreeMap<_, _>>()
                 .try_into()
                 .unwrap_or_default();
@@ -1181,8 +1181,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect();
             let routing_table = full_routing_table
                 .iter()
-                .filter(|(_, sid)| !engine_subnet_ids.contains(sid))
-                .map(|(range, sid)| (*range, *sid))
+                .filter(|(_, id)| !engine_subnet_ids.contains(id))
+                .map(|(range, id)| (*range, *id))
                 .collect::<BTreeMap<_, _>>()
                 .try_into()
                 .unwrap_or_default();
