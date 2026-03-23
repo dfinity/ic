@@ -18225,11 +18225,9 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
- "nix 0.24.3",
  "prost 0.13.5",
  "regex",
  "reqwest",
- "serde",
  "slog",
 ]
 
