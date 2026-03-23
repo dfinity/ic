@@ -1,8 +1,7 @@
 use crate::external_canister_types::{
-    BitcoinCanisterArg, CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
-    DogecoinCanisterArg, InternetIdentityFrontendInit, InternetIdentityInit,
-    NnsDappCanisterArguments, OpenIdConfig, OpenIdEmailVerification, RateLimitConfig,
-    SnsAggregatorConfig, StaticCaptchaTrigger,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
+    InternetIdentityFrontendInit, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
+    OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -30,7 +29,8 @@ use ic_boundary::{Health, RootKey, status};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
 use ic_btc_adapter::{AdapterNetwork, start_server as start_btc_server};
 use ic_btc_interface::{
-    Fees as BitcoinFees, InitConfig as BitcoinInitConfig, Network as BitcoinNetwork,
+    CanisterArg as BitcoinCanisterArg, Fees as BitcoinFees, InitConfig as BitcoinInitConfig,
+    Network as BitcoinNetwork,
 };
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
@@ -40,7 +40,8 @@ use ic_config::{
 };
 use ic_crypto_sha2::Sha256;
 use ic_doge_interface::{
-    Fees as DogecoinFees, InitConfig as DogecoinInitConfig, Network as DogecoinNetwork,
+    CanisterArg as DogecoinCanisterArg, Fees as DogecoinFees, InitConfig as DogecoinInitConfig,
+    Network as DogecoinNetwork,
 };
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
@@ -4113,7 +4114,7 @@ fn upload_blob_from_file(
         .map_err(|e| format!("Could not open {} file: {}", blob_kind.description(), e))?;
     while offset < length {
         let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
-        let mut chunk = vec![0u8; chunk_size as usize];
+        let mut chunk = vec![0_u8; chunk_size as usize];
         file.read_exact(&mut chunk)
             .map_err(|e| format!("Could not read {} file: {}", blob_kind.description(), e))?;
         let kind = match blob_kind {

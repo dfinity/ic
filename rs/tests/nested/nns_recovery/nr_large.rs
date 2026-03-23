@@ -24,8 +24,8 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    LARGE_DKG_INTERVAL, LARGE_SUBNET_SIZE, NNS_RECOVERY_VM_RESOURCES, SetupConfig, TestConfig,
-    setup, test,
+    LARGE_DKG_INTERVAL, LARGE_F, LARGE_SUBNET_SIZE, NNS_RECOVERY_VM_RESOURCES, SetupConfig,
+    TestConfig, setup, test,
 };
 use ic_system_test_driver::{
     driver::group::SystemTestGroup,
@@ -55,6 +55,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test; TestConfig {
             local_recovery: false,
             break_dfinity_owned_node: false,
+            num_broken_nodes: LARGE_F + 1,
             add_and_bless_upgrade_version: true,
             fix_dfinity_owned_node_like_np: false,
             sequential_np_actions: false,
