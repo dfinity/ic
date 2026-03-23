@@ -14,6 +14,9 @@ use std::convert::{From, TryFrom};
 /// underflow. A similar struct is provided in the protobuf types.
 /// We also provide split into low and high parts as protobuf does not support
 /// u128.
+///
+/// NOTE: This is distinct from `Cycles` which should be used when updating the
+/// canister's cycle balance.
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Deserialize, Serialize,
 )]

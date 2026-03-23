@@ -104,7 +104,7 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
 /// The following trait helps bound what kind of types can be used as the
 /// first generic argument to `CompoundCycles` that represent the various
 /// use cases for cycles accounting.
-pub trait CyclesUseCaseKind {
+pub trait CyclesUseCaseKind: Copy + Clone {
     fn cycles_use_case(&self) -> CyclesUseCase;
 }
 

@@ -73,14 +73,14 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// assert_eq!(total.real(), Cycles::new(30));
 /// ```
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
-pub struct CompoundCycles<T: CyclesUseCaseKind + Copy + Clone> {
+pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
     nominal: NominalCycles,
     use_case: CyclesUseCase,
     _cycles_use_case_marker: PhantomData<T>,
 }
 
-impl<T: CyclesUseCaseKind + Copy + Clone> CompoundCycles<T> {
+impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     pub fn new(
         amount: Cycles,
         use_case_kind: T,
@@ -136,7 +136,7 @@ impl<T: CyclesUseCaseKind + Copy + Clone> CompoundCycles<T> {
     }
 }
 
-impl<T: CyclesUseCaseKind + Copy + Clone> Add for CompoundCycles<T> {
+impl<T: CyclesUseCaseKind> Add for CompoundCycles<T> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
@@ -149,14 +149,14 @@ impl<T: CyclesUseCaseKind + Copy + Clone> Add for CompoundCycles<T> {
     }
 }
 
-impl<T: CyclesUseCaseKind + Copy + Clone> AddAssign for CompoundCycles<T> {
+impl<T: CyclesUseCaseKind> AddAssign for CompoundCycles<T> {
     fn add_assign(&mut self, rhs: Self) {
         self.real = self.real + rhs.real;
         self.nominal = self.nominal + rhs.nominal;
     }
 }
 
-impl<T: CyclesUseCaseKind + Copy + Clone> Sub for CompoundCycles<T> {
+impl<T: CyclesUseCaseKind> Sub for CompoundCycles<T> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
@@ -169,14 +169,14 @@ impl<T: CyclesUseCaseKind + Copy + Clone> Sub for CompoundCycles<T> {
     }
 }
 
-impl<T: CyclesUseCaseKind + Copy + Clone> SubAssign for CompoundCycles<T> {
+impl<T: CyclesUseCaseKind> SubAssign for CompoundCycles<T> {
     fn sub_assign(&mut self, rhs: Self) {
         self.real = self.real - rhs.real;
         self.nominal = self.nominal - rhs.nominal;
     }
 }
 
-impl<T: CyclesUseCaseKind + Copy + Clone> Mul<u64> for CompoundCycles<T> {
+impl<T: CyclesUseCaseKind> Mul<u64> for CompoundCycles<T> {
     type Output = Self;
 
     fn mul(self, rhs: u64) -> Self {
@@ -189,7 +189,7 @@ impl<T: CyclesUseCaseKind + Copy + Clone> Mul<u64> for CompoundCycles<T> {
     }
 }
 
-impl<T: CyclesUseCaseKind + Copy + Clone> Div<u128> for CompoundCycles<T> {
+impl<T: CyclesUseCaseKind> Div<u128> for CompoundCycles<T> {
     type Output = Self;
 
     fn div(self, rhs: u128) -> Self {

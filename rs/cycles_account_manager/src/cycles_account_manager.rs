@@ -97,7 +97,7 @@ impl CyclesAccountManager {
     }
 
     // Scale cycles cost according to a subnet size.
-    fn scale_cost<T: CyclesUseCaseKind + Copy + Clone>(
+    fn scale_cost<T: CyclesUseCaseKind>(
         &self,
         cycles: Cycles,
         subnet_size: usize,
@@ -384,13 +384,17 @@ impl CyclesAccountManager {
         }
     }
 
+    /// Withdraws and consumes cycles from the canister's balance.
+    ///
+    /// NOTE: This method reports the cycles withdrawn as consumed (i.e. burnt).
     ///       For withdrawals where cycles are not consumed, such as the case
+    ///       for inter-canister transfers, use `withdraw_cycles_for_transfer`.
     ///
     /// # Errors
     ///
     /// Returns a `CanisterOutOfCyclesError` if the
     /// requested amount is greater than the currently available.
-    pub fn consume_cycles<T: CyclesUseCaseKind + Copy + Clone>(
+    pub fn consume_cycles<T: CyclesUseCaseKind>(
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
@@ -978,7 +982,7 @@ impl CyclesAccountManager {
 
     /// Subtracts and consumes the cycles. This call should be used when the
     /// cycles are not being sent somewhere else.
-    pub fn consume_with_threshold<T: CyclesUseCaseKind + Copy + Clone>(
+    pub fn consume_with_threshold<T: CyclesUseCaseKind>(
         &self,
         system_state: &mut SystemState,
         cycles: CompoundCycles<T>,
@@ -1210,7 +1214,7 @@ impl CyclesAccountManager {
         )
     }
 
-    fn charge_canister_for_single_resource<T: CyclesUseCaseKind + Copy + Clone>(
+    fn charge_canister_for_single_resource<T: CyclesUseCaseKind>(
         &self,
         rate: CompoundCycles<T>,
         log: &ReplicaLogger,

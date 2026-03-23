@@ -14,6 +14,9 @@ use thousands::Separable;
 /// Struct to be used for updates to the canister's balance. They are maintained as a
 /// simple u128. We implement our own arithmetic functions on them so that we
 /// can ensure that they never overflow or underflow.
+///
+/// NOTE: This is distinct from `NominalCycles` which should be used to update metrics
+///       related to cycles accounting.
 #[derive(
     Copy,
     Clone,
