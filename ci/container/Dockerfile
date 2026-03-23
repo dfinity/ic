@@ -109,6 +109,8 @@ FROM base as build
 
 FROM base as dev
 
+USER root
+
 # Install additional packages for development but not needed on CI:
 ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
 COPY ${PACKAGE_DEV_FILE} /tmp/
@@ -126,3 +128,5 @@ RUN (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
 	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
 	&& sudo apt update \
 	&& sudo apt install gh -y
+
+USER ubuntu
