@@ -2874,6 +2874,7 @@ fn resource_limits() {
     let maximum_state_size = NumBytes::new(1 << 30);
     let resource_limits = ResourceLimits {
         maximum_state_size: Some(maximum_state_size),
+        maximum_state_delta: None,
     };
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let hypervisor_config = HypervisorConfig {
