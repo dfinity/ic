@@ -14,6 +14,11 @@ RUN echo "[storage]\nrootless_storage_path=\"/tmp/containers\"" > /etc/container
 # marker for scripts to check if they are running in this container
 RUN touch /home/ubuntu/.ic-build-container
 
+# Create user groups needed for github actions runner
+RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
+    # CI before script requires sudo \
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
 # Todo: split out essential packages from application-level packages
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
@@ -101,10 +106,6 @@ CMD ["/bin/bash"]
 
 FROM base as build
 
-# Create user groups needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
-    # CI before script requires sudo \
-    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 USER buildifier
 
 FROM base as dev
