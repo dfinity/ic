@@ -432,4 +432,3 @@ mod single_call_bincode {
         assert_eq!(bytes_tokio_bincode, bytes_our_bincode);
     }
 }
-
