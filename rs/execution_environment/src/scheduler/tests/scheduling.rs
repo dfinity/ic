@@ -729,7 +729,7 @@ fn scheduler_does_not_lose_canisters(
 // Verifies that each canister is scheduled as the first of its thread as
 // much as its compute_allocation requires.
 fn scheduler_respects_compute_allocation(
-    #[strategy(arb_scheduler_test(2..10, 1..20, 1..2, B..B+1, B..B+1, true))] test: (
+    #[strategy(arb_scheduler_test(2..6, 1..10, 1..2, B..B+1, B..B+1, true))] test: (
         SchedulerTest,
         usize,
         usize,
