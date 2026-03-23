@@ -1,35 +1,33 @@
 # Patch for determinism issues
 # https://github.com/askama-rs/askama/issues/708
 diff --git a/askama_derive/src/generator.rs b/askama_derive/src/generator.rs
-index 37c4fcb8..5c88719a 100644
+index 37c4fcb8..a88abe4f 100644
 --- a/askama_derive/src/generator.rs
 +++ b/askama_derive/src/generator.rs
-@@ -140,17 +140,17 @@ impl<'a, 'h> Generator<'a, 'h> {
-             && let Some(mut local_file) = proc_macro::Span::call_site().local_file()
-         {
-             local_file.pop();
+@@ -136,18 +136,18 @@ impl<'a, 'h> Generator<'a, 'h> {
+             CallerDir::Unresolved => {}
+         }
+
+-        if proc_macro::is_available()
+-            && let Some(mut local_file) = proc_macro::Span::call_site().local_file()
+-        {
+-            local_file.pop();
 -            if !local_file.is_absolute() {
 -                local_file = current_dir()
--                    .as_deref()
--                    .unwrap_or(Path::new("."))
++        if proc_macro::is_available() {
++            let file_str = proc_macro::Span::call_site().file();
++            let mut file = PathBuf::from(file_str);
++            file.pop();
++            if !file.is_absolute() {
++                file = current_dir()
+                     .as_deref()
+                     .unwrap_or(Path::new("."))
 -                    .join(local_file);
--            }
--
--            self.caller_dir = CallerDir::Valid(clean_path(&local_file));
--            match &self.caller_dir {
--                CallerDir::Valid(caller_dir) => Some(caller_dir.as_path()),
--                _ => None, // unreachable
-+            // Only use caller_dir if we have an absolute path, as relative paths
-+            // from proc_macro spans are relative to rustc's CWD which is non-deterministic
-+            if local_file.is_absolute() {
-+                self.caller_dir = CallerDir::Valid(clean_path(&local_file));
-+                match &self.caller_dir {
-+                    CallerDir::Valid(caller_dir) => Some(caller_dir.as_path()),
-+                    _ => None, // unreachable
-+                }
-+            } else {
-+                self.caller_dir = CallerDir::Invalid;
-+                None
++                    .join(file);
              }
-         } else {
-             self.caller_dir = CallerDir::Invalid;
+
+-            self.caller_dir = CallerDir::Valid(clean_path(&local_file));
++            self.caller_dir = CallerDir::Valid(clean_path(&file));
+             match &self.caller_dir {
+                 CallerDir::Valid(caller_dir) => Some(caller_dir.as_path()),
+                 _ => None, // unreachable
