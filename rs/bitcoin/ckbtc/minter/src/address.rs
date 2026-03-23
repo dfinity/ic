@@ -377,13 +377,13 @@ fn parse_bip173_address(
 
             match data.len() {
                 20 => {
-                    let mut pkhash = [0u8; 20];
+                    let mut pkhash = [0_u8; 20];
                     pkhash[..].copy_from_slice(&data[..]);
 
                     Ok(BitcoinAddress::P2wpkhV0(pkhash))
                 }
                 32 => {
-                    let mut script_hash = [0u8; 32];
+                    let mut script_hash = [0_u8; 32];
                     script_hash[..].copy_from_slice(&data[..]);
 
                     Ok(BitcoinAddress::P2wshV0(script_hash))
@@ -419,7 +419,7 @@ fn parse_bip173_address(
                     actual: data.len(),
                 });
             }
-            let mut pkhash = [0u8; 32];
+            let mut pkhash = [0_u8; 32];
             pkhash[..].copy_from_slice(&data[..]);
 
             Ok(BitcoinAddress::P2trV1(pkhash))

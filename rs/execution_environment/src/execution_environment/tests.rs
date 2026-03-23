@@ -31,7 +31,6 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
     CanisterId, CountBytes, PrincipalId, RegistryVersion,
-    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpMethod, Transform},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -41,13 +40,16 @@ use ic_types::{
     },
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+};
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::mem::size_of;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod canister_task;
@@ -1929,7 +1931,7 @@ fn canister_snapshots_after_split() {
     // expected_compiled_wasms cache (a subnet split assumes it happens after a
     // checkpoint round where these two happen among other things).
     test.state_mut().metadata.heap_delta_estimate = NumBytes::from(0);
-    test.state_mut().metadata.expected_compiled_wasms.clear();
+    test.state_mut().metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
 
     // Retain canister 1 on subnet A, migrate canister 2 to subnet B.
     let routing_table = RoutingTable::try_from(btreemap! {
@@ -3044,7 +3046,7 @@ fn execute_canister_http_request() {
     assert_eq!(http_request_context.request.payment, payment - fee);
 
     assert_eq!(
-        NominalCycles::from(fee.get()),
+        NominalCycles::new(fee.get()),
         test.state()
             .metadata
             .subnet_metrics
@@ -3052,7 +3054,7 @@ fn execute_canister_http_request() {
     );
 
     assert_eq!(
-        NominalCycles::from(fee.get()),
+        NominalCycles::new(fee.get()),
         *test
             .state()
             .metadata
@@ -3856,7 +3858,7 @@ fn replicated_query_can_burn_cycles() {
         .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
-    assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn.get()));
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
 }
 
 #[test]
@@ -4029,12 +4031,12 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that consumed cycles are correct for both use cases.
     assert_eq!(
         transmission_consumption_after_response,
-        NominalCycles::from(transmission_cost.get())
+        NominalCycles::new(transmission_cost.get())
     );
 
     assert_eq!(
         instruction_consumption_after_response,
-        NominalCycles::from(execution_cost.get())
+        NominalCycles::new(execution_cost.get())
     );
 
     // Consumed cycles after the response should be smaller than before
@@ -4072,7 +4074,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
-        NominalCycles::from(test.canister_execution_cost(b_id).get())
+        NominalCycles::new(test.canister_execution_cost(b_id).get())
     );
 }
 

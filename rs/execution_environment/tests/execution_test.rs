@@ -22,13 +22,10 @@ use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
-use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    ingress::{IngressState, IngressStatus},
-};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
@@ -1270,7 +1267,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
         HypervisorConfig::default(),
     ));
 
-    let initial_cycles = Cycles::new(588 * B);
+    let initial_cycles = Cycles::new(823 * B);
 
     let canister_id = create_universal_canister_with_cycles(
         &env,
@@ -1304,7 +1301,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
     // The amount of remaining cycles in the main balance should be large enough
     // to start message execution but should be lower than the freezing
     // threshold.
-    let reserved_cycles = Cycles::new(504 * B);
+    let reserved_cycles = Cycles::new(706 * B);
     {
         let mut state = env.get_latest_state().as_ref().clone();
         let canister = state.canister_state_make_mut(&canister_id).unwrap();

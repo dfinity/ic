@@ -7122,9 +7122,9 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-interface"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4209c650d166815b01336cbbab6310f44895a0fa6571a952b6a84097e5fd87ae"
+checksum = "7b07cca9319498684a7477a77a66d87377ecd698b5465a3b8523484fcca16bff"
 dependencies = [
  "candid",
  "datasize",
@@ -7662,7 +7662,9 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
+ "flate2",
  "hex",
+ "ic-agent",
  "ic-base-types",
  "ic-cdk",
  "ic-ckbtc-minter",
@@ -9480,9 +9482,9 @@ dependencies = [
 
 [[package]]
 name = "ic-doge-interface"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b36c851b8fc6ec45666e3a912c8b22878e4f12f6d1d9f7033a153c7684903829"
+checksum = "b6d9bf312c324521ce174560c002e90aef179bf16befb46c62bdffbccff8f14b"
 dependencies = [
  "candid",
  "datasize",
@@ -11222,6 +11224,7 @@ dependencies = [
  "ic-registry-local-registry",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -11301,6 +11304,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-config",
  "ic-http-types",
  "ic-limits",
  "ic-management-canister-types 0.5.0",
@@ -13251,6 +13255,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-resource-limits"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-protobuf",
+ "ic-types",
+ "serde",
+]
+
+[[package]]
 name = "ic-registry-routing-table"
 version = "0.9.0"
 dependencies = [
@@ -13566,6 +13580,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics",
  "ic-protobuf",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -15000,6 +15015,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-wasm-types",
  "wat",
 ]
@@ -15101,9 +15117,11 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-local-store-artifacts",
  "ic-registry-proto-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-types",
+ "ic-types-cycles",
  "tempfile",
 ]
 
@@ -19776,7 +19794,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "12.0.0"
+version = "13.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -19836,7 +19854,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "12.0.0"
+version = "13.0.0"
 dependencies = [
  "aide",
  "askama",
@@ -21315,6 +21333,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-node-provider-rewards",
  "ic-registry-proto-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -21525,7 +21544,10 @@ name = "rewards-calculation"
 version = "0.9.0"
 dependencies = [
  "chrono",
+ "futures",
  "ic-base-types",
+ "ic-cdk",
+ "ic-nns-constants",
  "ic-protobuf",
  "itertools 0.12.1",
  "lazy_static",
