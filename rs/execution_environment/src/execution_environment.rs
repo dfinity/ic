@@ -55,7 +55,8 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
-    canister_state::{NextExecution, system_state::PausedExecutionId},
+    canister_state::NextExecution,
+    canister_state::system_state::PausedExecutionId,
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash,
         ReshareChainKeyContext, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
@@ -65,7 +66,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion, ReplicaVersion,
     SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, ChainKeyData},
+    batch::ChainKeyData,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{
@@ -83,7 +84,7 @@ use ic_types::{
     methods::{Callback, SystemMethod},
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
@@ -2571,25 +2572,49 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         origin: CanisterChangeOrigin,
     ) -> Result<Vec<u8>, UserError> {
+        // Check if the canister on which the snapshot is loaded exists.
+        // We do this check at the very beginning for the sake of consistency
+        // with other mgmt canister endpoints that check for the existence
+        // of the "effective" canister ID at the very beginning.
         let canister_id = args.get_canister_id();
-        // Take canister out.
-        let mut old_canister = match state.take_canister_state(&canister_id) {
-            None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
-            }
-            Some(canister) => canister,
-        };
+        if state.canister_state(&canister_id).is_none() {
+            return Err(UserError::new(
+                ErrorCode::CanisterNotFound,
+                format!("Canister {} not found.", &canister_id),
+            ));
+        }
 
+        // Get `Arc<CanisterState>` containing the snapshot to be loaded.
+        // We do that before taking the canister on which the snapshot is loaded
+        // out of `ReplicatedState` since that might be the same canister
+        // (and thus `ReplicatedState::canister_state_arc` would return `None`
+        // after `ReplicatedState::take_canister_state`).
         let snapshot_id = args.snapshot_id();
+        let snapshot_canister_id = snapshot_id.get_canister_id();
+        let snapshot_canister: Arc<CanisterState> =
+            match state.canister_state_arc(&snapshot_canister_id) {
+                Some(snapshot_canister) => snapshot_canister,
+                None => {
+                    let err = CanisterManagerError::CanisterSnapshotNotFound {
+                        canister_id: snapshot_canister_id,
+                        snapshot_id,
+                    };
+                    return Err(err.into());
+                }
+            };
+
+        // Take canister out.
+        // We have already checked at the very beginning of this function
+        // that the canister exists so it is safe to unwrap here.
+        let mut old_canister = state.take_canister_state(&canister_id).unwrap();
+
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let result = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
             Arc::make_mut(&mut old_canister),
+            snapshot_canister,
             snapshot_id,
             state,
             round_limits,
@@ -3245,7 +3270,7 @@ impl ExecutionEnvironment {
             Ok(settings) => match settings.get_set_of_node_ids() {
                 Err(err) => Err(err),
                 Ok(nodes_in_target_subnet) => {
-                    let mut target_id = [0u8; 32];
+                    let mut target_id = [0_u8; 32];
                     rng.fill_bytes(&mut target_id);
 
                     info!(
@@ -3492,7 +3517,7 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let mut pseudo_random_id = [0u8; 32];
+        let mut pseudo_random_id = [0_u8; 32];
         rng.fill_bytes(&mut pseudo_random_id);
 
         state.metadata.subnet_call_context_manager.push_context(
@@ -3522,7 +3547,7 @@ impl ExecutionEnvironment {
             &args.key_id,
         )?;
 
-        let mut target_id = [0u8; 32];
+        let mut target_id = [0_u8; 32];
         rng.fill_bytes(&mut target_id);
 
         let nodes = args.get_set_of_nodes()?;
@@ -3768,10 +3793,9 @@ impl ExecutionEnvironment {
                     Ok(result) => {
                         state.metadata.heap_delta_estimate += result.heap_delta;
                         if let Some(new_wasm_hash) = result.new_wasm_hash {
-                            state
-                                .metadata
-                                .expected_compiled_wasms
-                                .insert(WasmHash::from(new_wasm_hash));
+                            let expected_compiled_wasms =
+                                Arc::make_mut(&mut state.metadata.expected_compiled_wasms);
+                            expected_compiled_wasms.insert(WasmHash::from(new_wasm_hash));
                         }
                         info!(
                             self.log,
@@ -4005,38 +4029,39 @@ impl ExecutionEnvironment {
         id
     }
 
-    /// Aborts paused execution in the given state.
-    pub fn abort_canister(&self, canister: &mut Arc<CanisterState>, log: &ReplicaLogger) {
-        if !canister.system_state.task_queue.is_empty() {
-            if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
-                self.metrics.executions_aborted.inc();
-                // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
-                // paused execution on the canister without requesting ID from TaskQueue.
-                let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
-
-                Arc::make_mut(canister)
-                    .system_state
-                    .task_queue
-                    .replace_paused_with_aborted_task(aborted_task);
-            }
-            if canister.system_state.ingress_induction_cycles_debit() > Cycles::zero() {
-                let canister_id = canister.canister_id();
-                Arc::make_mut(canister)
-                    .system_state
-                    .apply_ingress_induction_cycles_debit(
-                        canister_id,
-                        log,
-                        &self.metrics.charging_from_balance_error,
-                    );
-            }
-        };
-    }
-
-    /// Aborts all paused execution in the given state.
-    pub fn abort_all_paused_executions(&self, state: &mut ReplicatedState, log: &ReplicaLogger) {
-        for canister in state.canisters_iter_mut() {
-            self.abort_canister(canister, log);
+    /// Aborts the paused execution, if any, of the given canister.
+    ///
+    /// Returns true if a paused execution was aborted, false otherwise.
+    pub(crate) fn abort_canister(
+        &self,
+        canister: &mut Arc<CanisterState>,
+        log: &ReplicaLogger,
+    ) -> bool {
+        let mut aborted = false;
+        if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
+            self.metrics.executions_aborted.inc();
+            // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
+            // paused execution on the canister without requesting ID from TaskQueue.
+            let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
+            Arc::make_mut(canister)
+                .system_state
+                .task_queue
+                .replace_paused_with_aborted_task(aborted_task);
+            aborted = true;
         }
+
+        if canister.system_state.ingress_induction_cycles_debit() > Cycles::zero() {
+            let canister_id = canister.canister_id();
+            Arc::make_mut(canister)
+                .system_state
+                .apply_ingress_induction_cycles_debit(
+                    canister_id,
+                    log,
+                    &self.metrics.charging_from_balance_error,
+                );
+        }
+
+        aborted
     }
 
     /// Aborts all paused executions known to the execution environment. This

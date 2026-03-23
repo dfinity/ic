@@ -38,7 +38,7 @@ mod mixed_hash_tree {
 
     #[test]
     fn merge_of_pruned_is_idempotent() {
-        let pruned = Pruned(Digest([0u8; Sha256::DIGEST_LEN]));
+        let pruned = Pruned(Digest([0_u8; Sha256::DIGEST_LEN]));
         assert_eq!(
             Ok(pruned.clone()),
             MixedHashTree::merge_trees(pruned.clone(), pruned)
@@ -79,8 +79,8 @@ mod mixed_hash_tree {
 
     #[test]
     fn merge_of_pruned_with_mismatching_digests_is_error() {
-        let pruned1 = Pruned(Digest([0u8; Sha256::DIGEST_LEN]));
-        let pruned2 = Pruned(Digest([1u8; Sha256::DIGEST_LEN]));
+        let pruned1 = Pruned(Digest([0_u8; Sha256::DIGEST_LEN]));
+        let pruned2 = Pruned(Digest([1_u8; Sha256::DIGEST_LEN]));
         assert_eq!(
             Err(
                 WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(
@@ -247,7 +247,7 @@ mod witness {
     #[test]
     fn merge_of_pruned_is_idempotent() {
         let pruned = Pruned {
-            digest: Digest([0u8; 32]),
+            digest: Digest([0_u8; 32]),
         };
         assert_eq!(
             Ok(pruned.clone()),
@@ -258,7 +258,7 @@ mod witness {
     #[test]
     fn merge_of_pruned_with_anything_else_is_idempotent() {
         let pruned = Pruned {
-            digest: Digest([0u8; 32]),
+            digest: Digest([0_u8; 32]),
         };
         for other in [
             Known(),
@@ -312,10 +312,10 @@ mod witness {
     #[test]
     fn merge_of_pruned_with_mismatching_digests_is_error() {
         let pruned1 = Pruned {
-            digest: Digest([0u8; 32]),
+            digest: Digest([0_u8; 32]),
         };
         let pruned2 = Pruned {
-            digest: Digest([1u8; 32]),
+            digest: Digest([1_u8; 32]),
         };
         assert_eq!(
             Err(

@@ -1085,14 +1085,14 @@ impl IcNodeSnapshot {
         .expect("Could not install canister");
     }
 
-    pub fn create_and_install_canister_with_arg_and_cycles(
+    pub fn create_and_install_canister_with_effetive_id_with_arg_and_cycles(
         &self,
         name: &str,
         arg: Option<Vec<u8>>,
         cycles_amount: Option<u128>,
+        effective_canister_id: Principal,
     ) -> Principal {
         let canister_bytes = load_wasm(name);
-        let effective_canister_id = self.effective_canister_id();
 
         self.with_default_agent(move |agent| async move {
             // Create a canister.
@@ -1117,6 +1117,21 @@ impl IcNodeSnapshot {
             Ok::<_, String>(canister_id)
         })
         .expect("Could not install canister")
+    }
+
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
+        let effective_canister_id = self.effective_canister_id();
+        self.create_and_install_canister_with_effetive_id_with_arg_and_cycles(
+            name,
+            arg,
+            cycles_amount,
+            effective_canister_id.0,
+        )
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
@@ -2305,11 +2320,18 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
+    // Set a timeout for the SSH handshake and authentication to prevent
+    // indefinite hangs when the remote host accepts TCP but stalls during
+    // the SSH protocol exchange.
+    sess.set_timeout(30_000);
     sess.handshake()?;
     let priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
     sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
+    // Clear the timeout so subsequent operations on this session
+    // (e.g. long-running commands) are not subject to the handshake timeout.
+    sess.set_timeout(0);
     Ok(sess)
 }
 

@@ -34,14 +34,16 @@ use ic_test_utilities_types::{
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NodeId, NumBytes, PrincipalId, SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, RawQueryStats},
+    batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
     methods::{Callback, WasmClosure},
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+};
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
 use std::{
@@ -1068,7 +1070,7 @@ prop_compose! {
 
 prop_compose! {
     pub(crate) fn arb_nominal_cycles()(cycles in any::<u64>()) -> NominalCycles {
-        NominalCycles::from(cycles as u128)
+        NominalCycles::new(cycles as u128)
     }
 }
 

@@ -117,7 +117,7 @@ pub mod ckbtc {
     }
 
     pub fn amount() -> impl Strategy<Value = Satoshi> {
-        1..10_000_000_000u64
+        1..10_000_000_000_u64
     }
 
     fn canister_id() -> impl Strategy<Value = CanisterId> {

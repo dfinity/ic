@@ -41,11 +41,11 @@ macro_rules! hash_concat {
 
 fn file_hash(file_index: u32, chunks: &[&[u8]], version: StateSyncVersion) -> [u8; 32] {
     let mut h = Sha256::new();
-    13u8.update_hash(&mut h);
+    13_u8.update_hash(&mut h);
     b"ic-state-file".update_hash(&mut h);
     (chunks.len() as u32).update_hash(&mut h);
 
-    let mut offset = 0u64;
+    let mut offset = 0_u64;
     for &chunk in chunks {
         if version < StateSyncVersion::V3 {
             // In versions before V3, the file hash includes the file index.
@@ -63,11 +63,11 @@ fn file_hash(file_index: u32, chunks: &[&[u8]], version: StateSyncVersion) -> [u
 fn simple_file_table_and_chunk_table(version: StateSyncVersion) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
     assert!(version >= StateSyncVersion::V1);
 
-    let chunk_0 = &[0u8; 1000];
-    let chunk_1 = &[1u8; 1024];
-    let chunk_2 = &[1u8; 1024];
-    let chunk_3 = &[2u8; 1024];
-    let chunk_4 = &[2u8; 26];
+    let chunk_0 = &[0_u8; 1000];
+    let chunk_1 = &[1_u8; 1024];
+    let chunk_2 = &[1_u8; 1024];
+    let chunk_3 = &[2_u8; 1024];
+    let chunk_4 = &[2_u8; 26];
     let chunk_0_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_0);
     let chunk_1_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_1);
     let chunk_2_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_2);
@@ -325,7 +325,7 @@ fn test_simple_manifest_computation() {
         }
     };
 
-    for num_threads in 1..32u32 {
+    for num_threads in 1..32_u32 {
         test_computation_with_num_threads(num_threads)
     }
 }
@@ -554,7 +554,7 @@ fn bad_file_hash_detected() {
     for (manifest_hash, manifest) in simple_manifest_all_supported_versions() {
         let actual_hash = manifest.file_table[0].hash.to_vec();
         let mut file_table = manifest.file_table.to_owned();
-        file_table[0].hash = [1u8; 32];
+        file_table[0].hash = [1_u8; 32];
         let manifest = Manifest::new(
             manifest.version,
             file_table,
@@ -1170,8 +1170,8 @@ fn test_file_chunk_range() {
 
 #[test]
 fn test_build_file_group_chunks() {
-    let dummy_file_hash = [0u8; 32];
-    let dummy_chunk_hash = [0u8; 32];
+    let dummy_file_hash = [0_u8; 32];
+    let dummy_chunk_hash = [0_u8; 32];
     let file_group_file_info = |id: u32| -> FileInfo {
         FileInfo {
             relative_path: std::path::PathBuf::from(id.to_string()).join(CANISTER_FILE),

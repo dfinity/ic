@@ -2260,7 +2260,7 @@ fn prune_witness_exceed_recursion_depth() {
             result = Box::new(Witness::Fork {
                 left_tree: result,
                 right_tree: Box::new(Witness::Pruned {
-                    digest: Digest([0u8; 32]),
+                    digest: Digest([0_u8; 32]),
                 }),
             });
         }
@@ -2559,7 +2559,7 @@ fn mixed_hash_tree_lookup() {
     assert_eq!(t.lookup(&[&b"3"[..], &b"nope"[..]]), Absent);
 
     let t = mfork(
-        mpruned(&Digest([0u8; 32])),
+        mpruned(&Digest([0_u8; 32])),
         mlabeled(&Label::from("3"), mleaf("test3")),
     );
     assert_eq!(t.lookup(&[b"2"]), Unknown);
@@ -2568,7 +2568,7 @@ fn mixed_hash_tree_lookup() {
 
     let t = mfork(
         mlabeled(&Label::from("3"), mleaf("test3")),
-        mpruned(&Digest([0u8; 32])),
+        mpruned(&Digest([0_u8; 32])),
     );
     assert_eq!(t.lookup(&[b"2"]), Absent);
     assert_eq!(t.lookup(&[b"3"]), Found(&mleaf("test3")));
@@ -3188,7 +3188,7 @@ fn pruning_witness_pruned_in_the_root_fails_for_any_labeled_tree() {
     let random_tree_desired_size: u32 = rng.gen_range(1..100);
     let min_leaves = rng.gen_range(0..10);
     const WITNESS: Witness = Witness::Pruned {
-        digest: Digest([0u8; Sha256::DIGEST_LEN]),
+        digest: Digest([0_u8; Sha256::DIGEST_LEN]),
     };
     for _ in 0..10 {
         let labeled_tree = new_random_labeled_tree(
