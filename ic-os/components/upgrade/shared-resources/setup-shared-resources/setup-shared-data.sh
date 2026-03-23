@@ -16,7 +16,7 @@ else
     # the real mount (via fstab) will replay the journal automatically.
     if REPAIR_OUTPUT=$(xfs_repair "${DEVICE}" 2>&1); then
         echo "xfs_repair succeeded on ${DEVICE}."
-    elif echo "${REPAIR_OUTPUT}" | grep -q "Mount the filesystem to replay the log"; then
+    elif echo "${REPAIR_OUTPUT}" | grep -qi "replay the log"; then
         # Dirty but valid journal. The real mount will replay it.
         echo "XFS journal on ${DEVICE} is dirty but valid; the mount will replay it."
     else
