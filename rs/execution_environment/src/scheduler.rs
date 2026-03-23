@@ -1385,7 +1385,7 @@ impl Scheduler for SchedulerImpl {
                     state.time(),
                     state.metadata.heap_delta_estimate,
                     scheduled_heap_delta_limit,
-                    self.config.subnet_heap_delta_capacity,
+                    subnet_heap_delta_capacity,
                 );
                 self.finish_round(&mut state, current_round, current_round_type, &round_log);
                 self.metrics
