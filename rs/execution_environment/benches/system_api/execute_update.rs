@@ -19,10 +19,10 @@ use ic_execution_environment::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 
 use crate::common::Wasm64;
 
@@ -1196,6 +1196,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 time,
                 network_topology,
                 &mut round_limits,
+                Default::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
             );

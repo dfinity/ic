@@ -14,6 +14,7 @@ use ic_management_canister_types_private::{
     EcdsaKeyId, EmptyBlob, IC_00, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
     SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
@@ -22,13 +23,10 @@ use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
-use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    ingress::{IngressState, IngressStatus},
-};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
@@ -661,9 +659,9 @@ fn can_query_cycle_balance_and_top_up_canisters() {
         None,
     );
 
-    assert_eq!(0u128, env.cycle_balance(canister_id));
+    assert_eq!(0_u128, env.cycle_balance(canister_id));
     assert_eq!(
-        &0u64.to_le_bytes()[..],
+        &0_u64.to_le_bytes()[..],
         &env.query(canister_id, "cycle_balance", vec![])
             .unwrap()
             .bytes()[..]
@@ -2869,4 +2867,36 @@ fn canister_status_via_query_call_by_neither_controller_nor_subnet_admin_fails()
         "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
     )));
     assert_eq!(canister_status_count(&env), 0);
+}
+
+#[test]
+fn resource_limits() {
+    let maximum_state_size = NumBytes::new(1 << 30);
+    let resource_limits = ResourceLimits {
+        maximum_state_size: Some(maximum_state_size),
+    };
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let hypervisor_config = HypervisorConfig {
+        subnet_memory_reservation: NumBytes::new(0),
+        ..Default::default()
+    };
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            hypervisor_config,
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_resource_limits(resource_limits)
+        .build();
+
+    let canister_id = env.create_canister(None);
+
+    // the maximum state size is across all execution threads
+    // and thus setting the memory allocation to the maximum state size
+    // should fail since it strictly exceeds the maximum state size per thread
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(maximum_state_size.get())
+        .build();
+    let err = env.update_settings(&canister_id, settings).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
 }

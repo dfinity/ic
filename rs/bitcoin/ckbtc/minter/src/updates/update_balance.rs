@@ -186,8 +186,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account, &now));
 
     // Remove pending finalized transactions for the affected account.
-    // Temporarily disabled. See DEFI-2697 for more details.
-    // state::mutate_state(|s| s.finalized_utxos.remove(&caller_account));
+    state::mutate_state(|s| s.finalized_utxos.remove(&caller_account));
 
     let satoshis_to_mint = processable_utxos.iter().map(|u| u.value).sum::<u64>();
 

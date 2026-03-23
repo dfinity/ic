@@ -49,7 +49,7 @@ prop_compose! {
         from in arb_account_id(),
         to in arb_account_id(),
         amount in arb_tokens(),
-        fee in 0..100_000u64,
+        fee in 0..100_000_u64,
     ) -> Operation {
         Operation::Transfer {
             from, to, amount, spender: None, fee: Tokens::from_e8s(fee)
@@ -63,7 +63,7 @@ prop_compose! {
         spender in arb_account_id(),
         allowance in arb_tokens(),
         expires_at in proptest::option::of(arb_ts()),
-        fee in 0..100_000u64,
+        fee in 0..100_000_u64,
         expected_allowance in arb_tokens(),
     ) -> Operation {
         Operation::Approve {
@@ -83,7 +83,7 @@ prop_compose! {
         to in arb_account_id(),
         spender in arb_account_id(),
         amount in arb_tokens(),
-        fee in 0..100_000u64,
+        fee in 0..100_000_u64,
     ) -> Operation {
         Operation::Transfer {
             from, to, spender: Some(spender), amount, fee: Tokens::from_e8s(fee)

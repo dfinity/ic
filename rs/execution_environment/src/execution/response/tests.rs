@@ -11,7 +11,6 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::NO_DEADLINE;
 use ic_types::{
     CanisterId, Time,
@@ -20,7 +19,7 @@ use ic_types::{
 };
 use ic_types::{ComputeAllocation, MemoryAllocation};
 use ic_types::{NumInstructions, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_lt};
 
@@ -137,7 +136,7 @@ fn execute_response_refunds_cycles() {
         .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
     assert_eq!(
         balance_after,
-        balance_before + cycles_sent / 2u64 + response_transmission_refund + execution_refund
+        balance_before + cycles_sent / 2_u64 + response_transmission_refund + execution_refund
     );
 }
 

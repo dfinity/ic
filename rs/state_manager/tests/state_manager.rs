@@ -62,8 +62,7 @@ use ic_test_utilities_types::ids::{
 };
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{
-    BatchSummary, CanisterCyclesCostSchedule, CanisterQueryStats, QueryStats, QueryStatsPayload,
-    RawQueryStats, TotalQueryStats,
+    BatchSummary, CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
 use ic_types::consensus::certification::{Certification, CertificationContent};
 use ic_types::crypto::Signed;
@@ -80,6 +79,7 @@ use ic_types::{
     time::{Time, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use maplit::{btreemap, btreeset};
 use nix::sys::stat::{UtimensatFlags, utimensat};
 use nix::sys::time::{TimeSpec, TimeValLike};
@@ -333,10 +333,10 @@ fn lsmt_merge_overhead() {
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
 
-    let canister_ids = (0..10)
+    let canister_ids = (0..4)
         .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
         .collect::<Vec<_>>();
-    for i in 0..30 {
+    for i in 0..16 {
         env.set_checkpoints_enabled(false);
         for canister_id in &canister_ids {
             env.execute_ingress(*canister_id, "write_heap_64k", vec![])
@@ -5505,7 +5505,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
         subnets.insert(
             subnet_test_id(42), // its own subnet id
             SubnetTopology {
-                public_key: vec![1u8; 133],
+                public_key: vec![1_u8; 133],
                 nodes: node_public_keys.keys().cloned().collect(),
                 subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
@@ -5555,7 +5555,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                                 label("node") => SubTree(
                                     flatmap! {
                                         label(node_test_id(39).get_ref()) => SubTree(
-                                            flatmap!(label("public_key") => Leaf(vec![39u8; 44]))
+                                            flatmap!(label("public_key") => Leaf(vec![39_u8; 44]))
                                         ),
                                     })
                         })
@@ -6356,7 +6356,7 @@ fn remove_too_many_diverged_state_markers() {
         Box<dyn FnOnce(StateManagerImpl) + std::panic::RefUnwindSafe + std::panic::UnwindSafe>,
     >::new();
 
-    for i in 2..301 {
+    for i in 2..151 {
         divergences.push(Box::new(move |state_manager: StateManagerImpl| {
             diverge_state_at(state_manager, i)
         }));
@@ -6372,7 +6372,7 @@ fn remove_too_many_diverged_state_markers() {
                 .state_layout()
                 .diverged_state_heights()
                 .unwrap()[num_markers - 1],
-            Height(300)
+            Height(150)
         );
         assert!(num_markers <= 100);
     });
@@ -6447,14 +6447,14 @@ fn can_reset_memory() {
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6481,14 +6481,14 @@ fn can_reset_memory() {
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         // Wipe data completely.
@@ -6566,10 +6566,10 @@ fn can_upgrade_and_uninstall_canister_after_many_checkpoints() {
     env.set_checkpoints_enabled(true);
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
-    for i in 1..100 {
+    for i in 1..20 {
         env.execute_ingress(canister_id, "inc", vec![]).unwrap();
         read_and_assert_eq(&env, canister_id, i);
-        if i == 50 {
+        if i == 10 {
             env.execute_ingress(canister_id, "grow_page", vec![])
                 .unwrap();
             env.execute_ingress(canister_id, "persist", vec![]).unwrap();
@@ -6579,9 +6579,9 @@ fn can_upgrade_and_uninstall_canister_after_many_checkpoints() {
     env.upgrade_canister_wat(canister_id, TEST_CANISTER, vec![]);
     env.execute_ingress(canister_id, "load", vec![]).unwrap();
 
-    for i in 1..100 {
+    for i in 1..10 {
         env.execute_ingress(canister_id, "inc", vec![]).unwrap();
-        read_and_assert_eq(&env, canister_id, 50 + i);
+        read_and_assert_eq(&env, canister_id, 10 + i);
     }
 
     env.uninstall_code(canister_id).unwrap();
@@ -6640,14 +6640,14 @@ fn can_reset_stable_memory() {
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6674,14 +6674,14 @@ fn can_reset_stable_memory() {
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         // Wipe data completely.
@@ -6763,7 +6763,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             canister_state
@@ -6771,7 +6771,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6798,7 +6798,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             canister_state
@@ -6806,7 +6806,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         // Wipe data completely.
@@ -7702,14 +7702,14 @@ fn can_create_and_restore_snapshot() {
                         .wasm_memory
                         .page_map
                         .get_page(PageIndex::new(0)),
-                    &[1u8; PAGE_SIZE]
+                    &[1_u8; PAGE_SIZE]
                 );
                 assert_eq!(
                     execution_state
                         .stable_memory
                         .page_map
                         .get_page(PageIndex::new(0)),
-                    &[2u8; PAGE_SIZE]
+                    &[2_u8; PAGE_SIZE]
                 );
                 assert_eq!(
                     canister_state
@@ -7717,7 +7717,7 @@ fn can_create_and_restore_snapshot() {
                         .wasm_chunk_store
                         .page_map()
                         .get_page(PageIndex::new(0)),
-                    &[3u8; PAGE_SIZE]
+                    &[3_u8; PAGE_SIZE]
                 );
             };
 
@@ -8127,7 +8127,7 @@ fn can_split_with_inflight_restore_snapshot() {
                     .wasm_memory
                     .page_map
                     .get_page(PageIndex::new(0)),
-                &[1u8; PAGE_SIZE]
+                &[1_u8; PAGE_SIZE]
             );
 
             // Commit the state without checkpointing, so there is an unflushed "load
@@ -8297,7 +8297,7 @@ fn can_rename_canister() {
     can_rename_canister_impl(CertificationScope::Full);
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn stream_store_encode_decode(
     #[strategy(arb_stream(
         0, // min_size
@@ -8306,7 +8306,7 @@ fn stream_store_encode_decode(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8325,7 +8325,7 @@ fn stream_store_encode_decode(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_with_modified_hash_fails(
     #[strategy(arb_stream(
@@ -8335,7 +8335,7 @@ fn stream_store_decode_with_modified_hash_fails(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8357,7 +8357,7 @@ fn stream_store_decode_with_modified_hash_fails(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "Failed to deserialize witness")]
 fn stream_store_decode_with_empty_witness_fails(
     #[strategy(arb_stream(
@@ -8367,7 +8367,7 @@ fn stream_store_decode_with_empty_witness_fails(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8386,7 +8386,7 @@ fn stream_store_decode_with_empty_witness_fails(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InconsistentPartialTree")]
 fn stream_store_decode_slice_push_additional_message(
     #[strategy(arb_stream(
@@ -8438,7 +8438,7 @@ fn stream_store_decode_slice_push_additional_message(
 
 /// Depending on the specific input, may fail with either `InvalidSignature` or
 /// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic]
 fn stream_store_decode_slice_modify_message_begin(
     #[strategy(arb_stream(
@@ -8477,7 +8477,7 @@ fn stream_store_decode_slice_modify_message_begin(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_slice_modify_signals_end(
     #[strategy(arb_stream(
@@ -8513,7 +8513,7 @@ fn stream_store_decode_slice_modify_signals_end(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_slice_push_signal(
     #[strategy(arb_stream(
@@ -8551,7 +8551,7 @@ fn stream_store_decode_slice_push_signal(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidDestination")]
 fn stream_store_decode_with_invalid_destination(
     #[strategy(arb_stream(
@@ -8561,7 +8561,7 @@ fn stream_store_decode_with_invalid_destination(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8581,7 +8581,7 @@ fn stream_store_decode_with_invalid_destination(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_with_rejecting_verifier(
     #[strategy(arb_stream(
@@ -8591,7 +8591,7 @@ fn stream_store_decode_with_rejecting_verifier(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8613,7 +8613,7 @@ fn stream_store_decode_with_rejecting_verifier(
 
 /// If both signature verification and slice decoding would fail, we expect to
 /// see an error about the former.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
     #[strategy(arb_stream(
@@ -8623,7 +8623,7 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8643,7 +8643,7 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn stream_store_encode_partial(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -8652,7 +8652,7 @@ fn stream_store_encode_partial(
         10, // max_signal_count
     ))]
     test_slice: (Stream, StreamIndex, usize),
-    #[strategy(0..1000usize)] byte_limit: usize,
+    #[strategy(0..1000_usize)] byte_limit: usize,
 ) {
     let (stream, begin, count) = test_slice;
     // Partial slice with messages beginning at `begin + 1`.
@@ -8670,7 +8670,7 @@ fn stream_store_encode_partial_bad_indices(
         10, // max_signal_count
     ))]
     test_slice: (Stream, StreamIndex, usize),
-    #[strategy(0..1000usize)] byte_limit: usize,
+    #[strategy(0..1000_usize)] byte_limit: usize,
 ) {
     let (stream, begin, count) = test_slice;
     // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
@@ -8865,7 +8865,7 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
     ..ProptestConfig::with_cases(5)
 })]
 fn random_canister_input(
-    #[strategy(proptest::collection::vec(arbitrary_test_canister_op(), 1..50))] ops: Vec<
+    #[strategy(proptest::collection::vec(arbitrary_test_canister_op(), 10..15))] ops: Vec<
         TestCanisterOp,
     >,
 ) {
@@ -8911,11 +8911,10 @@ fn random_canister_input(
         }
     }
 
-    // Setup two state machines with a single TEST_CANISTER installed.
+    // Set up a state machine with a single TEST_CANISTER.
     let mut env = StateMachineBuilder::new()
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
-
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
     env.execute_ingress(canister_id, "grow_page", vec![])

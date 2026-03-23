@@ -1,6 +1,6 @@
 use crate::external_canister_types::{
-    BitcoinCanisterArg, CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
-    DogecoinCanisterArg, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
+    InternetIdentityFrontendInit, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
     OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
@@ -29,7 +29,8 @@ use ic_boundary::{Health, RootKey, status};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
 use ic_btc_adapter::{AdapterNetwork, start_server as start_btc_server};
 use ic_btc_interface::{
-    Fees as BitcoinFees, InitConfig as BitcoinInitConfig, Network as BitcoinNetwork,
+    CanisterArg as BitcoinCanisterArg, Fees as BitcoinFees, InitConfig as BitcoinInitConfig,
+    Network as BitcoinNetwork,
 };
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
@@ -39,7 +40,8 @@ use ic_config::{
 };
 use ic_crypto_sha2::Sha256;
 use ic_doge_interface::{
-    Fees as DogecoinFees, InitConfig as DogecoinInitConfig, Network as DogecoinNetwork,
+    CanisterArg as DogecoinCanisterArg, Fees as DogecoinFees, InitConfig as DogecoinInitConfig,
+    Network as DogecoinNetwork,
 };
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
@@ -78,9 +80,9 @@ use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
-    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID,
-    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    INTERNET_IDENTITY_FRONTEND_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
+    LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
@@ -114,7 +116,6 @@ use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetad
 use ic_types::{
     CanisterId, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
-    batch::CanisterCyclesCostSchedule,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
         CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
@@ -129,7 +130,7 @@ use ic_types::{
     time::GENESIS,
 };
 use ic_types::{NumBytes, Time};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
@@ -212,8 +213,10 @@ const SNS_LEDGER_INDEX_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_LEDGER_INDEX_CANISTER_WASM_PATH"));
 const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
-const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
-    include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_BACKEND_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_BACKEND_CANISTER_WASM_PATH"));
+const INTERNET_IDENTITY_FRONTEND_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("INTERNET_IDENTITY_FRONTEND_CANISTER_WASM_PATH"));
 const NNS_DAPP_TEST_CANISTER_WASM: &[u8] = include_bytes!(env!("NNS_DAPP_TEST_CANISTER_WASM_PATH"));
 const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
     include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
@@ -1076,7 +1079,8 @@ impl PocketIcSubnets {
                 self.deploy_sns(config);
             }
             if let Some(ref config) = ii {
-                self.deploy_ii(config);
+                self.deploy_ii_backend(config);
+                self.deploy_ii_frontend(config);
             }
             if let Some(ref config) = nns_ui {
                 self.deploy_nns_ui(config);
@@ -1972,7 +1976,7 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_ii(&self, config: &IcpFeaturesConfig) {
+    fn deploy_ii_backend(&self, config: &IcpFeaturesConfig) {
         // Using a match here to force an update after changing
         // the type of `IcpFeaturesConfig`.
         match config {
@@ -2119,7 +2123,7 @@ impl PocketIcSubnets {
             } else {
                 None
             };
-            let internet_identity_test_args = Some(InternetIdentityInit {
+            let internet_identity_backend_args = Some(InternetIdentityInit {
                 assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
                 archive_config: None,             // DIFFERENT FROM ICP MAINNET
                 canister_creation_cycles_cost: Some(0),
@@ -2147,11 +2151,98 @@ impl PocketIcSubnets {
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
-                    INTERNET_IDENTITY_TEST_CANISTER_WASM.to_vec(),
-                    Encode!(&internet_identity_test_args).unwrap(),
+                    INTERNET_IDENTITY_BACKEND_CANISTER_WASM.to_vec(),
+                    Encode!(&internet_identity_backend_args).unwrap(),
                 )
                 .unwrap();
         }
+    }
+
+    fn deploy_ii_frontend(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
+        // Nothing to do if the II subnet does not exist (yet).
+        let Some(ref ii_subnet) = self.ii_subnet else {
+            return;
+        };
+
+        // Nothing to do if the II backend has not been deployed (yet).
+        if !ii_subnet
+            .state_machine
+            .canister_exists(IDENTITY_CANISTER_ID)
+        {
+            return;
+        }
+
+        // Nothing to do if the II frontend has already been deployed.
+        if ii_subnet
+            .state_machine
+            .canister_exists(INTERNET_IDENTITY_FRONTEND_CANISTER_ID)
+        {
+            return;
+        }
+
+        let gateway_port = self.gateway_port.expect(
+            "The HTTP gateway is supposed to be created if the `ii` ICP feature is specified.",
+        );
+
+        // dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"uqzsh-gqaaa-aaaaq-qaada-cai";})' --ic
+        // settings = record {
+        //     freezing_threshold = opt (2_592_000 : nat);
+        //     wasm_memory_threshold = opt (0 : nat);
+        //     controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+        //     reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+        //     log_visibility = opt variant { controllers };
+        //     wasm_memory_limit = opt (3_221_225_472 : nat);
+        //     memory_allocation = opt (0 : nat);
+        //     compute_allocation = opt (0 : nat);
+        // };
+        let settings = Some(CanisterSettingsArgs {
+            controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+            compute_allocation: Some(0_u64.into()),
+            memory_allocation: Some(0_u64.into()),
+            freezing_threshold: Some(2_592_000_u64.into()),
+            reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+            log_visibility: Some(LogVisibilityV2::Controllers),
+            log_memory_limit: Some(4_096_u64.into()),
+            wasm_memory_limit: Some(3_221_225_472_u64.into()),
+            wasm_memory_threshold: Some(0_u64.into()),
+            environment_variables: None,
+            snapshot_visibility: Some(SnapshotVisibility::Controllers),
+        });
+
+        let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
+            Some(INTERNET_IDENTITY_FRONTEND_CANISTER_ID.get()),
+            Cycles::from(INITIAL_CYCLES),
+            settings,
+        );
+
+        // Install the Internet Identity frontend canister.
+        let backend_origin = format!("http://{IDENTITY_CANISTER_ID}.localhost:{gateway_port}");
+        let frontend_origin =
+            format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}");
+        let ii_frontend_init_payload = InternetIdentityFrontendInit {
+            backend_canister_id: IDENTITY_CANISTER_ID.get().0,
+            backend_origin,
+            related_origins: Some(vec![frontend_origin]),
+            fetch_root_key: Some(true),
+            analytics_config: None,
+            dummy_auth: Some(None),
+            dev_csp: Some(true),
+        };
+        ii_subnet
+            .state_machine
+            .install_wasm_in_mode(
+                canister_id,
+                CanisterInstallMode::Install,
+                INTERNET_IDENTITY_FRONTEND_CANISTER_WASM.to_vec(),
+                Encode!(&ii_frontend_init_payload).unwrap(),
+            )
+            .unwrap();
     }
 
     fn deploy_nns_ui(&self, config: &IcpFeaturesConfig) {
@@ -4023,7 +4114,7 @@ fn upload_blob_from_file(
         .map_err(|e| format!("Could not open {} file: {}", blob_kind.description(), e))?;
     while offset < length {
         let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
-        let mut chunk = vec![0u8; chunk_size as usize];
+        let mut chunk = vec![0_u8; chunk_size as usize];
         file.read_exact(&mut chunk)
             .map_err(|e| format!("Could not read {} file: {}", blob_kind.description(), e))?;
         let kind = match blob_kind {
