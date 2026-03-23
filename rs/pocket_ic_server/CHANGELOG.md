@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## 13.0.0 - 2026-03-20
+## 13.0.0 - 2026-03-23
 
 ### Added
 - The endpoint `/instances/` takes an additional optional field `mainnet_nns_subnet_id` specifying that the NNS subnet should be created with the mainnet NNS subnet ID.
