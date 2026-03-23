@@ -4063,8 +4063,7 @@ async fn main() {
             ),
         }
 
-        if opts.secret_key_pem.is_some() {
-            let secret_key_path = opts.secret_key_pem.unwrap();
+        if let Some(secret_key_path) = opts.secret_key_pem {
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
             let sig_keys = SigKeys::from_pem(&contents).expect("Failed to parse pem file");
             Sender::SigKeys(sig_keys)

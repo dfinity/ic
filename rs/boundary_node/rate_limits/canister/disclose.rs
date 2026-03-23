@@ -139,9 +139,9 @@ mod tests {
     fn test_disclose_rules_incidents_succeeds() {
         with_canister_state(|state| {
             // Disclosure times
-            let current_time_1 = 10u64;
-            let current_time_2 = 15u64;
-            let current_time_3 = 20u64;
+            let current_time_1 = 10_u64;
+            let current_time_2 = 15_u64;
+            let current_time_3 = 20_u64;
             // Five rules
             let rule_id_1 = RuleId(Uuid::new_v4());
             let rule_id_2 = RuleId(Uuid::new_v4());
@@ -150,9 +150,9 @@ mod tests {
             let rule_id_5 = RuleId(Uuid::new_v4());
             // Two rules are disclosed, and three are not
             let rule_1 = create_mock_rule(None);
-            let rule_2 = create_mock_rule(Some(25u64));
+            let rule_2 = create_mock_rule(Some(25_u64));
             let rule_3 = create_mock_rule(None);
-            let rule_4 = create_mock_rule(Some(30u64));
+            let rule_4 = create_mock_rule(Some(30_u64));
             let rule_5 = create_mock_rule(None);
             // Two incidents
             let incident_id_1 = IncidentId(Uuid::new_v4());
@@ -191,11 +191,11 @@ mod tests {
             let rule = state.get_rule(&rule_id_1).unwrap();
             assert_eq!(rule.disclosed_at, Some(current_time_1));
             let rule = state.get_rule(&rule_id_2).unwrap();
-            assert_eq!(rule.disclosed_at, Some(25u64));
+            assert_eq!(rule.disclosed_at, Some(25_u64));
             let rule = state.get_rule(&rule_id_3).unwrap();
             assert_eq!(rule.disclosed_at, Some(current_time_1));
             let rule = state.get_rule(&rule_id_4).unwrap();
-            assert_eq!(rule.disclosed_at, Some(30u64));
+            assert_eq!(rule.disclosed_at, Some(30_u64));
             let rule = state.get_rule(&rule_id_5).unwrap();
             assert_eq!(rule.disclosed_at, None);
             let incident = state.get_incident(&incident_id_1).unwrap();
@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn test_disclose_fails_with_invalid_input() {
         // Arrange
-        let current_time = 10u64;
+        let current_time = 10_u64;
         let id_1 = Uuid::new_v4();
         let id_2 = "not_a_uuid".to_string();
         let arg_1 =
@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn test_disclose_fails_with_id_not_found() {
         // Arrange
-        let current_time = 10u64;
+        let current_time = 10_u64;
         let uuid = Uuid::new_v4();
         let arg_1 = rate_limits_api::DiscloseRulesArg::RuleIds(vec![uuid.to_string()]);
         let arg_2 = rate_limits_api::DiscloseRulesArg::IncidentIds(vec![uuid.to_string()]);

@@ -877,7 +877,7 @@ mod random_ops {
                 // Flags copied from wasmtime:
                 // https://github.com/bytecodealliance/wasmtime/blob/0e9ce4c231b4b88ce79a1639fbbb5e8bd672d3c3/crates/runtime/src/traphandlers/unix.rs#LL35C1-L35C1
                 handler.sa_flags = libc::SA_SIGINFO | libc::SA_NODEFER | libc::SA_ONSTACK;
-                handler.sa_sigaction = sigsegv_handler as usize;
+                handler.sa_sigaction = sigsegv_handler as *const () as usize;
                 libc::sigemptyset(&mut handler.sa_mask);
                 if libc::sigaction(
                     libc::SIGSEGV,

@@ -9,9 +9,9 @@ Runbook::
 . Set up a subnet with a single node
 . Wait for the node to start up correctly and be healthy.
 . Verify that the `fstrim.prom` file exists and contains the initial metrics.
-. Attempt to run the systemd service `setup-fstrim-metrics` to initialize the metrics to be served
+. Attempt to run the systemd service `setup-fstrim-tool` to initialize the metrics to be served
   by the `node_exporter`.
-. Verify that the `setup-fstrim-metrics` service invocation succeeded, and that the metrics are
+. Verify that the `setup-fstrim-tool` service invocation succeeded, and that the metrics are
   still in the initialized state.
 . Attempt to run the systemd service `fstrim_tool` to run `fstrim` and update the metrics.
 . Verify that the `fstrim_tool` service invocation succeeded and that the metrics were updated
@@ -74,7 +74,7 @@ pub fn ic_crypto_fstrim_tool_test(env: TestEnv) {
     info!(logger, "initial fstrim metrics: {:?}", initial_metrics);
     assert_metrics_are_initialized(&initial_metrics);
 
-    initialize_fstrim_tool_metrics(&node, &logger);
+    initialize_fstrim_tool(&node, &logger);
     let reinitialized_metrics = retrieve_fstrim_metrics(&node, &logger);
     assert_metrics_are_initialized(&reinitialized_metrics);
 
@@ -120,39 +120,38 @@ fn retrieve_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) -> FsTrimMetr
         .expect("unable to parse fstrim metrics")
 }
 
-fn initialize_fstrim_tool_metrics(node: &IcNodeSnapshot, logger: &Logger) {
-    const INITIALIZE_FSTRIM_TOOL_METRICS_CMD: &str =
-        "sudo systemctl start setup-fstrim-metrics.service";
+fn initialize_fstrim_tool(node: &IcNodeSnapshot, logger: &Logger) {
+    const INITIALIZE_FSTRIM_TOOL_CMD: &str = "sudo systemctl start setup-fstrim-tool.service";
     info!(
         logger,
-        "initializing fstrim_tool metrics using command: {}", INITIALIZE_FSTRIM_TOOL_METRICS_CMD
+        "initializing fstrim tool using command: {}", INITIALIZE_FSTRIM_TOOL_CMD
     );
-    let fstrim_metrics_output = node
-        .block_on_bash_script(INITIALIZE_FSTRIM_TOOL_METRICS_CMD)
-        .expect("unable to initialize fstrim_tool metrics using SSH")
+    let output = node
+        .block_on_bash_script(INITIALIZE_FSTRIM_TOOL_CMD)
+        .expect("unable to initialize fstrim tool using SSH")
         .trim()
         .to_string();
-    assert_eq!(fstrim_metrics_output, "");
+    assert_eq!(output, "");
 }
 
 fn run_fstrim_tool(node: &IcNodeSnapshot, logger: &Logger) {
     const RUN_FSTRIM_TOOL_CMD: &str = "sudo systemctl start fstrim_tool.service";
     info!(
         logger,
-        "running fstrim_tool using command: {}", RUN_FSTRIM_TOOL_CMD
+        "running fstrim tool using command: {}", RUN_FSTRIM_TOOL_CMD
     );
-    let fstrim_metrics_output = node
+    let output = node
         .block_on_bash_script(RUN_FSTRIM_TOOL_CMD)
-        .expect("unable to run fstrim_tool using SSH")
+        .expect("unable to run fstrim tool using SSH")
         .trim()
         .to_string();
-    assert_eq!(fstrim_metrics_output, "");
+    assert_eq!(output, "");
 }
 
 fn assert_metrics_are_initialized(metrics: &FsTrimMetrics) {
-    assert_eq!(metrics.total_runs, 0f64);
+    assert_eq!(metrics.total_runs, 0_f64);
     assert!(metrics.last_run_success);
-    assert_eq!(metrics.last_duration_milliseconds, 0f64);
+    assert_eq!(metrics.last_duration_milliseconds, 0_f64);
 }
 
 fn assert_successful_run_and_metrics_valid_and_updated(
@@ -163,6 +162,6 @@ fn assert_successful_run_and_metrics_valid_and_updated(
     assert!(updated_metrics.last_run_success);
     assert_eq!(
         updated_metrics.total_runs,
-        initial_metrics.total_runs + 1f64
+        initial_metrics.total_runs + 1_f64
     );
 }

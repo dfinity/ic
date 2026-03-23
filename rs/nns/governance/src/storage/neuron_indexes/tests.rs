@@ -18,7 +18,7 @@ fn add_remove_neuron() {
 
     let mut neuron = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from([1u8; 32].as_ref()).unwrap(),
+        Subaccount::try_from([1_u8; 32].as_ref()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: 1,
@@ -184,16 +184,16 @@ fn create_model_neuron_builder(id: u64) -> NeuronBuilder {
 fn update_neuron_account_fails() {
     let mut indexes = new_heap_based();
     let neuron = create_model_neuron_builder(1)
-        .with_subaccount(Subaccount::try_from([1u8; 32].as_ref()).unwrap())
+        .with_subaccount(Subaccount::try_from([1_u8; 32].as_ref()).unwrap())
         .build();
     let neuron_with_different_account = create_model_neuron_builder(1)
-        .with_subaccount(Subaccount::try_from([2u8; 32].as_ref()).unwrap())
+        .with_subaccount(Subaccount::try_from([2_u8; 32].as_ref()).unwrap())
         .build();
 
     assert_matches!(
         indexes.update_neuron(&neuron, &neuron_with_different_account),
         Err(NeuronStoreError::SubaccountModified { old_subaccount, new_subaccount })
-        if old_subaccount.0 == [1u8; 32] && new_subaccount.0 == [2u8; 32]);
+        if old_subaccount.0 == [1_u8; 32] && new_subaccount.0 == [2_u8; 32]);
 }
 
 #[test]
@@ -320,7 +320,7 @@ fn update_neuron_remove_controller_as_hot_key() {
     let mut indexes = new_heap_based();
     let old_neuron = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from([1u8; 32].as_ref()).unwrap(),
+        Subaccount::try_from([1_u8; 32].as_ref()).unwrap(),
         PrincipalId::new_user_test_id(100),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: 1,

@@ -99,7 +99,7 @@ impl<const N: usize> FromStr for Hash<N> {
                 s.len()
             ));
         }
-        let mut bytes = [0u8; N];
+        let mut bytes = [0_u8; N];
         hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {e}"))?;
         Ok(Self(bytes))
     }
@@ -118,7 +118,7 @@ impl<const N: usize> Storable for Hash<N> {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         assert_eq!(bytes.len(), N, "Hash representation is {N}-bytes long");
-        let mut be_bytes = [0u8; N];
+        let mut be_bytes = [0_u8; N];
         be_bytes.copy_from_slice(bytes.as_ref());
         Self(be_bytes)
     }

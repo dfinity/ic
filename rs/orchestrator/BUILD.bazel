@@ -50,13 +50,13 @@ rust_library(
         "//rs/sys",
         "//rs/types/management_canister_types",
         "//rs/types/types",
+        "@crate_index//:anyhow",
         "@crate_index//:backoff",
         "@crate_index//:candid",
         "@crate_index//:clap",
         "@crate_index//:der",
         "@crate_index//:env-file-reader",
         "@crate_index//:exec",
-        "@crate_index//:get_if_addrs",
         "@crate_index//:hex",
         "@crate_index//:http-body-util",
         "@crate_index//:hyper",
@@ -103,11 +103,17 @@ rust_binary(
 rust_test(
     name = "orchestrator_test",
     compile_data = [
+        "testdata/nftables_assigned_cloud_engine.conf.golden",
         "testdata/nftables_assigned_replica.conf.golden",
         "testdata/nftables_boundary_node_app_subnet.conf.golden",
         "testdata/nftables_boundary_node_system_subnet.conf.golden",
+        "testdata/nftables_unassigned_cloud_engine.conf.golden",
+        "testdata/nftables_unassigned_replica.conf.golden",
     ],
     crate = ":lib",
+    # Disable optimizations to speed up compilation otherwise it will take over 9 minutes on CI.
+    # It does not have an effect on the test runtime.
+    rustc_flags = ["-Copt-level=0"],
     deps = [
         # Keep sorted.
         "//rs/crypto/temp_crypto",

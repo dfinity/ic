@@ -32,7 +32,8 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types_cycles::Cycles;
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, DEFAULT_TRANSFER_FEE, Memo, Operation,
     SendArgs, Subaccount, Tokens, Transaction,
@@ -2445,7 +2446,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 .as_ref()
                 .unwrap()
                 .xdr_permyriad_per_icp as f64
-                / 10_000f64,
+                / 10_000_f64,
             "Amount of XDR corresponding to 1 ICP.",
         )?;
         w.encode_gauge(
@@ -2465,7 +2466,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 .as_ref()
                 .unwrap()
                 .xdr_permyriad_per_icp as f64
-                / 10_000f64,
+                / 10_000_f64,
             "Average amount of XDR corresponding to 1 ICP.",
         )?;
         w.encode_gauge(

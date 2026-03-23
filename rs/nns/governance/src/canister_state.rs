@@ -149,7 +149,7 @@ impl RandomnessGenerator for CanisterRandomnessGenerator {
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         match self.rng.as_mut() {
             Some(rand) => {
-                let mut bytes = [0u8; 32];
+                let mut bytes = [0_u8; 32];
                 rand.fill_bytes(&mut bytes);
                 Ok(bytes)
             }

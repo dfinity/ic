@@ -500,7 +500,7 @@ fn initial_dkg_transcript(
     num_nodes: usize,
     rng: &mut ReproducibleRng,
 ) -> NiDkgTranscript {
-    let mut target_id_bytes = [0u8; 32];
+    let mut target_id_bytes = [0_u8; 32];
     rng.fill_bytes(&mut target_id_bytes);
     let target_id = NiDkgTargetId::new(target_id_bytes);
     let receiver_keys = generate_node_keys(num_nodes);

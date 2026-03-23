@@ -44,11 +44,25 @@ After changing Rust code (`*.rs`) follow these steps in order:
 4. **Test** the directly affected bazel tests by running the following from the root of the repository:
    ```
    cd "$(git rev-parse --show-toplevel)"
-   TESTS="$(bazel query 'kind(".*_test|test_suite", kind(rule, rdeps(//..., set(<MODIFIED_FILES>), 2)))' --keep_going 2>/dev/null)" || true
+   TESTS="$(bazel query 'kind(".*_test|test_suite", kind(rule, rdeps(//..., set(<MODIFIED_FILES>), 2))) except attr(tags, "manual", //...)' --keep_going 2>/dev/null)" || true
    if [ -n "$TESTS" ]; then
        bazel test --test_output=errors $TESTS
    fi
    ```
    (Use a depth of 2 in `rdeps` because tests usually depend on source files indirectly through a `rust_library` for example).
 
+   Always run tests, even if they're system-tests, i.e. their label starts with `//rs/tests/`.
+
    Fix all test failures.
+
+# Pull Requests
+
+When asked to create a PR, always create it in draft mode.
+
+When updating a PR prefer to push new commits to the PR branch instead of force-pushing over the existing commits.
+
+After the PR has been created or updated, request a review from the GitHub Copilot bot using:
+```
+gh api repos/dfinity/ic/pulls/<PULL_REQUEST_NUMBER>/requested_reviewers --method POST --raw-field 'reviewers[]=copilot-pull-request-reviewer[bot]'
+```
+where `<PULL_REQUEST_NUMBER>` is the number of the Pull Request.

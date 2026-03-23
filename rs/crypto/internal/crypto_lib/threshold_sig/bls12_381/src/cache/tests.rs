@@ -3,9 +3,9 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::RngCore;
 
 fn random_signature_cache_entry<R: RngCore>(rng: &mut R) -> SignatureCacheEntry {
-    let mut pk = [0u8; 96];
-    let mut sig = [0u8; 48];
-    let mut msg = [0u8; 32];
+    let mut pk = [0_u8; 96];
+    let mut sig = [0_u8; 48];
+    let mut msg = [0_u8; 32];
 
     rng.fill_bytes(&mut pk);
     rng.fill_bytes(&mut sig);

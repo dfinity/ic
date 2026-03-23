@@ -156,10 +156,6 @@ pub struct SignWithThresholdContext {
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
-    #[prost(uint64, optional, tag = "6")]
-    pub pre_signature_id: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "7")]
-    pub height: ::core::option::Option<u64>,
     #[prost(bytes = "vec", optional, tag = "8")]
     pub nonce: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
@@ -580,6 +576,9 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
+    #[prost(message, optional, tag = "24")]
+    pub own_resource_limits:
+        ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

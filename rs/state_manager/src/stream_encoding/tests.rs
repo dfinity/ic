@@ -5,7 +5,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, Stream, testing::ReplicatedStateTesting};
 use ic_test_utilities_state::{arb_stream, new_canister_state};
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
-use ic_types::{Cycles, xnet::StreamSlice};
+use ic_types::xnet::StreamSlice;
+use ic_types_cycles::Cycles;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -62,7 +63,7 @@ fn stream_encode_with_size_limit(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..1000usize)] size_limit: usize,
+    #[strategy(0..1000_usize)] size_limit: usize,
 ) {
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
