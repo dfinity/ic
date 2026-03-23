@@ -3,7 +3,7 @@
 index 37c4fcb8..cb626c89 100644
 --- a/askama_derive/src/generator.rs
 +++ b/askama_derive/src/generator.rs
-@@ -141,10 +141,9 @@ impl<'a, 'h> Generator<'a, 'h> {
+@@ -141,10 +141,10 @@ impl<'a, 'h> Generator<'a, 'h> {
          {
              local_file.pop();
              if !local_file.is_absolute() {
@@ -14,6 +14,7 @@ index 37c4fcb8..cb626c89 100644
 +                if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
 +                    local_file = Path::new(&manifest_dir).join(local_file);
 +                }
++                eprintln!("askama local_file: {:?}", local_file);
              }
  
              self.caller_dir = CallerDir::Valid(clean_path(&local_file));
