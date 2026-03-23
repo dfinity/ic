@@ -1,5 +1,6 @@
 use anyhow::bail;
 use bare_metal_deployment::BareMetalIpmiSession;
+use ic_system_test_driver::driver::test_env::SshKeyGen;
 use ic_system_test_driver::{
     driver::{
         nested::{HasNestedVms, NestedNodes},
@@ -9,15 +10,10 @@ use ic_system_test_driver::{
     retry_with_msg,
     util::block_on,
 };
-use nix::sys::signal::Signal;
-use nix::unistd::Pid;
-use serde::{Deserialize, Serialize};
 use slog::info;
-
-pub mod util;
 use util::{NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
 
-use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnvAttribute};
+pub mod util;
 
 pub const HOST_VM_NAME: &str = "host-1";
 const BARE_METAL_HOST_SECRETS: &str = "BARE_METAL_HOST_SECRETS";
