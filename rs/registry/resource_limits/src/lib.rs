@@ -9,9 +9,13 @@ use serde::{Deserialize, Serialize};
 /// Limits on resource consumption (e.g., memory usage).
 #[derive(CandidType, Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
 pub struct ResourceLimits {
-    // The maximum size of the (replicated) state in bytes.
+    /// The maximum size of the (replicated) state in bytes.
+    /// This is a hard limit, i.e., messages that attempt to increase the state size
+    /// beyond the limit fail.
     pub maximum_state_size: Option<NumBytes>,
-    // The maximum size of the (replicated) state *delta* (kept in main memory) in bytes.
+    /// The maximum size of the (replicated) state *delta* (kept in main memory) in bytes.
+    /// This is a soft limit, i.e., the actual size of the state delta can exceed the limit,
+    /// but no more messages are executed while the limit is exceeded.
     pub maximum_state_delta: Option<NumBytes>,
 }
 
