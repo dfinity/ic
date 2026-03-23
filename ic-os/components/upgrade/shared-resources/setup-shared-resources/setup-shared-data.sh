@@ -1,39 +1,34 @@
 #!/bin/bash
 
-set -e
+set -ex
 
 DEVICE=/dev/mapper/store-shared--data
 
+echo "Checking if ${DEVICE} has a valid filesystem..."
 if ! blkid "${DEVICE}" >/dev/null 2>&1; then
     # No filesystem exists, create one.
-    mkfs.xfs -m crc=1,reflink=1 "${DEVICE}"
+    mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
 else
-    # Filesystem exists. Try a test mount to verify it is healthy.
-    # This also replays the XFS journal if it is dirty (normal after a crash).
-    TESTMOUNT=$(mktemp -d)
-    # Ensure cleanup on exit: unmount if still mounted and remove temp dir.
-    cleanup() {
-        mountpoint -q "${TESTMOUNT}" && umount "${TESTMOUNT}" || true
-        rmdir "${TESTMOUNT}" 2>/dev/null || true
-    }
-    trap cleanup EXIT
-    if MOUNT_OUTPUT=$(mount -t xfs "${DEVICE}" "${TESTMOUNT}" 2>&1); then
-        # Mount succeeded, filesystem is healthy.
-        umount "${TESTMOUNT}" || echo "Warning: umount ${TESTMOUNT} failed, EXIT trap will retry." >&2
+    # Filesystem exists. Run xfs_repair to check and fix it.
+    # xfs_repair (without -L) is safe: it exits non-zero without modifying
+    # anything when the journal is dirty but valid (normal after a crash),
+    # telling us to mount the filesystem to replay the log. In that case
+    # the real mount (via fstab) will replay the journal automatically.
+    if REPAIR_OUTPUT=$(xfs_repair "${DEVICE}" 2>&1); then
+        echo "xfs_repair succeeded on ${DEVICE}."
+    elif echo "${REPAIR_OUTPUT}" | grep -q "Mount the filesystem to replay the log"; then
+        # Dirty but valid journal. The real mount will replay it.
+        echo "XFS journal on ${DEVICE} is dirty but valid; the mount will replay it."
     else
-        # Mount failed, filesystem is corrupted.
-        # Log the mount failure output to aid diagnostics.
-        echo "Mount of ${DEVICE} on ${TESTMOUNT} failed:" >&2
-        echo "${MOUNT_OUTPUT}" >&2
-        # Attempt xfs_repair first; if that also fails, try xfs_repair -L,
-        # and only then fall back to reformat. The IC node will recover its
-        # state via state sync so no data is permanently lost.
-        if ! xfs_repair "${DEVICE}"; then
-            echo "xfs_repair without log zeroing failed on ${DEVICE}, trying xfs_repair -L." >&2
-            if ! xfs_repair -L "${DEVICE}"; then
-                echo "xfs_repair -L failed on ${DEVICE}, reformatting." >&2
-                mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
-            fi
+        # Actual corruption. Log the output and try xfs_repair -L to zero
+        # the log and repair. If that also fails, reformat as last resort.
+        # The IC node will recover its state via state sync so no data is
+        # permanently lost.
+        echo "xfs_repair failed on ${DEVICE}:" >&2
+        echo "${REPAIR_OUTPUT}" >&2
+        if ! xfs_repair -L "${DEVICE}"; then
+            echo "xfs_repair -L failed on ${DEVICE}, reformatting." >&2
+            mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
         fi
     fi
 fi
