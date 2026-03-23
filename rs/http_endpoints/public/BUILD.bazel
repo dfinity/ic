@@ -107,6 +107,24 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
+    name = "repro",
+    srcs = glob(["repro/lib.rs"]),
+    aliases = ALIASES,
+    compile_data = ["templates/dashboard.html"],
+    crate_name = "ic_http_endpoints_public_repro",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
+    version = "0.9.0",
+    deps = [
+        "@crate_index//:askama",
+        "@crate_index//:hex",
+    ],
+)
+
+rust_library(
     name = "public",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
