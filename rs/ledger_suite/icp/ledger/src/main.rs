@@ -165,7 +165,7 @@ fn init(
             .blockchain
             .last_hash
             .map(|h| h.into_bytes())
-            .unwrap_or([0u8; 32]),
+            .unwrap_or([0_u8; 32]),
     );
 
     if let Some(archive_options) = archive_options {
@@ -297,7 +297,7 @@ fn icrc1_send_not_async(
         .expect("Minting canister id not initialized");
     let now = TimeStamp::from_nanos_since_unix_epoch(time());
     let (operation, effective_fee) = if to == minting_acc {
-        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
+        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0_u64)) {
             return Err(CoreTransferError::BadFee {
                 expected_fee: Tokens::ZERO,
             });
@@ -325,7 +325,7 @@ fn icrc1_send_not_async(
         if spender_account.is_some() {
             trap("the minter account cannot delegate mints");
         }
-        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
+        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0_u64)) {
             return Err(CoreTransferError::BadFee {
                 expected_fee: Tokens::ZERO,
             });
@@ -638,7 +638,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
 
     let mut magic_bytes_reader = ic_cdk::api::stable::StableReader::default();
     const MAGIC_BYTES: &[u8; 3] = b"MGR";
-    let mut first_bytes = [0u8; 3];
+    let mut first_bytes = [0_u8; 3];
     let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
         Ok(_) => first_bytes == *MAGIC_BYTES,
         Err(_) => false,
@@ -658,13 +658,13 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             let ledger_state = ciborium::de::from_reader(&mut buffered_reader).expect(
                 "Failed to read the Ledger state from memory manager managed stable memory",
             );
-            let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+            let mut pre_upgrade_instructions_counter_bytes = [0_u8; 8];
             pre_upgrade_instructions_consumed =
                 match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                     Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                     Err(_) => {
                         // If upgrading from a version that didn't write the instructions counter to stable memory
-                        0u64
+                        0_u64
                     }
                 };
             ledger_state
@@ -699,7 +699,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 .blockchain
                 .last_hash
                 .map(|h| h.into_bytes())
-                .unwrap_or([0u8; 32]),
+                .unwrap_or([0_u8; 32]),
         );
         PRE_UPGRADE_INSTRUCTIONS_CONSUMED
             .with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
@@ -1490,7 +1490,7 @@ async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> 
             owner: Principal::anonymous(),
             subaccount: None,
         },
-        amount: Nat::from(0u64),
+        amount: Nat::from(0_u64),
         expected_allowance: None,
         expires_at: None,
         fee: args.fee,

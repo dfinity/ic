@@ -1218,7 +1218,7 @@ pub fn get_allowances(
         None => AccountSpender {
             account: from,
             spender: Account {
-                owner: Principal::from_slice(&[0u8; 0]),
+                owner: Principal::from_slice(&[0_u8; 0]),
                 subaccount: None,
             },
         },

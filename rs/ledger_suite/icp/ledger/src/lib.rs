@@ -679,7 +679,7 @@ pub fn get_allowances_list(
     now: u64,
 ) -> Allowances {
     let mut result = vec![];
-    let start_spender = spender.unwrap_or(AccountIdentifier { hash: [0u8; 28] });
+    let start_spender = spender.unwrap_or(AccountIdentifier { hash: [0_u8; 28] });
     ALLOWANCES_MEMORY.with_borrow(|allowances| {
         for ((from_account_id, to_spender_id), storable_allowance) in
             allowances.range((from, start_spender)..)

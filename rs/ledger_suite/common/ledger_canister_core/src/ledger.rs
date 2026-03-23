@@ -377,7 +377,7 @@ fn throttle<L: LedgerData>(ledger: &L, now: TimeStamp) -> bool {
 /// transactions.
 pub fn purge_old_transactions<L: LedgerData>(ledger: &mut L, now: TimeStamp) -> usize {
     let max_tx_to_purge = ledger.max_transactions_to_purge();
-    let mut num_tx_purged = 0usize;
+    let mut num_tx_purged = 0_usize;
 
     while let Some(tx_info) = ledger.transactions_by_height().front() {
         if tx_info.block_timestamp + ledger.transaction_window() + ic_limits::PERMITTED_DRIFT >= now

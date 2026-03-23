@@ -176,7 +176,7 @@ ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
 # make sure we have all bind-mounts
-mkdir -p ~/.{aws,ssh,cache}
+mkdir -p ~/.{aws,ssh,cache,claude}
 
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
@@ -185,6 +185,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
+    --mount type=bind,source="${HOME}/.claude",target="${CTR_HOME}/.claude"
     --mount type=tmpfs,target="/tmp/containers"
 )
 
@@ -211,7 +212,6 @@ if [ "$(id -u)" = "1000" ]; then
             --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
         )
     fi
-
     if findmnt /hoststorage >/dev/null; then
         # use host's storage for cargo target
         # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json

@@ -32,7 +32,7 @@ use ic_types::messages::{
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CountBytes, Time};
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
 use strum::IntoEnumIterator;
@@ -871,7 +871,7 @@ fn canister_state_ingress_induction_cycles_debit() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
-        NominalCycles::from(ingress_induction_debit.get()),
+        NominalCycles::new(ingress_induction_debit.get()),
     );
 }
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -887,7 +887,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::from(initial_consumed_cycles.get())
+        NominalCycles::new(initial_consumed_cycles.get())
     );
 
     let cycles = Cycles::new(100);
@@ -898,7 +898,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::from((initial_consumed_cycles - cycles).get())
+        NominalCycles::new((initial_consumed_cycles - cycles).get())
     );
 }
 
@@ -920,7 +920,7 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)
             .unwrap(),
-        NominalCycles::from((cycles_to_consume - cycles_to_add).get())
+        NominalCycles::new((cycles_to_consume - cycles_to_add).get())
     );
 }
 

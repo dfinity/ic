@@ -1900,9 +1900,7 @@ impl SystemState {
         let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
             &mut self.canister_metrics.consumed_cycles_by_use_cases;
 
-        let use_case_consumption = metric
-            .entry(use_case)
-            .or_insert_with(|| NominalCycles::from(0));
+        let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
         let nominal_amount = NominalCycles::from(amount.get());
 

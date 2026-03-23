@@ -907,7 +907,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
         &ApproveArgs {
             from_subaccount: None,
             spender: user3,
-            amount: 1_000_000u32.into(),
+            amount: 1_000_000_u32.into(),
             expected_allowance: None,
             expires_at: None,
             fee: None,
@@ -930,7 +930,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
             spender_subaccount: None,
             from: user1,
             to: user2,
-            amount: 1_000_000u32.into(),
+            amount: 1_000_000_u32.into(),
             fee: None,
             memo: None,
             created_at_time: None,
@@ -1013,7 +1013,7 @@ fn test_icrc3_get_archives() {
         transaction: Transaction {
             operation: Operation::Mint {
                 to: minting_account,
-                amount: Tokens::from(1_000_000u64),
+                amount: Tokens::from(1_000_000_u64),
                 fee: None,
             },
             created_at_time: None,
@@ -1039,7 +1039,7 @@ fn test_icrc3_get_archives() {
         minting_account,
         fee_collector_account: None,
         initial_balances: vec![],
-        transfer_fee: Nat::from(0u64),
+        transfer_fee: Nat::from(0_u64),
         decimals: None,
         token_name: "Not a Token".to_string(),
         token_symbol: "NAT".to_string(),
@@ -1115,7 +1115,7 @@ fn test_icrc3_get_blocks() {
         minting_account,
         fee_collector_account: None,
         initial_balances: vec![],
-        transfer_fee: Nat::from(0u64),
+        transfer_fee: Nat::from(0_u64),
         decimals: None,
         token_name: "Not a Token".to_string(),
         token_symbol: "NAT".to_string(),
@@ -1404,14 +1404,14 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
     // Create 1000 mint blocks
     const NUM_MINT_BLOCKS: usize = 1000;
     let initial_balances = (0..NUM_MINT_BLOCKS)
-        .map(|i| (account(i as u64), Nat::from(1_000_000_000u64)))
+        .map(|i| (account(i as u64), Nat::from(1_000_000_000_u64)))
         .collect();
 
     let args = LedgerArgument::Init(InitArgs {
         minting_account,
         fee_collector_account: None,
         initial_balances,
-        transfer_fee: Nat::from(0u64),
+        transfer_fee: Nat::from(0_u64),
         decimals: None,
         token_name: "Not a Token".to_string(),
         token_symbol: "NAT".to_string(),
@@ -1482,7 +1482,7 @@ fn test_icrc3_certificate() {
     let init_args = ic_icrc1_ledger::InitArgsBuilder::for_tests()
         .with_minting_account(minting_account)
         // We need an initial balance so the block certificate is not None
-        .with_initial_balance(account(1), 1_000_000u64)
+        .with_initial_balance(account(1), 1_000_000_u64)
         .with_transfer_fee(FEE)
         .build();
 
@@ -1505,7 +1505,7 @@ fn test_icrc3_certificate() {
                 fee: None,
                 created_at_time: None,
                 memo: None,
-                amount: 1_000_000u64.into(),
+                amount: 1_000_000_u64.into(),
             },
         )
         .expect("mint should succeed");
@@ -1593,7 +1593,7 @@ fn test_icrc3_certificate() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: 1_000_000u64.into(),
+            amount: 1_000_000_u64.into(),
         },
     )
     .expect("mint should succeed");
@@ -1670,7 +1670,7 @@ mod verify_written_blocks {
 
     const DEFAULT_FEE: u64 = 10_000;
     const DEFAULT_AMOUNT: u64 = 1_000_000;
-    const DEFAULT_MEMO: [u8; 10] = [0u8; 10];
+    const DEFAULT_MEMO: [u8; 10] = [0_u8; 10];
 
     #[test]
     fn test_verify_written_mint_block() {
@@ -1679,7 +1679,7 @@ mod verify_written_blocks {
             from_subaccount: ledger.minter_account.subaccount,
             to: ledger.from_account,
             amount: Nat::from(10 * DEFAULT_AMOUNT),
-            fee: Some(NumTokens::from(0u8)),
+            fee: Some(NumTokens::from(0_u8)),
             created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
         };
@@ -1726,7 +1726,7 @@ mod verify_written_blocks {
             from_subaccount: ledger.from_account.subaccount,
             spender: ledger.minter_account,
             amount: Nat::from(2 * DEFAULT_AMOUNT),
-            expected_allowance: Some(Nat::from(0u8)),
+            expected_allowance: Some(Nat::from(0_u8)),
             expires_at: Some(ledger.current_time_ns_since_unix_epoch + 1_000_000),
             fee: Some(Nat::from(DEFAULT_FEE)),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
@@ -1769,7 +1769,7 @@ mod verify_written_blocks {
             from_subaccount: ledger.from_account.subaccount,
             spender: ledger.minter_account,
             amount: Nat::from(2 * DEFAULT_AMOUNT),
-            expected_allowance: Some(Nat::from(0u8)),
+            expected_allowance: Some(Nat::from(0_u8)),
             expires_at: Some(ledger.current_time_ns_since_unix_epoch + 1_000_000),
             fee: Some(Nat::from(DEFAULT_FEE)),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
@@ -1780,7 +1780,7 @@ mod verify_written_blocks {
             from: ledger.from_account,
             to: ledger.minter_account,
             amount: Nat::from(DEFAULT_AMOUNT),
-            fee: Some(NumTokens::from(0u8)),
+            fee: Some(NumTokens::from(0_u8)),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
             created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
         };
@@ -1816,7 +1816,7 @@ mod verify_written_blocks {
             from_subaccount: ledger.from_account.subaccount,
             spender: ledger.spender_account,
             amount: Nat::from(2 * DEFAULT_AMOUNT),
-            expected_allowance: Some(Nat::from(0u8)),
+            expected_allowance: Some(Nat::from(0_u8)),
             expires_at: Some(ledger.current_time_ns_since_unix_epoch + 1_000_000),
             fee: Some(Nat::from(DEFAULT_FEE)),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
@@ -1869,19 +1869,19 @@ mod verify_written_blocks {
         fn new() -> Self {
             let minter_account = Account {
                 owner: MINTER.owner,
-                subaccount: Some([42u8; 32]),
+                subaccount: Some([42_u8; 32]),
             };
             let from_account = Account {
                 owner: PrincipalId::new_user_test_id(1).0,
-                subaccount: Some([1u8; 32]),
+                subaccount: Some([1_u8; 32]),
             };
             let to_account = Account {
                 owner: PrincipalId::new_user_test_id(2).0,
-                subaccount: Some([2u8; 32]),
+                subaccount: Some([2_u8; 32]),
             };
             let spender_account = Account {
                 owner: PrincipalId::new_user_test_id(3).0,
-                subaccount: Some([3u8; 32]),
+                subaccount: Some([3_u8; 32]),
             };
             let initial_balances = vec![
                 (from_account, Nat::from(10 * DEFAULT_AMOUNT)),
@@ -1937,7 +1937,7 @@ mod verify_written_blocks {
         fn get_transaction(&self, block_index: BlockIndex) -> Transaction {
             let request = GetTransactionsRequest {
                 start: block_index.into(),
-                length: 1u8.into(),
+                length: 1_u8.into(),
             };
 
             let wasm_result_bytes = match self

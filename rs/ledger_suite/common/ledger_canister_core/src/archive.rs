@@ -268,7 +268,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
             .min(max_ledger_msg_size_bytes)
     });
 
-    let mut num_sent_blocks = 0usize;
+    let mut num_sent_blocks = 0_usize;
     while !blocks.is_empty() {
         log!(
             log_sink,
@@ -472,7 +472,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     let ledger_liquid_cycles_balance = ic_cdk::api::canister_liquid_cycle_balance();
 
     match cost_create_canister {
-        0u128 => {
+        0_u128 => {
             // Assume system subnet.
             if (cycles_for_archive_creation as u128) > ledger_liquid_cycles_balance {
                 // Even though no cycles would be needed to spawn an archive canister, some were
