@@ -5,7 +5,6 @@ use super::super::test_utilities::{
 };
 use super::super::*;
 use super::zero_instruction_overhead_config;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::{
     Method, Payload as _, TakeCanisterSnapshotArgs, UninstallCodeArgs,
@@ -72,12 +71,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
-        initial_cycles
-            - if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                20
-            } else {
-                10
-            },
+        initial_cycles - 10,
     );
 }
 

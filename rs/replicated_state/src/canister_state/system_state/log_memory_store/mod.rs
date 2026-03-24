@@ -220,11 +220,7 @@ impl LogMemoryStore {
             // Upsizing or First-time init: Reuse existing or create new.
             _ => self.maybe_page_map.clone().unwrap_or(create_page_map()),
         };
-        let mut new_buffer = RingBuffer::new(
-            page_map,
-            MemorySize::new(target_limit as u64),
-            self.next_idx(),
-        );
+        let mut new_buffer = RingBuffer::new(page_map, MemorySize::new(target_limit as u64), 0);
 
         // Migrate records.
         if let Some(old_buffer) = self.load_ring_buffer() {
