@@ -359,5 +359,11 @@ fn test_archive_http_request_decoding_quota() {
 fn test_icrc3_supported_block_types() {
     let setup = Setup::default();
 
-    check_icrc3_supported_block_types_ext(&setup.state_machine, setup.archive_id, true, false);
+    check_icrc3_supported_block_types_ext(
+        &setup.state_machine,
+        setup.archive_id,
+        true,
+        false,
+        false,
+    );
 }

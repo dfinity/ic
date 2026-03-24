@@ -620,6 +620,83 @@ type PauseResult = variant { Ok : nat; Err : PauseError };
 type UnpauseResult = variant { Ok : nat; Err : UnpauseError };
 type DeactivateResult = variant { Ok : nat; Err : DeactivateError };
 
+type FreezeAccountArgs = record {
+  account : Account;
+  reason : opt text;
+  created_at_time : nat64
+};
+
+type UnfreezeAccountArgs = record {
+  account : Account;
+  reason : opt text;
+  created_at_time : nat64
+};
+
+type FreezePrincipalArgs = record {
+  "principal" : principal;
+  reason : opt text;
+  created_at_time : nat64
+};
+
+type UnfreezePrincipalArgs = record {
+  "principal" : principal;
+  reason : opt text;
+  created_at_time : nat64
+};
+
+type FreezeAccountError = variant {
+  Unauthorized : record { message : text };
+  InvalidAccount : record { message : text };
+  AlreadyFrozen : record { message : text };
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type UnfreezeAccountError = variant {
+  Unauthorized : record { message : text };
+  InvalidAccount : record { message : text };
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type FreezePrincipalError = variant {
+  Unauthorized : record { message : text };
+  InvalidPrincipal : record { message : text };
+  AlreadyFrozen : record { message : text };
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type UnfreezePrincipalError = variant {
+  Unauthorized : record { message : text };
+  InvalidPrincipal : record { message : text };
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type FreezeAccountResult = variant { Ok : nat; Err : FreezeAccountError };
+type UnfreezeAccountResult = variant { Ok : nat; Err : UnfreezeAccountError };
+type FreezePrincipalResult = variant { Ok : nat; Err : FreezePrincipalError };
+type UnfreezePrincipalResult = variant { Ok : nat; Err : UnfreezePrincipalError };
+
+type FrozenAccountsRequest = record {
+  start : opt Account;
+  limit : opt nat
+};
+
+type FrozenAccountsResponse = record {
+  frozen_accounts : vec Account
+};
+
+type FrozenPrincipalsRequest = record {
+  start : opt principal;
+  limit : opt nat
+};
+
+type FrozenPrincipalsResponse = record {
+  frozen_principals : vec principal
+};
+
 service : (ledger_arg : LedgerArg) -> {
   archives : () -> (vec ArchiveInfo) query;
   get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
@@ -658,6 +735,15 @@ service : (ledger_arg : LedgerArg) -> {
   icrc154_deactivate : (DeactivateArgs) -> (DeactivateResult);
   icrc154_is_paused : () -> (bool) query;
   icrc154_is_deactivated : () -> (bool) query;
+
+  icrc153_freeze_account : (FreezeAccountArgs) -> (FreezeAccountResult);
+  icrc153_unfreeze_account : (UnfreezeAccountArgs) -> (UnfreezeAccountResult);
+  icrc153_freeze_principal : (FreezePrincipalArgs) -> (FreezePrincipalResult);
+  icrc153_unfreeze_principal : (UnfreezePrincipalArgs) -> (UnfreezePrincipalResult);
+  icrc153_is_frozen_account : (Account) -> (bool) query;
+  icrc153_is_frozen_principal : (principal) -> (bool) query;
+  icrc153_list_frozen_accounts : (FrozenAccountsRequest) -> (FrozenAccountsResponse) query;
+  icrc153_list_frozen_principals : (FrozenPrincipalsRequest) -> (FrozenPrincipalsResponse) query;
 
   is_ledger_ready : () -> (bool) query
 }

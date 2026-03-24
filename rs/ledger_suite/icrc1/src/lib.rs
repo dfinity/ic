@@ -863,6 +863,18 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             Some(FeeCollector { block_index, .. }) => (None, block_index),
             None => (None, None),
         };
+        let btype = match &transaction.operation {
+            Operation::Pause { .. } => Some(TRANSACTION_124_PAUSE.to_string()),
+            Operation::Unpause { .. } => Some(TRANSACTION_124_UNPAUSE.to_string()),
+            Operation::Deactivate { .. } => Some(TRANSACTION_124_DEACTIVATE.to_string()),
+            Operation::FreezeAccount { .. } => Some(TRANSACTION_123_FREEZE_ACCOUNT.to_string()),
+            Operation::UnfreezeAccount { .. } => Some(TRANSACTION_123_UNFREEZE_ACCOUNT.to_string()),
+            Operation::FreezePrincipal { .. } => Some(TRANSACTION_123_FREEZE_PRINCIPAL.to_string()),
+            Operation::UnfreezePrincipal { .. } => {
+                Some(TRANSACTION_123_UNFREEZE_PRINCIPAL.to_string())
+            }
+            _ => None,
+        };
         Self {
             parent_hash,
             transaction,
@@ -870,7 +882,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             timestamp: timestamp.as_nanos_since_unix_epoch(),
             fee_collector,
             fee_collector_block_index,
-            btype: None,
+            btype,
         }
     }
 }

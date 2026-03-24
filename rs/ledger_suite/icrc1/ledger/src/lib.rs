@@ -595,6 +595,14 @@ pub struct Ledger {
     paused: bool,
     #[serde(default)]
     deactivated: bool,
+
+    #[serde(default)]
+    /// Set of principals that are frozen at the principal level.
+    frozen_principals: std::collections::BTreeSet<Principal>,
+    #[serde(default)]
+    /// Account-level freeze overrides. An entry exists only when it differs
+    /// from or postdates the principal-level state for that account's owner.
+    account_freeze_overrides: std::collections::BTreeMap<Account, bool>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -723,6 +731,8 @@ impl Ledger {
             token_type: wasm_token_type(),
             paused: false,
             deactivated: false,
+            frozen_principals: std::collections::BTreeSet::new(),
+            account_freeze_overrides: std::collections::BTreeMap::new(),
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
@@ -880,6 +890,87 @@ impl Ledger {
 
     pub fn set_deactivated(&mut self, deactivated: bool) {
         self.deactivated = deactivated;
+    }
+
+    /// Returns true if the account has an explicit account-level freeze override set to true.
+    pub fn is_account_frozen(&self, account: &Account) -> bool {
+        self.account_freeze_overrides.get(account) == Some(&true)
+    }
+
+    /// Returns true if the principal is frozen at the principal level.
+    pub fn is_principal_frozen(&self, principal: &Principal) -> bool {
+        self.frozen_principals.contains(principal)
+    }
+
+    /// Returns true if the account is effectively frozen: an account-level
+    /// override takes precedence if present, otherwise the principal-level
+    /// state applies.
+    pub fn is_effectively_frozen(&self, account: &Account) -> bool {
+        match self.account_freeze_overrides.get(account) {
+            Some(&frozen) => frozen,
+            None => self.frozen_principals.contains(&account.owner),
+        }
+    }
+
+    pub fn freeze_account(&mut self, account: Account) {
+        self.account_freeze_overrides.insert(account, true);
+    }
+
+    pub fn unfreeze_account(&mut self, account: &Account) {
+        if self.frozen_principals.contains(&account.owner) {
+            // Principal is frozen — insert an exception override.
+            self.account_freeze_overrides.insert(*account, false);
+        } else {
+            // Principal is not frozen — remove override (if any).
+            self.account_freeze_overrides.remove(account);
+        }
+    }
+
+    pub fn freeze_principal(&mut self, principal: Principal) {
+        self.frozen_principals.insert(principal);
+        self.remove_account_overrides_for_principal(&principal);
+    }
+
+    pub fn unfreeze_principal(&mut self, principal: &Principal) {
+        self.frozen_principals.remove(principal);
+        self.remove_account_overrides_for_principal(principal);
+    }
+
+    /// Removes all account-level freeze overrides for the given principal.
+    fn remove_account_overrides_for_principal(&mut self, principal: &Principal) {
+        self.account_freeze_overrides
+            .retain(|account, _| account.owner != *principal);
+    }
+
+    /// Lists accounts that have an explicit account-level freeze override set to true.
+    pub fn list_frozen_accounts(&self, start_after: Option<&Account>, max: usize) -> Vec<Account> {
+        use std::ops::Bound;
+        let iter = match start_after {
+            Some(start) => self
+                .account_freeze_overrides
+                .range((Bound::Excluded(*start), Bound::Unbounded)),
+            None => self.account_freeze_overrides.range(..),
+        };
+        iter.filter(|(_, frozen)| **frozen)
+            .take(max)
+            .map(|(k, _)| *k)
+            .collect()
+    }
+
+    /// Lists principals that are frozen at the principal level.
+    pub fn list_frozen_principals(
+        &self,
+        start_after: Option<&Principal>,
+        max: usize,
+    ) -> Vec<Principal> {
+        use std::ops::Bound;
+        let iter = match start_after {
+            Some(start) => self
+                .frozen_principals
+                .range((Bound::Excluded(*start), Bound::Unbounded)),
+            None => self.frozen_principals.range(..),
+        };
+        iter.take(max).copied().collect()
     }
 
     pub fn metadata(&self) -> Vec<(MetadataKey, Value)> {

@@ -42,7 +42,17 @@ use icrc_ledger_types::icrc103::get_allowances::{
     Allowances, GetAllowancesArgs, GetAllowancesError,
 };
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
+use icrc_ledger_types::icrc123::schema::{
+    MTHD_153_FREEZE_ACCOUNT, MTHD_153_FREEZE_PRINCIPAL, MTHD_153_UNFREEZE_ACCOUNT,
+    MTHD_153_UNFREEZE_PRINCIPAL,
+};
 use icrc_ledger_types::icrc124::schema::{MTHD_154_DEACTIVATE, MTHD_154_PAUSE, MTHD_154_UNPAUSE};
+use icrc_ledger_types::icrc153::{
+    FreezeAccountArgs, FreezeAccountError, FreezePrincipalArgs, FreezePrincipalError,
+    FrozenAccountsRequest, FrozenAccountsResponse, FrozenPrincipalsRequest,
+    FrozenPrincipalsResponse, UnfreezeAccountArgs, UnfreezeAccountError, UnfreezePrincipalArgs,
+    UnfreezePrincipalError,
+};
 use icrc_ledger_types::icrc154::{
     DeactivateArgs, DeactivateError, PauseArgs, PauseError, UnpauseArgs, UnpauseError,
 };
@@ -685,6 +695,18 @@ fn check_not_paused_or_deactivated() -> Result<(), String> {
     })
 }
 
+fn check_not_frozen(sender: &Account, recipient: &Account) -> Result<(), String> {
+    Access::with_ledger(|ledger| {
+        if ledger.is_effectively_frozen(sender) {
+            return Err(format!("sender account {} is frozen", sender));
+        }
+        if ledger.is_effectively_frozen(recipient) {
+            return Err(format!("recipient account {} is frozen", recipient));
+        }
+        Ok(())
+    })
+}
+
 #[update]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
     check_not_paused_or_deactivated().map_err(|msg| TransferError::GenericError {
@@ -695,6 +717,10 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
         owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
     };
+    check_not_frozen(&from_account, &arg.to).map_err(|msg| TransferError::GenericError {
+        error_code: Nat::from(0u64),
+        message: msg,
+    })?;
     execute_transfer(
         from_account,
         arg.to,
@@ -718,6 +744,10 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 #[update]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     check_not_paused_or_deactivated().map_err(|msg| TransferFromError::GenericError {
+        error_code: Nat::from(0u64),
+        message: msg,
+    })?;
+    check_not_frozen(&arg.from, &arg.to).map_err(|msg| TransferFromError::GenericError {
         error_code: Nat::from(0u64),
         message: msg,
     })?;
@@ -803,6 +833,10 @@ fn supported_standards() -> Vec<StandardRecord> {
         StandardRecord {
             name: "ICRC-154".to_string(),
             url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-154.md".to_string(),
+        },
+        StandardRecord {
+            name: "ICRC-153".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-153.md".to_string(),
         },
     ];
     standards
@@ -915,6 +949,22 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
         error_code: Nat::from(0u64),
         message: msg,
     })?;
+    {
+        let from = Account {
+            owner: ic_cdk::api::caller(),
+            subaccount: arg.from_subaccount,
+        };
+        // For approve, check the account granting the approval is not frozen.
+        Access::with_ledger(|ledger| {
+            if ledger.is_effectively_frozen(&from) {
+                return Err(ApproveError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("account {} is frozen", from),
+                });
+            }
+            Ok(())
+        })?;
+    }
     let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
 
     // NB. we need to set the certified data before the first async call to make sure that the
@@ -997,6 +1047,22 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
         SupportedBlockType {
             block_type: "124deactivate".to_string(),
             url: "https://github.com/dfinity/ICRC/pull/135".to_string(),
+        },
+        SupportedBlockType {
+            block_type: "123freezeaccount".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/123".to_string(),
+        },
+        SupportedBlockType {
+            block_type: "123unfreezeaccount".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/123".to_string(),
+        },
+        SupportedBlockType {
+            block_type: "123freezeprincipal".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/123".to_string(),
+        },
+        SupportedBlockType {
+            block_type: "123unfreezeprincipal".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/123".to_string(),
         },
     ]
 }
@@ -1178,6 +1244,286 @@ fn icrc154_is_paused() -> bool {
 #[query]
 fn icrc154_is_deactivated() -> bool {
     Access::with_ledger(|ledger| ledger.is_deactivated())
+}
+
+// ---- ICRC-153 Freeze/Unfreeze endpoints ----
+
+fn icrc153_freeze_account_not_async(
+    caller: Principal,
+    arg: FreezeAccountArgs,
+) -> Result<u64, FreezeAccountError> {
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(FreezeAccountError::Unauthorized {
+            message: "caller is not a controller".to_string(),
+        });
+    }
+    if arg.account.owner == Principal::anonymous() {
+        return Err(FreezeAccountError::InvalidAccount {
+            message: "cannot freeze the anonymous principal's account".to_string(),
+        });
+    }
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if ledger.is_deactivated() {
+            return Err(FreezeAccountError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "ledger is deactivated".to_string(),
+            });
+        }
+        if ledger.is_account_frozen(&arg.account) {
+            return Err(FreezeAccountError::AlreadyFrozen {
+                message: format!("account {} is already frozen", arg.account),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::FreezeAccount {
+                account: arg.account,
+                caller: Some(caller),
+                mthd: Some(MTHD_153_FREEZE_ACCOUNT.to_string()),
+                reason: arg.reason,
+            },
+            created_at_time: Some(arg.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => FreezeAccountError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                other => FreezeAccountError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("{other:?}"),
+                },
+            })?;
+        ledger.freeze_account(arg.account);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc153_freeze_account(arg: FreezeAccountArgs) -> Result<Nat, FreezeAccountError> {
+    let block_idx = icrc153_freeze_account_not_async(ic_cdk::api::caller(), arg)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc153_unfreeze_account_not_async(
+    caller: Principal,
+    arg: UnfreezeAccountArgs,
+) -> Result<u64, UnfreezeAccountError> {
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(UnfreezeAccountError::Unauthorized {
+            message: "caller is not a controller".to_string(),
+        });
+    }
+    if arg.account.owner == Principal::anonymous() {
+        return Err(UnfreezeAccountError::InvalidAccount {
+            message: "cannot unfreeze the anonymous principal's account".to_string(),
+        });
+    }
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if ledger.is_deactivated() {
+            return Err(UnfreezeAccountError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "ledger is deactivated".to_string(),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::UnfreezeAccount {
+                account: arg.account,
+                caller: Some(caller),
+                mthd: Some(MTHD_153_UNFREEZE_ACCOUNT.to_string()),
+                reason: arg.reason,
+            },
+            created_at_time: Some(arg.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => {
+                    UnfreezeAccountError::Duplicate {
+                        duplicate_of: Nat::from(duplicate_of),
+                    }
+                }
+                other => UnfreezeAccountError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("{other:?}"),
+                },
+            })?;
+        ledger.unfreeze_account(&arg.account);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc153_unfreeze_account(arg: UnfreezeAccountArgs) -> Result<Nat, UnfreezeAccountError> {
+    let block_idx = icrc153_unfreeze_account_not_async(ic_cdk::api::caller(), arg)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc153_freeze_principal_not_async(
+    caller: Principal,
+    arg: FreezePrincipalArgs,
+) -> Result<u64, FreezePrincipalError> {
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(FreezePrincipalError::Unauthorized {
+            message: "caller is not a controller".to_string(),
+        });
+    }
+    if arg.principal == Principal::anonymous() {
+        return Err(FreezePrincipalError::InvalidPrincipal {
+            message: "cannot freeze the anonymous principal".to_string(),
+        });
+    }
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if ledger.is_deactivated() {
+            return Err(FreezePrincipalError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "ledger is deactivated".to_string(),
+            });
+        }
+        if ledger.is_principal_frozen(&arg.principal) {
+            return Err(FreezePrincipalError::AlreadyFrozen {
+                message: format!("principal {} is already frozen", arg.principal),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::FreezePrincipal {
+                principal: arg.principal,
+                caller: Some(caller),
+                mthd: Some(MTHD_153_FREEZE_PRINCIPAL.to_string()),
+                reason: arg.reason,
+            },
+            created_at_time: Some(arg.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => {
+                    FreezePrincipalError::Duplicate {
+                        duplicate_of: Nat::from(duplicate_of),
+                    }
+                }
+                other => FreezePrincipalError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("{other:?}"),
+                },
+            })?;
+        ledger.freeze_principal(arg.principal);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc153_freeze_principal(arg: FreezePrincipalArgs) -> Result<Nat, FreezePrincipalError> {
+    let block_idx = icrc153_freeze_principal_not_async(ic_cdk::api::caller(), arg)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc153_unfreeze_principal_not_async(
+    caller: Principal,
+    arg: UnfreezePrincipalArgs,
+) -> Result<u64, UnfreezePrincipalError> {
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(UnfreezePrincipalError::Unauthorized {
+            message: "caller is not a controller".to_string(),
+        });
+    }
+    if arg.principal == Principal::anonymous() {
+        return Err(UnfreezePrincipalError::InvalidPrincipal {
+            message: "cannot unfreeze the anonymous principal".to_string(),
+        });
+    }
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if ledger.is_deactivated() {
+            return Err(UnfreezePrincipalError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "ledger is deactivated".to_string(),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::UnfreezePrincipal {
+                principal: arg.principal,
+                caller: Some(caller),
+                mthd: Some(MTHD_153_UNFREEZE_PRINCIPAL.to_string()),
+                reason: arg.reason,
+            },
+            created_at_time: Some(arg.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => {
+                    UnfreezePrincipalError::Duplicate {
+                        duplicate_of: Nat::from(duplicate_of),
+                    }
+                }
+                other => UnfreezePrincipalError::GenericError {
+                    error_code: Nat::from(0u64),
+                    message: format!("{other:?}"),
+                },
+            })?;
+        ledger.unfreeze_principal(&arg.principal);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc153_unfreeze_principal(
+    arg: UnfreezePrincipalArgs,
+) -> Result<Nat, UnfreezePrincipalError> {
+    let block_idx = icrc153_unfreeze_principal_not_async(ic_cdk::api::caller(), arg)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+#[query]
+fn icrc153_is_frozen_account(account: Account) -> bool {
+    Access::with_ledger(|ledger| ledger.is_effectively_frozen(&account))
+}
+
+#[query]
+fn icrc153_is_frozen_principal(principal: Principal) -> bool {
+    Access::with_ledger(|ledger| ledger.is_principal_frozen(&principal))
+}
+
+#[query]
+fn icrc153_list_frozen_accounts(req: FrozenAccountsRequest) -> FrozenAccountsResponse {
+    let max = req
+        .limit
+        .map(|n| n.0.try_into().unwrap_or(usize::MAX))
+        .unwrap_or(100usize);
+    let accounts =
+        Access::with_ledger(|ledger| ledger.list_frozen_accounts(req.start.as_ref(), max));
+    FrozenAccountsResponse {
+        frozen_accounts: accounts,
+    }
+}
+
+#[query]
+fn icrc153_list_frozen_principals(req: FrozenPrincipalsRequest) -> FrozenPrincipalsResponse {
+    let max = req
+        .limit
+        .map(|n| n.0.try_into().unwrap_or(usize::MAX))
+        .unwrap_or(100usize);
+    let principals =
+        Access::with_ledger(|ledger| ledger.list_frozen_principals(req.start.as_ref(), max));
+    FrozenPrincipalsResponse {
+        frozen_principals: principals,
+    }
 }
 
 #[update]
