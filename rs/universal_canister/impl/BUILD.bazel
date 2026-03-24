@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-dummy-getrandom-0.3-for-wasm",
     "@crate_index//:candid",
     "@crate_index//:hex-literal",
     "@crate_index//:serde",

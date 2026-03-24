@@ -511,6 +511,11 @@ crate.spec(
     version = "^0.2",
 )
 crate.spec(
+    package = "getrandom",
+    version = "^0.3",
+    package_alias = "getrandom-0_3",
+)
+crate.spec(
     package = "gpt",
     version = "4.1",
 )
@@ -1219,7 +1224,7 @@ crate.spec(
         "rustls",
     ],
     package = "quinn",
-    version = "^0.11.5",
+    version = "^0.11.9",
 )
 crate.spec(
     package = "quinn-udp",

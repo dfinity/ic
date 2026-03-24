@@ -1,0 +1,12 @@
+[package]
+name = "ic-dummy-getrandom-0.3-for-wasm"
+version = "0.1.0"
+description = "Workaround a problem with rand on wasm32-unknown-unknown targets"
+license = "Apache-2.0"
+readme = "README.md"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))']
+rustflags = ["--cfg getrandom_backend='custom'"]

@@ -3707,6 +3707,7 @@ dependencies = [
  "futures-util",
  "getifs",
  "getrandom 0.2.10",
+ "getrandom 0.3.1",
  "goldenfile",
  "gpt",
  "group 0.13.0",
