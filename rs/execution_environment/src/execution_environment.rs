@@ -1907,7 +1907,11 @@ impl ExecutionEnvironment {
             self.log.clone(),
             &self.metrics.canister_not_found_error,
         );
-        self.reject_stop_requests(response.canister_id, response.stop_contexts, state);
+        self.reject_stop_requests(
+            response.canister_id,
+            response.stop_contexts_to_reject,
+            state,
+        );
         response.reply
     }
 

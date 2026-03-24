@@ -1022,7 +1022,7 @@ impl CanisterManager {
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: rejects,
-            stop_contexts: vec![],
+            stop_contexts_to_reject: vec![],
         })
     }
 
