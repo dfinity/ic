@@ -1,0 +1,63 @@
+load("//bazel:defs.bzl", "file_size_check", "zstd_compress")
+load("//toolchains/sysimage:toolchain.bzl", "disk_image", "upgrade_image")
+
+package(default_visibility = ["//rs/tests:__subpackages__"])
+
+# Special setup for SEV recovery testing:
+# - Boot partition from base (so launch measurements are from base)
+# - Root partition from test (so rootfs hash is from test)
+
+disk_image(
+    name = "disk-img.tar",
+    expanded_size = "50G",
+    layout = "//ic-os/guestos:partitions.csv",
+    partitions = [
+        "//ic-os/bootloader:partition-esp.tzst",
+        "//ic-os/guestos/envs/dev:partition-grub.tzst",
+        # Boot is from base
+        "//ic-os/guestos/envs/dev:partition-boot.tzst",
+        # Root is from test
+        "//ic-os/guestos/envs/dev:partition-root-test.tzst",
+        "//ic-os/guestos:partition-config.tzst",
+    ],
+    tags = [
+        "manual",
+        "no-cache",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+zstd_compress(
+    name = "disk-img.tar.zst",
+    srcs = [":disk-img.tar"],
+    tags = ["manual", "no-cache"],
+)
+
+upgrade_image(
+    name = "update-img.tar",
+    # Boot is from base
+    boot_partition = "//ic-os/guestos/envs/dev:partition-boot.tzst",
+    # Root is from test
+    root_partition = "//ic-os/guestos/envs/dev:partition-root-test.tzst",
+    tags = ["manual", "no-cache"],
+    target_compatible_with = ["@platforms//os:linux"],
+    version_file = "//ic-os/guestos/envs/dev:version.txt",
+)
+
+zstd_compress(
+    name = "update-img.tar.zst",
+    srcs = ["update-img.tar"],
+    tags = ["manual", "no-cache"],
+)
+
+# Boot (launch measurements) is from base
+alias(
+    name = "launch-measurements.json",
+    actual = "//ic-os/guestos/envs/dev:launch-measurements.json",
+)
+
+# Root (rootfs hash) is from test
+alias(
+    name = "partition-root-hash",
+    actual = "//ic-os/guestos/envs/dev:partition-root-test-hash",
+)

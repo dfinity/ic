@@ -162,3 +162,36 @@ system_test_nns(
         "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
     },
 )
+
+system_test_nns(
+    name = "sev_recovery",
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
+    guestos = {"default": True, "recovery": "sev_recovery_dev"},
+    hostos = True,
+    tags = ["long_test"],
+    test_timeout = "eternal",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/canister_client",
+        "//rs/crypto/tree_hash",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/protobuf",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
+)

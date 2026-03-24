@@ -24,20 +24,21 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_K
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance_api::{
-    FulfillSubnetRentalRequest, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest, ProposalInfo,
-    ProposalStatus, Vote,
+    BlessAlternativeGuestOsVersion, FulfillSubnetRentalRequest, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
+    ProposalActionRequest, ProposalInfo, ProposalStatus, Vote,
     manage_neuron::{NeuronIdOrSubaccount, RegisterVote},
     manage_neuron_response,
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
+use ic_nns_governance_conversions::convert_guest_launch_measurements_from_pb_to_api;
 use ic_nns_test_utils::governance::{
     get_proposal_info, submit_external_update_proposal,
     submit_external_update_proposal_allowing_error, wait_for_final_state,
 };
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
 use ic_protobuf::registry::{
-    replica_version::v1::GuestLaunchMeasurements,
+    replica_version::v1::GuestLaunchMeasurements as PbGuestLaunchMeasurements,
     subnet::v1::{SubnetListRecord, SubnetRecord},
 };
 use ic_registry_client_helpers::deserialize_registry_value;
@@ -619,7 +620,7 @@ pub async fn submit_update_elected_replica_versions_proposal(
     version: Option<&ReplicaVersion>,
     sha256: Option<String>,
     upgrade_urls: Vec<String>,
-    guest_launch_measurements: Option<GuestLaunchMeasurements>,
+    guest_launch_measurements: Option<PbGuestLaunchMeasurements>,
     versions_to_unelect: Vec<ReplicaVersion>,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
@@ -942,4 +943,72 @@ pub async fn submit_update_api_boundary_node_version_proposal(
     )
     .await
     .expect("submit_update_api_boundary_node_version_proposal failed")
+}
+
+/// Submits a proposal to bless an alternative guest OS version for disaster recovery.
+///
+/// This proposal allows node operators to manually intervene in case of disaster to run
+/// NNS-approved alternative software. The proposal records approval for specific software
+/// configurations (firmware, kernel, initrd, and kernel command line) that can be used
+/// for recovery purposes.
+///
+/// # Arguments
+///
+/// * `governance`                      - Governance canister
+/// * `sender`                          - Sender of the proposal
+/// * `neuron_id`                       - ID of the proposing neuron. This neuron will
+///   automatically vote in favor of the proposal.
+/// * `chip_ids`                        - AMD Secure Processor chip IDs that are allowed to run
+///   this software. Each chip ID must be exactly 64 bytes.
+/// * `rootfs_hash`                     - Hexadecimal fingerprint of the recovery rootfs.
+///   Must contain only hexadecimal characters (0-9, A-F, a-f).
+/// * `base_guest_launch_measurements`  - The version being replaced by this alternative version
+///   must match this field.
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_bless_alternative_guest_os_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    chip_ids: Vec<Vec<u8>>,
+    rootfs_hash: String,
+    base_guest_launch_measurements: PbGuestLaunchMeasurements,
+) -> ProposalId {
+    let proposal = MakeProposalRequest {
+        title: Some("Bless Alternative Guest OS Version".to_string()),
+        summary: "Proposal to bless alternative guest OS version for disaster recovery".to_string(),
+        url: "".to_string(),
+        action: Some(ProposalActionRequest::BlessAlternativeGuestOsVersion(
+            BlessAlternativeGuestOsVersion {
+                chip_ids: Some(chip_ids),
+                rootfs_hash: Some(rootfs_hash),
+                base_guest_launch_measurements: Some(
+                    convert_guest_launch_measurements_from_pb_to_api(
+                        base_guest_launch_measurements,
+                    ),
+                ),
+            },
+        )),
+    };
+
+    let response: ManageNeuronResponse = governance
+        .update_from_sender(
+            "manage_neuron",
+            candid_one,
+            ManageNeuronRequest {
+                id: None,
+                command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(proposal))),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id.into())),
+            },
+            &sender,
+        )
+        .await
+        .expect("Error calling the manage_neuron api.");
+
+    match response.command.unwrap() {
+        manage_neuron_response::Command::MakeProposal(resp) => {
+            ProposalId::from(resp.proposal_id.unwrap())
+        }
+        other => panic!("Unexpected response: {other:?}"),
+    }
 }
