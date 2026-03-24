@@ -1260,7 +1260,7 @@ fn subnets_with_engines_falls_back_to_filtered() {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
         },
-        routing_table,
+        routing_table: routing_table.clone(),
         ..Default::default()
     };
 
@@ -1269,6 +1269,7 @@ fn subnets_with_engines_falls_back_to_filtered() {
         network_topology.subnets_with_engines(),
         network_topology.subnets()
     );
+    assert_eq!(network_topology.routing_table(), &routing_table);
     assert_eq!(
         network_topology.routing_table_with_engines(),
         network_topology.routing_table()
@@ -1306,7 +1307,7 @@ fn subnets_with_engines_returns_full_topology_when_set() {
 
     let mut network_topology = NetworkTopology {
         subnets: filtered_subnets.clone(),
-        routing_table: filtered_routing_table,
+        routing_table: filtered_routing_table.clone(),
         ..Default::default()
     };
     network_topology.set_full_topology(Some(FullTopology {
@@ -1314,9 +1315,10 @@ fn subnets_with_engines_returns_full_topology_when_set() {
         routing_table: full_routing_table.clone(),
     }));
 
-    // subnets() returns the filtered view.
+    // subnets() and routing_table() return the filtered view.
     assert_eq!(network_topology.subnets(), &filtered_subnets);
-    // subnets_with_engines() returns the full view.
+    assert_eq!(network_topology.routing_table(), &filtered_routing_table);
+    // subnets_with_engines() and routing_table_with_engines() return the full view.
     assert_eq!(network_topology.subnets_with_engines(), &full_subnets);
     assert_eq!(
         network_topology.routing_table_with_engines(),
