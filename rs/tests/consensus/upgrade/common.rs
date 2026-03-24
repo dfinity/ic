@@ -301,6 +301,7 @@ async fn upgrade_to(
     // Concurrently assert that all orchestrators shut down gracefully
     try_join_all(healthy_nodes.iter().map(|node| {
         let session = node.block_on_ssh_session().unwrap();
+        session.set_timeout(5 * 60 * 1000);
         let node_id = node.node_id;
         tokio::task::spawn_blocking(move || {
             if !JournalStreamer::new(session)
