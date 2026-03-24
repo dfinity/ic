@@ -3,7 +3,7 @@ use ic_base_types::CanisterId;
 use ic_crypto_tree_hash::{Label, Path};
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpUserQuery,
+    HttpReadStateContent, HttpUserQuery, SenderInfo,
 };
 use std::ops::RangeInclusive;
 
@@ -15,7 +15,7 @@ pub struct AnonymousContent {
     pub arg: Blob,
     pub ingress_expiry: u64,
     pub nonce: Option<Blob>,
-    pub sender_info: Option<bool>,
+    pub sender_info: Option<SenderInfo>,
 }
 
 impl AnonymousContent {
@@ -34,7 +34,7 @@ impl<'a> Arbitrary<'a> for AnonymousContent {
             arg: arbitrary_blob(u)?,
             ingress_expiry: u64::arbitrary(u)?,
             nonce: arbitrary_option_blob(u)?,
-            sender_info: arbitrary_option_bool(u)?,
+            sender_info: arbitrary_option_sender_info(u)?,
         })
     }
 }
@@ -124,9 +124,13 @@ fn arbitrary_option_blob<'a>(u: &mut Unstructured<'a>) -> Result<Option<Blob>> {
     })
 }
 
-fn arbitrary_option_bool<'a>(u: &mut Unstructured<'a>) -> Result<Option<bool>> {
+fn arbitrary_option_sender_info<'a>(u: &mut Unstructured<'a>) -> Result<Option<SenderInfo>> {
     Ok(if <bool as Arbitrary<'a>>::arbitrary(u)? {
-        Some(true)
+        Some(SenderInfo {
+            info: arbitrary_blob(u)?,
+            signer: arbitrary_blob(u)?,
+            sig: arbitrary_blob(u)?,
+        })
     } else {
         None
     })

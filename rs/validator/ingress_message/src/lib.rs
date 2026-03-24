@@ -45,6 +45,7 @@ pub use internal::TimeProvider;
 ///   but a signature was provided.
 /// * [`RequestValidationError::CanisterNotInDelegationTargets`]: if the request targets a canister
 ///   that is not authorized in one of the delegations.
+/// * [`RequestValidationError::SenderInfoUnsupported`]: if sender info is provided.
 pub trait HttpRequestVerifier<C> {
     fn validate_request(&self, request: &HttpRequest<C>) -> Result<(), RequestValidationError>;
 }
@@ -63,7 +64,7 @@ pub enum RequestValidationError {
     TooManyPathsError { length: usize, maximum: usize },
     PathTooLongError { length: usize, maximum: usize },
     NonceTooBigError { num_bytes: usize, maximum: usize },
-    InvalidSenderInfo,
+    SenderInfoUnsupported,
 }
 
 impl Display for RequestValidationError {
@@ -108,8 +109,8 @@ impl Display for RequestValidationError {
                 f,
                 "Nonce in request is too big: got {length} bytes, but at most {maximum} are allowed"
             ),
-            RequestValidationError::InvalidSenderInfo => {
-                write!(f, "Sender info is not allowed to be false")
+            RequestValidationError::SenderInfoUnsupported => {
+                write!(f, "Sender info is not supported yet.")
             }
         }
     }

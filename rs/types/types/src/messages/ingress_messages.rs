@@ -7,7 +7,10 @@ use crate::{
     messages::{
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
         HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
-        http::{CallOrQuery, representation_independent_hash_call_or_query},
+        http::{
+            CallOrQuery, RawSenderInfo, SenderInfoInternal,
+            representation_independent_hash_call_or_query,
+        },
     },
 };
 use ic_error_types::{ErrorCode, UserError};
@@ -44,7 +47,7 @@ pub struct SignedIngressContent {
     arg: Vec<u8>,
     ingress_expiry: u64,
     nonce: Option<Vec<u8>>,
-    sender_info: Option<bool>,
+    sender_info: Option<SenderInfoInternal>,
 }
 
 impl SignedIngressContent {
@@ -85,7 +88,7 @@ impl SignedIngressContent {
         arg: Vec<u8>,
         ingress_expiry: u64,
         nonce: Option<Vec<u8>>,
-        sender_info: Option<bool>,
+        sender_info: Option<SenderInfoInternal>,
     ) -> Self {
         Self {
             sender,
@@ -107,6 +110,7 @@ impl HasCanisterId for SignedIngressContent {
 
 impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
+        //TODO(CON-1687): Avoid cloning fields when hashing
         MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
             self.canister_id.get().into_vec(),
@@ -115,7 +119,11 @@ impl HttpRequestContent for SignedIngressContent {
             self.ingress_expiry,
             self.sender.get().into_vec(),
             self.nonce.as_deref(),
-            self.sender_info,
+            self.sender_info.as_ref().map(|sender_info| RawSenderInfo {
+                info: sender_info.info.clone(),
+                signer: sender_info.signer.get().into_vec(),
+                sig: sender_info.sig.clone(),
+            }),
         ))
     }
 
@@ -131,8 +139,8 @@ impl HttpRequestContent for SignedIngressContent {
         self.nonce.clone()
     }
 
-    fn sender_info(&self) -> Option<bool> {
-        self.sender_info
+    fn sender_info(&self) -> Option<&SenderInfoInternal> {
+        self.sender_info.as_ref()
     }
 }
 
@@ -155,7 +163,18 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
             arg: update.arg.0,
             ingress_expiry: update.ingress_expiry,
             nonce: update.nonce.map(|n| n.0),
-            sender_info: update.sender_info,
+            sender_info: match update.sender_info {
+                Some(sender_info) => Some(SenderInfoInternal {
+                    info: sender_info.info.0,
+                    signer: CanisterId::try_from(sender_info.signer.0).map_err(|err| {
+                        HttpRequestError::InvalidPrincipalId(format!(
+                            "Converting sender_info.signer to PrincipalId failed with {err:?}"
+                        ))
+                    })?,
+                    sig: sender_info.sig.0,
+                }),
+                None => None,
+            },
         })
     }
 }

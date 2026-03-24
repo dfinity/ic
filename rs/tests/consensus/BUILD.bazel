@@ -413,7 +413,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "message_canister_test",
+    name = "sender_info_test",
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

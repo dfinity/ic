@@ -61,8 +61,8 @@ mod try_from {
         use crate::UserId;
         use crate::messages::http::{Authentication, HttpCallContent, HttpRequestError};
         use crate::messages::{
-            Blob, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope, SignedIngressContent,
-            UserSignature,
+            Blob, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope, SenderInfo,
+            SenderInfoInternal, SignedIngressContent, UserSignature,
         };
         use assert_matches::assert_matches;
 
@@ -110,6 +110,70 @@ mod try_from {
                     auth: Authentication::Anonymous,
                 })
             )
+        }
+
+        #[test]
+        fn should_successfully_create_http_request_with_sender_info() {
+            let envelope = HttpRequestEnvelope {
+                content: HttpCallContent::Call {
+                    update: HttpCanisterUpdate {
+                        sender_info: Some(SenderInfo {
+                            info: Blob(vec![1, 2, 3]),
+                            signer: to_blob(fixed::canister_id()),
+                            sig: Blob(vec![4, 5, 6]),
+                        }),
+                        ..default_call_content()
+                    },
+                },
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let request = HttpRequest::try_from(envelope);
+
+            assert_eq!(
+                request,
+                Ok(HttpRequest {
+                    content: SignedIngressContent::new_for_testing(
+                        UserId::from(fixed::principal_id()),
+                        fixed::canister_id(),
+                        fixed::method_name(),
+                        fixed::arg().0,
+                        fixed::ingress_expiry(),
+                        Some(fixed::nonce()),
+                        Some(SenderInfoInternal {
+                            info: vec![1, 2, 3],
+                            signer: fixed::canister_id(),
+                            sig: vec![4, 5, 6],
+                        }),
+                    ),
+                    auth: Authentication::Anonymous,
+                })
+            );
+        }
+
+        #[test]
+        fn should_fail_creating_http_requests_with_invalid_sender_info_signer() {
+            let envelope = HttpRequestEnvelope {
+                content: HttpCallContent::Call {
+                    update: HttpCanisterUpdate {
+                        sender_info: Some(SenderInfo {
+                            info: Blob(vec![1, 2, 3]),
+                            signer: fixed::invalid_serialized_printipal_id(),
+                            sig: Blob(vec![4, 5, 6]),
+                        }),
+                        ..default_call_content()
+                    },
+                },
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let request = HttpRequest::try_from(envelope);
+
+            assert_matches!(request, Err(HttpRequestError::InvalidPrincipalId(_)));
         }
 
         #[test]

@@ -558,6 +558,54 @@ mod validate_ingress_expiry {
     }
 }
 
+mod validate_sender_info {
+    use ic_types::messages::{
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SenderInfo,
+    };
+
+    use super::*;
+
+    #[test]
+    fn should_accept_none_sender_info() {
+        let request = http_request_with_sender_info(None);
+        let result = validate_sender_info(&request);
+        assert_matches!(result, Ok(()));
+    }
+
+    #[test]
+    fn should_reject_some_sender_info() {
+        let request = http_request_with_sender_info(Some(SenderInfo {
+            info: Blob(vec![1, 2, 3]),
+            signer: Blob(canister_test_id(42).get().into_vec()),
+            sig: Blob(vec![4, 5, 6]),
+        }));
+        let result = validate_sender_info(&request);
+        assert_matches!(result, Err(RequestValidationError::SenderInfoUnsupported));
+    }
+
+    fn http_request_with_sender_info(
+        sender_info: Option<SenderInfo>,
+    ) -> HttpRequest<SignedIngressContent> {
+        HttpRequest::try_from(HttpRequestEnvelope::<HttpCallContent> {
+            content: HttpCallContent::Call {
+                update: HttpCanisterUpdate {
+                    canister_id: Blob(vec![42; 8]),
+                    method_name: "some_method".to_string(),
+                    arg: Default::default(),
+                    sender: Blob(vec![0x04]),
+                    nonce: None,
+                    ingress_expiry: 1_000,
+                    sender_info,
+                },
+            },
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        })
+        .expect("invalid http envelope")
+    }
+}
+
 mod canister_id_set {
     use super::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;

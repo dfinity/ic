@@ -34,6 +34,12 @@ pub(crate) enum CallOrQuery {
     Query,
 }
 
+pub(crate) struct RawSenderInfo {
+    pub info: Vec<u8>,
+    pub signer: Vec<u8>,
+    pub sig: Vec<u8>,
+}
+
 pub(crate) fn representation_independent_hash_call_or_query(
     request_type: CallOrQuery,
     canister_id: Vec<u8>,
@@ -42,7 +48,7 @@ pub(crate) fn representation_independent_hash_call_or_query(
     ingress_expiry: u64,
     sender: Vec<u8>,
     nonce: Option<&[u8]>,
-    sender_info: Option<bool>,
+    sender_info: Option<RawSenderInfo>,
 ) -> [u8; 32] {
     use RawHttpRequestVal::*;
     let mut map = btreemap! {
@@ -59,8 +65,15 @@ pub(crate) fn representation_independent_hash_call_or_query(
     if let Some(some_nonce) = nonce {
         map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
     }
-    if let Some(sender_info) = sender_info {
-        map.insert("sender_info".to_string(), U64(sender_info as u64));
+    if let Some(RawSenderInfo { info, signer, sig }) = sender_info {
+        map.insert(
+            "sender_info".to_string(),
+            Map(btreemap! {
+                "info".to_string() => Bytes(info),
+                "signer".to_string() => Bytes(signer),
+                "sig".to_string() => Bytes(sig),
+            }),
+        );
     }
     hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
 }
@@ -93,6 +106,14 @@ pub(crate) fn representation_independent_hash_read_state(
     hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
 }
 
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(Arbitrary))]
+pub struct SenderInfo {
+    pub info: Blob,
+    pub signer: Blob,
+    pub sig: Blob,
+}
+
 /// Describes the fields of a canister update call as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#http-call>`.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -109,7 +130,7 @@ pub struct HttpCanisterUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nonce: Option<Blob>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sender_info: Option<bool>,
+    pub sender_info: Option<SenderInfo>,
 }
 
 impl HttpCanisterUpdate {
@@ -123,7 +144,11 @@ impl HttpCanisterUpdate {
             self.ingress_expiry,
             self.sender.0.clone(),
             self.nonce.as_ref().map(|x| x.0.as_slice()),
-            self.sender_info,
+            self.sender_info.as_ref().map(|sender_info| RawSenderInfo {
+                info: sender_info.info.0.clone(),
+                signer: sender_info.signer.0.clone(),
+                sig: sender_info.sig.0.clone(),
+            }),
         )
     }
 
@@ -290,6 +315,14 @@ pub enum Authentication {
     Anonymous,
 }
 
+/// Sender info after decoding.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct SenderInfoInternal {
+    pub info: Vec<u8>,
+    pub signer: CanisterId,
+    pub sig: Vec<u8>,
+}
+
 /// Common attributes that all HTTP request contents should have.
 pub trait HttpRequestContent {
     fn id(&self) -> MessageId;
@@ -300,7 +333,7 @@ pub trait HttpRequestContent {
 
     fn nonce(&self) -> Option<Vec<u8>>;
 
-    fn sender_info(&self) -> Option<bool>;
+    fn sender_info(&self) -> Option<&SenderInfoInternal>;
 }
 
 /// A trait implemented by HTTP requests that contain a `canister_id`.
@@ -325,7 +358,7 @@ impl<C: HttpRequestContent> HttpRequest<C> {
         self.content.nonce()
     }
 
-    pub fn sender_info(&self) -> Option<bool> {
+    pub fn sender_info(&self) -> Option<&SenderInfoInternal> {
         self.content.sender_info()
     }
 }
@@ -367,7 +400,7 @@ impl HttpRequestContent for Query {
         }
     }
 
-    fn sender_info(&self) -> Option<bool> {
+    fn sender_info(&self) -> Option<&SenderInfoInternal> {
         None
     }
 }
@@ -389,7 +422,7 @@ impl HttpRequestContent for ReadState {
         self.nonce.clone()
     }
 
-    fn sender_info(&self) -> Option<bool> {
+    fn sender_info(&self) -> Option<&SenderInfoInternal> {
         None
     }
 }

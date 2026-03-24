@@ -106,8 +106,8 @@ name = "ic-systest-catch-up-loop-prevention-test"
 path = "catch_up_loop_prevention_test.rs"
 
 [[bin]]
-name = "ic-systest-message-canister-test"
-path = "message_canister_test.rs"
+name = "ic-systest-sender_info_test"
+path = "sender_info_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-splitting"
