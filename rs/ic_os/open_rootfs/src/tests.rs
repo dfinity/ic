@@ -4,9 +4,14 @@ use anyhow::{Context, Result};
 use candid::Encode;
 use command_runner::MockCommandRunner;
 use config_tool::serialize_and_write_config;
-use config_types::{GuestOSConfig, TrustedExecutionEnvironmentConfig};
-use ic_certification_test_utils::{CertificateBuilder, CertificateData};
+use config_types::{
+    GuestOSConfig, GuestOSDevSettings, GuestOSSettings, TrustedExecutionEnvironmentConfig,
+};
+use ic_certification_test_utils::{
+    CertificateBuilder, CertificateData, SecretKeyBytes, generate_root_of_trust,
+};
 use ic_crypto_tree_hash::{Label, LabeledTree, flatmap};
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_pem;
 use ic_device::mount::PartitionSelector;
 use ic_device::mount::testing::MockPartitionProvider;
 use ic_nns_common::pb::v1::ProposalId;
@@ -15,8 +20,10 @@ use ic_nns_governance_api::{
     BlessAlternativeGuestOsVersion, GuestLaunchMeasurement, GuestLaunchMeasurements, Proposal,
     ProposalInfo, ProposalStatus,
 };
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use linux_kernel_command_line::KernelCommandLine;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::collections::HashMap;
 use std::fs;
@@ -42,25 +49,36 @@ struct TestFixture {
     sev_firmware: Option<MockSevGuestFirmwareBuilder>,
     command_runner: MockCommandRunner,
     partition_provider: MockPartitionProvider,
+    nns_key: (ThresholdSigPublicKey, SecretKeyBytes),
+    guestos_config: GuestOSConfig,
 }
 
 impl TestFixture {
     fn new() -> Self {
+        let nns_key = generate_root_of_trust(&mut StdRng::from_seed([42_u8; 32]));
         let signer = FakeAttestationReportSigner::default();
+        let sev_certificate_chain_pem = signer.get_certificate_chain_pem();
+
+        let guestos_config = GuestOSConfig {
+            trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
+                sev_cert_chain_pem: sev_certificate_chain_pem.clone(),
+            }),
+            guestos_settings: GuestOSSettings {
+                guestos_dev_settings: GuestOSDevSettings {
+                    nns_pub_key_override: Some(
+                        String::from_utf8(threshold_sig_public_key_to_pem(nns_key.0).unwrap())
+                            .unwrap(),
+                    ),
+                    ..Default::default()
+                },
+            },
+            ..Default::default()
+        };
 
         let cmdline =
             KernelCommandLine::from_str(&format!("root_hash={BASE_ROOTFS_HASH}")).unwrap();
 
         let config_media = Arc::new(TempDir::with_prefix("config").unwrap());
-        let guestos_config = GuestOSConfig {
-            trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
-                sev_cert_chain_pem: signer.get_certificate_chain_pem(),
-            }),
-            ..Default::default()
-        };
-
-        serialize_and_write_config(&config_media.path().join("config.json"), &guestos_config)
-            .expect("Failed to write GuestOS config");
 
         let mut partitions = HashMap::new();
         partitions.insert(
@@ -106,6 +124,8 @@ impl TestFixture {
             root_device: A_ROOT_PATH.into(),
             kernel_cmdline: cmdline,
             sev_firmware: Some(sev_firmware),
+            nns_key,
+            guestos_config,
             command_runner,
             partition_provider: MockPartitionProvider::new(partitions),
         }
@@ -201,13 +221,10 @@ impl TestFixture {
             Label::from("time") => LabeledTree::Leaf(vec![0u8; 8])
         ]);
 
-        let mut rng = rand::rngs::StdRng::from_seed([42_u8; 32]);
-        let (_cert, root_pk, cert_cbor) =
-            CertificateBuilder::new_with_rng(CertificateData::CustomTree(tree), &mut rng).build();
-
-        let nns_public_key =
-            ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_pem(root_pk)
-                .expect("Failed to encode NNS public key");
+        let (_cert, _root_pk, cert_cbor) =
+            CertificateBuilder::new(CertificateData::CustomTree(tree))
+                .with_root_of_trust(self.nns_key.0, self.nns_key.1.clone())
+                .build();
 
         // Write proposal to boot partition
         fs::write(
@@ -219,20 +236,17 @@ impl TestFixture {
         )
         .expect("Failed to write recovery proposal");
 
-        // Write NNS public key override to CONFIG media
-        fs::write(
-            self.partition_provider
-                .get_partition(PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()))
-                .unwrap()
-                .join("nns_public_key_override.pem"),
-            &nns_public_key,
-        )
-        .expect("Failed to write NNS public key");
-
         self
     }
 
     fn run(self) -> Result<()> {
+        let config_media_path = self
+            .partition_provider
+            .get_partition(PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()))
+            .unwrap();
+        serialize_and_write_config(&config_media_path.join("config.json"), &self.guestos_config)
+            .expect("Failed to write GuestOS config");
+
         crate::run(
             &self.root_device,
             &self.kernel_cmdline,
@@ -435,14 +449,11 @@ fn test_nns_root_key_mismatch() {
 
     // Remove NNS public key override, so proposal will be verified against public NNS key
     // which will fail.
-    fs::remove_file(
-        fixture
-            .partition_provider
-            .get_partition(PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()))
-            .unwrap()
-            .join("nns_public_key_override.pem"),
-    )
-    .expect("Failed to remove NNS public key");
+    fixture
+        .guestos_config
+        .guestos_settings
+        .guestos_dev_settings
+        .nns_pub_key_override = None;
 
     let error = fixture
         .run()
