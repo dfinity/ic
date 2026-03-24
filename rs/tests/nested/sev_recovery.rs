@@ -189,8 +189,7 @@ async fn submit_and_get_alternative_guestos_proposal(
         get_tagged_guestos_rootfs_hash("recovery"),
         get_guestos_launch_measurements(),
     )
-    .await
-    .0;
+    .await;
 
     info!(logger, "Submitted proposal {}", proposal_id);
 

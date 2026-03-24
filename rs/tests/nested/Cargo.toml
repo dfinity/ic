@@ -30,6 +30,7 @@ ic_consensus_system_test_utils = { path = "../consensus/utils" }
 prost = { workspace = true }
 reqwest = { workspace = true }
 regex = { workspace = true }
+serde_cbor = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 
