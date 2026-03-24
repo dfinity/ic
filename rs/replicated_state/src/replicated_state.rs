@@ -20,11 +20,12 @@ use ic_interfaces::messaging::{
 };
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     AccumulatedPriority, CanisterId, NumBytes, SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
+    batch::{ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{
@@ -32,7 +33,7 @@ use ic_types::{
     },
     time::CoarseTime,
 };
-use ic_types_cycles::{CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
@@ -523,6 +524,10 @@ impl ReplicatedState {
             .map(|canister| canister.as_ref())
     }
 
+    pub fn canister_state_arc(&self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
+        self.canister_states.get(canister_id).cloned()
+    }
+
     /// Makes a mutable reference to the canister state, cloning it if necessary.
     ///
     /// Make sure to only call this when actually mutating the canister state.
@@ -946,6 +951,10 @@ impl ReplicatedState {
                     .map_or(0, |ccm| ccm.callbacks().len())
             })
             .sum()
+    }
+
+    pub fn resource_limits(&self) -> ResourceLimits {
+        self.metadata.own_resource_limits
     }
 
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or

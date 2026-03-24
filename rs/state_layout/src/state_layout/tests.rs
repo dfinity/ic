@@ -46,7 +46,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         executed: 0,
         interrupted_during_execution: 0,
         certified_data: vec![],
-        consumed_cycles: NominalCycles::from(0),
+        consumed_cycles: NominalCycles::zero(),
         stable_memory_size: NumWasmPages::from(0),
         heap_delta_debit: NumBytes::from(0),
         install_code_debit: NumInstructions::from(0),
@@ -335,7 +335,7 @@ fn test_encode_decode_task_queue() {
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::clone(&request)),
             prepaid_execution_cycles: Cycles::new(3),
-            call_id: InstallCodeCallId::new(3u64),
+            call_id: InstallCodeCallId::new(3_u64),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Response {
@@ -595,7 +595,7 @@ fn test_canister_id_from_path() {
 // A strategy to create a randomly sampled and strictly monotonic sequence of `Height`.
 fn random_sorted_unique_heights(max_length: usize) -> impl Strategy<Value = Vec<Height>> {
     // Take a vector of length max_length, sort it and remove duplicate entries.
-    let unsorted = prop::collection::vec(0u64.., max_length);
+    let unsorted = prop::collection::vec(0_u64.., max_length);
     unsorted.prop_map(|heights| {
         let mut heights: Vec<Height> = heights.iter().map(|h| Height::new(*h)).collect();
         heights.sort();

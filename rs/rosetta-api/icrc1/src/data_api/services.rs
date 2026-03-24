@@ -268,7 +268,7 @@ pub async fn account_balance_with_metadata(
         // Note: subaccount None and Some([0; 32]) both represent the default subaccount
         let has_non_default_subaccount = match account.subaccount {
             None => false,
-            Some(subaccount) => subaccount != [0u8; 32],
+            Some(subaccount) => subaccount != [0_u8; 32],
         };
 
         if has_non_default_subaccount {
@@ -1628,7 +1628,7 @@ mod test {
                 transaction: IcrcTransaction {
                     operation: IcrcOperation::Mint {
                         to: main_account,
-                        amount: Nat::from(1000u64),
+                        amount: Nat::from(1000_u64),
                         fee: None,
                     },
                     created_at_time: Some(1000),
@@ -1649,7 +1649,7 @@ mod test {
         // Test 1: Aggregate flag with subaccount should fail
         let account_with_subaccount = Account {
             owner: principal,
-            subaccount: Some([1u8; 32]),
+            subaccount: Some([1_u8; 32]),
         };
 
         let account_identifier = AccountIdentifier::from(account_with_subaccount);
@@ -1684,7 +1684,7 @@ mod test {
         // Test 2: Create a simple scenario with aggregated balance
         // Use a separate storage client for the aggregation test
         let storage_client2 = StorageClient::new_in_memory().await.unwrap();
-        let subaccount1 = [1u8; 32];
+        let subaccount1 = [1_u8; 32];
         let account1 = Account {
             owner: principal,
             subaccount: Some(subaccount1),
@@ -1698,7 +1698,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: main_account,
-                            amount: Nat::from(500u64),
+                            amount: Nat::from(500_u64),
                             fee: None,
                         },
                         created_at_time: Some(1000),
@@ -1718,7 +1718,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: account1,
-                            amount: Nat::from(1000u64),
+                            amount: Nat::from(1000_u64),
                             fee: None,
                         },
                         created_at_time: Some(2000),
@@ -1825,12 +1825,12 @@ mod test {
             owner: principal,
             subaccount: None,
         };
-        let subaccount1 = [1u8; 32];
+        let subaccount1 = [1_u8; 32];
         let account1 = Account {
             owner: principal,
             subaccount: Some(subaccount1),
         };
-        let subaccount2 = [2u8; 32];
+        let subaccount2 = [2_u8; 32];
         let account2 = Account {
             owner: principal,
             subaccount: Some(subaccount2),
@@ -1873,7 +1873,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: main_account,
-                            amount: Nat::from(1000u64),
+                            amount: Nat::from(1000_u64),
                             fee: None,
                         },
                         created_at_time: Some(1000),
@@ -1896,8 +1896,8 @@ mod test {
                             from: main_account,
                             to: account1,
                             spender: None,
-                            amount: Nat::from(300u64),
-                            fee: Some(Nat::from(10u64)),
+                            amount: Nat::from(300_u64),
+                            fee: Some(Nat::from(10_u64)),
                         },
                         created_at_time: Some(2000),
                         memo: None,
@@ -1919,8 +1919,8 @@ mod test {
                             from: main_account,
                             to: account2,
                             spender: None,
-                            amount: Nat::from(200u64),
-                            fee: Some(Nat::from(10u64)),
+                            amount: Nat::from(200_u64),
+                            fee: Some(Nat::from(10_u64)),
                         },
                         created_at_time: Some(3000),
                         memo: None,
@@ -1942,8 +1942,8 @@ mod test {
                             from: account1,
                             to: other_account,
                             spender: None,
-                            amount: Nat::from(150u64),
-                            fee: Some(Nat::from(10u64)),
+                            amount: Nat::from(150_u64),
+                            fee: Some(Nat::from(10_u64)),
                         },
                         created_at_time: Some(4000),
                         memo: None,
@@ -2049,8 +2049,8 @@ mod test {
         let principal2 = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
 
         // Create accounts with specific non-zero subaccounts
-        let from_subaccount = [1u8; 32]; // Non-zero subaccount
-        let mut to_subaccount = [0u8; 32];
+        let from_subaccount = [1_u8; 32]; // Non-zero subaccount
+        let mut to_subaccount = [0_u8; 32];
         to_subaccount[31] = 42; // Different non-zero subaccount: [0, 0, ..., 0, 42]
 
         let from_account = Account {
@@ -2090,7 +2090,7 @@ mod test {
             status: None,
             account: Some(from_account_identifier),
             amount: Some(Amount::new(
-                BigInt::from(-100000000i64), // -1 ICP
+                BigInt::from(-100000000_i64), // -1 ICP
                 currency.clone(),
             )),
             coin_change: None,
@@ -2107,7 +2107,7 @@ mod test {
             status: None,
             account: Some(to_account_identifier),
             amount: Some(Amount::new(
-                BigInt::from(100000000i64), // +1 ICP
+                BigInt::from(100000000_i64), // +1 ICP
                 currency.clone(),
             )),
             coin_change: None,
@@ -2137,7 +2137,7 @@ mod test {
                 );
                 assert_eq!(
                     amount,
-                    Nat::from(100000000u64),
+                    Nat::from(100000000_u64),
                     "Amount should be preserved"
                 );
             }
@@ -2174,7 +2174,7 @@ mod test {
         );
 
         // Test 2: Account with non-zero subaccount should be preserved
-        let non_zero_subaccount = [1u8; 32];
+        let non_zero_subaccount = [1_u8; 32];
         let account_nonzero = Account {
             owner: principal,
             subaccount: Some(non_zero_subaccount),
@@ -2218,10 +2218,10 @@ mod test {
         };
         let explicit_zero_account = Account {
             owner: principal,
-            subaccount: Some([0u8; 32]),
+            subaccount: Some([0_u8; 32]),
         };
         let subaccount1 = [
-            0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0_u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 1,
         ];
         let account1 = Account {
@@ -2238,7 +2238,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: main_account,
-                            amount: Nat::from(6000000u64), // 0.06 tokens
+                            amount: Nat::from(6000000_u64), // 0.06 tokens
                             fee: None,
                         },
                         created_at_time: Some(1),
@@ -2259,7 +2259,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: explicit_zero_account,
-                            amount: Nat::from(1000000u64), // 0.01 tokens
+                            amount: Nat::from(1000000_u64), // 0.01 tokens
                             fee: None,
                         },
                         created_at_time: Some(2),
@@ -2280,7 +2280,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: account1,
-                            amount: Nat::from(1000000u64), // 0.01 tokens
+                            amount: Nat::from(1000000_u64), // 0.01 tokens
                             fee: None,
                         },
                         created_at_time: Some(3),
@@ -2301,22 +2301,22 @@ mod test {
         storage_client.update_account_balances().await.unwrap();
 
         // Check individual balances (use a reasonable high block index instead of u64::MAX)
-        let high_block_idx = 1000u64;
+        let high_block_idx = 1000_u64;
         let main_balance = storage_client
             .get_account_balance_at_block_idx(&main_account, high_block_idx)
             .await
             .unwrap()
-            .unwrap_or(Nat::from(0u64));
+            .unwrap_or(Nat::from(0_u64));
         let explicit_zero_balance = storage_client
             .get_account_balance_at_block_idx(&explicit_zero_account, high_block_idx)
             .await
             .unwrap()
-            .unwrap_or(Nat::from(0u64));
+            .unwrap_or(Nat::from(0_u64));
         let account1_balance = storage_client
             .get_account_balance_at_block_idx(&account1, high_block_idx)
             .await
             .unwrap()
-            .unwrap_or(Nat::from(0u64));
+            .unwrap_or(Nat::from(0_u64));
 
         println!("Individual balances:");
         println!("  Main account (None): {main_balance}");
@@ -2335,7 +2335,7 @@ mod test {
         println!("Aggregated balance: {aggregated_balance}");
 
         // Expected: 6000000 + 1000000 + 1000000 = 8000000
-        let expected_total = Nat::from(8000000u64);
+        let expected_total = Nat::from(8000000_u64);
         println!("Expected total: {expected_total}");
 
         // Debug: Let's manually check what the SQL query returns by using the storage operations directly

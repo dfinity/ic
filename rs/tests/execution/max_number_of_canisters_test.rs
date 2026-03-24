@@ -74,7 +74,7 @@ pub fn creating_canisters_fails_if_limit_of_allowed_canisters_is_reached(env: Te
             assert_reject(
                 canister
                     .update(wasm().call(management::create_canister(Cycles::from(
-                        100_000_000_000u64,
+                        100_000_000_000_u64,
                     ))))
                     .await,
                 RejectCode::CanisterReject,

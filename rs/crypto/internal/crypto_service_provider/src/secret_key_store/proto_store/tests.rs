@@ -1195,7 +1195,7 @@ mod zeroize_old_secret_key_store {
         let read_bytes = fs::read(file).expect("error reading file");
         assert!(!read_bytes.is_empty());
         for byte in read_bytes {
-            assert_eq!(byte, 0u8);
+            assert_eq!(byte, 0_u8);
         }
     }
 }

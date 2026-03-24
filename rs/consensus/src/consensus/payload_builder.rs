@@ -49,7 +49,7 @@ impl PayloadBuilderImpl {
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
-        vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -59,7 +59,7 @@ impl PayloadBuilderImpl {
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
             BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
             BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
-            BatchPayloadSectionBuilder::VetKd(vetkd_payload_builder),
+            BatchPayloadSectionBuilder::ChainKey(chain_key_payload_builder),
         ];
 
         Self {
@@ -289,7 +289,7 @@ pub(crate) mod test {
         let canister_http_payload_builder =
             FakeCanisterHttpPayloadBuilder::new().with_responses(canister_http_responses);
         let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
-        let vetkd_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let chain_key_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
@@ -300,7 +300,7 @@ pub(crate) mod test {
             Arc::new(self_validating_payload_builder),
             Arc::new(canister_http_payload_builder),
             Arc::new(query_stats_payload_builder),
-            Arc::new(vetkd_payload_builder),
+            Arc::new(chain_key_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )
@@ -420,7 +420,7 @@ pub(crate) mod test {
     #[test]
     // NOTE: this test is sensitive to the order in which the individual payload builders are executed.
     // At the time of the writing the test the order for a block at height 1 is:
-    // 1. vetkd
+    // 1. chain_key
     // 2. ingress
     // 3. bitcoin
     // 3. xnet
@@ -434,25 +434,25 @@ pub(crate) mod test {
             const XNET_PAYLOAD_SIZE: NumBytes = NumBytes::new(64 * KB);
             const BITCOIN_PAYLOAD_SIZE: NumBytes = NumBytes::new(128 * KB);
             const CANISTER_HTTP_PAYLOAD_SIZE: NumBytes = NumBytes::new(256 * KB);
-            const VETKD_PAYLOAD_SIZE: NumBytes = NumBytes::new(512 * KB);
+            const CHAIN_KEY_PAYLOAD_SIZE: NumBytes = NumBytes::new(512 * KB);
             const QUERY_STATS_PAYLOAD_SIZE: NumBytes = NumBytes::new(MB);
             const INGRESS_PAYLOAD_SIZE: NumBytes = NumBytes::new(2 * MB);
 
             let payload_builder = set_up_payload_builder(
                 registry,
                 MocksSettings {
-                    vetkd_payload_to_return: vec![0; VETKD_PAYLOAD_SIZE.get() as usize],
-                    expected_vetkd_payload_size_limit: MAX_BLOCK_SIZE,
+                    chain_key_payload_to_return: vec![0; CHAIN_KEY_PAYLOAD_SIZE.get() as usize],
+                    expected_chain_key_payload_size_limit: MAX_BLOCK_SIZE,
                     ingress_payload_size_to_return: INGRESS_PAYLOAD_SIZE,
-                    expected_ingress_payload_size_limit: MAX_BLOCK_SIZE - VETKD_PAYLOAD_SIZE,
+                    expected_ingress_payload_size_limit: MAX_BLOCK_SIZE - CHAIN_KEY_PAYLOAD_SIZE,
                     bitcoin_payload_size_to_return: BITCOIN_PAYLOAD_SIZE,
                     expected_bitcoin_payload_size_limit: MAX_BLOCK_SIZE
-                        - VETKD_PAYLOAD_SIZE
+                        - CHAIN_KEY_PAYLOAD_SIZE
                         - INGRESS_PAYLOAD_SIZE,
                     xnet_payload_size_to_return: XNET_PAYLOAD_SIZE,
                     expected_xnet_payload_size_limit: NumBytes::new(
                         95 * (MAX_BLOCK_SIZE
-                            - VETKD_PAYLOAD_SIZE
+                            - CHAIN_KEY_PAYLOAD_SIZE
                             - INGRESS_PAYLOAD_SIZE
                             - BITCOIN_PAYLOAD_SIZE)
                             .get()
@@ -463,13 +463,13 @@ pub(crate) mod test {
                         CANISTER_HTTP_PAYLOAD_SIZE.get() as usize
                     ],
                     expected_http_outcalls_size_limit: MAX_BLOCK_SIZE
-                        - VETKD_PAYLOAD_SIZE
+                        - CHAIN_KEY_PAYLOAD_SIZE
                         - INGRESS_PAYLOAD_SIZE
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE,
                     query_stats_payload_to_return: vec![0; QUERY_STATS_PAYLOAD_SIZE.get() as usize],
                     expected_query_stats_size_limit: MAX_BLOCK_SIZE
-                        - VETKD_PAYLOAD_SIZE
+                        - CHAIN_KEY_PAYLOAD_SIZE
                         - INGRESS_PAYLOAD_SIZE
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE
@@ -513,12 +513,12 @@ pub(crate) mod test {
             let settings = MocksSettings {
                 ingress_payload_size_to_return: NumBytes::from(ingress_payload_size),
                 query_stats_payload_to_return: vec![0; MB as usize],
-                vetkd_payload_to_return: vec![0; 512 * KB as usize],
+                chain_key_payload_to_return: vec![0; 512 * KB as usize],
                 http_outcalls_payload_to_return: vec![0; 256 * KB as usize],
                 bitcoin_payload_size_to_return: NumBytes::new(128 * KB),
                 xnet_payload_size_to_return: NumBytes::new(64 * KB),
                 // The fields below are irrelevant for the test
-                expected_vetkd_payload_size_limit: ZERO_BYTES,
+                expected_chain_key_payload_size_limit: ZERO_BYTES,
                 expected_ingress_payload_size_limit: ZERO_BYTES,
                 expected_bitcoin_payload_size_limit: ZERO_BYTES,
                 expected_xnet_payload_size_limit: ZERO_BYTES,
@@ -546,7 +546,7 @@ pub(crate) mod test {
                         self_validating: SelfValidatingPayload::default(),
                         canister_http: settings.http_outcalls_payload_to_return,
                         query_stats: settings.query_stats_payload_to_return,
-                        vetkd: settings.vetkd_payload_to_return,
+                        chain_key: settings.chain_key_payload_to_return,
                     },
                     dkg: DkgDataPayload::new_empty(Height::from(0)),
                     idkg: None,
@@ -572,8 +572,8 @@ pub(crate) mod test {
     struct MocksSettings {
         ingress_payload_size_to_return: NumBytes,
         expected_ingress_payload_size_limit: NumBytes,
-        vetkd_payload_to_return: Vec<u8>,
-        expected_vetkd_payload_size_limit: NumBytes,
+        chain_key_payload_to_return: Vec<u8>,
+        expected_chain_key_payload_size_limit: NumBytes,
         bitcoin_payload_size_to_return: NumBytes,
         expected_bitcoin_payload_size_limit: NumBytes,
         xnet_payload_size_to_return: NumBytes,
@@ -588,9 +588,9 @@ pub(crate) mod test {
         registry: Arc<dyn RegistryClient>,
         settings: MocksSettings,
     ) -> PayloadBuilderImpl {
-        let vetkd_payload_builder = MockBatchPayloadBuilder::new().with_response_and_max_size(
-            settings.vetkd_payload_to_return,
-            settings.expected_vetkd_payload_size_limit,
+        let chain_key_payload_builder = MockBatchPayloadBuilder::new().with_response_and_max_size(
+            settings.chain_key_payload_to_return,
+            settings.expected_chain_key_payload_size_limit,
         );
 
         let mut ingress_selector = MockIngressSelector::new();
@@ -668,7 +668,7 @@ pub(crate) mod test {
             Arc::new(self_validating_payload_builder),
             Arc::new(canister_http_payload_builder),
             Arc::new(query_stats_payload_builder),
-            Arc::new(vetkd_payload_builder),
+            Arc::new(chain_key_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )

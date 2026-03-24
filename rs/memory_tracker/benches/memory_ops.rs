@@ -65,7 +65,7 @@ fn mmap_read_write(file: &File) {
 }
 
 fn file_read_write(file: &File) {
-    let mut buf = [0u8; WASM_PAGE_SIZE];
+    let mut buf = [0_u8; WASM_PAGE_SIZE];
     file.read_exact_at(&mut buf, 0).unwrap();
     for i in 0..64 / 4 {
         buf[PAGE_SIZE * i] = buf[1 + PAGE_SIZE * i];

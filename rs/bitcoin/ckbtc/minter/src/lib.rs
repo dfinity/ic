@@ -1108,7 +1108,7 @@ pub fn fake_sign(unsigned_tx: &tx::UnsignedTransaction) -> tx::SignedTransaction
                 previous_output: unsigned_input.previous_output.clone(),
                 sequence: unsigned_input.sequence,
                 signature: signature::EncodedSignature::fake(),
-                pubkey: ByteBuf::from(vec![0u8; tx::PUBKEY_LEN]),
+                pubkey: ByteBuf::from(vec![0_u8; tx::PUBKEY_LEN]),
             })
             .collect(),
         outputs: unsigned_tx.outputs.clone(),
@@ -1948,6 +1948,11 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
 
     pub fn set_expiration(&mut self, expiration: Duration) {
         self.expiration = expiration;
+    }
+
+    pub fn clear(&mut self) {
+        self.keys.clear();
+        self.values.clear();
     }
 
     pub fn prune<T: Into<Timestamp>>(&mut self, now: T) {
