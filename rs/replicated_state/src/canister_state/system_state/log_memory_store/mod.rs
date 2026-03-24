@@ -91,7 +91,11 @@ impl LogMemoryStore {
             } else {
                 None
             },
-            persistent_next_idx,
+            persistent_next_idx: if feature_flag == FlagStatus::Enabled {
+                persistent_next_idx
+            } else {
+                0
+            },
             header_cache: OnceLock::new(),
             delta_log_sizes: VecDeque::new(),
         }

@@ -5,6 +5,7 @@ use super::super::test_utilities::{
 };
 use super::super::*;
 use super::zero_instruction_overhead_config;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::{
     Method, Payload as _, TakeCanisterSnapshotArgs, UninstallCodeArgs,
@@ -16,7 +17,6 @@ use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::CyclesUseCase;
 use ic_types_test_utils::ids::canister_test_id;
-use more_asserts::assert_lt;
 use std::time::Duration;
 
 #[test]
@@ -70,10 +70,14 @@ fn only_charge_for_allocation_after_specified_duration() {
     // should be triggered.
     test.set_time(initial_time + 2 * time_between_batches);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert_lt!(
+    assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
-        initial_cycles,
-        "Canister balance should decrease due to allocation charging"
+        initial_cycles
+            - if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                20
+            } else {
+                10
+            },
     );
 }
 
