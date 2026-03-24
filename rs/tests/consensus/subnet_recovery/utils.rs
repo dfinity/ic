@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use candid::Principal;
 use ic_consensus_system_test_utils::{
-    journal::JournalStreamer,
     rw_message::{can_read_msg, cannot_store_msg},
     ssh_access::AuthMean,
 };
@@ -18,7 +17,7 @@ use ic_system_test_driver::{
             IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to, secs,
         },
     },
-    util::block_on,
+    util::{JournalStreamer, block_on},
 };
 use ic_types::SubnetId;
 use slog::{Logger, info};

@@ -15957,7 +15957,6 @@ dependencies = [
  "registry-canister",
  "reqwest",
  "rsa",
- "serde",
  "serde_json",
  "slog",
  "ssh2",

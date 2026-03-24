@@ -15,7 +15,6 @@ end::catalog[] */
 
 use anyhow::Result;
 use anyhow::bail;
-use ic_consensus_system_test_utils::journal::JournalStreamer;
 use ic_consensus_system_test_utils::upgrade::{
     bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
 };
@@ -34,7 +33,7 @@ use ic_system_test_driver::driver::{
     test_env_api::*,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::block_on;
+use ic_system_test_driver::util::{JournalStreamer, block_on};
 use ic_types::Height;
 use slog::info;
 use ssh2::Session;

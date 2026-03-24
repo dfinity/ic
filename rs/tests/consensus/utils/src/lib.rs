@@ -6,7 +6,6 @@ use ic_types::Height;
 use slog::{Logger, info, warn};
 
 pub mod impersonate_upstreams;
-pub mod journal;
 pub mod node;
 pub mod performance;
 pub mod rw_message;
