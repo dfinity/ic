@@ -149,7 +149,7 @@ impl LogReceiver {
         use tokio::io::AsyncReadExt;
 
         let (mut stream, _addr) = self.listener.accept().await?;
-        let mut buf: Vec<u8> = vec![0u8; 4096];
+        let mut buf: Vec<u8> = vec![0_u8; 4096];
         let mut log = {
             let log = self.log.clone();
             move |r: &'_ slog::Record<'_>| {
@@ -169,7 +169,7 @@ impl LogReceiver {
             };
             // increase buffer size if necessary
             if buf.len() < msg_len {
-                buf.resize(msg_len, 0u8);
+                buf.resize(msg_len, 0_u8);
             }
 
             // read message

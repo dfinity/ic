@@ -1940,7 +1940,7 @@ VALUES (:idx, :block_idx)"#,
         // Verify the balance history
         let history = blocks.get_account_balance_history(&account, None).unwrap();
         assert_eq!(history.len(), 1);
-        assert_eq!(history[0], (0u64, Tokens::from_e8s(large_amount)));
+        assert_eq!(history[0], (0_u64, Tokens::from_e8s(large_amount)));
     }
 
     #[test]
@@ -1963,13 +1963,13 @@ VALUES (:idx, :block_idx)"#,
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![1u64, account1.to_hex(), small_value1 as i64],
+                params![1_u64, account1.to_hex(), small_value1 as i64],
             )
             .unwrap();
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![2u64, account2.to_hex(), small_value2 as i64],
+                params![2_u64, account2.to_hex(), small_value2 as i64],
             )
             .unwrap();
 
@@ -1979,13 +1979,13 @@ VALUES (:idx, :block_idx)"#,
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![3u64, account1.to_hex(), large_value1 as i64], // Stored as negative i64
+                params![3_u64, account1.to_hex(), large_value1 as i64], // Stored as negative i64
             )
             .unwrap();
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![4u64, account2.to_hex(), large_value2 as i64], // Stored as -1
+                params![4_u64, account2.to_hex(), large_value2 as i64], // Stored as -1
             )
             .unwrap();
 
@@ -2030,7 +2030,7 @@ VALUES (:idx, :block_idx)"#,
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![1u64, account.to_hex(), small_value as i64],
+                params![1_u64, account.to_hex(), small_value as i64],
             )
             .unwrap();
 
@@ -2044,7 +2044,7 @@ VALUES (:idx, :block_idx)"#,
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![2u64, account.to_hex(), large_value_as_i64],
+                params![2_u64, account.to_hex(), large_value_as_i64],
             )
             .unwrap();
 
@@ -2058,7 +2058,7 @@ VALUES (:idx, :block_idx)"#,
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![3u64, account.to_hex(), max_value_as_i64],
+                params![3_u64, account.to_hex(), max_value_as_i64],
             )
             .unwrap();
 
@@ -2067,10 +2067,10 @@ VALUES (:idx, :block_idx)"#,
         assert_eq!(balance, Some(max_value)); // Should recover u64::MAX
 
         // Verify that bit reinterpretation works correctly
-        assert_eq!(large_value_as_i64, -8446744073709551616i64);
-        assert_eq!(max_value_as_i64, -1i64);
-        assert_eq!((-8446744073709551616i64) as u64, 10000000000000000000u64);
-        assert_eq!((-1i64) as u64, u64::MAX);
+        assert_eq!(large_value_as_i64, -8446744073709551616_i64);
+        assert_eq!(max_value_as_i64, -1_i64);
+        assert_eq!((-8446744073709551616_i64) as u64, 10000000000000000000_u64);
+        assert_eq!((-1_i64) as u64, u64::MAX);
     }
 
     #[test]

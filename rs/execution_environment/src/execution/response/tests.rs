@@ -136,7 +136,7 @@ fn execute_response_refunds_cycles() {
         .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
     assert_eq!(
         balance_after,
-        balance_before + cycles_sent / 2u64 + response_transmission_refund + execution_refund
+        balance_before + cycles_sent / 2_u64 + response_transmission_refund + execution_refund
     );
 }
 

@@ -3292,7 +3292,7 @@ fn witness_for_a_subtree_returns_pruned_for_a_leaf() {
 
 #[test]
 fn labeled_tree_does_not_produce_stack_overflow_for_deep_trees() {
-    let mut tree = LabeledTree::Leaf(vec![0u8; 32]);
+    let mut tree = LabeledTree::Leaf(vec![0_u8; 32]);
     for _ in 0..100_000 {
         tree = LabeledTree::SubTree(flatmap! {
             Label::from("a") => tree
@@ -3305,7 +3305,7 @@ fn labeled_tree_does_not_produce_stack_overflow_for_deep_trees() {
 
 #[test]
 fn witness_generator_exceeding_recursion_depth_should_error() {
-    let mut labeled_tree = LabeledTree::Leaf(vec![0u8; 32]);
+    let mut labeled_tree = LabeledTree::Leaf(vec![0_u8; 32]);
     for _ in 1..MAX_HASH_TREE_DEPTH {
         labeled_tree = LabeledTree::SubTree(flatmap! {
             Label::from("a") => labeled_tree

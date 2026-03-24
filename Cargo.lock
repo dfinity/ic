@@ -7122,9 +7122,9 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-interface"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4209c650d166815b01336cbbab6310f44895a0fa6571a952b6a84097e5fd87ae"
+checksum = "7b07cca9319498684a7477a77a66d87377ecd698b5465a3b8523484fcca16bff"
 dependencies = [
  "candid",
  "datasize",
@@ -9482,9 +9482,9 @@ dependencies = [
 
 [[package]]
 name = "ic-doge-interface"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b36c851b8fc6ec45666e3a912c8b22878e4f12f6d1d9f7033a153c7684903829"
+checksum = "b6d9bf312c324521ce174560c002e90aef179bf16befb46c62bdffbccff8f14b"
 dependencies = [
  "candid",
  "datasize",
@@ -9675,6 +9675,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-query-stats",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -11224,6 +11225,7 @@ dependencies = [
  "ic-registry-local-registry",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -13579,6 +13581,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics",
  "ic-protobuf",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -13700,7 +13703,6 @@ dependencies = [
  "num-traits",
  "on_wire",
  "pocket-ic",
- "prometheus",
  "proptest",
  "prost 0.13.5",
  "rand 0.8.5",
@@ -13717,6 +13719,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
+ "test-strategy 0.4.5",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -14566,6 +14569,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -15037,6 +15041,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -18220,11 +18225,9 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
- "nix 0.24.3",
  "prost 0.13.5",
  "regex",
  "reqwest",
- "serde",
  "slog",
 ]
 
@@ -18906,6 +18909,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-types",
  "ic_device",
  "linux_kernel_command_line",
  "pem",
@@ -19792,7 +19796,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "12.0.0"
+version = "13.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -19852,7 +19856,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "12.0.0"
+version = "13.0.0"
 dependencies = [
  "aide",
  "askama",

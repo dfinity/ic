@@ -126,7 +126,7 @@ impl PrivateKey {
             let mut sha2 = Sha512::new();
             sha2.update(seed);
             let digest: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
+            let mut truncated = [0_u8; 32];
             truncated.copy_from_slice(&digest[..32]);
             truncated
         };
@@ -291,7 +291,7 @@ impl PrivateKey {
     /// incompatible with additive derivation.
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -325,7 +325,7 @@ impl PrivateKey {
             sha2.update(derived_scalar.to_bytes());
             sha2.update(chain_code);
             let hash: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
+            let mut truncated = [0_u8; 32];
             truncated.copy_from_slice(&hash[..32]);
             truncated
         };
@@ -381,7 +381,7 @@ impl DerivedPrivateKey {
     /// incompatible with additive derivation.
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -415,7 +415,7 @@ impl DerivedPrivateKey {
             sha2.update(derived_scalar.to_bytes());
             sha2.update(chain_code);
             let hash: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
+            let mut truncated = [0_u8; 32];
             truncated.copy_from_slice(&hash[..32]);
             truncated
         };
@@ -453,7 +453,7 @@ impl Signature {
         }
 
         let (r, r_bytes) = {
-            let mut r_bytes = [0u8; 32];
+            let mut r_bytes = [0_u8; 32];
             r_bytes.copy_from_slice(&signature[..32]);
             let r = CompressedEdwardsY(r_bytes)
                 .decompress()
@@ -463,7 +463,7 @@ impl Signature {
         };
 
         let s = {
-            let mut s_bytes = [0u8; 32];
+            let mut s_bytes = [0_u8; 32];
             s_bytes.copy_from_slice(&signature[32..]);
             Option::<Scalar>::from(Scalar::from_canonical_bytes(s_bytes))
                 .ok_or(SignatureError::InvalidSignature)?
@@ -861,7 +861,7 @@ impl PublicKey {
     /// This is the same derivation system used by the Internet Computer when
     /// deriving subkeys for Ed25519
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -953,11 +953,11 @@ impl DerivationPath {
 
             let hkdf = hkdf::Hkdf::<Sha512>::new(Some(&chain_code), &ikm);
 
-            let mut okm = [0u8; 96];
+            let mut okm = [0_u8; 96];
             hkdf.expand(b"Ed25519", &mut okm)
                 .expect("96 is a valid length for HKDF-SHA-512");
 
-            let mut offset = [0u8; 64];
+            let mut offset = [0_u8; 64];
             offset.copy_from_slice(&okm[0..64]);
             offset.reverse(); // dalek uses little endian
             let offset = Scalar::from_bytes_mod_order_wide(&offset);

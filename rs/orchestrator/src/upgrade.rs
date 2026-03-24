@@ -117,7 +117,7 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
@@ -139,7 +139,7 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
@@ -1139,7 +1139,6 @@ mod tests {
     use crate::catch_up_package_provider::tests::mock_tls_config;
 
     use super::*;
-    use crate::process_manager::tests::FakeProcessManager;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
@@ -1201,6 +1200,7 @@ mod tests {
     use slog::Level;
     use std::collections::BTreeSet;
     use std::io::Write;
+    use std::os::fd::AsRawFd;
     use std::os::unix::fs::PermissionsExt;
     use std::{collections::BTreeMap, path::Path};
     use tempfile::{TempDir, tempdir};
@@ -1449,6 +1449,21 @@ mod tests {
         file.write_all(bash_script.as_bytes()).unwrap();
         file.set_permissions(std::fs::Permissions::from_mode(0o755))
             .unwrap();
+
+        // The ugly hack below is to work around rstest running the tests in multiple threads but
+        // in the same process. Each of them creates their own binary file and later executes it.
+        // This means a parallel test might still have the file open for writing while the current
+        // one is trying to execute it. This yields ETXTBSY errors on Linux. To avoid this, we use
+        // the below hack, taken from https://github.com/rust-lang/rust/issues/114554, see
+        // "Implementation of the `flock` algorithm"
+        std::thread::sleep(std::time::Duration::from_micros(2));
+
+        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+        drop(file);
+
+        let file = std::fs::File::open(binary_path).unwrap();
+        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_SH) };
+        drop(file);
     }
 
     async fn create_upgrade_for_test(
@@ -1477,9 +1492,10 @@ mod tests {
 
         let ic_binary_dir = dir.join("ic_binary");
         std::fs::create_dir_all(&ic_binary_dir).unwrap();
+        create_binary(&ic_binary_dir.join("replica"), "#!/bin/sh\nsleep 60\n");
         create_binary(&ic_binary_dir.join("manageboot.sh"), "#!/bin/sh\nexit 0\n");
 
-        let replica_process = Arc::new(Mutex::new(FakeProcessManager::new()));
+        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
         // Start the replica process if the test scenario indicates so
         if test_scenario.was_replica_process_started_previously() {
             replica_process
