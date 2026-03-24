@@ -6,9 +6,10 @@ DEVICE=/dev/mapper/store-shared--data
 
 echo "Checking if ${DEVICE} has a valid filesystem..."
 if ! blkid "${DEVICE}" >/dev/null 2>&1; then
-    # No filesystem exists, create one.
+    echo "No filesystem exists on ${DEVICE}, creating one..."
     mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
 else
+    echo "Filesystem exists on ${DEVICE}, running xfs_repair to check and repair if necessary..."
     # Filesystem exists. Run xfs_repair to check and fix it.
     # xfs_repair (without -L) is safe: it exits non-zero without modifying
     # anything when the journal is dirty but valid (normal after a crash),
@@ -24,10 +25,11 @@ else
         # the log and repair. If that also fails, reformat as last resort.
         # The IC node will recover its state via state sync so no data is
         # permanently lost.
-        echo "xfs_repair failed on ${DEVICE}:" >&2
-        echo "${REPAIR_OUTPUT}" >&2
+        echo "xfs_repair failed on ${DEVICE}:"
+        echo "${REPAIR_OUTPUT}"
+        echo "Calling 'xfs_repair -L' on ${DEVICE}..."
         if ! xfs_repair -L "${DEVICE}"; then
-            echo "xfs_repair -L failed on ${DEVICE}, reformatting." >&2
+            echo "'xfs_repair -L' failed on ${DEVICE}, reformatting..."
             mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
         fi
     fi
