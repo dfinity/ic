@@ -1901,7 +1901,7 @@ impl ExecutionEnvironment {
                 .push(unflushed_checkpoint_op);
         }
         crate::util::process_responses(
-            response.responses,
+            response.deleted_call_context_responses,
             state,
             Arc::clone(&self.ingress_history_writer),
             self.log.clone(),
