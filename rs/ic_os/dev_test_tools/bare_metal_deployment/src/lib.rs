@@ -19,14 +19,11 @@ pub struct BareMetalIpmiSession {
     /// IPv6 address of the HostOS
     host_address: Ipv6Addr,
     mgmt_mac: MacAddr6,
-    keep_alive_after_drop: bool,
 }
 
 impl BareMetalIpmiSession {
     /// Attempts to start a SOL session, retrying if it fails.
     /// The session is closed when the struct is dropped.
-    /// As long as the impitool process is running, the SOL session is active and no other sessions
-    /// can be started on the same host.
     pub fn start(login_info: &LoginInfo) -> Result<Self> {
         let _ = Command::new("ipmitool")
             .args([
@@ -75,7 +72,6 @@ impl BareMetalIpmiSession {
                 .parse()
                 .with_context(|| format!("Failed to parse Host IPv6 address {host_ip}"))?,
             mgmt_mac: login_info.mgmt_mac,
-            keep_alive_after_drop: false,
         })
     }
 
@@ -158,18 +154,10 @@ impl BareMetalIpmiSession {
 
         Ok(())
     }
-
-    /// Keep the SOL session alive after dropping the BareMetalIpmiSession
-    pub fn keep_alive_after_drop(&mut self) {
-        self.keep_alive_after_drop = true;
-    }
 }
 
 impl Drop for BareMetalIpmiSession {
     fn drop(&mut self) {
-        if self.keep_alive_after_drop {
-            return;
-        }
         // Attempt to cleanly terminate the SOL session
         let _ = self.session.send("\n~.").inspect_err(|err| {
             eprintln!("Failed to send '~.' to terminate SOL session: {err}");
