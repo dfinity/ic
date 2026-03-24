@@ -1,4 +1,5 @@
 use crate::execution_environment::{RoundContext, RoundLimits};
+use crate::types::Response;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
@@ -13,13 +14,14 @@ use ic_replicated_state::{
     CanisterState,
     canister_state::canister_snapshots::CanisterSnapshotError,
     canister_state::system_state::wasm_chunk_store::{WasmChunkStore, chunk_size},
+    metadata_state::UnflushedCheckpointOp,
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
     SnapshotId, SubnetId,
     ingress::IngressStatus,
-    messages::{CanisterCall, MessageId, RejectContext},
+    messages::{CanisterCall, MessageId, RejectContext, StopCanisterContext},
 };
 use ic_types_cycles::Cycles;
 use ic_wasm_types::{AsErrorHelp, CanisterModule, ErrorHelp, WasmHash, doc_ref};
@@ -317,6 +319,15 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
 pub(crate) struct UploadChunkResult {
     pub(crate) reply: UploadChunkReply,
     pub(crate) heap_delta_increase: NumBytes,
+}
+
+pub(crate) struct CanisterManagerResponse {
+    pub canister_id: CanisterId,
+    pub reply: Vec<u8>,
+    pub heap_delta_increase: NumBytes,
+    pub unflushed_checkpoint_op: Option<UnflushedCheckpointOp>,
+    pub responses: Vec<Response>,
+    pub stop_contexts: Vec<StopCanisterContext>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
