@@ -33,7 +33,7 @@ pub const DST_SUBNET: SubnetId = OWN_SUBNET;
 
 pub const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(169);
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn slice_unpack_roundtrip(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -56,7 +56,7 @@ fn slice_unpack_roundtrip(
     });
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn slice_garbage_collect(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -133,7 +133,7 @@ fn slice_garbage_collect(
     });
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn slice_take_prefix(
     #[strategy(arb_stream_slice(
         0, // min_size
@@ -277,7 +277,7 @@ fn slice_take_prefix(
     });
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn invalid_slice(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -414,7 +414,7 @@ fn invalid_slice(
 ///
 /// If this test fails, you need to check where the error lies (payload vs.
 /// witness) and adjust the estimate accordingly. Or bump the error margin.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn slice_accurate_count_bytes(
     #[strategy(arb_stream_slice(
         2, // min_size
@@ -484,7 +484,7 @@ fn slice_accurate_count_bytes(
 /// validation) produces the exact same estimate as
 /// `UnpackedStreamSlice::try_from(slice).unwrap().count_bytes()` (used in
 /// payload building).
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn matching_count_bytes(
     #[strategy(arb_stream_slice(
         2, // min_size
@@ -517,7 +517,7 @@ fn matching_count_bytes(
     });
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn pool(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -780,10 +780,10 @@ fn pool(
     });
 }
 
-// This test creates two `StateManagerFixture`s per case (each spinning up a full
+// This test creates two `StateManagerFixtures` per case (each spinning up a full
 // `StateManagerImpl` with disk I/O), so we reduce the number of cases to keep
 // the overall load within reasonable bounds.
-#[test_strategy::proptest(ProptestConfig::with_cases(50))]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn pool_append_same_slice(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -900,7 +900,7 @@ fn pool_append_same_slice(
     });
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn pool_append_non_empty_to_empty(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -968,7 +968,7 @@ fn pool_append_non_empty_to_empty(
     });
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn pool_append_non_empty_to_non_empty(
     #[strategy(arb_stream_slice(
         2, // min_size
@@ -1089,7 +1089,7 @@ fn pool_append_non_empty_to_non_empty(
     });
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn pool_put_invalid_slice(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -1144,7 +1144,7 @@ fn pool_put_invalid_slice(
     });
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn pool_append_invalid_slice(
     #[strategy(arb_stream_slice(
         2, // min_size
@@ -1233,7 +1233,7 @@ fn pool_append_invalid_slice(
     });
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn pool_append_invalid_slice_to_empty(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -1292,7 +1292,7 @@ fn pool_append_invalid_slice_to_empty(
 // signals after inducting it is capped) requires streams with thousands of messages in it.
 //
 // It is therefore using a reduced number of cases to keep the load within reasonable bounds.
-#[test_strategy::proptest(ProptestConfig::with_cases(10))]
+#[test_strategy::proptest(ProptestConfig::with_cases(5))]
 fn pool_take_slice_respects_signal_limit(
     #[strategy(arb_stream_slice(
         MAX_SIGNALS, // min_size

@@ -22,6 +22,7 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_canister_ranges_key, make_chain_key_enabled_subnet_list_key};
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::Stream;
@@ -269,6 +270,7 @@ struct SubnetRecord<'a> {
     max_number_of_canisters: u64,
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
+    resource_limits: ResourceLimits,
 }
 
 impl From<SubnetRecord<'_>> for SubnetRecordProto {
@@ -281,6 +283,7 @@ impl From<SubnetRecord<'_>> for SubnetRecordProto {
             .with_max_number_of_canisters(record.max_number_of_canisters)
             .with_cost_schedule(record.cost_schedule)
             .with_subnet_admins(record.subnet_admins)
+            .with_resource_limits(record.resource_limits)
             .build()
     }
 }
@@ -625,12 +628,14 @@ impl StateMachine for FakeStateMachine {
         network_topology: NetworkTopology,
         _batch: Batch,
         subnet_features: SubnetFeatures,
+        resource_limits: ResourceLimits,
         registry_settings: &RegistryExecutionSettings,
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
         state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;
+        state.metadata.own_resource_limits = resource_limits;
         state.metadata.node_public_keys = node_public_keys;
         state.metadata.api_boundary_nodes = api_boundary_nodes;
         state.put_canister_state(
@@ -685,6 +690,7 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
 }
 
 /// Convenience wrapper for `BatchProcessorImpl::try_to_read_registry()`.
+#[allow(clippy::type_complexity)]
 fn try_to_read_registry(
     registry: Arc<FakeRegistryClient>,
     log: ReplicaLogger,
@@ -693,6 +699,7 @@ fn try_to_read_registry(
     (
         NetworkTopology,
         SubnetFeatures,
+        ResourceLimits,
         RegistryExecutionSettings,
         NodePublicKeys,
         ApiBoundaryNodes,
@@ -721,6 +728,8 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
 
         // Own subnet characteristics.
         let own_subnet_id = subnet_test_id(13);
+        let own_maximum_state_size = NumBytes::new(1 << 30);
+        let own_maximum_state_delta = NumBytes::new(1 << 20);
         let own_subnet_record = SubnetRecord {
             membership: &[node_test_id(1), node_test_id(2)],
             subnet_type: SubnetType::Application,
@@ -752,6 +761,11 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             },
 
             max_number_of_canisters: 387,
+
+            resource_limits: ResourceLimits {
+                maximum_state_size: Some(own_maximum_state_size),
+                maximum_state_delta: Some(own_maximum_state_delta),
+            },
 
             ..Default::default()
         };
@@ -883,6 +897,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         let (
             network_topology,
             own_subnet_features,
+            own_resource_limits,
             registry_execution_settings,
             node_public_keys,
             api_boundary_nodes,
@@ -1047,6 +1062,21 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             latest_state.metadata.own_subnet_features
         );
         assert_eq!(
+            own_resource_limits,
+            latest_state.metadata.own_resource_limits
+        );
+        assert_eq!(
+            latest_state.metadata.own_resource_limits.maximum_state_size,
+            Some(own_maximum_state_size)
+        );
+        assert_eq!(
+            latest_state
+                .metadata
+                .own_resource_limits
+                .maximum_state_delta,
+            Some(own_maximum_state_delta)
+        );
+        assert_eq!(
             *registry_settings.lock().unwrap(),
             registry_execution_settings,
         );
@@ -1098,7 +1128,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         // critical error for `subnet_size` has incremented.
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 1);
         // Check the subnet size was set to the maximum for a small app subnet.
-        let (_, _, registry_execution_settings, _, _) = result.unwrap();
+        let (_, _, _, registry_execution_settings, _, _) = result.unwrap();
         assert_eq!(
             registry_execution_settings.subnet_size,
             SMALL_APP_SUBNET_MAX_SIZE
@@ -1417,7 +1447,7 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             2
         );
 
-        let (_, _, _, node_public_keys, _) = res.unwrap();
+        let (_, _, _, _, node_public_keys, _) = res.unwrap();
         assert_eq!(node_public_keys.len(), 1);
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
@@ -1556,7 +1586,7 @@ fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() 
 
         // There are six API BNs in the registry. However, five nodes have missing or invalid fields of NodeRecord.
         // Hence, only one nodes are retrieved.
-        let (_, _, _, _, api_boundary_nodes) = res.unwrap();
+        let (_, _, _, _, _, api_boundary_nodes) = res.unwrap();
         assert_eq!(api_boundary_nodes.len(), 1);
         assert!(api_boundary_nodes.contains_key(&node_test_id(11)));
 

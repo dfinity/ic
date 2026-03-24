@@ -97,21 +97,21 @@ pub fn extract_and_verify_recovery_rootfs_hash(
 
 #[cfg(any(feature = "dev", test))]
 fn get_nns_public_key_override(config_media_path: &Path) -> Result<Option<Vec<u8>>> {
-    let nns_public_key_override_path = config_media_path.join("nns_public_key_override.pem");
-    if !nns_public_key_override_path.exists() {
+    println!("Dev mode: reading NNS public key override from {config_media_path:?}");
+
+    let guestos_config: GuestOSConfig =
+        config_tool::deserialize_config(config_media_path.join("config.json"))?;
+
+    let Some(nns_pub_key_pem) = guestos_config
+        .guestos_settings
+        .guestos_dev_settings
+        .nns_pub_key_override
+    else {
+        println!("No NNS public key override found in GuestOS config");
         return Ok(None);
-    }
+    };
 
-    eprintln!("Dev mode: reading NNS public key override from {nns_public_key_override_path:?}");
-
-    let pem_contents =
-        std::fs::read_to_string(&nns_public_key_override_path).with_context(|| {
-            format!(
-                "Failed to read NNS public key override from {:?}",
-                nns_public_key_override_path
-            )
-        })?;
-    let pem_object = pem::parse(&pem_contents).context("Failed to parse PEM")?;
+    let pem_object = pem::parse(&nns_pub_key_pem).context("Failed to parse PEM")?;
 
     Ok(Some(pem_object.into_contents()))
 }

@@ -141,7 +141,7 @@ fn test_basic_add_and_query_blocks() {
     // Create and add a mint block
     let mint_block = create_mint_block(account1, 1_000_000_000, timestamp);
     let result = add_block(&env, canister_id, &mint_block).expect("Failed to add block");
-    assert_eq!(result, Nat::from(0u64));
+    assert_eq!(result, Nat::from(0_u64));
 
     // Query blocks
     let response = query_blocks(
@@ -183,7 +183,7 @@ fn test_add_raw_block_and_query_encoded_blocks() {
 
     // Add the encoded block
     let result = add_raw_block(&env, canister_id, &encoded_block).expect("Failed to add raw block");
-    assert_eq!(result, Nat::from(0u64));
+    assert_eq!(result, Nat::from(0_u64));
 
     // Query encoded blocks
     let response = query_encoded_blocks(
@@ -216,7 +216,7 @@ fn test_add_raw_bad_block_and_query_blocks() {
     let bad_encoded_block = EncodedBlock::from_vec(vec![0, 1, 2, 3, 4, 5]); // Invalid block data
     let result =
         add_raw_block(&env, canister_id, &bad_encoded_block).expect("Failed to add raw block");
-    assert_eq!(result, Nat::from(0u64));
+    assert_eq!(result, Nat::from(0_u64));
 
     // Query the bad block
     query_blocks(
