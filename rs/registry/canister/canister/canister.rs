@@ -46,6 +46,7 @@ use registry_canister::{
         do_create_subnet::{CreateSubnetPayload, NewSubnet},
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
+        do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_node_operators::RemoveNodeOperatorsPayload,
@@ -241,9 +242,9 @@ fn canister_post_upgrade() {
     println!("{LOG_PREFIX}canister_post_upgrade");
     // call stable_storage APIs and get registry instance in canister context
     // Look for MemoryManager magic bytes
-    let mut magic_bytes = [0u8; 3];
+    let mut magic_bytes = [0_u8; 3];
     stable64_read(&mut magic_bytes, 0, 3);
-    let mut mgr_version_byte = [0u8; 1];
+    let mut mgr_version_byte = [0_u8; 1];
     stable64_read(&mut mgr_version_byte, 3, 1);
 
     let registry_storage: RegistryCanisterStableStorage =
@@ -808,6 +809,19 @@ fn swap_node_in_subnet_directly() {
 #[candid_method(update, rename = "swap_node_in_subnet_directly")]
 fn swap_node_in_subnet_directly_(payload: SwapNodeInSubnetDirectlyPayload) {
     registry_mut().do_swap_node_in_subnet_directly(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update migrate_node_operator_directly")]
+fn migrate_node_operator_directly() {
+    over(candid_one, |payload: MigrateNodeOperatorPayload| {
+        migrate_node_operator_directly_(payload)
+    });
+}
+
+#[candid_method(update, rename = "migrate_node_operator_directly")]
+fn migrate_node_operator_directly_(payload: MigrateNodeOperatorPayload) {
+    registry_mut().do_migrate_node_operator_directly(payload);
     recertify_registry();
 }
 

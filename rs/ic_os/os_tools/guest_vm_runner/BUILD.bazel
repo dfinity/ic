@@ -29,6 +29,8 @@ DEPENDENCIES = [
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-util",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
     "@crate_index//:uuid",
     "@crate_index//:virt",
     "@libvirt",

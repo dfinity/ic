@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::bail;
 use bare_metal_deployment::BareMetalIpmiSession;
+use ic_system_test_driver::driver::test_env::SshKeyGen;
 use ic_system_test_driver::{
     driver::{
         nested::{HasNestedVms, NestedNodes},
@@ -11,27 +12,13 @@ use ic_system_test_driver::{
     retry_with_msg,
     util::block_on,
 };
-use nix::sys::signal::Signal;
-use nix::unistd::Pid;
-use serde::{Deserialize, Serialize};
 use slog::info;
-
-pub mod util;
 use util::{NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
 
-use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnvAttribute};
+pub mod util;
 
 pub const HOST_VM_NAME: &str = "host-1";
 const BARE_METAL_HOST_SECRETS: &str = "BARE_METAL_HOST_SECRETS";
-
-#[derive(Serialize, Deserialize)]
-pub struct IpmiProcessId(i32);
-
-impl TestEnvAttribute for IpmiProcessId {
-    fn attribute_name() -> String {
-        "ipmi_process_id".to_string()
-    }
-}
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
@@ -77,10 +64,6 @@ fn simple_bare_metal_with_trusted_execution_environment_setup(env: TestEnv) {
         /*enable_trusted_execution_environment*/ true,
     );
     nodes.setup_and_start(&env).unwrap();
-
-    // Remember process ID of the IMPI session so we can clean it up in teardown()
-    IpmiProcessId(bare_metal.process_id()).write_attribute(&env);
-    bare_metal.keep_alive_after_drop();
 }
 
 pub fn registration(env: TestEnv) {
@@ -126,11 +109,4 @@ pub fn registration_with_timeout(env: TestEnv, timeout: Duration) {
         }
     ).unwrap();
     info!(logger, "All {n} nodes successfully came up and registered.");
-}
-
-/// Clean up the environment after nested tests.
-pub fn teardown(env: TestEnv) {
-    if let Ok(pid) = IpmiProcessId::try_read_attribute(&env) {
-        let _ = nix::sys::signal::kill(Pid::from_raw(pid.0), Signal::SIGTERM);
-    }
 }

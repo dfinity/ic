@@ -8,10 +8,10 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::{ReplicaLogger, fatal};
 use ic_replicated_state::{CanisterState, NetworkTopology};
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::SignedIngressContent;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{NumBytes, NumInstructions, Time};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use prometheus::IntCounter;
 
 /// Executes the system method `canister_inspect_message`.

@@ -207,7 +207,7 @@ impl TopologyConfig {
         let assigned = self
             .subnets
             .iter()
-            .fold(0usize, |a, (_, x)| a + x.membership.len());
+            .fold(0_usize, |a, (_, x)| a + x.membership.len());
         let unassigned = self.unassigned_nodes.len();
         assigned + unassigned
     }

@@ -10,7 +10,9 @@ use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources};
+use ic_system_test_driver::driver::ic::{
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
+};
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
 };
@@ -35,10 +37,10 @@ use url::Url;
 use crate::proposals::RecoveredNnsDictatorNeuron;
 use crate::proposals::{ProposalWithMainnetState, RECOVERED_NNS_DICTATOR_NEURON_IDENTITY};
 
-pub const MAINNET_NODE_VM_RESOURCES: VmResources = VmResources {
-    vcpus: None,
+pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
     memory_kibibytes: Some(AmountOfMemoryKiB::new(67108864)), // 64 GiB
     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
+    ..VmResourceOverrides::const_default()
 };
 
 // Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
@@ -810,7 +812,7 @@ fn setup_ic(env: TestEnv) {
             .unwrap();
 
     InternetComputer::new()
-        .with_default_vm_resources(MAINNET_NODE_VM_RESOURCES)
+        .with_resource_overrides(MAINNET_NODE_VM_RESOURCE_OVERRIDES)
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)

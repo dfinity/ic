@@ -15,7 +15,6 @@ exports_files([
     "buf.yaml",
     "clippy.toml",
     "rustfmt.toml",
-    "WORKSPACE.bazel",
     "mainnet-canister-revisions.json",
     "mainnet-icos-images.bzl",
     "mainnet-routing-table.json",
@@ -27,18 +26,18 @@ alias(
 )
 
 alias(
-    name = "ruff-format",
-    actual = "//pre-commit:ruff-format",
+    name = "ruff-fix",
+    actual = "//pre-commit:ruff-fix",
 )
 
 alias(
     name = "protobuf-format",
-    actual = "//pre-commit:protobuf-format",
+    actual = "//pre-commit:buf-fix",
 )
 
 alias(
     name = "shfmt-format",
-    actual = "//pre-commit:shfmt-format",
+    actual = "//pre-commit:shfmt-fix",
 )
 
 alias(

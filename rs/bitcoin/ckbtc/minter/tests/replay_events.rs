@@ -7,14 +7,16 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_ckbtc_minter::state::CkBtcMinterState;
+use ic_btc_interface::{OutPoint, Txid};
 use ic_ckbtc_minter::state::eventlog::{
     CkBtcEventLogger, CkBtcMinterEvent, EventLogger, EventType,
 };
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
+use ic_ckbtc_minter::state::{CkBtcMinterState, LedgerMintIndex};
 use ic_ckbtc_minter::{ECDSAPublicKey, Network};
+use maplit::btreemap;
 use std::cmp::Reverse;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -94,6 +96,60 @@ static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
 });
 static TESTNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Testnet.deserialize());
 
+#[test]
+fn should_replay_events_and_retain_pending_requests() {
+    use std::str::FromStr;
+
+    let state = &MAINNET_STATE;
+    state
+        .check_invariants()
+        .expect("Failed to check invariants");
+
+    println!(
+        "pending retrieve_btc_request = {:?}",
+        state.pending_retrieve_btc_requests
+    );
+
+    let block_indices = state
+        .pending_retrieve_btc_requests
+        .iter()
+        .map(|request| request.block_index)
+        .collect::<BTreeSet<_>>();
+    // 1st stuck retrieve_btc transits to pending
+    assert!(block_indices.contains(&3459007));
+    assert!(block_indices.contains(&3459009));
+    assert!(block_indices.contains(&3459013));
+    // 2st stuck retrieve_btc transits to pending
+    assert!(block_indices.contains(&3489347));
+    assert!(block_indices.contains(&3489353));
+    // The following transactions and resubmissions should not be found
+    let txids = vec![
+        "fad3348b5e121d07bcd4afc523a1a506edf0e232ad3a6a6fdb214c04719a05fc",
+        "f69e339597b98a3286f586785c33b320f38ff4d2921f07dafecd12de881b769d",
+        "d4bcf28392c327795a4cd7f85ab935c348aa980313daba8b40c71ecc1fc4d0a4",
+        "0282fffcd9cd59352a7e6670219949d5493b95068df5ffe399e1648fa51db83c",
+        "9733ae015a766051f51ac12284c3f821ec60ec0d44ffa14bbcc54ef4f5e575da",
+        "36e9125b299428f18e957dd8ffbc2ecb8e125469f77a11e1dbb8245a2a8ed5a9",
+        "1fd0293a0260c844ef1e5822dbc7b9fce3e934f49bcacd3feea6650c96386476",
+    ];
+    let txids = txids
+        .into_iter()
+        .map(|txid| Txid::from_str(txid).unwrap())
+        .collect::<BTreeSet<_>>();
+    let submitted = state
+        .submitted_transactions
+        .iter()
+        .map(|tx| tx.txid)
+        .collect::<BTreeSet<_>>();
+    let stuck = state
+        .stuck_transactions
+        .iter()
+        .map(|tx| tx.txid)
+        .collect::<BTreeSet<_>>();
+    assert!(txids.is_disjoint(&submitted));
+    assert!(txids.is_disjoint(&stuck));
+}
+
 #[tokio::test]
 async fn should_replay_events_for_mainnet() {
     Mainnet.retrieve_and_store_events_if_env().await;
@@ -104,7 +160,7 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 40_431_602_885);
+    assert_eq!(state.get_total_btc_managed(), 28_608_213_637);
 }
 
 #[tokio::test]
@@ -150,7 +206,7 @@ async fn should_replay_events_for_testnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Testnet);
-    assert_eq!(state.get_total_btc_managed(), 24_902_022_759);
+    assert_eq!(state.get_total_btc_managed(), 24_885_679_983);
 }
 
 // This test is ignored because it takes too long to run,
@@ -193,6 +249,66 @@ async fn should_not_have_useless_events() {
 
     assert_useless_events_is_empty(&MAINNET_EVENTS);
     assert_useless_events_is_empty(&TESTNET_EVENTS);
+}
+
+#[test]
+fn should_have_exactly_2_double_mint_events_and_not_more() {
+    fn test(
+        retrieved_events: &GetEventsResult,
+        double_mints: BTreeMap<OutPoint, [LedgerMintIndex; 2]>,
+    ) {
+        let double_mints_by_index: BTreeMap<_, _> = double_mints
+            .iter()
+            // the second index is the double mint
+            .map(|(outpoint, indexes)| (indexes[1], outpoint))
+            .collect();
+
+        let minted_utxos: Vec<_> = retrieved_events
+            .events
+            .iter()
+            .filter_map(|event| match &event.payload {
+                EventType::ReceivedUtxos {
+                    mint_txid, utxos, ..
+                } => {
+                    if let Some(mint) = mint_txid
+                        && double_mints_by_index.contains_key(mint)
+                    {
+                        assert_eq!(utxos.len(), 1);
+                        assert_eq!(&utxos[0].outpoint, double_mints_by_index[mint]);
+                        None
+                    } else {
+                        Some(utxos)
+                    }
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect();
+
+        let unique_outpoints: BTreeSet<_> =
+            minted_utxos.iter().map(|utxo| &utxo.outpoint).collect();
+
+        assert_eq!(minted_utxos.len(), unique_outpoints.len());
+    }
+
+    fn outpoint(out: &str) -> OutPoint {
+        let (txid, vout) = out.split_once(":").unwrap();
+        OutPoint {
+            txid: txid.parse().unwrap(),
+            vout: vout.parse().unwrap(),
+        }
+    }
+
+    // Obviously double mints should never occur.
+    // This was due to a bug, see
+    // https://forum.dfinity.org/t/proposal-140929-to-upgrade-the-ckbtc-minter/65401/3
+    // for details.
+    let double_mints = btreemap! {
+        outpoint("91bb46443799335076fbcd117f2295c7499d02dd3a59c22a531d31591114b303:5") => [3_458_934, 3_458_990],
+        outpoint("8942e5ef0d4ace158a4fddd5153d320701bd13370ff8fecef13795cdd8ff1dc5:1") => [3_489_107, 3_489_297]
+    };
+    test(&MAINNET_EVENTS, double_mints);
+    test(&TESTNET_EVENTS, BTreeMap::default());
 }
 
 #[derive(Debug)]

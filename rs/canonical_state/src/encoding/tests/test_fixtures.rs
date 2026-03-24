@@ -2,7 +2,7 @@ use crate::CertificationVersion;
 use ic_error_types::RejectCode;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    Cycles, Time,
+    Time,
     messages::{
         CallbackId, Payload, Refund, RejectContext, Request, RequestMetadata, Response,
         StreamMessage,
@@ -10,6 +10,7 @@ use ic_types::{
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamHeader},
 };
+use ic_types_cycles::Cycles;
 
 pub fn stream_header(_certification_version: CertificationVersion) -> StreamHeader {
     let reject_signals = vec![

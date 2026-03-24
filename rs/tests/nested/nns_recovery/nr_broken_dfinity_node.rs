@@ -24,7 +24,8 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    DKG_INTERVAL, NNS_RECOVERY_VM_RESOURCES, SUBNET_SIZE, SetupConfig, TestConfig, setup, test,
+    DKG_INTERVAL, F, NNS_RECOVERY_VM_RESOURCE_OVERRIDES, SUBNET_SIZE, SetupConfig, TestConfig,
+    setup, test,
 };
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
@@ -39,7 +40,7 @@ fn main() -> Result<()> {
                     use_mainnet_state: false,
                     subnet_size: SUBNET_SIZE,
                     dkg_interval: DKG_INTERVAL,
-                    nested_nodes_vm_resources: NNS_RECOVERY_VM_RESOURCES,
+                    nested_nodes_vm_resource_overrides: NNS_RECOVERY_VM_RESOURCE_OVERRIDES,
                 },
             )
         })
@@ -47,6 +48,7 @@ fn main() -> Result<()> {
             use_mainnet_state: false,
             local_recovery: false,
             break_dfinity_owned_node: true,
+            num_broken_nodes: F + 1,
             add_and_bless_upgrade_version: true,
             fix_dfinity_owned_node_like_np: false,
             sequential_np_actions: false,

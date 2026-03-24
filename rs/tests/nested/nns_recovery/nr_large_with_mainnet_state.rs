@@ -24,12 +24,12 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    LARGE_DKG_INTERVAL, LARGE_SUBNET_SIZE, NNS_RECOVERY_VM_RESOURCES, SetupConfig, TestConfig,
-    setup, test,
+    LARGE_DKG_INTERVAL, LARGE_F, LARGE_SUBNET_SIZE, NNS_RECOVERY_VM_RESOURCE_OVERRIDES,
+    SetupConfig, TestConfig, setup, test,
 };
 use ic_system_test_driver::{
     driver::group::SystemTestGroup,
-    driver::ic::{NrOfVCPUs, VmResources},
+    driver::ic::{NrOfVCPUs, VmResourceOverrides},
     systest,
 };
 use std::time::Duration;
@@ -44,12 +44,17 @@ fn main() -> Result<()> {
                     use_mainnet_state: true,
                     subnet_size: LARGE_SUBNET_SIZE,
                     dkg_interval: LARGE_DKG_INTERVAL,
-                    nested_nodes_vm_resources: VmResources {
+                    nested_nodes_vm_resource_overrides: VmResourceOverrides {
+                        // NOTE: This test is quite sensitive to loaded Farm
+                        // hosts. To limit the number of of these VMs that can
+                        // be scheduled to a given Farm host, we request 64
+                        // vCPUs (resulting in approx. 4 VMs per host).
+                        //
+                        // In theory, these VMs should be able to run with 20
+                        // or fewer vCPUs. (16 GuestOS + 4 HostOS)
                         vcpus: Some(NrOfVCPUs::new(64)),
-                        memory_kibibytes: None,
-                        boot_image_minimal_size_gibibytes: None,
-                    }
-                    .or(&NNS_RECOVERY_VM_RESOURCES),
+                        ..NNS_RECOVERY_VM_RESOURCE_OVERRIDES
+                    },
                 },
             )
         })
@@ -57,6 +62,7 @@ fn main() -> Result<()> {
             use_mainnet_state: true,
             local_recovery: true,
             break_dfinity_owned_node: false,
+            num_broken_nodes: LARGE_F + 1,
             add_and_bless_upgrade_version: true,
             fix_dfinity_owned_node_like_np: false,
             sequential_np_actions: false,

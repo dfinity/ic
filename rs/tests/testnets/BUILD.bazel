@@ -145,7 +145,8 @@ system_test_nns(
     ],
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-        "II_WASM_PATH": "@ii_dev_canister//file",
+        "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+        "II_FRONTEND_WASM_PATH": "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
@@ -168,7 +169,6 @@ system_test_nns(
     ],
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-        "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
@@ -189,7 +189,8 @@ system_test_nns(
         "manual",
     ],
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | SNS_CANISTER_RUNTIME_DEPS | {
-        "II_WASM_PATH": "@ii_dev_canister//file",
+        "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+        "II_FRONTEND_WASM_PATH": "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
         "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
@@ -230,7 +231,8 @@ system_test_nns(
         "manual",
     ],
     runtime_deps = SNS_CANISTER_RUNTIME_DEPS | {
-        "II_WASM_PATH": "@ii_dev_canister//file",
+        "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+        "II_FRONTEND_WASM_PATH": "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
         "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
@@ -274,7 +276,8 @@ system_test_nns(
     ],
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | SNS_CANISTER_RUNTIME_DEPS | {
         "XRC_WASM_PATH": "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
-        "II_WASM_PATH": "@ii_dev_canister//file",
+        "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+        "II_FRONTEND_WASM_PATH": "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
         "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
