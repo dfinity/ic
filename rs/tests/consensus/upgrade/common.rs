@@ -15,7 +15,6 @@ end::catalog[] */
 use candid::Principal;
 use futures::future::try_join_all;
 use ic_agent::Agent;
-use ic_consensus_system_test_utils::journal::JournalStreamer;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message_with_retries,
 };
@@ -30,7 +29,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::{MessageCanister, block_on},
+    util::{JournalStreamer, MessageCanister, block_on},
 };
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
