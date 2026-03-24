@@ -295,9 +295,7 @@ async fn upgrade_to(
 
     info!(
         logger,
-        "Checking that all nodes produced a log indicating that the orchestrator has gracefully shut \
-        down the tasks, as well as at least n - f nodes producing a log displaying the latest computed \
-        root hash.",
+        "Checking that all nodes produced a log indicating that the orchestrator has gracefully shut down...",
     );
 
     // Concurrently assert that all orchestrators shut down gracefully
@@ -323,6 +321,10 @@ async fn upgrade_to(
         assert_assigned_replica_version(node, target_version, logger.clone());
     }
 
+    info!(
+        logger,
+        "Checking that at least n - f nodes produced a log displaying the latest computed root hash before rebooting..."
+    );
     // Fetch the latest computed root hash from logs of each node
     let state_hashes_from_logs = find_latest_computed_root_hashes_from_logs(logger, healthy_nodes);
     // Find all nodes that logged the same latest computed root hash and pick the most common one
