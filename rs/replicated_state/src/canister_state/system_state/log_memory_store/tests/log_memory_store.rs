@@ -659,11 +659,79 @@ fn test_delta_log_sizes() {
 }
 
 #[test]
+fn test_resize_up_preserves_records_and_next_idx() {
+    let initial_capacity = EXPECTED_DATA_CAPACITY_MIN;
+    let larger_capacity = 3 * initial_capacity;
+
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    s.resize_for_testing(initial_capacity);
+
+    // Append 3 records.
+    let mut delta = CanisterLog::new_delta_with_next_index(0, initial_capacity);
+    delta.add_record(1000, b"aaa".to_vec());
+    delta.add_record(2000, b"bbb".to_vec());
+    delta.add_record(3000, b"ccc".to_vec());
+    s.append_delta_log(&mut delta);
+
+    let records_before = s.records(None);
+    assert_eq!(records_before.len(), 3);
+    assert_eq!(s.next_idx(), 3);
+    assert_eq!(s.byte_capacity(), initial_capacity);
+
+    // Resize up.
+    s.resize_for_testing(larger_capacity);
+
+    // Records and next_idx must be preserved.
+    assert_eq!(s.records(None), records_before);
+    assert_eq!(s.next_idx(), 3);
+    assert_eq!(s.byte_capacity(), larger_capacity);
+
+    // Appending after resize must continue from next_idx == 3.
+    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), larger_capacity);
+    delta.add_record(4000, b"ddd".to_vec());
+    s.append_delta_log(&mut delta);
+
+    assert_eq!(s.next_idx(), 4);
+    let records = s.records(None);
+    assert_eq!(records.len(), 4);
+    assert_eq!(records[3].idx, 3);
+    assert_eq!(records[3].content, b"ddd");
+}
+
+#[test]
+fn test_resize_down_preserves_records_and_next_idx() {
+    let smaller_capacity = EXPECTED_DATA_CAPACITY_MIN;
+    let initial_capacity = 3 * smaller_capacity;
+
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    s.resize_for_testing(initial_capacity);
+
+    // Append a few small records (fit in both capacities).
+    let mut delta = CanisterLog::new_delta_with_next_index(0, initial_capacity);
+    delta.add_record(1000, b"aaa".to_vec());
+    delta.add_record(2000, b"bbb".to_vec());
+    s.append_delta_log(&mut delta);
+
+    let records_before = s.records(None);
+    assert_eq!(records_before.len(), 2);
+    assert_eq!(s.next_idx(), 2);
+
+    // Resize down.
+    s.resize_for_testing(smaller_capacity);
+
+    // Records and next_idx must be preserved.
+    assert_eq!(s.records(None), records_before);
+    assert_eq!(s.next_idx(), 2);
+    assert_eq!(s.byte_capacity(), smaller_capacity);
+}
+
+#[test]
 fn test_from_checkpoint_feature_enabled() {
     let some_page_map = Some(PageMap::new_for_testing());
 
     let s = LogMemoryStore::from_checkpoint(FlagStatus::Enabled, some_page_map, TEST_NEXT_IDX);
     assert!(s.maybe_page_map().is_some());
+    assert_eq!(s.next_idx(), TEST_NEXT_IDX);
 }
 
 #[test]
@@ -672,6 +740,8 @@ fn test_from_checkpoint_feature_disabled() {
 
     let s = LogMemoryStore::from_checkpoint(FlagStatus::Disabled, some_page_map, TEST_NEXT_IDX);
     assert!(s.maybe_page_map().is_none());
+    // When feature is disabled, next_idx should be initialized to 0 regardless of the provided value.
+    assert_eq!(s.next_idx(), 0);
 }
 
 #[test]

@@ -645,9 +645,9 @@ pub fn canister_from_exec_state(
     CanisterState {
         system_state: SystemStateBuilder::new()
             .memory_allocation(NumBytes::new(8 * 1024 * 1024 * 1024)) // 8GiB
-            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .canister_id(canister_id)
             .initial_cycles(INITIAL_CYCLES)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build(),
         execution_state: Some(execution_state),
         scheduler_state: Default::default(),
