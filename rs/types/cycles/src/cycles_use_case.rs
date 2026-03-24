@@ -1,6 +1,7 @@
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use strum_macros::EnumIter;
 
 /// Enumerates use cases of consumed cycles.
@@ -104,7 +105,7 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
 /// The following trait helps bound what kind of types can be used as the
 /// first generic argument to `CompoundCycles` that represent the various
 /// use cases for cycles accounting.
-pub trait CyclesUseCaseKind: Copy + Clone {
+pub trait CyclesUseCaseKind: Copy + Clone + Debug {
     fn cycles_use_case() -> CyclesUseCase;
 }
 
