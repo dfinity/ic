@@ -64,6 +64,7 @@ rust_doc(
 
 rust_test(
     name = "ic_https_outcalls_consensus_test",
+    timeout = "long",
     crate = ":consensus",
     crate_features = ["proptest"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

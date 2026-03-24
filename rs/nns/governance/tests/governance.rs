@@ -1989,7 +1989,7 @@ fn test_query_for_manage_neuron() {
     assert_eq!(
         ErrorType::NotFound as i32,
         gov.get_neuron_info_by_id_or_subaccount(
-            &NeuronIdOrSubaccount::Subaccount([0u8; 32].to_vec()),
+            &NeuronIdOrSubaccount::Subaccount([0_u8; 32].to_vec()),
             *RANDOM_PRINCIPAL_ID,
         )
         .unwrap_err()
@@ -1998,7 +1998,7 @@ fn test_query_for_manage_neuron() {
     assert_eq!(
         ErrorType::NotFound as i32,
         gov.get_full_neuron_by_id_or_subaccount(
-            &NeuronIdOrSubaccount::Subaccount([0u8; 32].to_vec()),
+            &NeuronIdOrSubaccount::Subaccount([0_u8; 32].to_vec()),
             &principal(1)
         )
         .unwrap_err()
@@ -2949,7 +2949,7 @@ async fn test_disallow_large_manage_neuron_proposals() {
                         summary: "proposal 1".to_string(),
                         action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
                             nns_function: 42,
-                            payload: vec![1u8; 1_000_000],
+                            payload: vec![1_u8; 1_000_000],
                         })),
                         ..Default::default()
                     }))),
@@ -3004,7 +3004,7 @@ async fn test_disallow_large_manage_neuron_proposals() {
                         to_account: Some(Account {
                             owner: None,
                             subaccount: Some(GovernanceSubaccount {
-                                subaccount: vec![1u8; 1_000_000],
+                                subaccount: vec![1_u8; 1_000_000],
                             }),
                         }),
                         to_account_identifier: None,
@@ -3037,7 +3037,7 @@ async fn test_disallow_large_manage_neuron_proposals() {
                         percentage_to_disburse: 100,
                         to_account: None,
                         to_account_identifier: Some(AccountIdentifierProto {
-                            hash: vec![1u8; 1_000_000],
+                            hash: vec![1_u8; 1_000_000],
                         }),
                     })),
                 }))),
@@ -3068,7 +3068,7 @@ async fn test_disallow_large_manage_neuron_proposals() {
                     command: Some(Command::Disburse(Disburse {
                         amount: Some(Amount { e8s: 1_000_000_000 }),
                         to_account: Some(AccountIdentifierProto {
-                            hash: vec![1u8; 1_000_000],
+                            hash: vec![1_u8; 1_000_000],
                         }),
                     })),
                 }))),
@@ -3592,7 +3592,7 @@ proptest! {
     cases: 100, .. ProptestConfig::default()
 })]
 #[test]
-fn test_topic_weights(stake in 1u64..1_000_000_000) {
+fn test_topic_weights(stake in 1_u64..1_000_000_000) {
     // Check that voting on
     // 1. a governance proposal yields 20 times the voting power
     // 3. other proposals yield 1 time the voting power
@@ -5864,7 +5864,7 @@ fn test_neuron_spawn() {
     assert_eq!(child_neuron.controller, Some(child_controller));
     assert_eq!(
         child_neuron.cached_neuron_stake_e8s,
-        (parent_maturity_e8s_equivalent as f64 * 1.01f64) as u64
+        (parent_maturity_e8s_equivalent as f64 * 1.01_f64) as u64
     );
     assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
     assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
@@ -6022,7 +6022,7 @@ fn test_neuron_spawn_with_subaccount() {
     assert_eq!(child_neuron.controller, Some(child_controller));
     assert_eq!(
         child_neuron.cached_neuron_stake_e8s,
-        (parent_maturity_e8s_equivalent as f64 * 1.01f64) as u64
+        (parent_maturity_e8s_equivalent as f64 * 1.01_f64) as u64
     );
     assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
     assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
@@ -6288,7 +6288,7 @@ fn assert_neuron_spawn_partial(
     assert_eq!(child_neuron.controller, Some(child_controller));
     assert_eq!(
         child_neuron.cached_neuron_stake_e8s,
-        (expected_spawned_maturity as f64 * 1.01f64) as u64
+        (expected_spawned_maturity as f64 * 1.01_f64) as u64
     );
     assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
     assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
@@ -6394,7 +6394,7 @@ async fn test_staked_maturity() {
     // Neuron should get the maturity equivalent of 5 days as staked maturity.
     assert_eq!(
         neuron.staked_maturity_e8s_equivalent.unwrap(),
-        54719555847781u64
+        54719555847781_u64
     );
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
@@ -6429,7 +6429,7 @@ async fn test_staked_maturity() {
             assert_eq!(neuron.maturity_e8s_equivalent, 0);
             assert_eq!(
                 neuron.staked_maturity_e8s_equivalent,
-                Some(54719555847781u64)
+                Some(54719555847781_u64)
             );
 
             // Configure the neuron to auto-stake any future maturity.
@@ -6455,7 +6455,7 @@ async fn test_staked_maturity() {
         .neuron_store
         .with_neuron(&id, |neuron| neuron.clone())
         .expect("Neuron not found");
-    assert_eq!(neuron.maturity_e8s_equivalent, 54719555847781u64);
+    assert_eq!(neuron.maturity_e8s_equivalent, 54719555847781_u64);
     assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
 }
 
