@@ -22,6 +22,7 @@ WITH
       AND ({time_filter})
       AND (NOT {only_prs} OR wr.event_type = 'pull_request')
       AND ({branch} = '' OR wr.head_branch LIKE {branch})
+      AND (wr.pull_request_number != ALL({exclude_prs}))
 
     GROUP BY label
   ),
