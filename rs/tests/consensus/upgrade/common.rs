@@ -298,7 +298,9 @@ async fn upgrade_to(
 
     info!(
         logger,
-        "Checking that all nodes produced a log indicating that the orchestrator has gracefully shut down...",
+        "Checking that all nodes produced a log indicating that the orchestrator has gracefully shut \
+        down the tasks, as well as at least n - f nodes producing a log displaying the latest computed \
+        root hash.",
     );
 
     // Concurrently assert that all orchestrators shut down gracefully and fetch the latest computed
