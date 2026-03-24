@@ -667,7 +667,7 @@ impl XNetPayloadBuilderImpl {
                 if err.is_reproducible() {
                     return SliceValidationResult::Invalid(msg);
                 } else {
-                    return SliceValidationResult::TransientRegistryError(msg);
+                    return SliceValidationResult::Transient(msg);
                 }
             }
         }
@@ -945,8 +945,7 @@ impl XNetPayloadBuilderImpl {
                         return Some((slice, message_count, slice_bytes));
                     }
 
-                    SliceValidationResult::Invalid(_)
-                    | SliceValidationResult::TransientRegistryError(_) => {
+                    SliceValidationResult::Invalid(_) | SliceValidationResult::Transient(_) => {
                         info!(
                             self.log,
                             "Invalid slice from {}: {:?}. Referenced certified height {}. Gap to chain tip {}.",
@@ -1268,11 +1267,11 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                         InvalidXNetPayload::InvalidSlice(reason),
                     ));
                 }
-                SliceValidationResult::TransientRegistryError(reason) => {
+                SliceValidationResult::Transient(reason) => {
                     self.metrics
                         .observe_validate_duration(VALIDATION_STATUS_ERROR, since);
                     return Err(ValidationError::ValidationFailed(
-                        XNetPayloadValidationFailure::TransientRegistryError(reason),
+                        XNetPayloadValidationFailure::Transient(reason),
                     ));
                 }
                 SliceValidationResult::Empty => {
@@ -1663,8 +1662,8 @@ enum SliceValidationResult {
     },
     /// Slice is invalid for the given reason.
     Invalid(String),
-    /// Validation could not be completed due to a transient registry error.
-    TransientRegistryError(String),
+    /// Validation could not be completed due to a transient error.
+    Transient(String),
     /// Slice is empty.
     Empty,
 }
@@ -1677,7 +1676,7 @@ impl SliceValidationResult {
         match self {
             SliceValidationResult::Valid { .. } => "Valid",
             SliceValidationResult::Invalid(_) => "Invalid",
-            SliceValidationResult::TransientRegistryError(_) => "TransientRegistryError",
+            SliceValidationResult::Transient(_) => "Transient",
             SliceValidationResult::Empty => "Empty",
         }
     }
