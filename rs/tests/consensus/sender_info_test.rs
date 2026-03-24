@@ -1,3 +1,17 @@
+//! Title:: Sender Info Rejection Path
+//!
+//! Goal:: Verify that update calls without `sender_info` succeed, while update calls with `sender_info`
+//! are rejected by ingress validation.
+//!
+//! Runbook::
+//! . Start a single-node system subnet and wait for certified state progress.
+//! . Install the message canister.
+//! . Store and read a message via canister client with `sender_info = None`; expect success.
+//! . Attempt to store with `sender_info = Some(...)`; expect failure.
+//! . Read the message again; expect the original value to remain unchanged.
+//!
+//! Success:: The first write/read succeeds, the second write is rejected, and the state is unchanged.
+
 use anyhow::{Result, anyhow};
 use candid::{Decode, Encode};
 use ic_canister_client::{Agent as CanisterClient, Sender};
@@ -45,29 +59,32 @@ async fn store_with_retries(
     backoff: Duration,
 ) -> Result<()> {
     ic_system_test_driver::retry_with_msg_async!(
-        format!("storing message '{}' with sender_info={sender_info:?}", message),
+        format!(
+            "storing message '{}' with sender_info={sender_info:?}",
+            message
+        ),
         logger,
         timeout,
         backoff,
         || {
-        let sender_info = sender_info.clone();
-        async move {
-            let payload =
-                Encode!(&message.to_string()).unwrap();
-            agent
-                .execute_update_with_sender_info(
-                    effective_canister_id,
-                    canister_id,
-                    "store",
-                    payload,
-                    nonce(),
-                    sender_info,
-                )
-                .await
-                .map(|_| ())
-                .map_err(|e| anyhow!("update failed: {e}"))
+            let sender_info = sender_info.clone();
+            async move {
+                let payload = Encode!(&message.to_string()).unwrap();
+                agent
+                    .execute_update_with_sender_info(
+                        effective_canister_id,
+                        canister_id,
+                        "store",
+                        payload,
+                        nonce(),
+                        sender_info,
+                    )
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| anyhow!("update failed: {e}"))
+            }
         }
-    })
+    )
     .await
 }
 
@@ -125,7 +142,14 @@ fn test(env: TestEnv) {
     block_on(async {
         info!(logger, "Installing message canister");
         let install_agent = assert_create_agent(node.get_public_url().as_str()).await;
-        let message_canister = MessageCanister::new_with_retries(&install_agent, node.effective_canister_id(), &logger, secs(300), secs(10)).await;
+        let message_canister = MessageCanister::new_with_retries(
+            &install_agent,
+            node.effective_canister_id(),
+            &logger,
+            secs(300),
+            secs(10),
+        )
+        .await;
         let canister_id = CanisterId::unchecked_from_principal(
             PrincipalId::try_from(message_canister.canister_id()).unwrap(),
         );
