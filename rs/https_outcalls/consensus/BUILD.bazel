@@ -6,7 +6,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
     "//rs/consensus/utils",
-    "//rs/types/management_canister_types",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
     "//rs/interfaces/registry",
@@ -17,6 +16,7 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:candid",
