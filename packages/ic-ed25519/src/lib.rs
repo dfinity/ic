@@ -101,7 +101,7 @@ fn hash_seed(seed: &[u8]) -> [u8; 32] {
     let mut sha2 = Sha512::new();
     sha2.update(seed);
     let digest: [u8; 64] = sha2.finalize().into();
-    let mut truncated = [0u8; 32];
+    let mut truncated = [0_u8; 32];
     truncated.copy_from_slice(&digest[..32]);
     truncated
 }
