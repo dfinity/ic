@@ -555,7 +555,7 @@ enum SubCommand {
     /// Swap nodes in subnet directly, without governance.
     SwapNodeInSubnetDirectly(SwapNodeInSubnetDirectlyCmd),
 
-    /// Swap nodes in subnet directly, without governance.
+    /// Migrate node operator for nodes directly, without governance.
     MigrateNodeOperatorDirectly(MigrateNodeOperatorDirectlyCmd),
 
     /// Update local registry store by pulling from remote URL
@@ -2858,12 +2858,12 @@ struct SwapNodeInSubnetDirectlyCmd {
 
 #[derive(Parser)]
 struct MigrateNodeOperatorDirectlyCmd {
-    /// Represents the node operator id which will be removed from the registry.
+    /// The node operator principal to migrate from.
     #[clap(long)]
     pub old_node_operator_id: PrincipalId,
 
     /// Represents the new identity to which the resources from the old operator
-    /// will be transffered to.
+    /// will be transfered to.
     #[clap(long)]
     pub new_node_operator_id: PrincipalId,
 }
@@ -4844,7 +4844,7 @@ async fn main() {
             swap_node_in_subnet_directly(registry_canister, cmd).await;
         }
         SubCommand::MigrateNodeOperatorDirectly(cmd) => {
-            migrate_node_operators_directly(registry_canister, cmd).await;
+            migrate_node_operator_directly(registry_canister, cmd).await;
         }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
             get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(
@@ -6363,7 +6363,7 @@ async fn swap_node_in_subnet_directly(
     }
 }
 
-async fn migrate_node_operators_directly(
+async fn migrate_node_operator_directly(
     registry_canister: RegistryCanister,
     cmd: MigrateNodeOperatorDirectlyCmd,
 ) {
