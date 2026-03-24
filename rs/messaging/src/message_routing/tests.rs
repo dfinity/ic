@@ -1781,6 +1781,7 @@ fn setup_three_subnet_registry() -> (Arc<FakeRegistryClient>, SubnetId, SubnetId
     routing_table_insert_subnet(&mut routing_table, app_subnet_id).unwrap();
     routing_table_insert_subnet(&mut routing_table, engine_subnet_id).unwrap();
     routing_table_insert_subnet(&mut routing_table, nns_subnet_id).unwrap();
+    routing_table_insert_subnet(&mut routing_table, engine_subnet_id).unwrap();
 
     let fixture = RegistryFixture::new();
     fixture
@@ -1834,8 +1835,8 @@ fn try_read_registry_engine_subnet_sees_only_itself() {
                 .routing_table()
                 .iter()
                 .map(|(_, sid)| *sid)
-                .collect::<Vec<_>>(),
-            vec![engine_subnet_id],
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([engine_subnet_id]),
         );
 
         // Engine accessors also return only the own subnet (no full_topology on engines).
@@ -1851,8 +1852,8 @@ fn try_read_registry_engine_subnet_sees_only_itself() {
                 .routing_table_with_engines()
                 .iter()
                 .map(|(_, sid)| *sid)
-                .collect::<Vec<_>>(),
-            vec![engine_subnet_id],
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([engine_subnet_id]),
         );
     });
 }
