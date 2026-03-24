@@ -7,7 +7,7 @@ use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use ic_device::mount::{FileSystem, MountOptions, PartitionProvider, PartitionSelector};
 use std::fs::File;
 use tempfile::NamedTempFile;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 const fn const_unwrap(result: std::result::Result<Uuid, uuid::Error>) -> Uuid {
@@ -150,7 +150,7 @@ pub async fn prepare_direct_boot(
         match read_boot_args(&boot_args_path, tee_boot_args_var_name) {
             Ok(args) => args,
             Err(_) => {
-                println!(
+                warn!(
                     "{tee_boot_args_var_name} not found in boot_args for partition \
                      {boot_alternative}. Falling back to {boot_args_var_name}."
                 );
