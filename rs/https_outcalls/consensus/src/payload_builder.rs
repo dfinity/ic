@@ -658,6 +658,18 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
+                // Reject responses are not allowed in flexible payloads
+                if matches!(
+                    entry.response.content,
+                    CanisterHttpResponseContent::Reject(_)
+                ) {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::FlexibleRejectResponseNotAllowed {
+                            callback_id,
+                        },
+                    );
+                }
+
                 // No duplicate signers
                 let signer = entry.proof.signature.signer;
                 if !seen_signers.insert(signer) {
