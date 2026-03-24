@@ -39,7 +39,7 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
 const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(25 * B);
 const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(5 * B);
 
-const CANISTER_INIT_CYCLES: Cycles = Cycles::new(400_000_000_000_u128);
+const CANISTER_INIT_CYCLES: Cycles = Cycles::new(310_000_000_000_u128);
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64

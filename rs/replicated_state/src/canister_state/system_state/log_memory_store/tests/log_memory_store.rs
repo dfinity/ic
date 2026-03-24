@@ -748,8 +748,8 @@ fn test_from_checkpoint_feature_disabled() {
 fn test_next_idx_preserved_after_deallocate() {
     let log_size = 4096;
     let mut delta = ic_types::CanisterLog::new_delta_with_next_index(TEST_NEXT_IDX, log_size);
-    delta.add_record(TEST_NEXT_IDX + 1, b"a".to_vec());
-    delta.add_record(TEST_NEXT_IDX + 2, b"b".to_vec());
+    delta.add_record(1001, b"a".to_vec());
+    delta.add_record(1002, b"b".to_vec());
 
     let mut store = LogMemoryStore::new(FlagStatus::Enabled);
     store.resize_for_testing(log_size);
