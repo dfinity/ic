@@ -827,6 +827,12 @@ fn should_node_become_unassigned(
         return UnassignmentDecision::StayInSubnet;
     }
 
+    if let Ok(true) =
+        registry.is_subnet_deleted(subnet_id, RegistryVersion::from(latest_registry_version))
+    {
+        return UnassignmentDecision::Now;
+    }
+
     // If the node is at the latest registry version in a subnet it shouldn't be unassigned.
     if node_is_in_subnet_at_version(registry, node_id, subnet_id, latest_registry_version) {
         return UnassignmentDecision::StayInSubnet;
