@@ -25,9 +25,7 @@ use ic_embedders::{
     wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits},
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{
-    IngressHistoryWriter, MessageMemoryUsage, SubnetAvailableMemory,
-};
+use ic_interfaces::execution_environment::{MessageMemoryUsage, SubnetAvailableMemory};
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
@@ -105,7 +103,6 @@ pub(crate) struct CanisterManager {
     log: ReplicaLogger,
     config: CanisterMgrConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     environment_variables_flag: FlagStatus,
 }
@@ -116,7 +113,6 @@ impl CanisterManager {
         log: ReplicaLogger,
         config: CanisterMgrConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         environment_variables_flag: FlagStatus,
     ) -> Self {
@@ -125,7 +121,6 @@ impl CanisterManager {
             log,
             config,
             cycles_account_manager,
-            ingress_history_writer,
             fd_factory,
             environment_variables_flag,
         }
@@ -980,6 +975,10 @@ impl CanisterManager {
 
     /// Uninstalls code from a canister.
     ///
+    /// Returns a list of reject responses to callers of the uninstalled canister
+    /// which must be enqueued to `ReplicatedState`
+    /// by separately calling `crate::util::process_responses`.
+    ///
     /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-uninstall_code
     pub(crate) fn uninstall_code(
         &self,
@@ -987,10 +986,9 @@ impl CanisterManager {
         canister_id: CanisterId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
-        canister_not_found_error: &IntCounter,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
         time: Time,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> Result<Vec<Response>, CanisterManagerError> {
         let sender = origin.origin();
         let canister = match state.canister_state(&canister_id) {
             Some(canister) => canister,
@@ -1022,15 +1020,7 @@ impl CanisterManager {
             .subnet_available_memory
             .update_execution_memory_unchecked(available_execution_memory_change);
 
-        crate::util::process_responses(
-            rejects,
-            state,
-            Arc::clone(&self.ingress_history_writer),
-            self.log.clone(),
-            canister_not_found_error,
-        );
-
-        Ok(())
+        Ok(rejects)
     }
 
     /// Signals a canister to stop.
