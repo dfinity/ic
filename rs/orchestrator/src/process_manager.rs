@@ -42,7 +42,7 @@ pub(crate) trait Process {
 
 /// Trait for managing a single versioned [`Process`]
 pub(crate) trait ProcessManager<P: Process>: Send {
-    /// Spawn the given process in the background.
+    /// Start the given process.
     fn start(&mut self, process: P) -> Result<()>;
 
     /// Stop the currently running process.
