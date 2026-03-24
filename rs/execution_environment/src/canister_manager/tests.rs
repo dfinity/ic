@@ -7318,6 +7318,14 @@ fn create_canister_as_subnet_admin_succeeds_on_free_cost_schedule() {
         .get_canister_id();
 
     let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles()
+            .get(),
+        0
+    );
     assert_eq!(canister.system_state.balance(), Cycles::new(0));
 }
 
