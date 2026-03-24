@@ -683,19 +683,30 @@ fn end_iteration_adds_idle_completed_to_fully_executed() {
     let all = btreeset! {new, long, fully_executed};
     let none = btreeset! {};
 
-    // All canisters executed, none completed an execution.
-    fixture.end_iteration(&all, &none, &btreeset! {});
+    // Only `new` was executed, no canister completed an execution.
+    fixture.end_iteration(&btreeset! {new}, &none, &none);
 
-    // No canister got marked as fully executed (as none completed an execution).
+    // No canister got marked as fully executed (as `new` still has inputs).
     assert_eq!(fixture.fully_executed_canisters(), &btreeset! {});
 
-    // All executed, all completed at least one execution.
-    fixture.end_iteration(&all, &all, &btreeset! {low_cycle_balance});
+    // All canisters executed, none completed an execution.
+    fixture.end_iteration(&all, &none, &none);
 
-    // Only the canisters with `next_execution() == None` were fully executed.
+    // `long` counts as fully executed, as it executed a full slice.
+    // `fully_executed` has no more inputs, so it is also counts as fully executed.
     assert_eq!(
         fixture.fully_executed_canisters(),
-        &btreeset! {fully_executed, low_cycle_balance}
+        &btreeset! {long, fully_executed}
+    );
+
+    // All executed, all completed at least one execution, `low_cycle_balance` was
+    // skipped.
+    fixture.end_iteration(&all, &all, &btreeset! {low_cycle_balance});
+
+    // `low_cycle_balance` now also counts as fully executed, as it has no inputs.
+    assert_eq!(
+        fixture.fully_executed_canisters(),
+        &btreeset! {long,fully_executed, low_cycle_balance}
     );
 }
 

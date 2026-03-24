@@ -69,11 +69,11 @@ impl CanisterRoundState {
         }
     }
 
-    pub fn canister_id(&self) -> CanisterId {
+    pub(super) fn canister_id(&self) -> CanisterId {
         self.canister_id
     }
 
-    pub fn is_long_execution(&self) -> bool {
+    fn has_long_execution(&self) -> bool {
         self.next_execution == NextExecution::ContinueLong
     }
 }
@@ -85,8 +85,8 @@ impl Ord for CanisterRoundState {
         other
             .long_execution_mode
             .cmp(&self.long_execution_mode)
-            //  2. Next execution (ContinueLong -> StartNew; there should be no scheduled None)
-            .then(other.is_long_execution().cmp(&self.is_long_execution()))
+            //  2. Long execution (long execution -> new execution)
+            .then(other.has_long_execution().cmp(&self.has_long_execution()))
             //  3. Accumulated priority, descending.
             .then(other.accumulated_priority.cmp(&self.accumulated_priority))
             //  4. Canister ID, ascending.
@@ -112,8 +112,8 @@ struct Config {
     install_code_rate_limit: NumInstructions,
 }
 
-/// Result of one iteration: the schedule for this iteration only.
-/// Use it to partition canisters to cores and to query iteration-specific values.
+/// Schedule for one iteration: used to partition canisters to cores and to
+/// query iteration-specific values.
 #[derive(Debug)]
 pub struct IterationSchedule {
     /// Ordered canister IDs. First `long_executions_count` are long executions, the
@@ -138,7 +138,7 @@ impl IterationSchedule {
         BTreeMap<CanisterId, Arc<CanisterState>>,
     ) {
         let mut canisters_partitioned_by_cores = vec![vec![]; self.scheduler_cores];
-        let long_execution_cores = self.long_execution_cores;
+        let long_execution_cores = self.long_execution_cores.min(self.long_executions_count);
         let mut idx = 0;
 
         for canister_id in self.schedule.iter().take(long_execution_cores) {
@@ -175,7 +175,7 @@ impl IterationSchedule {
 }
 
 /// Round-level schedule and accounting: builds the iteration schedule each iteration,
-/// accumulates round-wide state, and applies priority credit at end of round.
+/// accumulates round-wide state, and updates priorities at the end of the round.
 #[derive(Debug)]
 pub struct RoundSchedule {
     /// Immutable configuration for this round.
@@ -231,8 +231,11 @@ impl RoundSchedule {
         }
     }
 
-    /// Builds this iteration's schedule from state, updates round accumulators and state,
-    /// and returns the iteration schedule for partitioning and execution.
+    /// Computes and returns an iteration schedule covering active canisters only.
+    ///
+    /// Updates round accumulators (scheduled, rate limited, long execution
+    /// canisters). Updates the `long_execution_mode` of scheduled ifrst long
+    /// cabusters to `Prioritized`.
     pub fn start_iteration(
         &mut self,
         state: &mut ReplicatedState,
@@ -341,12 +344,20 @@ impl RoundSchedule {
 
         let schedule: Vec<CanisterId> = schedule.into_iter().map(|rs| rs.canister_id).collect();
         if is_first_iteration {
-            // First iteration: mark the first canisters on each core as fully executed.
+            // First iteration: mark the first canister on each core as fully executed.
+            let mut observe_scheduled_as_first = |canister: &CanisterId| {
+                self.fully_executed_canisters.insert(*canister);
+                Arc::make_mut(canister_states.get_mut(canister).unwrap())
+                    .system_state
+                    .canister_metrics_mut()
+                    .observe_scheduled_as_first();
+            };
+
             schedule
                 .iter()
                 .take(long_execution_cores)
                 .for_each(|canister| {
-                    self.fully_executed_canisters.insert(*canister);
+                    observe_scheduled_as_first(canister);
 
                     // And set prioritized long execution mode for the first `long_execution_cores`
                     // canisters.
@@ -358,7 +369,7 @@ impl RoundSchedule {
                 .skip(long_executions_count)
                 .take(self.config.scheduler_cores - long_execution_cores)
                 .for_each(|canister| {
-                    self.fully_executed_canisters.insert(*canister);
+                    observe_scheduled_as_first(canister);
                 });
         }
 
@@ -370,6 +381,8 @@ impl RoundSchedule {
         }
     }
 
+    /// Updates round state (executed, fully executed, completed message canisters)
+    /// after an iteration.
     pub fn end_iteration(
         &mut self,
         state: &mut ReplicatedState,
@@ -388,16 +401,17 @@ impl RoundSchedule {
                 .long_execution_mode = LongExecutionMode::Opportunistic;
         }
 
-        for canister_id in canisters_with_completed_messages.union(low_cycle_balance_canisters) {
+        for canister_id in executed_canisters.union(low_cycle_balance_canisters) {
             match state
                 .canister_state(canister_id)
                 .map(|canister| canister.next_execution())
                 .unwrap_or(NextExecution::None)
             {
-                NextExecution::None => {
+                // Either all messages or a full long execution slice completed.
+                NextExecution::None | NextExecution::ContinueLong => {
                     self.fully_executed_canisters.insert(*canister_id);
                 }
-                NextExecution::StartNew | NextExecution::ContinueLong => {}
+                NextExecution::StartNew => {}
                 NextExecution::ContinueInstallCode => {
                     unreachable!()
                 }
@@ -405,6 +419,12 @@ impl RoundSchedule {
         }
     }
 
+    /// Updates canister priorities at the end of the round.
+    ///
+    /// * Grants canisters their compute allocations; charges for fullexecutions;
+    ///   then calculates the subnet-wide free allocation and distributes it.
+    /// * Applies the priority credit where possible (no long execution).
+    /// * Observes round-level metrics.
     pub fn finish_round(
         &self,
         state: &mut ReplicatedState,
@@ -541,6 +561,7 @@ impl RoundSchedule {
             }
             remaining_canisters -= 1;
         }
+        println!("round {current_round}: subnet_schedule: {subnet_schedule:?}");
 
         metrics
             .scheduler_accumulated_priority_deviation
@@ -551,6 +572,8 @@ impl RoundSchedule {
         // TODO(DSM-103): `debug_assert` that all active canisters are in the subnet schedule.
     }
 
+    /// Deducts the heap delta and install code rate limits from the canisters'
+    /// respective debits.
     fn grant_heap_delta_and_install_code_credits(
         &self,
         state: &mut ReplicatedState,
@@ -611,6 +634,7 @@ impl RoundSchedule {
                 metrics.canister_age.observe(canister_age as f64);
             }
         }
+
         metrics
             .executable_canisters_per_round
             .observe(self.scheduled_canisters.len() as f64);

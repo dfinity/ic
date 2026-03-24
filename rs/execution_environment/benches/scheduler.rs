@@ -1,8 +1,7 @@
 use criterion::Criterion;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
-use ic_execution_environment::RoundSchedule;
-use ic_execution_environment::scheduler::scheduler_metrics::SchedulerMetrics;
+use ic_execution_environment::{RoundSchedule, SchedulerMetrics};
 use ic_logger::new_replica_logger_from_config;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;

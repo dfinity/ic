@@ -1,5 +1,6 @@
 use self::round_schedule::*;
 pub use self::round_schedule::{IterationSchedule, RoundSchedule};
+pub use self::scheduler_metrics::SchedulerMetrics;
 use self::scheduler_metrics::*;
 use self::threshold_signatures::*;
 use crate::ExecuteSubnetMessageResultType;
@@ -53,7 +54,7 @@ use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 mod round_schedule;
-pub mod scheduler_metrics;
+mod scheduler_metrics;
 mod threshold_signatures;
 
 #[cfg(test)]
@@ -191,12 +192,12 @@ impl SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         round_limits: &mut RoundLimits,
-        long_running_canister_ids: &Vec<CanisterId>,
+        long_running_canisters: &[CanisterId],
         measurement_scope: &MeasurementScope,
         subnet_size: usize,
     ) -> ReplicatedState {
         let mut ongoing_long_install_code = false;
-        for canister_id in long_running_canister_ids.iter() {
+        for canister_id in long_running_canisters.iter() {
             match state.canister_state(canister_id) {
                 None => continue,
                 Some(canister) => match canister.next_execution() {
@@ -352,9 +353,9 @@ impl SchedulerImpl {
         (new_state, execute_subnet_message_result_type)
     }
 
-    /// Invoked in the first iteration of the inner round to add the `Heartbeat`
-    /// and `GlobalTimer` tasks that are carried out prior to processing
-    /// any input messages.
+    /// Enqueues `Heartbeat` and `GlobalTimer` tasks to be executed prior to
+    /// processing any canister input messages. Invoked in the first inner round
+    /// iteration.
     ///
     /// Returns the IDs of all canisters that actually had a `Heartbeat` and/or
     /// `GlobalTimer` task enqueued.
@@ -493,26 +494,15 @@ impl SchedulerImpl {
             // In every iteration after the first, recompute the subnet available memory,
             // before taking out the canisters.
             if !is_first_iteration {
-                let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
+                // FIXME: This overlaps with `round_inner_iteration_scheduling`.
+                let _preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
                 round_limits.subnet_available_memory =
                     self.exec_env.scaled_subnet_available_memory(&state);
-                drop(preparation_timer);
             }
 
             let canisters = state.take_canister_states();
-            let (mut active_canisters_partitioned_by_cores, inactive_canisters) =
+            let (active_canisters_partitioned_by_cores, inactive_canisters) =
                 iteration_schedule.partition_canisters_to_cores(canisters);
-
-            if is_first_iteration {
-                for partition in active_canisters_partitioned_by_cores.iter_mut() {
-                    if let Some(canister) = partition.first_mut() {
-                        Arc::make_mut(canister)
-                            .system_state
-                            .canister_metrics_mut()
-                            .observe_scheduled_as_first();
-                    }
-                }
-            }
             drop(scheduling_timer);
 
             let execution_timer = self.metrics.round_inner_iteration_exe.start_timer();
@@ -539,7 +529,6 @@ impl SchedulerImpl {
             drop(execution_timer);
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
-            // println!("executed_canister_ids: {:?}", executed_canister_ids);
             total_heap_delta += heap_delta;
             state.metadata.heap_delta_estimate += heap_delta;
 
@@ -631,12 +620,14 @@ impl SchedulerImpl {
 
     /// Executes canisters in parallel using the thread pool.
     ///
-    /// The function is invoked in each iteration of `inner_round`.
-    /// The given `canisters_by_thread` defines the priority of canisters.
+    /// Invoked in each iteration of `inner_round`. `canisters_by_thread` are the
+    /// prioritized canisters to be executed by each thread.
+    ///
     /// Returns:
-    /// - the new states of the canisters,
+    /// - the updated canister states,
     /// - actually executed canisters,
     /// - canisters that completed at least one message execution,
+    /// - canisters that could not be executed due to low cycle balances,
     /// - the ingress results,
     /// - the total heap delta.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -1181,7 +1172,7 @@ impl Scheduler for SchedulerImpl {
 
         let round_log;
         let mut csprng;
-        let long_running_canister_ids: Vec<_>;
+        let long_running_canisters: Vec<_>;
         let mut canister_ingress_latencies = CanisterIngressQueueLatencies::new(
             state.time(),
             self.metrics.canister_ingress_queue_latencies.clone(),
@@ -1201,7 +1192,7 @@ impl Scheduler for SchedulerImpl {
             );
             self.metrics.execute_round_called.inc();
 
-            long_running_canister_ids = state
+            long_running_canisters = state
                 .canister_priorities()
                 .iter()
                 .filter_map(|(&canister_id, _)| {
@@ -1217,7 +1208,7 @@ impl Scheduler for SchedulerImpl {
             // Check if any of the long-running canisters has a paused
             // execution. Note that a long-running canister has either
             // a paused execution or an aborted execution.
-            let has_any_paused_execution = long_running_canister_ids.iter().any(|canister_id| {
+            let has_any_paused_execution = long_running_canisters.iter().any(|canister_id| {
                 state
                     .canister_state(canister_id)
                     .map(|canister| {
@@ -1407,7 +1398,7 @@ impl Scheduler for SchedulerImpl {
             state = self.advance_long_running_install_code(
                 state,
                 &mut subnet_round_limits,
-                &long_running_canister_ids,
+                &long_running_canisters,
                 &measurement_scope,
                 registry_settings.subnet_size,
             );

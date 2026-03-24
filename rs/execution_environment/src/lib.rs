@@ -11,7 +11,7 @@ mod ic00_permissions;
 mod ingress_filter;
 mod metrics;
 mod query_handler;
-pub mod scheduler;
+mod scheduler;
 mod types;
 pub mod units;
 pub mod util;
@@ -50,7 +50,7 @@ pub use metrics::IngressFilterMetrics;
 pub use query_handler::{DataCertificateWithDelegationMetadata, InternalHttpQueryHandler};
 use query_handler::{HttpQueryHandler, QueryScheduler};
 use scheduler::SchedulerImpl;
-pub use scheduler::{IterationSchedule, RoundSchedule, abort_all_paused_executions};
+pub use scheduler::{IterationSchedule, RoundSchedule, SchedulerMetrics, abort_all_paused_executions};
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 

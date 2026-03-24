@@ -178,10 +178,10 @@ fn execute_idle_and_canisters_with_messages() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // We update `last_full_execution_round` for the canister without any
+    // We do not update `last_full_execution_round` for the canister without any
     // input messages.
     assert!(!test.was_fully_executed(idle));
-    // But not its counts of rounds scheduled or executed.
+    // Nor its counts of rounds scheduled or executed.
     let idle = test.canister_state(idle);
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
     assert_eq!(idle.system_state.canister_metrics().executed(), 0);
@@ -289,7 +289,7 @@ fn scheduler_long_execution_progress_across_checkpoints() {
         canister_ids.push(canister_id);
     }
 
-    // Start a long execution on the penalized canister.
+    // Start a long execution on the (to be) penalized canister.
     test.send_ingress(penalized_long_id, ingress(message_instructions));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -311,7 +311,8 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     // Abort both canisters on checkpoint.
     test.execute_round(ExecutionRoundType::CheckpointRound);
 
-    // Assert that penalized canister accumulated priority is higher.
+    // Assert that the penalized canister accumulated priority is higher (because it
+    // has been scheduled for longer).
     let penalized = test.state().canister_priority(&penalized_long_id);
     let other = test.state().canister_priority(&other_long_id);
     assert_gt!(penalized.accumulated_priority, other.accumulated_priority);
@@ -864,7 +865,7 @@ fn inner_round_first_execution_is_not_a_full_execution() {
 }
 
 #[test]
-fn inner_round_long_execution_is_not_a_full_execution() {
+fn inner_round_long_execution_is_a_full_execution() {
     let scheduler_cores = 2;
     let slice = 20;
     let mut test = SchedulerTestBuilder::new()
@@ -904,22 +905,20 @@ fn inner_round_long_execution_is_not_a_full_execution() {
         if canister.canister_id() == target_id {
             // The target canister was not executed first, and still has messages.
             assert_eq!(system_state.queues().ingress_queue_size(), 1);
-            // It also isn't marked as fully executed.
-            assert!(!test.was_fully_executed(canister.canister_id()));
         } else {
-            // All other canisters were fully executed.
+            // All other canisters consumed all their inputs.
             assert_eq!(system_state.queues().ingress_queue_size(), 0);
-            assert!(test.was_fully_executed(canister.canister_id()));
         }
+        // All canisters should be marked as fully executed. The target canister,
+        // despite still having messages, executed a full slice of instructions.
+        assert!(test.was_fully_executed(canister.canister_id()));
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += canister_priority.priority_credit.get();
     }
     // The accumulated priority invariant should be respected.
-    assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    assert_eq!(total_accumulated_priority, 0);
 }
 
 #[test_strategy::proptest(ProptestConfig { cases: 8, ..ProptestConfig::default() })]
