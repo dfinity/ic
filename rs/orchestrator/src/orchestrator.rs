@@ -247,7 +247,7 @@ impl Orchestrator {
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
         let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
-            ic_binary_directory.join("manageboot.sh").into_os_string(),
+            ic_binary_directory.join("manageboot.sh"),
         ));
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall

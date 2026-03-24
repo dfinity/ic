@@ -26,11 +26,11 @@ pub trait ManagebootRunner: Send + Sync {
 /// Production implementation of [`ManagebootRunner`] that executes the command
 /// as a child process.
 pub struct ManagebootRunnerImpl {
-    binary: OsString,
+    binary: PathBuf,
 }
 
 impl ManagebootRunnerImpl {
-    pub fn new(binary: OsString) -> Self {
+    pub fn new(binary: PathBuf) -> Self {
         Self { binary }
     }
 }
