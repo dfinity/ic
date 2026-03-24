@@ -38,8 +38,8 @@ impl Process for BoundaryNodeProcess {
         &self.args
     }
 
-    fn get_env(&self) -> &HashMap<OsString, OsString> {
-        &self.env
+    fn get_env(&self) -> HashMap<OsString, OsString> {
+        self.env.clone()
     }
 }
 
