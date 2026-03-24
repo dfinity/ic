@@ -82,8 +82,8 @@ impl Process for ReplicaProcess {
         &self.args
     }
 
-    fn get_env(&self) -> HashMap<OsString, OsString> {
-        HashMap::new()
+    fn get_env(&self) -> &HashMap<OsString, OsString> {
+        &HashMap::new()
     }
 }
 

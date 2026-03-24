@@ -38,7 +38,7 @@ pub(crate) trait Process {
     fn get_args(&self) -> &[OsString];
 
     /// Return the env vars passed to the [`Process`]
-    fn get_env(&self) -> HashMap<OsString, OsString>;
+    fn get_env(&self) -> &HashMap<OsString, OsString>;
 }
 
 /// Trait for managing a single versioned [`Process`]
