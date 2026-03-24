@@ -4,10 +4,14 @@ set -e
 
 DEVICE=/dev/mapper/store-shared--data
 
+format_device() {
+    mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
+}
+
 echo "Checking if ${DEVICE} has a valid filesystem..."
 if ! blkid "${DEVICE}" >/dev/null 2>&1; then
     echo "No filesystem exists on ${DEVICE}, creating one..."
-    mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
+    format_device
     exit 0
 fi
 
@@ -36,5 +40,5 @@ echo "${REPAIR_OUTPUT}"
 echo "Calling 'xfs_repair -L' on ${DEVICE}..."
 if ! xfs_repair -L "${DEVICE}"; then
     echo "'xfs_repair -L' failed on ${DEVICE}, reformatting..."
-    mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
+    format_device
 fi
