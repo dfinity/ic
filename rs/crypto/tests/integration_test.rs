@@ -277,7 +277,7 @@ fn should_fail_check_keys_with_registry_if_committee_member_secret_key_is_missin
         algorithm: AlgorithmId::MultiBls12_381 as i32,
         key_value: [1_u8; 96].to_vec(),
         version: 0,
-        proof_data: Some(vec![1u8; 48]),
+        proof_data: Some(vec![1_u8; 48]),
         timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()

@@ -193,12 +193,12 @@ impl TestFixture {
 
         let tree = LabeledTree::SubTree(flatmap![
             Label::from("request_status") => LabeledTree::SubTree(flatmap![
-                Label::from(vec![1u8; 32]) => LabeledTree::SubTree(flatmap![
+                Label::from(vec![1_u8; 32]) => LabeledTree::SubTree(flatmap![
                     Label::from("status") => LabeledTree::Leaf(b"replied".to_vec()),
                     Label::from("reply") => LabeledTree::Leaf(reply_bytes),
                 ])
             ]),
-            Label::from("time") => LabeledTree::Leaf(vec![0u8; 8])
+            Label::from("time") => LabeledTree::Leaf(vec![0_u8; 8])
         ]);
 
         let mut rng = rand::rngs::StdRng::from_seed([42_u8; 32]);
@@ -342,7 +342,7 @@ fn test_recovery_proposal_chip_id_mismatch() {
     let mut fixture = TestFixture::new();
 
     let proposal = BlessAlternativeGuestOsVersion {
-        chip_ids: Some(vec![vec![1u8; 64]]), // does not include CHIP_ID
+        chip_ids: Some(vec![vec![1_u8; 64]]), // does not include CHIP_ID
         rootfs_hash: Some(RECOVERY_ROOTFS_HASH.to_string()),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: Some(vec![GuestLaunchMeasurement {
@@ -371,7 +371,7 @@ fn test_recovery_proposal_measurement_mismatch() {
         rootfs_hash: Some(RECOVERY_ROOTFS_HASH.to_string()),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: Some(vec![GuestLaunchMeasurement {
-                measurement: Some(vec![1u8; 48]), // different from MEASUREMENT
+                measurement: Some(vec![1_u8; 48]), // different from MEASUREMENT
                 metadata: None,
             }]),
         }),
