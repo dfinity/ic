@@ -1745,7 +1745,7 @@ impl JournalStreamer {
         }
         command.push_str(&format!(" | {grep} '{search_regex}'"));
 
-        let output = execute_bash_script_from_session(&self.session, command)?;
+        let output = execute_bash_script_from_session(&self.session, &command)?;
         Ok(output
             .lines()
             .map(|line| {
