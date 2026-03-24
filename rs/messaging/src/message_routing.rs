@@ -1169,19 +1169,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             (subnets, routing_table)
         } else {
             // Non-engine subnets see every subnet that is *not* a CloudEngine.
-            let engine_subnet_ids: BTreeSet<SubnetId> = all_subnets
+            let subnets: BTreeMap<_, _> = all_subnets
                 .iter()
-                .filter(|(_, topo)| topo.subnet_type == SubnetType::CloudEngine)
-                .map(|(id, _)| *id)
-                .collect();
-            let subnets = all_subnets
-                .iter()
-                .filter(|(id, _)| !engine_subnet_ids.contains(id))
+                .filter(|(_, topo)| topo.subnet_type != SubnetType::CloudEngine)
                 .map(|(id, topo)| (*id, topo.clone()))
                 .collect();
             let routing_table = full_routing_table
                 .iter()
-                .filter(|(_, id)| !engine_subnet_ids.contains(id))
+                .filter(|(_, id)| subnets.contains_key(id))
                 .map(|(range, id)| (*range, *id))
                 .collect::<BTreeMap<_, _>>()
                 .try_into()
