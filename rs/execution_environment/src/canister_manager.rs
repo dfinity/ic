@@ -987,9 +987,9 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
+        time: Time,
     ) -> Result<Vec<Response>, CanisterManagerError> {
         let sender = origin.origin();
-        let time = state.time();
         let canister = match state.canister_state(&canister_id) {
             Some(canister) => canister,
             None => return Err(CanisterManagerError::CanisterNotFound(canister_id)),
@@ -1972,6 +1972,7 @@ impl CanisterManager {
     pub(crate) fn take_canister_snapshot(
         &self,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         origin: CanisterChangeOrigin,
         canister: &mut CanisterState,
         replace_snapshot: Option<SnapshotId>,
@@ -1979,9 +1980,9 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
+        time: Time,
     ) -> Result<(CanisterSnapshotResponse, Vec<Response>), CanisterManagerError> {
         let sender = origin.origin();
-        let time = state.time();
 
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2036,7 +2037,7 @@ impl CanisterManager {
             .saturating_add(&new_snapshot_size.get().into());
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             canister,
             sender,
             instructions,
@@ -2047,8 +2048,8 @@ impl CanisterManager {
         )?;
 
         // Create new snapshot.
-        let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
-            .map_err(CanisterManagerError::from)?;
+        let new_snapshot =
+            CanisterSnapshot::from_canister(canister, time).map_err(CanisterManagerError::from)?;
 
         // Delete old snapshot identified by `replace_snapshot`.
         if let Some(replace_snapshot) = replace_snapshot {
@@ -2057,7 +2058,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             canister,
             sender,
             round_limits,
@@ -2110,7 +2111,7 @@ impl CanisterManager {
         Ok((
             CanisterSnapshotResponse::new(
                 &snapshot_id,
-                state.time().as_nanos_since_unix_epoch(),
+                time.as_nanos_since_unix_epoch(),
                 new_snapshot_size,
             ),
             rejects,
@@ -2155,9 +2156,11 @@ impl CanisterManager {
         Ok(snapshot)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn load_canister_snapshot(
         &self,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         sender: PrincipalId,
         canister: &mut CanisterState,
         snapshot_canister: Arc<CanisterState>,
@@ -2167,6 +2170,7 @@ impl CanisterManager {
         instruction_limits: InstructionLimits,
         origin: CanisterChangeOrigin,
         resource_saturation: &ResourceSaturation,
+        time: Time,
         metrics: &ExecutionEnvironmentMetrics,
     ) -> Result<CanisterState, CanisterManagerError> {
         let canister_id = canister.canister_id();
@@ -2243,7 +2247,7 @@ impl CanisterManager {
             compute_allocation,
             prepaid_execution_instructions,
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             reveal_top_up,
             wasm_execution_mode,
         ) {
@@ -2282,7 +2286,7 @@ impl CanisterManager {
                 prepaid_execution_cycles,
                 &metrics.execution_cycles_refund_error,
                 subnet_size,
-                state.get_own_cost_schedule(),
+                cost_schedule,
                 wasm_execution_mode,
                 &self.log,
             );
@@ -2402,7 +2406,7 @@ impl CanisterManager {
                 + NumInstructions::new(snapshot.size().get());
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             &new_canister,
             sender,
             instructions_for_snapshot_size,
@@ -2414,7 +2418,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             &mut new_canister,
             sender,
             round_limits,
@@ -2433,7 +2437,7 @@ impl CanisterManager {
         // Increment canister version.
         new_canister.system_state.bump_canister_version();
         let available_execution_memory_change = new_canister.add_canister_change(
-            state.time(),
+            time,
             origin,
             CanisterChangeDetails::load_snapshot(
                 snapshot.canister_version(),
@@ -2499,9 +2503,9 @@ impl CanisterManager {
         sender: PrincipalId,
         canister: &mut CanisterState,
         delete_snapshot_id: SnapshotId,
-        state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
         // Check sender is a controller.
@@ -2516,7 +2520,7 @@ impl CanisterManager {
         let new_memory_usage = memory_usage.saturating_sub(&old_snapshot_size);
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             canister,
             sender,
             NumInstructions::new(0),
@@ -2530,7 +2534,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             canister,
             sender,
             round_limits,
@@ -2595,8 +2599,8 @@ impl CanisterManager {
         canister: &mut CanisterState,
         snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataKind,
-        state: &ReplicatedState,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         round_limits: &mut RoundLimits,
     ) -> Result<ReadCanisterSnapshotDataResponse, UserError> {
         validate_snapshot_visibility(canister, &sender, "read_canister_snapshot_data")?;
@@ -2617,7 +2621,7 @@ impl CanisterManager {
                 canister,
                 num_instructions,
                 subnet_size,
-                state.get_own_cost_schedule(),
+                cost_schedule,
             )
         {
             return Err(UserError::from(
@@ -2683,8 +2687,10 @@ impl CanisterManager {
         args: UploadCanisterSnapshotMetadataArgs,
         state: &mut ReplicatedState,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
+        time: Time,
     ) -> Result<SnapshotId, UserError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2746,7 +2752,7 @@ impl CanisterManager {
             .saturating_add(&new_snapshot_size.get().into());
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             canister,
             sender,
             instructions,
@@ -2764,14 +2770,14 @@ impl CanisterManager {
         // Create new snapshot.
         let new_snapshot = CanisterSnapshot::from_metadata(
             &valid_args,
-            state.time(),
+            time,
             canister.system_state.canister_version(),
             Arc::clone(&self.fd_factory),
         );
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.get_own_cost_schedule(),
+            cost_schedule,
             canister,
             sender,
             round_limits,
@@ -2808,16 +2814,15 @@ impl CanisterManager {
         sender: PrincipalId,
         canister: &mut CanisterState,
         args: &UploadCanisterSnapshotDataArgs,
-        state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
 
-        let cost_schedule = state.get_own_cost_schedule();
         let snapshot = self.get_snapshot(canister, snapshot_id)?;
 
         // Ensure the snapshot was created via metadata upload, not from the canister.
@@ -2915,7 +2920,7 @@ impl CanisterManager {
                 let new_memory_usage = canister.memory_usage() + chunk_bytes;
                 let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
                     subnet_size,
-                    state.get_own_cost_schedule(),
+                    cost_schedule,
                     canister,
                     sender,
                     NumInstructions::new(0),
@@ -2926,7 +2931,7 @@ impl CanisterManager {
                 )?;
                 self.cycles_and_memory_usage_updates(
                     subnet_size,
-                    state.get_own_cost_schedule(),
+                    cost_schedule,
                     canister,
                     sender,
                     round_limits,
