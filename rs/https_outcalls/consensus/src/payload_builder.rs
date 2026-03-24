@@ -10,6 +10,7 @@ use crate::{
         },
     },
 };
+use candid::{Decode, Encode};
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
@@ -27,6 +28,9 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, warn};
+use ic_management_canister_types_private::{
+    CanisterHttpResponsePayload, FlexibleHttpRequestResult,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -69,6 +73,7 @@ pub struct CanisterHttpBatchStats {
     pub timeouts: usize,
     pub divergence_responses: usize,
     pub single_signature_responses: usize,
+    pub flexible_responses: usize,
     pub payload_bytes: usize,
 }
 
@@ -856,9 +861,42 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             .filter_map(divergence_response_into_reject)
             .inspect(|_| stats.divergence_responses += 1);
 
+        let flexible_responses = messages.flexible_responses.into_iter().map(|group| {
+            stats.flexible_responses += 1;
+            let payloads_result = group
+                .responses
+                .into_iter()
+                .filter_map(|entry| match entry.response.content {
+                    CanisterHttpResponseContent::Success(data) => {
+                        Some(Decode!(&data, CanisterHttpResponsePayload).map_err(|err| {
+                            format!("Failed to decode CanisterHttpResponsePayload: {err}")
+                        }))
+                    }
+                    CanisterHttpResponseContent::Reject(_) => {
+                        // Payload building/validation guarantee that this case
+                        // is unreachable as there are no reject responses here.
+                        None
+                    }
+                })
+                .collect::<Result<Vec<CanisterHttpResponsePayload>, String>>()
+                .and_then(|p| {
+                    Encode!(&FlexibleHttpRequestResult::Ok(p))
+                        .map_err(|err| format!("Failed to encode FlexibleHttpRequestResult: {err}"))
+                });
+
+            match payloads_result {
+                Ok(bytes) => ConsensusResponse::new(group.callback_id, Payload::Data(bytes)),
+                Err(msg) => ConsensusResponse::new(
+                    group.callback_id,
+                    Payload::Reject(RejectContext::new(RejectCode::SysTransient, msg)),
+                ),
+            }
+        });
+
         let responses = responses
             .chain(timeouts)
             .chain(divergece_responses)
+            .chain(flexible_responses)
             .collect();
 
         (responses, stats)
