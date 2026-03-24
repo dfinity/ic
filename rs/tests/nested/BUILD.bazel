@@ -175,7 +175,10 @@ system_test_nns(
         "recovery": "sev_recovery_dev",
     },
     hostos = True,
-    tags = ["long_test", "manual"],
+    tags = [
+        "long_test",
+        "manual",
+    ],
     test_timeout = "eternal",
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
