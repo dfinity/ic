@@ -630,8 +630,8 @@ mod tests {
         let version = RegistryVersion::from(2);
         let subnet_record = SubnetRecord {
             membership: vec![
-                node_id(32u64).get().into_vec(),
-                node_id(33u64).get().into_vec(),
+                node_id(32_u64).get().into_vec(),
+                node_id(33_u64).get().into_vec(),
             ],
             ..Default::default()
         };

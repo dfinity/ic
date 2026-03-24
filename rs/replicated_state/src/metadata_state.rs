@@ -16,6 +16,7 @@ use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
     IC_00, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRanges, CanisterMigrations, RoutingTable,
     canister_id_into_u64, difference, intersection,
@@ -93,6 +94,8 @@ pub struct SystemMetadata {
     pub own_subnet_type: SubnetType,
 
     pub own_subnet_features: SubnetFeatures,
+
+    pub own_resource_limits: ResourceLimits,
 
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
@@ -442,6 +445,7 @@ impl SystemMetadata {
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
+            own_resource_limits: Default::default(),
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
@@ -734,6 +738,8 @@ impl SystemMetadata {
             // Overwritten as soon as the round begins, no explicit action needed.
             own_subnet_features: _,
             // Overwritten as soon as the round begins, no explicit action needed.
+            own_resource_limits: _,
+            // Overwritten as soon as the round begins, no explicit action needed.
             node_public_keys: _,
             api_boundary_nodes: _,
             ref mut split_from,
@@ -839,6 +845,7 @@ impl SystemMetadata {
             own_subnet_id,
             own_subnet_type,
             own_subnet_features,
+            own_resource_limits,
             node_public_keys,
             api_boundary_nodes,
             split_from,
@@ -942,6 +949,7 @@ impl SystemMetadata {
             own_subnet_id: subnet_id,
             own_subnet_type,
             own_subnet_features,
+            own_resource_limits,
             // Already populated from the registry.
             node_public_keys,
             api_boundary_nodes,
@@ -2038,6 +2046,7 @@ pub mod testing {
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
+            own_resource_limits: Default::default(),
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
