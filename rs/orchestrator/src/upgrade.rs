@@ -689,10 +689,6 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         self.prepared_upgrade_version = version
     }
 
-    fn binary_dir(&self) -> &PathBuf {
-        &self.ic_binary_dir
-    }
-
     fn image_path(&self) -> &PathBuf {
         &self.image_path
     }

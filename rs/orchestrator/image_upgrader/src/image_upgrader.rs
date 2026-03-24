@@ -123,8 +123,6 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// Set or unset the currently prepared version. Default is No-op.
     /// The prepared version is set during `prepare_upgrade()` and unset during the `execute_upgrade()` step.
     fn set_prepared_version(&mut self, _version: Option<V>) {}
-    /// Path to the directory containing boot scripts.
-    fn binary_dir(&self) -> &PathBuf;
     /// Path to the image image download and unpacking destination.
     fn image_path(&self) -> &PathBuf;
     /// Optional data path, used for storing latest reboot time. Default is None.
