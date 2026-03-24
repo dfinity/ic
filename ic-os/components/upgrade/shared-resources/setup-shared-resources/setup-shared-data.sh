@@ -12,7 +12,6 @@ if ! blkid "${DEVICE}" >/dev/null 2>&1; then
 fi
 
 echo "Filesystem exists on ${DEVICE}, running xfs_repair to check and repair if necessary..."
-# Filesystem exists. Run xfs_repair to check and fix it.
 # xfs_repair (without -L) is safe: it exits non-zero without modifying
 # anything when the journal is dirty but valid (normal after a crash),
 # telling us to mount the filesystem to replay the log. In that case
