@@ -401,7 +401,8 @@ trait GetEventsFile {
 
     fn path_to_events_file(&self) -> PathBuf {
         PathBuf::from(
-            std::env::var(self.environment_variable()).expect("Failed to get event path env variable"),
+            std::env::var(self.environment_variable())
+                .expect("Failed to get event path env variable"),
         )
     }
 
