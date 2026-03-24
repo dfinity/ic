@@ -89,7 +89,7 @@ RUN RUST_VERSION=$(sed -n 's/^channel = "\(.*\)"$/\1/p' /tmp/rust-toolchain.toml
     rustup default "${RUST_VERSION}-x86_64-unknown-linux-gnu" && \
     rustup target add wasm32-unknown-unknown && \
     rustup component add clippy && \
-    rm /tmp/rust-toolchain.toml
+    sudo rm /tmp/rust-toolchain.toml
 
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.22.0
