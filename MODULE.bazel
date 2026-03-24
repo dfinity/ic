@@ -541,6 +541,19 @@ http_file(
     url = "https://download.dfinity.systems/testdata/ckbtc/testnet_events.gz",
 )
 
+# ckETH
+http_file(
+    name = "cketh_mainnet_events.gz",
+    sha256 = "e5ffdd0be68b11eacdc623547643dc3c4dc02de4bcb4e1dfb5906fd775c4d8e0",
+    url = "https://download.dfinity.systems/testdata/cketh/mainnet_events_v1.gz",
+)
+
+http_file(
+    name = "cketh_sepolia_events.gz",
+    sha256 = "ad417332a67911cace2ed1f5179b7b1e5f4eb5327a5e872f68a85283dfa838af",
+    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v1.gz",
+)
+
 # EVM RPC canister
 
 http_file(
