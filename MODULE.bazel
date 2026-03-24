@@ -541,6 +541,13 @@ http_file(
     url = "https://download.dfinity.systems/testdata/ckbtc/testnet_events.gz",
 )
 
+# ckDOGE
+http_file(
+    name = "ckdoge_mainnet_events.gz",
+    sha256 = "9f2959621216371fefec3b2f6a4d6876b7d699009e64363adc514d6abff18f09",
+    url = "https://download.dfinity.systems/testdata/ckdoge/mainnet_events_v1.gz",
+)
+
 # ckETH
 http_file(
     name = "cketh_mainnet_events.gz",
