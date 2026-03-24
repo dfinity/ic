@@ -757,7 +757,7 @@ fn test_message_stats_best_effort() {
             inbound_guaranteed_request_count: 0,
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
-            cycles: request_cycles * 2u64 + response_cycles * 2u64,
+            cycles: request_cycles * 2_u64 + response_cycles * 2_u64,
         },
         pool.message_stats
     );
@@ -839,7 +839,7 @@ fn test_message_stats_guaranteed_response() {
             inbound_guaranteed_request_count: 1,
             inbound_guaranteed_response_count: 1,
             outbound_message_count: 2,
-            cycles: request_cycles * 2u64 + response_cycles * 2u64,
+            cycles: request_cycles * 2_u64 + response_cycles * 2_u64,
         },
         pool.message_stats
     );
@@ -937,7 +937,7 @@ fn test_message_stats_oversized_requests() {
             inbound_guaranteed_request_count: 1,
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
-            cycles: best_effort_cycles * 2u64 + guaranteed_cycles * 2u64,
+            cycles: best_effort_cycles * 2_u64 + guaranteed_cycles * 2_u64,
         },
         pool.message_stats
     );
