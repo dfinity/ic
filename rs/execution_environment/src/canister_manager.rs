@@ -975,10 +975,6 @@ impl CanisterManager {
 
     /// Uninstalls code from a canister.
     ///
-    /// Returns a list of reject responses to callers of the uninstalled canister
-    /// which must be enqueued to `ReplicatedState`
-    /// by separately calling `crate::util::process_responses`.
-    ///
     /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-uninstall_code
     pub(crate) fn uninstall_code(
         &self,

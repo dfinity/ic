@@ -321,12 +321,28 @@ pub(crate) struct UploadChunkResult {
     pub(crate) heap_delta_increase: NumBytes,
 }
 
+/// Bundles the reply (success) to a management canister request (referred to as "current request")
+/// with changes to `ReplicatedState` that must be applied separately.
+/// This is because `CanisterManager` only mutates a single `CanisterState` (but no other parts of `ReplicatedState`)
+/// in cases when it returns `CanisterManagerResponse`.
 pub(crate) struct CanisterManagerResponse {
+    /// The target canister of the current request.
+    /// Only `CanisterState` of that canister could have been mutated
+    /// by `CanisterManager` while processing the current request.
     pub canister_id: CanisterId,
+    /// The reply (success) to the current request.
     pub reply: Vec<u8>,
+    /// The heap delta increase produced by processing
+    /// the current request.
     pub heap_delta_increase: NumBytes,
+    /// An unflushed checkpoint operation that must be handled
+    /// before the next checkpoint.
     pub unflushed_checkpoint_op: Option<UnflushedCheckpointOp>,
+    /// Responses to other requests that must be enqueued to `ReplicatedState`
+    /// (reject responses to calls to a canister uninstalled by the current request).
     pub responses: Vec<Response>,
+    /// Stop canister requests (other than the current request)
+    /// that must be rejected (because the canister was restarted by the current request).
     pub stop_contexts: Vec<StopCanisterContext>,
 }
 
