@@ -1,23 +1,15 @@
 # Patch for determinism issues
 # https://github.com/askama-rs/askama/issues/708
-// When .file() returns a relative path (e.g. "src/lib.rs"), we need to
-// resolve it to an absolute path so that diff_paths() can compute a correct
-// relative path to the template files.
+// .file() returns a path relative to rustc's CWD, so we resolve it
+// against current_dir() to get the true absolute path of the source file.
+// This is deterministic because CWD + .file() always resolve to the same
+// physical location regardless of where the build is invoked from.
 //
-// We use CARGO_MANIFEST_DIR as the base because:
-// 1. Template paths are resolved and canonicalized relative to CARGO_MANIFEST_DIR
-//    (see Config::find_template and manifest_root in config.rs).
-// 2. The .file() path from proc_macro is relative to the crate root, which is
-//    what CARGO_MANIFEST_DIR points to.
-// 3. CARGO_MANIFEST_DIR is a stable, deterministic value set by cargo — unlike
-//    current_dir() which depends on where cargo was invoked from, or where a
-//    build system chose to run rustc.
-//
-// This ensures include_bytes!() paths in generated code are relative (not
-// absolute), making them identical across different checkouts and build
-// directories.
+// Note: CARGO_MANIFEST_DIR is NOT the correct base here — it points to
+// the crate directory, while .file() may be relative to the workspace
+// root or build system execution root.
 diff --git a/askama_derive/src/generator.rs b/askama_derive/src/generator.rs
-index 37c4fcb8..a71b44fa 100644
+index 37c4fcb8..52026df6 100644
 --- a/askama_derive/src/generator.rs
 +++ b/askama_derive/src/generator.rs
 @@ -136,18 +136,21 @@ impl<'a, 'h> Generator<'a, 'h> {
@@ -39,8 +31,8 @@ index 37c4fcb8..a71b44fa 100644
 +            file.pop();
 +
 +            if !file.is_absolute() {
-+                if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-+                    file = Path::new(&manifest_dir).join(file);
++                if let Ok(cwd) = current_dir() {
++                    file = cwd.join(file);
 +                } else {
 +                    self.caller_dir = CallerDir::Invalid;
 +                    return None;
