@@ -1,5 +1,5 @@
 {
-  "checksum": "41bf14afa9a8be764c4ec7de00544fa01a09007bdf5cfe31084b4434ca9b6efb",
+  "checksum": "b48f4f203243a924fe781ab1b084128fb77616f3d2206f11ac0d59f71727cbab",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14661,7 +14661,7 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.48.0",
                 "target": "windows_sys"
               }
             ]
@@ -22222,7 +22222,7 @@
               "target": "quickcheck"
             },
             {
-              "id": "quinn 0.11.5",
+              "id": "quinn 0.11.9",
               "target": "quinn"
             },
             {
@@ -62587,14 +62587,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "quinn 0.11.5": {
+    "quinn 0.11.9": {
       "name": "quinn",
-      "version": "0.11.5",
+      "version": "0.11.9",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn/0.11.5/download",
-          "sha256": "8c7c5fdde3cdae7203427dc4f0a68fe0ed09833edc525a03456b153b79828684"
+          "url": "https://static.crates.io/crates/quinn/0.11.9/download",
+          "sha256": "b9e20a958963c291dc322d98411f541009df2ced7b5a4f2bd52337638cfccf20"
         }
       },
       "targets": [
@@ -62602,6 +62602,18 @@
           "Library": {
             "crate_name": "quinn",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -62621,7 +62633,8 @@
             "log",
             "ring",
             "runtime-tokio",
-            "rustls"
+            "rustls",
+            "rustls-ring"
           ],
           "selects": {}
         },
@@ -62634,6 +62647,10 @@
             {
               "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
+            },
+            {
+              "id": "quinn 0.11.9",
+              "target": "build_script_build"
             },
             {
               "id": "quinn-proto 0.11.14",
@@ -62654,11 +62671,7 @@
               "target": "rustls"
             },
             {
-              "id": "socket2 0.5.9",
-              "target": "socket2"
-            },
-            {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -62670,10 +62683,43 @@
               "target": "tracing"
             }
           ],
-          "selects": {}
+          "selects": {
+            "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
+              {
+                "id": "web-time 1.1.0",
+                "target": "web_time"
+              }
+            ],
+            "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
+              {
+                "id": "socket2 0.6.1",
+                "target": "socket2"
+              }
+            ]
+          }
         },
         "edition": "2021",
-        "version": "0.11.5"
+        "version": "0.11.9"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg_aliases 0.2.1",
+              "target": "cfg_aliases"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -62715,7 +62761,6 @@
           "common": [
             "log",
             "ring",
-            "rustls",
             "rustls-ring"
           ],
           "selects": {}
@@ -98578,6 +98623,12 @@
       "x86_64-apple-darwin",
       "x86_64-unknown-linux-gnu"
     ],
+    "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu"
+    ],
     "cfg(not(any(target_os = \"unknown\", target_arch = \"wasm32\")))": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
@@ -98922,7 +98973,7 @@
     "publicsuffix 2.2.3",
     "qrcode 0.14.1",
     "quickcheck 1.0.3",
-    "quinn 0.11.5",
+    "quinn 0.11.9",
     "quinn-udp 0.5.5",
     "quote 1.0.42",
     "rand 0.8.5",
