@@ -212,39 +212,3 @@ fn wait_on_exit(
         let _pid = pid_cell.lock().unwrap().take();
     }
 }
-
-#[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-
-    pub(crate) struct FakeProcessManager {
-        running: bool,
-    }
-
-    impl FakeProcessManager {
-        pub(crate) fn new() -> Self {
-            Self { running: false }
-        }
-    }
-
-    impl<P: Process> ProcessManager<P> for FakeProcessManager {
-        fn start(&mut self, _process: P) -> Result<()> {
-            self.running = true;
-            Ok(())
-        }
-
-        fn stop(&mut self) -> Result<()> {
-            self.running = false;
-            Ok(())
-        }
-
-        fn is_running(&self) -> bool {
-            self.running
-        }
-
-        fn get_pid(&self) -> Option<Pid> {
-            // Return a dummy PID if the process is running.
-            self.running.then_some(Pid::from_raw(12345))
-        }
-    }
-}

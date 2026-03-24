@@ -336,24 +336,3 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
     async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
 }
-
-pub mod tests {
-    use std::ffi::OsStr;
-
-    use super::*;
-
-    pub struct FakeManagebootRunner;
-
-    #[async_trait]
-    impl ManagebootRunner for FakeManagebootRunner {
-        async fn run(&self, _args: &[&OsStr]) -> std::io::Result<Output> {
-            // Mock implementation that simulates a successful execution of the manageboot command.
-            use std::os::unix::process::ExitStatusExt;
-            Ok(Output {
-                status: std::process::ExitStatus::from_raw(0),
-                stdout: vec![],
-                stderr: vec![],
-            })
-        }
-    }
-}

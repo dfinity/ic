@@ -1143,7 +1143,6 @@ mod tests {
     use crate::catch_up_package_provider::tests::mock_tls_config;
 
     use super::*;
-    use crate::process_manager::tests::FakeProcessManager;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
@@ -1154,7 +1153,6 @@ mod tests {
         run_ni_dkg_and_create_single_transcript,
     };
     use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
-    use ic_image_upgrader::tests::FakeManagebootRunner;
     use ic_interfaces_registry::{
         RegistryClientVersionedResult, RegistryDataProvider, RegistryVersionedRecord,
     };
@@ -1200,17 +1198,65 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use mockall::mock;
+    use nix::unistd::Pid;
     use prost::Message;
     use rand::RngCore;
     use rstest::rstest;
     use slog::Level;
-    use std::collections::BTreeSet;
-    use std::{collections::BTreeMap, path::Path};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        ffi::OsStr,
+        path::Path,
+        process::Output,
+    };
     use tempfile::{TempDir, tempdir};
 
     impl Upgrade {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
             *self.subnet_assignment.read().unwrap()
+        }
+    }
+
+    pub(crate) struct FakeProcessManager {
+        running: bool,
+    }
+    impl FakeProcessManager {
+        pub(crate) fn new() -> Self {
+            Self { running: false }
+        }
+    }
+    impl<P: Process> ProcessManager<P> for FakeProcessManager {
+        fn start(&mut self, _process: P) -> std::io::Result<()> {
+            self.running = true;
+            Ok(())
+        }
+
+        fn stop(&mut self) -> std::io::Result<()> {
+            self.running = false;
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            self.running
+        }
+
+        fn get_pid(&self) -> Option<Pid> {
+            // Return a dummy PID if the process is running.
+            self.running.then_some(Pid::from_raw(12345))
+        }
+    }
+
+    pub struct FakeManagebootRunner;
+    #[async_trait]
+    impl ManagebootRunner for FakeManagebootRunner {
+        async fn run(&self, _args: &[&OsStr]) -> std::io::Result<Output> {
+            // Mock implementation that simulates a successful execution of the manageboot command.
+            use std::os::unix::process::ExitStatusExt;
+            Ok(Output {
+                status: std::process::ExitStatus::from_raw(0),
+                stdout: vec![],
+                stderr: vec![],
+            })
         }
     }
 
