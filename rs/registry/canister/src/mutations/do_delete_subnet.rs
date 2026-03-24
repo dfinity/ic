@@ -1,12 +1,11 @@
 use candid::{CandidType, Principal};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetType};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{delete, update};
 use ic_types::{PrincipalId, SubnetId};
 use prost::Message;
@@ -15,8 +14,9 @@ use serde::{Deserialize, Serialize};
 use crate::{common::LOG_PREFIX, registry::Registry};
 
 impl Registry {
-    /// Note: Currently, only CloudEngine subnets can be deleted.
-    ///       General subnet deletion requires changes in the deterministic state machine!
+    /// Note: The method name implies general subnet deletion. Currently, however, only CloudEngine subnets
+    ///       can be deleted. The reason is that general subnet deletion requires changes in the deterministic
+    ///       state machine, which are planned in the near future.  
     ///
     /// Deleting a subnet means to:
     /// - Remove its subnet ID from the key `subnet_list`.

@@ -643,12 +643,12 @@ async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, Strin
 fn delete_subnet() {
     check_caller_is_governance_and_log("delete_subnet");
     over_async(candid_one, |payload: DeleteSubnetPayload| async move {
-        delete_subnet_(payload).await
+        delete_subnet_(payload)
     });
 }
 
 #[candid_method(update, rename = "delete_subnet")]
-async fn delete_subnet_(payload: DeleteSubnetPayload) -> Result<(), String> {
+fn delete_subnet_(payload: DeleteSubnetPayload) -> Result<(), String> {
     registry_mut().do_delete_subnet(payload)?;
     recertify_registry();
     Ok(())

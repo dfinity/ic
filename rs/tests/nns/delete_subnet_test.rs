@@ -6,7 +6,7 @@ Goal:: Ensure that CloudEngines can be deleted, and that regular App and System 
 end::catalog[] */
 
 use anyhow::Result;
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{Decode, Encode};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
@@ -22,6 +22,7 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
 use ic_types::{Height, RegistryVersion, SubnetId};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
@@ -201,9 +202,4 @@ async fn try_delete_subnet<'a>(
     } else {
         Decode!(&result_bytes, Result<(), String>).unwrap().unwrap();
     }
-}
-
-#[derive(CandidType)]
-pub struct DeleteSubnetPayload {
-    subnet_id: Principal,
 }
