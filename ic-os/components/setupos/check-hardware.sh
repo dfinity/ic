@@ -23,9 +23,8 @@ GEN1_CPU_MODEL="AMD EPYC 7302"
 GEN1_CPU_CAPABILITIES=("svm" "sev")
 GEN1_CPU_SOCKETS=2
 GEN1_CPU_THREADS=64
-# Gen1 Dell has 10 * 3.2TB drives and Gen1 SuperMicro has 5 * 6.4 TB drives = 32TB
-GEN1_MINIMUM_DISK_SIZE=3200000000000
-GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
+# Gen1 Dell has 10 * 3.2TB drives, Gen1 SuperMicro has 5 * 6.4TB drives, Gen2 has 5 * 6.4TB drives = 32TB
+MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
 # SEV-SNP was introduced with Milan (EPYC 7003), so that is generation minimum.
 # Also support newer generations: 8000 (Siena) and 9000 (Genoa/Turin).
@@ -33,9 +32,6 @@ GEN2_CPU_MODEL="AMD EPYC (7..[3-9]|[89][0-9]+)"
 GEN2_CPU_CAPABILITIES=("svm" "sev_snp")
 GEN2_MINIMUM_CPU_SOCKETS=2
 GEN2_MINIMUM_CPU_THREADS=64
-# Gen2 has 5 * 6.4 TB drives = 32TB
-GEN2_MINIMUM_DISK_SIZE=6400000000000
-GEN2_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
 # Memory requirement for all nodes: 510 GB (just under the 512 GB publicly-listed requirement)
 MINIMUM_MEMORY_SIZE=547608330240
@@ -226,9 +222,8 @@ function verify_memory() {
 # Disk Verification
 ###############################################################################
 
-function verify_disks_helper() {
-    local min_disk_size="${1}"
-    local min_aggregate_disk_size="${2}"
+function verify_disks() {
+    echo "* Verifying disks..."
     local aggregate_size=0
     local large_drives=($(get_large_drives))
 
@@ -246,28 +241,14 @@ function verify_disks_helper() {
             '.[][] | select(.name==$logicalname) | .size')
         log_and_halt_installation_on_error "${?}" "Unable to extract disk size."
 
-        if [ "${disk_size}" -ge "${min_disk_size}" ]; then
-            echo "Disk size (${disk_size} bytes) meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${min_disk_size}) does NOT meet system requirements."
-        fi
-
+        echo "Disk size: ${disk_size} bytes"
         aggregate_size=$((aggregate_size + disk_size))
     done
 
-    if [ "${aggregate_size}" -ge "${min_aggregate_disk_size}" ]; then
+    if [ "${aggregate_size}" -ge "${MINIMUM_AGGREGATE_DISK_SIZE}" ]; then
         echo "Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
     else
-        log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${min_aggregate_disk_size}) does NOT meet system requirements."
-    fi
-}
-
-function verify_disks() {
-    echo "* Verifying disks..."
-    if [[ "${HARDWARE_GENERATION}" == "1" ]]; then
-        verify_disks_helper "${GEN1_MINIMUM_DISK_SIZE}" "${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}"
-    else
-        verify_disks_helper "${GEN2_MINIMUM_DISK_SIZE}" "${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}"
+        log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${MINIMUM_AGGREGATE_DISK_SIZE}) does NOT meet system requirements."
     fi
 }
 
