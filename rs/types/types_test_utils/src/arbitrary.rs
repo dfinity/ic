@@ -170,7 +170,7 @@ pub fn response_payload() -> impl Strategy<Value = Payload> {
         // Data payload.
         prop::collection::vec(any::<u8>(), 0..16).prop_flat_map(|data| Just(Payload::Data(data))),
         // Reject payload.
-        (1i32..5, "[a-zA-Z]{1,6}").prop_flat_map(|(code, message)| Just(Payload::Reject(
+        (1_i32..5, "[a-zA-Z]{1,6}").prop_flat_map(|(code, message)| Just(Payload::Reject(
             RejectContext::new(
                 pbRejectCode::try_from(code).unwrap().try_into().unwrap(),
                 message
@@ -217,7 +217,7 @@ prop_compose! {
     /// Returns an arbitrary [`Refund`].
     pub fn refund() (
         recipient in canister_id(),
-        cycles in 1u64..,
+        cycles in 1_u64..,
     ) -> Refund {
         Refund::anonymous(recipient, Cycles::from(cycles))
     }

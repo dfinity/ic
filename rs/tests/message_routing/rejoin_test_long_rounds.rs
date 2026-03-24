@@ -87,7 +87,7 @@ fn setup(env: TestEnv, config: Config) {
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
     InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::Performance])
+        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)

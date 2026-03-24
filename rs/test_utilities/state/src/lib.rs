@@ -994,8 +994,8 @@ prop_compose! {
     /// count values for extracting a slice from the stream.
     pub fn arb_stream_slice(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
         stream in arb_stream(min_size, max_size, min_signal_count, max_signal_count),
-        from_percent in -20..120i64,
-        percent_above_min_size in 0..120i64,
+        from_percent in -20..120_i64,
+        percent_above_min_size in 0..120_i64,
     ) ->  (Stream, StreamIndex, usize) {
         let from_percent = from_percent.clamp(0, 100) as usize;
         let percent_above_min_size = percent_above_min_size.clamp(0, 100) as usize;
@@ -1014,8 +1014,8 @@ prop_compose! {
         max_signal_count: usize,
         with_reject_reasons: Vec<RejectReason>,
     )(
-        msg_start in 0..10000u64,
-        msg_len in 0..10000u64,
+        msg_start in 0..10000_u64,
+        msg_len in 0..10000_u64,
         (_signals_begin, signals_end, reject_signals) in arb_stream_signals(
             0..=10000,
             min_signal_count..=max_signal_count,

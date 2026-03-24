@@ -59,6 +59,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_finalization_stop_canisters: Histogram,
     pub(super) round_finalization_ingress: Histogram,
     pub(super) round_finalization_charge: Histogram,
+    pub(super) round_finalization_scheduling: Histogram,
     pub(super) canister_heap_delta_debits: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
     pub(super) canister_install_code_debits: Histogram,
@@ -302,6 +303,7 @@ impl SchedulerMetrics {
             // Pruning of expired messages from the ingress history.
             round_finalization_ingress: round_finalization_phase_duration_histogram("prune ingress", metrics_registry),
             round_finalization_charge: round_finalization_phase_duration_histogram("charge canisters", metrics_registry),
+            round_finalization_scheduling: round_finalization_phase_duration_histogram("scheduling", metrics_registry),
             canister_heap_delta_debits: metrics_registry.histogram(
                 "scheduler_canister_heap_delta_debits",
                 "The heap delta debit of a canister at the end of the round, before \

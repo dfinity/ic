@@ -661,7 +661,7 @@ mod tests {
             // properly convert `size: i32` to u64 and this process does not charge
             // more than the equivalent of `size` for values >= 2^31.
             let num_bytes = 2147483648; // equivalent to 2^31
-            let payload = vec![0u8; num_bytes];
+            let payload = vec![0_u8; num_bytes];
             let wasm = wat2wasm(
                 r#"
               (module
