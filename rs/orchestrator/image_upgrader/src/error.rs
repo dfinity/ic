@@ -33,7 +33,7 @@ impl UpgradeError {
 
     pub(crate) fn manageboot_error(e: io::Error, args: &[&OsStr]) -> Self {
         UpgradeError::IoError(
-            format!("Failed to executing manageboot command with args {args:?}"),
+            format!("Failed to execute manageboot command with args {args:?}"),
             e,
         )
     }
