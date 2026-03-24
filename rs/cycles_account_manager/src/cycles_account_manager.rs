@@ -965,7 +965,7 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let use_case = cycles.use_case();
+        let use_case = T::cycles_use_case();
         match cost_schedule {
             CanisterCyclesCostSchedule::Free => {}
             CanisterCyclesCostSchedule::Normal => {
@@ -1209,7 +1209,7 @@ impl CyclesAccountManager {
                 log,
                 "Charging canister {} for {} failed with {}",
                 canister.canister_id(),
-                cycles.use_case().as_str(),
+                T::cycles_use_case().as_str(),
                 err
             );
             return Err(err);

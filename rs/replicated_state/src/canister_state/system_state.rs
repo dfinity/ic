@@ -1813,7 +1813,7 @@ impl SystemState {
         self.cycles_balance += amount.real();
         self.observe_consumed_cycles_with_use_case(
             amount.nominal(),
-            amount.use_case(),
+            T::cycles_use_case(),
             ConsumingCycles::No,
         );
     }
@@ -1823,7 +1823,7 @@ impl SystemState {
     /// that drain the main `cycles_balance`.
     pub fn remove_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
         let requested_real = requested_amount.real();
-        let use_case = requested_amount.use_case();
+        let use_case = T::cycles_use_case();
         let remaining_amount = match use_case {
             CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
                 let covered_by_reserved_balance = requested_real.min(self.reserved_balance);

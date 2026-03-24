@@ -32,7 +32,9 @@ use ic_types::{
     },
     time::CoarseTime,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, DroppedMessages, NonConsumed};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCaseKind, DroppedMessages, NonConsumed,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
@@ -1667,7 +1669,10 @@ impl ReplicatedState {
     ) {
         self.metadata
             .subnet_metrics
-            .observe_consumed_cycles_with_use_case(cycles.use_case(), cycles.nominal());
+            .observe_consumed_cycles_with_use_case(
+                DroppedMessages::cycles_use_case(),
+                cycles.nominal(),
+            );
     }
 
     /// Computes the subnet's total cycle balance including cycles attached to

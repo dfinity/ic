@@ -76,7 +76,6 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
     nominal: NominalCycles,
-    use_case: CyclesUseCase,
     _cycles_use_case_marker: PhantomData<T>,
 }
 
@@ -114,7 +113,6 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
         Self {
             real: amount,
             nominal: NominalCycles::new_private(amount.get()),
-            use_case,
             _cycles_use_case_marker: PhantomData,
         }
     }
@@ -126,10 +124,6 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     pub fn nominal(&self) -> NominalCycles {
         self.nominal
     }
-
-    pub fn use_case(&self) -> CyclesUseCase {
-        self.use_case
-    }
 }
 
 impl<T: CyclesUseCaseKind> Add for CompoundCycles<T> {
@@ -139,7 +133,6 @@ impl<T: CyclesUseCaseKind> Add for CompoundCycles<T> {
         Self {
             real: self.real + rhs.real,
             nominal: self.nominal + rhs.nominal,
-            use_case: self.use_case,
             _cycles_use_case_marker: self._cycles_use_case_marker,
         }
     }
@@ -159,7 +152,6 @@ impl<T: CyclesUseCaseKind> Sub for CompoundCycles<T> {
         Self {
             real: self.real - rhs.real,
             nominal: self.nominal - rhs.nominal,
-            use_case: self.use_case,
             _cycles_use_case_marker: self._cycles_use_case_marker,
         }
     }
@@ -179,7 +171,6 @@ impl<T: CyclesUseCaseKind> Mul<u64> for CompoundCycles<T> {
         Self {
             real: self.real * rhs,
             nominal: self.nominal * rhs,
-            use_case: self.use_case,
             _cycles_use_case_marker: self._cycles_use_case_marker,
         }
     }
@@ -192,7 +183,6 @@ impl<T: CyclesUseCaseKind> Div<u128> for CompoundCycles<T> {
         Self {
             real: self.real / rhs,
             nominal: self.nominal / rhs,
-            use_case: self.use_case,
             _cycles_use_case_marker: self._cycles_use_case_marker,
         }
     }
