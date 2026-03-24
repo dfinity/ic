@@ -24,22 +24,12 @@ pub fn send_request_to_host(request: &Request, port: &u32) -> Result<String, Str
 fn read_response_from_host(stream: &mut VsockStream) -> anyhow::Result<String> {
     // 64 KiB - generous for current responses (typically <1 KiB) while
     // preventing unbounded allocation from a misbehaving host.
-    const MAX_RESPONSE_SIZE: usize = 64 * 1024;
-    let mut response = Vec::new();
-    let mut buffer = [0u8; 4096];
-    loop {
-        let bytes_read = stream.read(&mut buffer)?;
-        // read() returns 0 when the server has closed the connection (EOF).
-        if bytes_read == 0 {
-            break;
-        }
-        response.extend_from_slice(&buffer[..bytes_read]);
-        anyhow::ensure!(
-            response.len() <= MAX_RESPONSE_SIZE,
-            "Response exceeded maximum size of {MAX_RESPONSE_SIZE} bytes"
-        );
-    }
-    String::from_utf8(response).map_err(Into::into)
+    const MAX_RESPONSE_SIZE: u64 = 64 * 1024;
+    let mut response = String::new();
+    stream
+        .take(MAX_RESPONSE_SIZE)
+        .read_to_string(&mut response)?;
+    Ok(response)
 }
 
 fn create_stream(port: &u32) -> Result<VsockStream, std::io::Error> {
