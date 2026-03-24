@@ -366,8 +366,6 @@ impl StructIO {
 mod tests {
     use super::*;
 
-    const TEST_NEXT_IDX: u64 = 123;
-
     #[test]
     fn test_header_roundtrip_serialization() {
         let original = Header {
@@ -395,7 +393,7 @@ mod tests {
     fn test_index_default_load() {
         let mut io = StructIO::new(PageMap::new_for_testing());
         let data_capacity = MemorySize::new(10_000_000);
-        io.save_header(&Header::new(data_capacity, TEST_NEXT_IDX));
+        io.save_header(&Header::new(data_capacity));
         let loaded_index = io.load_index_table();
         let loaded = loaded_index.raw_entries();
 
@@ -426,7 +424,7 @@ mod tests {
 
         let mut io = StructIO::new(PageMap::new_for_testing());
         let data_capacity = MemorySize::new(10_000_000);
-        io.save_header(&Header::new(data_capacity, TEST_NEXT_IDX));
+        io.save_header(&Header::new(data_capacity));
         io.save_index_table(&IndexTable::new(
             None,
             data_capacity,
@@ -459,7 +457,7 @@ mod tests {
 
             let mut io = StructIO::new(PageMap::new_for_testing());
             // Update header to make the record "alive"
-            let mut header = Header::new(data_capacity, TEST_NEXT_IDX);
+            let mut header = Header::new(data_capacity);
             header.data_head = position;
             let size = MemorySize::new(original.bytes_len() as u64);
             header.data_tail = header.advance_position(position, size);
@@ -480,7 +478,7 @@ mod tests {
         let mut io = StructIO::new(PageMap::new_for_testing());
         let data_capacity = MemorySize::new(100);
         let custom_offset = MemoryAddress::new(5000); // Different from DATA_REGION_OFFSET
-        let mut header = Header::new(data_capacity, TEST_NEXT_IDX);
+        let mut header = Header::new(data_capacity);
         header.data_offset = custom_offset;
         io.save_header(&header);
 
@@ -516,7 +514,7 @@ mod tests {
     fn test_struct_io_cache_reused() {
         let mut io = StructIO::new(PageMap::new_for_testing());
         // Initial state
-        let header = Header::new(MemorySize::new(1024), TEST_NEXT_IDX);
+        let header = Header::new(MemorySize::new(1024));
         io.save_header(&header);
 
         // Load header - should populate cache
@@ -525,7 +523,7 @@ mod tests {
 
         // Manually overwrite cache with a fake header.
         // This proves that load_header() uses the cache instead of reading from page map.
-        let header_fake = Header::new(MemorySize::new(9999), TEST_NEXT_IDX);
+        let header_fake = Header::new(MemorySize::new(9999));
         io.header_cache = OnceLock::new();
         let _ = io.header_cache.set(header_fake);
 
