@@ -18235,6 +18235,7 @@ dependencies = [
  "prost 0.13.5",
  "regex",
  "reqwest",
+ "serde_cbor",
  "slog",
  "tempfile",
 ]
