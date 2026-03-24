@@ -16,7 +16,7 @@ use thousands::Separable;
 /// can ensure that they never overflow or underflow.
 ///
 /// NOTE: This is distinct from `NominalCycles` which should be used to update metrics
-///       related to cycles accounting.
+/// related to cycles accounting.
 #[derive(
     Copy,
     Clone,
