@@ -262,7 +262,7 @@ genrule(
     testonly = True,
     srcs = [
         ":ckbtc_minter_dump_stable_memory",
-        "test_resources/mainnet_events.gz",
+        "@ckbtc_mainnet_events.gz//file",
         ":ckbtc_minter_debug.wasm.gz",
         "//:pocket-ic-server",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
@@ -274,7 +274,7 @@ genrule(
     export IC_CKBTC_MINTER_WASM_PATH="$(location :ckbtc_minter_debug.wasm.gz)"
     export POCKET_IC_BIN="$(location //:pocket-ic-server)"
 
-    $(location :ckbtc_minter_dump_stable_memory) $(location test_resources/mainnet_events.gz) $@
+    $(location :ckbtc_minter_dump_stable_memory) $(location @ckbtc_mainnet_events.gz//file) $@
 """,
     # For some unknown reason this target can take well over an hour to run on MacOS x86_64 so we exclude that platform:
     target_compatible_with = select({
