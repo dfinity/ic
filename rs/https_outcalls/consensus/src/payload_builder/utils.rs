@@ -6,8 +6,7 @@ use ic_types::{
     },
     canister_http::{
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare,
-        CanisterHttpResponseWithConsensus,
+        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
     crypto::crypto_hash,
     messages::CallbackId,
@@ -251,7 +250,10 @@ pub(crate) fn find_flexible_responses(
             if let Some(http_response) =
                 pool_access.get_response_content_by_hash(&metadata.content_hash)
             {
-                if matches!(http_response.content, CanisterHttpResponseContent::Reject(_)) {
+                if matches!(
+                    http_response.content,
+                    CanisterHttpResponseContent::Reject(_)
+                ) {
                     continue;
                 }
                 let response = FlexibleCanisterHttpResponseWithProof {

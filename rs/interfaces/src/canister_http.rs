@@ -93,7 +93,9 @@ pub enum InvalidCanisterHttpPayloadReason {
         signer: NodeId,
     },
     /// A flexible response entry contains a Reject response, which is not allowed.
-    FlexibleRejectResponseNotAllowed { callback_id: CallbackId },
+    FlexibleRejectResponseNotAllowed {
+        callback_id: CallbackId,
+    },
     /// The payload is not in its designated section.
     /// For example, a non-flexible response is not in the responses section
     /// or a flexible response is not in the flexible_responses section.
