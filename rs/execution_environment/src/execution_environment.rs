@@ -1885,6 +1885,9 @@ impl ExecutionEnvironment {
         self.finish_subnet_message_execution(state, msg, result, since)
     }
 
+    /// Applies changes to `ReplicatedState` according to `CanisterManagerResponse`
+    /// and returns the reply (success) contained in that `CanisterManagerResponse`
+    /// (that reply is supposed to be handled by the caller).
     fn process_canister_manager_response(
         &self,
         response: CanisterManagerResponse,
