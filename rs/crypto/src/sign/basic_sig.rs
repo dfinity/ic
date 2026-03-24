@@ -1,5 +1,4 @@
 use super::*;
-use crate::CryptoRngCore;
 use ic_crypto_internal_csp::CspRwLock;
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::types::SigConverter;
@@ -49,7 +48,7 @@ impl BasicSigVerifierInternal {
     }
 
     pub fn verify_basic_sig_batch<H: Signable>(
-        csprng: &CspRwLock<Box<dyn CryptoRngCore + Send + Sync>>,
+        csprng: &CspRwLock<Box<ChaCha20Rng>>,
         registry: &dyn RegistryClient,
         signatures: &BasicSignatureBatch<H>,
         message: &H,

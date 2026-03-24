@@ -115,6 +115,7 @@ mod test_multi_sig_verification {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with_records(vec![pk_rec_1]),
+            [0_u8; 32],
         );
 
         assert_matches!(
@@ -149,6 +150,7 @@ mod test_multi_sig_verification {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with_records(vec![pk_rec_1, pk_rec_2]),
+            [0_u8; 32],
         );
 
         assert_matches!(

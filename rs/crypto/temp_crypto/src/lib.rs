@@ -437,6 +437,8 @@ pub mod internal {
                 fake_registry_client as Arc<dyn RegistryClient>
             });
 
+            let seed = vault.new_public_seed().expect("CspVault new_public_seed failed").into_rng().r#gen::<[u8; 32]>();
+
             let crypto_component = CryptoComponent::new_for_test(
                 csp,
                 vault,
@@ -445,7 +447,7 @@ pub mod internal {
                 node_id,
                 metrics,
                 Some(time_source),
-                Box::new(OsRng),
+                seed
             );
 
             TempCryptoComponentGeneric {

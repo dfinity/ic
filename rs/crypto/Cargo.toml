@@ -44,6 +44,7 @@ ic-types = { path = "../types/types" }
 ic-vetkeys = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
+rand_chacha = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
@@ -98,7 +99,6 @@ mockall = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 prost = { workspace = true }
-rand_chacha = { workspace = true }
 rsa = { workspace = true }
 sha2 = { workspace = true }
 

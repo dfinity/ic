@@ -16,6 +16,7 @@ mod tls;
 mod vetkd;
 
 use ic_crypto_internal_csp::vault::api::CspVault;
+use rand_chacha::ChaCha20Rng;
 pub use sign::{
     MegaKeyFromRegistryError, get_master_public_key_from_transcript,
     retrieve_mega_public_key_from_registry,
@@ -36,17 +37,9 @@ use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicK
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::{NodeId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::{CryptoRng, RngCore, rngs::OsRng};
+use rand::{rngs::OsRng, SeedableRng, Rng};
 use std::fmt;
 use std::sync::Arc;
-
-/// A trait combining [`RngCore`] and [`CryptoRng`], allowing use as a trait object.
-///
-/// Rust does not allow multiple non-auto traits in a trait object (error E0225)
-/// so this supertrait is needed. `rand` 0.9 adds exactly this same trait, so this
-/// definition can be removed when `rand` is updated.
-pub trait CryptoRngCore: RngCore + CryptoRng {}
-impl<T: RngCore + CryptoRng> CryptoRngCore for T {}
 
 /// Defines the maximum number of entries contained in the
 /// `ThresholdSigDataStore` per tag, where tag is of type `NiDkgTag`.
@@ -64,7 +57,7 @@ pub struct CryptoComponentImpl<C: CryptoServiceProvider> {
     lockable_threshold_sig_data_store: LockableThresholdSigDataStore,
     vault: Arc<dyn CspVault>,
     csp: C,
-    csprng: CspRwLock<Box<dyn CryptoRngCore + Send + Sync>>,
+    csprng: CspRwLock<Box<ChaCha20Rng>>,
     registry_client: Arc<dyn RegistryClient>,
     // The node id of the node that instantiated this crypto component.
     node_id: NodeId,
@@ -113,13 +106,13 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         node_id: NodeId,
         metrics: Arc<CryptoMetrics>,
         time_source: Option<Arc<dyn TimeSource>>,
-        rng: Box<dyn CryptoRngCore + Send + Sync>,
+        seed: [u8; 32],
     ) -> Self {
         CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             vault,
-            csprng: CspRwLock::new_for_rng(rng, Arc::clone(&metrics)),
+            csprng: CspRwLock::new_for_rng(Box::new(rand_chacha::ChaCha20Rng::from_seed(seed)), Arc::clone(&metrics)),
             registry_client,
             node_id,
             logger,
@@ -225,7 +218,7 @@ impl CryptoComponentImpl<Csp> {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             vault,
-            csprng: CspRwLock::new_for_rng(Box::new(OsRng), Arc::clone(&metrics)),
+            csprng: CspRwLock::new_for_rng(Box::new(rand_chacha::ChaCha20Rng::from_seed(OsRng.r#gen())), Arc::clone(&metrics)),
             registry_client,
             node_id,
             time_source: Arc::new(SysTimeSource::new()),

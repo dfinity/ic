@@ -23,6 +23,7 @@ mod verify_basic_sig {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_returning_none(),
+            [0_u8; 32],
         );
 
         let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V1);
@@ -37,6 +38,7 @@ mod verify_basic_sig {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with(invalid_key_rec),
+            [0_u8; 32],
         );
 
         let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2);
@@ -52,6 +54,7 @@ mod verify_basic_sig {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with(key_record),
+            [0_u8; 32],
         );
         let incompatible_sig = BasicSigOf::new(BasicSig(vec![1, 2, 3]));
 
@@ -81,7 +84,7 @@ mod verify_basic_sig {
                     && *public_key == pk
             })
             .return_const(Ok(()));
-        let crypto = crypto_component_with_csp(csp, registry_with(key_record));
+        let crypto = crypto_component_with_csp(csp, registry_with(key_record), [0_u8; 32]);
 
         assert!(crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2).is_ok());
     }
@@ -108,7 +111,7 @@ mod verify_basic_sig {
                     && *public_key == pk
             })
             .return_const(Err(expected_error.clone()));
-        let crypto = crypto_component_with_csp(csp, registry_with(key_record));
+        let crypto = crypto_component_with_csp(csp, registry_with(key_record), [0_u8; 32]);
 
         let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2);
 
@@ -154,6 +157,7 @@ mod combine_basic_sig {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with(key_record),
+            [0_u8; 32],
         );
 
         assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
@@ -175,6 +179,7 @@ mod combine_basic_sig {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with_records(vec![key_record_1, key_record_2]),
+            [0_u8; 32],
         );
 
         assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
@@ -191,6 +196,7 @@ mod combine_basic_sig {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with(key_record),
+            [0_u8; 32],
         );
 
         assert_matches!(
@@ -409,6 +415,7 @@ mod verify_sig_batch {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with(key_record),
+            [0_u8; 32],
         );
 
         assert_matches!(
@@ -436,7 +443,7 @@ mod verify_basic_sig_by_public_key {
         ) {
             let request_id = request_id();
             let (sig, _pk) = request_id_signature_and_public_key(&request_id, AlgorithmId::Ed25519);
-            let crypto = crypto_component_with_csp(MockAllCryptoServiceProvider::new(), dummy_registry());
+            let crypto = crypto_component_with_csp(MockAllCryptoServiceProvider::new(), dummy_registry(), [0_u8; 32]);
             let err = crypto
                 .verify_basic_sig_by_public_key(&sig, &request_id, &not_supported_user_pubkey)
                 .unwrap_err();
@@ -456,6 +463,7 @@ mod verify_basic_sig_by_public_key {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_panicking_on_usage(),
+            [0_u8; 32],
         );
 
         let result = crypto.verify_basic_sig_by_public_key(
@@ -479,6 +487,7 @@ mod verify_basic_sig_by_public_key {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_panicking_on_usage(),
+            [0_u8; 32],
         );
 
         let result = crypto.verify_basic_sig_by_public_key(
