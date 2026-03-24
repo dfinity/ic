@@ -285,9 +285,8 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
     use testing::{mock_chip_id, mock_sev_host_firmware, mock_snp_platform_status};
-    use tokio::test;
 
-    #[test]
+    #[tokio::test]
     async fn test_helper_functions() {
         let chip_id = mock_chip_id();
         let status = mock_snp_platform_status();
@@ -303,7 +302,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test]
     async fn test_certificate_chain_with_cache() {
         // Filenames on ext4 must be <= 255 bytes
         assert!(MOCK_CACHE_FILENAME.len() <= 255);
@@ -354,7 +353,7 @@ mod tests {
             "Chain should contain exactly 3 certificates (VCEK, ASK, ARK)"
         );
     }
-    #[test]
+    #[tokio::test]
     async fn test_firmware_error() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
@@ -378,7 +377,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test]
     async fn test_invalid_cached_certificate() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
@@ -405,7 +404,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test]
     async fn test_load_from_amd_key_server() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
@@ -434,5 +433,22 @@ mod tests {
         let cached_data =
             fs::read(cache_dir.join(MOCK_CACHE_FILENAME)).expect("Could not read cached data");
         assert!(!cached_data.is_empty(), "Cached VCEK should not be empty");
+    }
+
+    #[test]
+    fn test_builtin_ask_ark_are_valid_utf8() {
+        for cert in [
+            // Milan
+            sev::certs::snp::builtin::milan::ASK,
+            sev::certs::snp::builtin::milan::ARK,
+            // Genoa
+            sev::certs::snp::builtin::genoa::ASK,
+            sev::certs::snp::builtin::genoa::ARK,
+            // Turin
+            sev::certs::snp::builtin::turin::ASK,
+            sev::certs::snp::builtin::turin::ARK,
+        ] {
+            std::str::from_utf8(cert).expect("Cert is not valid UTF-8");
+        }
     }
 }
