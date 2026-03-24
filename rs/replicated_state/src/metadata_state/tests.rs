@@ -1246,7 +1246,7 @@ fn network_topology_route_uses_filtered_topology() {
 }
 
 #[test]
-fn subnets_with_engines_falls_back_to_filtered() {
+fn subnets_for_certification_falls_back_to_filtered() {
     let subnet_a = subnet_test_id(1);
 
     let routing_table = Arc::new(
@@ -1264,20 +1264,20 @@ fn subnets_with_engines_falls_back_to_filtered() {
         ..Default::default()
     };
 
-    // Without full_topology, subnets_with_engines returns the filtered map.
+    // Without full_topology, subnets_for_certification returns the filtered map.
     assert_eq!(
-        network_topology.subnets_with_engines(),
+        network_topology.subnets_for_certification(),
         network_topology.subnets()
     );
     assert_eq!(network_topology.routing_table(), &routing_table);
     assert_eq!(
-        network_topology.routing_table_with_engines(),
+        network_topology.routing_table_for_certification(),
         network_topology.routing_table()
     );
 }
 
 #[test]
-fn subnets_with_engines_returns_full_topology_when_set() {
+fn subnets_for_certification_returns_full_topology_when_set() {
     use crate::metadata_state::testing::NetworkTopologyTesting;
 
     let subnet_a = subnet_test_id(1);
@@ -1318,10 +1318,10 @@ fn subnets_with_engines_returns_full_topology_when_set() {
     // subnets() and routing_table() return the filtered view.
     assert_eq!(network_topology.subnets(), &filtered_subnets);
     assert_eq!(network_topology.routing_table(), &filtered_routing_table);
-    // subnets_with_engines() and routing_table_with_engines() return the full view.
-    assert_eq!(network_topology.subnets_with_engines(), &full_subnets);
+    // subnets_for_certification() and routing_table_for_certification() return the full view.
+    assert_eq!(network_topology.subnets_for_certification(), &full_subnets);
     assert_eq!(
-        network_topology.routing_table_with_engines(),
+        network_topology.routing_table_for_certification(),
         &full_routing_table
     );
 }

@@ -314,7 +314,7 @@ impl NetworkTopology {
     ///
     /// On the NNS subnet this returns the full, unfiltered map (including cloud
     /// engines); on every other subnet it falls back to `subnets()`.
-    pub fn subnets_with_engines(&self) -> &BTreeMap<SubnetId, SubnetTopology> {
+    pub fn subnets_for_certification(&self) -> &BTreeMap<SubnetId, SubnetTopology> {
         self.full_topology
             .as_ref()
             .map(|ft| &ft.subnets)
@@ -326,7 +326,7 @@ impl NetworkTopology {
     /// On the NNS subnet this returns the full, unfiltered table (including
     /// cloud engine ranges); on every other subnet it falls back to
     /// `routing_table()`.
-    pub fn routing_table_with_engines(&self) -> &Arc<RoutingTable> {
+    pub fn routing_table_for_certification(&self) -> &Arc<RoutingTable> {
         self.full_topology
             .as_ref()
             .map(|ft| &ft.routing_table)

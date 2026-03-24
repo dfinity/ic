@@ -1813,7 +1813,7 @@ fn setup_three_subnet_registry() -> (Arc<FakeRegistryClient>, SubnetId, SubnetId
 }
 
 /// Tests that a CloudEngine subnet sees only itself in the resulting topology:
-/// `subnets`, `routing_table`, `subnets_with_engines`, and `routing_table_with_engines`
+/// `subnets`, `routing_table`, `subnets_for_certification`, and `routing_table_for_certification`
 /// all contain only the own subnet.
 #[test]
 fn try_read_registry_engine_subnet_sees_only_itself() {
@@ -1842,14 +1842,14 @@ fn try_read_registry_engine_subnet_sees_only_itself() {
         // Engine accessors also return only the own subnet (no full_topology on engines).
         assert_eq!(
             network_topology
-                .subnets_with_engines()
+                .subnets_for_certification()
                 .keys()
                 .collect::<Vec<_>>(),
             vec![&engine_subnet_id],
         );
         assert_eq!(
             network_topology
-                .routing_table_with_engines()
+                .routing_table_for_certification()
                 .iter()
                 .map(|(_, sid)| *sid)
                 .collect::<BTreeSet<_>>(),
@@ -1859,8 +1859,8 @@ fn try_read_registry_engine_subnet_sees_only_itself() {
 }
 
 /// Tests that an Application subnet filters out CloudEngine subnets from its
-/// topology: `subnets`, `routing_table`, `subnets_with_engines`, and
-/// `routing_table_with_engines` all exclude the engine subnet.
+/// topology: `subnets`, `routing_table`, `subnets_for_certification`, and
+/// `routing_table_for_certification` all exclude the engine subnet.
 #[test]
 fn try_read_registry_application_subnet_filters_out_engines() {
     with_test_replica_logger(|log| {
@@ -1888,19 +1888,19 @@ fn try_read_registry_application_subnet_filters_out_engines() {
 
         // Engine accessors also exclude the engine (no full_topology on non-NNS subnets).
         assert_eq!(
-            network_topology.subnets_with_engines(),
+            network_topology.subnets_for_certification(),
             network_topology.subnets(),
         );
         assert_eq!(
-            network_topology.routing_table_with_engines(),
+            network_topology.routing_table_for_certification(),
             network_topology.routing_table(),
         );
     });
 }
 
 /// Tests that the NNS subnet filters out CloudEngine subnets from `subnets()`
-/// and `routing_table()`, but `subnets_with_engines()` and
-/// `routing_table_with_engines()` include all subnets (via `full_topology`).
+/// and `routing_table()`, but `subnets_for_certification()` and
+/// `routing_table_for_certification()` include all subnets (via `full_topology`).
 #[test]
 fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
     with_test_replica_logger(|log| {
@@ -1917,9 +1917,9 @@ fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
         assert!(subnet_keys.contains(&nns_subnet_id));
         assert!(!subnet_keys.contains(&engine_subnet_id));
 
-        // subnets_with_engines includes all three subnets via full_topology.
+        // subnets_for_certification includes all three subnets via full_topology.
         let all_keys: Vec<_> = network_topology
-            .subnets_with_engines()
+            .subnets_for_certification()
             .keys()
             .copied()
             .collect();
@@ -1927,9 +1927,9 @@ fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
         assert!(all_keys.contains(&engine_subnet_id));
         assert!(all_keys.contains(&nns_subnet_id));
 
-        // routing_table_with_engines includes ranges for all three subnets.
+        // routing_table_for_certification includes ranges for all three subnets.
         let rt_with_engines_subnets: BTreeSet<_> = network_topology
-            .routing_table_with_engines()
+            .routing_table_for_certification()
             .iter()
             .map(|(_, sid)| *sid)
             .collect();
