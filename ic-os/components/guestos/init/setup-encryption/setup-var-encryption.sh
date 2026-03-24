@@ -10,8 +10,9 @@ function transfer_log_state() {
     echo "Successfully mounted old /var partition, copying contents for machine id: ${MACHINE_ID}"
 
     # First, copy actual journal files.
+    mkdir -p /mnt/var_new/log/journal
     if cp -vr /mnt/var_old/log/journal/"${MACHINE_ID}" /mnt/var_new/log/journal/"${MACHINE_ID}"; then
-        chown -R root.systemd-journal /mnt/var_new/log/journal/"${MACHINE_ID}"
+        chown -R root.systemd-journal /mnt/var_new/log/journal/
         chcon -R system_u:object_r:systemd_journal_t:s0 /mnt/var_new/log/journal/"${MACHINE_ID}"
         ls -lZ /mnt/var_new/log/journal/"${MACHINE_ID}"
     else
