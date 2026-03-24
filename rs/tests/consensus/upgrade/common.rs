@@ -438,9 +438,7 @@ async fn fetch_latest_computed_root_hashes_from_logs(
 ///
 /// This function will never return if an upgrade is not scheduled.
 fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
-    let session = node.block_on_ssh_session().unwrap();
-    session.set_timeout(5 * 60 * 1000);
-    if !JournalStreamer::new(session)
+    if !JournalStreamer::new(node.block_on_ssh_session().unwrap())
         .follow()
         .max_lines(1)
         .search("Orchestrator shut down gracefully")
