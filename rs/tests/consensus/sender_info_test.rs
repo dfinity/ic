@@ -150,9 +150,8 @@ fn test(env: TestEnv) {
             secs(10),
         )
         .await;
-        let canister_id = CanisterId::unchecked_from_principal(
-            PrincipalId::try_from(message_canister.canister_id()).unwrap(),
-        );
+        let canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from(message_canister.canister_id()));
         info!(logger, "Message canister installed: {}", canister_id);
 
         let msg = "Hello from canister_client!";
