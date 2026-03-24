@@ -9,6 +9,6 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "@crate_index//:getrandom-0_3",
+        "@crate_index//:getrandom_0_3",
     ],
 )

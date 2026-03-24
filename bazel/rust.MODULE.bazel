@@ -513,7 +513,7 @@ crate.spec(
 crate.spec(
     package = "getrandom",
     version = "^0.3",
-    package_alias = "getrandom-0_3",
+    package_alias = "getrandom_0_3",
 )
 crate.spec(
     package = "gpt",
