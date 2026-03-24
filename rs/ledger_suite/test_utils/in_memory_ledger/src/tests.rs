@@ -10,13 +10,13 @@ use icrc_ledger_types::icrc1::account::Account;
 const ACCOUNT_ID_1: u64 = 134;
 const ACCOUNT_ID_2: u64 = 256;
 const ACCOUNT_ID_3: u64 = 378;
-const MINT_AMOUNT: u64 = 1_000_000u64;
-const BURN_AMOUNT: u64 = 500_000u64;
-const TRANSFER_AMOUNT: u64 = 200_000u64;
-const APPROVE_AMOUNT: u64 = 250_000u64;
-const ANOTHER_APPROVE_AMOUNT: u64 = 700_000u64;
-const ZERO_AMOUNT: u64 = 0u64;
-const FEE_AMOUNT: u64 = 10_000u64;
+const MINT_AMOUNT: u64 = 1_000_000_u64;
+const BURN_AMOUNT: u64 = 500_000_u64;
+const TRANSFER_AMOUNT: u64 = 200_000_u64;
+const APPROVE_AMOUNT: u64 = 250_000_u64;
+const ANOTHER_APPROVE_AMOUNT: u64 = 700_000_u64;
+const ZERO_AMOUNT: u64 = 0_u64;
+const FEE_AMOUNT: u64 = 10_000_u64;
 const TIMESTAMP_NOW: u64 = 0;
 const TIMESTAMP_LATER: u64 = 1;
 const TIMESTAMP_EVEN_LATER: u64 = 2;
@@ -350,7 +350,7 @@ fn should_set_allowance_with_expected_allowance_and_no_existing_allowance() {
             &account_from_u64(ACCOUNT_ID_1),
             &account_from_u64(ACCOUNT_ID_2),
             &Tokens::from(APPROVE_AMOUNT),
-            &Some(Tokens::from(0u64)),
+            &Some(Tokens::from(0_u64)),
             &None,
             &Some(Tokens::from(FEE_AMOUNT)),
             now,
@@ -427,7 +427,7 @@ fn should_set_allowance_with_expected_allowance_and_expired_existing_allowance()
             &account_from_u64(ACCOUNT_ID_1),
             &account_from_u64(ACCOUNT_ID_2),
             &Tokens::from(ANOTHER_APPROVE_AMOUNT),
-            &Some(Tokens::from(0u64)),
+            &Some(Tokens::from(0_u64)),
             &None,
             &Some(Tokens::from(FEE_AMOUNT)),
             even_later,
@@ -457,7 +457,7 @@ fn should_panic_if_expected_allowance_different_than_existing_allowance() {
             &account_from_u64(ACCOUNT_ID_1),
             &account_from_u64(ACCOUNT_ID_2),
             &Tokens::from(APPROVE_AMOUNT),
-            &Some(Tokens::from(0u64)),
+            &Some(Tokens::from(0_u64)),
             &None,
             &Some(Tokens::from(FEE_AMOUNT)),
             now,
@@ -466,7 +466,7 @@ fn should_panic_if_expected_allowance_different_than_existing_allowance() {
             &account_from_u64(ACCOUNT_ID_1),
             &account_from_u64(ACCOUNT_ID_2),
             &Tokens::from(APPROVE_AMOUNT),
-            &Some(Tokens::from(0u64)),
+            &Some(Tokens::from(0_u64)),
             &None,
             &Some(Tokens::from(FEE_AMOUNT)),
             now,

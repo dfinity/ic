@@ -230,7 +230,7 @@ impl InternalHttpQueryHandler {
                             .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE),
                         state.get_ref().get_own_cost_schedule(),
                         ready_for_migration,
-                        &state.get_ref().get_own_subnet_admins(),
+                        state.get_ref().get_own_subnet_admins(),
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
@@ -281,7 +281,8 @@ impl InternalHttpQueryHandler {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory = full_subnet_memory_capacity(&self.config);
+        let subnet_available_memory =
+            full_subnet_memory_capacity(&self.config, state.get_ref().resource_limits());
         // Letting the canister use the full subnet memory reservation
         // is fine as we do not persist state modifications.
         let subnet_memory_reservation = self.config.subnet_memory_reservation;

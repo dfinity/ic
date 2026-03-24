@@ -68,7 +68,7 @@ fn read_response<T: DeserializeOwned>(child_out: &mut ChildStdout) -> T {
 }
 
 fn read_bytes(num_bytes: usize, child_out: &mut ChildStdout) -> Vec<u8> {
-    let mut buf = vec![0u8; num_bytes];
+    let mut buf = vec![0_u8; num_bytes];
     child_out
         .read_exact(&mut buf)
         .expect("failed to read from child_stdout");

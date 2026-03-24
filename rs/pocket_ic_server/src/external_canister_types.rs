@@ -1,8 +1,4 @@
 use candid::{CandidType, Principal};
-use ic_btc_interface::{
-    InitConfig as BitcoinInitConfig, SetConfigRequest as BitcoinSetConfigRequest,
-};
-use ic_doge_interface::{Fees, Flag, InitConfig as DogecoinInitConfig};
 use icrc_ledger_types::icrc1::account::Account;
 
 /* NNS dapp */
@@ -90,6 +86,13 @@ pub struct CaptchaConfig {
 }
 
 #[derive(CandidType)]
+pub enum OpenIdEmailVerification {
+    Unknown,
+    Google,
+    Microsoft,
+}
+
+#[derive(CandidType)]
 pub struct OpenIdConfig {
     pub name: String,
     pub logo: String,
@@ -99,6 +102,7 @@ pub struct OpenIdConfig {
     pub auth_uri: String,
     pub auth_scope: Vec<String>,
     pub fedcm_uri: Option<String>,
+    pub email_verification: Option<OpenIdEmailVerification>,
 }
 
 #[allow(dead_code)]
@@ -118,6 +122,17 @@ pub struct DummyAuthConfig {
 }
 
 #[derive(CandidType)]
+pub struct InternetIdentityFrontendInit {
+    pub backend_canister_id: Principal,
+    pub backend_origin: String,
+    pub related_origins: Option<Vec<String>>,
+    pub fetch_root_key: Option<bool>,
+    pub analytics_config: Option<Option<AnalyticsConfig>>,
+    pub dummy_auth: Option<Option<DummyAuthConfig>>,
+    pub dev_csp: Option<bool>,
+}
+
+#[derive(CandidType)]
 pub struct InternetIdentityInit {
     pub assigned_user_number_range: Option<(AnchorNumber, AnchorNumber)>,
     pub archive_config: Option<ArchiveConfig>,
@@ -132,38 +147,6 @@ pub struct InternetIdentityInit {
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
-}
-
-/* Bitcoin canister */
-#[derive(CandidType, serde::Deserialize)]
-pub enum BitcoinCanisterArg {
-    #[serde(rename = "init")]
-    Init(BitcoinInitConfig),
-    #[serde(rename = "upgrade")]
-    Upgrade(Option<BitcoinSetConfigRequest>),
-}
-
-/* Dogecoin canister */
-
-/// TODO(DEFI-2672): use SetConfigRequest from new version of ic-doge-interface once published
-/// Matches the canister's set_config_request (release/2026-02-06). ic-doge-interface
-/// SetConfigRequest is missing burn_cycles, so we define the full shape here for Candid equality.
-#[derive(CandidType, serde::Deserialize)]
-pub struct DogecoinSetConfigRequest {
-    pub stability_threshold: Option<u128>,
-    pub syncing: Option<Flag>,
-    pub fees: Option<Fees>,
-    pub api_access: Option<Flag>,
-    pub disable_api_if_not_fully_synced: Option<Flag>,
-    pub watchdog_canister: Option<Option<Principal>>,
-    pub burn_cycles: Option<Flag>,
-    pub lazily_evaluate_fee_percentiles: Option<Flag>,
-}
-
-#[derive(CandidType, serde::Deserialize)]
-pub enum DogecoinCanisterArg {
-    #[serde(rename = "init")]
-    Init(DogecoinInitConfig),
-    #[serde(rename = "upgrade")]
-    Upgrade(Option<DogecoinSetConfigRequest>),
+    pub backend_canister_id: Option<Principal>,
+    pub backend_origin: Option<String>,
 }

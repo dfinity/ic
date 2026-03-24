@@ -38,6 +38,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::prometheus_vm::PrometheusUrls;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
+use ic_system_test_driver::driver::universal_vm::UniversalVms;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*; // to use the universal canister
 use slog::info;
@@ -204,12 +205,24 @@ pub fn test(env: TestEnv) {
         "Check if the PrometheusVm is correctly configured to scrape the IC..."
     );
     block_on(async move {
+        let deployed_prometheus_vm = env.get_deployed_universal_vm("prometheus").unwrap();
+        let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
+        let ipv6 = prometheus_vm.ipv6.to_string();
+
         let p8s_urls = PrometheusUrls::read_attribute(&env);
         let p8s_url = p8s_urls.prometheus_url;
         let node_id = nodes[0].node_id.to_string();
+        // The DNS record of the p8s_url often takes to long to propagate for the request below,
+        // so we instruct reqwest to resolve the host to the IP address of the Prometheus VM directly
+        // without relying on DNS.
+        let parsed_url = url::Url::parse(&p8s_url).expect("Failed to parse Prometheus URL");
+        let host = parsed_url.host_str().expect("URL has no host").to_string();
+        let port = parsed_url.port_or_known_default().unwrap_or(80);
+        let addr: std::net::SocketAddr = format!("[{ipv6}]:{port}").parse().unwrap();
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
+            .resolve(&host, addr)
             .build()
             .expect("Failed to build HTTP client");
 

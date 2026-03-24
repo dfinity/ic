@@ -37,7 +37,6 @@ pub use ic_ckbtc_minter::{
     memo::{BurnMemo, MintMemo, encode as memo_encode},
     queries::EstimateFeeArg,
     reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
-    state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
     state::eventlog::{CkBtcMinterEvent, EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},
     tx::FeeRate,
@@ -45,6 +44,9 @@ pub use ic_ckbtc_minter::{
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
 use std::time::Duration;
+
+/// Maximum number of inputs for a Dogecoin transaction.
+pub const DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION: usize = 500;
 
 pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 

@@ -117,7 +117,7 @@ pub mod ckbtc {
     }
 
     pub fn amount() -> impl Strategy<Value = Satoshi> {
-        1..10_000_000_000u64
+        1..10_000_000_000_u64
     }
 
     fn canister_id() -> impl Strategy<Value = CanisterId> {
@@ -421,7 +421,7 @@ pub mod ckbtc {
             amount: amount,
             address: address(),
             block_index: any::<u64>(),
-            received_at: 1569975147000..2069975147000u64,
+            received_at: 1569975147000..2069975147000_u64,
             kyt_provider: option::of(principal()),
             reimbursement_account: option::of(account()),
         })
@@ -434,7 +434,7 @@ pub mod ckbtc {
             amount: amount,
             address: address(),
             block_index: any::<u64>(),
-            received_at: 1569975147000..2069975147000u64,
+            received_at: 1569975147000..2069975147000_u64,
         })
     }
 

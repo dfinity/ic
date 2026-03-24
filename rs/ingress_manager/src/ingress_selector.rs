@@ -20,7 +20,7 @@ use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CanisterId, CountBytes, Cycles, Height, NumBytes, RegistryVersion, Time,
+    CanisterId, CountBytes, Height, NumBytes, RegistryVersion, Time,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
@@ -29,6 +29,7 @@ use ic_types::{
         EXPECTED_MESSAGE_ID_LENGTH, MessageId, SignedIngress, extract_effective_canister_id,
     },
 };
+use ic_types_cycles::Cycles;
 use ic_validator::RequestValidationError;
 use std::{collections::BTreeMap, collections::HashMap, sync::Arc};
 
@@ -196,7 +197,10 @@ impl IngressSelector for IngressManager {
                         Ok(()) => (),
                         Err(ValidationError::InvalidArtifact(
                             InvalidIngressPayloadReason::IngressPayloadTooManyMessages(_, _),
-                        )) => break 'outer,
+                        )) => {
+                            self.metrics.observe_limit_reached("messages_count_limit");
+                            break 'outer;
+                        }
                         _ => {
                             queue.msgs.pop();
                             continue;
@@ -206,9 +210,12 @@ impl IngressSelector for IngressManager {
                     let size_estimates = self.message_size_estimates(&ingress.signed_ingress);
 
                     // Break criterion #1: global byte limit
-                    if accumulated_wire_size + size_estimates.wire > wire_byte_limit
-                        || accumulated_memory_size + size_estimates.memory > memory_byte_limit
-                    {
+                    if accumulated_wire_size + size_estimates.wire > wire_byte_limit {
+                        self.metrics.observe_limit_reached("wire_byte_limit");
+                        break 'outer;
+                    }
+                    if accumulated_memory_size + size_estimates.memory > memory_byte_limit {
+                        self.metrics.observe_limit_reached("memory_byte_limit");
                         break 'outer;
                     }
 
@@ -247,9 +254,12 @@ impl IngressSelector for IngressManager {
                 }
             }
 
-            if wire_byte_limit <= accumulated_wire_size
-                || memory_byte_limit <= accumulated_memory_size
-            {
+            if wire_byte_limit <= accumulated_wire_size {
+                self.metrics.observe_limit_reached("wire_byte_limit");
+                // No remaining quota means the block is full. No more iterations needed.
+                break;
+            } else if memory_byte_limit <= accumulated_memory_size {
+                self.metrics.observe_limit_reached("memory_byte_limit");
                 // No remaining quota means the block is full. No more iterations needed.
                 break;
             } else {
@@ -291,6 +301,7 @@ impl IngressSelector for IngressManager {
                 wire_byte_limit.get()
             );
             messages_in_payload.pop();
+            self.metrics.observe_limit_reached("serialized");
             if messages_in_payload.is_empty() {
                 break IngressPayload::default();
             }
@@ -305,6 +316,7 @@ impl IngressSelector for IngressManager {
 
         debug_assert!(size_estimates.wire <= wire_byte_limit);
         debug_assert!(size_estimates.memory <= memory_byte_limit);
+        debug_assert!(payload.payload.message_count() <= settings.max_ingress_messages_per_block);
         payload
     }
 
@@ -789,13 +801,14 @@ pub(crate) mod tests {
     use ic_types::{
         Height, RegistryVersion,
         artifact::IngressMessageId,
-        batch::{CanisterCyclesCostSchedule, IngressPayload},
+        batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
         state_manager::{StateManagerError, StateManagerResult},
         time::{UNIX_EPOCH, expiry_time_from_now},
     };
+    use ic_types_cycles::CanisterCyclesCostSchedule;
     use rstest::rstest;
     use std::sync::RwLock;
     use std::{collections::HashSet, convert::TryInto, time::Duration};
@@ -1605,13 +1618,15 @@ pub(crate) mod tests {
                                     )
                                     .cost(),
                             )
+                            .with_log_memory_limit(0) // Don't pay for logs memory allocation.
                             .build(),
                     )
                     .with_canister(
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(1))
                             // No cycles
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
+                            .with_log_memory_limit(0) // Don't pay for logs memory allocation.
                             .build(),
                     )
                     .build(),
@@ -1664,7 +1679,7 @@ pub(crate) mod tests {
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(0))
                             // Not enough cycles
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),
@@ -1873,7 +1888,7 @@ pub(crate) mod tests {
                     .with_canister(
                         CanisterStateBuilder::new()
                             .with_canister_id(canister_test_id(2))
-                            .with_cycles(0u128)
+                            .with_cycles(0_u128)
                             .build(),
                     )
                     .build(),
