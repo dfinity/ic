@@ -257,6 +257,9 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
         })
         .build();
 
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
     for _ in 0..3 {
         let canister = test.create_canister();
         test.send_ingress(canister, ingress(instructions_per_message.get()));

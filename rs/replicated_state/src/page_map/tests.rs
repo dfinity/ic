@@ -281,13 +281,13 @@ fn can_use_buffer_to_modify_page_map() {
     page_map.update(pages);
 
     let n = 4 * PAGE_SIZE;
-    let mut vec_buf = vec![0u8; n];
+    let mut vec_buf = vec![0_u8; n];
     vec_buf[PAGE_SIZE..2 * PAGE_SIZE].copy_from_slice(&page_1);
     vec_buf[3 * PAGE_SIZE..4 * PAGE_SIZE].copy_from_slice(&page_3);
 
     let mut buf = Buffer::new(page_map);
 
-    let mut read_buf = vec![0u8; n];
+    let mut read_buf = vec![0_u8; n];
 
     buf.read(&mut read_buf[..], 0);
     assert_eq!(read_buf, vec_buf);
@@ -453,7 +453,7 @@ fn get_memory_instructions_returns_deltas() {
             range: range.clone(),
             instructions: vec![(
                 PageIndex::new(1)..PageIndex::new(2),
-                MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
+                MemoryMapOrData::Data(&[1_u8; PAGE_SIZE])
             )]
         },
         page_map.get_memory_instructions(range.clone(), range.clone())
@@ -511,11 +511,11 @@ fn get_memory_instructions_returns_deltas() {
             instructions: vec![
                 (
                     PageIndex::new(3)..PageIndex::new(4),
-                    MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
+                    MemoryMapOrData::Data(&[1_u8; PAGE_SIZE])
                 ),
                 (
                     PageIndex::new(5)..PageIndex::new(6),
-                    MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
+                    MemoryMapOrData::Data(&[1_u8; PAGE_SIZE])
                 )
             ]
         },
@@ -668,8 +668,8 @@ fn get_memory_instructions_stops_at_instructions_outside_min_range() {
     page_map.strip_unflushed_delta();
 
     let pages = vec![
-        (PageIndex::new(5), &[1u8; PAGE_SIZE]),
-        (PageIndex::new(35), &[1u8; PAGE_SIZE]),
+        (PageIndex::new(5), &[1_u8; PAGE_SIZE]),
+        (PageIndex::new(35), &[1_u8; PAGE_SIZE]),
     ];
     page_map.update(&pages);
     page_map

@@ -178,9 +178,10 @@ fn execute_idle_and_canisters_with_messages() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // We won't update `last_full_execution_round` for the canister without any
+    // We update `last_full_execution_round` for the canister without any
     // input messages.
     assert!(!test.was_fully_executed(idle));
+    // But not its counts of rounds scheduled or executed.
     let idle = test.canister_state(idle);
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
     assert_eq!(idle.system_state.canister_metrics().executed(), 0);
@@ -840,17 +841,16 @@ fn inner_round_first_execution_is_not_a_full_execution() {
 
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
-        let priority = test.state().canister_priority(&canister.canister_id());
-        // All ingresses should be executed in the previous round.
+        // All ingress messages should have been executed in the previous round.
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         if canister.canister_id() == target_id {
             // The target canister, despite being executed first in the second inner round,
             // should not be marked as fully executed.
             assert_ne!(test.last_round(), 0.into());
-            assert_eq!(priority.last_full_execution_round, 0.into());
+            assert!(!test.was_fully_executed(canister.canister_id()));
         } else {
-            assert_eq!(priority.last_full_execution_round, test.last_round());
+            assert!(test.was_fully_executed(canister.canister_id()));
         }
     }
     let mut total_accumulated_priority = 0;
@@ -1093,9 +1093,8 @@ fn frozen_canisters_are_fully_executed() {
     };
     for (i, canister) in canisters.iter().enumerate() {
         if (i as u64) < (canisters_per_core - 1) * 2 {
-            assert_eq!(
-                canister_priority(canister).last_full_execution_round,
-                1.into(),
+            assert!(
+                test.was_fully_executed(*canister),
                 "Canister {i} should have been fully executed",
             );
             assert!(
@@ -1103,9 +1102,8 @@ fn frozen_canisters_are_fully_executed() {
                 "Canister {i} should have been charged"
             );
         } else {
-            assert_eq!(
-                canister_priority(canister).last_full_execution_round,
-                0.into(),
+            assert!(
+                !test.was_fully_executed(*canister),
                 "Canister {i} should not have been executed",
             );
             assert!(

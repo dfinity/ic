@@ -11,6 +11,18 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-20: Proposal 140958
+
+http://dashboard.internetcomputer.org/proposal/140958
+
+## Changed
+
+- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
+  where the sum of developer-allocated tokens exceeds
+  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
+  validation is no longer needed.
+
+
 # 2026-03-13: Proposal 140859
 
 http://dashboard.internetcomputer.org/proposal/140859
