@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{ReplicaLogger, error, info, warn};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::str::FromStr;
 use std::{
     fmt::Debug,
@@ -16,31 +16,29 @@ use crate::error::{UpgradeError, UpgradeResult};
 
 pub mod error;
 
-/// Describes a manageboot.sh command to be executed.
-#[derive(Clone, Debug)]
-pub struct ManagebootCommand {
-    binary: OsString,
-    args: Vec<OsString>,
-}
-
 /// Trait for running manageboot.sh commands.
 #[async_trait]
 pub trait ManagebootRunner: Send + Sync {
     /// Run the given manageboot command and return its output.
-    async fn run(&self, command: &ManagebootCommand) -> std::io::Result<Output>;
+    async fn run(&self, args: &[&OsStr]) -> std::io::Result<Output>;
 }
 
 /// Production implementation of [`ManagebootRunner`] that executes the command
 /// as a child process.
-pub struct ManagebootRunnerImpl;
+pub struct ManagebootRunnerImpl {
+    binary: OsString,
+}
+
+impl ManagebootRunnerImpl {
+    pub fn new(binary: OsString) -> Self {
+        Self { binary }
+    }
+}
 
 #[async_trait]
 impl ManagebootRunner for ManagebootRunnerImpl {
-    async fn run(&self, command: &ManagebootCommand) -> std::io::Result<Output> {
-        Command::new(&command.binary)
-            .args(&command.args)
-            .output()
-            .await
+    async fn run(&self, args: &[&OsStr]) -> std::io::Result<Output> {
+        Command::new(&self.binary).args(args).output().await
     }
 }
 
@@ -127,10 +125,6 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     fn set_prepared_version(&mut self, _version: Option<V>) {}
     /// Path to the directory containing boot scripts.
     fn binary_dir(&self) -> &PathBuf;
-    /// Return the path to the manageboot.sh binary.
-    fn manageboot_binary(&self) -> OsString {
-        self.binary_dir().join("manageboot.sh").into_os_string()
-    }
     /// Path to the image image download and unpacking destination.
     fn image_path(&self) -> &PathBuf;
     /// Optional data path, used for storing latest reboot time. Default is None.
@@ -157,14 +151,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// successfully. Without a confirmation the image will be reverted on the next
     /// restart.
     async fn confirm_boot(&self) {
-        if let Err(err) = self
-            .manageboot_runner()
-            .run(&ManagebootCommand {
-                binary: self.manageboot_binary(),
-                args: vec!["guestos".into(), "confirm".into()],
-            })
-            .await
-        {
+        let args = ["guestos".as_ref(), "confirm".as_ref()];
+        if let Err(err) = self.manageboot_runner().run(&args).await {
             error!(self.log(), "Could not confirm the boot: {:?}", err);
         }
     }
@@ -235,19 +223,16 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         // clear it here.
         self.set_prepared_version(None);
 
-        let manageboot = ManagebootCommand {
-            binary: self.manageboot_binary(),
-            args: vec![
-                "guestos".into(),
-                "upgrade-install".into(),
-                self.image_path().into(),
-            ],
-        };
+        let args = [
+            "guestos".as_ref(),
+            "upgrade-install".as_ref(),
+            self.image_path().as_os_str(),
+        ];
         let out = self
             .manageboot_runner()
-            .run(&manageboot)
+            .run(&args)
             .await
-            .map_err(|e| UpgradeError::manageboot_error(e, &manageboot))?;
+            .map_err(|e| UpgradeError::manageboot_error(e, &args))?;
 
         if !out.status.success() {
             warn!(self.log(), "upgrade-install has failed");
@@ -288,15 +273,12 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
             .map_err(|e| UpgradeError::IoError("Couldn't delete the image".to_string(), e))?;
 
         info!(self.log(), "Attempting to reboot");
-        let manageboot = ManagebootCommand {
-            binary: self.manageboot_binary(),
-            args: vec!["guestos".into(), "upgrade-commit".into()],
-        };
+        let args = ["guestos".as_ref(), "upgrade-commit".as_ref()];
         let out = self
             .manageboot_runner()
-            .run(&manageboot)
+            .run(&args)
             .await
-            .map_err(|e| UpgradeError::manageboot_error(e, &manageboot))?;
+            .map_err(|e| UpgradeError::manageboot_error(e, &args))?;
 
         if !out.status.success() {
             warn!(self.log(), "upgrade-commit has failed: {:?}", out.status);
@@ -356,13 +338,15 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
 }
 
 pub mod tests {
+    use std::ffi::OsStr;
+
     use super::*;
 
     pub struct FakeManagebootRunner;
 
     #[async_trait]
     impl ManagebootRunner for FakeManagebootRunner {
-        async fn run(&self, _command: &ManagebootCommand) -> std::io::Result<Output> {
+        async fn run(&self, _args: &[&OsStr]) -> std::io::Result<Output> {
             // Mock implementation that simulates a successful execution of the manageboot command.
             use std::os::unix::process::ExitStatusExt;
             Ok(Output {

@@ -246,6 +246,9 @@ impl Orchestrator {
             .as_ref()
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
+        let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
+            ic_binary_directory.join("manageboot.sh").into_os_string(),
+        ));
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall
         // They read from the same file, so they'll see the same persisted CUP
@@ -279,7 +282,7 @@ impl Orchestrator {
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
                 Arc::clone(&replica_process) as _,
-                Box::new(ManagebootRunnerImpl),
+                manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),

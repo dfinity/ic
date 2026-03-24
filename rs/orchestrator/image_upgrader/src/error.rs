@@ -1,9 +1,8 @@
 use ic_http_utils::file_downloader::FileDownloadError;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fmt;
 use std::io;
-
-use crate::ManagebootCommand;
 
 pub type UpgradeResult<T> = Result<T, UpgradeError>;
 
@@ -32,9 +31,9 @@ impl UpgradeError {
         UpgradeError::RebootTimeError(msg.to_string())
     }
 
-    pub(crate) fn manageboot_error(e: io::Error, cmd: &ManagebootCommand) -> Self {
+    pub(crate) fn manageboot_error(e: io::Error, args: &[&OsStr]) -> Self {
         UpgradeError::IoError(
-            format!("Failed to executing manageboot command: {cmd:?}"),
+            format!("Failed to executing manageboot command with args {args:?}"),
             e,
         )
     }
