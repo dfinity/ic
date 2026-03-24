@@ -1,10 +1,10 @@
 # Patch for determinism issues
 # https://github.com/askama-rs/askama/issues/708
 diff --git a/askama_derive/src/generator.rs b/askama_derive/src/generator.rs
-index 37c4fcb8..a88abe4f 100644
+index 37c4fcb8..4eaecc8b 100644
 --- a/askama_derive/src/generator.rs
 +++ b/askama_derive/src/generator.rs
-@@ -136,18 +136,18 @@ impl<'a, 'h> Generator<'a, 'h> {
+@@ -136,18 +136,19 @@ impl<'a, 'h> Generator<'a, 'h> {
              CallerDir::Unresolved => {}
          }
 
@@ -14,16 +14,19 @@ index 37c4fcb8..a88abe4f 100644
 -            local_file.pop();
 -            if !local_file.is_absolute() {
 -                local_file = current_dir()
+-                    .as_deref()
+-                    .unwrap_or(Path::new("."))
+-                    .join(local_file);
 +        if proc_macro::is_available() {
 +            let file_str = proc_macro::Span::call_site().file();
 +            let mut file = PathBuf::from(file_str);
 +            file.pop();
++
++            // Only use caller_dir if we have an absolute path. Relative paths from proc_macro::Span depend
++            // on rustc's working directory, which varies across different build environments
 +            if !file.is_absolute() {
-+                file = current_dir()
-                     .as_deref()
-                     .unwrap_or(Path::new("."))
--                    .join(local_file);
-+                    .join(file);
++                self.caller_dir = CallerDir::Invalid;
++                return None;
              }
 
 -            self.caller_dir = CallerDir::Valid(clean_path(&local_file));
