@@ -129,10 +129,12 @@ fn charging_for_message_memory_works() {
     assert_eq!(
         canister_state.system_state.balance(),
         balance_before
-            - test.memory_cost(
-                canister_state.message_memory_usage().total(),
-                charge_duration,
-            ),
+            - test
+                .memory_cost(
+                    canister_state.message_memory_usage().total(),
+                    charge_duration,
+                )
+                .real(),
     );
 }
 
@@ -184,10 +186,12 @@ fn charging_for_logging_memory_works() {
     assert_eq!(
         canister_state.system_state.balance(),
         balance_before
-            - test.memory_cost(
-                canister_state.log_memory_store_memory_usage(),
-                charge_duration,
-            ),
+            - test
+                .memory_cost(
+                    canister_state.log_memory_store_memory_usage(),
+                    charge_duration,
+                )
+                .real(),
     );
 }
 
@@ -335,7 +339,7 @@ fn dont_charge_allocations_for_paused_canisters() {
     fn assert_balance_change(test: &SchedulerTest, canister: CanisterId, duration: Duration) {
         assert_eq!(
             test.canister_state(canister).system_state.balance(),
-            INITIAL_CYCLES - test.memory_cost(MEMORY_ALLOCATION, duration)
+            INITIAL_CYCLES - test.memory_cost(MEMORY_ALLOCATION, duration).real()
         );
     }
     // Balance has changed for the canister with no paused execution.

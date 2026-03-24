@@ -11,6 +11,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
+use ic_types::NumInstructions;
 use ic_types::messages::NO_DEADLINE;
 use ic_types::{
     CanisterId, Time,
@@ -18,8 +19,7 @@ use ic_types::{
     messages::{CallbackId, MessageId},
 };
 use ic_types::{ComputeAllocation, MemoryAllocation};
-use ic_types::{NumInstructions, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_lt};
 
@@ -79,67 +79,105 @@ fn execute_response_when_stopping_status() {
 
 #[test]
 fn execute_response_refunds_cycles() {
-    // This test uses manual execution to get finer control over the execution.
-    let instruction_limit = 1_000_000_000;
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(instruction_limit)
-        .with_manual_execution()
-        .build();
-    let initial_cycles = Cycles::new(1_000_000_000_000);
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        // This test uses manual execution to get finer control over the execution.
+        let instruction_limit = 1_000_000_000;
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(instruction_limit)
+            .with_cost_schedule(cost_schedule)
+            .with_manual_execution()
+            .build();
+        let initial_cycles = Cycles::new(1_000_000_000_000);
 
-    // Create two canisters: A and B.
-    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+        // Create two canisters: A and B.
+        let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+        let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    // Canister A calls canister B.
-    let cycles_sent = Cycles::new(1_000_000);
-    let wasm_payload = wasm()
-        .call_with_cycles(b_id, "update", call_args(), cycles_sent)
-        .build();
+        // Canister A calls canister B.
+        let cycles_sent = Cycles::new(1_000_000);
+        let wasm_payload = wasm()
+            .call_with_cycles(b_id, "update", call_args(), cycles_sent)
+            .build();
 
-    // Enqueue ingress message to canister A and execute it.
-    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
-    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
-    test.execute_message(a_id);
+        // Enqueue ingress message to canister A and execute it.
+        let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+        assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
+        test.execute_message(a_id);
 
-    // Create response from canister B to canister A.
-    let response = ResponseBuilder::new()
-        .originator(a_id)
-        .respondent(b_id)
-        .originator_reply_callback(CallbackId::from(1))
-        .refund(cycles_sent / 2_u64)
-        .build();
-    let response_payload_size = response.payload_size_bytes();
+        // Create response from canister B to canister A.
+        let response = ResponseBuilder::new()
+            .originator(a_id)
+            .respondent(b_id)
+            .originator_reply_callback(CallbackId::from(1))
+            .refund(cycles_sent / 2_u64)
+            .build();
+        let response_payload_size = response.payload_size_bytes();
 
-    // Execute response.
-    let balance_before = test.canister_state(a_id).system_state.balance();
-    let instructions_before = test.canister_executed_instructions(a_id);
-    test.execute_response(a_id, response);
-    let instructions_after = test.canister_executed_instructions(a_id);
-    let instructions_executed = instructions_after - instructions_before;
-    let balance_after = test.canister_state(a_id).system_state.balance();
+        // Execute response.
+        let balance_before = test.canister_state(a_id).system_state.balance();
+        let consumed_cycles_before = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
+        let instructions_before = test.canister_executed_instructions(a_id);
+        test.execute_response(a_id, response);
+        let instructions_after = test.canister_executed_instructions(a_id);
+        let instructions_executed = instructions_after - instructions_before;
+        let balance_after = test.canister_state(a_id).system_state.balance();
+        let consumed_cycles_after = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
 
-    // The balance is equivalent to the amount of cycles before executing`execute_response`
-    // plus the unaccepted cycles (no more the cycles sent via request),
-    // the execution cost refund and the refunded transmission fee.
-    // Compute the response transmission refund.
-    let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    let mgr = test.cycles_account_manager();
-    let response_transmission_refund = mgr
-        .xnet_call_bytes_transmitted_fee(
-            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        // The balance is equivalent to the amount of cycles before executing`execute_response`
+        // plus the unaccepted cycles (no more the cycles sent via request),
+        // the execution cost refund and the refunded transmission fee.
+        // Compute the response transmission refund.
+        let mgr = test.cycles_account_manager();
+        let prepayment_for_response_transmission =
+            mgr.prepayment_for_response_transmission(test.subnet_size(), cost_schedule);
+        let actual_response_transmission_fee = mgr.xnet_call_bytes_transmitted_fee(
+            response_payload_size,
             test.subnet_size(),
             cost_schedule,
-        )
-        .real();
-    mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size(), cost_schedule);
-    let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
-    let execution_refund = mgr
-        .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
-    assert_eq!(
-        balance_after,
-        balance_before + cycles_sent / 2_u64 + response_transmission_refund + execution_refund
-    );
+        );
+        let response_transmission_refund =
+            prepayment_for_response_transmission - actual_response_transmission_fee;
+        let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
+        let execution_refund = mgr.convert_instructions_to_cycles(
+            instructions_left,
+            test.canister_wasm_execution_mode(a_id),
+        );
+
+        match cost_schedule {
+            // On a free schedule the balance changes only due to cycles transfers.
+            CanisterCyclesCostSchedule::Free => {
+                assert_eq!(balance_after, balance_before + cycles_sent / 2_u64);
+            }
+            CanisterCyclesCostSchedule::Normal => {
+                assert_eq!(
+                    balance_after,
+                    balance_before
+                        + cycles_sent / 2_u64
+                        + response_transmission_refund.real()
+                        + execution_refund
+                );
+            }
+        }
+        assert_eq!(
+            consumed_cycles_after,
+            consumed_cycles_before - response_transmission_refund.nominal(),
+        );
+    }
 }
 
 #[test]

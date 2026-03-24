@@ -174,7 +174,7 @@ fn consensus_queue_is_emptied() {
         test.inject_call_to_ic00(
             Method::SignWithECDSA,
             ecdsa_payload.clone(),
-            test.ecdsa_signature_fee(),
+            test.ecdsa_signature_fee().real(),
             canister_id,
             InputQueueType::RemoteSubnet,
         );
