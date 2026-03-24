@@ -3072,6 +3072,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         compute_allocation_used: state.total_compute_allocation(),
         subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
+    let time = state.time();
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
@@ -3080,6 +3081,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             &mut round_limits,
             &no_op_counter,
             None,
+            time,
         )
         .unwrap();
 

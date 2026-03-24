@@ -793,6 +793,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UninstallCode) => {
                 let res = UninstallCodeArgs::decode(payload).and_then(|args| {
                     let subnet_admins = state.get_own_subnet_admins();
+                    let time = state.time();
                     self.canister_manager
                         .uninstall_code(
                             msg.canister_change_origin(args.get_sender_canister_version()),
@@ -801,6 +802,7 @@ impl ExecutionEnvironment {
                             round_limits,
                             &self.metrics.canister_not_found_error,
                             subnet_admins,
+                            time,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into())
@@ -2555,14 +2557,17 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
+        let cost_schedule = state.get_own_cost_schedule();
         let resource_saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
         );
+        let time = state.time();
         let replace_snapshot = args.replace_snapshot();
         let uninstall_code = args.uninstall_code().unwrap_or_default();
         let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
+            cost_schedule,
             origin,
             Arc::make_mut(&mut canister),
             replace_snapshot,
@@ -2570,6 +2575,7 @@ impl ExecutionEnvironment {
             state,
             round_limits,
             &resource_saturation,
+            time,
         );
         // Put canister back.
         state.put_canister_state(canister);
@@ -2636,12 +2642,15 @@ impl ExecutionEnvironment {
         // that the canister exists so it is safe to unwrap here.
         let mut old_canister = state.take_canister_state(&canister_id).unwrap();
 
+        let cost_schedule = state.get_own_cost_schedule();
         let resource_saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
         );
+        let time = state.time();
         let result = self.canister_manager.load_canister_snapshot(
             subnet_size,
+            cost_schedule,
             sender,
             Arc::make_mut(&mut old_canister),
             snapshot_canister,
@@ -2651,6 +2660,7 @@ impl ExecutionEnvironment {
             instruction_limits,
             origin,
             &resource_saturation,
+            time,
             &self.metrics,
         );
 
@@ -2703,15 +2713,16 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
+        let cost_schedule = state.get_own_cost_schedule();
         let result = self
             .canister_manager
             .delete_canister_snapshot(
                 sender,
                 Arc::make_mut(&mut canister),
                 args.get_snapshot_id(),
-                state,
                 round_limits,
                 subnet_size,
+                cost_schedule,
                 resource_saturation,
             )
             .map(|()| EmptyBlob.encode())
@@ -2742,6 +2753,7 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
+        let cost_schedule = state.get_own_cost_schedule();
         let result = self
             .canister_manager
             .read_snapshot_data(
@@ -2749,8 +2761,8 @@ impl ExecutionEnvironment {
                 Arc::make_mut(&mut canister),
                 args.get_snapshot_id(),
                 args.kind,
-                state,
                 subnet_size,
+                cost_schedule,
                 round_limits,
             )
             .map(|response| Encode!(&response).unwrap());
@@ -2840,18 +2852,22 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
+        let cost_schedule = state.get_own_cost_schedule();
         let resource_saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
         );
+        let time = state.time();
         let result = self.canister_manager.create_snapshot_from_metadata(
             sender,
             Arc::make_mut(&mut canister),
             args,
             state,
             subnet_size,
+            cost_schedule,
             round_limits,
             &resource_saturation,
+            time,
         );
         // Put canister back.
         state.put_canister_state(canister);
@@ -2883,6 +2899,7 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
+        let cost_schedule = state.get_own_cost_schedule();
         let resource_saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
@@ -2891,9 +2908,9 @@ impl ExecutionEnvironment {
             sender,
             Arc::make_mut(&mut canister),
             &args,
-            state,
             round_limits,
             subnet_size,
+            cost_schedule,
             &resource_saturation,
         );
         // Put canister back.
