@@ -3074,6 +3074,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         compute_allocation_used: state.total_compute_allocation(),
         subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
+    let time = state.time();
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
@@ -3082,6 +3083,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             &mut round_limits,
             &no_op_counter,
             None,
+            time,
         )
         .unwrap();
 
@@ -3935,7 +3937,7 @@ fn cycles_correct_if_upgrade_succeeds() {
     let cycles_before = test.canister_state(id).system_state.balance();
     let execution_cost_before = test.canister_execution_cost(id);
     // Clear `expected_compiled_wasms` so that the full execution cost is applied
-    test.state_mut().metadata.expected_compiled_wasms.clear();
+    test.state_mut().metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
     test.upgrade_canister(id, wasm.clone()).unwrap();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(

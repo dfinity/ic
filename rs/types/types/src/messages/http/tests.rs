@@ -967,7 +967,7 @@ mod to_authentication {
     fn dummy_delegation() -> Option<Vec<SignedDelegation>> {
         let delegation_pubkey = Blob(vec![7, 8, 9]);
         let delegation_signature = Blob(vec![10, 11, 12]);
-        let expiration = 54378u64;
+        let expiration = 54378_u64;
         Some(vec![SignedDelegation::new(
             Delegation::new(
                 delegation_pubkey.to_vec(),

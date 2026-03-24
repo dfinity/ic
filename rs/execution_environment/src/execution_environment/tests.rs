@@ -47,8 +47,9 @@ use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, u
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::mem::size_of;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod canister_task;
@@ -1931,7 +1932,7 @@ fn canister_snapshots_after_split() {
     // expected_compiled_wasms cache (a subnet split assumes it happens after a
     // checkpoint round where these two happen among other things).
     test.state_mut().metadata.heap_delta_estimate = NumBytes::from(0);
-    test.state_mut().metadata.expected_compiled_wasms.clear();
+    test.state_mut().metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
 
     // Retain canister 1 on subnet A, migrate canister 2 to subnet B.
     let routing_table = RoutingTable::try_from(btreemap! {
@@ -4626,13 +4627,13 @@ fn cannot_accept_cycles_after_replying() {
     // The remaining was refunded as part of the reply delivered to A.
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
-        initial_cycles - (transferred_cycles / 2u64)
+        initial_cycles - (transferred_cycles / 2_u64)
     );
 
     // Canister B gets half of transferred_cycles that it accepted before replying.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles + (transferred_cycles / 2u64)
+        initial_cycles + (transferred_cycles / 2_u64)
     );
 }
 

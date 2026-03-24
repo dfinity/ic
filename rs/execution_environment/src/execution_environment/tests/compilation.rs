@@ -11,7 +11,9 @@ mod execution_tests {
     use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
+    use std::collections::BTreeSet;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     const WAT_EMPTY: &str = "(module)";
     const WAT_WITH_GO: &str = r#"
@@ -283,7 +285,7 @@ mod execution_tests {
 
         // Install two canisters with the same wat.
         let canister_id1 = test.canister_from_wat(WAT_EMPTY).unwrap();
-        test.state_mut().metadata.expected_compiled_wasms.clear();
+        test.state_mut().metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
         let initial_balance = Cycles::new(1_000_000_000_000);
         let canister_id2 = test
             .canister_from_cycles_and_wat(initial_balance, WAT_EMPTY)

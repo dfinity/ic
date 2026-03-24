@@ -230,7 +230,7 @@ fn create_neuron_with_stake_dissolve_state_and_age(
 ) -> Neuron {
     NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         dissolve_state_and_age,
         123_456_789,
@@ -368,7 +368,7 @@ fn create_neuron_with_dissolve_state_and_age(
 ) -> Neuron {
     NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         dissolve_state_and_age,
         123_456_789,
@@ -553,7 +553,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
     let builder = NeuronBuilder::new(
         NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![42_u8; 32].as_slice()).unwrap(),
         principal_id,
         DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds: 1_000_000,
@@ -619,7 +619,7 @@ fn test_adjust_voting_power() {
 
     let neuron = NeuronBuilder::new(
         NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![42_u8; 32].as_slice()).unwrap(),
         principal_id,
         DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
@@ -711,7 +711,7 @@ fn test_ready_to_unstake_maturity() {
         |dissolve_state_and_age, staked_maturity| -> Neuron {
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 dissolve_state_and_age,
                 123_456_789,
@@ -773,7 +773,7 @@ fn test_ready_to_spawn() {
     // Ready to spawn since it has a spawn timestamp in the past.
     let neuron_ready_to_spawn = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: now - 1,
@@ -787,7 +787,7 @@ fn test_ready_to_spawn() {
     // Not ready to spawn since it has a spawn timestamp in the future.
     let neuron_not_ready_to_spawn = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: now + 1,
@@ -801,7 +801,7 @@ fn test_ready_to_spawn() {
     // Not ready to spawn since it has no spawn timestamp.
     let neuron_no_spawn_timestamp = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: now - 1,

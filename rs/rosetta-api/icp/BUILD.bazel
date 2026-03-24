@@ -41,7 +41,6 @@ DEPENDENCIES = [
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
-    "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:rolling-file",
@@ -90,7 +89,9 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tempfile",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    "@crate_index//:test-strategy",
+]
 
 ALIASES = {
 }

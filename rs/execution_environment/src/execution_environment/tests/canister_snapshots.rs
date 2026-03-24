@@ -1248,6 +1248,34 @@ fn load_canister_snapshot_fails_invalid_controller() {
 }
 
 #[test]
+fn load_canister_snapshot_fails_snapshot_canister_not_found() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // Create canister onto which a snapshot is supposed to be loaded.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Loading canister snapshot fails because the canister holding the snapshot does not exist.
+    let snapshot_canister_id = canister_test_id(2);
+    let snapshot_id = SnapshotId::from((snapshot_canister_id, 3));
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let error = test
+        .subnet_message("load_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
+    let message = format!(
+        "Could not find the snapshot ID {snapshot_id} for canister {snapshot_canister_id}",
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id).is_some());
+    assert!(test.state().canister_state(&snapshot_canister_id).is_none());
+}
+
+#[test]
 fn load_canister_snapshot_fails_snapshot_not_found() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
     let own_subnet = subnet_test_id(1);
@@ -1275,6 +1303,38 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
             .to_string();
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id).is_some());
+}
+
+#[test]
+fn load_canister_snapshot_fails_snapshot_not_found_on_another_canister() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // Create canister onto which a snapshot is supposed to be loaded.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Create the canister from which the snapshot is supposed to be loaded.
+    let snapshot_canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Loading canister snapshot fails because the snapshot does not exist (on another canister).
+    let snapshot_id = SnapshotId::from((snapshot_canister_id, 3));
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let error = test
+        .subnet_message("load_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
+    let message = format!(
+        "Could not find the snapshot ID {snapshot_id} for canister {snapshot_canister_id}",
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id).is_some());
+    assert!(test.state().canister_state(&snapshot_canister_id).is_some());
 }
 
 #[test]
@@ -1454,7 +1514,7 @@ fn load_canister_snapshot_succeeds() {
         .unwrap()
         .system_state
         .canister_version();
-    assert_eq!(canister_version_before, 1u64);
+    assert_eq!(canister_version_before, 1_u64);
 
     let canister_history = test
         .state()
@@ -1521,7 +1581,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_version();
     // Canister version should be bumped after loading a snapshot.
     assert_gt!(canister_version_after, canister_version_before);
-    assert_eq!(canister_version_after, 2u64);
+    assert_eq!(canister_version_after, 2_u64);
 
     // Entry in canister history should contain the information of
     // the snapshot that was loaded back into the canister.
