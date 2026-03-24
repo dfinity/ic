@@ -475,8 +475,9 @@ impl XNetPayloadBuilderImpl {
             .unwrap_or_default()
     }
 
-    /// Computes the expected message and signal indices for every known subnet except cloud engines.
-    fn expected_stream_indices_without_engines(
+    /// Computes the expected message and signal indices for every known subnet
+    /// except cloud engines.
+    fn expected_stream_indices(
         &self,
         validation_context: &ValidationContext,
         state: &ReplicatedState,
@@ -875,11 +876,8 @@ impl XNetPayloadBuilderImpl {
         }
 
         // Build the payload based on indices computed from state + past payloads.
-        let stream_positions = self.expected_stream_indices_without_engines(
-            validation_context,
-            &state,
-            past_payloads,
-        )?;
+        let stream_positions =
+            self.expected_stream_indices(validation_context, &state, past_payloads)?;
         if stream_positions.is_empty() {
             return Ok((XNetPayload::default(), 0.into()));
         }

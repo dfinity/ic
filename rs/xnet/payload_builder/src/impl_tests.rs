@@ -75,7 +75,7 @@ async fn expected_stream_indices() {
             .take();
 
         let computed_indices = xnet_payload_builder
-            .expected_stream_indices_without_engines(
+            .expected_stream_indices(
                 &validation_context,
                 state.as_ref(),
                 past_payloads.as_slice(),
@@ -85,7 +85,7 @@ async fn expected_stream_indices() {
     });
 }
 
-/// `expected_stream_indices_without_engines` should not include `SUBNET_6`
+/// `expected_stream_indices` should not include `SUBNET_6`
 /// (registered as `CloudEngine` in `get_simple_registry_for_test`).
 #[tokio::test]
 async fn expected_stream_indices_excludes_engine_subnets() {
@@ -119,7 +119,7 @@ async fn expected_stream_indices_excludes_engine_subnets() {
             .take();
 
         let computed_indices = xnet_payload_builder
-            .expected_stream_indices_without_engines(
+            .expected_stream_indices(
                 &validation_context,
                 state.as_ref(),
                 past_payloads.as_slice(),

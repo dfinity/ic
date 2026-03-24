@@ -685,7 +685,7 @@ async fn build_payload_skips_cloud_engine_subnet() {
             .take();
         let past_payloads = fixture.past_payloads();
         let stream_positions = xnet_payload_builder
-            .expected_stream_indices_without_engines(
+            .expected_stream_indices(
                 &fixture.validation_context,
                 state.as_ref(),
                 past_payloads.as_slice(),
