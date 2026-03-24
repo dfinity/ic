@@ -659,6 +659,22 @@ fn test_delta_log_sizes() {
 }
 
 #[test]
+fn test_single_record_returned_by_records_no_filter() {
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+
+    let mut delta = CanisterLog::new_delta_with_next_index(0, TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(1000, b"only_record".to_vec());
+    s.append_delta_log(&mut delta);
+
+    // No filter — the single record must be returned.
+    let records = s.records(None);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].idx, 0);
+    assert_eq!(records[0].content, b"only_record");
+}
+
+#[test]
 fn test_resize_up_preserves_records_and_next_idx() {
     let initial_capacity = EXPECTED_DATA_CAPACITY_MIN;
     let larger_capacity = 3 * initial_capacity;
