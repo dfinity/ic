@@ -166,7 +166,10 @@ system_test_nns(
 system_test_nns(
     name = "sev_recovery",
     env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
-    guestos = {"default": True, "recovery": "sev_recovery_dev"},
+    guestos = {
+        "default": True,
+        "recovery": "sev_recovery_dev",
+    },
     hostos = True,
     tags = ["long_test"],
     test_timeout = "eternal",

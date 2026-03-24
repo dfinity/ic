@@ -1,4 +1,4 @@
-load("//bazel:defs.bzl", "file_size_check", "zstd_compress")
+load("//bazel:defs.bzl", "zstd_compress")
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "upgrade_image")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
@@ -30,7 +30,10 @@ disk_image(
 zstd_compress(
     name = "disk-img.tar.zst",
     srcs = [":disk-img.tar"],
-    tags = ["manual", "no-cache"],
+    tags = [
+        "manual",
+        "no-cache",
+    ],
 )
 
 upgrade_image(
@@ -39,7 +42,10 @@ upgrade_image(
     boot_partition = "//ic-os/guestos/envs/dev:partition-boot.tzst",
     # Root is from test
     root_partition = "//ic-os/guestos/envs/dev:partition-root-test.tzst",
-    tags = ["manual", "no-cache"],
+    tags = [
+        "manual",
+        "no-cache",
+    ],
     target_compatible_with = ["@platforms//os:linux"],
     version_file = "//ic-os/guestos/envs/dev:version.txt",
 )
@@ -47,7 +53,10 @@ upgrade_image(
 zstd_compress(
     name = "update-img.tar.zst",
     srcs = ["update-img.tar"],
-    tags = ["manual", "no-cache"],
+    tags = [
+        "manual",
+        "no-cache",
+    ],
 )
 
 # Boot (launch measurements) is from base
