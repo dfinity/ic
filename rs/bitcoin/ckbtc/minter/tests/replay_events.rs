@@ -400,12 +400,12 @@ trait GetEventsFile {
     fn minter_canister_id(&self) -> Principal;
 
     fn path_to_events_file(&self) -> PathBuf {
-        let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        path.push(format!("test_resources/{}", self.file_name()));
-        path
+        PathBuf::from(
+            std::env::var(self.environment_variable()).expect("Failed to get event path env variable"),
+        )
     }
 
-    fn file_name(&self) -> &str;
+    fn environment_variable(&self) -> &str;
 
     fn deserialize(&self) -> GetEventsResult {
         use candid::Decode;
@@ -426,8 +426,8 @@ impl GetEventsFile for Mainnet {
     fn minter_canister_id(&self) -> Principal {
         Principal::from_text("mqygn-kiaaa-aaaar-qaadq-cai").unwrap()
     }
-    fn file_name(&self) -> &str {
-        "mainnet_events.gz"
+    fn environment_variable(&self) -> &str {
+        "MAINNET_EVENTS_PATH"
     }
 }
 
@@ -435,8 +435,8 @@ impl GetEventsFile for Testnet {
     fn minter_canister_id(&self) -> Principal {
         Principal::from_text("ml52i-qqaaa-aaaar-qaaba-cai").unwrap()
     }
-    fn file_name(&self) -> &str {
-        "testnet_events.gz"
+    fn environment_variable(&self) -> &str {
+        "TESTNET_EVENTS_PATH"
     }
 }
 
