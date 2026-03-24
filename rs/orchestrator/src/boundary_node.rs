@@ -9,14 +9,14 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{NodeId, ReplicaVersion};
 use std::{
     collections::HashMap,
-    ffi::{OsStr, OsString},
-    path::PathBuf,
+    ffi::OsString,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
 struct BoundaryNodeProcess {
     version: ReplicaVersion,
-    binary: OsString,
+    binary: PathBuf,
     args: Vec<OsString>,
     env: HashMap<OsString, OsString>,
 }
@@ -30,7 +30,7 @@ impl Process for BoundaryNodeProcess {
         &self.version
     }
 
-    fn get_binary(&self) -> &OsStr {
+    fn get_binary(&self) -> &Path {
         &self.binary
     }
 
@@ -154,7 +154,7 @@ impl BoundaryNodeManager {
         }
         info!(self.logger, "Starting new boundary node process");
 
-        let binary = self.ic_binary_dir.join("ic-boundary").into_os_string();
+        let binary = self.ic_binary_dir.join("ic-boundary");
 
         let domain_name = self
             .domain_name

@@ -32,8 +32,8 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, HashMap},
-    ffi::{OsStr, OsString},
-    path::PathBuf,
+    ffi::OsString,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
@@ -61,7 +61,7 @@ pub(crate) enum OrchestratorControlFlow {
 
 pub struct ReplicaProcess {
     version: ReplicaVersion,
-    binary: OsString,
+    binary: PathBuf,
     args: Vec<OsString>,
 }
 
@@ -74,7 +74,7 @@ impl Process for ReplicaProcess {
         &self.version
     }
 
-    fn get_binary(&self) -> &OsStr {
+    fn get_binary(&self) -> &Path {
         &self.binary
     }
 
@@ -651,7 +651,7 @@ impl Upgrade {
         info!(self.logger, "Starting new replica process");
         self.metrics.replica_process_start_attempts.inc();
         let cup_path = self.cup_provider.get_cup_path();
-        let replica_binary = self.ic_binary_dir.join("replica").into_os_string();
+        let replica_binary = self.ic_binary_dir.join("replica");
         let cmd = vec![
             format!("--replica-version={}", replica_version.as_ref()).into(),
             format!(
@@ -1481,7 +1481,7 @@ mod tests {
                 .unwrap()
                 .start(ReplicaProcess {
                     version: current_replica_version.clone(),
-                    binary: ic_binary_dir.join("replica").into_os_string(),
+                    binary: ic_binary_dir.join("replica"),
                     args: vec![],
                 })
                 .unwrap();

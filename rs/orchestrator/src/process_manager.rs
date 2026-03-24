@@ -5,9 +5,10 @@ use nix::{
 };
 use std::{
     collections::HashMap,
-    ffi::{OsStr, OsString},
+    ffi::OsString,
     fmt::Debug,
     io::Result,
+    path::Path,
     sync::{Arc, Mutex},
 };
 
@@ -31,7 +32,7 @@ pub(crate) trait Process {
     fn get_version(&self) -> &Self::Version;
 
     /// Return the path to the binary of the [`Process`]
-    fn get_binary(&self) -> &OsStr;
+    fn get_binary(&self) -> &Path;
 
     /// Return the arguments passed to the [`Process`]
     fn get_args(&self) -> &[OsString];
