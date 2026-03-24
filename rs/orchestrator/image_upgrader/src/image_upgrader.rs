@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{ReplicaLogger, error, info, warn};
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::str::FromStr;
 use std::{
     fmt::Debug,
