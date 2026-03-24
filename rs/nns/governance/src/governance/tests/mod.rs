@@ -1033,7 +1033,7 @@ mod neuron_archiving_tests {
         // Dissolved in the distant past.
         let model_neuron = NeuronBuilder::new(
             NeuronId { id: 1 },
-            Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+            Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
             PrincipalId::new_user_test_id(1),
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: 42,
@@ -1069,7 +1069,7 @@ mod neuron_archiving_tests {
         let neuron_with_dissolve_state_and_age = |dissolve_state_and_age| {
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 dissolve_state_and_age,
                 NOW,
@@ -1131,7 +1131,7 @@ mod neuron_archiving_tests {
             let staked_maturity_e8s_equivalent = Some(staked_maturity_e8s_equivalent);
             let mut neuron = NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: 42,
@@ -1219,7 +1219,7 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
         .add_neuron(
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: 42,
@@ -1280,7 +1280,7 @@ fn test_validate_execute_nns_function() {
         (
             ExecuteNnsFunction {
                 nns_function: NnsFunction::CreateSubnet as i32,
-                payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
+                payload: vec![1_u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
             },
             format!(
                 "The maximum NNS function payload size in a proposal action is {} bytes, \
@@ -1345,7 +1345,7 @@ fn test_validate_execute_nns_function() {
     let ok_test_cases = vec![
         ExecuteNnsFunction {
             nns_function: NnsFunction::CreateSubnet as i32,
-            payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
+            payload: vec![1_u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
         },
         ExecuteNnsFunction {
             nns_function: NnsFunction::AssignNoid as i32,

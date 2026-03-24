@@ -178,7 +178,7 @@ mod test {
 
     #[test]
     fn test_fr_zeroize_leaves_zero() {
-        let mut fr = FrBytes([42u8; FrBytes::SIZE]);
+        let mut fr = FrBytes([42_u8; FrBytes::SIZE]);
         assert_ne!(fr, FrBytes::default());
         fr.zeroize();
         assert_eq!(fr, FrBytes::default());
@@ -186,7 +186,7 @@ mod test {
 
     #[test]
     fn test_g1_zeroize_leaves_zero() {
-        let mut g1 = G1Bytes([42u8; G1Bytes::SIZE]);
+        let mut g1 = G1Bytes([42_u8; G1Bytes::SIZE]);
         assert_ne!(g1, G1Bytes::default());
         g1.zeroize();
         assert_eq!(g1, G1Bytes::default());
@@ -194,7 +194,7 @@ mod test {
 
     #[test]
     fn test_g2_zeroize_leaves_zero() {
-        let mut g2 = G2Bytes([42u8; G2Bytes::SIZE]);
+        let mut g2 = G2Bytes([42_u8; G2Bytes::SIZE]);
         assert_ne!(g2, G2Bytes::default());
         g2.zeroize();
         assert_eq!(g2, G2Bytes::default());

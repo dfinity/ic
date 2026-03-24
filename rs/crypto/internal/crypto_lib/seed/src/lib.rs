@@ -55,7 +55,7 @@ impl Seed {
     ///
     /// The security of the Seed depends on the security of the RNG
     pub fn from_rng<R: CryptoRng + RngCore>(rng: &mut R) -> Self {
-        let mut rng_output = [0u8; SEED_LEN];
+        let mut rng_output = [0_u8; SEED_LEN];
         rng.fill_bytes(&mut rng_output);
         Self::new(&rng_output, "ic-crypto-seed-from-rng")
     }

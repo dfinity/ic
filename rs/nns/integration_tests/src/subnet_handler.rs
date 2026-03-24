@@ -54,6 +54,8 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: Default::default(),
+                recalled_replica_version_ids: vec![],
             };
 
             let key = make_subnet_record_key(subnet_id);
@@ -175,6 +177,8 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     chain_key_config: None,
                     canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                     subnet_admins: vec![],
+                    resource_limits: Default::default(),
+                    recalled_replica_version_ids: vec![],
                 }
             );
             Ok(())

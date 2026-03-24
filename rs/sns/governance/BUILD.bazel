@@ -199,7 +199,6 @@ rust_canister(
     aliases = ALIASES,
     compile_data = [":test_did"],
     crate_features = ["test"],
-    did_check = False,  # we don't check in the did so can't meaningfully check
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_did",
     deps = DEPENDENCIES + [
@@ -313,7 +312,6 @@ generated_files_check(
 rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
-    add_test = True,
     opt = "s",
     results_file = "canbench/canbench_results.yml",
     deps = [

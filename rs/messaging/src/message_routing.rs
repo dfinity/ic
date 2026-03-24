@@ -30,13 +30,14 @@ use ic_registry_client_helpers::subnet::{
     SubnetListRegistry, SubnetRegistry, get_node_ids_from_subnet_record,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
-use ic_types::batch::{Batch, BatchContent, BatchSummary, CanisterCyclesCostSchedule};
+use ic_types::batch::{Batch, BatchContent, BatchSummary};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
@@ -46,6 +47,7 @@ use ic_types::{
     Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
     Time,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
@@ -799,6 +801,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     ) -> (
         NetworkTopology,
         SubnetFeatures,
+        ResourceLimits,
         RegistryExecutionSettings,
         NodePublicKeys,
         ApiBoundaryNodes,
@@ -836,6 +839,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     /// All of the above are required for deterministic processing, so if any
     /// entry is missing or cannot be decoded; or reading the registry fails; the
     /// call fails and returns an error.
+    #[allow(clippy::type_complexity)]
     fn try_to_read_registry(
         &self,
         registry_version: RegistryVersion,
@@ -844,6 +848,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         (
             NetworkTopology,
             SubnetFeatures,
+            ResourceLimits,
             RegistryExecutionSettings,
             NodePublicKeys,
             ApiBoundaryNodes,
@@ -877,6 +882,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let node_public_keys = self.try_to_populate_node_public_keys(&nodes, registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
+        let resource_limits = subnet_record.resource_limits.unwrap_or_default().into();
         let max_number_of_canisters = if subnet_record.max_number_of_canisters == 0 {
             DEFAULT_MAX_NUMBER_OF_CANISTERS
         } else {
@@ -964,6 +970,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         Ok((
             network_topology,
             subnet_features,
+            resource_limits,
             RegistryExecutionSettings {
                 max_number_of_canisters,
                 provisional_whitelist,
@@ -1081,10 +1088,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             );
             let mut subnet_admins = BTreeSet::new();
             // Only rented subnets, i.e., application subnets on a "free" cost
-            // schedule can have a non-empty subnet admins list. In this case,
+            // schedule, and cloud engines on a "free" cost schedule can have a non-empty subnet admins list. In this case,
             // parse the protobuf field to populate the list.
-            if subnet_type == SubnetType::Application
-                && cost_schedule == CanisterCyclesCostSchedule::Free
+            #[allow(clippy::nonminimal_bool)]
+            if (subnet_type == SubnetType::Application
+                && cost_schedule == CanisterCyclesCostSchedule::Free)
+                || (subnet_type == SubnetType::CloudEngine
+                    && cost_schedule == CanisterCyclesCostSchedule::Free)
             {
                 for p in subnet_record.subnet_admins.into_iter() {
                     let subnet_admin = PrincipalId::try_from(p).map_err(|err| {
@@ -1381,6 +1391,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         let (
             network_topology,
             subnet_features,
+            resource_limits,
             registry_execution_settings,
             node_public_keys,
             api_boundary_nodes,
@@ -1409,6 +1420,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             network_topology,
             batch,
             subnet_features,
+            resource_limits,
             &registry_execution_settings,
             node_public_keys,
             api_boundary_nodes,

@@ -231,7 +231,7 @@ mod tests {
 
     impl LowerBounded for TestNeuronId {
         fn min_value() -> Self {
-            TestNeuronId([0u8; 32])
+            TestNeuronId([0_u8; 32])
         }
     }
 
@@ -248,7 +248,7 @@ mod tests {
         assert_eq!(
             add_neuron_id_principal_ids(
                 &mut index,
-                &TestNeuronId([1u8; 32]),
+                &TestNeuronId([1_u8; 32]),
                 vec![
                     PrincipalId::new_user_test_id(1),
                     PrincipalId::new_user_test_id(2),
@@ -258,11 +258,11 @@ mod tests {
         );
         assert_eq!(
             index.get_neuron_ids(PrincipalId::new_user_test_id(1)),
-            hashset! {TestNeuronId([1u8; 32])}
+            hashset! {TestNeuronId([1_u8; 32])}
         );
         assert_eq!(
             index.get_neuron_ids(PrincipalId::new_user_test_id(2)),
-            hashset! {TestNeuronId([1u8; 32])}
+            hashset! {TestNeuronId([1_u8; 32])}
         );
     }
 
@@ -270,7 +270,7 @@ mod tests {
         assert_eq!(
             add_neuron_id_principal_ids(
                 &mut index,
-                &TestNeuronId([1u8; 32]),
+                &TestNeuronId([1_u8; 32]),
                 vec![PrincipalId::new_user_test_id(1)],
             ),
             vec![]
@@ -278,7 +278,7 @@ mod tests {
         assert_eq!(
             remove_neuron_id_principal_ids(
                 &mut index,
-                &TestNeuronId([1u8; 32]),
+                &TestNeuronId([1_u8; 32]),
                 vec![PrincipalId::new_user_test_id(1)],
             ),
             vec![]
@@ -293,7 +293,7 @@ mod tests {
         assert_eq!(
             add_neuron_id_principal_ids(
                 &mut index,
-                &TestNeuronId([1u8; 32]),
+                &TestNeuronId([1_u8; 32]),
                 vec![
                     PrincipalId::new_user_test_id(1),
                     PrincipalId::new_user_test_id(2),
@@ -304,7 +304,7 @@ mod tests {
         assert_eq!(
             add_neuron_id_principal_ids(
                 &mut index,
-                &TestNeuronId([2u8; 32]),
+                &TestNeuronId([2_u8; 32]),
                 vec![
                     PrincipalId::new_user_test_id(2),
                     PrincipalId::new_user_test_id(3),
@@ -315,20 +315,20 @@ mod tests {
 
         assert_eq!(
             index.get_neuron_ids(PrincipalId::new_user_test_id(1)),
-            hashset! {TestNeuronId([1u8; 32])}
+            hashset! {TestNeuronId([1_u8; 32])}
         );
         assert_eq!(
             index.get_neuron_ids(PrincipalId::new_user_test_id(2)),
-            hashset! {TestNeuronId([1u8; 32]), TestNeuronId([2u8; 32])}
+            hashset! {TestNeuronId([1_u8; 32]), TestNeuronId([2_u8; 32])}
         );
         assert_eq!(
             index.get_neuron_ids(PrincipalId::new_user_test_id(3)),
-            hashset! {TestNeuronId([2u8; 32])}
+            hashset! {TestNeuronId([2_u8; 32])}
         );
     }
 
     fn test_remove_add_principal_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
-        let neuron_id = TestNeuronId([1u8; 32]);
+        let neuron_id = TestNeuronId([1_u8; 32]);
         let principal_id_1 = PrincipalId::new_user_test_id(1);
         let principal_id_2 = PrincipalId::new_user_test_id(2);
         let principal_id_3 = PrincipalId::new_user_test_id(3);
@@ -374,7 +374,7 @@ mod tests {
     }
 
     fn test_add_existing_neuron_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
-        let neuron_id = TestNeuronId([1u8; 32]);
+        let neuron_id = TestNeuronId([1_u8; 32]);
         let principal_id_1 = PrincipalId::new_user_test_id(1);
         let principal_id_2 = PrincipalId::new_user_test_id(2);
 
@@ -396,7 +396,7 @@ mod tests {
     }
 
     fn test_remove_absent_neuron_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
-        let neuron_id = TestNeuronId([1u8; 32]);
+        let neuron_id = TestNeuronId([1_u8; 32]);
         let principal_id_1 = PrincipalId::new_user_test_id(1);
         let principal_id_2 = PrincipalId::new_user_test_id(2);
         assert_eq!(
@@ -490,7 +490,7 @@ mod tests {
         assert_eq!(
             add_neuron_id_principal_ids(
                 &mut index,
-                &TestNeuronId([1u8; 32]),
+                &TestNeuronId([1_u8; 32]),
                 vec![
                     PrincipalId::new_user_test_id(1),
                     PrincipalId::new_user_test_id(2),
@@ -509,7 +509,7 @@ mod tests {
         assert_eq!(
             add_neuron_id_principal_ids(
                 &mut index,
-                &TestNeuronId([1u8; 32]),
+                &TestNeuronId([1_u8; 32]),
                 vec![
                     PrincipalId::new_user_test_id(1),
                     PrincipalId::new_user_test_id(2),
@@ -518,8 +518,8 @@ mod tests {
             vec![]
         );
 
-        assert!(index.contains_entry(&TestNeuronId([1u8; 32]), PrincipalId::new_user_test_id(1)));
-        assert!(index.contains_entry(&TestNeuronId([1u8; 32]), PrincipalId::new_user_test_id(2)));
-        assert!(!index.contains_entry(&TestNeuronId([1u8; 32]), PrincipalId::new_user_test_id(3)));
+        assert!(index.contains_entry(&TestNeuronId([1_u8; 32]), PrincipalId::new_user_test_id(1)));
+        assert!(index.contains_entry(&TestNeuronId([1_u8; 32]), PrincipalId::new_user_test_id(2)));
+        assert!(!index.contains_entry(&TestNeuronId([1_u8; 32]), PrincipalId::new_user_test_id(3)));
     }
 }

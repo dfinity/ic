@@ -48,7 +48,7 @@ use ic_nns_governance_api::{
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
-        governance_parameters::VotingRewardParameters,
+        governance_parameters::{CustomProposalCriticality, VotingRewardParameters},
         initial_token_distribution::{
             DeveloperDistribution, SwapDistribution, TreasuryDistribution,
             developer_distribution::NeuronDistribution,
@@ -129,6 +129,7 @@ use registry_canister::mutations::{
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
+    do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
@@ -554,6 +555,9 @@ enum SubCommand {
     /// Swap nodes in subnet directly, without governance.
     SwapNodeInSubnetDirectly(SwapNodeInSubnetDirectlyCmd),
 
+    /// Migrate node operator for nodes directly, without governance.
+    MigrateNodeOperatorDirectly(MigrateNodeOperatorDirectlyCmd),
+
     /// Update local registry store by pulling from remote URL
     UpdateRegistryLocalStore(UpdateRegistryLocalStoreCmd),
 
@@ -854,6 +858,17 @@ struct ProposeToTakeSubnetOfflineForRepairsCmd {
     /// so most likely, this won't be an issue.
     #[clap(long, value_parser, num_args(1..))]
     pub ssh_node_state_write_access: Vec<NodeSshAccessFlagValue>,
+
+    /// List of replica version IDs to recall. These versions will be marked as
+    /// recalled for this subnet, preventing them from being upgraded to them. If the
+    /// subnet already has a list of recalled versions, it will be overwritten.
+    #[clap(long, num_args(1..), conflicts_with = "recall_current_replica_version")]
+    pub recalled_replica_version_ids: Option<Vec<String>>,
+
+    /// If set, recall the current replica version of the subnet. This prevents
+    /// the subnet from being upgraded to this version again.
+    #[clap(long, conflicts_with = "recalled_replica_version_ids")]
+    pub recall_current_replica_version: bool,
 }
 
 impl ProposalTitle for ProposeToTakeSubnetOfflineForRepairsCmd {
@@ -866,7 +881,16 @@ impl ProposalTitle for ProposeToTakeSubnetOfflineForRepairsCmd {
 
 #[async_trait]
 impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOfflineForRepairsCmd {
-    async fn payload(&self, _agent: &Agent) -> SetSubnetOperationalLevelPayload {
+    async fn payload(&self, agent: &Agent) -> SetSubnetOperationalLevelPayload {
+        let recalled_replica_version_ids = if self.recall_current_replica_version {
+            let registry_canister = RegistryCanister::new_with_agent(agent.clone());
+            let subnet_id = SubnetId::from(self.subnet);
+            let subnet_record = get_subnet_record(&registry_canister, subnet_id).await;
+            Some(vec![subnet_record.replica_version_id])
+        } else {
+            self.recalled_replica_version_ids.clone()
+        };
+
         let ssh_node_state_write_access = self
             .ssh_node_state_write_access
             .clone()
@@ -879,6 +903,7 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOf
             operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
             ssh_readonly_access: Some(self.ssh_readonly_access.clone()),
             ssh_node_state_write_access: Some(ssh_node_state_write_access),
+            recalled_replica_version_ids,
         }
     }
 }
@@ -983,6 +1008,7 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload>
             operational_level: Some(operational_level::NORMAL),
             ssh_readonly_access: Some(vec![]),
             ssh_node_state_write_access: Some(ssh_node_state_write_access),
+            recalled_replica_version_ids: Some(vec![]),
         }
     }
 }
@@ -2830,6 +2856,18 @@ struct SwapNodeInSubnetDirectlyCmd {
     pub new_node_id: PrincipalId,
 }
 
+#[derive(Parser)]
+struct MigrateNodeOperatorDirectlyCmd {
+    /// The node operator principal to migrate from.
+    #[clap(long)]
+    pub old_node_operator_id: PrincipalId,
+
+    /// Represents the new identity to which the resources from the old operator
+    /// will be transfered to.
+    #[clap(long)]
+    pub new_node_operator_id: PrincipalId,
+}
+
 /// Sub-command to vote on a root proposal to upgrade the governance canister.
 #[derive(Parser)]
 struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
@@ -3263,6 +3301,13 @@ struct ProposeToCreateServiceNervousSystemCmd {
 
     #[clap(long, value_parser=parse_duration)]
     voting_reward_rate_transition_duration: nervous_system_pb::Duration,
+
+    // Custom Proposal Criticality
+    // ---------------------------
+    /// Native action IDs that should be treated as critical, requiring a higher
+    /// level of consensus to be executed. Can be specified multiple times.
+    #[clap(long)]
+    additional_critical_native_action_id: Vec<u64>,
 }
 
 impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSystem {
@@ -3320,6 +3365,9 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             initial_voting_reward_rate,
             final_voting_reward_rate,
             voting_reward_rate_transition_duration,
+
+            // Deconstruct to a more indicative name
+            additional_critical_native_action_id: additional_critical_native_action_ids,
 
             // Not used.
             proposer: _,
@@ -3509,8 +3557,15 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
                 voting_reward_parameters,
 
-                // TODO: Support additional critical native action IDs
-                custom_proposal_criticality: None,
+                custom_proposal_criticality: if additional_critical_native_action_ids.is_empty() {
+                    None
+                } else {
+                    Some(CustomProposalCriticality {
+                        additional_critical_native_action_ids: Some(
+                            additional_critical_native_action_ids,
+                        ),
+                    })
+                },
             })
         };
 
@@ -4017,6 +4072,7 @@ async fn main() {
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
             SubCommand::SwapNodeInSubnetDirectly(_) => (),
+            SubCommand::MigrateNodeOperatorDirectly(_) => (),
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
@@ -4024,8 +4080,7 @@ async fn main() {
             ),
         }
 
-        if opts.secret_key_pem.is_some() {
-            let secret_key_path = opts.secret_key_pem.unwrap();
+        if let Some(secret_key_path) = opts.secret_key_pem {
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
             let sig_keys = SigKeys::from_pem(&contents).expect("Failed to parse pem file");
             Sender::SigKeys(sig_keys)
@@ -4787,6 +4842,9 @@ async fn main() {
         }
         SubCommand::SwapNodeInSubnetDirectly(cmd) => {
             swap_node_in_subnet_directly(registry_canister, cmd).await;
+        }
+        SubCommand::MigrateNodeOperatorDirectly(cmd) => {
+            migrate_node_operator_directly(registry_canister, cmd).await;
         }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
             get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(
@@ -6302,6 +6360,36 @@ async fn swap_node_in_subnet_directly(
     {
         Some(_) => println!("Nodes swapped successfully."),
         None => panic!("No response was received from swap_node_in_subnet_directly"),
+    }
+}
+
+async fn migrate_node_operator_directly(
+    registry_canister: RegistryCanister,
+    cmd: MigrateNodeOperatorDirectlyCmd,
+) {
+    let nonce = generate_nonce();
+    let request = MigrateNodeOperatorPayload {
+        new_node_operator_id: Some(cmd.new_node_operator_id),
+        old_node_operator_id: Some(cmd.old_node_operator_id),
+    };
+
+    let payload = Encode!(&request).expect("Failed to serialize migrate node operator request.");
+
+    let agent = registry_canister.choose_random_agent();
+
+    match agent
+        .execute_update(
+            &REGISTRY_CANISTER_ID,
+            &REGISTRY_CANISTER_ID,
+            "migrate_node_operator_directly",
+            payload,
+            nonce,
+        )
+        .await
+        .unwrap()
+    {
+        Some(_) => println!("Node operator migrated successfully."),
+        None => panic!("No response was received from migrate_node_operator_directly"),
     }
 }
 

@@ -7,6 +7,7 @@ mod struct_io;
 
 use crate::canister_state::system_state::log_memory_store::{
     header::Header,
+    log_record::LogRecord,
     memory::MemorySize,
     ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
 };
@@ -18,12 +19,12 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 /// Upper bound on stored delta-log sizes used for metrics.
 /// Limits memory growth, 10k covers expected per-round
 /// number of messages per canister (and so delta log appends).
 const DELTA_LOG_SIZES_CAP: usize = 10_000;
-use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
@@ -131,7 +132,7 @@ impl LogMemoryStore {
     /// Returns the total virtual memory usage of the ring buffer.
     ///
     /// Includes header, index table and data region.
-    /// It is 'virtual' because it is not alligned to actual OS page size.
+    /// It is 'virtual' because it is not aligned to actual OS page size.
     pub fn total_virtual_memory_usage(&self) -> usize {
         self.get_header()
             .map(|h| {
@@ -157,8 +158,10 @@ impl LogMemoryStore {
         self.resize_impl(limit, || PageMap::new(fd_factory))
     }
 
-    #[cfg(test)]
-    fn resize_for_testing(&mut self, limit: usize) {
+    /// Resizes the ring buffer to the specified limit, preserving existing records.
+    ///
+    /// This method is used for testing purposes and does not use file descriptors.
+    pub fn resize_for_testing(&mut self, limit: usize) {
         self.resize_impl(limit, PageMap::new_for_testing)
     }
 
@@ -184,7 +187,7 @@ impl LogMemoryStore {
 
         // Migrate records.
         if let Some(old_buffer) = self.load_ring_buffer() {
-            new_buffer.append_log_iter(old_buffer.iter());
+            new_buffer.append_log(old_buffer.iter());
         }
 
         // Update of the state.
@@ -202,7 +205,11 @@ impl LogMemoryStore {
         self.bytes_used() == 0
     }
 
-    fn bytes_used(&self) -> usize {
+    /// Returns the number of bytes used by the ring buffer.
+    ///
+    /// This is the actual number of bytes used by the ring buffer, not the
+    /// allocated capacity.
+    pub fn bytes_used(&self) -> usize {
         self.get_header()
             .map(|h| h.data_size.get() as usize)
             .unwrap_or(0)
@@ -230,7 +237,7 @@ impl LogMemoryStore {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.bytes_used());
         // Append the delta records and persist the ring buffer.
-        ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
+        ring_buffer.append_log(delta_log.records_mut().drain(..));
         self.maybe_page_map = Some(ring_buffer.to_page_map());
         self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
     }
@@ -256,6 +263,24 @@ impl LogMemoryStore {
     /// Clears the delta_log sizes.
     pub fn clear_delta_log_sizes(&mut self) {
         self.delta_log_sizes.clear();
+    }
+
+    /// Calculates the total memory footprint of canister log records
+    /// when encoded and stored within the `LogMemoryStore`.
+    ///
+    /// `CanisterLog` and `LogMemoryStore` use different structures for storing
+    /// log records, so we need to calculate the storage size for each type separately.
+    pub fn estimate_storage_size(log: &CanisterLog) -> usize {
+        log.records()
+            .iter()
+            .map(|r| LogRecord::estimate_bytes_len(r.content.len()))
+            .sum()
+    }
+
+    /// Calculates the size of a single log record when encoded
+    /// and stored within the `LogMemoryStore`.
+    pub fn estimate_record_size(content_size: usize) -> usize {
+        LogRecord::estimate_bytes_len(content_size)
     }
 }
 

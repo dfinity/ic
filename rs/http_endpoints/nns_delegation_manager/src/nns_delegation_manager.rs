@@ -252,7 +252,6 @@ async fn try_fetch_delegation_from_nns(
         }
     };
 
-    // TODO(CON-1487): request the /canister_ranges/{subnet_id} subtree as well
     let envelope = HttpRequestEnvelope {
         content: HttpReadStateContent::ReadState {
             read_state: HttpReadState {
@@ -271,6 +270,11 @@ async fn try_fetch_delegation_from_nns(
                     ]),
                     // New format of the canister ranges
                     Path::new(vec![b"canister_ranges".into(), subnet_id.get().into()]),
+                    Path::new(vec![
+                        b"subnet".into(),
+                        subnet_id.get().into(),
+                        b"type".into(),
+                    ]),
                 ],
                 ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
                 nonce: None,
@@ -923,9 +927,10 @@ mod tests {
         // The initial delegation should be fetched immediately.
         reader.receiver.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
-        // has passed.
+        // has passed. We use a timeout of 2x the interval to give enough margin for the
+        // time it takes to fetch the delegation (TLS handshake, HTTP request, etc.).
         assert!(
-            timeout(DELEGATION_UPDATE_INTERVAL, reader.receiver.changed())
+            timeout(DELEGATION_UPDATE_INTERVAL * 2, reader.receiver.changed())
                 .await
                 .is_ok()
         );

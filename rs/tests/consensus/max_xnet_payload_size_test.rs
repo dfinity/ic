@@ -176,6 +176,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        // In the test we set the block size limit to 2MiB which is below the minimum of 4MiB, which
+        // results in a critical error.
         .remove_metrics_to_check("critical_errors")
         .execute_from_args()?;
     Ok(())

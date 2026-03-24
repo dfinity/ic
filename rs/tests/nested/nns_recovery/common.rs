@@ -1,16 +1,15 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
-    get_admin_keys_and_generate_backup_keys,
+    BACKUP_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes, get_ssh_keys_for_user,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
     node_with_highest_certification_share_height, remote_recovery,
 };
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version_with_retries,
-    rw_message::store_message,
+    rw_message::store_message_with_retries,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
@@ -19,10 +18,11 @@ use ic_consensus_system_test_utils::{
     upgrade::bless_replica_version,
 };
 use ic_recovery::{
-    RecoveryArgs,
+    IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE, RECOVERY_DIRECTORY_NAME, RecoveryArgs,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs, StepType},
+    ssh_helper::SshHelper as RecoverySshHelper,
     steps::CreateNNSRecoveryTarStep,
-    util::DataLocation,
+    util::{DataLocation, SshUser as RecoverySshUser},
 };
 use ic_system_test_driver::{
     driver::{
@@ -51,12 +51,15 @@ pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
+/// f is the maximum number of faulty nodes that can be tolerated in the subnet
+pub const F: usize = (SUBNET_SIZE - 1) / 3;
 /// DKG interval as small as possible to keep the test runtime low
 pub const DKG_INTERVAL: u64 = 4 * SUBNET_SIZE as u64 + 13;
 
 /// 40 nodes and DKG interval of 499 are the production values for the NNS but 49 was chosen for
 /// the DKG interval to make the test faster
 pub const LARGE_SUBNET_SIZE: usize = 40;
+pub const LARGE_F: usize = (LARGE_SUBNET_SIZE - 1) / 3;
 pub const LARGE_DKG_INTERVAL: u64 = 49;
 
 /// RECOVERY_GUESTOS_IMG_VERSION variable is a placeholder for the actual version of the recovery
@@ -69,12 +72,14 @@ pub struct SetupConfig {
     pub impersonate_upstreams: bool,
     pub subnet_size: usize,
     pub dkg_interval: u64,
+    pub nested_nodes_vm_resources: VmResources,
 }
 
 #[derive(Debug)]
 pub struct TestConfig {
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
+    pub num_broken_nodes: usize,
     pub add_and_bless_upgrade_version: bool,
     pub fix_dfinity_owned_node_like_np: bool,
     pub sequential_np_actions: bool,
@@ -180,7 +185,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    NestedNodes::new_with_resources(&host_vm_names, NNS_RECOVERY_VM_RESOURCES)
+    NestedNodes::new_with_resources(&host_vm_names, cfg.nested_nodes_vm_resources)
         .setup_and_start(&env)
         .unwrap();
 }
@@ -190,14 +195,16 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
 
-    let AdminAndUserKeys {
-        ssh_admin_priv_key_path,
-        admin_auth,
-        ssh_user_priv_key_path: ssh_backup_priv_key_path,
-        user_auth: backup_auth,
-        ssh_user_pub_key: ssh_backup_pub_key,
-        ..
-    } = get_admin_keys_and_generate_backup_keys(&env);
+    let SshKeys {
+        ssh_priv_key_path: ssh_admin_priv_key_path,
+        auth: admin_auth,
+        ssh_pub_key: _,
+    } = get_ssh_keys_for_user(&env, SSH_USERNAME);
+    let SshKeys {
+        ssh_priv_key_path: ssh_backup_priv_key_path,
+        auth: backup_auth,
+        ssh_pub_key: ssh_backup_pub_key,
+    } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
@@ -213,7 +220,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     info!(logger, "Ensure NNS subnet is functional");
     let init_msg = "subnet recovery works!";
-    let app_can_id = store_message(
+    let app_can_id = store_message_with_retries(
         &nns_node.get_public_url(),
         nns_node.effective_canister_id(),
         init_msg,
@@ -253,23 +260,31 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     let output_dir = env.get_path("recovery_output");
 
-    // Choose f+1 faulty nodes to break
+    // Define faulty and healthy nodes
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
     let f = (subnet_size - 1) / 3;
-    let faulty_nodes = &nns_nodes[..(f + 1)];
-    let healthy_nodes = &nns_nodes[(f + 1)..];
-    // TODO(CON-1587): Consider breaking all nodes.
-    let healthy_node = healthy_nodes.first().unwrap();
+    assert!(
+        f < cfg.num_broken_nodes && cfg.num_broken_nodes <= subnet_size,
+        "Number of broken nodes must be between f+1 and the subnet size, but got {} broken nodes with f={}",
+        cfg.num_broken_nodes,
+        f
+    );
+    let faulty_nodes = &nns_nodes[..cfg.num_broken_nodes];
+    let healthy_nodes = &nns_nodes[cfg.num_broken_nodes..];
+    let maybe_healthy_node = healthy_nodes.first();
     info!(
         logger,
         "Selected faulty nodes: {:?}. Selected healthy nodes: {:?}",
         faulty_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
         healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
     );
+    assert!(
+        cfg.break_dfinity_owned_node || cfg.num_broken_nodes < subnet_size,
+        "Cannot break all nodes if the DFINITY-owned node is not broken"
+    );
     let dfinity_owned_node = if cfg.break_dfinity_owned_node {
         faulty_nodes.last().unwrap()
     } else {
-        // TODO(CON-1587): Consider breaking all nodes.
         healthy_nodes.first().unwrap()
     };
     info!(
@@ -279,14 +294,38 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         dfinity_owned_node.get_ip_addr()
     );
 
-    break_nodes(faulty_nodes, &logger);
-    assert_subnet_is_broken(
-        &healthy_node.get_public_url(),
-        app_can_id,
-        msg,
-        true,
-        &logger,
-    );
+    // We could break all faulty nodes now. But if all nodes are broken, then the later call to
+    // fetch nodes' metrics to determine which node to download the consensus pool from will fail,
+    // since no nodes will answer.
+    // To avoid that, in case all nodes are faulty, we break only `subnet_size - 1` nodes first,
+    // effectively breaking the subnet, then fetch the metrics and determine the download pool, and
+    // finally break the remaining node. Otherwise, we can break all faulty nodes at once.
+    let (nodes_to_break_first, nodes_to_break_after) = if faulty_nodes.len() == subnet_size {
+        faulty_nodes.split_at(subnet_size - 1)
+    } else {
+        (faulty_nodes, &[] as &[_])
+    };
+    break_nodes(nodes_to_break_first, &logger);
+
+    if let Some(healthy_node) = maybe_healthy_node {
+        assert_subnet_is_broken(
+            &healthy_node.get_public_url(),
+            app_can_id,
+            msg,
+            /*can_read=*/ true,
+            &logger,
+        );
+    } else {
+        // Special case if all nodes are broken: the subnet is broken even in read mode, see the
+        // `false` parameter below.
+        assert_subnet_is_broken(
+            &dfinity_owned_node.get_public_url(), // This URL is not expected to be responsive
+            app_can_id,
+            msg,
+            /*can_read=*/ false,
+            &logger,
+        );
+    }
 
     // Download pool from the node with the highest certification share height
     let (download_pool_node, highest_cert_share) =
@@ -298,6 +337,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         download_pool_node.get_ip_addr(),
         highest_cert_share,
     );
+
+    break_nodes(nodes_to_break_after, &logger);
 
     // Mirror production setup by removing admin SSH access from all nodes except the DFINITY-owned node
     info!(
@@ -327,14 +368,58 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     );
 
     let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    let mut skipped_steps = vec![StepType::Cleanup]; // Skip Cleanup to keep the output directory
+    if faulty_nodes.len() == subnet_size {
+        // If all nodes are broken, the registry canister will not be able to respond to
+        // `get_certified_changes_since` calls to initialize the local store of `ic-recovery`.
+        // Thus, we need to manually download the local store of one of the nodes to pre-populate
+        // the local store of `ic-recovery`.
+        let local_store_path_src = PathBuf::from(IC_DATA_PATH)
+            .join(IC_REGISTRY_LOCAL_STORE)
+            .join("");
+        let local_store_path_dest = recovery_dir
+            .join(RECOVERY_DIRECTORY_NAME)
+            .join("working_dir")
+            .join("data")
+            .join(IC_REGISTRY_LOCAL_STORE);
+
+        std::fs::create_dir_all(&local_store_path_dest).unwrap();
+        let ssh_helper = RecoverySshHelper::new(
+            logger.clone(),
+            RecoverySshUser::Backup,
+            dfinity_owned_node.get_ip_addr(),
+            false,
+            Some(ssh_backup_priv_key_path.clone()),
+        );
+
+        info!(
+            logger,
+            "All nodes are broken, manually initialize the local store of ic-recovery by downloading it from node {}",
+            dfinity_owned_node.node_id,
+        );
+        ssh_helper
+            .rsync(
+                ssh_helper.remote_path(&local_store_path_src),
+                &local_store_path_dest,
+            )
+            .expect("Failed to initialize the local store of ic-recovery");
+
+        // Skip validating the output if all nodes are broken, as in this case no replica will be
+        // running to compare the heights to.
+        skipped_steps.push(StepType::ValidateReplayOutput);
+    }
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
-        nns_url: healthy_node.get_public_url(),
+        // If `maybe_healthy_node` is `None`, it means all nodes are broken, and the local store was
+        // initialized above. In that case `ic-recovery` will not use `nns_url` and we can pass the
+        // URL of whatever node.
+        nns_url: maybe_healthy_node
+            .unwrap_or(dfinity_owned_node)
+            .get_public_url(),
         replica_version: None,
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: false,
     };
 
     // Unlike during a production recovery using the CLI, here we already know all parameters ahead
@@ -355,7 +440,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         backup_key_file: Some(ssh_backup_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
-        skip: Some(vec![StepType::Cleanup]), // Skip Cleanup to keep the output directory
+        skip: Some(skipped_steps),
     };
 
     info!(
@@ -583,6 +668,10 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
 
     // The command is expected to reboot the node as part of the recovery, so if it returns
     // successfully, it means something went wrong.
+    // Set a 5-minute SSH timeout to detect when the node reboots and the TCP connection
+    // hangs (e.g. abrupt reboot without clean TCP FIN). Without this, the SSH channel
+    // can hang indefinitely waiting for data from the rebooted node.
+    session.set_timeout(5 * 60 * 1000);
     info!(logger, "Executing local recovery command: \n{command}");
     node.block_on_bash_script_from_session(&session, &command)
         .expect_err("Local recovery command completed without rebooting");

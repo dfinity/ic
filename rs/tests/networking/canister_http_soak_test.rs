@@ -32,7 +32,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use proxy_canister::RemoteHttpRequest;
 use proxy_canister::RemoteHttpResponse;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;

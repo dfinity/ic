@@ -237,6 +237,7 @@ rust_ic_test(
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:bitcoin-0.28.2",
@@ -281,6 +282,7 @@ genrule(
 
 rust_canbench(
     name = "ckbtc_minter_canbench",
+    timeout = "long",
     srcs = ["src/main.rs"],
     compile_data = [":ckbtc_minter.did"],
     data = ["mainnet_events.mem.gz"],

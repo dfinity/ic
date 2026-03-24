@@ -190,7 +190,7 @@ impl RandomnessGenerator for MockRandomness {
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         self.counter += 1;
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         bytes[..8].copy_from_slice(&self.counter.to_le_bytes());
         Ok(bytes)
     }

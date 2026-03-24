@@ -14,6 +14,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
   pull-requests: read
 
 env:
@@ -32,7 +33,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:15e6eca52d696697a681916c92ab3623ebff1fcff70156220b0270c2985a6b2b
+      image: ghcr.io/dfinity/ic-build@sha256:898d5f8e921a96c9433d8cd2588178f0a033d3dd74fcf1790cf9eddaaf23d905
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 180
@@ -42,6 +43,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
+      - uses: ./.github/actions/netrc
       - name: Run Bazel System Tests
         uses: ./.github/actions/bazel
         with:
@@ -96,6 +98,7 @@ jobs:
     timeout-minutes: 180
     steps:
       - *checkout
+      - uses: ./.github/actions/netrc
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel
         with:

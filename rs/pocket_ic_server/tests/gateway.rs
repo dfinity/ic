@@ -6,6 +6,7 @@ use pocket_ic::common::rest::{
     HttpsConfig, Topology,
 };
 use pocket_ic::{PocketIc, PocketIcBuilder};
+use pocket_ic_server::external_canister_types::InternetIdentityFrontendInit;
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::Url;
 use reqwest::blocking::Client;
@@ -19,23 +20,75 @@ use tempfile::NamedTempFile;
 mod common;
 
 fn deploy_ii(pic: &PocketIc) -> Principal {
-    let canister_id = pic.create_canister();
+    // Deploy II backend.
+    let backend_id = pic.create_canister();
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 1_000_000_000_000);
-    let arg = Encode!(&()).unwrap();
-    pic.install_canister(canister_id, ii_wasm, arg, None);
-    canister_id
+
+    pic.add_cycles(backend_id, 2_000_000_000_000);
+    pic.install_canister(backend_id, ii_wasm, Encode!(&()).unwrap(), None);
+
+    // Deploy II frontend.
+    let frontend_id = pic.create_canister();
+    let frontend_path = std::env::var_os("II_FRONTEND_WASM")
+        .expect("Missing II_FRONTEND_WASM (path to II frontend wasm) in env.");
+    let frontend_wasm =
+        std::fs::read(frontend_path).expect("Could not read II frontend wasm file.");
+    pic.add_cycles(frontend_id, 2_000_000_000_000);
+    // The backend_origin is mocked out since it's only used by the frontend for browser-side
+    // redirects to the backend, which these tests don't exercise.
+    let frontend_arg = Encode!(&InternetIdentityFrontendInit {
+        backend_canister_id: backend_id,
+        backend_origin: "dummy_backend_origin".to_string(),
+        related_origins: None,
+        fetch_root_key: Some(true),
+        analytics_config: None,
+        dummy_auth: None,
+        dev_csp: Some(true),
+    })
+    .unwrap();
+
+    pic.add_cycles(frontend_id, 2_800_000_000_000);
+    pic.install_canister(frontend_id, frontend_wasm, frontend_arg, None);
+
+    frontend_id
 }
 
 async fn deploy_ii_async(pic: &pocket_ic::nonblocking::PocketIc) -> Principal {
-    let canister_id = pic.create_canister().await;
+    // Deploy II backend.
+    let backend_id = pic.create_canister().await;
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
     let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
-    pic.add_cycles(canister_id, 1_000_000_000_000).await;
-    let arg = Encode!(&()).unwrap();
-    pic.install_canister(canister_id, ii_wasm, arg, None).await;
-    canister_id
+
+    pic.add_cycles(backend_id, 2_000_000_000_000).await;
+    pic.install_canister(backend_id, ii_wasm, Encode!(&()).unwrap(), None)
+        .await;
+
+    // Deploy II frontend.
+    let frontend_id = pic.create_canister().await;
+    let frontend_path = std::env::var_os("II_FRONTEND_WASM")
+        .expect("Missing II_FRONTEND_WASM (path to II frontend wasm) in env.");
+    let frontend_wasm =
+        std::fs::read(frontend_path).expect("Could not read II frontend wasm file.");
+    pic.add_cycles(frontend_id, 2_000_000_000_000).await;
+    // The backend_origin is mocked out since it's only used by the frontend for browser-side
+    // redirects to the backend, which these tests don't exercise.
+    let frontend_arg = Encode!(&InternetIdentityFrontendInit {
+        backend_canister_id: backend_id,
+        backend_origin: "dummy_backend_origin".to_string(),
+        related_origins: None,
+        fetch_root_key: Some(true),
+        analytics_config: None,
+        dummy_auth: None,
+        dev_csp: Some(true),
+    })
+    .unwrap();
+
+    pic.add_cycles(frontend_id, 2_800_000_000_000).await;
+    pic.install_canister(frontend_id, frontend_wasm, frontend_arg, None)
+        .await;
+
+    frontend_id
 }
 
 // Test the server endpoint to list HTTP gateways and the following HTTP gateway endpoints:
@@ -432,11 +485,11 @@ fn test_unresponsive_gateway_backend() {
     // Query a few endpoints on the HTTP gateway:
     // - a custom dashboard endpoint (handled by the PocketIC server);
     // - an /api endpoint (proxied by `ic-gateway`);
-    // - an asset endpoint (handled by `ic-http-gateway`).
+    // - an asset endpoint (handled by `ic-http-gateway-protocol`).
     let paths = vec![
         "_/dashboard".to_string(),
         "api/v2/status".to_string(),
-        format!("favicon.ico?canisterId={}", canister_id),
+        format!("?canisterId={}", canister_id),
     ];
     for path in &paths {
         let resp = client.get(endpoint.join(path).unwrap()).send().unwrap();
@@ -586,9 +639,25 @@ async fn test_gateway_custom_domain_provider_file() {
 
     // Verify all three domains: custom (www), apex, and subdomain (app).
     // No canister ID appears in any URL; the file mapping provides it in each case.
+    //
+    // Custom domain mappings are loaded asynchronously by a background polling
+    // task in the gateway, so they may not be available immediately after the
+    // gateway starts listening. We retry each request until the
+    // `x-ic-canister-id` header appears (with a generous timeout).
     for domain in [custom_domain, apex_domain, sub_domain] {
         let url = format!("http://{}:{}", domain, port);
-        let res = client.get(&url).send().await.unwrap();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let res = loop {
+            let res = client.get(&url).send().await.unwrap();
+            if res.headers().get("x-ic-canister-id").is_some() {
+                break res;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "Timed out waiting for x-ic-canister-id header for domain {domain}",
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
         assert_eq!(
             res.headers()
                 .get("x-ic-canister-id")

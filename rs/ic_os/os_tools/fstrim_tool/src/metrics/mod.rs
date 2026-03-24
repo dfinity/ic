@@ -1,0 +1,244 @@
+use super::*;
+use anyhow::Context;
+use prometheus::{Counter, Encoder, Gauge, Registry, TextEncoder};
+use std::io::Lines;
+
+#[cfg(test)]
+mod tests;
+
+const METRICS_LAST_RUN_DURATION_MILLISECONDS: &str = "fstrim_last_run_duration_milliseconds";
+const METRICS_LAST_RUN_SUCCESS: &str = "fstrim_last_run_success";
+const METRICS_RUNS_TOTAL: &str = "fstrim_runs_total";
+
+const METRICS_LAST_RUN_DURATION_MILLISECONDS_DATADIR: &str =
+    "fstrim_datadir_last_run_duration_milliseconds";
+const METRICS_LAST_RUN_SUCCESS_DATADIR: &str = "fstrim_datadir_last_run_success";
+const METRICS_RUNS_TOTAL_DATADIR: &str = "fstrim_datadir_runs_total";
+
+#[derive(Debug)]
+pub struct FsTrimMetrics {
+    pub last_duration_milliseconds: f64,
+    pub last_run_success: bool,
+    pub total_runs: f64,
+
+    pub last_duration_milliseconds_datadir: f64,
+    pub last_run_success_datadir: bool,
+    pub total_runs_datadir: f64,
+}
+
+impl Default for FsTrimMetrics {
+    fn default() -> Self {
+        Self {
+            last_duration_milliseconds: 0_f64,
+            last_run_success: true,
+            total_runs: 0_f64,
+
+            last_duration_milliseconds_datadir: 0_f64,
+            last_run_success_datadir: true,
+            total_runs_datadir: 0_f64,
+        }
+    }
+}
+
+impl FsTrimMetrics {
+    pub(crate) fn update(&mut self, success: bool, duration: Duration) -> Result<()> {
+        self.total_runs += 1_f64;
+        self.last_run_success = success;
+        self.last_duration_milliseconds = duration.as_millis() as f64;
+        Ok(())
+    }
+
+    pub(crate) fn update_datadir(&mut self, success: bool, duration: Duration) -> Result<()> {
+        self.total_runs_datadir += 1_f64;
+        self.last_run_success_datadir = success;
+        self.last_duration_milliseconds_datadir = duration.as_millis() as f64;
+        Ok(())
+    }
+
+    pub fn to_p8s_metrics_string(&self) -> Result<String> {
+        let registry = Registry::new();
+
+        let duration = Gauge::new(
+            METRICS_LAST_RUN_DURATION_MILLISECONDS,
+            "Duration of last run of fstrim in milliseconds",
+        )
+        .context("failed to create duration gauge")?;
+        let success = Gauge::new(
+            METRICS_LAST_RUN_SUCCESS,
+            "Success status of last run of fstrim (success: 1, failure: 0)",
+        )
+        .context("failed to create success gauge")?;
+        let runs = Counter::new(METRICS_RUNS_TOTAL, "Total number of runs of fstrim")
+            .context("failed to create runs counter")?;
+        let duration_datadir = Gauge::new(
+            METRICS_LAST_RUN_DURATION_MILLISECONDS_DATADIR,
+            "Duration of last run of fstrim on datadir in milliseconds",
+        )
+        .context("failed to create datadir duration gauge")?;
+        let success_datadir = Gauge::new(
+            METRICS_LAST_RUN_SUCCESS_DATADIR,
+            "Success status of last run of fstrim on datadir (success: 1, failure: 0)",
+        )
+        .context("failed to create datadir success gauge")?;
+        let runs_datadir = Counter::new(
+            METRICS_RUNS_TOTAL_DATADIR,
+            "Total number of runs of fstrim on datadir",
+        )
+        .context("failed to create datadir runs counter")?;
+
+        duration.set(self.last_duration_milliseconds);
+        success.set(if self.last_run_success { 1.0 } else { 0.0 });
+        runs.inc_by(self.total_runs);
+        duration_datadir.set(self.last_duration_milliseconds_datadir);
+        success_datadir.set(if self.last_run_success_datadir {
+            1.0
+        } else {
+            0.0
+        });
+        runs_datadir.inc_by(self.total_runs_datadir);
+
+        registry
+            .register(Box::new(duration))
+            .context("failed to register duration gauge")?;
+        registry
+            .register(Box::new(success))
+            .context("failed to register success gauge")?;
+        registry
+            .register(Box::new(runs))
+            .context("failed to register runs counter")?;
+        registry
+            .register(Box::new(duration_datadir))
+            .context("failed to register datadir duration gauge")?;
+        registry
+            .register(Box::new(success_datadir))
+            .context("failed to register datadir success gauge")?;
+        registry
+            .register(Box::new(runs_datadir))
+            .context("failed to register datadir runs counter")?;
+
+        let mut buf = Vec::new();
+        TextEncoder::new()
+            .encode(&registry.gather(), &mut buf)
+            .context("failed to encode metrics")?;
+        String::from_utf8(buf).context("metrics output is not valid UTF-8")
+    }
+
+    fn are_valid(&self) -> bool {
+        is_f64_finite_and_0_or_larger(self.total_runs)
+            && is_f64_finite_and_0_or_larger(self.last_duration_milliseconds)
+            && is_f64_finite_and_0_or_larger(self.total_runs_datadir)
+            && is_f64_finite_and_0_or_larger(self.last_duration_milliseconds_datadir)
+    }
+}
+
+fn is_f64_finite_and_0_or_larger(value: f64) -> bool {
+    value.is_finite() && value.is_sign_positive() && value >= 0_f64
+}
+
+fn parse_metrics_value(key: &str, value: &str) -> Result<f64> {
+    parse_go_f64(value).with_context(|| format!("key: {key}"))
+}
+
+fn parse_go_f64(value: &str) -> Result<f64> {
+    value.parse::<f64>().or_else(|e| {
+        if value == "+Inf" {
+            Ok(f64::INFINITY)
+        } else if value == "-Inf" {
+            Ok(f64::NEG_INFINITY)
+        } else if value == "NaN" {
+            Ok(f64::NAN)
+        } else {
+            Err(format_err!("failed to parse value '{}': {}", value, e))
+        }
+    })
+}
+
+impl<S> TryFrom<Lines<S>> for FsTrimMetrics
+where
+    S: Sized + BufRead,
+{
+    type Error = anyhow::Error;
+
+    fn try_from(lines: Lines<S>) -> Result<Self> {
+        let mut last_duration_milliseconds: Option<f64> = None;
+        let mut last_run_success: Option<bool> = None;
+        let mut total_runs: Option<f64> = None;
+
+        // Default datadir fields (we treat them as optional in the metrics file)
+        let mut datadir_last_duration_milliseconds: f64 = 0_f64;
+        let mut datadir_last_run_success: bool = true;
+        let mut datadir_total_runs: f64 = 0_f64;
+
+        for line_or_err in lines {
+            let line = line_or_err.map_err(|e| format_err!("failed to read line: {}", e))?;
+            match line.split(' ').collect::<Vec<_>>()[..] {
+                ["#", ..] => continue,
+                [key, value] => match key {
+                    METRICS_LAST_RUN_DURATION_MILLISECONDS => {
+                        last_duration_milliseconds.get_or_insert(parse_metrics_value(key, value)?);
+                    }
+                    METRICS_LAST_RUN_SUCCESS => {
+                        last_run_success.get_or_insert(parse_metrics_value(key, value)? > 0_f64);
+                    }
+                    METRICS_RUNS_TOTAL => {
+                        total_runs.get_or_insert(parse_metrics_value(key, value)?);
+                    }
+                    METRICS_LAST_RUN_DURATION_MILLISECONDS_DATADIR => {
+                        datadir_last_duration_milliseconds = parse_metrics_value(key, value)?;
+                    }
+                    METRICS_LAST_RUN_SUCCESS_DATADIR => {
+                        datadir_last_run_success = parse_metrics_value(key, value)? > 0_f64;
+                    }
+                    METRICS_RUNS_TOTAL_DATADIR => {
+                        datadir_total_runs = parse_metrics_value(key, value)?;
+                    }
+                    _ => return Err(format_err!("unknown metric key: {}", key)),
+                },
+                _ => return Err(format_err!("invalid metric line: {:?}", line)),
+            }
+        }
+
+        let metrics = FsTrimMetrics {
+            last_duration_milliseconds: last_duration_milliseconds.ok_or(format_err!(
+                "missing metric: {}",
+                METRICS_LAST_RUN_DURATION_MILLISECONDS
+            ))?,
+            last_run_success: last_run_success
+                .ok_or(format_err!("missing metric: {}", METRICS_LAST_RUN_SUCCESS))?,
+            total_runs: total_runs.ok_or(format_err!("missing metric: {}", METRICS_RUNS_TOTAL))?,
+            last_duration_milliseconds_datadir: datadir_last_duration_milliseconds,
+            last_run_success_datadir: datadir_last_run_success,
+            total_runs_datadir: datadir_total_runs,
+        };
+        if !metrics.are_valid() {
+            return Err(format_err!("parsed metrics are invalid"));
+        }
+        Ok(metrics)
+    }
+}
+
+#[cfg(test)]
+impl PartialEq for FsTrimMetrics {
+    fn eq(&self, other: &Self) -> bool {
+        f64_approx_eq(self.total_runs, other.total_runs)
+            && f64_approx_eq(
+                self.last_duration_milliseconds,
+                other.last_duration_milliseconds,
+            )
+            && (self.last_run_success == other.last_run_success)
+            && f64_approx_eq(
+                self.last_duration_milliseconds_datadir,
+                other.last_duration_milliseconds_datadir,
+            )
+            && (self.last_run_success_datadir == other.last_run_success_datadir)
+            && f64_approx_eq(self.total_runs_datadir, other.total_runs_datadir)
+    }
+}
+
+#[cfg(test)]
+fn f64_approx_eq(a: f64, b: f64) -> bool {
+    (a.is_finite() && b.is_finite() && (a - b).abs() < f64::EPSILON)
+        || (a == f64::INFINITY && b == f64::INFINITY)
+        || (a == f64::NEG_INFINITY && b == f64::NEG_INFINITY)
+        || (a.is_nan() && b.is_nan())
+}

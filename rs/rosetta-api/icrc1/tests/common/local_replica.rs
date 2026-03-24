@@ -57,7 +57,7 @@ pub fn icrc_ledger_default_args_builder() -> InitArgsBuilder {
         .with_transfer_fee(FEE)
         .with_feature_flags(FeatureFlags { icrc2: true })
         .with_minting_account(minter_identity().sender().unwrap())
-        .with_initial_balance(test_identity.sender().unwrap(), 1_000_000_000_000u64)
+        .with_initial_balance(test_identity.sender().unwrap(), 1_000_000_000_000_u64)
         .with_archive_options(ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
             num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
