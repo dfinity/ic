@@ -93,7 +93,8 @@ jobs:
           if [[ "${is_protected_branch:-}" == "true" && '${{ github.event_name }}' != 'workflow_dispatch' ]]; then
               # if we are on a "protected" branch, targeting an rc branch or master we
               # upload all artifacts and run a release build (with versioning)
-              # but don't set this if it has been kicked off manually, because that is for external contribution PRs
+              # but don't set this if it has been kicked off manually, because that is for external contribution PRs.
+              # If release_build is 'true' then all build shortcuts (diff only, etc) are 'false'.
               release_build="true"
               diff_only="false"
               skip_long_tests="false"
@@ -151,15 +152,69 @@ jobs:
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
           echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
+  # The main, "source of truth" build
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
+    if: needs.config.outputs.release-build == 'true'
     environment:
-      # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
-      # It also requires the AWS and CF secrets which are only available in the `upload-artifacts` environment.
-      # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
-      # when `release-build == 'true'` but not otherwise.
-      name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
+      name: upload-artifacts
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
+      - uses: ./.github/actions/netrc
+      - name: "Node Name"
+        run: |
+          echo "::notice::Node Name: ${NODE_NAME}"
+
+      - name: Build Targets
+        uses: ./.github/actions/bazel
+        with:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          execlogs-artifact-name: execlogs-bazel-test-all-build
+          invocation-names: build
+          run: bazel build //... --config=stamped --config=lint
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-session-name: "GitHub-Actions_ic_upload-artifacts"
+          role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
+          aws-region: eu-central-1
+
+      - name: Upload artifacts
+        uses: ./.github/actions/upload-artifacts
+        env:
+          CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
+          CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
+        with:
+          name: Bazel Test All
+          # with --check_up_to_date Bazel will error out if the artifacts
+          # to be uploaded were not built in the build step above
+          # (this ensures that the exact artifacts built above are uploaded)
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+
+      - name: Run Tests
+        uses: ./.github/actions/bazel
+        with:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          execlogs-artifact-name: execlogs-bazel-test-all-test
+          invocation-names: test
+          run: bazel test //... --config=stamped --config=lint
+
+  # An (often) faster alternative to the full build:
+  #   * artifacts are not stamped (better cache utilization)
+  #   * artifacts are not uploaded
+  #   * target list is inferred by targets.py (see implementation for details) instead
+  #       of building & testing all targets
+  bazel-test-shortcut:
+    name: Bazel Test Shortcut
+    if: needs.config.outputs.release-build != 'true'
+    needs: [config]
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 150
@@ -174,7 +229,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          execlogs-artifact-name: execlogs-bazel-test-all
+          execlogs-artifact-name: execlogs-bazel-test-shortcut
           invocation-names: |
             build
             test
@@ -252,27 +307,6 @@ jobs:
 
             bazel_do build
             bazel_do test
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
-        if: needs.config.outputs.release-build == 'true'
-        with:
-          role-session-name: "GitHub-Actions_ic_upload-artifacts"
-          role-to-assume: ${{ vars.AWS_ASSUME_ROLE }}
-          aws-region: eu-central-1
-
-      - name: Upload artifacts
-        uses: ./.github/actions/upload-artifacts
-        if: needs.config.outputs.release-build == 'true'
-        env:
-          CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
-          CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
-        with:
-          name: Bazel Test All
-          # with --check_up_to_date Bazel will error out if the artifacts
-          # to be uploaded were not built in the build step above
-          # (this ensures that the exact artifacts built above are uploaded)
-          upload-command: bazel run --check_up_to_date //:upload-artifacts
 
   # Build & upload the arm64-{linux,darwin} variant of the PocketIC server,
   # build the entire codebase on arm64-darwin,
