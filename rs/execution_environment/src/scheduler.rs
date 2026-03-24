@@ -5,12 +5,11 @@ use self::threshold_signatures::*;
 use crate::ExecuteSubnetMessageResultType;
 use crate::canister_manager::uninstall_canister;
 use crate::execution_environment::{
-    ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
-    as_num_instructions, as_round_instructions, execute_canister,
+    ConsumedCyclesForInstructions, ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions,
+    RoundLimits, as_num_instructions, as_round_instructions, execute_canister,
 };
 use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::metrics::MeasurementScope;
-use crate::util::process_responses;
 use ic_config::embedders::Config as HypervisorConfig;
 use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::flag_status::FlagStatus;
@@ -863,7 +862,8 @@ impl SchedulerImpl {
     fn charge_canisters_for_resource_allocation_and_usage(
         &self,
         state: &mut ReplicatedState,
-        subnet_size: usize,
+        round_limits: &mut RoundLimits,
+        registry_settings: &RegistryExecutionSettings,
     ) {
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
@@ -871,7 +871,7 @@ impl SchedulerImpl {
             self.cycles_account_manager
                 .duration_between_allocation_charges(),
         );
-        let mut all_rejects = Vec::new();
+        let mut canisters_to_uninstall = Vec::new();
         for canister in state.canisters_iter_mut() {
             if canister.system_state.time_of_last_allocation_charge
                 > threshold_last_allocation_charge
@@ -897,18 +897,28 @@ impl SchedulerImpl {
                     &self.log,
                     canister,
                     duration_since_last_charge,
-                    subnet_size,
+                    registry_settings.subnet_size,
                     cost_schedule,
                 )
                 .is_err()
             {
-                all_rejects.push(uninstall_canister(
-                    &self.log,
-                    canister,
+                let canister_id = canister.canister_id();
+                canisters_to_uninstall.push(canister_id);
+            }
+        }
+
+        for canister_id in canisters_to_uninstall {
+            let op = |mut canister,
+                      round_limits,
+                      _consumed_cycles: &mut ConsumedCyclesForInstructions<'_>,
+                      state_time: Time| {
+                let responses = uninstall_canister(
+                    &mut canister,
                     None, /* we're at the end of a round so no need to update round limits */
                     state_time,
                     Arc::clone(&self.fd_factory),
-                ));
+                    &self.log,
+                );
                 canister.system_state.compute_allocation = ComputeAllocation::zero();
                 canister.system_state.memory_allocation = MemoryAllocation::default();
                 canister.system_state.clear_canister_history();
@@ -916,24 +926,35 @@ impl SchedulerImpl {
                 canister.system_state.burn_remaining_balance_for_uninstall();
                 canister.canister_snapshots.delete_snapshots();
 
-                info!(
-                    self.log,
-                    "Uninstalling canister {} because it ran out of cycles",
-                    canister.canister_id()
-                );
-                self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
-            }
-        }
-
-        // Send rejects to any requests that were forcibly closed while uninstalling.
-        for rejects in all_rejects.into_iter() {
-            process_responses(
-                rejects,
+                Ok((
+                    canister,
+                    round_limits,
+                    (),
+                    NumBytes::from(0),
+                    responses,
+                    vec![],
+                    None,
+                ))
+            };
+            if let Err(e) = self.exec_env.execute_mgmt_operation_on_canister(
+                canister_id,
+                op,
+                state_time,
                 state,
-                Arc::clone(&self.ingress_history_writer),
-                self.log.clone(),
-                self.exec_env.canister_not_found_error(),
+                round_limits,
+                registry_settings,
+            ) {
+                error!(
+                    self.log,
+                    "[EXC-BUG]: Uninstalling canister {} failed: {}", canister_id, e
+                );
+            }
+
+            info!(
+                self.log,
+                "Uninstalling canister {} because it ran out of cycles", canister_id
             );
+            self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
         }
     }
 
@@ -1597,9 +1618,11 @@ impl Scheduler for SchedulerImpl {
             }
             {
                 let _timer = self.metrics.round_finalization_charge.start_timer();
+                let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
                 self.charge_canisters_for_resource_allocation_and_usage(
                     &mut final_state,
-                    registry_settings.subnet_size,
+                    &mut subnet_round_limits,
+                    registry_settings,
                 );
             }
 
