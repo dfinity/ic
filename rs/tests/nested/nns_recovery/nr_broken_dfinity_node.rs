@@ -24,7 +24,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    DKG_INTERVAL, F, NNS_RECOVERY_VM_RESOURCES_OVERRIDES, SUBNET_SIZE, SetupConfig, TestConfig,
+    DKG_INTERVAL, F, NNS_RECOVERY_VM_RESOURCE_OVERRIDES, SUBNET_SIZE, SetupConfig, TestConfig,
     setup, test,
 };
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};

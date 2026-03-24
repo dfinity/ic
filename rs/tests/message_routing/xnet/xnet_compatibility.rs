@@ -70,10 +70,9 @@ fn setup(env: TestEnv) {
         subnet
     }
     InternetComputer::new()
-        .with_default_vm_resources(VmResources {
-            vcpus: Some(NrOfVCPUs::new(16)),
-            memory_kibibytes: None,
-            boot_image_minimal_size_gibibytes: None,
+        .with_resource_overrides(VmResources {
+            vcpus: NrOfVCPUs::new(16),
+            ..VmResources::default()
         })
         .add_subnet(subnet(SubnetType::System, None))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
