@@ -105,9 +105,9 @@ pub async fn prepare_direct_boot(
     // The variable name inside 'boot_args' that contains the kernel command line parameters.
     // Note that this depends on the boot alternative since they contain the root partition and
     // other boot alternative-specific parameters.
-    let (boot_partition_uuid, boot_args_var_name, sev_boot_args_var_name) = match boot_alternative {
-        BootAlternative::A => (A_BOOT_PARTITION_UUID, "BOOT_ARGS_A", "BOOT_ARGS_SEV_A"),
-        BootAlternative::B => (B_BOOT_PARTITION_UUID, "BOOT_ARGS_B", "BOOT_ARGS_SEV_B"),
+    let (boot_partition_uuid, boot_args_var_name, tee_boot_args_var_name) = match boot_alternative {
+        BootAlternative::A => (A_BOOT_PARTITION_UUID, "BOOT_ARGS_A", "BOOT_ARGS_TEE_A"),
+        BootAlternative::B => (B_BOOT_PARTITION_UUID, "BOOT_ARGS_B", "BOOT_ARGS_TEE_B"),
     };
 
     let boot_partition = guest_partition_provider
@@ -144,14 +144,14 @@ pub async fn prepare_direct_boot(
         return Ok(None);
     }
 
-    // When TEE is enabled, prefer BOOT_ARGS_SEV_{A,B} if present in the file,
-    // falling back to BOOT_ARGS_{A,B} if the SEV variant is not available.
+    // When TEE is enabled, prefer BOOT_ARGS_TEE_{A,B} if present in the file,
+    // falling back to BOOT_ARGS_{A,B} if the TEE variant is not available.
     let boot_args = if tee_enabled {
-        match read_boot_args(&boot_args_path, sev_boot_args_var_name) {
+        match read_boot_args(&boot_args_path, tee_boot_args_var_name) {
             Ok(args) => args,
             Err(_) => {
                 println!(
-                    "{sev_boot_args_var_name} not found in boot_args for partition \
+                    "{tee_boot_args_var_name} not found in boot_args for partition \
                      {boot_alternative}. Falling back to {boot_args_var_name}."
                 );
                 read_boot_args(&boot_args_path, boot_args_var_name)
@@ -243,8 +243,8 @@ mod tests {
     struct ArgsConf {
         boot_args_a: String,
         boot_args_b: String,
-        sev_boot_args_a: Option<String>,
-        sev_boot_args_b: Option<String>,
+        tee_boot_args_a: Option<String>,
+        tee_boot_args_b: Option<String>,
     }
 
     /// Builder for creating test setups with fluent interface
@@ -265,8 +265,8 @@ mod tests {
                 args_conf: Some(ArgsConf {
                     boot_args_a: "args_a".to_string(),
                     boot_args_b: "args_b".to_string(),
-                    sev_boot_args_a: None,
-                    sev_boot_args_b: None,
+                    tee_boot_args_a: None,
+                    tee_boot_args_b: None,
                 }),
                 create_kernel_files: true,
                 create_ovmf_sev_file: true,
@@ -294,21 +294,21 @@ mod tests {
             self.args_conf = Some(ArgsConf {
                 boot_args_a: args_a.to_string(),
                 boot_args_b: args_b.to_string(),
-                sev_boot_args_a: None,
-                sev_boot_args_b: None,
+                tee_boot_args_a: None,
+                tee_boot_args_b: None,
             });
             self
         }
 
-        fn with_sev_boot_args(mut self, sev_args_a: &str, sev_args_b: &str) -> Self {
+        fn with_tee_boot_args(mut self, tee_args_a: &str, tee_args_b: &str) -> Self {
             let conf = self.args_conf.get_or_insert_with(|| ArgsConf {
                 boot_args_a: "args_a".to_string(),
                 boot_args_b: "args_b".to_string(),
-                sev_boot_args_a: None,
-                sev_boot_args_b: None,
+                tee_boot_args_a: None,
+                tee_boot_args_b: None,
             });
-            conf.sev_boot_args_a = Some(sev_args_a.to_string());
-            conf.sev_boot_args_b = Some(sev_args_b.to_string());
+            conf.tee_boot_args_a = Some(tee_args_a.to_string());
+            conf.tee_boot_args_b = Some(tee_args_b.to_string());
             self
         }
 
@@ -333,7 +333,7 @@ mod tests {
             let a_boot_partition = create_boot_partition(
                 self.args_conf.as_ref().map(|v| ArgsConf {
                     boot_args_b: "SHOULD NOT BE USED".to_string(),
-                    sev_boot_args_b: None,
+                    tee_boot_args_b: None,
                     ..v.clone()
                 }),
                 self.create_kernel_files,
@@ -342,7 +342,7 @@ mod tests {
             let b_boot_partition = create_boot_partition(
                 self.args_conf.map(|v| ArgsConf {
                     boot_args_a: "SHOULD NOT BE USED".to_string(),
-                    sev_boot_args_a: None,
+                    tee_boot_args_a: None,
                     ..v
                 }),
                 self.create_kernel_files,
@@ -433,18 +433,18 @@ mod tests {
         if let Some(ArgsConf {
             boot_args_a,
             boot_args_b,
-            sev_boot_args_a,
-            sev_boot_args_b,
+            tee_boot_args_a,
+            tee_boot_args_b,
         }) = args_conf
         {
             let mut boot_args_file = File::create(boot_dir.path().join("boot_args")).unwrap();
             writeln!(boot_args_file, "BOOT_ARGS_A=\"{boot_args_a}\"").unwrap();
             writeln!(boot_args_file, "BOOT_ARGS_B=\"{boot_args_b}\"").unwrap();
-            if let Some(sev_a) = sev_boot_args_a {
-                writeln!(boot_args_file, "BOOT_ARGS_SEV_A=\"{sev_a}\"").unwrap();
+            if let Some(tee_a) = tee_boot_args_a {
+                writeln!(boot_args_file, "BOOT_ARGS_TEE_A=\"{tee_a}\"").unwrap();
             }
-            if let Some(sev_b) = sev_boot_args_b {
-                writeln!(boot_args_file, "BOOT_ARGS_SEV_B=\"{sev_b}\"").unwrap();
+            if let Some(tee_b) = tee_boot_args_b {
+                writeln!(boot_args_file, "BOOT_ARGS_TEE_B=\"{tee_b}\"").unwrap();
             }
         }
 
@@ -725,10 +725,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_tee_uses_sev_boot_args_a() {
+    async fn test_tee_uses_tee_boot_args_a() {
         let setup = TestSetupBuilder::new()
             .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
-            .with_sev_boot_args("sev_args_a", "sev_args_b")
+            .with_tee_boot_args("tee_args_a", "tee_args_b")
             .build();
 
         let direct_boot = setup
@@ -737,14 +737,14 @@ mod tests {
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
 
-        assert_eq!(direct_boot.kernel_cmdline, "sev_args_a");
+        assert_eq!(direct_boot.kernel_cmdline, "tee_args_a");
     }
 
     #[tokio::test]
-    async fn test_tee_uses_sev_boot_args_b() {
+    async fn test_tee_uses_tee_boot_args_b() {
         let setup = TestSetupBuilder::new()
             .with_grubenv(Some(BootAlternative::B), Some(BootCycle::Stable))
-            .with_sev_boot_args("sev_args_a", "sev_args_b")
+            .with_tee_boot_args("tee_args_a", "tee_args_b")
             .build();
 
         let direct_boot = setup
@@ -753,12 +753,12 @@ mod tests {
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
 
-        assert_eq!(direct_boot.kernel_cmdline, "sev_args_b");
+        assert_eq!(direct_boot.kernel_cmdline, "tee_args_b");
     }
 
     #[tokio::test]
-    async fn test_tee_falls_back_to_regular_boot_args_when_sev_absent() {
-        // No SEV boot args in the file: should fall back to BOOT_ARGS_A/B
+    async fn test_tee_falls_back_to_regular_boot_args_when_tee_absent() {
+        // No TEE boot args in the file: should fall back to BOOT_ARGS_A/B
         let setup = TestSetupBuilder::new()
             .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
             .build();
@@ -773,11 +773,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_non_tee_ignores_sev_boot_args() {
-        // Even if SEV boot args are present, non-TEE boot should use BOOT_ARGS_A/B
+    async fn test_non_tee_ignores_tee_boot_args() {
+        // Even if TEE boot args are present, non-TEE boot should use BOOT_ARGS_A/B
         let setup = TestSetupBuilder::new()
             .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
-            .with_sev_boot_args("sev_args_a", "sev_args_b")
+            .with_tee_boot_args("tee_args_a", "tee_args_b")
             .build();
 
         let direct_boot = setup
