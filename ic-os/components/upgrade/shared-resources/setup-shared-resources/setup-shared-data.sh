@@ -4,14 +4,10 @@ set -e
 
 DEVICE=/dev/mapper/store-shared--data
 
-format_device() {
-    mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
-}
-
 echo "Checking if ${DEVICE} has a valid filesystem..."
 if ! blkid "${DEVICE}" >/dev/null 2>&1; then
     echo "No filesystem exists on ${DEVICE}, creating one..."
-    format_device
+    mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
     exit 0
 fi
 
@@ -31,14 +27,8 @@ if echo "${REPAIR_OUTPUT}" | grep -qi "replay the log"; then
     exit 0
 fi
 
-# Actual corruption. Log the output and try xfs_repair -L to zero
-# the log and repair. If that also fails, reformat as last resort.
-# The IC node will recover its state via state sync so no data is
-# permanently lost.
+# Actual corruption. Log the output and try xfs_repair -L to zero the log and repair.
 echo "xfs_repair failed on ${DEVICE}:"
 echo "${REPAIR_OUTPUT}"
 echo "Calling 'xfs_repair -L' on ${DEVICE}..."
-if ! xfs_repair -L "${DEVICE}"; then
-    echo "'xfs_repair -L' failed on ${DEVICE}, reformatting..."
-    format_device
-fi
+xfs_repair -L "${DEVICE}"
