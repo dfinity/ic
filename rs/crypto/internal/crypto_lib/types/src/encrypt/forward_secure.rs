@@ -53,7 +53,7 @@ impl TryFrom<&PublicKeyProto> for CspFsEncryptionPublicKey {
                 ),
             });
         }
-        let mut pk_array = [0u8; bls12_381::G1Bytes::SIZE];
+        let mut pk_array = [0_u8; bls12_381::G1Bytes::SIZE];
         pk_array[..].copy_from_slice(&pk_proto.key_value);
         Ok(CspFsEncryptionPublicKey::Groth20_Bls12_381(
             groth20_bls12_381::FsEncryptionPublicKey(bls12_381::G1Bytes(pk_array)),

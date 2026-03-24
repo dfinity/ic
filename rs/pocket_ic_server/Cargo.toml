@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic-server"
-version = "12.0.0"
+version = "13.0.0"
 edition.workspace = true
 
 [dependencies]
@@ -75,6 +75,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-state-manager = { path = "../state_manager" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
 ic-utils = { workspace = true }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }

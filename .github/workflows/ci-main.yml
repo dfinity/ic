@@ -27,7 +27,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:0a0cff0b12c7586c2f312c739176924edf0c9e71df92f382eba836913da9f1c6
+      image: ghcr.io/dfinity/ic-build@sha256:898d5f8e921a96c9433d8cd2588178f0a033d3dd74fcf1790cf9eddaaf23d905
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release-build: ${{ steps.config.outputs.release-build }}
-      diff_only: ${{ steps.config.outputs.diff_only }}
+      diff-only: ${{ steps.config.outputs.diff-only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
     steps:
       - name: Infer build config
@@ -139,9 +139,9 @@ jobs:
           echo "release-build=$release_build" >> "$GITHUB_OUTPUT"
           echo "| \`release-build\` | \`$release_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
-          echo "diff_only: $diff_only"
-          echo "diff_only=$diff_only" >> "$GITHUB_OUTPUT"
-          echo "| \`diff_only\` | \`$diff_only\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "diff-only: $diff_only"
+          echo "diff-only=$diff_only" >> "$GITHUB_OUTPUT"
+          echo "| \`diff-only\` | \`$diff_only\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "skip_long_tests: $skip_long_tests"
           echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
@@ -213,7 +213,7 @@ jobs:
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
             fi
-            if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
               targets_args+=(
                 '--base=${{ github.event.pull_request.base.sha }}'
                 '--head=${{ github.event.pull_request.head.sha }}'
@@ -485,21 +485,16 @@ jobs:
           run: |
             set -euo pipefail
 
-            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
-            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
-            BASE_SHA='${{ github.event.pull_request.base.sha }}'
-            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
-
             cd "$CI_PROJECT_DIR"
 
             # run full release build on "protected" branches
-            if [[ "$RELEASE_BUILD" == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
                 ci/container/build-ic.sh -i -c -b
                 exit 0
             fi
 
             # run full non-release build if not asked to diff
-            if ! [ "$DIFF_ONLY" == 'true' ]; then
+            if [[ '${{ needs.config.outputs.diff-only }}' != 'true' ]]; then
                 ci/container/build-ic.sh -i -c -b --no-release
                 exit 0
             fi
@@ -507,11 +502,10 @@ jobs:
             # otherwise, infer targets to build
             target_pattern_file=$(mktemp)
             trap "rm $target_pattern_file" INT TERM EXIT
-            targets_args=()
-            commit_range_arg=""
-            if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
-            fi
+            targets_args=(
+              "--base=${{ github.event.pull_request.base.sha }}"
+              "--head=${{ github.event.pull_request.head.sha }}"
+            )
             ci/scripts/targets.py build "${targets_args[@]}" >"$target_pattern_file"
             num_targets=$(wc <"$target_pattern_file" -l)
             echo "Considering $num_targets targets ..."

@@ -42,12 +42,13 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CanisterId, Cycles, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
+    CanisterId, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     ingress::IngressStatus,
     malicious_flags::MaliciousFlags,
 };
+use ic_types_cycles::Cycles;
 use pprof::criterion::{Output, PProfProfiler};
 use std::{
     collections::HashSet,

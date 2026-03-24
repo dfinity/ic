@@ -39,7 +39,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers,
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
-use ic_types::{Cycles, ExecutionRound, Height};
+use ic_types::{ExecutionRound, Height};
+use ic_types_cycles::{Cycles, NominalCyclesTesting};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -127,7 +128,7 @@ fn entries_sorted_lexicographically() {
     let mut ingress_history = IngressHistoryState::new();
     let time = UNIX_EPOCH;
 
-    for i in (0..10u64).rev() {
+    for i in (0..10_u64).rev() {
         ingress_history.insert(
             message_test_id(i),
             IngressStatus::Known {
@@ -141,7 +142,7 @@ fn entries_sorted_lexicographically() {
             |_| {},
         );
     }
-    let mut expected: Vec<_> = (0..10u64).map(message_test_id).collect();
+    let mut expected: Vec<_> = (0..10_u64).map(message_test_id).collect();
     expected.sort();
 
     let actual: Vec<_> = ingress_history
@@ -476,7 +477,7 @@ fn system_metadata_split() {
     system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
     system_metadata.batch_time = current_time();
     system_metadata.subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: 2197.into(),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
         ..Default::default()
     };
 
@@ -534,7 +535,7 @@ fn system_metadata_split_with_batch_time() {
     system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
     system_metadata.batch_time = current_time();
     system_metadata.subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: 2197.into(),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
         ..Default::default()
     };
 
@@ -649,7 +650,7 @@ fn system_metadata_online_split() {
     system_metadata.batch_time = current_time();
     system_metadata.network_topology.routing_table = Arc::new(routing_table);
     system_metadata.subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: 2197.into(),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
         ..Default::default()
     };
 
@@ -1041,7 +1042,6 @@ fn sign_with_threshold_context_roundtrip() {
                     derivation_path: Arc::new(vec![]),
                     pseudo_random_id: [1; 32],
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: None,
                     nonce: Some([3; 32]),
                 },
             );
@@ -2156,25 +2156,25 @@ fn stream_responses_tracking() {
 #[test]
 fn consumed_cycles_total_calculates_the_right_amount() {
     let mut consumed_cycles_by_use_case = BTreeMap::new();
-    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::from(5));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::from(12));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::from(30));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::from(100));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::from(50));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::from(40));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::NonConsumed, NominalCycles::from(10));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(5));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(12));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(30));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(100));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(50));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(40));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::NonConsumed, NominalCycles::new(10));
 
     let subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: NominalCycles::from(10),
-        consumed_cycles_http_outcalls: NominalCycles::from(20),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::from(30),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(10),
+        consumed_cycles_http_outcalls: NominalCycles::new(20),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(30),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
 
     assert_eq!(
         subnet_metrics.consumed_cycles_total(),
-        NominalCycles::from(250)
+        NominalCycles::new(250)
     );
 }
 

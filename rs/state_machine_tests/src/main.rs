@@ -9,7 +9,8 @@ use ic_crypto_utils_threshold_sig_der::{
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};
-use ic_types::{CanisterId, Cycles, PrincipalId};
+use ic_types::{CanisterId, PrincipalId};
+use ic_types_cycles::Cycles;
 use serde::Serialize;
 use std::io::{Read, Write, stdin, stdout};
 
@@ -187,7 +188,7 @@ fn debug_print_data(opts: &Opts, prefix: &str, data: &[u8]) {
 }
 
 fn read_bytes(num_bytes: usize) -> Vec<u8> {
-    let mut buf = vec![0u8; num_bytes];
+    let mut buf = vec![0_u8; num_bytes];
     stdin()
         .read_exact(&mut buf)
         .expect("failed to read from stdin");

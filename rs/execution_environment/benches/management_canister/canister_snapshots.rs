@@ -8,7 +8,8 @@ use ic_management_canister_types_private::{
     TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
 };
 use ic_state_machine_tests::StateMachine;
-use ic_types::{CanisterId, Cycles, SnapshotId};
+use ic_types::{CanisterId, SnapshotId};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use rand::Rng;
 
