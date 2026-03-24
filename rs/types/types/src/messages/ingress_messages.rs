@@ -77,8 +77,8 @@ impl SignedIngressContent {
         Time::from_nanos_since_unix_epoch(self.ingress_expiry)
     }
 
-    #[cfg(test)]
-    pub fn new(
+    /// Public only for use in tests.
+    pub fn new_for_testing(
         sender: UserId,
         canister_id: CanisterId,
         method_name: String,

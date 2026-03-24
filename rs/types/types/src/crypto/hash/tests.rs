@@ -147,7 +147,7 @@ mod crypto_hash_stability {
     /// Test stability of MessageId hash output
     #[test]
     fn message_id_stability() {
-        let data = MessageId::from([0x42u8; 32]);
+        let data = MessageId::from([0x42_u8; 32]);
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
@@ -159,7 +159,7 @@ mod crypto_hash_stability {
     /// Test stability of SignedRequestBytes hash output
     #[test]
     fn signed_request_bytes_stability() {
-        let data = SignedRequestBytes::from(vec![0x42u8; 32]);
+        let data = SignedRequestBytes::from(vec![0x42_u8; 32]);
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),

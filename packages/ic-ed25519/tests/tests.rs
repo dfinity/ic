@@ -398,7 +398,7 @@ fn should_produce_expected_derived_public_keys() {
     check_derivation(
         &DerivationPath::new_bip32(&[1]),
         hex!("931387a550eb4524a7af29381b938df38e76aeecac08e2cfaae4f4ca99bb4881"),
-        [0u8; 32],
+        [0_u8; 32],
         hex!("6f3086e738ab5417c6e02504464f208a763f0fba0c4d7ade40694773b6c2273c"),
         hex!("d34e4e22d2c008ccc7e9bb9882fbc025a1e5516e3421d8e932dbc0be35f787a0"),
     );
@@ -414,7 +414,7 @@ fn should_produce_expected_derived_public_keys() {
     check_derivation(
         &DerivationPath::new_bip32(&[1, 2]),
         hex!("931387a550eb4524a7af29381b938df38e76aeecac08e2cfaae4f4ca99bb4881"),
-        [0u8; 32],
+        [0_u8; 32],
         hex!("8efb675fcaf45c93e785ff535e380d9019c876a7c5faed264b911f97ef34d838"),
         hex!("2562ad75c50708f8d20c442e48b3f8ee851570be256ef0a7060b9f755a837216"),
     );

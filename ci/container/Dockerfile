@@ -39,12 +39,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     cd .. && \
     rm -rf e2fsdroid
 
-ARG mkcert_version=1.4.4
-ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
-RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /usr/local/bin/mkcert && \
-    echo "$mkcert_sha /usr/local/bin/mkcert" | sha256sum --check && \
-    chmod +x /usr/local/bin/mkcert
-
 ARG bazelisk_sha=22e7d3a188699982f661cf4687137ee52d1f24fec1ec893d91a6c4d791a75de8
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \

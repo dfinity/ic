@@ -348,46 +348,6 @@ def rust_test_with_binary(name, binary_name, **kwargs):
         test_target = name,
     )
 
-def _symlink_dir(ctx):
-    dirname = ctx.attr.name
-    lns = []
-    for target, canister_name in ctx.attr.targets.items():
-        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
-        file = target[DefaultInfo].files.to_list()[0]
-        ctx.actions.symlink(
-            output = ln,
-            target_file = file,
-        )
-        lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns))]
-
-symlink_dir = rule(
-    implementation = _symlink_dir,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
-
-def _symlink_dirs(ctx):
-    dirname = ctx.attr.name
-    lns = []
-    for target, childdirname in ctx.attr.targets.items():
-        for file in target[DefaultInfo].files.to_list():
-            ln = ctx.actions.declare_file(dirname + "/" + childdirname + "/" + file.basename)
-            ctx.actions.symlink(
-                output = ln,
-                target_file = file,
-            )
-            lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns))]
-
-symlink_dirs = rule(
-    implementation = _symlink_dirs,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
-
 def _write_info_file_var_impl(ctx):
     """Helper rule that creates a file with the content of the provided var from the info file."""
 

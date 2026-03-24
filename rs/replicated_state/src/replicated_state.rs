@@ -1,18 +1,17 @@
-use crate::canister_snapshots::{CanisterSnapshot, CanisterSnapshots};
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{
-    CanisterOutputQueuesIterator, CyclesUseCase, push_input,
-};
+use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
-use crate::metadata_state::{IngressHistoryState, Stream, StreamMap, SystemMetadata};
+use crate::metadata_state::{
+    IngressHistoryState, Stream, StreamMap, SystemMetadata, can_have_subnet_admins,
+};
 use crate::{
     CanisterPriority, CanisterQueues, CanisterState, DroppedMessageMetrics, SubnetSchedule,
 };
-use ic_base_types::{PrincipalId, SnapshotId};
+use ic_base_types::PrincipalId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::messaging::{
@@ -21,11 +20,12 @@ use ic_interfaces::messaging::{
 };
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    AccumulatedPriority, CanisterId, Cycles, NumBytes, SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
+    AccumulatedPriority, CanisterId, NumBytes, SubnetId, Time,
+    batch::{ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{
@@ -33,6 +33,7 @@ use ic_types::{
     },
     time::CoarseTime,
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
@@ -40,6 +41,9 @@ use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
+
+#[cfg(debug_assertions)]
+use ic_types_cycles::Cycles;
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -451,10 +455,6 @@ pub struct ReplicatedState {
     /// Temporary query stats received during the current epoch.
     /// Reset during the start of each epoch.
     pub epoch_query_stats: RawQueryStats,
-
-    /// Manages the canister snapshots.
-    #[validate_eq(CompareWithValidateEq)]
-    pub canister_snapshots: CanisterSnapshots,
 }
 
 impl ReplicatedState {
@@ -467,7 +467,6 @@ impl ReplicatedState {
             refunds: RefundPool::default(),
             consensus_queue: Vec::new(),
             epoch_query_stats: RawQueryStats::default(),
-            canister_snapshots: CanisterSnapshots::default(),
         }
     }
 
@@ -478,7 +477,6 @@ impl ReplicatedState {
         subnet_queues: CanisterQueues,
         refunds: RefundPool,
         epoch_query_stats: RawQueryStats,
-        canister_snapshots: CanisterSnapshots,
     ) -> Self {
         Self {
             canister_states,
@@ -487,7 +485,6 @@ impl ReplicatedState {
             refunds,
             consensus_queue: Vec::new(),
             epoch_query_stats,
-            canister_snapshots,
         }
     }
 
@@ -502,7 +499,6 @@ impl ReplicatedState {
         &RefundPool,
         &Vec<ConsensusResponse>,
         &RawQueryStats,
-        &CanisterSnapshots,
     ) {
         let ReplicatedState {
             canister_states,
@@ -511,7 +507,6 @@ impl ReplicatedState {
             refunds,
             consensus_queue,
             epoch_query_stats,
-            canister_snapshots,
         } = self;
         (
             canister_states,
@@ -520,7 +515,6 @@ impl ReplicatedState {
             refunds,
             consensus_queue,
             epoch_query_stats,
-            canister_snapshots,
         )
     }
 
@@ -528,6 +522,10 @@ impl ReplicatedState {
         self.canister_states
             .get(canister_id)
             .map(|canister| canister.as_ref())
+    }
+
+    pub fn canister_state_arc(&self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
+        self.canister_states.get(canister_id).cloned()
     }
 
     /// Makes a mutable reference to the canister state, cloning it if necessary.
@@ -734,14 +732,14 @@ impl ReplicatedState {
     }
 
     /// Returns the list of subnet admins of this subnet.
-    pub fn get_own_subnet_admins(&self) -> BTreeSet<PrincipalId> {
+    pub fn get_own_subnet_admins(&self) -> Option<BTreeSet<PrincipalId>> {
         let subnet_id = self.metadata.own_subnet_id;
-        self.metadata
-            .network_topology
-            .subnets()
-            .get(&subnet_id)
-            .map(|x| x.subnet_admins.clone())
-            .unwrap_or_default()
+        let subnet_topology = self.metadata.network_topology.subnets().get(&subnet_id)?;
+        if can_have_subnet_admins(subnet_topology.subnet_type, subnet_topology.cost_schedule) {
+            Some(subnet_topology.subnet_admins.clone())
+        } else {
+            None
+        }
     }
 
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
@@ -955,6 +953,10 @@ impl ReplicatedState {
             .sum()
     }
 
+    pub fn resource_limits(&self) -> ResourceLimits {
+        self.metadata.own_resource_limits
+    }
+
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or
     /// subnet).
     pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {
@@ -1031,7 +1033,9 @@ impl ReplicatedState {
                         // Best-effort responses are silently dropped if the canister is not found.
                         RequestOrResponse::Response(response) if response.is_best_effort() => {
                             if !response.refund.is_zero() {
-                                self.observe_lost_cycles_due_to_dropped_messages(response.refund);
+                                self.observe_lost_cycles_due_to_dropped_messages(
+                                    NominalCycles::from(response.refund.get()),
+                                );
                             }
                             Ok(false)
                         }
@@ -1371,30 +1375,6 @@ impl ReplicatedState {
         }
     }
 
-    /// Adds a new snapshot to the list of snapshots.
-    ///
-    /// This function is used by the management canister's TakeSnapshot function to change the state.
-    /// Note that the rest of the logic, e.g. constructing the `snapshot` is done in the calling code.
-    pub fn take_snapshot(
-        &mut self,
-        snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
-    ) -> SnapshotId {
-        self.metadata
-            .unflushed_checkpoint_ops
-            .take_snapshot(snapshot.canister_id(), snapshot_id);
-        self.canister_snapshots.push(snapshot_id, snapshot)
-    }
-
-    /// Adds a new snapshot to the list of snapshots.
-    pub fn create_snapshot_from_metadata(
-        &mut self,
-        snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
-    ) {
-        self.canister_snapshots.push(snapshot_id, snapshot);
-    }
-
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
     /// only the canisters of `subnet_id` (as determined by the provided routing
     /// table).
@@ -1436,7 +1416,6 @@ impl ReplicatedState {
             mut refunds,
             consensus_queue,
             epoch_query_stats: _,
-            mut canister_snapshots,
         } = self;
 
         // Consensus queue is always empty at the end of the round.
@@ -1477,9 +1456,6 @@ impl ReplicatedState {
         // setting the split marker).
         let metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
 
-        // Retain only the canister snapshots belonging to the local canisters.
-        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
-
         Ok(Self {
             canister_states,
             metadata,
@@ -1487,7 +1463,6 @@ impl ReplicatedState {
             refunds,
             consensus_queue,
             epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
-            canister_snapshots,
         })
     }
 
@@ -1511,7 +1486,6 @@ impl ReplicatedState {
             consensus_queue: _,
             refunds: _,
             epoch_query_stats,
-            canister_snapshots: _,
         } = self;
 
         metadata
@@ -1592,7 +1566,6 @@ impl ReplicatedState {
             mut refunds,
             consensus_queue,
             epoch_query_stats: _,
-            mut canister_snapshots,
         } = self;
 
         // Consensus queue is always empty in-between rounds.
@@ -1633,9 +1606,6 @@ impl ReplicatedState {
             }
             canister_states.insert(*canister_id, canister_state);
         }
-
-        // Retain only the canister snapshots of hosted canisters.
-        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
 
         // On *subnet B*:
         if subnet_id != metadata.own_subnet_id {
@@ -1679,16 +1649,15 @@ impl ReplicatedState {
             refunds,
             consensus_queue,
             epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
-            canister_snapshots,
         })
     }
 
     /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort
     /// responses to deleted canisters).
-    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: Cycles) {
+    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: NominalCycles) {
         self.metadata
             .subnet_metrics
-            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles.into());
+            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles);
     }
 
     /// Computes the subnet's total cycle balance including cycles attached to
@@ -1717,7 +1686,7 @@ impl ReplicatedState {
             .subnet_metrics
             .get_consumed_cycles_by_use_case()
             .get(&CyclesUseCase::DroppedMessages)
-            .map(ic_types::nominal_cycles::NominalCycles::get)
+            .map(NominalCycles::get)
             .unwrap_or_default()
             .into();
         canister_cycles
@@ -1790,7 +1759,7 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 
 pub mod testing {
     use super::*;
-    use ic_types::Cycles;
+    use ic_types_cycles::Cycles;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1884,8 +1853,6 @@ pub mod testing {
             refunds: Default::default(),
             consensus_queue: Default::default(),
             epoch_query_stats: Default::default(),
-            // TODO(EXC-1527): Handle canister snapshots during a subnet split.
-            canister_snapshots: CanisterSnapshots::default(),
         };
     }
 }

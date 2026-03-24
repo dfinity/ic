@@ -15,7 +15,9 @@ use ic_types::messages::{
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_utils::interfaces::ManagementCanister;
 use reqwest::{Client, Response};
+use serde::Serialize;
 use serde_bytes::ByteBuf;
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 pub const UPDATE_POLLING_TIMEOUT: Duration = Duration::from_secs(10);
@@ -33,16 +35,6 @@ pub type Timestamp = u64;
 type Signature = ByteBuf;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-struct DeviceData {
-    pub pubkey: DeviceKey,
-    pub alias: String,
-    pub credential_id: Option<CredentialId>,
-    pub purpose: Purpose,
-    pub key_type: KeyType,
-    pub protection: DeviceProtection,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum Purpose {
     #[serde(rename = "recovery")]
     Recovery,
@@ -51,48 +43,11 @@ pub enum Purpose {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-enum RegisterResponse {
-    #[serde(rename = "registered")]
-    Registered { user_number: AnchorNumber },
-    #[serde(rename = "canister_full")]
-    CanisterFull,
-    #[serde(rename = "bad_challenge")]
-    BadChallenge,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-enum KeyType {
-    #[serde(rename = "unknown")]
-    Unknown,
-    #[serde(rename = "platform")]
-    Platform,
-    #[serde(rename = "cross_platform")]
-    CrossPlatform,
-    #[serde(rename = "seed_phrase")]
-    SeedPhrase,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum DeviceProtection {
     #[serde(rename = "protected")]
     Protected,
     #[serde(rename = "unprotected")]
     Unprotected,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct Challenge {
-    pub png_base64: String,
-    pub challenge_key: ChallengeKey,
-}
-
-type ChallengeKey = String;
-
-// The user's attempt
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct ChallengeAttempt {
-    pub chars: String,
-    pub key: ChallengeKey,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -293,6 +248,130 @@ impl AgentWithDelegation<'_> {
     }
 }
 
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub enum RegistrationFlowNextStep {
+    /// Supply the captcha solution using check_captcha
+    CheckCaptcha { captcha_png_base64: String },
+    /// Finish the registration using identity_registration_finish
+    Finish,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub enum IdRegStartError {
+    RateLimitExceeded,
+    InvalidCaller,
+    AlreadyInProgress,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub struct IdRegNextStepResult {
+    pub next_step: RegistrationFlowNextStep,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub struct PublicKeyAuthn {
+    pub pubkey: PublicKey,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub struct WebAuthn {
+    pub pubkey: PublicKey,
+    pub credential_id: CredentialId,
+    pub aaguid: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub enum AuthnMethod {
+    WebAuthn(WebAuthn),
+    PubKey(PublicKeyAuthn),
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+pub enum MetadataEntryV2 {
+    String(String),
+    Bytes(ByteBuf),
+    Map(HashMap<String, MetadataEntryV2>),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub enum AuthnMethodProtection {
+    Protected,
+    Unprotected,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+pub enum AuthnMethodPurpose {
+    Recovery,
+    Authentication,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub struct AuthnMethodSecuritySettings {
+    pub protection: AuthnMethodProtection,
+    pub purpose: AuthnMethodPurpose,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub struct AuthnMethodData {
+    pub authn_method: AuthnMethod,
+    pub security_settings: AuthnMethodSecuritySettings,
+    pub metadata: HashMap<String, MetadataEntryV2>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub struct IdRegFinishArg {
+    pub authn_method: AuthnMethodData,
+    pub name: Option<String>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub struct IdRegFinishResult {
+    pub identity_number: u64,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub enum IdRegFinishError {
+    UnexpectedCall { next_step: RegistrationFlowNextStep },
+    NoRegistrationFlow,
+    InvalidAuthnMethod(String),
+    StorageError(String),
+}
+
+#[derive(CandidType, Serialize)]
+enum StaticCaptchaTrigger {
+    #[allow(dead_code)]
+    CaptchaEnabled,
+    CaptchaDisabled,
+}
+
+#[derive(CandidType, Serialize)]
+enum CaptchaTrigger {
+    #[allow(dead_code)]
+    Dynamic,
+    Static(StaticCaptchaTrigger),
+}
+
+#[derive(CandidType, Serialize)]
+struct CaptchaConfig {
+    pub max_unsolved_captchas: u64,
+    pub captcha_trigger: CaptchaTrigger,
+}
+
+#[derive(CandidType, Serialize)]
+struct InternetIdentityInit {
+    pub captcha_config: Option<CaptchaConfig>,
+}
+
+pub fn build_internet_identity_backend_install_arg() -> Vec<u8> {
+    candid::encode_one(&InternetIdentityInit {
+        captcha_config: Some(CaptchaConfig {
+            max_unsolved_captchas: 50,
+            captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
+        }),
+    })
+    .unwrap()
+}
+
 pub async fn register_user(
     agent: &Agent,
     public_key: Vec<u8>,
@@ -300,42 +379,64 @@ pub async fn register_user(
     expected_user_id: u64,
 ) {
     let data = agent
-        .update(&ii_canister_id, "create_challenge")
+        .update(&ii_canister_id, "identity_registration_start")
         .with_arg(candid::encode_one(()).unwrap())
         .call_and_wait()
         .await
         .unwrap();
-    let challenge: Challenge = candid::decode_one(&data).unwrap();
-    let device = DeviceData {
-        pubkey: ByteBuf::from(public_key),
-        alias: "test key".to_string(),
-        credential_id: None,
-        purpose: Purpose::Authentication,
-        key_type: KeyType::Unknown,
-        protection: DeviceProtection::Unprotected,
+
+    let result: Result<IdRegNextStepResult, IdRegStartError> = candid::decode_one(&data).unwrap();
+
+    let IdRegNextStepResult {
+        next_step: RegistrationFlowNextStep::Finish,
+    } = result.expect("identity_registration_start failed")
+    else {
+        panic!(
+            "Expected the next step to be Finish, but got CheckCaptcha with captcha. \
+             Make sure to initialize internet_identity_backend with CaptchaDisabled for tests.",
+        );
+    };
+
+    let authn_method = AuthnMethodData {
+        authn_method: AuthnMethod::WebAuthn(WebAuthn {
+            pubkey: ByteBuf::from(public_key),
+            // Not used for this device type
+            credential_id: ByteBuf::from([0xde, 0xad, 0xbe, 0xef]),
+            aaguid: None,
+        }),
+        // Does not matter for the test, but unfortunately not optional.
+        security_settings: AuthnMethodSecuritySettings {
+            protection: AuthnMethodProtection::Unprotected,
+            purpose: AuthnMethodPurpose::Authentication,
+        },
+        // This passkey isn't going to be used from a web browser, so mocking out its
+        // origin is fine for the test.
+        metadata: [(
+            "origin".to_string(),
+            MetadataEntryV2::String("https://id.ai".to_string()),
+        )]
+        .into_iter()
+        .collect(),
     };
     let data: Vec<u8> = agent
-        .update(&ii_canister_id, "register")
+        .update(&ii_canister_id, "identity_registration_finish")
         .with_arg(
-            candid::encode_args((
-                device,
-                ChallengeAttempt {
-                    chars: "a".to_string(),
-                    key: challenge.challenge_key,
-                },
-            ))
+            candid::encode_one(IdRegFinishArg {
+                authn_method,
+                name: Some("test user".to_string()),
+            })
             .unwrap(),
         )
         .call_and_wait()
         .await
         .unwrap();
-    let register_response: RegisterResponse = candid::decode_one(&data).unwrap();
-    assert_eq!(
-        register_response,
-        RegisterResponse::Registered {
-            user_number: expected_user_id
-        }
-    );
+
+    let register_response: Result<IdRegFinishResult, IdRegFinishError> =
+        candid::decode_one(&data).unwrap();
+
+    let IdRegFinishResult { identity_number } = register_response.unwrap();
+
+    assert_eq!(identity_number, expected_user_id);
 }
 
 pub async fn create_delegation(

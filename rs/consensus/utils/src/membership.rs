@@ -264,8 +264,8 @@ impl Membership {
         &self,
         height: Height,
     ) -> Result<Threshold, MembershipError> {
-        let subnet_size = self.get_nodes(height)?.len();
-        Ok(subnet_size - get_faults_tolerated(subnet_size))
+        let committee_size = self.get_canister_http_committee(height)?.len();
+        Ok(committee_size - get_faults_tolerated(committee_size))
     }
 }
 
@@ -299,7 +299,7 @@ pub mod test {
                         )
                     })
                     .count(),
-                get_faults_tolerated(subnet_members.len()) + 1usize
+                get_faults_tolerated(subnet_members.len()) + 1_usize
             );
         }
     }

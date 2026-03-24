@@ -238,7 +238,8 @@ impl NNSDelegationBuilderInner {
     }
 
     fn try_build(&self, filter: CanisterRangesFilter) -> Result<CertificateDelegation, String> {
-        // Always include `/subnet/<subnet_id>/public_key` and `/time` paths.
+        // Always include `/subnet/<subnet_id>/public_key`, `/time`, and
+        // `/subnet/<subnet_id>/type` paths.
         let mut paths = vec![
             Path::new(vec![
                 b"subnet".into(),
@@ -246,6 +247,11 @@ impl NNSDelegationBuilderInner {
                 b"public_key".into(),
             ]),
             Path::new(vec![b"time".into()]),
+            Path::new(vec![
+                b"subnet".into(),
+                self.subnet_id.get().into(),
+                b"type".into(),
+            ]),
         ];
 
         match filter {

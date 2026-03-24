@@ -420,7 +420,7 @@ pub mod arbitrary {
     }
 
     fn amount() -> impl Strategy<Value = Satoshi> {
-        1..10_000_000_000u64
+        1..10_000_000_000_u64
     }
 
     fn txid() -> impl Strategy<Value = Txid> {
@@ -463,7 +463,7 @@ pub mod arbitrary {
             amount: amount,
             address: address(),
             block_index: any::<u64>(),
-            received_at: 1569975147000..2069975147000u64,
+            received_at: 1569975147000..2069975147000_u64,
             kyt_provider: option::of(principal()),
             reimbursement_account: option::of(account()),
         })
@@ -496,7 +496,7 @@ pub mod arbitrary {
     }
 
     fn withdrawal_reimbursement_reason() -> impl Strategy<Value = WithdrawalReimbursementReason> {
-        (0..2000usize, 500..1000usize).prop_map(|(n, m)| {
+        (0..2000_usize, 500..1000_usize).prop_map(|(n, m)| {
             WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
                     num_inputs: n + m + 1,
@@ -528,7 +528,7 @@ pub mod arbitrary {
     }
 
     fn encoded_signature() -> impl Strategy<Value = EncodedSignature> {
-        pvec(1u8..0xff, 64).prop_map(|bytes| EncodedSignature::from_sec1(bytes.as_slice()))
+        pvec(1_u8..0xff, 64).prop_map(|bytes| EncodedSignature::from_sec1(bytes.as_slice()))
     }
 
     pub fn unsigned_input(

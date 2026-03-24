@@ -8,13 +8,14 @@ use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{ExecutionTask, InputQueueType, StateError, SystemState};
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+use ic_types::CanisterId;
 use ic_types::messages::{
     CanisterMessage, CanisterMessageOrTask, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response,
 };
 use ic_types::methods::Callback;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
-use ic_types::{CanisterId, Cycles};
+use ic_types_cycles::Cycles;
 use std::{collections::BTreeMap, sync::Arc};
 
 /// Figure out how many cycles a canister should have so that it can support the

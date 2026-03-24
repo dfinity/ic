@@ -20,7 +20,7 @@ pub use self::http::{
 use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{Cycles, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
+use crate::{NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
@@ -29,6 +29,7 @@ use ic_management_canister_types_private::CanisterChangeOrigin;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types_cycles::Cycles;
 pub use ingress_messages::{
     Ingress, ParseIngressError, SignedIngress, SignedIngressContent, extract_effective_canister_id,
 };

@@ -37,7 +37,8 @@ use ic_system_test_driver::{
     types::{CanisterStatusResult, CreateCanisterResult},
     util::UniversalCanister,
 };
-use ic_types::{Cycles, Height};
+use ic_types::Height;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{management, wasm};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_agent::Icrc1Agent;
@@ -914,7 +915,7 @@ pub fn add_one_participant(env: TestEnv) {
         "Second update call to `icp_ledger.transfer` returned {block_idx_2:?} (elapsed {:?})",
         start_time.elapsed()
     );
-    assert_eq!(block_idx_1 + 1u8, block_idx_2);
+    assert_eq!(block_idx_1 + 1_u8, block_idx_2);
 
     info!(
         log,
@@ -1288,7 +1289,7 @@ impl<'a> DappCanister<'a> {
         let dapp_canister = original_controller_canister
             .update(
                 wasm().call(
-                    management::create_canister(Cycles::from(2_000_000_000_000u64))
+                    management::create_canister(Cycles::from(2_000_000_000_000_u64))
                         .with_controllers(controllers.clone()),
                 ),
             )

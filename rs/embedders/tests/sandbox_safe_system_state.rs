@@ -12,7 +12,6 @@ use ic_management_canister_types_private::{
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{NetworkTopology, SystemState};
@@ -22,12 +21,11 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE};
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::UNIX_EPOCH;
-use ic_types::{ComputeAllocation, Cycles, NumInstructions};
+use ic_types::{ComputeAllocation, NumInstructions};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::convert::From;
@@ -329,7 +327,7 @@ fn handle_heap_cycles<T>(
     slf: T,
     f: &dyn Fn(T, usize, &mut [u8]) -> HypervisorResult<()>,
 ) -> HypervisorResult<Cycles> {
-    let mut res = [0u8; 16];
+    let mut res = [0_u8; 16];
     f(slf, 0, &mut res)?;
     Ok(Cycles::new(u128::from_le_bytes(res)))
 }
@@ -342,7 +340,7 @@ fn handle_heap_cycles_1<T, A>(
     a: A,
     f: &dyn Fn(T, A, usize, &mut [u8]) -> HypervisorResult<()>,
 ) -> HypervisorResult<Cycles> {
-    let mut res = [0u8; 16];
+    let mut res = [0_u8; 16];
     f(slf, a, 0, &mut res)?;
     Ok(Cycles::new(u128::from_le_bytes(res)))
 }
@@ -522,7 +520,7 @@ fn call_increases_cycles_consumed_metric() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap(),
-        NominalCycles::from(0)
+        NominalCycles::zero()
     );
 }
 

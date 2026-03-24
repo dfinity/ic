@@ -120,7 +120,7 @@ fn hash_bytes<T: AsRef<[u8]>>(value: T) -> Vec<u8> {
 fn hash_u64(value: u64) -> Vec<u8> {
     // We need at most ⌈ 64 / 7 ⌉ = 10 bytes to encode a 64 bit
     // integer in LEB128.
-    let mut buf = [0u8; 10];
+    let mut buf = [0_u8; 10];
     let mut n = value;
     let mut i = 0;
 
