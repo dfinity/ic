@@ -624,6 +624,7 @@ pub(crate) mod test {
                 sender: Blob(sender.as_slice().to_vec()),
                 nonce: None,
                 ingress_expiry: 1234,
+                sender_info: None,
             },
         };
 
@@ -664,6 +665,7 @@ pub(crate) mod test {
                 sender: Blob(sender.as_slice().to_vec()),
                 nonce: None,
                 ingress_expiry: 1234,
+                sender_info: None,
             },
         };
 

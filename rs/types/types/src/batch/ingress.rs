@@ -214,6 +214,7 @@ mod tests {
                 sender: Blob(vec![0x05]),
                 nonce: Some(Blob(vec![1, 2, 3, 4])),
                 ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         }
     }
