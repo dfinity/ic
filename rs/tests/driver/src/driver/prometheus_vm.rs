@@ -561,6 +561,8 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_BOUNDARY_PROMETHEUS_TARGET);
     let ic_gateways_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_GATEWAY_PROMETHEUS_TARGET);
+    let nested_hosts_scraping_targets_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(NESTED_HOSTS_PROMETHEUS_TARGET);
     let replica_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(REPLICA_PROMETHEUS_TARGET);
     let orchestrator_scraping_targets_path =
@@ -591,6 +593,13 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "job_name": "ic_gateways",
                 "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [ic_gateways_scraping_targets_path]}],
+            },
+            {
+                "job_name": "nested_hosts",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [nested_hosts_scraping_targets_path]}],
+                "scheme": "https",
+                "tls_config": {"insecure_skip_verify": true},
             },
             {
                 "job_name": "ic_boundary",
@@ -753,7 +762,7 @@ fn sync_prometheus_config_dir_with_nested_hosts(
         .into_iter()
         .collect();
         nested_hosts_p8s_static_configs.push(PrometheusStaticConfig {
-            targets: vec![format!("[{:?}]:{:?}", ipv6, REPLICA_METRICS_PORT)],
+            targets: vec![format!("[{:?}]:{:?}", ipv6, NODE_EXPORTER_METRICS_PORT)],
             labels: labels.clone(),
         });
     }
