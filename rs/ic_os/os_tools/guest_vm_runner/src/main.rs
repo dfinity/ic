@@ -582,9 +582,17 @@ impl GuestVmService {
             .context("Failed to create config media file")?;
 
         info!("Extracting direct boot dependencies");
-        let direct_boot = prepare_direct_boot(self.guest_vm_type, self.partition_provider.as_ref())
-            .await
-            .context("Failed to prepare direct boot")?;
+        let enable_tee = self
+            .hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment;
+        let direct_boot = prepare_direct_boot(
+            self.guest_vm_type,
+            enable_tee,
+            self.partition_provider.as_ref(),
+        )
+        .await
+        .context("Failed to prepare direct boot")?;
 
         if direct_boot.is_none() {
             info!(
@@ -592,11 +600,6 @@ impl GuestVmService {
                  legacy boot."
             );
         }
-
-        let enable_tee = self
-            .hostos_config
-            .icos_settings
-            .enable_trusted_execution_environment;
         if enable_tee && direct_boot.is_none() {
             return Err(GuestVmServiceError::Other(anyhow!(
                 "enable_trusted_execution_environment is true but direct boot could not be \
