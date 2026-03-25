@@ -1061,6 +1061,15 @@ impl IcNodeSnapshot {
         self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
     }
 
+    pub async fn create_and_install_canister_with_arg_async(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+    ) -> Result<Principal> {
+        self.create_and_install_canister_with_arg_and_cycles_async(name, arg, None)
+            .await
+    }
+
     pub fn install_canister_with_arg(
         &self,
         canister_id: Principal,
@@ -1091,32 +1100,45 @@ impl IcNodeSnapshot {
         arg: Option<Vec<u8>>,
         cycles_amount: Option<u128>,
     ) -> Principal {
+        let rt = Rt::new().expect("Could not create runtime");
+        rt.block_on(self.create_and_install_canister_with_arg_and_cycles_async(
+            name,
+            arg,
+            cycles_amount,
+        ))
+        .expect("Could not install canister")
+    }
+
+    pub async fn create_and_install_canister_with_arg_and_cycles_async(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Result<Principal> {
         let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
+        let agent = self.build_default_agent_async().await;
+        // Create a canister.
+        let mgr = ManagementCanister::create(&agent);
+        let canister_id = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(cycles_amount)
+            .with_effective_canister_id(effective_canister_id)
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't create canister with provisional API: {err}"))?
+            .0;
 
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(cycles_amount)
-                .with_effective_canister_id(effective_canister_id)
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
-                .0;
+        let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+        if let Some(arg) = arg {
+            install_code = install_code.with_raw_arg(arg)
+        }
+        install_code
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't install canister: {err}"))?;
 
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister")
+        Ok(canister_id)
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {

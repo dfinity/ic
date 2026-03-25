@@ -17,8 +17,7 @@ end::catalog[] */
 
 use std::time::Duration;
 
-use anyhow::Result;
-use candid::Principal;
+use anyhow::{Context, Result, bail};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_canister_client::Sender;
@@ -34,9 +33,9 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
-use ic_system_test_driver::driver::test_env_api::get_dependency_path;
+use ic_system_test_driver::driver::test_env_api::{HasRegistryVersion, get_dependency_path};
 use ic_system_test_driver::nns::vote_and_execute_proposal;
-use ic_system_test_driver::util::block_on;
+use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
     driver::{
@@ -49,9 +48,9 @@ use ic_system_test_driver::{
     util::runtime_from_url,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet;
-use ic_types::{CanisterId, Height, NodeId, PrincipalId, SubnetId};
+use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use registry_canister::mutations::do_split_subnet::SplitSubnetPayload;
-use slog::{info, warn};
+use slog::info;
 use xnet_test::{Metrics, StartArgs};
 
 const DKG_INTERVAL: u64 = 49;
@@ -108,36 +107,40 @@ fn setup(env: TestEnv) {
 }
 
 fn subnet_splitting_test(env: TestEnv) {
-    let test_params = prepare_canisters(&env);
-    info!(
-        env.logger(),
-        "Sleeping for 10 seconds before splitting the subnet \
-        so the canisters have some time to chit chat"
-    );
-    std::thread::sleep(Duration::from_secs(10));
-
-    if !TEST_ENABLED {
+    ic_system_test_driver::util::block_on(async {
+        let test_params = prepare_canisters(&env).await;
         info!(
             env.logger(),
-            "Subnet splititing not enabled yet, skipping the test."
+            "Sleeping for 10 seconds before splitting the subnet \
+            so the canisters have some time to chit chat"
         );
+        std::thread::sleep(Duration::from_secs(10));
 
-        return;
-    }
+        if !TEST_ENABLED {
+            info!(
+                env.logger(),
+                "Subnet splititing not enabled yet, skipping the test."
+            );
 
-    block_on(run_subnet_splitting_test(env.clone(), &test_params));
+            return;
+        }
+
+        run_subnet_splitting_test(env.clone(), &test_params).await
+    })
 }
 
-fn prepare_canisters(env: &TestEnv) -> TestParams {
-    let (source_subnet_chatting_canister_ids, third_subnet_chatting_canister_ids) =
-        block_on(install_chatting_canisters(env));
-    let source_subnet_counting_canister_ids = install_counting_canisters(env);
+async fn prepare_canisters(env: &TestEnv) -> TestParams {
+    let (
+        (source_subnet_chatting_canister_ids, third_subnet_chatting_canister_ids),
+        source_subnet_counting_canister_ids,
+    ) = tokio::join!(
+        install_chatting_canisters(env),
+        install_counting_canisters(env)
+    );
+
     TestParams::new(
-        source_subnet_counting_canister_ids
-            .iter()
-            .map(|principal| CanisterId::unchecked_from_principal(PrincipalId(*principal)))
-            .collect(),
-        source_subnet_chatting_canister_ids.clone(),
+        source_subnet_counting_canister_ids,
+        source_subnet_chatting_canister_ids,
         third_subnet_chatting_canister_ids,
     )
 }
@@ -162,7 +165,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
     propose_to_split_subnet(
         &env,
         &source_subnet,
-        test_params.canister_migation_list.clone(),
+        test_params.canister_migration_list.clone(),
         destination_subnet_nodes.clone(),
     )
     .await;
@@ -176,7 +179,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         source_subnet.subnet_id,
         &original_source_subnet_canister_ranges,
         &nns_canister_ranges,
-        &test_params.canister_migation_list,
+        &test_params.canister_migration_list,
     );
     check_subnet_membership(
         &env,
@@ -206,7 +209,7 @@ struct TestParams {
     destination_subnet_counting_canister_ids: Vec<CanisterId>,
     destination_subnet_chatting_canister_ids: Vec<CanisterId>,
     third_subnet_chatting_canister_ids: Vec<CanisterId>,
-    canister_migation_list: Vec<CanisterIdRange>,
+    canister_migration_list: Vec<CanisterIdRange>,
 }
 
 impl TestParams {
@@ -234,14 +237,14 @@ impl TestParams {
 
         let mut test_params = TestParams {
             third_subnet_chatting_canister_ids,
-            canister_migation_list: vec![
+            canister_migration_list: vec![
                 counter_canister_range_to_migrate,
                 chatting_canister_range_to_migrate,
             ],
             ..Default::default()
         };
 
-        test_params.canister_migation_list.sort();
+        test_params.canister_migration_list.sort();
 
         for canister_id in original_source_subnet_counter_canister_ids {
             if counter_canister_range_to_migrate.contains(&canister_id) {
@@ -343,40 +346,45 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
         env.logger(),
         "Installing chatting canisters on the source subnet"
     );
-    let wasm = Wasm::from_file(get_dependency_path(
-        std::env::var("XNET_TEST_CANISTER_WASM_PATH")
-            .expect("XNET_TEST_CANISTER_WASM_PATH not set"),
-    ));
 
     let source_subnet_runtime = runtime_from_subnet(&get_source_subnet(env));
-    let other_subnet_runtime = runtime_from_subnet(&get_third_subnet(env));
+    let third_subnet_runtime = runtime_from_subnet(&get_third_subnet(env));
 
-    let mut source_subnet_canisters = Vec::new();
-    let mut other_subnet_canisters = Vec::new();
+    let install_canisters = |count: usize, runtime| async move {
+        let wasm = Wasm::from_file(get_dependency_path(
+            std::env::var("XNET_TEST_CANISTER_WASM_PATH")
+                .expect("XNET_TEST_CANISTER_WASM_PATH not set"),
+        ));
 
-    for _ in 0..CHATTING_CANISTERS_ON_SOURCE_SUBNET_COUNT {
-        source_subnet_canisters.push(
-            wasm.clone()
-                .install_(&source_subnet_runtime, /*payload=*/ vec![])
-                .await
-                .expect("Failed to install the chatting canister"),
-        );
-    }
+        let mut installed_canisters: Vec<Canister> = Vec::new();
+        for _ in 0..count {
+            installed_canisters.push(
+                wasm.clone()
+                    .install_(runtime, /*payload=*/ vec![])
+                    .await
+                    .expect("Failed to install the chatting canister"),
+            );
+        }
 
-    for _ in 0..CHATTING_CANISTERS_ON_THIRD_SUBNET_COUNT {
-        other_subnet_canisters.push(
-            wasm.clone()
-                .install_(&other_subnet_runtime, /*payload=*/ vec![])
-                .await
-                .expect("Failed to install the chatting canister"),
-        );
-    }
+        installed_canisters
+    };
+
+    let (source_subnet_canisters, third_subnet_canisters) = tokio::join!(
+        install_canisters(
+            CHATTING_CANISTERS_ON_SOURCE_SUBNET_COUNT,
+            &source_subnet_runtime
+        ),
+        install_canisters(
+            CHATTING_CANISTERS_ON_THIRD_SUBNET_COUNT,
+            &third_subnet_runtime
+        )
+    );
 
     // Each canister will belong to a singleton, meaning that every canister will talk to every
     // other canister.
     let canister_groups: Vec<Vec<_>> = source_subnet_canisters
         .iter()
-        .chain(&other_subnet_canisters)
+        .chain(&third_subnet_canisters)
         .map(|canister| vec![canister.canister_id().get().0])
         .collect();
 
@@ -390,7 +398,7 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
 
     for canister in source_subnet_canisters
         .iter()
-        .chain(&other_subnet_canisters)
+        .chain(&third_subnet_canisters)
     {
         let _: String = canister
             .update_("start", candid, (canister_start_arguments.clone(),))
@@ -409,14 +417,14 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
             .iter()
             .map(Canister::canister_id)
             .collect(),
-        other_subnet_canisters
+        third_subnet_canisters
             .iter()
             .map(Canister::canister_id)
             .collect(),
     )
 }
 
-fn install_counting_canisters(env: &TestEnv) -> Vec<Principal> {
+async fn install_counting_canisters(env: &TestEnv) -> Vec<CanisterId> {
     info!(
         env.logger(),
         "Installing counter canisters on the source subnet"
@@ -425,35 +433,44 @@ fn install_counting_canisters(env: &TestEnv) -> Vec<Principal> {
         .nodes()
         .next()
         .expect("There should be at least one node on the source subnet");
-    let canister_ids: Vec<Principal> = (0..COUNTER_CANISTERS_COUNT)
-        .map(|_| {
-            source_node.create_and_install_canister_with_arg(
+
+    let mut canister_ids = Vec::new();
+
+    for _ in 0..COUNTER_CANISTERS_COUNT {
+        let canister_id = source_node
+            .create_and_install_canister_with_arg_async(
                 &std::env::var("COUNTER_CANISTER_WAT_PATH")
-                    .expect("COUNTER_CANISTER_WAT_PATH should be set"), /*arg=*/
-                None,
+                    .expect("COUNTER_CANISTER_WAT_PATH should be set"),
+                /*arg=*/ None,
             )
-        })
-        .inspect(|id| info!(env.logger(), "Installed counter canister {id}"))
-        .collect();
+            .await
+            .expect("Failed to create a counter canister");
 
-    block_on(async {
-        let agent = source_node.build_canister_agent().await;
-        for canister_id in &canister_ids {
-            for _ in 0..20 {
-                let response = agent
+        info!(env.logger(), "Installed counter canister {canister_id}");
+        canister_ids.push(CanisterId::unchecked_from_principal(PrincipalId(
+            canister_id,
+        )));
+    }
+
+    let agent = source_node.build_canister_agent().await;
+    for canister_id in &canister_ids {
+        retry_with_msg_async!(
+            format!("Making an update call to the counter canister with id {canister_id}"),
+            &env.logger(),
+            std::time::Duration::from_secs(120),
+            std::time::Duration::from_secs(5),
+            || async {
+                agent
                     .get()
-                    .update(canister_id, "write".to_string())
+                    .update(&canister_id.get().0, "write".to_string())
                     .call()
-                    .await;
-
-                if response.is_ok() {
-                    break;
-                }
-
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                    .await
+                    .context("Failed to make the update call")
             }
-        }
-    });
+        )
+        .await
+        .expect("Failed to make the update call after multiple retries");
+    }
 
     info!(
         env.logger(),
@@ -562,9 +579,9 @@ async fn check_counter_canisters(
                         counter, 1,
                         "The counter value should not have changed during subnet splitting"
                     ),
-                    (true, Err(_err)) => panic!(
+                    (true, Err(err)) => panic!(
                         "The subnet should host the canister with id {canister_id} and so \
-                        the request should succeed"
+                        the request should succeed: {err}"
                     ),
                     (false, Err(_)) => {
                         // Good, it should have failed!
@@ -638,7 +655,7 @@ async fn check_subnet_membership(
                 assert_eq!(
                     nodes.len(),
                     1,
-                    "There should be exactly one node on the other app subnet"
+                    "There should be exactly one node on the third subnet"
                 );
             }
             SubnetType::CloudEngine => {
@@ -679,7 +696,13 @@ async fn check_subnet_membership(
                 env.logger(),
                 "Waiting until node {} is on {}", node.node_id, subnet.subnet_id
             );
-            wait_for_cup_with_subnet_id(env, &node, subnet.subnet_id).await;
+            wait_for_cup_with_subnet_id(
+                env,
+                &node,
+                subnet.subnet_id,
+                topology.get_registry_version(),
+            )
+            .await;
             info!(
                 env.logger(),
                 "Node {} is on {}", node.node_id, subnet.subnet_id
@@ -790,30 +813,51 @@ fn check_routing_table(
     info!(env.logger(), "Routing table has been updated correctly!");
 }
 
-async fn wait_for_cup_with_subnet_id(env: &TestEnv, node: &IcNodeSnapshot, subnet_id: SubnetId) {
-    loop {
-        match get_cup_from_node(node, &env.logger()).await {
-            Ok(cup)
-                if cup.signature.signer.target_subnet == NiDkgTargetSubnet::Local
-                    && cup.signature.signer.dealer_subnet == subnet_id =>
-            {
-                break;
-            }
-            Ok(cup) => {
-                info!(
-                    env.logger(),
-                    "The downloaded CUP doesn't have the expected subnet id. {} vs expected {}",
-                    cup.signature.signer.dealer_subnet,
-                    subnet_id,
-                );
-            }
-            Err(err) => {
-                warn!(env.logger(), "Failed to fetch the CUP: {err:#}");
+async fn wait_for_cup_with_subnet_id(
+    env: &TestEnv,
+    node: &IcNodeSnapshot,
+    subnet_id: SubnetId,
+    minimum_registry_version: RegistryVersion,
+) {
+    retry_with_msg_async!(
+        format!(
+            "Waiting until node {} recognizes it's on {subnet_id}",
+            node.node_id
+        ),
+        &env.logger(),
+        std::time::Duration::from_secs(120),
+        std::time::Duration::from_secs(5),
+        || async {
+            match get_cup_from_node(node, &env.logger()).await {
+                Ok(cup) => {
+                    let cup_registry_version = cup.content.registry_version();
+                    if cup_registry_version >= minimum_registry_version {
+                        bail!(
+                            "The downloaded CUP still has an \
+                            old registry version: {cup_registry_version}. \
+                            The minimum expected registry version: {minimum_registry_version}",
+                        )
+                    } else if cup.signature.signer.target_subnet == NiDkgTargetSubnet::Local
+                        && cup.signature.signer.dealer_subnet == subnet_id
+                    {
+                        Ok(())
+                    } else {
+                        bail!(
+                            "The downloaded CUP doesn't have the expected subnet id. \
+                            {} vs expected {}",
+                            cup.signature.signer.dealer_subnet,
+                            subnet_id,
+                        )
+                    }
+                }
+                Err(err) => {
+                    bail!("Failed to fetch the CUP: {err:#}")
+                }
             }
         }
-
-        tokio::time::sleep(Duration::from_secs(3)).await;
-    }
+    )
+    .await
+    .expect("Timed out while waiting for the node to be on the correct subnet")
 }
 
 fn get_source_subnet(env: &TestEnv) -> SubnetSnapshot {
