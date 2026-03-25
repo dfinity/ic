@@ -393,13 +393,10 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
     // Returns `true` if a call to `add_to_pagemaps_and_strip()` would either add a
     // `PageMapToFlush` or its `PageMap::strip_unflushed_delta()` call would
     // actually mutate the `PageMap`.
-    let should_add_or_strip = |page_map: &PageMap| -> bool {
-        !page_map.has_stripped_unflushed_deltas() || !page_map.unflushed_delta_is_empty()
-    };
+    let should_add_or_strip =
+        |page_map: &PageMap| -> bool { page_map.should_strip_unflushed_delta() };
 
     let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
-        // debug_assert!(should_add_or_strip(page_map));
-
         // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
         // created one. In these cases, we also need to wipe the data from the file on disk.
         // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
