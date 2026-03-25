@@ -11,7 +11,8 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, DOMAIN_IC_REQUEST, KeyPurpose, Signable, SignableMock, UserPublicKey
+    AlgorithmId, BasicSig, BasicSigOf, DOMAIN_IC_REQUEST, KeyPurpose, Signable, SignableMock,
+    UserPublicKey,
 };
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
