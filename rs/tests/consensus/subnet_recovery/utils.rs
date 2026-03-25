@@ -12,9 +12,7 @@ use ic_system_test_driver::{
     driver::{
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         test_env::{SshKeyGen, TestEnv},
-        test_env_api::{
-            IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to, secs,
-        },
+        test_env_api::{IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to},
     },
     util::{JournalStreamer, block_on},
 };
