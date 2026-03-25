@@ -11,13 +11,12 @@ if ! blkid "${DEVICE}" >/dev/null 2>&1; then
     exit 0
 fi
 
-DATA_MOUNT="/mnt/data"
+DATA_MOUNT="/mnt"
 cleanup() {
     mountpoint -q "${DATA_MOUNT}" && umount "${DATA_MOUNT}" || true
     rm -rf "${DATA_MOUNT}" || true
 }
 trap cleanup EXIT
-mkdir -p "${DATA_MOUNT}"
 
 echo "Performing a test mount of ${DEVICE} to ${DATA_MOUNT} to check filesystem health..."
 if MOUNT_OUTPUT=$(mount -t xfs "${DEVICE}" "${DATA_MOUNT}" 2>&1); then
