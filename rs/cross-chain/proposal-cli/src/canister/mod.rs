@@ -506,12 +506,12 @@ impl Display for TargetCanister {
             TargetCanister::EvmRpc => write!(f, "EVM RPC"),
             TargetCanister::CyclesLedger => write!(f, "cycles ledger"),
             TargetCanister::CyclesIndex => write!(f, "cycles index"),
-            TargetCanister::ExchangeRateCanister => write!(f, "exchange rate canister"),
+            TargetCanister::ExchangeRateCanister => write!(f, "exchange rate"),
             TargetCanister::SolRpc => write!(f, "SOL RPC"),
-            TargetCanister::Bitcoin => write!(f, "Bitcoin canister"),
+            TargetCanister::Bitcoin => write!(f, "Bitcoin"),
             TargetCanister::BtcWatchdog => write!(f, "Bitcoin watchdog"),
             TargetCanister::DogeWatchdog => write!(f, "Dogecoin watchdog"),
-            TargetCanister::Dogecoin => write!(f, "Dogecoin canister"),
+            TargetCanister::Dogecoin => write!(f, "Dogecoin"),
         }
     }
 }

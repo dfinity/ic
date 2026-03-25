@@ -586,7 +586,7 @@ fn get_xnet_payload_byte_limit_exceeded(
         10, // max_signal_count
     ))]
     test_slice2: (Stream, StreamIndex, usize),
-    #[strategy(0..100usize)] message_bytes_percentage: usize,
+    #[strategy(0..100_usize)] message_bytes_percentage: usize,
 ) {
     let msg_count1 = test_slice1.2;
     let msg_count2 = test_slice2.2;
@@ -871,7 +871,7 @@ fn validate_xnet_payload(
         10, // max_signal_count
     ))]
     test_slice2: (Stream, StreamIndex, usize),
-    #[strategy(0..110u64)] size_limit_percentage: u64,
+    #[strategy(0..110_u64)] size_limit_percentage: u64,
 ) {
     let (stream1, from1, msg_count1) = test_slice1;
     let (stream2, from2, msg_count2) = test_slice2;
