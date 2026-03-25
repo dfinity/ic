@@ -207,7 +207,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
+use tokio::sync::Mutex as TokioMutex;
 use url::Url;
 
 pub use super::ic_images::*;
@@ -1100,8 +1100,7 @@ impl IcNodeSnapshot {
         arg: Option<Vec<u8>>,
         cycles_amount: Option<u128>,
     ) -> Principal {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(self.create_and_install_canister_with_arg_and_cycles_async(
+        block_on(self.create_and_install_canister_with_arg_and_cycles_async(
             name,
             arg,
             cycles_amount,
@@ -1978,8 +1977,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn build_default_agent(&self) -> Agent {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move { self.build_default_agent_async().await })
+        block_on(self.build_default_agent_async())
     }
 
     fn with_default_agent<F, Fut, R>(&self, op: F) -> R
@@ -1987,8 +1985,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         F: FnOnce(Agent) -> Fut + 'static,
         Fut: Future<Output = R>,
     {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move {
+        block_on(async move {
             let agent = self.build_default_agent_async().await;
             op(agent).await
         })
