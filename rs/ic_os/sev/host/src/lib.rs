@@ -3,6 +3,7 @@ use der::pem::LineEnding;
 use der::{Decode, Document};
 use firmware::SevHostFirmware;
 use reqwest::{Proxy, Response};
+use sev::Generation;
 use sev::firmware::host::{Identifier, SnpPlatformStatus};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -39,6 +40,8 @@ impl HostSevCertificateProvider {
                 sev_host_firmware: Box::new(
                     sev::firmware::host::Firmware::open().context("Could not open SEV firmware")?,
                 ),
+                generation: Generation::identify_host_generation()
+                    .context("Could not determine CPU generation")?,
             }),
         })
     }
@@ -55,11 +58,13 @@ impl HostSevCertificateProvider {
     pub fn new_for_test(
         certificate_cache_dir: PathBuf,
         sev_host_firmware: Box<dyn SevHostFirmware>,
+        generation: Generation,
     ) -> Self {
         Self {
             implementation: Some(HostSevCertificateProviderImpl {
                 certificate_cache_dir,
                 sev_host_firmware,
+                generation,
             }),
         }
     }
@@ -78,17 +83,31 @@ impl HostSevCertificateProvider {
 struct HostSevCertificateProviderImpl {
     certificate_cache_dir: PathBuf,
     sev_host_firmware: Box<dyn SevHostFirmware>,
+    generation: Generation,
 }
 
 impl HostSevCertificateProviderImpl {
     pub async fn load_certificate_chain_pem(&mut self) -> Result<String> {
+        let (ask, ark) = match self.generation {
+            Generation::Milan => (
+                sev::certs::snp::builtin::milan::ASK,
+                sev::certs::snp::builtin::milan::ARK,
+            ),
+            Generation::Genoa => (
+                sev::certs::snp::builtin::genoa::ASK,
+                sev::certs::snp::builtin::genoa::ARK,
+            ),
+            Generation::Turin => (
+                sev::certs::snp::builtin::turin::ASK,
+                sev::certs::snp::builtin::turin::ARK,
+            ),
+        };
+
         let chain_pem = format!(
             "{}{}{}",
             self.load_vcek_pem().await?,
-            std::str::from_utf8(sev::certs::snp::builtin::milan::ASK)
-                .expect("ASK PEM is invalid UTF-8"),
-            std::str::from_utf8(sev::certs::snp::builtin::milan::ARK)
-                .expect("ARK PEM is invalid UTF-8"),
+            std::str::from_utf8(ask).expect("ASK PEM is invalid UTF-8"),
+            std::str::from_utf8(ark).expect("ARK PEM is invalid UTF-8"),
         );
 
         Ok(chain_pem)
@@ -199,7 +218,7 @@ impl HostSevCertificateProviderImpl {
         chip_id: &Identifier,
         status: &SnpPlatformStatus,
     ) -> Result<Vec<u8>> {
-        let url = Self::get_kds_url(chip_id, status);
+        let url = Self::get_kds_url(chip_id, status, self.generation);
 
         let response = match Self::load_url(&url, false).await {
             Ok(response) => Ok(response),
@@ -237,16 +256,23 @@ impl HostSevCertificateProviderImpl {
             .await
     }
 
-    fn get_kds_url(chip_id: &Identifier, status: &SnpPlatformStatus) -> String {
+    fn get_kds_url(
+        chip_id: &Identifier,
+        status: &SnpPlatformStatus,
+        generation: Generation,
+    ) -> String {
         const KDS_CERT_SITE: &str = "https://kdsintf.amd.com";
         const KDS_VCEK: &str = "/vcek/v1";
-        const SEV_PROD_NAME: &str = "Milan";
 
         let hw_id = Self::get_hw_id_string(chip_id);
         let reported_tcb = status.reported_tcb_version;
         format!(
-            "{KDS_CERT_SITE}{KDS_VCEK}/{SEV_PROD_NAME}/{hw_id}?blSPL={:02}&teeSPL={:02}&snpSPL={:02}&ucodeSPL={:02}",
-            reported_tcb.bootloader, reported_tcb.tee, reported_tcb.snp, reported_tcb.microcode,
+            "{KDS_CERT_SITE}{KDS_VCEK}/{}/{hw_id}?blSPL={:02}&teeSPL={:02}&snpSPL={:02}&ucodeSPL={:02}",
+            generation.titlecase(),
+            reported_tcb.bootloader,
+            reported_tcb.tee,
+            reported_tcb.snp,
+            reported_tcb.microcode,
         )
     }
 }
@@ -259,9 +285,8 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
     use testing::{mock_chip_id, mock_sev_host_firmware, mock_snp_platform_status};
-    use tokio::test;
 
-    #[test]
+    #[tokio::test]
     async fn test_helper_functions() {
         let chip_id = mock_chip_id();
         let status = mock_snp_platform_status();
@@ -272,12 +297,12 @@ mod tests {
         );
 
         assert_eq!(
-            HostSevCertificateProviderImpl::get_kds_url(&chip_id, &status),
+            HostSevCertificateProviderImpl::get_kds_url(&chip_id, &status, Generation::Milan),
             MOCK_AMD_KEY_SERVER_URL
         );
     }
 
-    #[test]
+    #[tokio::test]
     async fn test_certificate_chain_with_cache() {
         // Filenames on ext4 must be <= 255 bytes
         assert!(MOCK_CACHE_FILENAME.len() <= 255);
@@ -310,7 +335,11 @@ mod tests {
             .expect_get_identifier()
             .return_once(move || Ok(non_existing_chip_id));
 
-        let mut provider = HostSevCertificateProvider::new_for_test(cache_dir, Box::new(firmware));
+        let mut provider = HostSevCertificateProvider::new_for_test(
+            cache_dir,
+            Box::new(firmware),
+            Generation::Milan,
+        );
 
         let chain_pem = provider
             .load_certificate_chain_pem()
@@ -324,7 +353,7 @@ mod tests {
             "Chain should contain exactly 3 certificates (VCEK, ASK, ARK)"
         );
     }
-    #[test]
+    #[tokio::test]
     async fn test_firmware_error() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
@@ -335,16 +364,20 @@ mod tests {
             .return_once(|| Err(sev::error::UserApiError::Unknown));
 
         assert!(
-            HostSevCertificateProvider::new_for_test(cache_dir, Box::new(erroring_firmware))
-                .load_certificate_chain_pem()
-                .await
-                .expect_err("Expected error")
-                .to_string()
-                .contains("Failed to get SNP platform status")
+            HostSevCertificateProvider::new_for_test(
+                cache_dir,
+                Box::new(erroring_firmware),
+                Generation::Milan,
+            )
+            .load_certificate_chain_pem()
+            .await
+            .expect_err("Expected error")
+            .to_string()
+            .contains("Failed to get SNP platform status")
         );
     }
 
-    #[test]
+    #[tokio::test]
     async fn test_invalid_cached_certificate() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
@@ -358,16 +391,20 @@ mod tests {
         fs::write(&cache_path, b"invalid der data").unwrap();
 
         assert!(
-            HostSevCertificateProvider::new_for_test(cache_dir, Box::new(mock_sev_host_firmware()))
-                .load_certificate_chain_pem()
-                .await
-                .expect_err("Expected error")
-                .to_string()
-                .contains("Failed to parse VCEK")
+            HostSevCertificateProvider::new_for_test(
+                cache_dir,
+                Box::new(mock_sev_host_firmware()),
+                Generation::Milan,
+            )
+            .load_certificate_chain_pem()
+            .await
+            .expect_err("Expected error")
+            .to_string()
+            .contains("Failed to parse VCEK")
         );
     }
 
-    #[test]
+    #[tokio::test]
     async fn test_load_from_amd_key_server() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
@@ -375,6 +412,7 @@ mod tests {
         let mut provider = HostSevCertificateProvider::new_for_test(
             cache_dir.clone(),
             Box::new(mock_sev_host_firmware()),
+            Generation::Milan,
         );
 
         // First call should fetch from AMD server and cache
@@ -395,5 +433,22 @@ mod tests {
         let cached_data =
             fs::read(cache_dir.join(MOCK_CACHE_FILENAME)).expect("Could not read cached data");
         assert!(!cached_data.is_empty(), "Cached VCEK should not be empty");
+    }
+
+    #[test]
+    fn test_builtin_ask_ark_are_valid_utf8() {
+        for cert in [
+            // Milan
+            sev::certs::snp::builtin::milan::ASK,
+            sev::certs::snp::builtin::milan::ARK,
+            // Genoa
+            sev::certs::snp::builtin::genoa::ASK,
+            sev::certs::snp::builtin::genoa::ARK,
+            // Turin
+            sev::certs::snp::builtin::turin::ASK,
+            sev::certs::snp::builtin::turin::ARK,
+        ] {
+            std::str::from_utf8(cert).expect("Cert is not valid UTF-8");
+        }
     }
 }
