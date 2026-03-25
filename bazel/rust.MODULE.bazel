@@ -1900,6 +1900,10 @@ crate.spec(
     version = "~1.244.0",
 )
 crate.spec(
+    package = "webpki-roots",
+    version = "1.0.6",
+)
+crate.spec(
     package = "which",
     version = "^4.2.2",
 )

@@ -11,11 +11,12 @@ use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tree_hash::{LabeledTree, Path, lookup_path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{ReplicaLogger, fatal, info, warn};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_registry_client_helpers::{
-    crypto::CryptoRegistry, node::NodeRegistry, node_operator::ConnectionEndpoint,
-    subnet::SubnetRegistry,
+    api_boundary_node::ApiBoundaryNodeRegistry, crypto::CryptoRegistry, node::NodeRegistry,
+    node_operator::ConnectionEndpoint, subnet::SubnetRegistry,
 };
 use ic_types::{
     NodeId, RegistryVersion, SubnetId,
@@ -33,7 +34,7 @@ use tokio::{
     task::JoinHandle,
     time::{sleep, timeout},
 };
-use tokio_rustls::TlsConnector;
+use tokio_rustls::{TlsConnector, client::TlsStream};
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
@@ -74,6 +75,7 @@ pub fn start_nns_delegation_manager(
     config: Config,
     log: ReplicaLogger,
     rt_handle: tokio::runtime::Handle,
+    node_id: NodeId,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
@@ -84,6 +86,7 @@ pub fn start_nns_delegation_manager(
     let manager = DelegationManager {
         config,
         log,
+        node_id,
         subnet_id,
         nns_subnet_id,
         registry_client,
@@ -107,6 +110,7 @@ pub fn start_nns_delegation_manager(
 struct DelegationManager {
     config: Config,
     log: ReplicaLogger,
+    node_id: NodeId,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
@@ -123,6 +127,7 @@ impl DelegationManager {
             &self.config,
             &self.log,
             &self.rt_handle,
+            self.node_id,
             self.subnet_id,
             self.nns_subnet_id,
             self.registry_client.as_ref(),
@@ -172,6 +177,7 @@ async fn load_root_delegation(
     config: &Config,
     log: &ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
+    node_id: NodeId,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
@@ -202,6 +208,7 @@ async fn load_root_delegation(
             config,
             log,
             rt_handle,
+            node_id,
             subnet_id,
             nns_subnet_id,
             registry_client,
@@ -235,23 +242,13 @@ async fn try_fetch_delegation_from_nns(
     config: &Config,
     log: &ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
+    node_id: NodeId,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     tls_config: &dyn TlsConfig,
     metrics: &DelegationManagerMetrics,
 ) -> Result<NNSDelegationBuilder, BoxError> {
-    let (peer_id, node) = match get_random_node_from_nns_subnet(registry_client, nns_subnet_id) {
-        Ok(node_topology) => node_topology,
-        Err(err) => {
-            fatal!(
-                log,
-                "Could not find a node from the root subnet to talk to. Error :{}",
-                err
-            );
-        }
-    };
-
     let envelope = HttpRequestEnvelope {
         content: HttpReadStateContent::ReadState {
             read_state: HttpReadState {
@@ -292,24 +289,24 @@ async fn try_fetch_delegation_from_nns(
     let mut request_sender = timeout(
         CONNECTION_TIMEOUT,
         connect(
-            log.clone(),
+            log,
             rt_handle,
-            peer_id,
-            node,
+            node_id,
+            nns_subnet_id,
             registry_client,
             tls_config,
         ),
     )
     .await
     .map_err(|_| {
-        format!("Timed out while connecting to the nns node after {CONNECTION_TIMEOUT:?}")
+        format!("Timed out while connecting to the node after {CONNECTION_TIMEOUT:?}")
     })??;
 
     let uri = format!("/api/v2/subnet/{nns_subnet_id}/read_state");
 
     info!(
         log,
-        "Attempt to fetch HTTPS delegation from root subnet node, uri = `{uri}`."
+        "Attempt to fetch HTTPS delegation from the NNS, uri = `{uri}`."
     );
 
     let nns_request = Request::builder()
@@ -325,8 +322,8 @@ async fn try_fetch_delegation_from_nns(
     .await
     .map_err(|_| {
         format!(
-            "Timed out while sending request to the nns \
-            node after {NNS_DELEGATION_REQUEST_SEND_TIMEOUT:?}",
+            "Timed out while sending request to the node \
+            after {NNS_DELEGATION_REQUEST_SEND_TIMEOUT:?}",
         )
     })??;
 
@@ -425,13 +422,62 @@ async fn try_fetch_delegation_from_nns(
 }
 
 async fn connect(
-    log: ReplicaLogger,
+    log: &ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
+    node_id: NodeId,
+    nns_subnet_id: SubnetId,
+    registry_client: &dyn RegistryClient,
+    tls_config: &(dyn TlsConfig + Send + Sync),
+) -> Result<SendRequest<Body>, BoxError> {
+    let node_reward_type = get_node_reward_type(registry_client, node_id).unwrap_or_else(|err| {
+        warn!(log, "Could not determine the reward type: {err}");
+        NodeRewardType::Unspecified
+    });
+
+    let tls_stream = match node_reward_type {
+        NodeRewardType::Unspecified
+        | NodeRewardType::Type0
+        | NodeRewardType::Type1
+        | NodeRewardType::Type2
+        | NodeRewardType::Type3
+        | NodeRewardType::Type3dot1
+        | NodeRewardType::Type1dot1 => {
+            let (peer_id, node) = get_random_node_from_nns_subnet(registry_client, nns_subnet_id)
+                .map_err(|err| {
+                format!("Could not find a node from the root subnet to talk to: {err}")
+            })?;
+
+            connect_to_nns_node(log, peer_id, node, registry_client, tls_config).await
+        }
+        NodeRewardType::Type4 => {
+            let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
+                .map_err(|err| format!("Could not find an API boundary node to talk to: {err}"))?;
+
+            connect_to_api_bn(log, api_bn_id, domain).await
+        }
+    }?;
+
+    let (request_sender, connection) =
+        hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
+
+    // Spawn a task to poll the connection, driving the HTTP state
+    let log_cl = log.clone();
+    rt_handle.spawn(async move {
+        if let Err(err) = connection.await {
+            warn!(log_cl, "Polling connection failed: {err:?}.");
+        }
+    });
+
+    Ok(request_sender)
+}
+
+async fn connect_to_nns_node(
+    log: &ReplicaLogger,
     peer_id: NodeId,
     node: ConnectionEndpoint,
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
-) -> Result<SendRequest<Body>, BoxError> {
+) -> Result<TlsStream<TcpStream>, BoxError> {
     let registry_version = registry_client.get_latest_version();
 
     let ip_addr = node
@@ -468,21 +514,59 @@ async fn connect(
         .await
         .map_err(|err| format!("Could not establish TLS stream to node {addr}. {err:?}."))?;
 
+    Ok(tls_stream)
+}
+
+async fn connect_to_api_bn(
+    log: &ReplicaLogger,
+    api_bn_id: NodeId,
+    domain: String,
+) -> Result<TlsStream<TcpStream>, BoxError> {
+    let mut root_store = rustls::RootCertStore::empty();
+    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let tls_client_config = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+
+    let addr = (domain.as_str(), 443 as u16);
+    info!(log, "Establishing TCP connection to {api_bn_id} @ {addr:?}");
+    let tcp_stream: TcpStream = TcpStream::connect(addr)
+        .await
+        .map_err(|err| format!("Could not connect to node {api_bn_id}. {err:?}."))?;
+
+    let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
+
     info!(
         log,
-        "Establishing HTTP connection to {peer_id}. Tls stream: {tls_stream:?}"
+        "Establishing TLS stream to {api_bn_id}. Tcp stream: {tcp_stream:?}"
     );
-    let (request_sender, connection) =
-        hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
+    let tls_stream = tls_connector
+        .connect(
+            domain
+                .clone()
+                .try_into()
+                .map_err(|err| format!("Invalid API BN domain {domain}: {err}"))?,
+            tcp_stream,
+        )
+        .await
+        .map_err(|err| format!("Could not establish TLS stream to node {api_bn_id}. {err:?}."))?;
 
-    // Spawn a task to poll the connection, driving the HTTP state
-    rt_handle.spawn(async move {
-        if let Err(err) = connection.await {
-            warn!(log, "Polling connection failed: {err:?}.");
-        }
-    });
+    Ok(tls_stream)
+}
 
-    Ok(request_sender)
+fn get_node_reward_type(
+    registry_client: &dyn RegistryClient,
+    node_id: NodeId,
+) -> Result<NodeRewardType, String> {
+    match registry_client.get_node_record(node_id, registry_client.get_latest_version()) {
+        // node_reward_type() defaults to `Unspecified` if the field is unset or set to an
+        // invalid enum value
+        Ok(Some(record)) => Ok(record.node_reward_type()),
+        Ok(None) => Err(format!("Node record for node id {node_id} not found",)),
+        Err(err) => Err(format!(
+            "Failed to get node record for node id {node_id}: {err}",
+        )),
+    }
 }
 
 fn get_random_node_from_nns_subnet(
@@ -506,9 +590,34 @@ fn get_random_node_from_nns_subnet(
     ))?;
     match registry_client.get_node_record(*nns_node, registry_client.get_latest_version()) {
         Ok(Some(node)) => Ok((*nns_node, node.http.ok_or("No http endpoint for node")?)),
-        Ok(None) => Err(format!("No transport info found for nns node. {nns_node}")),
+        Ok(None) => Err(format!("No node record found for nns node. {nns_node}")),
         Err(err) => Err(format!(
             "failed to get node record for nns node {nns_node}. Err: {err}"
+        )),
+    }
+}
+
+fn get_random_api_boundary_node(
+    registry_client: &dyn RegistryClient,
+) -> Result<(NodeId, String), String> {
+    use rand::seq::SliceRandom;
+
+    let api_bns =
+        match registry_client.get_api_boundary_node_ids(registry_client.get_latest_version()) {
+            Ok(api_bns) => Ok(api_bns),
+            Err(err) => Err(format!("Failed to get API BNs from registry: {err}")),
+        }?;
+
+    // Randomly choose a node from the API boundary nodes.
+    let mut rng = rand::thread_rng();
+    let api_bn = api_bns.choose(&mut rng).ok_or(format!(
+        "Failed to choose random API boundary node. API BN list: {api_bns:?}"
+    ))?;
+    match registry_client.get_node_record(*api_bn, registry_client.get_latest_version()) {
+        Ok(Some(node)) => Ok((*api_bn, node.domain.ok_or("No domain for node")?)),
+        Ok(None) => Err(format!("No node record found for API BN. {api_bn}")),
+        Err(err) => Err(format!(
+            "failed to get node record for nns node {api_bn}. Err: {err}"
         )),
     }
 }
