@@ -83,8 +83,8 @@ where
     }
 }
 
-// Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
-// This function waits until it detects in the subnet node's journal that consensus is halted.
+/// Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
+/// This function waits until it detects in the subnet node's journal that consensus is halted.
 pub fn halt_subnet(
     admin_helper: &AdminHelper,
     subnet_node: &IcNodeSnapshot,
@@ -125,8 +125,8 @@ pub fn halt_subnet(
     info!(logger, "Subnet {subnet_id} halted.");
 }
 
-// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
-// URL.
+/// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
+/// URL.
 pub fn unhalt_subnet(
     admin_helper: &AdminHelper,
     subnet_id: SubnetId,
