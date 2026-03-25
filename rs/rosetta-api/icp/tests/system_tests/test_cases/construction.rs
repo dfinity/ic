@@ -73,7 +73,7 @@ fn test_burn_via_construction_api_transaction_hash_mismatch() {
         let user_account_id = AccountIdentifier::new(PrincipalId(user_principal), None);
 
         // Give user1 enough ICP to cover the burn amount.
-        let initial_balance = 1_000_000_000u64; // 10 ICP
+        let initial_balance = 1_000_000_000_u64; // 10 ICP
         let env = RosettaTestingEnvironment::builder()
             .with_minting_account(minting_account)
             .with_initial_balances(HashMap::from([(
@@ -89,7 +89,7 @@ fn test_burn_via_construction_api_transaction_hash_mismatch() {
         // Burns require fee = 0 on the ledger side, so we construct the
         // operations manually rather than using `build_transfer_operations`
         // (which would include the standard transfer fee).
-        let burn_amount = 100_000_000u64; // 1 ICP
+        let burn_amount = 100_000_000_u64; // 1 ICP
         let minting_account_id: AccountIdentifier = minting_account.into();
         let currency = Currency {
             symbol: "ICP".to_string(),
@@ -154,8 +154,8 @@ fn test_burn_via_construction_api_transaction_hash_mismatch() {
                 &user_identity,
                 network_id.clone(),
                 operations,
-                Some(0u64), // memo
-                None,       // created_at_time (Rosetta will generate one)
+                Some(0_u64), // memo
+                None,        // created_at_time (Rosetta will generate one)
             )
             .await
             .expect("Failed to submit burn transaction via Rosetta construction API");
@@ -165,7 +165,7 @@ fn test_burn_via_construction_api_transaction_hash_mismatch() {
         // Wait for Rosetta to sync the new block.
         // The ledger starts with a genesis mint block (index 0), so the burn
         // will land at block index 1.
-        let burn_block_index = 1u64;
+        let burn_block_index = 1_u64;
         wait_for_rosetta_to_sync_up_to_block(
             &env.rosetta_client,
             network_id.clone(),
