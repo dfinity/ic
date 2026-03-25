@@ -440,12 +440,12 @@ async fn fetch_latest_computed_root_hashes_from_logs(
 fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
     let session = node.block_on_ssh_session().unwrap();
     session.set_timeout(5 * 60 * 1000);
-    if !JournalStreamer::new(session)
-        .follow()
-        .max_lines(1)
-        .contains("Orchestrator shut down gracefully")
-        .unwrap_or_default()
-    {
-        panic!("Orchestrator did not shut down gracefully");
-    }
+    assert!(
+        JournalStreamer::new(session)
+            .follow()
+            .max_lines(1)
+            .contains("Orchestrator shut down gracefully")
+            .unwrap_or_default(),
+        "Orchestrator did not shut down gracefully"
+    );
 }
