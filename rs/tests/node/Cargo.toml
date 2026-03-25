@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
+chrono = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-nns-constants = { path = "../../nns/constants" }
@@ -50,3 +51,7 @@ path = "kill_start_test.rs"
 [[bin]]
 name = "guestos-no-failed-systemd-units"
 path = "guestos_no_failed_systemd_units.rs"
+
+[[bin]]
+name = "rs/tests/node/xfs_corruption_repair_test"
+path = "xfs_corruption_repair_test.rs"

@@ -145,6 +145,19 @@ system_test(
     test_driver_target = ":kill_start_test_bin",
 )
 
+system_test(
+    name = "xfs_corruption_repair_test",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:chrono",
+    ],
+)
+
 # Tests that no systemd units have failed on GuestOS nodes after they boot.
 system_test(
     name = "guestos_no_failed_systemd_units",
