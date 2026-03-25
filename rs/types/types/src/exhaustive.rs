@@ -1,7 +1,7 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::artifact::IngressMessageId;
-use crate::batch::VetKdAgreement;
+use crate::batch::ChainKeyAgreement;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
@@ -303,7 +303,7 @@ impl ExhaustiveSet for RejectCode {
 
 impl ExhaustiveSet for PrincipalId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let mut data = [0u8; Self::MAX_LENGTH_IN_BYTES];
+        let mut data = [0_u8; Self::MAX_LENGTH_IN_BYTES];
         rng.fill_bytes(&mut data);
         vec![Self::new(data.len(), data)]
     }
@@ -685,7 +685,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
 
 impl ExhaustiveSet for Witness {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let mut digest = [0u8; 32];
+        let mut digest = [0_u8; 32];
         rng.fill_bytes(&mut digest);
         vec![Witness::new_for_testing(Digest(digest))]
     }
@@ -1021,7 +1021,7 @@ impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
     }
 }
 
-impl HasId<CallbackId> for VetKdAgreement {}
+impl HasId<CallbackId> for ChainKeyAgreement {}
 impl HasId<IngressMessageId> for SignedRequestBytes {}
 impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
 impl HasId<PseudoRandomId> for CompletedSignature {}

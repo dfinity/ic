@@ -433,7 +433,7 @@ fn eval(ops_bytes: OpsBytes) {
                         break;
                     }
                     // Allocate a megabyte more.
-                    a.push(vec![13u8; 1024 * 1024]);
+                    a.push(vec![13_u8; 1024 * 1024]);
                 }
                 std::hint::black_box(a);
             }

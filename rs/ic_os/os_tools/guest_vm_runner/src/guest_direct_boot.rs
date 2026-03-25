@@ -7,6 +7,7 @@ use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use ic_device::mount::{FileSystem, MountOptions, PartitionProvider, PartitionSelector};
 use std::fs::File;
 use tempfile::NamedTempFile;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 const fn const_unwrap(result: std::result::Result<Uuid, uuid::Error>) -> Uuid {
@@ -64,6 +65,7 @@ impl DirectBoot {
 /// * `Err` - If any error occurs during preparation
 pub async fn prepare_direct_boot(
     guest_vm_type: GuestVMType,
+    tee_enabled: bool,
     guest_partition_provider: &dyn PartitionProvider,
 ) -> Result<Option<DirectBoot>> {
     let should_refresh_grubenv = match guest_vm_type {
@@ -98,14 +100,14 @@ pub async fn prepare_direct_boot(
         boot_alternative = boot_alternative.get_opposite();
     }
 
-    println!("Will boot into {boot_alternative} from {guest_vm_type:?} GuestVM");
+    info!("Will boot into {boot_alternative} from {guest_vm_type:?} GuestVM");
 
     // The variable name inside 'boot_args' that contains the kernel command line parameters.
     // Note that this depends on the boot alternative since they contain the root partition and
     // other boot alternative-specific parameters.
-    let (boot_partition_uuid, boot_args_var_name) = match boot_alternative {
-        BootAlternative::A => (A_BOOT_PARTITION_UUID, "BOOT_ARGS_A"),
-        BootAlternative::B => (B_BOOT_PARTITION_UUID, "BOOT_ARGS_B"),
+    let (boot_partition_uuid, boot_args_var_name, tee_boot_args_var_name) = match boot_alternative {
+        BootAlternative::A => (A_BOOT_PARTITION_UUID, "BOOT_ARGS_A", "BOOT_ARGS_TEE_A"),
+        BootAlternative::B => (B_BOOT_PARTITION_UUID, "BOOT_ARGS_B", "BOOT_ARGS_TEE_B"),
     };
 
     let boot_partition = guest_partition_provider
@@ -128,22 +130,39 @@ pub async fn prepare_direct_boot(
     // operation. Therefore, we don't write out grubenv until we can ensure that we'll do a direct
     // boot.
     if !boot_args_path.exists() {
-        println!(
+        info!(
             "No boot_args file found in boot partition {boot_alternative}. Cannot prepare \
              direct boot."
         );
         return Ok(None);
     }
     if !ovmf_sev_path.exists() {
-        println!(
+        info!(
             "No OVMF.fd file found in boot partition {boot_alternative}. Cannot prepare \
              direct boot."
         );
         return Ok(None);
     }
 
-    let boot_args =
-        read_boot_args(&boot_args_path, boot_args_var_name).context("Failed to read boot args")?;
+    // When TEE is enabled, prefer BOOT_ARGS_TEE_{A,B} if present in the file,
+    // falling back to BOOT_ARGS_{A,B} if the TEE variant is not available.
+    let boot_args = if tee_enabled {
+        match read_boot_args(&boot_args_path, tee_boot_args_var_name)? {
+            Some(args) => args,
+            None => {
+                warn!(
+                    "{tee_boot_args_var_name} not found in boot_args for partition \
+                     {boot_alternative}. Falling back to {boot_args_var_name}."
+                );
+                read_boot_args(&boot_args_path, boot_args_var_name)?.with_context(|| {
+                    format!("Variable {boot_args_var_name} not found in boot_args")
+                })?
+            }
+        }
+    } else {
+        read_boot_args(&boot_args_path, boot_args_var_name)?
+            .with_context(|| format!("Variable {boot_args_var_name} not found in boot_args"))?
+    };
 
     let kernel = NamedTempFile::with_prefix("kernel")?;
     let initrd = NamedTempFile::with_prefix("initrd")?;
@@ -226,6 +245,8 @@ mod tests {
     struct ArgsConf {
         boot_args_a: String,
         boot_args_b: String,
+        tee_boot_args_a: Option<String>,
+        tee_boot_args_b: Option<String>,
     }
 
     /// Builder for creating test setups with fluent interface
@@ -246,6 +267,8 @@ mod tests {
                 args_conf: Some(ArgsConf {
                     boot_args_a: "args_a".to_string(),
                     boot_args_b: "args_b".to_string(),
+                    tee_boot_args_a: None,
+                    tee_boot_args_b: None,
                 }),
                 create_kernel_files: true,
                 create_ovmf_sev_file: true,
@@ -273,7 +296,21 @@ mod tests {
             self.args_conf = Some(ArgsConf {
                 boot_args_a: args_a.to_string(),
                 boot_args_b: args_b.to_string(),
+                tee_boot_args_a: None,
+                tee_boot_args_b: None,
             });
+            self
+        }
+
+        fn with_tee_boot_args(mut self, tee_args_a: &str, tee_args_b: &str) -> Self {
+            let conf = self.args_conf.get_or_insert_with(|| ArgsConf {
+                boot_args_a: "args_a".to_string(),
+                boot_args_b: "args_b".to_string(),
+                tee_boot_args_a: None,
+                tee_boot_args_b: None,
+            });
+            conf.tee_boot_args_a = Some(tee_args_a.to_string());
+            conf.tee_boot_args_b = Some(tee_args_b.to_string());
             self
         }
 
@@ -298,6 +335,7 @@ mod tests {
             let a_boot_partition = create_boot_partition(
                 self.args_conf.as_ref().map(|v| ArgsConf {
                     boot_args_b: "SHOULD NOT BE USED".to_string(),
+                    tee_boot_args_b: None,
                     ..v.clone()
                 }),
                 self.create_kernel_files,
@@ -306,6 +344,7 @@ mod tests {
             let b_boot_partition = create_boot_partition(
                 self.args_conf.map(|v| ArgsConf {
                     boot_args_a: "SHOULD NOT BE USED".to_string(),
+                    tee_boot_args_a: None,
                     ..v
                 }),
                 self.create_kernel_files,
@@ -343,8 +382,9 @@ mod tests {
         async fn prepare_direct_boot(
             &self,
             guest_vm_type: GuestVMType,
+            tee_enabled: bool,
         ) -> Result<Option<DirectBoot>> {
-            prepare_direct_boot(guest_vm_type, &self.partition_provider).await
+            prepare_direct_boot(guest_vm_type, tee_enabled, &self.partition_provider).await
         }
 
         fn get_grubenv(&self) -> GrubEnv {
@@ -395,11 +435,19 @@ mod tests {
         if let Some(ArgsConf {
             boot_args_a,
             boot_args_b,
+            tee_boot_args_a,
+            tee_boot_args_b,
         }) = args_conf
         {
             let mut boot_args_file = File::create(boot_dir.path().join("boot_args")).unwrap();
             writeln!(boot_args_file, "BOOT_ARGS_A=\"{boot_args_a}\"").unwrap();
             writeln!(boot_args_file, "BOOT_ARGS_B=\"{boot_args_b}\"").unwrap();
+            if let Some(tee_a) = tee_boot_args_a {
+                writeln!(boot_args_file, "BOOT_ARGS_TEE_A=\"{tee_a}\"").unwrap();
+            }
+            if let Some(tee_b) = tee_boot_args_b {
+                writeln!(boot_args_file, "BOOT_ARGS_TEE_B=\"{tee_b}\"").unwrap();
+            }
         }
 
         if create_kernel_files {
@@ -421,7 +469,7 @@ mod tests {
             .build();
 
         let direct_boot = setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -439,7 +487,7 @@ mod tests {
             .build();
 
         let direct_boot = setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -454,7 +502,7 @@ mod tests {
         let setup = TestSetupBuilder::new().build();
 
         let direct_boot = setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -470,7 +518,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -485,7 +533,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -500,7 +548,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -515,7 +563,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -530,7 +578,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -545,7 +593,7 @@ mod tests {
             .build();
 
         setup
-            .prepare_direct_boot(GuestVMType::Upgrade)
+            .prepare_direct_boot(GuestVMType::Upgrade, false)
             .await
             .expect("prepare_direct_boot failed")
             .expect("prepare_direct_boot returned None");
@@ -560,7 +608,7 @@ mod tests {
     async fn test_missing_grub_partition() {
         let provider = MockPartitionProvider::new(HashMap::new());
 
-        let result = prepare_direct_boot(GuestVMType::Default, &provider).await;
+        let result = prepare_direct_boot(GuestVMType::Default, false, &provider).await;
 
         assert!(
             result
@@ -583,7 +631,7 @@ mod tests {
         );
         let provider = MockPartitionProvider::new(partitions);
 
-        let result = prepare_direct_boot(GuestVMType::Default, &provider).await;
+        let result = prepare_direct_boot(GuestVMType::Default, false, &provider).await;
 
         assert!(
             result
@@ -603,7 +651,7 @@ mod tests {
         let debug_error = format!(
             "{:?}",
             setup
-                .prepare_direct_boot(GuestVMType::Default)
+                .prepare_direct_boot(GuestVMType::Default, false)
                 .await
                 .expect_err("prepare_direct_boot should fail")
         );
@@ -618,7 +666,7 @@ mod tests {
             .build();
 
         let result = setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed");
         assert!(result.is_none());
@@ -638,7 +686,7 @@ mod tests {
 
         assert!(
             setup
-                .prepare_direct_boot(GuestVMType::Default)
+                .prepare_direct_boot(GuestVMType::Default, false)
                 .await
                 .expect_err("prepare_direct_boot should fail")
                 .to_string()
@@ -654,7 +702,7 @@ mod tests {
             .build();
 
         let result = setup
-            .prepare_direct_boot(GuestVMType::Default)
+            .prepare_direct_boot(GuestVMType::Default, false)
             .await
             .expect("prepare_direct_boot failed");
         assert!(result.is_none());
@@ -669,12 +717,77 @@ mod tests {
 
         assert!(
             setup
-                .prepare_direct_boot(GuestVMType::Upgrade)
+                .prepare_direct_boot(GuestVMType::Upgrade, false)
                 .await
                 .expect("prepare_direct_boot failed")
                 .expect("prepare_direct_boot returned None")
                 .kernel_cmdline
                 .contains("args_b")
         );
+    }
+
+    #[tokio::test]
+    async fn test_tee_uses_tee_boot_args_a() {
+        let setup = TestSetupBuilder::new()
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
+            .with_tee_boot_args("tee_args_a", "tee_args_b")
+            .build();
+
+        let direct_boot = setup
+            .prepare_direct_boot(GuestVMType::Default, true)
+            .await
+            .expect("prepare_direct_boot failed")
+            .expect("prepare_direct_boot returned None");
+
+        assert_eq!(direct_boot.kernel_cmdline, "tee_args_a");
+    }
+
+    #[tokio::test]
+    async fn test_tee_uses_tee_boot_args_b() {
+        let setup = TestSetupBuilder::new()
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::Stable))
+            .with_tee_boot_args("tee_args_a", "tee_args_b")
+            .build();
+
+        let direct_boot = setup
+            .prepare_direct_boot(GuestVMType::Default, true)
+            .await
+            .expect("prepare_direct_boot failed")
+            .expect("prepare_direct_boot returned None");
+
+        assert_eq!(direct_boot.kernel_cmdline, "tee_args_b");
+    }
+
+    #[tokio::test]
+    async fn test_tee_falls_back_to_regular_boot_args_when_tee_absent() {
+        // No TEE boot args in the file: should fall back to BOOT_ARGS_A/B
+        let setup = TestSetupBuilder::new()
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
+            .build();
+
+        let direct_boot = setup
+            .prepare_direct_boot(GuestVMType::Default, true)
+            .await
+            .expect("prepare_direct_boot failed")
+            .expect("prepare_direct_boot returned None");
+
+        assert_eq!(direct_boot.kernel_cmdline, "args_a");
+    }
+
+    #[tokio::test]
+    async fn test_non_tee_ignores_tee_boot_args() {
+        // Even if TEE boot args are present, non-TEE boot should use BOOT_ARGS_A/B
+        let setup = TestSetupBuilder::new()
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
+            .with_tee_boot_args("tee_args_a", "tee_args_b")
+            .build();
+
+        let direct_boot = setup
+            .prepare_direct_boot(GuestVMType::Default, false)
+            .await
+            .expect("prepare_direct_boot failed")
+            .expect("prepare_direct_boot returned None");
+
+        assert_eq!(direct_boot.kernel_cmdline, "args_a");
     }
 }

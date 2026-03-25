@@ -19,6 +19,11 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
+## Because the container is used for both CI and development, we need to have a user that matches the UID of the runner (1001) and a user that matches the UID of ubuntu (1000)
+RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
+    # both buildifier and ubuntu users need to be able to access root permissions
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
 # Install a version of google-android-platform-tools-installer with e2fsdroid
 RUN export DEBIAN_FRONTEND=noninteractive && \
     mkdir e2fsdroid && \
@@ -39,18 +44,12 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     cd .. && \
     rm -rf e2fsdroid
 
-ARG mkcert_version=1.4.4
-ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
-RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /usr/local/bin/mkcert && \
-    echo "$mkcert_sha /usr/local/bin/mkcert" | sha256sum --check && \
-    chmod +x /usr/local/bin/mkcert
-
 ARG bazelisk_sha=22e7d3a188699982f661cf4687137ee52d1f24fec1ec893d91a6c4d791a75de8
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
-# Add mold linker
+# Add mold linker - required because it is 6x faster than ld
 ARG MOLD_BIN="/usr/local/bin/mold"
 ARG MOLD_VERSION=2.37.1
 RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
@@ -60,11 +59,6 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
 # Add motoko compiler
 ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
-
-# Create user groups needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
-    # CI before script requires sudo \
-    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Install AFLplusplus for fuzzing
 # LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
@@ -84,43 +78,36 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
+# install cargo with the ubuntu user
 USER ubuntu
-# Set PATH for ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-
-# Add Rust/Cargo support
-RUN mkdir -p /tmp/rust-version/
-COPY rust-toolchain.toml /tmp/rust-version/rust-toolchain.toml
-# Read the channel from the toolchain file
-RUN sed </tmp/rust-version/rust-toolchain.toml -n 's/^channel = "\(.*\)"$/\1/p' > /tmp/rust-version/version
-RUN echo "Rust version:" "$(cat /tmp/rust-version/version)"
-RUN curl --fail https://sh.rustup.rs -sSf \
-    | sh -s -- -y --default-toolchain "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" --no-modify-path && \
-    rustup default "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" && \
+COPY rust-toolchain.toml /tmp/rust-toolchain.toml
+RUN RUST_VERSION=$(sed -n 's/^channel = "\(.*\)"$/\1/p' /tmp/rust-toolchain.toml) && \
+    echo "Rust version: $RUST_VERSION" && \
+    curl --fail https://sh.rustup.rs -sSf \
+    | sh -s -- -y --default-toolchain "${RUST_VERSION}-x86_64-unknown-linux-gnu" --no-modify-path && \
+    rustup default "${RUST_VERSION}-x86_64-unknown-linux-gnu" && \
     rustup target add wasm32-unknown-unknown && \
-    rustup component add clippy
-RUN rm -rf /tmp/rust-version
+    rustup component add clippy && \
+    sudo rm /tmp/rust-toolchain.toml
 
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
-# Add zshrc generated from zsh-newuser-install (option 2)
-COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
+# switch back to root user after cargo install so that we have permissions to install additional packages
+USER root
 WORKDIR /
-# Use buildifier (uid 1001) if /entrypoint.sh is overriden
-# In GitHub that is the case and we need 1001 and we set it via ARG.
-ARG CI_USER="root"
-USER $CI_USER
 CMD ["/bin/bash"]
 
 FROM base as build
 
+USER buildifier
+
 FROM base as dev
 
-# Temporarily switch to root to install development packages.
-# We will switch back to the non-root user at the end of this stage.
-USER root
+# Add zshrc generated from zsh-newuser-install (option 2)
+COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
 # Install additional packages for development but not needed on CI:
 ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
@@ -130,14 +117,14 @@ RUN apt -yq update && \
     rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
 
 # Install GitHub CLI `gh` following: https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian
-RUN (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
-	&& sudo mkdir -p -m 755 /etc/apt/keyrings \
+RUN (type -p wget >/dev/null || (apt update && apt install wget -y)) \
+	&& mkdir -p -m 755 /etc/apt/keyrings \
 	&& out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-	&& cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-	&& sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-	&& sudo mkdir -p -m 755 /etc/apt/sources.list.d \
-	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-	&& sudo apt update \
-	&& sudo apt install gh -y
+	&& cat $out | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+	&& chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+	&& mkdir -p -m 755 /etc/apt/sources.list.d \
+	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+	&& apt update \
+	&& apt install gh -y
 
-USER $CI_USER
+USER ubuntu

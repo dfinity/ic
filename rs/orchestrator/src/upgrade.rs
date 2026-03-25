@@ -12,7 +12,7 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    ImageUpgrader, Rebooting,
+    ImageUpgrader, ManagebootRunner, Rebooting,
     error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -32,7 +32,8 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, HashMap},
-    path::PathBuf,
+    ffi::OsString,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
@@ -60,8 +61,8 @@ pub(crate) enum OrchestratorControlFlow {
 
 pub struct ReplicaProcess {
     version: ReplicaVersion,
-    binary: String,
-    args: Vec<String>,
+    binary: PathBuf,
+    args: Vec<OsString>,
 }
 
 impl Process for ReplicaProcess {
@@ -73,15 +74,15 @@ impl Process for ReplicaProcess {
         &self.version
     }
 
-    fn get_binary(&self) -> &str {
+    fn get_binary(&self) -> &Path {
         &self.binary
     }
 
-    fn get_args(&self) -> &[String] {
+    fn get_args(&self) -> &[OsString] {
         &self.args
     }
 
-    fn get_env(&self) -> HashMap<String, String> {
+    fn get_env(&self) -> HashMap<OsString, OsString> {
         HashMap::new()
     }
 }
@@ -117,7 +118,8 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
+    replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    manageboot_runner: Box<dyn ManagebootRunner>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
@@ -139,7 +141,8 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
+        replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        manageboot_runner: Box<dyn ManagebootRunner>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
@@ -158,6 +161,7 @@ impl Upgrade {
             registry,
             metrics,
             replica_process,
+            manageboot_runner,
             cup_provider,
             subnet_assignment,
             node_id,
@@ -647,20 +651,16 @@ impl Upgrade {
         info!(self.logger, "Starting new replica process");
         self.metrics.replica_process_start_attempts.inc();
         let cup_path = self.cup_provider.get_cup_path();
-        let replica_binary = self
-            .ic_binary_dir
-            .join("replica")
-            .as_path()
-            .display()
-            .to_string();
+        let replica_binary = self.ic_binary_dir.join("replica");
         let cmd = vec![
-            format!("--replica-version={}", replica_version.as_ref()),
+            format!("--replica-version={}", replica_version.as_ref()).into(),
             format!(
                 "--config-file={}",
                 self.replica_config_file.as_path().display()
-            ),
-            format!("--catch-up-package={}", cup_path.as_path().display()),
-            format!("--force-subnet={}", subnet_id),
+            )
+            .into(),
+            format!("--catch-up-package={}", cup_path.as_path().display()).into(),
+            format!("--force-subnet={}", subnet_id).into(),
         ];
 
         self.replica_process
@@ -689,16 +689,16 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         self.prepared_upgrade_version = version
     }
 
-    fn binary_dir(&self) -> &PathBuf {
-        &self.ic_binary_dir
-    }
-
     fn image_path(&self) -> &PathBuf {
         &self.image_path
     }
 
     fn data_dir(&self) -> Option<&PathBuf> {
         Some(&self.orchestrator_data_directory)
+    }
+
+    fn manageboot_runner(&self) -> &dyn ManagebootRunner {
+        self.manageboot_runner.as_ref()
     }
 
     fn get_release_package_urls_and_hash(
@@ -1205,20 +1205,65 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use mockall::mock;
+    use nix::unistd::Pid;
     use prost::Message;
     use rand::RngCore;
     use rstest::rstest;
     use slog::Level;
-    use std::collections::BTreeSet;
-    use std::io::Write;
-    use std::os::fd::AsRawFd;
-    use std::os::unix::fs::PermissionsExt;
-    use std::{collections::BTreeMap, path::Path};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        ffi::OsStr,
+        path::Path,
+        process::Output,
+    };
     use tempfile::{TempDir, tempdir};
 
     impl Upgrade {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
             *self.subnet_assignment.read().unwrap()
+        }
+    }
+
+    pub(crate) struct FakeProcessManager {
+        running: bool,
+    }
+    impl FakeProcessManager {
+        pub(crate) fn new() -> Self {
+            Self { running: false }
+        }
+    }
+    impl<P: Process> ProcessManager<P> for FakeProcessManager {
+        fn start(&mut self, _process: P) -> std::io::Result<()> {
+            self.running = true;
+            Ok(())
+        }
+
+        fn stop(&mut self) -> std::io::Result<()> {
+            self.running = false;
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            self.running
+        }
+
+        fn get_pid(&self) -> Option<Pid> {
+            // Return a dummy PID if the process is running.
+            self.running.then_some(Pid::from_raw(12345))
+        }
+    }
+
+    pub struct FakeManagebootRunner;
+    #[async_trait]
+    impl ManagebootRunner for FakeManagebootRunner {
+        async fn run(&self, _args: &[&OsStr]) -> std::io::Result<Output> {
+            // Mock implementation that simulates a successful execution of the manageboot command.
+            use std::os::unix::process::ExitStatusExt;
+            Ok(Output {
+                status: std::process::ExitStatus::from_raw(0),
+                stdout: vec![],
+                stderr: vec![],
+            })
         }
     }
 
@@ -1379,7 +1424,7 @@ mod tests {
         let membership_vec = membership.into_iter().collect::<Vec<_>>();
 
         let rng = &mut reproducible_rng();
-        let mut target_id_bytes = [0u8; 32];
+        let mut target_id_bytes = [0_u8; 32];
         rng.fill_bytes(&mut target_id_bytes);
         let target_id = NiDkgTargetId::new(target_id_bytes);
 
@@ -1454,29 +1499,6 @@ mod tests {
             .unwrap();
     }
 
-    // Create a fake binary file with the given bash script content
-    fn create_binary(binary_path: &Path, bash_script: &str) {
-        let mut file = std::fs::File::create(binary_path).unwrap();
-        file.write_all(bash_script.as_bytes()).unwrap();
-        file.set_permissions(std::fs::Permissions::from_mode(0o755))
-            .unwrap();
-
-        // The ugly hack below is to work around rstest running the tests in multiple threads but
-        // in the same process. Each of them creates their own binary file and later executes it.
-        // This means a parallel test might still have the file open for writing while the current
-        // one is trying to execute it. This yields ETXTBSY errors on Linux. To avoid this, we use
-        // the below hack, taken from https://github.com/rust-lang/rust/issues/114554, see
-        // "Implementation of the `flock` algorithm"
-        std::thread::sleep(std::time::Duration::from_micros(2));
-
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-        drop(file);
-
-        let file = std::fs::File::open(binary_path).unwrap();
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_SH) };
-        drop(file);
-    }
-
     async fn create_upgrade_for_test(
         dir: &Path,
         logger: ReplicaLogger,
@@ -1503,10 +1525,8 @@ mod tests {
 
         let ic_binary_dir = dir.join("ic_binary");
         std::fs::create_dir_all(&ic_binary_dir).unwrap();
-        create_binary(&ic_binary_dir.join("replica"), "#!/bin/sh\nsleep 60\n");
-        create_binary(&ic_binary_dir.join("manageboot.sh"), "#!/bin/sh\nexit 0\n");
 
-        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
+        let replica_process = Arc::new(Mutex::new(FakeProcessManager::new()));
         // Start the replica process if the test scenario indicates so
         if test_scenario.was_replica_process_started_previously() {
             replica_process
@@ -1514,11 +1534,13 @@ mod tests {
                 .unwrap()
                 .start(ReplicaProcess {
                     version: current_replica_version.clone(),
-                    binary: ic_binary_dir.join("replica").display().to_string(),
+                    binary: ic_binary_dir.join("replica"),
                     args: vec![],
                 })
                 .unwrap();
         }
+
+        let manageboot_runner = Box::new(FakeManagebootRunner);
 
         let cup_dir = dir.join("cups");
         std::fs::create_dir_all(&cup_dir).unwrap();
@@ -1573,6 +1595,7 @@ mod tests {
             registry,
             metrics,
             replica_process,
+            manageboot_runner,
             cup_provider,
             subnet_assignment,
             current_replica_version.clone(),

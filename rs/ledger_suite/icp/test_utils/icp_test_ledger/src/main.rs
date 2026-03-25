@@ -22,7 +22,7 @@ thread_local! {
 fn next_block_id() -> u64 {
     BLOCKS.with(|blocks| match blocks.borrow().last_key_value() {
         Some((k, _)) => *k + 1,
-        None => 0u64,
+        None => 0_u64,
     })
 }
 

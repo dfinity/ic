@@ -393,7 +393,7 @@ mod tests {
             }),
             restore_aging_summary: None,
             topic_of_garbage_collected_proposals: hashmap! { 1 => Topic::Unspecified as i32 },
-            rng_seed: Some(vec![1u8; 32]),
+            rng_seed: Some(vec![1_u8; 32]),
         }
     }
 

@@ -39,7 +39,7 @@ fn create_test_rosetta_block(
             from: owner,
             to: recipient,
             amount: Nat::from(amount),
-            fee: Some(Nat::from(1u64)),
+            fee: Some(Nat::from(1_u64)),
             spender: None,
         },
         memo: None,
@@ -92,10 +92,10 @@ fn create_test_approve_block(
         operation: IcrcOperation::Approve {
             from: owner,
             spender,
-            amount: Nat::from(1000u64),
+            amount: Nat::from(1000_u64),
             expected_allowance: None,
             expires_at: Some(expires_at),
-            fee: Some(Nat::from(1u64)),
+            fee: Some(Nat::from(1_u64)),
         },
         memo: None,
         created_at_time: Some(created_at_time),
@@ -135,7 +135,7 @@ fn test_store_and_read_blocks() -> anyhow::Result<()> {
     let principal2 = vec![5, 6, 7, 8];
 
     // Create timestamps of different sizes
-    let normal_timestamp = 1000000000u64;
+    let normal_timestamp = 1000000000_u64;
     let max_timestamp = i64::MAX as u64;
     let beyond_max_timestamp = max_timestamp + 1;
     let very_large_timestamp = u64::MAX;
@@ -243,7 +243,7 @@ fn test_hash_consistency() -> anyhow::Result<()> {
     let principal2 = vec![5, 6, 7, 8];
 
     // Create blocks with different timestamps and operations
-    let normal_timestamp = 1000000000u64;
+    let normal_timestamp = 1000000000_u64;
     let max_timestamp = i64::MAX as u64;
     let beyond_max_timestamp = max_timestamp + 1;
 
@@ -380,7 +380,7 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     let mut mint_block = create_test_rosetta_block(0, 999999999, &principal1, 1000000000);
     mint_block.block.transaction.operation = IcrcOperation::Mint {
         to: from_account,
-        amount: Nat::from(1000000000u64),
+        amount: Nat::from(1000000000_u64),
         fee: None,
     };
 
@@ -389,8 +389,8 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     block1.block.transaction.operation = IcrcOperation::Transfer {
         from: from_account,
         to: to_account,
-        amount: Nat::from(100u64),
-        fee: Some(Nat::from(1u64)),
+        amount: Nat::from(100_u64),
+        fee: Some(Nat::from(1_u64)),
         spender: None,
     };
 
@@ -400,8 +400,8 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     block2.block.transaction.operation = IcrcOperation::Transfer {
         from: from_account,
         to: to_account,
-        amount: Nat::from(200u64),
-        fee: Some(Nat::from(1u64)),
+        amount: Nat::from(200_u64),
+        fee: Some(Nat::from(1_u64)),
         spender: None,
     };
 
@@ -444,7 +444,7 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     // Insert metadata that needs to be cleared
     connection.execute(
         "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
-        params![METADATA_BLOCK_IDX, 100_000_000u64.to_le_bytes()],
+        params![METADATA_BLOCK_IDX, 100_000_000_u64.to_le_bytes()],
     )?;
     let no_fee_col: Option<Account> = None;
     connection.execute(
@@ -475,7 +475,7 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     // Verify broken state
     let fee_balance_before =
         get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(fee_balance_before, Some(Nat::from(1u64))); // Should be 2, but it's 1 (broken)
+    assert_eq!(fee_balance_before, Some(Nat::from(1_u64))); // Should be 2, but it's 1 (broken)
 
     // Test repair function
     repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?;
@@ -483,13 +483,13 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     // Verify fixed state
     let fee_balance_after =
         get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(fee_balance_after, Some(Nat::from(2u64))); // Now correctly 2
+    assert_eq!(fee_balance_after, Some(Nat::from(2_u64))); // Now correctly 2
 
     // Test idempotency - running repair again should not change anything
     repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?;
     let fee_balance_final =
         get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(fee_balance_final, Some(Nat::from(2u64)));
+    assert_eq!(fee_balance_final, Some(Nat::from(2_u64)));
 
     // Verify counter exists (prevents future repairs)
     assert!(is_counter_flag_set(
@@ -530,7 +530,7 @@ fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
     let mut mint_block = create_test_rosetta_block(0, 999999999, &principal1, 1000000000);
     mint_block.block.transaction.operation = IcrcOperation::Mint {
         to: from_account,
-        amount: Nat::from(1000000000u64),
+        amount: Nat::from(1000000000_u64),
         fee: None,
     };
     store_blocks(&mut connection, vec![mint_block])?;
@@ -557,7 +557,7 @@ fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
 
     repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?; // First run - should execute
     let balance_after_first = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
-    assert_eq!(balance_after_first, Some(Nat::from(1000000000u64)));
+    assert_eq!(balance_after_first, Some(Nat::from(1000000000_u64)));
 
     connection.execute("DELETE FROM account_balances", params![])?;
     repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?; // Second run - should be skipped
@@ -602,7 +602,7 @@ fn test_schema_version_zero() -> anyhow::Result<()> {
     )?;
     connection.execute(
         "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
-        params![METADATA_SCHEMA_VERSION, 0u64.to_le_bytes()],
+        params![METADATA_SCHEMA_VERSION, 0_u64.to_le_bytes()],
     )?;
 
     schema::create_tables(&connection)?;
@@ -696,14 +696,14 @@ fn test_get_blocks_by_index_range_returns_ascending_order() {
     let mut block0 = create_test_rosetta_block(0, 1000000000, &principal, 100);
     block0.block.transaction.operation = IcrcOperation::Mint {
         to: account,
-        amount: Nat::from(100u64),
+        amount: Nat::from(100_u64),
         fee: None,
     };
 
     let mut block1 = create_test_rosetta_block(1, 1000000001, &principal, 100);
     block1.block.transaction.operation = IcrcOperation::Mint {
         to: account,
-        amount: Nat::from(100u64),
+        amount: Nat::from(100_u64),
         fee: None,
     };
 
