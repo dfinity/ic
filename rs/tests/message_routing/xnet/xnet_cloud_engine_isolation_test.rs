@@ -153,7 +153,7 @@ fn test(env: TestEnv) {
         )
         .await;
 
-        let data = vec![42u8];
+        let data = vec![42_u8];
 
         // ── Intra-subnet calls on CloudEngine subnets ───────────────────
 
