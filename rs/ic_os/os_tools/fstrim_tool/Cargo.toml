@@ -12,8 +12,8 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 ic-sys = { path = "../../../sys" }
 prometheus = { workspace = true }
+ic-os-logging = { path = "../../logging" }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

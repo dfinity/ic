@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/ic_os/config/tool:config_lib",
     "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/networking/network",
+    "//rs/ic_os/logging",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
@@ -14,7 +15,6 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
 ]
 
 MACRO_DEPENDENCIES = [
