@@ -11,7 +11,7 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, DOMAIN_IC_REQUEST, KeyPurpose, SignableMock, UserPublicKey,
+    AlgorithmId, BasicSig, BasicSigOf, DOMAIN_IC_REQUEST, KeyPurpose, Signable, SignableMock, UserPublicKey
 };
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
@@ -213,12 +213,7 @@ fn crypto_ed25519_basicsig_batch_verify<M: Measurement, R: Rng + CryptoRng>(
     // Generate batch_size distinct signers, each with their own key and signature.
     let mut node_ids = Vec::with_capacity(batch_size);
     let mut signatures = Vec::with_capacity(batch_size);
-    let bytes_to_sign = {
-        let mut buf = vec![];
-        buf.extend_from_slice(&msg.domain);
-        buf.extend_from_slice(&msg.signed_bytes_without_domain);
-        buf
-    };
+    let bytes_to_sign = msg.as_signed_bytes();
     for i in 0..batch_size {
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1000 + i as u64));
         let private_key = ic_ed25519::PrivateKey::generate_using_rng(rng);
@@ -324,12 +319,7 @@ fn signature_from_random_keypair<R: Rng + CryptoRng>(
     algorithm_id: AlgorithmId,
     rng: &mut R,
 ) -> (BasicSigOf<SignableMock>, UserPublicKey) {
-    let bytes_to_sign = {
-        let mut buf = vec![];
-        buf.extend_from_slice(&msg.domain);
-        buf.extend_from_slice(&msg.signed_bytes_without_domain);
-        buf
-    };
+    let bytes_to_sign = msg.as_signed_bytes();
 
     let (signature_bytes, public_key_bytes) = match algorithm_id {
         AlgorithmId::Ed25519 => {
