@@ -72,24 +72,6 @@ RUN RUST_VERSION=$(sed -n 's/^channel = "\(.*\)"$/\1/p' /tmp/rust-toolchain.toml
     rustup component add clippy && \
     sudo rm /tmp/rust-toolchain.toml
 
-# Add cargo-audit
-ARG CARGO_AUDIT_VERSION=0.22.0
-RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
-
-# switch back to root user after cargo install so that we have permissions to install additional packages
-USER root
-WORKDIR /
-CMD ["/bin/bash"]
-
-FROM base as build
-
-# Install packages only needed fro ci
-ARG PACKAGE_CI_FILE=ci/container/files/packages.ci
-COPY ${PACKAGE_CI_FILE} /tmp/
-RUN apt -yq update && \
-    apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_CI_FILE)") && \
-    rm "/tmp/$(basename $PACKAGE_CI_FILE)"
-
 # Install AFLplusplus for fuzzing
 # LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
@@ -107,6 +89,24 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make install && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
+
+# Add cargo-audit
+ARG CARGO_AUDIT_VERSION=0.22.0
+RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
+
+# switch back to root user after cargo install so that we have permissions to install additional packages
+USER root
+WORKDIR /
+CMD ["/bin/bash"]
+
+FROM base as build
+
+# Install packages only needed fro ci
+ARG PACKAGE_CI_FILE=ci/container/files/packages.ci
+COPY ${PACKAGE_CI_FILE} /tmp/
+RUN apt -yq update && \
+    apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_CI_FILE)") && \
+    rm "/tmp/$(basename $PACKAGE_CI_FILE)"
 
 USER buildifier
 
