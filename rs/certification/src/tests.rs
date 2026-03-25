@@ -1034,6 +1034,130 @@ fn should_fail_to_validate_delegation_cert_if_subnet_new_canister_ranges_malform
     );
 }
 
+#[test]
+fn should_reject_delegation_from_cloud_engine_subnet() {
+    let rng = &mut reproducible_rng();
+    let subnet_id = subnet_id(42);
+    let cid = canister_id(1);
+    let canister_ranges: Vec<(CanisterId, CanisterId)> = vec![(canister_id(0), canister_id(10))];
+
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: cid,
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        CustomTree(LabeledTree::SubTree(flatmap![
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&canister_ranges)),
+                    Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&threshold_sig_pubkey().into_bytes()).unwrap()),
+                    Label::from("type") => LabeledTree::Leaf(b"cloud_engine".to_vec()),
+                ])
+            ]),
+            Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
+        ])),
+        rng,
+    ))
+    .with_delegation_subnet_id(subnet_id)
+    .build();
+    let delegation = cert.delegation.expect("missing delegation");
+
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(
+            &delegation.certificate,
+            &subnet_id,
+            &root_pk
+        ),
+        Err(CertificateValidationError::UnacceptableSourceSubnet)
+    );
+}
+
+#[test]
+fn should_reject_delegation_from_cloud_engine_subnet_via_verify_certified_data() {
+    let rng = &mut reproducible_rng();
+    let subnet_id = subnet_id(42);
+    let cid = canister_id(1);
+    let certified_data = random_certified_data();
+    let canister_ranges: Vec<(CanisterId, CanisterId)> = vec![(canister_id(0), canister_id(10))];
+
+    let (_cert, root_pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: cid,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        CustomTree(LabeledTree::SubTree(flatmap![
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&canister_ranges)),
+                    Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&threshold_sig_pubkey().into_bytes()).unwrap()),
+                    Label::from("type") => LabeledTree::Leaf(b"cloud_engine".to_vec()),
+                ])
+            ]),
+            Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
+        ])),
+        rng,
+    ))
+    .with_delegation_subnet_id(subnet_id)
+    .build();
+
+    assert_matches!(
+        verify_certified_data_with_and_without_cache(
+            &cbor,
+            &cid,
+            &root_pk,
+            certified_data.as_bytes(),
+        ),
+        Err(CertificateValidationError::UnacceptableSourceSubnet)
+    );
+}
+
+#[test]
+fn should_accept_delegation_with_non_cloud_engine_type() {
+    let rng = &mut reproducible_rng();
+    let subnet_id = subnet_id(42);
+    let cid = canister_id(1);
+    let canister_ranges: Vec<(CanisterId, CanisterId)> = vec![(canister_id(0), canister_id(10))];
+
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: cid,
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        CustomTree(LabeledTree::SubTree(flatmap![
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&canister_ranges)),
+                    Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&threshold_sig_pubkey().into_bytes()).unwrap()),
+                    Label::from("type") => LabeledTree::Leaf(b"application".to_vec()),
+                ])
+            ]),
+            Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
+        ])),
+        rng,
+    ))
+    .with_delegation_subnet_id(subnet_id)
+    .build();
+    let delegation = cert.delegation.expect("missing delegation");
+
+    assert!(
+        validate_subnet_delegation_certificate_with_and_without_cache(
+            &delegation.certificate,
+            &subnet_id,
+            &root_pk,
+        )
+        .is_ok()
+    );
+}
+
 fn random_certified_data() -> Digest {
     let mut random_certified_data: [u8; 32] = [0; 32];
     thread_rng().fill(&mut random_certified_data);

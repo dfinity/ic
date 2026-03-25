@@ -77,6 +77,9 @@ fn embed_certificate_error(err: CertificateValidationError) -> CertificationErro
             provided_subnet_id,
             delegation_subnet_id,
         },
+        Cve::UnacceptableSourceSubnet => {
+            Ce::InvalidSignature("the source subnet cannot be used for delegations".to_string())
+        }
     }
 }
 

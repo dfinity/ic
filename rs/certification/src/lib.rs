@@ -46,6 +46,8 @@ pub enum CertificateValidationError {
         provided_subnet_id: SubnetId,
         delegation_subnet_id: SubnetId,
     },
+    /// A delegation was encountered which originated from a subnet which is not trusted for delegations
+    UnacceptableSourceSubnet,
 }
 
 impl fmt::Display for CertificateValidationError {
@@ -83,6 +85,9 @@ impl fmt::Display for CertificateValidationError {
                 f,
                 "provided subnet id {provided_subnet_id} does not match subnet id in delegation {delegation_subnet_id}",
             ),
+            Self::UnacceptableSourceSubnet => {
+                write!(f, "the source subnet cannot be used for delegations")
+            }
         }
     }
 }
@@ -312,6 +317,7 @@ pub fn verify_delegation_certificate(
     struct SubnetView {
         canister_ranges: Option<Blob>,
         public_key: Blob,
+        r#type: Option<String>, // added in V25 certifications
     }
 
     type TreeCanisterRanges = BTreeMap<CanisterId, Blob>;
@@ -348,6 +354,12 @@ pub fn verify_delegation_certificate(
             "cannot find subnet information for subnet {subnet_id} in the tree"
         ))
     })?;
+
+    if let Some(subnet_type) = &subnet_info.r#type
+        && subnet_type == "cloud_engine"
+    {
+        return Err(CertificateValidationError::UnacceptableSourceSubnet);
+    }
 
     // canister ranges could be found in two places. Either in the
     // `/subnet/<subnet_id>/canister_ranges` leaf or in the
