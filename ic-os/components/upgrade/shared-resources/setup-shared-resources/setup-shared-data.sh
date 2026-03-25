@@ -7,28 +7,24 @@ DEVICE=/dev/mapper/store-shared--data
 echo "Checking if ${DEVICE} has a valid filesystem..."
 if ! blkid "${DEVICE}" >/dev/null 2>&1; then
     echo "No filesystem exists on ${DEVICE}, creating one..."
-    mkfs.xfs -f -m crc=1,reflink=1 "${DEVICE}"
+    mkfs.xfs -m crc=1,reflink=1 "${DEVICE}"
     exit 0
 fi
 
-echo "Filesystem exists on ${DEVICE}, running xfs_repair to check and repair if necessary..."
-# xfs_repair (without -L) is safe: it exits non-zero without modifying
-# anything when the journal is dirty but valid (normal after a crash),
-# telling us to mount the filesystem to replay the log. In that case
-# the real mount (via fstab) will replay the journal automatically.
-if REPAIR_OUTPUT=$(xfs_repair "${DEVICE}" 2>&1); then
-    echo "xfs_repair succeeded on ${DEVICE}."
+DATA_MOUNT="/mnt/data"
+cleanup() {
+    mountpoint -q "${DATA_MOUNT}" && umount "${DATA_MOUNT}" || true
+    rm -rf "${DATA_MOUNT}" || true
+}
+trap cleanup EXIT
+mkdir -p "${DATA_MOUNT}"
+
+echo "Performing a test mount of ${DEVICE} to ${DATA_MOUNT} to check filesystem health..."
+if MOUNT_OUTPUT=$(mount -t xfs "${DEVICE}" "${DATA_MOUNT}" 2>&1); then
+    echo "Mount succeeded, filesystem is healthy. Unmounting ${DATA_MOUNT}..."
+    umount "${DATA_MOUNT}" || echo "Warning: umount ${DATA_MOUNT} failed, EXIT trap will retry." >&2
     exit 0
 fi
 
-if echo "${REPAIR_OUTPUT}" | grep -qi "replay the log"; then
-    # Dirty but valid journal. The real mount will replay it.
-    echo "XFS journal on ${DEVICE} is dirty but valid; the mount will replay it."
-    exit 0
-fi
-
-# Actual corruption. Log the output and try xfs_repair -L to zero the log and repair.
-echo "xfs_repair failed on ${DEVICE}:"
-echo "${REPAIR_OUTPUT}"
-echo "Calling 'xfs_repair -L' on ${DEVICE}..."
+echo "Mounting ${DEVICE} failed with error: '${MOUNT_OUTPUT}'. Calling xfs_repair -L ..."
 xfs_repair -L "${DEVICE}"
