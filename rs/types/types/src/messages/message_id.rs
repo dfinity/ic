@@ -142,7 +142,7 @@ fn hash_u64(value: u64) -> Vec<u8> {
 
 // arrays, encoded as the concatenation of the hashes of the encodings of the
 // array elements.
-fn hash_array(elements: &[RawHttpRequestVal]) -> Vec<u8> {
+fn hash_array(elements: &[RawHttpRequestVal<'_>]) -> Vec<u8> {
     let mut hasher = Sha256::new();
     elements
         .iter()
@@ -151,19 +151,19 @@ fn hash_array(elements: &[RawHttpRequestVal]) -> Vec<u8> {
     hasher.finish().to_vec() // hash the concatenation of the hashes.
 }
 
-fn hash_val(val: &RawHttpRequestVal) -> Vec<u8> {
+fn hash_val(val: &RawHttpRequestVal<'_>) -> Vec<u8> {
     match val {
         RawHttpRequestVal::String(string) => hash_string(string),
         RawHttpRequestVal::Bytes(bytes) => hash_bytes(bytes),
         RawHttpRequestVal::U64(integer) => hash_u64(*integer),
         RawHttpRequestVal::Array(elements) => hash_array(elements),
         RawHttpRequestVal::Map(map) => {
-            hash_of_map(map, |key, value| hash_key_val(key.as_str(), value)).to_vec()
+            hash_of_map(map, |key, value| hash_key_val(key, value)).to_vec()
         }
     }
 }
 
-pub(crate) fn hash_key_val(key: &str, val: &RawHttpRequestVal) -> Vec<u8> {
+pub(crate) fn hash_key_val(key: &str, val: &RawHttpRequestVal<'_>) -> Vec<u8> {
     let mut key_hash = hash_string(key);
     let mut val_hash = hash_val(val);
     key_hash.append(&mut val_hash);
@@ -238,21 +238,21 @@ mod tests {
         use maplit::btreemap;
 
         let inner_map_0 = btreemap! {
-            "key_string_0".to_string() => String("test_string_0".to_string()),
+            "key_string_0" => String("test_string_0"),
         };
         let inner_map_1 = btreemap! {
-            "key_string_1".to_string() => String("test_string_1".to_string()),
+            "key_string_1" => String("test_string_1"),
         };
         let inner_map_2 = btreemap! {
-            "key_string_2".to_string() => String("test_string_2".to_string()),
+            "key_string_2" => String("test_string_2"),
         };
 
         let outer_map = btreemap! {
-            "key_bytes".to_string() => Bytes(vec![1; 10]),
-            "key_string".to_string() => String("test_string".to_string()),
-            "key_u64".to_string() => U64(42),
-            "key_array".to_string() => Array(vec![Map(inner_map_0), Map(inner_map_1)]),
-            "key_inner".to_string() => Map(inner_map_2)
+            "key_bytes" => Bytes(&[1; 10]),
+            "key_string" => String("test_string"),
+            "key_u64" => U64(42),
+            "key_array" => Array(vec![Map(inner_map_0), Map(inner_map_1)]),
+            "key_inner" => Map(inner_map_2)
         };
 
         assert_eq!(
@@ -264,10 +264,7 @@ mod tests {
     #[test]
     fn message_id_icf_key_val_reference_1() {
         assert_eq!(
-            hash_key_val(
-                "request_type",
-                &RawHttpRequestVal::String("call".to_string())
-            ),
+            hash_key_val("request_type", &RawHttpRequestVal::String("call")),
             hex!(
                 "
                 769e6f87bdda39c859642b74ce9763cdd37cb1cd672733e8c54efaa33ab78af9
@@ -350,7 +347,7 @@ mod tests {
     #[test]
     fn message_id_array_reference_1() {
         assert_eq!(
-            hash_array(&[RawHttpRequestVal::String("a".to_string())]),
+            hash_array(&[RawHttpRequestVal::String("a")]),
             // hash(hash("a"))
             hex!("bf5d3affb73efd2ec6c36ad3112dd933efed63c4e1cbffcfa88e2759c144f2d8"),
         );
@@ -360,8 +357,8 @@ mod tests {
     fn message_id_array_reference_2() {
         assert_eq!(
             hash_array(&[
-                RawHttpRequestVal::String("a".to_string()),
-                RawHttpRequestVal::String("b".to_string()),
+                RawHttpRequestVal::String("a"),
+                RawHttpRequestVal::String("b"),
             ]),
             // hash(concat(hash("a"), hash("b"))
             hex!("e5a01fee14e0ed5c48714f22180f25ad8365b53f9779f79dc4a3d7e93963f94a"),
@@ -372,8 +369,8 @@ mod tests {
     fn message_id_array_reference_3() {
         assert_eq!(
             hash_array(&[
-                RawHttpRequestVal::Bytes(vec![97]), // "a" as a byte string.
-                RawHttpRequestVal::String("b".to_string()),
+                RawHttpRequestVal::Bytes(&[97]), // "a" as a byte string.
+                RawHttpRequestVal::String("b"),
             ]),
             // hash(concat(hash("a"), hash("b"))
             hex!("e5a01fee14e0ed5c48714f22180f25ad8365b53f9779f79dc4a3d7e93963f94a"),
@@ -384,7 +381,7 @@ mod tests {
     fn message_id_array_reference_4() {
         assert_eq!(
             hash_array(&[RawHttpRequestVal::Array(vec![RawHttpRequestVal::String(
-                "a".to_string()
+                "a"
             )])]),
             // hash(hash(hash("a"))
             hex!("eb48bdfa15fc43dbea3aabb1ee847b6e69232c0f0d9705935e50d60cce77877f"),
@@ -395,8 +392,8 @@ mod tests {
     fn message_id_array_reference_5() {
         assert_eq!(
             hash_array(&[RawHttpRequestVal::Array(vec![
-                RawHttpRequestVal::String("a".to_string()),
-                RawHttpRequestVal::String("b".to_string())
+                RawHttpRequestVal::String("a"),
+                RawHttpRequestVal::String("b")
             ])]),
             // hash(hash(concat(hash("a"), hash("b")))
             hex!("029fd80ca2dd66e7c527428fc148e812a9d99a5e41483f28892ef9013eee4a19"),
@@ -408,10 +405,10 @@ mod tests {
         assert_eq!(
             hash_array(&[
                 RawHttpRequestVal::Array(vec![
-                    RawHttpRequestVal::String("a".to_string()),
-                    RawHttpRequestVal::String("b".to_string())
+                    RawHttpRequestVal::String("a"),
+                    RawHttpRequestVal::String("b")
                 ]),
-                RawHttpRequestVal::Bytes(vec![97]), // "a" in bytes
+                RawHttpRequestVal::Bytes(&[97]), // "a" in bytes
             ]),
             // hash(concat(hash(concat(hash("a"), hash("b")), hash(100))
             hex!("aec3805593d9ec6df50da070597f73507050ce098b5518d0456876701ada7bb7"),

@@ -22,7 +22,7 @@ impl ReadState {
         MessageId::from(representation_independent_hash_read_state(
             self.ingress_expiry,
             self.paths.as_slice(),
-            self.source.get().into_vec(),
+            self.source.get_ref().as_slice(),
             self.nonce.as_deref(),
         ))
     }

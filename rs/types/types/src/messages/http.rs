@@ -34,76 +34,76 @@ pub(crate) enum CallOrQuery {
     Query,
 }
 
-pub(crate) struct RawSenderInfo {
-    pub info: Vec<u8>,
-    pub signer: Vec<u8>,
-    pub sig: Vec<u8>,
+pub(crate) struct RawSenderInfo<'a> {
+    pub info: &'a [u8],
+    pub signer: &'a [u8],
+    pub sig: &'a [u8],
 }
 
 pub(crate) fn representation_independent_hash_call_or_query(
     request_type: CallOrQuery,
-    canister_id: Vec<u8>,
+    canister_id: &[u8],
     method_name: &str,
-    arg: Vec<u8>,
+    arg: &[u8],
     ingress_expiry: u64,
-    sender: Vec<u8>,
+    sender: &[u8],
     nonce: Option<&[u8]>,
-    sender_info: Option<RawSenderInfo>,
+    sender_info: Option<RawSenderInfo<'_>>,
 ) -> [u8; 32] {
     use RawHttpRequestVal::*;
     let mut map = btreemap! {
-        "request_type".to_string() => match request_type {
-            CallOrQuery::Call => String("call".to_string()),
-            CallOrQuery::Query => String("query".to_string()),
+        "request_type" => match request_type {
+            CallOrQuery::Call => String("call"),
+            CallOrQuery::Query => String("query"),
         },
-        "canister_id".to_string() => Bytes(canister_id),
-        "method_name".to_string() => String(method_name.to_string()),
-        "arg".to_string() => Bytes(arg),
-        "ingress_expiry".to_string() => U64(ingress_expiry),
-        "sender".to_string() => Bytes(sender),
+        "canister_id" => Bytes(canister_id),
+        "method_name" => String(method_name),
+        "arg" => Bytes(arg),
+        "ingress_expiry" => U64(ingress_expiry),
+        "sender" => Bytes(sender),
     };
     if let Some(some_nonce) = nonce {
-        map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
+        map.insert("nonce", Bytes(some_nonce));
     }
     if let Some(RawSenderInfo { info, signer, sig }) = sender_info {
         map.insert(
-            "sender_info".to_string(),
+            "sender_info",
             Map(btreemap! {
-                "info".to_string() => Bytes(info),
-                "signer".to_string() => Bytes(signer),
-                "sig".to_string() => Bytes(sig),
+                "info" => Bytes(info),
+                "signer" => Bytes(signer),
+                "sig" => Bytes(sig),
             }),
         );
     }
-    hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
+    hash_of_map(&map, |key, value| hash_key_val(key, value))
 }
 
 pub(crate) fn representation_independent_hash_read_state(
     ingress_expiry: u64,
     paths: &[Path],
-    sender: Vec<u8>,
+    sender: &[u8],
     nonce: Option<&[u8]>,
 ) -> [u8; 32] {
     use RawHttpRequestVal::*;
     let mut map = btreemap! {
-        "request_type".to_string() => String("read_state".to_string()),
-        "ingress_expiry".to_string() => U64(ingress_expiry),
-        "paths".to_string() => Array(paths
+        "request_type" => String("read_state"),
+        "ingress_expiry" => U64(ingress_expiry),
+        "paths" => Array(paths
                 .iter()
                 .map(|p| {
-                    RawHttpRequestVal::Array(
+                    Array(
                         p.iter()
-                            .map(|b| RawHttpRequestVal::Bytes(b.clone().into_vec()))
+                            .map(|b| Bytes(b.as_bytes()))
                             .collect(),
                     )
                 })
                 .collect()),
-        "sender".to_string() => Bytes(sender),
+        "sender" => Bytes(sender),
     };
     if let Some(some_nonce) = nonce {
-        map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
+        map.insert("nonce", Bytes(some_nonce));
     }
-    hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
+    hash_of_map(&map, |key, value| hash_key_val(key, value))
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -138,16 +138,16 @@ impl HttpCanisterUpdate {
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         representation_independent_hash_call_or_query(
             CallOrQuery::Call,
-            self.canister_id.0.clone(),
+            self.canister_id.0.as_slice(),
             &self.method_name,
-            self.arg.0.clone(),
+            self.arg.0.as_slice(),
             self.ingress_expiry,
-            self.sender.0.clone(),
+            self.sender.0.as_slice(),
             self.nonce.as_ref().map(|x| x.0.as_slice()),
             self.sender_info.as_ref().map(|sender_info| RawSenderInfo {
-                info: sender_info.info.0.clone(),
-                signer: sender_info.signer.0.clone(),
-                sig: sender_info.sig.0.clone(),
+                info: sender_info.info.0.as_slice(),
+                signer: sender_info.signer.0.as_slice(),
+                sig: sender_info.sig.0.as_slice(),
             }),
         )
     }
@@ -261,11 +261,11 @@ impl HttpUserQuery {
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         representation_independent_hash_call_or_query(
             CallOrQuery::Query,
-            self.canister_id.0.clone(),
+            self.canister_id.0.as_slice(),
             &self.method_name,
-            self.arg.0.clone(),
+            self.arg.0.as_slice(),
             self.ingress_expiry,
-            self.sender.0.clone(),
+            self.sender.0.as_slice(),
             self.nonce.as_ref().map(|x| x.0.as_slice()),
             None,
         )
@@ -278,7 +278,7 @@ impl HttpReadState {
         representation_independent_hash_read_state(
             self.ingress_expiry,
             self.paths.as_slice(),
-            self.sender.0.clone(),
+            self.sender.0.as_slice(),
             self.nonce.as_ref().map(|x| x.0.as_slice()),
         )
     }
@@ -570,13 +570,13 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
         use RawHttpRequestVal::*;
 
         let mut map = btreemap! {
-            "pubkey" => Bytes(self.pubkey.0.clone()),
+            "pubkey" => Bytes(self.pubkey.0.as_slice()),
             "expiration" => U64(self.expiration.as_nanos_since_unix_epoch()),
         };
         if let Some(targets) = &self.targets {
             map.insert(
                 "targets",
-                Array(targets.iter().map(|t| Bytes(t.0.clone())).collect()),
+                Array(targets.iter().map(|t| Bytes(t.0.as_slice())).collect()),
             );
         }
 
@@ -615,13 +615,13 @@ impl SignedDelegation {
 }
 
 /// The different types of values supported in `RawHttpRequest`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
-pub enum RawHttpRequestVal {
-    Bytes(#[serde(with = "serde_bytes")] Vec<u8>),
-    String(String),
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub enum RawHttpRequestVal<'a> {
+    Bytes(&'a [u8]),
+    String(&'a str),
     U64(u64),
-    Array(Vec<RawHttpRequestVal>),
-    Map(BTreeMap<String, RawHttpRequestVal>),
+    Array(Vec<RawHttpRequestVal<'a>>),
+    Map(BTreeMap<&'a str, RawHttpRequestVal<'a>>),
 }
 
 /// The reply to an update call.
@@ -655,18 +655,18 @@ impl QueryResponseHash {
     /// Creates a [`QueryResponseHash`] from a given query response, request and timestamp.
     pub fn new(response: &HttpQueryResponse, request: &Query, timestamp: Time) -> Self {
         use RawHttpRequestVal::*;
-
+        let request_id = request.id();
         let self_map_representation = match response {
             HttpQueryResponse::Replied { reply } => {
                 let map_of_reply = btreemap! {
-                    "arg".to_string() => RawHttpRequestVal::Bytes(reply.arg.0.clone()),
+                    "arg" => RawHttpRequestVal::Bytes(reply.arg.0.as_slice()),
                 };
 
                 btreemap! {
-                    "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
-                    "status".to_string() => String("replied".to_string()),
-                    "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
-                    "reply".to_string() => Map(map_of_reply)
+                    "request_id" => Bytes(request_id.as_bytes()),
+                    "status" => String("replied"),
+                    "timestamp" => U64(timestamp.as_nanos_since_unix_epoch()),
+                    "reply" => Map(map_of_reply)
                 }
             }
             HttpQueryResponse::Rejected {
@@ -675,19 +675,19 @@ impl QueryResponseHash {
                 reject_message,
             } => {
                 btreemap! {
-                    "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
-                    "status".to_string() => String("rejected".to_string()),
-                    "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
-                    "reject_code".to_string() => U64(*reject_code),
-                    "reject_message".to_string() => String(reject_message.to_string()),
-                    "error_code".to_string() => String(error_code.to_string()),
+                    "request_id" => Bytes(request_id.as_bytes()),
+                    "status" => String("rejected"),
+                    "timestamp" => U64(timestamp.as_nanos_since_unix_epoch()),
+                    "reject_code" => U64(*reject_code),
+                    "reject_message" => String(reject_message.as_str()),
+                    "error_code" => String(error_code.as_str()),
 
                 }
             }
         };
 
         let hash = hash_of_map(&self_map_representation, |key, value| {
-            hash_key_val(key.as_str(), value)
+            hash_key_val(key, value)
         });
 
         Self(hash)
