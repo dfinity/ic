@@ -12019,6 +12019,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
  "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",

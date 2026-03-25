@@ -651,10 +651,12 @@ mod tests {
     use ic_crypto_utils_threshold_sig_der::public_key_to_der;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
-    use ic_registry_keys::make_node_record_key;
+    use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_registry::{
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record,
         add_subnet_list_record,
@@ -683,9 +685,13 @@ mod tests {
     use super::*;
 
     const NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
-    const NON_NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_2;
+    const APP_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_2;
+    const CLOUD_ENGINE_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_3;
     const NNS_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_1;
-    const NON_NNS_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_2;
+    const APP_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_2;
+    const UNKNOWN_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_3;
+    const CLOUD_ENGINE_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_4;
+    const API_BN_ID: NodeId = ic_test_utilities_types::ids::NODE_5;
 
     // Get a free port on this host to which we can connect transport to.
     fn get_free_localhost_socket_addr() -> SocketAddr {
@@ -738,7 +744,7 @@ mod tests {
         // None means we will generate a random, valid certificate.
         override_nns_delegation: Arc<RwLock<Option<CertificateDelegation>>>,
         delay: Option<Delay>,
-    ) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
+    ) -> (Arc<FakeRegistryClient>, Arc<MockTlsConfig>) {
         let registry_version = 1;
 
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -755,21 +761,27 @@ mod tests {
         add_single_subnet_record(
             &data_provider,
             registry_version,
-            NON_NNS_SUBNET_ID,
+            APP_SUBNET_ID,
             SubnetRecordBuilder::new()
-                .with_committee(&[NON_NNS_NODE_ID])
+                .with_committee(&[APP_NODE_ID, UNKNOWN_NODE_ID])
                 .build(),
         );
 
-        let (non_nns_public_key, _non_nns_secret_key) = generate_root_of_trust(&mut thread_rng());
-        let (nns_public_key, nns_secret_key) = generate_root_of_trust(&mut thread_rng());
-
-        add_subnet_key_record(
+        add_single_subnet_record(
             &data_provider,
             registry_version,
-            NON_NNS_SUBNET_ID,
-            non_nns_public_key,
+            CLOUD_ENGINE_SUBNET_ID,
+            SubnetRecordBuilder::new()
+                .with_committee(&[CLOUD_ENGINE_NODE_ID])
+                .with_subnet_type(SubnetType::CloudEngine)
+                .build(),
         );
+
+        let (nns_public_key, nns_secret_key) = generate_root_of_trust(&mut thread_rng());
+        let (app_subnet_public_key, _app_subnet_secret_key) =
+            generate_root_of_trust(&mut thread_rng());
+        let (cloud_engine_public_key, _cloud_engine_secret_key) =
+            generate_root_of_trust(&mut thread_rng());
 
         add_subnet_key_record(
             &data_provider,
@@ -778,28 +790,93 @@ mod tests {
             nns_public_key,
         );
 
+        add_subnet_key_record(
+            &data_provider,
+            registry_version,
+            APP_SUBNET_ID,
+            app_subnet_public_key,
+        );
+
+        add_subnet_key_record(
+            &data_provider,
+            registry_version,
+            CLOUD_ENGINE_SUBNET_ID,
+            cloud_engine_public_key,
+        );
+
         add_subnet_list_record(
             &data_provider,
             registry_version,
-            vec![NNS_SUBNET_ID, NON_NNS_SUBNET_ID],
+            vec![NNS_SUBNET_ID, APP_SUBNET_ID, CLOUD_ENGINE_SUBNET_ID],
         );
 
         let addr = get_free_localhost_socket_addr();
         let tcp_listener = TcpListener::bind(addr).unwrap();
 
-        let node_record = NodeRecord {
-            http: Some(ConnectionEndpoint {
-                ip_addr: addr.ip().to_string(),
-                port: addr.port() as u32,
-            }),
-            ..Default::default()
-        };
-
         data_provider
             .add(
                 &make_node_record_key(NNS_NODE_ID),
                 registry_version.into(),
-                Some(node_record),
+                Some(NodeRecord {
+                    http: Some(ConnectionEndpoint {
+                        ip_addr: addr.ip().to_string(),
+                        port: addr.port() as u32,
+                    }),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+
+        data_provider
+            .add(
+                &make_node_record_key(APP_NODE_ID),
+                registry_version.into(),
+                Some(NodeRecord {
+                    node_reward_type: Some(NodeRewardType::Type1 as i32),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+
+        data_provider
+            .add(
+                &make_node_record_key(UNKNOWN_NODE_ID),
+                registry_version.into(),
+                Some(NodeRecord {
+                    node_reward_type: Some(NodeRewardType::Unspecified as i32),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+
+        data_provider
+            .add(
+                &make_node_record_key(CLOUD_ENGINE_NODE_ID),
+                registry_version.into(),
+                Some(NodeRecord {
+                    node_reward_type: Some(NodeRewardType::Type4 as i32),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+
+        data_provider
+            .add(
+                &make_node_record_key(API_BN_ID),
+                registry_version.into(),
+                Some(NodeRecord {
+                    domain: Some("domain.invalid".to_string()),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        data_provider
+            .add(
+                &make_api_boundary_node_record_key(API_BN_ID),
+                registry_version.into(),
+                Some(ApiBoundaryNodeRecord {
+                    ..Default::default()
+                }),
             )
             .unwrap();
 
@@ -812,10 +889,14 @@ mod tests {
             let (_certificate, _root_pk, cbor) =
                 CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
                     Label::from("subnet") => LabeledTree::SubTree(flatmap![
-                        Label::from(NON_NNS_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                        Label::from(APP_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
                             Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&vec![(canister_test_id(0), canister_test_id(10))])),
-                            Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&non_nns_public_key.into_bytes()).unwrap()),
-                        ])
+                            Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&app_subnet_public_key.into_bytes()).unwrap()),
+                        ]),
+                        Label::from(CLOUD_ENGINE_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&vec![(canister_test_id(10), canister_test_id(20))])),
+                            Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&cloud_engine_public_key.into_bytes()).unwrap()),
+                        ]),
                     ]),
                     Label::from("time") => LabeledTree::Leaf(encoded_time(time))
                 ])))
@@ -914,7 +995,7 @@ mod tests {
             .expect_client_config()
             .returning(move |_, _| Ok(accept_any_config.clone()));
 
-        (registry_client, tls_config)
+        (registry_client, Arc::new(tls_config))
     }
 
     #[tokio::test]
@@ -931,10 +1012,11 @@ mod tests {
             Config::default(),
             no_op_logger(),
             rt_handle,
+            NNS_NODE_ID,
             NNS_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client,
-            Arc::new(tls_config),
+            tls_config,
             CancellationToken::new(),
         );
 
@@ -944,7 +1026,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn manager_load_root_delegation_on_non_nns_should_return_some_test() {
+    async fn manager_load_root_delegation_on_app_subnet_should_return_some_test() {
         let rt_handle = tokio::runtime::Handle::current();
         let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
@@ -952,31 +1034,34 @@ mod tests {
             /*delay=*/ None,
         );
 
-        let (_, mut reader) = start_nns_delegation_manager(
-            &MetricsRegistry::new(),
-            Config::default(),
-            no_op_logger(),
-            rt_handle,
-            NON_NNS_SUBNET_ID,
-            NNS_SUBNET_ID,
-            registry_client,
-            Arc::new(tls_config),
-            CancellationToken::new(),
-        );
+        for node_id in [APP_NODE_ID, UNKNOWN_NODE_ID] {
+            let (_, mut reader) = start_nns_delegation_manager(
+                &MetricsRegistry::new(),
+                Config::default(),
+                no_op_logger(),
+                rt_handle.clone(),
+                node_id,
+                APP_SUBNET_ID,
+                NNS_SUBNET_ID,
+                registry_client.clone(),
+                tls_config.clone(),
+                CancellationToken::new(),
+            );
 
-        reader.receiver.changed().await.unwrap();
+            reader.receiver.changed().await.unwrap();
 
-        let delegation = reader
-            .get_delegation(CanisterRangesFilter::Flat)
-            .expect("Should return some delegation on non NNS subnet");
-        let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
-            .expect("Should return a certificate which can be deserialized");
-        let tree = LabeledTree::try_from(parsed_delegation.tree)
-            .expect("Should return a state tree which can be parsed");
-        // Verify that the state tree has the a subtree corresponding to the requested subnet
-        match lookup_path(&tree, &[b"subnet", NON_NNS_SUBNET_ID.get_ref().as_ref()]) {
-            Some(LabeledTree::SubTree(..)) => (),
-            _ => panic!("Didn't find the subnet path in the state tree"),
+            let delegation = reader
+                .get_delegation(CanisterRangesFilter::Flat)
+                .expect("Should return some delegation on non NNS subnet");
+            let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
+                .expect("Should return a certificate which can be deserialized");
+            let tree = LabeledTree::try_from(parsed_delegation.tree)
+                .expect("Should return a state tree which can be parsed");
+            // Verify that the state tree has the a subtree corresponding to the requested subnet
+            match lookup_path(&tree, &[b"subnet", APP_SUBNET_ID.get_ref().as_ref()]) {
+                Some(LabeledTree::SubTree(..)) => (),
+                _ => panic!("Didn't find the subnet path in the state tree"),
+            }
         }
     }
 
@@ -994,10 +1079,11 @@ mod tests {
             Config::default(),
             no_op_logger(),
             rt_handle,
-            NON_NNS_SUBNET_ID,
+            APP_NODE_ID,
+            APP_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client,
-            Arc::new(tls_config),
+            tls_config,
             CancellationToken::new(),
         );
 
@@ -1026,10 +1112,11 @@ mod tests {
             Config::default(),
             no_op_logger(),
             rt_handle,
-            NON_NNS_SUBNET_ID,
+            APP_NODE_ID,
+            APP_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client,
-            Arc::new(tls_config),
+            tls_config,
             CancellationToken::new(),
         );
 
@@ -1060,10 +1147,11 @@ mod tests {
             Config::default(),
             no_op_logger(),
             rt_handle,
-            NON_NNS_SUBNET_ID,
+            APP_NODE_ID,
+            APP_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client,
-            Arc::new(tls_config),
+            tls_config,
             CancellationToken::new(),
         );
 
@@ -1103,10 +1191,11 @@ mod tests {
             &Config::default(),
             &no_op_logger(),
             &rt_handle,
+            NNS_NODE_ID,
             NNS_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client.as_ref(),
-            &tls_config,
+            tls_config.as_ref(),
             &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
@@ -1115,7 +1204,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn load_root_delegation_on_non_nns_should_return_some_test() {
+    async fn load_root_delegation_on_app_subnet_should_return_some_test() {
         let rt_handle = tokio::runtime::Handle::current();
         let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
@@ -1123,34 +1212,63 @@ mod tests {
             /*delay=*/ None,
         );
 
-        let builder = load_root_delegation(
+        for node_id in [APP_NODE_ID, UNKNOWN_NODE_ID] {
+            let builder = load_root_delegation(
+                &Config::default(),
+                &no_op_logger(),
+                &rt_handle,
+                node_id,
+                APP_SUBNET_ID,
+                NNS_SUBNET_ID,
+                registry_client.as_ref(),
+                tls_config.as_ref(),
+                &DelegationManagerMetrics::new(&MetricsRegistry::new()),
+            )
+            .await;
+
+            let builder = builder.expect("Should return Some delegation on non NNS subnet");
+            let parsed_delegation: Certificate = serde_cbor::from_slice(
+                &builder
+                    .build_or_original(CanisterRangesFilter::Flat, &no_op_logger())
+                    .certificate,
+            )
+            .expect("Should return a certificate which can be deserialized");
+            let tree = LabeledTree::try_from(parsed_delegation.tree)
+                .expect("The deserialized delegation should contain a correct tree");
+            // Verify that the state tree has the a subtree corresponding to the requested subnet
+            match lookup_path(&tree, &[b"subnet", APP_SUBNET_ID.get_ref().as_ref()]) {
+                Some(LabeledTree::SubTree(..)) => (),
+                _ => panic!("Didn't find the subnet path in the state tree"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn load_root_delegation_on_cloud_engine_should_contact_api_bn_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+            rt_handle.clone(),
+            Arc::new(RwLock::new(None)),
+            /*delay=*/ None,
+        );
+
+        let response = try_fetch_delegation_from_nns(
             &Config::default(),
             &no_op_logger(),
             &rt_handle,
-            NON_NNS_SUBNET_ID,
+            CLOUD_ENGINE_NODE_ID,
+            CLOUD_ENGINE_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client.as_ref(),
-            &tls_config,
+            tls_config.as_ref(),
             &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
 
-        tokio::time::pause();
-
-        let builder = builder.expect("Should return Some delegation on non NNS subnet");
-        let parsed_delegation: Certificate = serde_cbor::from_slice(
-            &builder
-                .build_or_original(CanisterRangesFilter::Flat, &no_op_logger())
-                .certificate,
-        )
-        .expect("Should return a certificate which can be deserialized");
-        let tree = LabeledTree::try_from(parsed_delegation.tree)
-            .expect("The deserialized delegation should contain a correct tree");
-        // Verify that the state tree has the a subtree corresponding to the requested subnet
-        match lookup_path(&tree, &[b"subnet", NON_NNS_SUBNET_ID.get_ref().as_ref()]) {
-            Some(LabeledTree::SubTree(..)) => (),
-            _ => panic!("Didn't find the subnet path in the state tree"),
-        }
+        // Since the API BN is configured with a domain that does not resolve, we expect the
+        // connection to fail with a name resolution error, which indicates that we indeed tried to
+        // connect to the API BN instead of an NNS node.
+        assert_matches!(response, Err(err) if err.to_string().contains("Temporary failure in name resolution"));
     }
 
     #[tokio::test]
@@ -1166,10 +1284,11 @@ mod tests {
             &Config::default(),
             &no_op_logger(),
             &rt_handle,
-            NON_NNS_SUBNET_ID,
+            APP_NODE_ID,
+            APP_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client.as_ref(),
-            &tls_config,
+            tls_config.as_ref(),
             &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
@@ -1190,10 +1309,11 @@ mod tests {
             &Config::default(),
             &no_op_logger(),
             &rt_handle,
-            NON_NNS_SUBNET_ID,
+            APP_NODE_ID,
+            APP_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client.as_ref(),
-            &tls_config,
+            tls_config.as_ref(),
             &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
@@ -1214,10 +1334,11 @@ mod tests {
             &Config::default(),
             &no_op_logger(),
             &rt_handle,
-            NON_NNS_SUBNET_ID,
+            APP_NODE_ID,
+            APP_SUBNET_ID,
             NNS_SUBNET_ID,
             registry_client.as_ref(),
-            &tls_config,
+            tls_config.as_ref(),
             &DelegationManagerMetrics::new(&MetricsRegistry::new()),
         )
         .await;
