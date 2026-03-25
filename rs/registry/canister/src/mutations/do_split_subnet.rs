@@ -276,7 +276,7 @@ impl Registry {
 
         if 2 * destination_nodes.len() != source_nodes.len() {
             return Err(PayloadValidationError::UnequalSplit {
-                proposed_destination_subnet_size: payload.destination_node_ids.len(),
+                proposed_destination_subnet_size: destination_nodes.len(),
                 current_source_subnet_size: source_nodes.len(),
             });
         }
@@ -438,7 +438,7 @@ impl std::fmt::Display for PayloadValidationError {
             }
             PayloadValidationError::UnhostedCanisterIds => write!(
                 f,
-                "Some the canister ID ranges are not hosted by the source subnet"
+                "Some of the canister ID ranges are not hosted by the source subnet"
             ),
             PayloadValidationError::SplitAlreadyInProgress => {
                 write!(f, "Currently we allow only one subnet splitting at a time")
