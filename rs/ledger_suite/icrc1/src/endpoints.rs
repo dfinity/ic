@@ -7,8 +7,9 @@ use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc3::transactions::{
-    Approve, Burn, FeeCollector, Mint, TRANSACTION_APPROVE, TRANSACTION_BURN,
-    TRANSACTION_FEE_COLLECTOR, TRANSACTION_MINT, TRANSACTION_TRANSFER, Transaction, Transfer,
+    Approve, AuthorizedBurn, AuthorizedMint, Burn, FeeCollector, Mint, TRANSACTION_122_BURN,
+    TRANSACTION_122_MINT, TRANSACTION_APPROVE, TRANSACTION_BURN, TRANSACTION_FEE_COLLECTOR,
+    TRANSACTION_MINT, TRANSACTION_TRANSFER, Transaction, Transfer,
 };
 use serde::Deserialize;
 
@@ -163,6 +164,8 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             transfer: None,
             approve: None,
             fee_collector: None,
+            authorized_mint: None,
+            authorized_burn: None,
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;
@@ -246,6 +249,42 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     caller,
                     ts: created_at_time,
                     mthd,
+                });
+            }
+            Operation::AuthorizedMint {
+                to,
+                amount,
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_122_MINT.to_string();
+                tx.authorized_mint = Some(AuthorizedMint {
+                    to,
+                    amount: amount.into(),
+                    caller,
+                    mthd,
+                    reason,
+                    memo,
+                    created_at_time,
+                });
+            }
+            Operation::AuthorizedBurn {
+                from,
+                amount,
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_122_BURN.to_string();
+                tx.authorized_burn = Some(AuthorizedBurn {
+                    from,
+                    amount: amount.into(),
+                    caller,
+                    mthd,
+                    reason,
+                    memo,
+                    created_at_time,
                 });
             }
         }

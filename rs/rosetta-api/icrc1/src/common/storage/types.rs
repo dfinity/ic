@@ -676,6 +676,9 @@ where
                 caller,
                 mthd,
             },
+            Op::AuthorizedMint { .. } | Op::AuthorizedBurn { .. } => {
+                panic!("AuthorizedMint/AuthorizedBurn not yet supported in Rosetta")
+            }
         }
     }
 }
@@ -1096,6 +1099,12 @@ mod tests {
                 assert_eq!(fee_collector, rosetta_fee_collector, "fee_collector");
                 assert_eq!(caller, rosetta_caller, "caller");
                 assert_eq!(mthd, rosetta_mthd, "mthd");
+            }
+            (ic_icrc1::Operation::AuthorizedMint { .. }, _) => {
+                panic!("AuthorizedMint not yet supported in compare_operations")
+            }
+            (ic_icrc1::Operation::AuthorizedBurn { .. }, _) => {
+                panic!("AuthorizedBurn not yet supported in compare_operations")
             }
             (l, r) => panic!(
                 "Found different type of operations. Operation:{l:?} rosetta's Operation:{r:?}"

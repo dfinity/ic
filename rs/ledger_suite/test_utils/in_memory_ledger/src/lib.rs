@@ -538,6 +538,12 @@ where
                     &fee.clone().or(block.effective_fee.clone()),
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
+                Operation::AuthorizedMint { to, amount, .. } => {
+                    self.process_mint(to, amount);
+                }
+                Operation::AuthorizedBurn { from, amount, .. } => {
+                    self.process_burn(from, &None, amount, index);
+                }
                 Operation::FeeCollector { .. } => {
                     panic!("FeeCollector107 not implemented")
                 }

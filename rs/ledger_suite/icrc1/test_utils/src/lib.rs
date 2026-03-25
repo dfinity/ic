@@ -16,6 +16,7 @@ use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
+use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -259,10 +260,14 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Burn { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                Operation::FeeCollector { .. } => None,
+                Operation::FeeCollector { .. }
+                | Operation::AuthorizedMint { .. }
+                | Operation::AuthorizedBurn { .. } => None,
             };
             let btype = match transaction.operation {
                 Operation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                Operation::AuthorizedMint { .. } => Some(BTYPE_122_MINT.to_string()),
+                Operation::AuthorizedBurn { .. } => Some(BTYPE_122_BURN.to_string()),
                 _ => None,
             };
 
@@ -622,6 +627,12 @@ impl TransactionsAndBalances {
                     .or_insert(amount);
                 self.debit(from, fee);
             }
+            Operation::AuthorizedMint { to, amount, .. } => {
+                self.credit(to, amount.get_e8s());
+            }
+            Operation::AuthorizedBurn { from, amount, .. } => {
+                self.debit(from, amount.get_e8s());
+            }
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
@@ -650,6 +661,12 @@ impl TransactionsAndBalances {
             Operation::Approve { from, .. } => {
                 // Check if the from account should be added/removed from valid_allowance_from
                 // (allowance was added/modified for this account)
+                self.check_and_update_account_validity(*from, default_fee);
+            }
+            Operation::AuthorizedMint { to, .. } => {
+                self.check_and_update_account_validity(*to, default_fee);
+            }
+            Operation::AuthorizedBurn { from, .. } => {
                 self.check_and_update_account_validity(*from, default_fee);
             }
             Operation::FeeCollector { .. } => {
