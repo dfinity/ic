@@ -302,6 +302,20 @@ fn strip_page_map_deltas(
                     execution_state.wasm_memory.page_map.should_strip_deltas()
                         || execution_state.stable_memory.page_map.should_strip_deltas()
                 });
+        let should_mutate = should_mutate
+            || canister.canister_snapshots.iter().any(|(_, snapshot)| {
+                snapshot.chunk_store().page_map().should_strip_deltas()
+                    || snapshot
+                        .execution_snapshot()
+                        .wasm_memory
+                        .page_map
+                        .should_strip_deltas()
+                    || snapshot
+                        .execution_snapshot()
+                        .stable_memory
+                        .page_map
+                        .should_strip_deltas()
+            });
         if !should_mutate {
             continue;
         }
@@ -380,7 +394,7 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
     // `PageMapToFlush` or its `PageMap::strip_unflushed_delta()` call would
     // actually mutate the `PageMap`.
     let should_add_or_strip = |page_map: &PageMap| -> bool {
-        page_map.has_stripped_unflushed_deltas() || !page_map.unflushed_delta_is_empty()
+        !page_map.has_stripped_unflushed_deltas() || !page_map.unflushed_delta_is_empty()
     };
 
     let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
@@ -426,6 +440,12 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
                     should_add_or_strip(&execution_state.wasm_memory.page_map)
                         || should_add_or_strip(&execution_state.stable_memory.page_map)
                 });
+        let should_mutate = should_mutate
+            || canister.canister_snapshots.iter().any(|(_, snapshot)| {
+                should_add_or_strip(snapshot.chunk_store().page_map())
+                    || should_add_or_strip(&snapshot.execution_snapshot().wasm_memory.page_map)
+                    || should_add_or_strip(&snapshot.execution_snapshot().stable_memory.page_map)
+            });
         if !should_mutate {
             continue;
         }
