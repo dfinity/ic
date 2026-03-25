@@ -69,39 +69,46 @@ impl UpdateCanisterSettings {
     }
 
     fn valid_canister_settings(&self) -> Result<RootCanisterSettings, GovernanceError> {
-        let settings = self
+        let CanisterSettings {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            log_visibility,
+            wasm_memory_limit,
+            wasm_memory_threshold,
+            snapshot_visibility,
+        } = self
             .settings
             .as_ref()
-            .ok_or(invalid_proposal_error("Settings are required"))?;
+            .ok_or(invalid_proposal_error("Settings are required"))?
+            .clone();
 
-        if settings.controllers.is_none()
-            && settings.compute_allocation.is_none()
-            && settings.memory_allocation.is_none()
-            && settings.freezing_threshold.is_none()
-            && settings.log_visibility.is_none()
-            && settings.snapshot_visibility.is_none()
-            && settings.wasm_memory_limit.is_none()
-            && settings.wasm_memory_threshold.is_none()
+        if controllers.is_none()
+            && compute_allocation.is_none()
+            && memory_allocation.is_none()
+            && freezing_threshold.is_none()
+            && log_visibility.is_none()
+            && snapshot_visibility.is_none()
+            && wasm_memory_limit.is_none()
+            && wasm_memory_threshold.is_none()
         {
             return Err(invalid_proposal_error(
                 "At least one setting must be provided",
             ));
         }
 
-        let controllers = settings
-            .controllers
-            .as_ref()
-            .map(|controllers| controllers.controllers.clone());
-        let compute_allocation = settings.compute_allocation.map(Nat::from);
-        let memory_allocation = settings.memory_allocation.map(Nat::from);
-        let freezing_threshold = settings.freezing_threshold.map(Nat::from);
-        let wasm_memory_limit = settings.wasm_memory_limit.map(Nat::from);
-        let wasm_memory_threshold = settings.wasm_memory_threshold.map(Nat::from);
-        let log_visibility = match settings.log_visibility {
+        let controllers = controllers.map(|controllers| controllers.controllers);
+        let compute_allocation = compute_allocation.map(Nat::from);
+        let memory_allocation = memory_allocation.map(Nat::from);
+        let freezing_threshold = freezing_threshold.map(Nat::from);
+        let wasm_memory_limit = wasm_memory_limit.map(Nat::from);
+        let wasm_memory_threshold = wasm_memory_threshold.map(Nat::from);
+        let log_visibility = match log_visibility {
             Some(log_visibility) => Some(Self::valid_log_visibility(log_visibility)?),
             None => None,
         };
-        let snapshot_visibility = match settings.snapshot_visibility {
+        let snapshot_visibility = match snapshot_visibility {
             Some(snapshot_visibility) => {
                 Some(Self::valid_snapshot_visibility(snapshot_visibility)?)
             }
