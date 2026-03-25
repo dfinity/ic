@@ -64,6 +64,15 @@ const AUX_NODE_NAME: &str = "aux";
 const ORIGINAL_NNS_ID: &str = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
 const MAINNET_NNS_DAPP_CANISTER_ID: &str = "qoctq-giaaa-aaaaa-aaaea-cai";
 
+// In general, the flags below should be set to `false` to download the mainnet version of
+// `ic-replay` and `ic-recovery` respectively and avoid compatibility bugs. Though, if some changes
+// were made to them specifically to make this testnet work, then we should use the HEAD version
+// and switch the corresponding flag flag to `true`. We must then hope that no incompatibles
+// changes were also introduced. It is thus then advised to switch back the flag to `false` when
+// the changes reach mainnet NNS.
+const USE_HEAD_IC_REPLAY: bool = true;
+const USE_HEAD_IC_RECOVERY: bool = true;
+
 pub mod proposals;
 
 /// Sets up an IC running mainnet IC-OS nodes running the mainnet NNS
@@ -290,13 +299,7 @@ fn setup_recovered_nns(
 }
 
 fn fetch_mainnet_ic_replay(env: &TestEnv) {
-    // In general, the flag below should be set to `false` to download the mainnet version of
-    // `ic-replay` and avoid compatibility bugs. Though, if some changes were made to `ic-replay`
-    // specifically to make this testnet work, then we should use the HEAD version and switch this
-    // flag to `true`. We must then hope that no incompatibles changes were also introduced. It is
-    // thus then advised to switch back this flag to `false` when the changes reach mainnet NNS.
-    // TODO: Switch to false when #(...) has reached mainnet NNS.
-    if true {
+    if USE_HEAD_IC_REPLAY {
         std::fs::copy(
             get_dependency_path_from_env("IC_REPLAY_PATH"),
             env.get_path(PATH_IC_REPLAY),
@@ -309,7 +312,6 @@ fn fetch_mainnet_ic_replay(env: &TestEnv) {
             format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
         let ic_replay_path = env.get_path(PATH_IC_REPLAY);
         let ic_replay_gz_path = env.get_path("ic-replay.gz");
-        // let mut tmp_file = tempfile::tempfile().unwrap();
         info!(
             logger,
             "Downloading {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?} ..."
@@ -350,13 +352,7 @@ fn fetch_mainnet_ic_replay(env: &TestEnv) {
 }
 
 fn fetch_mainnet_ic_recovery(env: &TestEnv) {
-    // In general, the flag below should be set to `false` to download the mainnet version of
-    // `ic-replay` and avoid compatibility bugs. Though, if some changes were made to `ic-replay`
-    // specifically to make this testnet work, then we should use the HEAD version and switch this
-    // flag to `true`. We must then hope that no incompatibles changes were also introduced. It is
-    // thus then advised to switch back this flag to `false` when the changes reach mainnet NNS.
-    // TODO: Switch to false when #(...) has reached mainnet NNS.
-    if true {
+    if USE_HEAD_IC_RECOVERY {
         std::fs::copy(
             get_dependency_path_from_env("IC_RECOVERY_PATH"),
             env.get_path(PATH_IC_RECOVERY),
