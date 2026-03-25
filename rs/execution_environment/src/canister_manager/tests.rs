@@ -1,6 +1,6 @@
 use super::InstallCodeResult;
 use crate::{
-    IngressHistoryWriterImpl, RoundLimits, as_num_instructions,
+    RoundLimits, as_num_instructions,
     canister_manager::{
         CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
         InstallCodeContext, MAX_SLICE_SIZE_BYTES, StopCanisterResult, WasmSource,
@@ -91,7 +91,9 @@ use ic_types::{
     messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+};
 use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
@@ -256,15 +258,6 @@ impl CanisterManagerBuilder {
     fn build(self) -> CanisterManager {
         let subnet_type = SubnetType::Application;
         let metrics_registry = MetricsRegistry::new();
-        let state_reader = Arc::new(FakeStateManager::new());
-        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
-        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
-            Config::default(),
-            no_op_logger(),
-            &metrics_registry,
-            completed_execution_messages_tx,
-            state_reader,
-        ));
         let cycles_account_manager = Arc::new(self.cycles_account_manager);
         let hypervisor = Hypervisor::new(
             Config::default(),
@@ -287,7 +280,6 @@ impl CanisterManagerBuilder {
                 self.rate_limiting_of_instructions,
             ),
             cycles_account_manager,
-            ingress_history_writer,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
             FlagStatus::Disabled,
         )
@@ -2165,7 +2157,7 @@ fn delete_canister_consumed_cycles_observed() {
             .get_consumed_cycles_by_use_case()
             .get(&CyclesUseCase::DeletedCanisters)
             .unwrap(),
-        NominalCycles::from(initial_cycles.get())
+        NominalCycles::new(initial_cycles.get())
     );
 }
 
@@ -3062,7 +3054,6 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         NumBytes::from(MIB)
     );
 
-    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
@@ -3070,14 +3061,15 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         compute_allocation_used: state.total_compute_allocation(),
         subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
+    let time = state.time();
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
             canister_test_id(0),
             &mut state,
             &mut round_limits,
-            &no_op_counter,
             None,
+            time,
         )
         .unwrap();
 
@@ -3927,7 +3919,7 @@ fn cycles_correct_if_upgrade_succeeds() {
     let cycles_before = test.canister_state(id).system_state.balance();
     let execution_cost_before = test.canister_execution_cost(id);
     // Clear `expected_compiled_wasms` so that the full execution cost is applied
-    test.state_mut().metadata.expected_compiled_wasms.clear();
+    test.state_mut().metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
     test.upgrade_canister(id, wasm.clone()).unwrap();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
@@ -5341,9 +5333,8 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
     test.subnet_message("upload_chunk", upload_args.encode())
         .unwrap_err()
         .assert_contains(
-            ErrorCode::CanisterContractViolation,
-            "Error from Wasm chunk store: Canister is heap delta rate limited. \
-        Current delta debit: 1048576, limit: 1048576.",
+            ErrorCode::CanisterHeapDeltaRateLimited,
+            &format!("Canister {canister_id} is heap delta rate limited: current delta debit is 1048576, but limit is 1048576")
         );
 
     assert_eq!(

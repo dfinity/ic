@@ -193,7 +193,7 @@ fn update_neuron_account_fails() {
     assert_matches!(
         indexes.update_neuron(&neuron, &neuron_with_different_account),
         Err(NeuronStoreError::SubaccountModified { old_subaccount, new_subaccount })
-        if old_subaccount.0 == [1u8; 32] && new_subaccount.0 == [2u8; 32]);
+        if old_subaccount.0 == [1_u8; 32] && new_subaccount.0 == [2_u8; 32]);
 }
 
 #[test]

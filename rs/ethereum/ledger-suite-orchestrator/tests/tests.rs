@@ -87,7 +87,7 @@ fn should_spawn_ledger_with_correct_init_args() {
             ),
             (
                 MetadataKey::parse(MetadataKey::ICRC103_MAX_TAKE_VALUE).unwrap(),
-                LedgerMetadataValue::from(500u64),
+                LedgerMetadataValue::from(500_u64),
             ),
             (
                 MetadataKey::parse(MetadataKey::ICRC106_INDEX_PRINCIPAL).unwrap(),

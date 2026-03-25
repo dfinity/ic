@@ -281,8 +281,8 @@ fn csp_dealing() -> CspNiDkgDealing {
 }
 
 pub fn zk_proof_dec() -> ZKProofDec {
-    let fr = FrBytes([0u8; FrBytes::SIZE]);
-    let g1 = G1Bytes([0u8; G1Bytes::SIZE]);
+    let fr = FrBytes([0_u8; FrBytes::SIZE]);
+    let g1 = G1Bytes([0_u8; G1Bytes::SIZE]);
 
     ZKProofDec {
         first_move_y0: g1,
@@ -297,9 +297,9 @@ pub fn zk_proof_dec() -> ZKProofDec {
 }
 
 pub fn zk_proof_share() -> ZKProofShare {
-    let fr = FrBytes([0u8; FrBytes::SIZE]);
-    let g1 = G1Bytes([0u8; G1Bytes::SIZE]);
-    let g2 = G2Bytes([0u8; G2Bytes::SIZE]);
+    let fr = FrBytes([0_u8; FrBytes::SIZE]);
+    let g1 = G1Bytes([0_u8; G1Bytes::SIZE]);
+    let g2 = G2Bytes([0_u8; G2Bytes::SIZE]);
 
     ZKProofShare {
         first_move_f: g1,

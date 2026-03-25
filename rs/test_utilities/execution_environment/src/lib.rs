@@ -20,7 +20,7 @@ use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
     IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits, WasmSource,
-    execute_canister, wasm_execution_mode,
+    abort_all_paused_executions, execute_canister, wasm_execution_mode,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -41,6 +41,7 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, WellFormedError,
 };
@@ -79,7 +80,9 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule, WasmHash};
@@ -312,6 +315,7 @@ pub struct ExecutionTest {
     replica_version: ReplicaVersion,
     canister_snapshot_baseline_instructions: NumInstructions,
     execution_config: Config,
+    resource_limits: ResourceLimits,
 
     // The actual implementation.
     exec_env: Arc<ExecutionEnvironment>,
@@ -1262,6 +1266,7 @@ impl ExecutionTest {
             Arc::clone(&network_topology),
             self.time,
             &mut round_limits,
+            self.resource_limits,
             self.subnet_size(),
             cost_schedule,
         );
@@ -1408,6 +1413,7 @@ impl ExecutionTest {
             UNIX_EPOCH,
             network_topology,
             &mut round_limits,
+            self.resource_limits,
             self.subnet_size(),
             cost_schedule,
         );
@@ -1606,7 +1612,7 @@ impl ExecutionTest {
                 self.expected_cycles_balance_change(message, instructions_used);
             assert_eq!(
                 cycles_used,
-                NominalCycles::from(expected_cycles_balance_change.get())
+                NominalCycles::new(expected_cycles_balance_change.get())
             );
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
@@ -1618,7 +1624,7 @@ impl ExecutionTest {
             // the base cost could still be charged in some cases even if no instructions
             // were used (e.g., depending on how early validation fails)
             assert!(
-                cycles_used.get() == 0 || cycles_used == NominalCycles::from(baseline_cost.get())
+                cycles_used.get() == 0 || cycles_used == NominalCycles::new(baseline_cost.get())
             );
         }
     }
@@ -1777,6 +1783,7 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
+                    self.resource_limits,
                     self.subnet_size(),
                     cost_schedule,
                 );
@@ -1917,6 +1924,7 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
+                    self.resource_limits,
                     self.subnet_size(),
                     cost_schedule,
                 );
@@ -1942,8 +1950,7 @@ impl ExecutionTest {
     /// Aborts all paused executions.
     pub fn abort_all_paused_executions(&mut self) {
         let mut state = self.state.take().unwrap();
-        self.exec_env
-            .abort_all_paused_executions(&mut state, &self.log);
+        abort_all_paused_executions(&mut state, &self.exec_env, &self.log);
         for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
             paused_subnet_message.instructions = NumInstructions::new(0);
         }
@@ -2192,7 +2199,7 @@ impl ExecutionTest {
 
     pub fn subnet_memory_saturation(&self) -> ResourceSaturation {
         self.exec_env
-            .subnet_memory_saturation(&self.subnet_available_memory)
+            .subnet_memory_saturation(&self.subnet_available_memory, self.resource_limits)
     }
 
     pub fn expected_storage_reservation_cycles(
@@ -2293,6 +2300,7 @@ pub struct ExecutionTestBuilder {
     subnet_admins: BTreeSet<PrincipalId>,
     network_topology: Option<NetworkTopology>,
     log_level: Option<Level>,
+    resource_limits: ResourceLimits,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -2330,6 +2338,7 @@ impl Default for ExecutionTestBuilder {
             subnet_admins: BTreeSet::new(),
             network_topology: None,
             log_level: Some(Level::Warning),
+            resource_limits: Default::default(),
         }
     }
 }
@@ -2782,6 +2791,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = resource_limits;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -3069,6 +3083,7 @@ impl ExecutionTestBuilder {
                 .scheduler_config
                 .canister_snapshot_baseline_instructions,
             execution_config: self.execution_config,
+            resource_limits: self.resource_limits,
         }
     }
 }

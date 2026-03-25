@@ -1,4 +1,4 @@
-use crate::driver::ic::VmResources;
+use crate::driver::ic::VmResourceOverrides;
 use crate::driver::test_env::TestEnvAttribute;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ pub struct GroupSetup {
     /// For now, the group timeout strictly translates to the corresponding group
     /// TTL.
     pub group_timeout: Option<Duration>,
-    pub default_vm_resources: Option<VmResources>,
+    pub vm_resource_overrides: VmResourceOverrides,
 }
 
 impl GroupSetup {

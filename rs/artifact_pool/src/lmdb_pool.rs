@@ -2258,9 +2258,9 @@ mod tests {
 
         let hashes = [
             CryptoHash(vec![]),
-            CryptoHash(vec![2u8; 1]),
-            CryptoHash(vec![2u8; 32]),
-            CryptoHash(vec![2u8; 128]),
+            CryptoHash(vec![2_u8; 1]),
+            CryptoHash(vec![2_u8; 32]),
+            CryptoHash(vec![2_u8; 128]),
         ];
 
         let message_types = [IDkgMessageType::Dealing, IDkgMessageType::EcdsaSigShare];
