@@ -1703,12 +1703,13 @@ impl JournalStreamer {
     /// Returns an error on transport errors or if the journal is empty and there is no cursor to
     /// anchor to.
     pub fn from_now(mut self) -> anyhow::Result<Self> {
-        let (_message, cursor) = Self::new(self.session.clone())
+        let cursor = Self::new(self.session.clone())
             .max_lines(1)
             .search_and_return_cursors("__CURSOR")?
             .into_iter()
             .next()
-            .ok_or_else(|| anyhow::anyhow!("No journal entries found"))?;
+            .ok_or_else(|| anyhow::anyhow!("No journal entries found"))?
+            .cursor;
 
         self.from_cursor = Some(cursor);
         Ok(self)
@@ -1718,15 +1719,12 @@ impl JournalStreamer {
     /// returns the matching journal messages.
     pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {
         self.search_and_return_cursors(search_regex)
-            .map(|iter| iter.into_iter().map(|(message, _cursor)| message).collect())
+            .map(|iter| iter.into_iter().map(|output| output.message).collect())
     }
 
     /// Builds and executes the `journalctl` command over SSH, parses the JSON output, and returns
     /// `(message, cursor)` pairs for entries matching `search_regex`.
-    fn search_and_return_cursors(
-        &self,
-        search_regex: &str,
-    ) -> anyhow::Result<Vec<(String, String)>> {
+    fn search_and_return_cursors(&self, search_regex: &str) -> anyhow::Result<Vec<JournalOutput>> {
         let mut command = "journalctl --output json --output-fields='MESSAGE,__CURSOR'".to_string();
 
         if !self.journalctl_flags.is_empty() {
@@ -1748,11 +1746,7 @@ impl JournalStreamer {
         let output = execute_bash_script_from_session(&self.session, &command)?;
         Ok(output
             .lines()
-            .map(|line| {
-                let output: JournalOutput =
-                    serde_json::from_str(line).expect("Journal output should be valid JSON");
-                (output.message, output.cursor)
-            })
+            .map(|line| serde_json::from_str(line).expect("Journal output should be valid JSON"))
             .collect::<Vec<_>>())
     }
 }
