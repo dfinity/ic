@@ -4,7 +4,8 @@ use ic_types::{
     CanisterId, PrincipalId, Time, UserId,
     crypto::DOMAIN_IC_REQUEST,
     messages::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Ingress, MessageId, SenderInfo, SignedIngress
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Ingress, MessageId,
+        SenderInfo, SignedIngress,
     },
     time::expiry_time_from_now,
 };

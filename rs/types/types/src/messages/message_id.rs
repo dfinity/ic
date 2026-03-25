@@ -223,8 +223,8 @@ impl From<MessageIdError> for ProxyDecodeError {
 #[cfg(test)]
 mod tests {
     use super::super::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawHttpRequestVal, SenderInfo,
-        SignedIngress,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawHttpRequestVal,
+        SenderInfo, SignedIngress,
     };
     use super::*;
     use crate::{CanisterId, PrincipalId, Time, time::expiry_time_from_now};

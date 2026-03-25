@@ -29,7 +29,9 @@ use ic_types::{
             IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
         },
     },
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SenderInfo, SignedIngress},
+    messages::{
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SenderInfo, SignedIngress,
+    },
     signature::BasicSignatureBatch,
     time::UNIX_EPOCH,
 };
