@@ -984,8 +984,10 @@ fn corrupt_latest_cup(
         secs(120),
         secs(10),
         || {
-            let matches = journal_streamer.search("Failed to deserialize CatchUpPackage");
-            if matches.is_ok_and(|m| !m.is_empty()) {
+            if journal_streamer
+                .search("Failed to deserialize CatchUpPackage")
+                .is_ok_and(|m| !m.is_empty())
+            {
                 Ok(())
             } else {
                 bail!("Did not find log entry that cup is corrupted.")
