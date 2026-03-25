@@ -21,6 +21,7 @@ use ic_system_test_driver::nns::get_subnet_list_from_registry;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
 use ic_types::{Height, RegistryVersion, SubnetId};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
 use std::collections::BTreeSet;
@@ -34,7 +35,7 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         // Currently, the orchestrator/replica does not handle subnet deletion gracefully, so this test can experience
         // node restarts. However, this is ok because it can only affect the nodes of a deleted subnet.
-        .without_assert_no_replica_restarts()
+        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
         .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
@@ -58,7 +59,7 @@ pub fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::fast(SubnetType::CloudEngine, NUM_ENGINE_NODES)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH))
-                .with_cost_schedule(ic_types::batch::CanisterCyclesCostSchedule::Free),
+                .with_cost_schedule(CanisterCyclesCostSchedule::Free),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
