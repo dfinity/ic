@@ -113,7 +113,6 @@ system_test_nns(
     guestos_update = True,
     hostos = "mainnet_latest_dev",
     tags = [
-        "long_test",
         "manual",
     ],
     test_driver_target = ":guestos_upgrade_test_bin",
@@ -176,7 +175,6 @@ system_test_nns(
     },
     hostos = True,
     tags = [
-        "long_test",
         "manual",
     ],
     test_timeout = "eternal",

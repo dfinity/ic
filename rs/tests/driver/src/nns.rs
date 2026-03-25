@@ -947,11 +947,6 @@ pub async fn submit_update_api_boundary_node_version_proposal(
 
 /// Submits a proposal to bless an alternative guest OS version for disaster recovery.
 ///
-/// This proposal allows node operators to manually intervene in case of disaster to run
-/// NNS-approved alternative software. The proposal records approval for specific software
-/// configurations (firmware, kernel, initrd, and kernel command line) that can be used
-/// for recovery purposes.
-///
 /// # Arguments
 ///
 /// * `governance`                      - Governance canister
@@ -961,9 +956,8 @@ pub async fn submit_update_api_boundary_node_version_proposal(
 /// * `chip_ids`                        - AMD Secure Processor chip IDs that are allowed to run
 ///   this software. Each chip ID must be exactly 64 bytes.
 /// * `rootfs_hash`                     - Hexadecimal fingerprint of the recovery rootfs.
-///   Must contain only hexadecimal characters (0-9, A-F, a-f).
-/// * `base_guest_launch_measurements`  - The version being replaced by this alternative version
-///   must match this field.
+/// * `base_guest_launch_measurements`  - The SEV launch measurements of the version being replaced
+///   by this alternative version.
 ///
 /// Eventually returns the identifier of the newly submitted proposal.
 pub async fn submit_bless_alternative_guest_os_version_proposal(
