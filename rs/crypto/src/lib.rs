@@ -37,7 +37,7 @@ use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicK
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::{NodeId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::{rngs::OsRng, SeedableRng, Rng};
+use rand::{Rng, SeedableRng, rngs::OsRng};
 use std::fmt;
 use std::sync::Arc;
 
@@ -112,7 +112,10 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             vault,
-            csprng: CspRwLock::new_for_rng(Box::new(rand_chacha::ChaCha20Rng::from_seed(seed)), Arc::clone(&metrics)),
+            csprng: CspRwLock::new_for_rng(
+                Box::new(rand_chacha::ChaCha20Rng::from_seed(seed)),
+                Arc::clone(&metrics),
+            ),
             registry_client,
             node_id,
             logger,
@@ -218,7 +221,10 @@ impl CryptoComponentImpl<Csp> {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             vault,
-            csprng: CspRwLock::new_for_rng(Box::new(rand_chacha::ChaCha20Rng::from_seed(OsRng.r#gen())), Arc::clone(&metrics)),
+            csprng: CspRwLock::new_for_rng(
+                Box::new(rand_chacha::ChaCha20Rng::from_seed(OsRng.r#gen())),
+                Arc::clone(&metrics),
+            ),
             registry_client,
             node_id,
             time_source: Arc::new(SysTimeSource::new()),
