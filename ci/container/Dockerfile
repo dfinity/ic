@@ -59,19 +59,6 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
 ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# install cargo with the ubuntu user
-USER ubuntu
-ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-COPY rust-toolchain.toml /tmp/rust-toolchain.toml
-RUN RUST_VERSION=$(sed -n 's/^channel = "\(.*\)"$/\1/p' /tmp/rust-toolchain.toml) && \
-    echo "Rust version: $RUST_VERSION" && \
-    curl --fail https://sh.rustup.rs -sSf \
-    | sh -s -- -y --default-toolchain "${RUST_VERSION}-x86_64-unknown-linux-gnu" --no-modify-path && \
-    rustup default "${RUST_VERSION}-x86_64-unknown-linux-gnu" && \
-    rustup target add wasm32-unknown-unknown && \
-    rustup component add clippy && \
-    sudo rm /tmp/rust-toolchain.toml
-
 # Install AFLplusplus for fuzzing
 # LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
@@ -89,6 +76,19 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make install && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
+
+# install cargo with the ubuntu user
+USER ubuntu
+ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
+COPY rust-toolchain.toml /tmp/rust-toolchain.toml
+RUN RUST_VERSION=$(sed -n 's/^channel = "\(.*\)"$/\1/p' /tmp/rust-toolchain.toml) && \
+    echo "Rust version: $RUST_VERSION" && \
+    curl --fail https://sh.rustup.rs -sSf \
+    | sh -s -- -y --default-toolchain "${RUST_VERSION}-x86_64-unknown-linux-gnu" --no-modify-path && \
+    rustup default "${RUST_VERSION}-x86_64-unknown-linux-gnu" && \
+    rustup target add wasm32-unknown-unknown && \
+    rustup component add clippy && \
+    sudo rm /tmp/rust-toolchain.toml
 
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.22.0
