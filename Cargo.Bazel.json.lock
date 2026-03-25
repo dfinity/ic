@@ -1,5 +1,5 @@
 {
-  "checksum": "039c010125fb5a7e9b285985debfc06af3f0beb6e7c0c1ffb027d1431794028a",
+  "checksum": "804958314432436420f16afd62a7607b5c422f36da8fed6e23855075eaad3846",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3066,14 +3066,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "askama 0.15.1": {
+    "askama 0.15.5": {
       "name": "askama",
-      "version": "0.15.1",
+      "version": "0.15.5",
       "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/askama/0.15.1/download",
-          "sha256": "bb7125972258312e79827b60c9eb93938334100245081cf701a2dee981b17427"
+          "url": "https://static.crates.io/crates/askama/0.15.5/download",
+          "sha256": "33b7e89247085c4bb89576c3116140bac3999c81d74db52afe11b36c7e11a97d"
         }
       },
       "targets": [
@@ -3132,13 +3132,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "askama_macros 0.15.1",
+              "id": "askama_macros 0.15.5",
               "target": "askama_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.15.1"
+        "version": "0.15.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -3147,20 +3147,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "askama_derive 0.15.1": {
+    "askama_derive 0.15.5": {
       "name": "askama_derive",
-      "version": "0.15.1",
+      "version": "0.15.5",
       "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/askama_derive/0.15.1/download",
-          "sha256": "8ba5e7259a1580c61571e3116ebaaa01e3c001b2132b17c4cc5c70780ca3e994",
-          "patch_args": [
-            "-p2"
-          ],
-          "patches": [
-            "@@//bazel:askama.patch"
-          ]
+          "url": "https://static.crates.io/crates/askama_derive/0.15.5/download",
+          "sha256": "adf18857bd6189696f6e44ab992acbb731cc12bc1661959cd9f1d56342708cee"
         }
       },
       "targets": [
@@ -3197,7 +3191,7 @@
         "deps": {
           "common": [
             {
-              "id": "askama_parser 0.15.1",
+              "id": "askama_parser 0.15.5",
               "target": "askama_parser",
               "alias": "parser"
             },
@@ -3242,7 +3236,7 @@
           ],
           "selects": {}
         },
-        "version": "0.15.1"
+        "version": "0.15.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -3251,14 +3245,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "askama_macros 0.15.1": {
+    "askama_macros 0.15.5": {
       "name": "askama_macros",
-      "version": "0.15.1",
+      "version": "0.15.5",
       "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/askama_macros/0.15.1/download",
-          "sha256": "236ce20b77cb13506eaf5024899f4af6e12e8825f390bd943c4c37fd8f322e46"
+          "url": "https://static.crates.io/crates/askama_macros/0.15.5/download",
+          "sha256": "78a8dcefb2a4763c7957ad5b1a16df6d81cff6227aae161b95af322d52c02005"
         }
       },
       "targets": [
@@ -3293,14 +3287,14 @@
         "deps": {
           "common": [
             {
-              "id": "askama_derive 0.15.1",
+              "id": "askama_derive 0.15.5",
               "target": "askama_derive"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.15.1"
+        "version": "0.15.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -3309,14 +3303,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "askama_parser 0.15.1": {
+    "askama_parser 0.15.5": {
       "name": "askama_parser",
-      "version": "0.15.1",
+      "version": "0.15.5",
       "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/askama_parser/0.15.1/download",
-          "sha256": "f3c63392767bb2df6aa65a6e1e3b80fd89bb7af6d58359b924c0695620f1512e"
+          "url": "https://static.crates.io/crates/askama_parser/0.15.5/download",
+          "sha256": "e7ef9905e0280528d0c2271ff66cab68ec4a550e745e3a365ded353f6e30faac"
         }
       },
       "targets": [
@@ -3375,7 +3369,7 @@
           ],
           "selects": {}
         },
-        "version": "0.15.1"
+        "version": "0.15.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -21346,7 +21340,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "askama 0.15.1",
+              "id": "askama 0.15.5",
               "target": "askama"
             },
             {
@@ -98604,7 +98598,7 @@
     "arbitrary 1.4.2",
     "arc-swap 1.7.1",
     "arrayvec 0.7.4",
-    "askama 0.15.1",
+    "askama 0.15.5",
     "assert-json-diff 2.0.2",
     "assert_cmd 2.0.16",
     "assert_matches 1.5.0",
