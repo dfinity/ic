@@ -4,7 +4,8 @@ use dfn_core::println;
 use ic_base_types::{SubnetId, subnet_id_into_protobuf};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
-    SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
+    ResourceLimits as ResourceLimitsPb, SubnetFeatures as SubnetFeaturesPb,
+    SubnetRecord as SubnetRecordPb,
 };
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
@@ -234,6 +235,7 @@ pub struct UpdateSubnetPayload {
     pub halt_at_cup_height: Option<bool>,
 
     pub features: Option<SubnetFeaturesPb>,
+    pub resource_limits: Option<ResourceLimitsPb>,
 
     pub chain_key_config: Option<ChainKeyConfig>,
     pub chain_key_signing_enable: Option<Vec<MasterPublicKeyId>>,
@@ -444,6 +446,7 @@ fn merge_subnet_record(
         is_halted,
         halt_at_cup_height,
         features,
+        resource_limits,
         chain_key_config,
         chain_key_signing_enable: _,
         chain_key_signing_disable: _,
@@ -484,6 +487,7 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, halt_at_cup_height);
 
     maybe_set_option!(subnet_record, features);
+    maybe_set_option!(subnet_record, resource_limits);
 
     let chain_key_config = chain_key_config.map(|chain_key_config| {
         ChainKeyConfigInternal::try_from(chain_key_config)
@@ -538,6 +542,7 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -627,6 +632,7 @@ mod tests {
                 }
                 .into(),
             ),
+            resource_limits: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -732,6 +738,7 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: Some(true),
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
