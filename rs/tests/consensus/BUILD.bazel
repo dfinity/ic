@@ -252,9 +252,6 @@ system_test_nns(
 system_test_nns(
     name = "subnet_splitting_v2_test",
     enable_metrics = True,
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
