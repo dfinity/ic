@@ -1715,6 +1715,13 @@ impl JournalStreamer {
         Ok(self)
     }
 
+    /// Executes the configured `journalctl` query and returns whether there are any entries
+    /// matching `search_regex`.
+    pub fn contains(&self, search_regex: &str) -> anyhow::Result<bool> {
+        self.search_and_return_cursors(search_regex)
+            .map(|matches| !matches.is_empty())
+    }
+
     /// Executes the configured `journalctl` query, filters the output with `search_regex`, and
     /// returns the matching journal messages.
     pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {

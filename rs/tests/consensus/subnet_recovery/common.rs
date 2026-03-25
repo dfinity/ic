@@ -985,8 +985,8 @@ fn corrupt_latest_cup(
         secs(10),
         || {
             if journal_streamer
-                .search("Failed to deserialize CatchUpPackage")
-                .is_ok_and(|m| !m.is_empty())
+                .contains("Failed to deserialize CatchUpPackage")
+                .unwrap_or_default()
             {
                 Ok(())
             } else {

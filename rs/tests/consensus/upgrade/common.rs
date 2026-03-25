@@ -443,8 +443,8 @@ fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
     if !JournalStreamer::new(session)
         .follow()
         .max_lines(1)
-        .search("Orchestrator shut down gracefully")
-        .is_ok_and(|matches| !matches.is_empty())
+        .contains("Orchestrator shut down gracefully")
+        .unwrap_or_default()
     {
         panic!("Orchestrator did not shut down gracefully");
     }

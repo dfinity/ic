@@ -110,10 +110,7 @@ pub fn halt_subnet(
         secs(120),
         secs(10),
         || {
-            if journal_streamer
-                .search("is halted")
-                .is_ok_and(|m| !m.is_empty())
-            {
+            if journal_streamer.contains("is halted").unwrap_or_default() {
                 Ok(())
             } else {
                 Err(anyhow!("Did not find log entry that consensus is halted"))

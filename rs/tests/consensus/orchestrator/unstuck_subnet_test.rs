@@ -206,8 +206,8 @@ fn test(test_env: TestEnv) {
 
 fn have_sha_errors(session: &Session) -> bool {
     JournalStreamer::new(session.clone())
-        .search("FileHashMismatchError")
-        .is_ok_and(|matches| !matches.is_empty())
+        .contains("FileHashMismatchError")
+        .unwrap_or_default()
 }
 
 fn main() -> Result<()> {
