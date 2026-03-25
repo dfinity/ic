@@ -6,6 +6,7 @@ use ic_base_types::NumSeconds;
 use ic_config::state_manager::lsmt_config_default;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::CanisterStatusType;
+use ic_management_canister_types_private::SnapshotSource;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -30,10 +31,11 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{StopCanisterCallId, StopCanisterContext},
 };
+use ic_types::{NumBytes, time::UNIX_EPOCH};
 use ic_types_cycles::Cycles;
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::CanisterModule;
-use std::{collections::BTreeSet, fs::OpenOptions, path::Path};
+use std::{collections::BTreeMap, collections::BTreeSet, fs::OpenOptions, path::Path};
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -671,4 +673,285 @@ fn empty_protobufs_are_loaded_correctly() {
 
         assert_eq!(recovered_state, recovered_state_altered);
     });
+}
+
+fn make_test_snapshot(
+    chunk_store_has_delta: bool,
+    wasm_mem_has_delta: bool,
+    stable_mem_has_delta: bool,
+) -> CanisterSnapshot {
+    let mut chunk_store = WasmChunkStore::new_for_testing();
+    if chunk_store_has_delta {
+        chunk_store
+            .page_map_mut()
+            .update(&[(PageIndex::from(0), &[1_u8; PAGE_SIZE])]);
+    }
+
+    fn page_memory_for_test(with_delta: bool) -> PageMemory {
+        let mut page_map = PageMap::new_for_testing();
+        if with_delta {
+            page_map.update(&[(PageIndex::from(0), &[1_u8; PAGE_SIZE])]);
+        }
+        PageMemory {
+            page_map,
+            size: NumWasmPages::new(1),
+        }
+    }
+    let execution_snapshot = ExecutionStateSnapshot {
+        wasm_binary: CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]),
+        exported_globals: vec![],
+        stable_memory: page_memory_for_test(stable_mem_has_delta),
+        wasm_memory: page_memory_for_test(wasm_mem_has_delta),
+        global_timer: None,
+        on_low_wasm_memory_hook_status: None,
+    };
+
+    CanisterSnapshot::new(
+        SnapshotSource::taken_from_canister(),
+        UNIX_EPOCH,
+        0,
+        vec![],
+        chunk_store,
+        execution_snapshot,
+        NumBytes::from(0),
+    )
+}
+
+/// Clones the `Arc<CanisterState>` and calls `strip_page_map_deltas()`. Returns
+/// the `Arc<CanisterStates>` from before and after the call.
+fn call_strip_page_map_deltas(
+    canister_state: CanisterState,
+) -> (Arc<CanisterState>, Arc<CanisterState>) {
+    let canister_id = canister_state.canister_id();
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    state.put_canister_state(canister_state);
+
+    // Clone the `Arc<CanisterState>` before, so that any `Arc::make_mut()` call
+    // causes the underlying `CanisterState` to be cloned (and changes the pointer).
+    let canister_before = state.canister_state_arc(&canister_id).unwrap();
+
+    let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
+    strip_page_map_deltas(&mut state, fd_factory);
+
+    let canister_after = state.canister_state_arc(&canister_id).unwrap();
+    (canister_before, canister_after)
+}
+
+fn ptr_eq(left: &Arc<CanisterState>, right: &Arc<CanisterState>) -> bool {
+    left.as_ref() as *const CanisterState == right.as_ref() as *const CanisterState
+}
+
+#[test]
+fn strip_page_map_deltas_skips_canister_with_no_deltas() {
+    let canister_id = canister_test_id(10);
+    let canister_state = new_canister_state(
+        canister_id,
+        user_test_id(24).get(),
+        INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+
+    let (canister_before, canister_after) = call_strip_page_map_deltas(canister_state);
+
+    assert!(ptr_eq(&canister_before, &canister_after));
+}
+
+#[test]
+fn strip_page_map_deltas_strips_wasm_chunk_store() {
+    let canister_id = canister_test_id(10);
+    let mut canister_state = new_canister_state(
+        canister_id,
+        user_test_id(24).get(),
+        INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+    canister_state
+        .system_state
+        .wasm_chunk_store
+        .page_map_mut()
+        .update(&[(PageIndex::from(0), &[1u8; PAGE_SIZE])]);
+    // Wasm chunk store has deltas to strip.
+    assert!(
+        canister_state
+            .system_state
+            .wasm_chunk_store
+            .page_map()
+            .should_strip_deltas()
+    );
+
+    let (canister_before, canister_after) = call_strip_page_map_deltas(canister_state);
+
+    // `CanisterState` was mutated.
+    assert!(!ptr_eq(&canister_before, &canister_after));
+
+    // Deltas were stripped.
+    assert!(
+        !canister_after
+            .system_state
+            .wasm_chunk_store
+            .page_map()
+            .should_strip_deltas()
+    );
+}
+
+#[test]
+fn strip_page_map_deltas_strips_execution_state_memories() {
+    let canister_id = canister_test_id(10);
+    let mut canister_state = new_canister_state(
+        canister_id,
+        user_test_id(24).get(),
+        INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+
+    let wasm_memory = one_page_of(1);
+    let stable_memory = one_page_of(2);
+    let execution_state = ExecutionState::new(
+        "NOT_USED".into(),
+        WasmBinary::new(empty_wasm()),
+        ExportedFunctions::new(BTreeSet::new()),
+        wasm_memory,
+        stable_memory,
+        vec![],
+        WasmMetadata::default(),
+    );
+    assert!(execution_state.wasm_memory.page_map.should_strip_deltas());
+    assert!(execution_state.stable_memory.page_map.should_strip_deltas());
+    canister_state.execution_state = Some(execution_state);
+
+    let (canister_before, canister_after) = call_strip_page_map_deltas(canister_state);
+
+    // `CanisterState` was mutated.
+    assert!(!ptr_eq(&canister_before, &canister_after));
+
+    // Deltas were stripped.
+    let execution_state = canister_after.execution_state.as_ref().unwrap();
+    assert!(!execution_state.wasm_memory.page_map.should_strip_deltas());
+    assert!(!execution_state.stable_memory.page_map.should_strip_deltas());
+}
+
+#[test]
+fn strip_page_map_deltas_strips_snapshot_page_maps() {
+    let canister_id = canister_test_id(10);
+    let mut canister_state = new_canister_state(
+        canister_id,
+        user_test_id(24).get(),
+        INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+
+    let snapshot = make_test_snapshot(true, true, true);
+    assert!(snapshot.chunk_store().page_map().should_strip_deltas());
+    assert!(
+        snapshot
+            .execution_snapshot()
+            .wasm_memory
+            .page_map
+            .should_strip_deltas()
+    );
+    assert!(
+        snapshot
+            .execution_snapshot()
+            .stable_memory
+            .page_map
+            .should_strip_deltas()
+    );
+
+    let snapshot_id = SnapshotId::from((canister_id, 1));
+    let mut snapshots = BTreeMap::new();
+    snapshots.insert(snapshot_id, Arc::new(snapshot));
+    canister_state.canister_snapshots = CanisterSnapshots::new(snapshots);
+
+    let (canister_before, canister_after) = call_strip_page_map_deltas(canister_state);
+
+    // `CanisterState` was mutated.
+    assert!(!ptr_eq(&canister_before, &canister_after));
+
+    // Deltas were stripped.
+    let snapshot = canister_after.canister_snapshots.get(snapshot_id).unwrap();
+    assert!(!snapshot.chunk_store().page_map().should_strip_deltas());
+    assert!(
+        !snapshot
+            .execution_snapshot()
+            .wasm_memory
+            .page_map
+            .should_strip_deltas()
+    );
+    assert!(
+        !snapshot
+            .execution_snapshot()
+            .stable_memory
+            .page_map
+            .should_strip_deltas()
+    );
+}
+
+#[test]
+fn strip_page_map_deltas_handles_mixed_canisters() {
+    let clean_id = canister_test_id(10);
+    let dirty_id = canister_test_id(20);
+
+    let clean_canister = new_canister_state(
+        clean_id,
+        user_test_id(24).get(),
+        INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+
+    let mut dirty_canister = new_canister_state(
+        dirty_id,
+        user_test_id(24).get(),
+        INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+    dirty_canister
+        .system_state
+        .wasm_chunk_store
+        .page_map_mut()
+        .update(&[(PageIndex::from(0), &[1u8; PAGE_SIZE])]);
+
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    state.put_canister_state(clean_canister);
+    state.put_canister_state(dirty_canister);
+
+    // Clone the `Arc<CanisterStates>` before, so that any `Arc::make_mut()` call
+    // would result in cloning the underlying `CanisterState` (and a new pointer).
+    let clean_before = state.canister_state_arc(&clean_id).unwrap();
+    let dirty_before = state.canister_state_arc(&dirty_id).unwrap();
+
+    let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
+    strip_page_map_deltas(&mut state, fd_factory);
+
+    let clean_after = state.canister_state_arc(&clean_id).unwrap();
+    let dirty_after = state.canister_state_arc(&dirty_id).unwrap();
+    // Clean canister was not mutated.
+    assert_eq!(
+        clean_before.as_ref() as *const CanisterState,
+        clean_after.as_ref() as *const CanisterState
+    );
+    // Dirty canister was mutated.
+    assert_ne!(
+        dirty_before.as_ref() as *const CanisterState,
+        dirty_after.as_ref() as *const CanisterState
+    );
+
+    // Deltas were stripped.
+    assert!(
+        !state
+            .canister_state(&clean_id)
+            .unwrap()
+            .system_state
+            .wasm_chunk_store
+            .page_map()
+            .should_strip_deltas()
+    );
+    assert!(
+        !state
+            .canister_state(&dirty_id)
+            .unwrap()
+            .system_state
+            .wasm_chunk_store
+            .page_map()
+            .should_strip_deltas()
+    );
 }

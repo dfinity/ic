@@ -131,6 +131,12 @@ impl PageAllocator {
     ) -> Vec<(PageIndex, Page)> {
         PageAllocatorInner::deserialize_page_delta(&self.0, page_delta)
     }
+
+    /// Returns `true` if the page allocator is active, i.e. if it has allocated any
+    /// pages and thus has a backing file descriptor.
+    pub fn is_active(&self) -> bool {
+        self.0.is_active()
+    }
 }
 
 struct PageCounter(AtomicUsize);

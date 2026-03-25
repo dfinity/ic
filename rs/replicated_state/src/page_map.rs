@@ -802,6 +802,14 @@ impl PageMap {
         self.page_allocator = PageAllocator::new(Arc::clone(&fd_factory));
     }
 
+    /// Returns `true` if calling `strip_all_deltas()` would mutate the `PageMap`,
+    /// `false` if the call would be a no-op.
+    pub fn should_strip_deltas(&self) -> bool {
+        !self.page_delta.is_empty()
+            || !self.unflushed_delta.is_empty()
+            || self.page_allocator.is_active()
+    }
+
     /// Removes the unflushed delta from this page map.
     pub fn strip_unflushed_delta(&mut self) {
         self.has_stripped_unflushed_deltas = true;
