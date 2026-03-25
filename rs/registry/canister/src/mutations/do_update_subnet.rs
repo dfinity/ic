@@ -519,10 +519,11 @@ mod tests {
         SubnetRecord as SubnetRecordPb,
     };
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
+    use ic_registry_resource_limits::ResourceLimits;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
+    use ic_types::{NumBytes, PrincipalId, ReplicaVersion, SubnetId};
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -632,7 +633,13 @@ mod tests {
                 }
                 .into(),
             ),
-            resource_limits: None,
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                }
+                .into(),
+            ),
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -684,7 +691,13 @@ mod tests {
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
-                resource_limits: Default::default(),
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(42)),
+                        maximum_state_delta: Some(NumBytes::new(64)),
+                    }
+                    .into()
+                ),
                 recalled_replica_version_ids: vec![],
             }
         );
@@ -714,7 +727,13 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
-            resource_limits: Default::default(),
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                }
+                .into(),
+            ),
             recalled_replica_version_ids: vec![],
         };
 
@@ -780,8 +799,58 @@ mod tests {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
-                resource_limits: Default::default(),
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(42)),
+                        maximum_state_delta: Some(NumBytes::new(64)),
+                    }
+                    .into()
+                ),
                 recalled_replica_version_ids: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn resource_limits_resets_all_fields() {
+        let subnet_record = SubnetRecordPb {
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                }
+                .into(),
+            ),
+            ..Default::default()
+        };
+
+        let subnet_id = SubnetId::from(
+            PrincipalId::from_str(
+                "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
+            )
+            .unwrap(),
+        );
+        let payload = UpdateSubnetPayload {
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(128)),
+                    maximum_state_delta: None,
+                }
+                .into(),
+            ),
+            ..make_empty_update_payload(subnet_id)
+        };
+        assert_eq!(
+            merge_subnet_record(subnet_record, payload),
+            SubnetRecordPb {
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(128)),
+                        maximum_state_delta: None,
+                    }
+                    .into()
+                ),
+                ..Default::default()
             }
         );
     }
