@@ -5492,7 +5492,7 @@ dependencies = [
  "clap 4.6.0",
  "config_tool",
  "config_types",
- "ic-os-logging",
+ "ic_os_logging",
  "ic-sys",
  "ic_device",
  "itertools 0.12.1",
@@ -5617,7 +5617,7 @@ dependencies = [
  "goldenfile",
  "gpt",
  "grub",
- "ic-os-logging",
+ "ic_os_logging",
  "ic-os-metrics-utils",
  "ic_device",
  "macaddr",
@@ -5647,7 +5647,7 @@ dependencies = [
  "clap 4.6.0",
  "config_tool",
  "config_types",
- "ic-os-logging",
+ "ic_os_logging",
  "indoc 1.0.9",
  "network",
  "nix 0.24.3",
@@ -6040,7 +6040,7 @@ dependencies = [
  "config_types",
  "deterministic_ips",
  "grub",
- "ic-os-logging",
+ "ic_os_logging",
  "ic-os-metrics-utils",
  "ic_device",
  "manual_guestos_recovery",
@@ -9747,7 +9747,7 @@ dependencies = [
  "assert_matches",
  "clap 4.6.0",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-os-logging",
+ "ic_os_logging",
  "ic-sys",
  "predicates",
  "prometheus",
@@ -12616,7 +12616,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-os-logging"
+name = "ic_os_logging"
 version = "1.0.0"
 dependencies = [
  "tracing-journald",
@@ -22866,7 +22866,7 @@ dependencies = [
  "config_tool",
  "config_types",
  "deterministic_ips",
- "ic-os-logging",
+ "ic_os_logging",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",

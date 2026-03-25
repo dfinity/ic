@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-ic-os-logging = { path = "../../logging" }
+ic_os_logging = { path = "../../logging" }
 tracing = { workspace = true }
 config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
