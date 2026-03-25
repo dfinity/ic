@@ -95,13 +95,13 @@ pub fn test_alternative_guestos_recovery(env: TestEnv) {
             set -e
             sudo systemctl stop guestos
 
-            # Get the offset of the A_boot partition (partition 4)
-            OFFSET=$(sudo parted -s /dev/hostlvm/guestos unit s print | grep "^ 4" | awk '{print $2}' | sed 's/s//')
-            OFFSET_BYTES=$((OFFSET * 512))
+            sudo partprobe /dev/hostlvm/guestos
 
+            # Guest A_boot partition (see guestos/partitions.csv)
+            GUEST_A_BOOT_UUID="ddf618fe-7244-b446-a175-3296e6b9d02e"
             mkdir -p /tmp/guest_boot
 
-            sudo mount -o loop,offset=${OFFSET_BYTES} /dev/hostlvm/guestos /tmp/guest_boot
+            sudo mount "/dev/disk/by-partuuid/${GUEST_A_BOOT_UUID}" /tmp/guest_boot
             sudo cp /tmp/test_recovery_proposal.cbor /tmp/guest_boot/alternative_guestos_proposal.cbor
             sudo umount /tmp/guest_boot
             sudo systemctl start guestos
