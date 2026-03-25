@@ -18498,6 +18498,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "chrono",
  "ic-agent",
  "ic-base-types",
  "ic-nns-constants",
