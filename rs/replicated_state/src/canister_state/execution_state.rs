@@ -230,6 +230,7 @@ impl SandboxMemory {
         Arc::new(Mutex::new(SandboxMemory::Synced(handle)))
     }
 
+    /// Returns true if the sandbox memory is synced with the sandbox process.
     pub fn is_synced(&self) -> bool {
         matches!(self, SandboxMemory::Synced(_))
     }

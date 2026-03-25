@@ -285,7 +285,8 @@ fn strip_page_map_deltas(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
     for canister in state.canisters_iter_mut() {
-        let should_mutate = canister
+        // Skip canisters with no page map deltas to strip.
+        let has_deltas_to_strip = canister
             .system_state
             .wasm_chunk_store
             .page_map()
@@ -301,8 +302,7 @@ fn strip_page_map_deltas(
                 .is_some_and(|execution_state| {
                     execution_state.wasm_memory.page_map.should_strip_deltas()
                         || execution_state.stable_memory.page_map.should_strip_deltas()
-                });
-        let should_mutate = should_mutate
+                })
             || canister.canister_snapshots.iter().any(|(_, snapshot)| {
                 snapshot.chunk_store().page_map().should_strip_deltas()
                     || snapshot
@@ -316,7 +316,7 @@ fn strip_page_map_deltas(
                         .page_map
                         .should_strip_deltas()
             });
-        if !should_mutate {
+        if !has_deltas_to_strip {
             continue;
         }
 
@@ -361,18 +361,15 @@ fn strip_page_map_deltas(
     // Reset the sandbox state to force full synchronization on the next execution
     // since the page deltas are out of sync now.
     for canister in state.canisters_iter_mut() {
-        match &canister.execution_state {
-            Some(xs) => {
-                if !xs.wasm_memory.sandbox_memory.lock().unwrap().is_synced()
-                    && !xs.stable_memory.sandbox_memory.lock().unwrap().is_synced()
-                {
-                    continue;
-                }
-            }
-            None => {
-                continue;
-            }
+        // Skip canisters that don't have any execution state; and those whose sandbox
+        // states are already `Unsynced`.
+        if canister.execution_state.as_ref().is_none_or(|es| {
+            !es.wasm_memory.sandbox_memory.lock().unwrap().is_synced()
+                && !es.stable_memory.sandbox_memory.lock().unwrap().is_synced()
+        }) {
+            continue;
         }
+
         let canister = Arc::make_mut(canister);
         if let Some(execution_state) = &mut canister.execution_state {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
@@ -391,9 +388,9 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
     let mut pagemaps = Vec::new();
 
     // Returns `true` if a call to `add_to_pagemaps_and_strip()` would either add a
-    // `PageMapToFlush` or its `PageMap::strip_unflushed_delta()` call would
+    // `PageMapToFlush`; or the subsequent `PageMap::strip_unflushed_delta()` call would
     // actually mutate the `PageMap`.
-    let should_add_or_strip =
+    let needs_add_or_strip =
         |page_map: &PageMap| -> bool { page_map.should_strip_unflushed_delta() };
 
     let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
@@ -424,26 +421,27 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
     };
 
     for canister in tip_state.canisters_iter_mut() {
-        let should_mutate = should_add_or_strip(canister.system_state.wasm_chunk_store.page_map())
-            || canister
-                .system_state
-                .log_memory_store
-                .maybe_page_map()
-                .is_some_and(should_add_or_strip)
-            || canister
-                .execution_state
-                .as_ref()
-                .is_some_and(|execution_state| {
-                    should_add_or_strip(&execution_state.wasm_memory.page_map)
-                        || should_add_or_strip(&execution_state.stable_memory.page_map)
+        // Skip canisters that don't have any page maps to flush.
+        let needs_add_to_pagemaps_and_strip =
+            needs_add_or_strip(canister.system_state.wasm_chunk_store.page_map())
+                || canister
+                    .system_state
+                    .log_memory_store
+                    .maybe_page_map()
+                    .is_some_and(needs_add_or_strip)
+                || canister
+                    .execution_state
+                    .as_ref()
+                    .is_some_and(|execution_state| {
+                        needs_add_or_strip(&execution_state.wasm_memory.page_map)
+                            || needs_add_or_strip(&execution_state.stable_memory.page_map)
+                    })
+                || canister.canister_snapshots.iter().any(|(_, snapshot)| {
+                    needs_add_or_strip(snapshot.chunk_store().page_map())
+                        || needs_add_or_strip(&snapshot.execution_snapshot().wasm_memory.page_map)
+                        || needs_add_or_strip(&snapshot.execution_snapshot().stable_memory.page_map)
                 });
-        let should_mutate = should_mutate
-            || canister.canister_snapshots.iter().any(|(_, snapshot)| {
-                should_add_or_strip(snapshot.chunk_store().page_map())
-                    || should_add_or_strip(&snapshot.execution_snapshot().wasm_memory.page_map)
-                    || should_add_or_strip(&snapshot.execution_snapshot().stable_memory.page_map)
-            });
-        if !should_mutate {
+        if !needs_add_to_pagemaps_and_strip {
             continue;
         }
 
