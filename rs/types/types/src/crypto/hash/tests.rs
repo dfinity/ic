@@ -111,7 +111,9 @@ mod crypto_hash_stability {
         ThresholdSigShare, ThresholdSigShareOf,
     };
     use crate::crypto::{CryptoHash, CryptoHashOf};
-    use crate::messages::{Blob, CallbackId, HttpCanisterUpdate, MessageId, SignedRequestBytes};
+    use crate::messages::{
+        Blob, CallbackId, HttpCanisterUpdate, MessageId, SenderInfo, SignedRequestBytes,
+    };
     use crate::signature::{
         BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
         ThresholdSignatureShare,
@@ -1032,12 +1034,16 @@ mod crypto_hash_stability {
             sender: Blob(vec![0x42; 29]),
             ingress_expiry: 1234567890,
             nonce: Some(Blob(vec![0x42; 8])),
-            sender_info: None,
+            sender_info: Some(SenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(vec![0xAB; 10]),
+                sig: Blob(vec![4, 5, 6]),
+            }),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "311f37cc4558b65279d560e52f4cfa3497ac34ed1c2d21ce3f0297ca56b11be5",
+            "b410d43e850c9f8ae12dc397bbcdbd3e8f4a6b7988924cdc4917dd9ab2a860da",
             "Hash of HttpCanisterUpdate changed"
         );
     }

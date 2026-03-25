@@ -583,6 +583,25 @@ mod validate_sender_info {
         assert_matches!(result, Err(RequestValidationError::SenderInfoUnsupported));
     }
 
+    #[test]
+    fn should_reject_some_sender_info_in_full_request_validation() {
+        let request = http_request_with_sender_info(Some(SenderInfo {
+            info: Blob(vec![1, 2, 3]),
+            signer: Blob(canister_test_id(42).get().into_vec()),
+            sig: Blob(vec![4, 5, 6]),
+        }));
+        let verifier = HttpRequestVerifierImpl::new(std::sync::Arc::new(
+            temp_crypto_component_with_fake_registry(node_test_id(0)),
+        ));
+
+        let result = verifier.validate_request(
+            &request,
+            Time::from_nanos_since_unix_epoch(0),
+            &MockRootOfTrustProvider::new(),
+        );
+        assert_matches!(result, Err(RequestValidationError::SenderInfoUnsupported));
+    }
+
     fn http_request_with_sender_info(
         sender_info: Option<SenderInfo>,
     ) -> HttpRequest<SignedIngressContent> {

@@ -223,7 +223,7 @@ impl From<MessageIdError> for ProxyDecodeError {
 #[cfg(test)]
 mod tests {
     use super::super::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawHttpRequestVal,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawHttpRequestVal, SenderInfo,
         SignedIngress,
     };
     use super::*;
@@ -438,6 +438,7 @@ mod tests {
         expiry_time: Time,
         sender_sig: Vec<u8>,
         sender_pubkey: Vec<u8>,
+        sender_info: Option<SenderInfo>,
     ) -> SignedIngress {
         let update = HttpCanisterUpdate {
             canister_id: Blob(receiver.get().into_vec()),
@@ -446,7 +447,7 @@ mod tests {
             sender: Blob(vec![0; 29]),
             ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
             nonce: None,
-            sender_info: None,
+            sender_info,
         };
         let content = HttpCallContent::Call { update };
         let envelope = HttpRequestEnvelope::<HttpCallContent> {
@@ -474,6 +475,7 @@ mod tests {
             expiry_time,
             vec![3; 32],
             vec![6; 32],
+            None,
         );
         let message_id1 = signed_ingress1.id();
         let signed_ingress2 = signed_ingress(
@@ -485,6 +487,7 @@ mod tests {
             expiry_time,
             vec![1; 32],
             vec![5; 32],
+            None,
         );
         let message_id2 = signed_ingress2.id();
         assert_eq!(message_id1, message_id2);
@@ -501,5 +504,37 @@ mod tests {
         let value = bincode::deserialize::<MessageId>(&bytes);
         assert!(value.is_ok());
         assert_eq!(value.unwrap(), id);
+    }
+
+    #[test]
+    fn message_id_changes_when_sender_info_is_present() {
+        let expiry_time = Time::from_nanos_since_unix_epoch(1_000);
+        let ingress_without_sender_info = signed_ingress(
+            CanisterId::unchecked_from_principal(PrincipalId::try_from(&[42; 8][..]).unwrap()),
+            "some_method".to_string(),
+            b"".to_vec(),
+            expiry_time,
+            vec![1; 32],
+            vec![2; 32],
+            None,
+        );
+        let ingress_with_sender_info = signed_ingress(
+            CanisterId::unchecked_from_principal(PrincipalId::try_from(&[42; 8][..]).unwrap()),
+            "some_method".to_string(),
+            b"".to_vec(),
+            expiry_time,
+            vec![1; 32],
+            vec![2; 32],
+            Some(SenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(vec![42; 8]),
+                sig: Blob(vec![4, 5, 6]),
+            }),
+        );
+        assert_ne!(
+            ingress_without_sender_info.id(),
+            ingress_with_sender_info.id(),
+            "MessageId should change when sender_info is present"
+        );
     }
 }
