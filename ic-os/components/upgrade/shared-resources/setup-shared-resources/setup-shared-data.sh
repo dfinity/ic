@@ -11,17 +11,16 @@ if ! blkid "${DEVICE}" >/dev/null 2>&1; then
     exit 0
 fi
 
-DATA_MOUNT="/mnt"
+DATA_TEST_MOUNTPOINT="/mnt/data_test"
 cleanup() {
-    mountpoint -q "${DATA_MOUNT}" && umount "${DATA_MOUNT}" || true
-    rm -rf "${DATA_MOUNT}" || true
+    umount --quiet "${DATA_TEST_MOUNTPOINT}" || true
 }
 trap cleanup EXIT
 
-echo "Performing a test mount of ${DEVICE} to ${DATA_MOUNT} to check filesystem health..."
-if MOUNT_OUTPUT=$(mount -t xfs "${DEVICE}" "${DATA_MOUNT}" 2>&1); then
-    echo "Mount succeeded, filesystem is healthy. Unmounting ${DATA_MOUNT}..."
-    umount "${DATA_MOUNT}" || echo "Warning: umount ${DATA_MOUNT} failed, EXIT trap will retry." >&2
+echo "Performing a test mount of ${DEVICE} to ${DATA_TEST_MOUNTPOINT} to check filesystem health..."
+if MOUNT_OUTPUT=$(mount -t xfs "${DEVICE}" "${DATA_TEST_MOUNTPOINT}" 2>&1); then
+    echo "Mount succeeded, filesystem is healthy. Unmounting ${DATA_TEST_MOUNTPOINT}..."
+    umount "${DATA_TEST_MOUNTPOINT}" || echo "Warning: umount ${DATA_TEST_MOUNTPOINT} failed, EXIT trap will retry." >&2
     exit 0
 fi
 
