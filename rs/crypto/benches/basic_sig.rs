@@ -196,17 +196,8 @@ fn crypto_ed25519_basicsig_batch_verify<M: Measurement, R: Rng + CryptoRng>(
     let crypto = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&registry) as Arc<_>)
         .with_node_id(NODE_1)
-        .with_keys(NodeKeysToGenerate::only_node_signing_key())
         .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
-        .with_remote_vault()
         .build();
-    let node_pubkeys = crypto.current_node_public_keys().unwrap();
-    add_node_signing_pubkey_to_registry(
-        NODE_1,
-        &node_pubkeys.node_signing_public_key.unwrap().key_value,
-        &registry,
-        &registry_data,
-    );
 
     let msg = random_signable_message_of_size(32, rng);
 
