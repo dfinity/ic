@@ -285,41 +285,7 @@ fn strip_page_map_deltas(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
     for canister in state.canisters_iter_mut() {
-        // Skip canisters with no page map deltas to strip.
-        let has_deltas_to_strip = canister
-            .system_state
-            .wasm_chunk_store
-            .page_map()
-            .should_strip_deltas()
-            || canister
-                .system_state
-                .log_memory_store
-                .maybe_page_map()
-                .is_some_and(|page_map| page_map.should_strip_deltas())
-            || canister
-                .execution_state
-                .as_ref()
-                .is_some_and(|execution_state| {
-                    execution_state.wasm_memory.page_map.should_strip_deltas()
-                        || execution_state.stable_memory.page_map.should_strip_deltas()
-                })
-            || canister.canister_snapshots.iter().any(|(_, snapshot)| {
-                snapshot.chunk_store().page_map().should_strip_deltas()
-                    || snapshot
-                        .execution_snapshot()
-                        .wasm_memory
-                        .page_map
-                        .should_strip_deltas()
-                    || snapshot
-                        .execution_snapshot()
-                        .stable_memory
-                        .page_map
-                        .should_strip_deltas()
-            });
-        if !has_deltas_to_strip {
-            continue;
-        }
-
+        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
         let canister = Arc::make_mut(canister);
         canister
             .system_state
@@ -361,15 +327,9 @@ fn strip_page_map_deltas(
     // Reset the sandbox state to force full synchronization on the next execution
     // since the page deltas are out of sync now.
     for canister in state.canisters_iter_mut() {
-        // Skip canisters that don't have any execution state; and those whose sandbox
-        // states are already `Unsynced`.
-        if canister.execution_state.as_ref().is_none_or(|es| {
-            !es.wasm_memory.sandbox_memory.lock().unwrap().is_synced()
-                && !es.stable_memory.sandbox_memory.lock().unwrap().is_synced()
-        }) {
+        if canister.execution_state.is_none() {
             continue;
         }
-
         let canister = Arc::make_mut(canister);
         if let Some(execution_state) = &mut canister.execution_state {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
