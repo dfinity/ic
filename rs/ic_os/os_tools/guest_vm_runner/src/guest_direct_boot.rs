@@ -147,19 +147,21 @@ pub async fn prepare_direct_boot(
     // When TEE is enabled, prefer BOOT_ARGS_TEE_{A,B} if present in the file,
     // falling back to BOOT_ARGS_{A,B} if the TEE variant is not available.
     let boot_args = if tee_enabled {
-        match read_boot_args(&boot_args_path, tee_boot_args_var_name) {
-            Ok(args) => args,
-            Err(_) => {
+        match read_boot_args(&boot_args_path, tee_boot_args_var_name)? {
+            Some(args) => args,
+            None => {
                 warn!(
                     "{tee_boot_args_var_name} not found in boot_args for partition \
                      {boot_alternative}. Falling back to {boot_args_var_name}."
                 );
-                read_boot_args(&boot_args_path, boot_args_var_name)
-                    .context("Failed to read boot args")?
+                read_boot_args(&boot_args_path, boot_args_var_name)?.with_context(|| {
+                    format!("Variable {boot_args_var_name} not found in boot_args")
+                })?
             }
         }
     } else {
-        read_boot_args(&boot_args_path, boot_args_var_name).context("Failed to read boot args")?
+        read_boot_args(&boot_args_path, boot_args_var_name)?
+            .with_context(|| format!("Variable {boot_args_var_name} not found in boot_args"))?
     };
 
     let kernel = NamedTempFile::with_prefix("kernel")?;
