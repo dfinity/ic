@@ -104,20 +104,14 @@ pub fn halt_subnet(
     .exec()
     .expect("Failed to halt subnet");
 
-    ic_system_test_driver::retry_with_msg!(
-        "check if consensus is halted",
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || {
-            if journal_streamer.contains("is halted").unwrap_or_default() {
-                Ok(())
-            } else {
-                Err(anyhow!("Did not find log entry that consensus is halted"))
-            }
-        }
-    )
-    .expect("Failed to detect halted subnet");
+    assert!(
+        journal_streamer
+            .follow()
+            .max_lines(1)
+            .contains("is halted")
+            .unwrap_or_default(),
+        "Did not find log entry that consensus is halted"
+    );
 
     info!(logger, "Subnet {subnet_id} halted.");
 }

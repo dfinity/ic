@@ -978,23 +978,14 @@ fn corrupt_latest_cup(
             .expect("restart");
     }
 
-    ic_system_test_driver::retry_with_msg!(
-        "check if cup is corrupted",
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || {
-            if journal_streamer
-                .contains("Failed to deserialize CatchUpPackage")
-                .unwrap_or_default()
-            {
-                Ok(())
-            } else {
-                bail!("Did not find log entry that cup is corrupted.")
-            }
-        }
-    )
-    .expect("Failed to detect broken subnet.");
+    assert!(
+        journal_streamer
+            .follow()
+            .max_lines(1)
+            .contains("Failed to deserialize CatchUpPackage")
+            .unwrap_or_default(),
+        "Did not find log entry that CUP is corrupted"
+    );
 
     unhalt_subnet(admin_helper, subnet.subnet_id, &[], logger);
 }

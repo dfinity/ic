@@ -91,23 +91,15 @@ fn test(test_env: TestEnv) {
     info!(logger, "Upgrade started");
 
     for nns_node in test_env.topology_snapshot().root_subnet().nodes() {
-        let session = nns_node
-            .block_on_ssh_session()
-            .expect("Failed to establish SSH session");
-        ic_system_test_driver::retry_with_msg!(
-            "check for 'hash mismatch' in the replica's log",
-            test_env.logger(),
-            secs(600),
-            secs(20),
-            || {
-                if have_sha_errors(&session) {
-                    Ok(())
-                } else {
-                    bail!("Waiting for hash mismatch!")
-                }
-            }
-        )
-        .expect("No hash mismatch in the logs");
+        assert!(
+            JournalStreamer::new(nns_node.block_on_ssh_session().unwrap())
+                .follow()
+                .max_lines(1)
+                .contains("FileHashMismatchError")
+                .unwrap_or_default(),
+            "No hash mismatch error in the logs of node {}",
+            nns_node.node_id
+        );
     }
 
     info!(logger, "Check that system does not make progress");
@@ -202,12 +194,6 @@ fn test(test_env: TestEnv) {
         );
     }
     info!(logger, "Could store and read message!");
-}
-
-fn have_sha_errors(session: &Session) -> bool {
-    JournalStreamer::new(session.clone())
-        .contains("FileHashMismatchError")
-        .unwrap_or_default()
 }
 
 fn main() -> Result<()> {
