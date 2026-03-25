@@ -18,7 +18,7 @@ fn bench_key_generation(c: &mut Criterion) {
     });
 
     group.bench_function("generate_from_seed", |b| {
-        let seed = [42u8; 32];
+        let seed = [42_u8; 32];
         b.iter(|| PrivateKey::generate_from_seed(black_box(&seed)))
     });
 
@@ -27,7 +27,7 @@ fn bench_key_generation(c: &mut Criterion) {
 
 fn bench_sign(c: &mut Criterion) {
     let sk = PrivateKey::generate_using_rng(&mut rng());
-    let msg = [0x42u8; 32];
+    let msg = [0x42_u8; 32];
 
     c.bench_function("sign", |b| b.iter(|| sk.sign_message(black_box(&msg))));
 }
@@ -35,7 +35,7 @@ fn bench_sign(c: &mut Criterion) {
 fn bench_verify(c: &mut Criterion) {
     let sk = PrivateKey::generate_using_rng(&mut rng());
     let pk = sk.public_key();
-    let msg = [0x42u8; 32];
+    let msg = [0x42_u8; 32];
     let sig = sk.sign_message(&msg);
 
     c.bench_function("verify", |b| {
@@ -55,7 +55,7 @@ fn bench_batch_verify(c: &mut Criterion) {
             let public_keys: Vec<PublicKey> = keys.iter().map(|k| k.public_key()).collect();
             let messages: Vec<Vec<u8>> = (0..batch_size)
                 .map(|i| {
-                    let mut m = vec![0u8; msg_len];
+                    let mut m = vec![0_u8; msg_len];
                     m[..8].copy_from_slice(&(i as u64).to_le_bytes());
                     m
                 })
