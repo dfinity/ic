@@ -203,7 +203,7 @@ fn test_ii_nns_ui() {
     let nns_dapp_canister_id = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
     let nns_dapp_title = "Network Nervous System";
     let internet_identity_canister_id =
-        Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+        Principal::from_text("uqzsh-gqaaa-aaaaq-qaada-cai").unwrap();
     let internet_identity_title = "Internet Identity";
     for (canister_id, expected_title) in [
         (nns_dapp_canister_id.to_string(), nns_dapp_title),
@@ -216,7 +216,12 @@ fn test_ii_nns_ui() {
             frontend_canister(&pic, Principal::from_text(canister_id).unwrap(), false, "/");
         let resp = client.get(url).send().unwrap();
         let body = String::from_utf8(decode_gzipped_bytes(resp.bytes().unwrap().to_vec())).unwrap();
-        assert!(body.contains(&format!("<title>{}</title>", expected_title)));
+        assert!(
+            body.contains(&format!("<title>{}</title>", expected_title)),
+            "Expected title '{}' not found in response body (first 2000 chars): {}",
+            expected_title,
+            &body[..body.len().min(2000)]
+        );
     }
 }
 

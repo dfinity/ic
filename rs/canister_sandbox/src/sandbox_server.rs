@@ -147,13 +147,12 @@ mod tests {
     use ic_types::{
         CanisterTimer, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
         NumBytes, NumInstructions,
-        batch::CanisterCyclesCostSchedule,
         ingress::WasmResult,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
         time::Time,
     };
-    use ic_types_cycles::Cycles;
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use ic_wasm_types::BinaryEncodedWasm;
     use mockall::*;
     use std::sync::{Arc, Condvar, Mutex};

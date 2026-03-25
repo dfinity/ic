@@ -107,6 +107,7 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, RoutingTable, routing_table_insert_subnet,
 };
@@ -142,9 +143,9 @@ use ic_types::{
     SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics,
-        CanisterCyclesCostSchedule, ChainKeyData, ConsensusResponse, QueryStatsPayload,
-        SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
+        ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
+        ValidationContext, XNetPayload,
     },
     canister_http::{
         CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
@@ -177,7 +178,7 @@ use ic_types::{
     time::{GENESIS, Time},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
     RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
@@ -379,6 +380,7 @@ fn add_subnet_local_registry_records(
     registry_version: RegistryVersion,
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
+    resource_limits: ResourceLimits,
 ) {
     for node in nodes {
         let node_record = NodeRecord {
@@ -492,6 +494,7 @@ fn add_subnet_local_registry_records(
         .with_features(features)
         .with_cost_schedule(cost_schedule)
         .with_subnet_admins(subnet_admins)
+        .with_resource_limits(resource_limits)
         .build();
 
     // Insert initial DKG transcripts
@@ -1122,7 +1125,7 @@ pub struct StateMachine {
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
-    vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
     cost_schedule: CanisterCyclesCostSchedule,
@@ -1208,6 +1211,7 @@ pub struct StateMachineBuilder {
     create_at_registry_version: Option<RegistryVersion>,
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
+    resource_limits: ResourceLimits,
 }
 
 impl StateMachineBuilder {
@@ -1249,6 +1253,7 @@ impl StateMachineBuilder {
             create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: vec![],
+            resource_limits: Default::default(),
         }
     }
 
@@ -1488,6 +1493,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_resource_limits(self, resource_limits: ResourceLimits) -> Self {
+        Self {
+            resource_limits,
+            ..self
+        }
+    }
+
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
     /// Otherwise, no new registry records are created.
@@ -1533,6 +1545,7 @@ impl StateMachineBuilder {
             self.create_at_registry_version,
             self.cost_schedule,
             self.subnet_admins,
+            self.resource_limits,
         )
     }
 
@@ -1669,7 +1682,7 @@ impl StateMachineBuilder {
             self_validating_payload_builder,
             sm.canister_http_payload_builder.clone(),
             sm.query_stats_payload_builder.clone(),
-            sm.vetkd_payload_builder.clone(),
+            sm.chain_key_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -1901,6 +1914,7 @@ impl StateMachine {
         create_at_registry_version: Option<RegistryVersion>,
         cost_schedule: CanisterCyclesCostSchedule,
         subnet_admins: Vec<PrincipalId>,
+        resource_limits: ResourceLimits,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
@@ -1980,6 +1994,7 @@ impl StateMachine {
                 create_registry_version,
                 cost_schedule,
                 subnet_admins,
+                resource_limits,
             );
         }
 
@@ -2006,7 +2021,7 @@ impl StateMachine {
             replica_logger.clone(),
         ));
 
-        let vetkd_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
+        let chain_key_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
 
         // Setup ingress watcher for synchronous call endpoint.
         let (completed_execution_messages_tx, completed_execution_messages_rx) =
@@ -2276,7 +2291,7 @@ impl StateMachine {
             canister_http_pool,
             canister_http_payload_builder,
             query_stats_payload_builder: pocket_query_stats_payload_builder,
-            vetkd_payload_builder,
+            chain_key_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
@@ -2930,7 +2945,7 @@ impl StateMachine {
     ) -> Height {
         let batch_number = self.message_routing.expected_batch_height();
 
-        let mut seed = [0u8; 32];
+        let mut seed = [0_u8; 32];
         // use the batch number to seed randomness
         seed[..8].copy_from_slice(batch_number.get().to_le_bytes().as_slice());
 
@@ -3459,6 +3474,7 @@ impl StateMachine {
         let chain_keys_enabled_status = Default::default();
         let cost_schedule = CanisterCyclesCostSchedule::Normal;
         let subnet_admins = vec![];
+        let resource_limits = Default::default();
 
         add_subnet_local_registry_records(
             subnet_id,
@@ -3472,6 +3488,7 @@ impl StateMachine {
             next_version,
             cost_schedule,
             subnet_admins,
+            resource_limits,
         );
     }
 
@@ -4784,7 +4801,7 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory;
 
-        let mut dst = vec![0u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
+        let mut dst = vec![0_u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
         let buffer = Buffer::new(memory.page_map.clone());
         buffer.read(&mut dst, 0);
         dst

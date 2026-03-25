@@ -9,12 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
-* Rate limit the number of subnet admin updates that can happen for a subnet.
 * Subnet deletion endpoint. Limited to CloudEngine subnets. 
+* Added an optional field `maximum_state_delta` to `ResourceLimits` in `CreateSubnetPayload` which, when present,
+  sets a soft limit on the maximum (replicated) state *delta* (kept in main memory) in bytes.
 
 ## Changed
-
-* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
 
 ## Deprecated
 

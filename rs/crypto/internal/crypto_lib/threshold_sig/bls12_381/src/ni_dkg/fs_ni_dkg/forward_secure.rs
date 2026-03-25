@@ -50,7 +50,7 @@ pub const LAMBDA_H: usize = 256;
 ///
 /// The maximum epoch is expressed as a u32 because that is the
 /// underlying size of the Epoch type in ic-crypto-internal-types
-pub const MAXIMUM_EPOCH: u32 = ((1u64 << LAMBDA_T) - 1) as u32;
+pub const MAXIMUM_EPOCH: u32 = ((1_u64 << LAMBDA_T) - 1) as u32;
 
 const DOMAIN_CIPHERTEXT_NODE: &str = "ic-fs-encryption/binary-tree-node";
 
@@ -393,7 +393,7 @@ impl SecretKey {
     /// Returns None if the key has been exhausted
     pub fn current_epoch(&self) -> Option<Epoch> {
         if let Some(node) = self.current() {
-            let mut epoch = 0u32;
+            let mut epoch = 0_u32;
             for i in 0..LAMBDA_T {
                 let x = if let Some(t) = node.tau.0.get(i) {
                     t.into()

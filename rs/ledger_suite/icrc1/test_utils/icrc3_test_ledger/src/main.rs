@@ -45,7 +45,7 @@ fn next_block_id() -> u64 {
 fn first_non_archive_index() -> u64 {
     ARCHIVES.with(|archives| match archives.borrow().last() {
         Some(archive) => archive.block_range.end,
-        None => 0u64,
+        None => 0_u64,
     })
 }
 
@@ -344,10 +344,10 @@ fn get_blocks_for_request(blocks: &BlockStorage, request: GetBlocksRequest) -> B
 #[query]
 fn icrc1_metadata() -> Vec<(MetadataKey, MetadataValue)> {
     vec![
-        MetadataValue::entry(MetadataKey::ICRC1_DECIMALS, 0u64).unwrap(),
+        MetadataValue::entry(MetadataKey::ICRC1_DECIMALS, 0_u64).unwrap(),
         MetadataValue::entry(MetadataKey::ICRC1_NAME, "").unwrap(),
         MetadataValue::entry(MetadataKey::ICRC1_SYMBOL, "XTST").unwrap(),
-        MetadataValue::entry(MetadataKey::ICRC1_FEE, 0u64).unwrap(),
+        MetadataValue::entry(MetadataKey::ICRC1_FEE, 0_u64).unwrap(),
     ]
 }
 

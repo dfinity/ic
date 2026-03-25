@@ -348,6 +348,7 @@ impl SubnetConfig {
             chain_key_config: self.chain_key_config,
             canister_cycles_cost_schedule: i32::from(self.canister_cycles_cost_schedule),
             subnet_admins: vec![],
+            resource_limits: Default::default(),
             recalled_replica_version_ids: vec![],
         };
 
