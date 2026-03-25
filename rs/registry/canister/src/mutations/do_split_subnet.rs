@@ -8,7 +8,8 @@ use ic_protobuf::registry::subnet::v1::{
 };
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_catch_up_package_contents_key,
-    make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_crypto_threshold_signing_pubkey_key, make_routing_table_record_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, WellFormedError, is_subset_of};
 use ic_registry_subnet_type::SubnetType;
@@ -26,7 +27,7 @@ enum PayloadValidationError {
     UnknownNodeId(NodeId),
     UnequalSplit {
         proposed_destination_subnet_size: usize,
-        current_source_subnet_size: usize,
+        pre_split_source_subnet_size: usize,
     },
     DisallowedSourceSubnetType(SubnetType),
     SourceSubnetIsSigningSubnet,
@@ -143,7 +144,10 @@ impl Registry {
             (cup_contents, dkg_response)
         };
 
-        let (destination_cup_contents, mut source_cup_contents) = futures::join!(
+        let (
+            (destination_cup_contents, destination_dkg_response),
+            (mut source_cup_contents, source_dkg_response),
+        ) = futures::join!(
             create_cup_contents(payload.destination_node_ids.clone()),
             create_cup_contents(source_nodes)
         );
@@ -157,14 +161,9 @@ impl Registry {
         .map_err(|err| {
             format!("The registry was updated during the `setup_initial_dkg` calls: {err}")
         })?;
-        // Just a safety check that the payload is still valid after the `setup_initial_dkg` calls
-        self.validate_subnet_splitting_payload(&payload, post_call_registry_version)
-            .map_err(|err| {
-                format!("Failed to validate the payload after `setup_initial_dkg` calls: {err}")
-            })?;
 
-        let destination_subnet_id = destination_cup_contents.1.fresh_subnet_id;
-        source_cup_contents.0.cup_type = Some(
+        let destination_subnet_id = destination_dkg_response.fresh_subnet_id;
+        source_cup_contents.cup_type = Some(
             pb::catch_up_package_contents::CupType::SubnetSplitting(pb::SubnetSplittingArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
             }),
@@ -189,15 +188,14 @@ impl Registry {
             // source subnet threshold public key
             update(
                 make_crypto_threshold_signing_pubkey_key(payload.source_subnet_id),
-                source_cup_contents
-                    .1
+                source_dkg_response
                     .subnet_threshold_public_key
                     .encode_to_vec(),
             ),
             // source cup contents
             update(
                 make_catch_up_package_contents_key(payload.source_subnet_id),
-                source_cup_contents.0.encode_to_vec(),
+                source_cup_contents.encode_to_vec(),
             ),
             // destination subnet record changes
             insert(
@@ -207,15 +205,14 @@ impl Registry {
             // destination subnet threshold public key
             insert(
                 make_crypto_threshold_signing_pubkey_key(destination_subnet_id),
-                destination_cup_contents
-                    .1
+                destination_dkg_response
                     .subnet_threshold_public_key
                     .encode_to_vec(),
             ),
             // destination cup contents
             insert(
                 make_catch_up_package_contents_key(destination_subnet_id),
-                destination_cup_contents.0.encode_to_vec(),
+                destination_cup_contents.encode_to_vec(),
             ),
         ];
 
@@ -261,7 +258,7 @@ impl Registry {
             ));
         }
 
-        let source_nodes: HashSet<NodeId> = source_subnet_record
+        let pre_split_source_nodes: HashSet<NodeId> = source_subnet_record
             .membership
             .iter()
             .map(|bytes| {
@@ -274,15 +271,15 @@ impl Registry {
             return Err(PayloadValidationError::DuplicateDestinationNodeIds);
         }
 
-        if 2 * destination_nodes.len() != source_nodes.len() {
+        if 2 * destination_nodes.len() != pre_split_source_nodes.len() {
             return Err(PayloadValidationError::UnequalSplit {
                 proposed_destination_subnet_size: destination_nodes.len(),
-                current_source_subnet_size: source_nodes.len(),
+                pre_split_source_subnet_size: pre_split_source_nodes.len(),
             });
         }
 
         for node_id in &payload.destination_node_ids {
-            if !source_nodes.contains(node_id) {
+            if !pre_split_source_nodes.contains(node_id) {
                 return Err(PayloadValidationError::UnknownNodeId(*node_id));
             }
         }
@@ -350,7 +347,7 @@ impl Registry {
         Ok((source_subnet_record, ranges_to_migrate))
     }
 
-    /// Checks to make sure records did not change during the async call
+    /// Checks to make sure records did not change during the async calls
     fn check_if_registry_changed_across_versions(
         &self,
         source_subnet_id: SubnetId,
@@ -382,6 +379,10 @@ impl Registry {
 
         if record_changed_across_versions(make_canister_migrations_record_key()) {
             return Err("Canister migrations changed");
+        }
+
+        if record_changed_across_versions(make_routing_table_record_key()) {
+            return Err("Routing table changed");
         }
 
         Ok(())
@@ -420,7 +421,7 @@ impl std::fmt::Display for PayloadValidationError {
             ),
             PayloadValidationError::UnequalSplit {
                 proposed_destination_subnet_size,
-                current_source_subnet_size,
+                pre_split_source_subnet_size: current_source_subnet_size,
             } => write!(
                 f,
                 "The proposed split would result in subnets with uneven sizes. \
@@ -428,13 +429,13 @@ impl std::fmt::Display for PayloadValidationError {
                 proposed destination subnet size: {proposed_destination_subnet_size}"
             ),
             PayloadValidationError::DisallowedSourceSubnetType(subnet_type) => {
-                write!(f, "Subnets of type {subnet_type:?} may not to be split")
+                write!(f, "Subnets of type {subnet_type:?} may not be split")
             }
             PayloadValidationError::SourceSubnetIsSigningSubnet => {
-                write!(f, "Signing subnets are not allowed to be split")
+                write!(f, "Signing subnets may not be split")
             }
             PayloadValidationError::SourceSubnetIsRentalSubnet => {
-                write!(f, "Rental subnets are not allowed to be split")
+                write!(f, "Rental subnets may not be split")
             }
             PayloadValidationError::UnhostedCanisterIds => write!(
                 f,
@@ -496,6 +497,12 @@ mod tests {
     use rstest::rstest;
     use std::collections::BTreeMap;
 
+    /// IDs of the nodes to initialize the registry with.
+    // Note: when we set up the registry, we first create public keys of the nodes, and
+    // then derive the node IDs from these public keys. This means that the registry won't actually
+    // have nodes with the IDs specified below, but inside the tests we will remap the dynamically
+    // created node IDs to the static IDs below. Thus, from the tests point of view we can pretend
+    // that, for example, `NODE_1` is in the registry even though in reality it isn't.
     const FAKE_NODE_IDS_IN_THE_REGISTRY: &[NodeId; 4] = &[NODE_1, NODE_2, NODE_3, NODE_4];
 
     #[rstest]
@@ -542,7 +549,7 @@ mod tests {
         },
         Err(PayloadValidationError::UnequalSplit {
             proposed_destination_subnet_size: 1,
-            current_source_subnet_size: 4,
+            pre_split_source_subnet_size: 4,
         })
     )]
     #[case::too_many_nodes_on_the_destination_subnet(
@@ -556,7 +563,7 @@ mod tests {
         },
         Err(PayloadValidationError::UnequalSplit {
             proposed_destination_subnet_size: 3,
-            current_source_subnet_size: 4,
+            pre_split_source_subnet_size: 4,
         })
     )]
     #[case::unknown_node_id(
@@ -647,7 +654,6 @@ mod tests {
     )]
     #[case::duplicate_destination_node_ids(
         SubnetInfo {
-            is_already_being_split: true,
             ..invariants_compliant_subnet_info()
         },
         SplitSubnetPayload {
@@ -700,9 +706,9 @@ mod tests {
     ) {
         let (registry, node_infos) = set_up_registry(source_subnet_info);
         // Warning: hack ahead! When we set up the registry, we create public keys of the nodes, and
-        // then derive the subnet IDs from these public keys. Since, we can't know a priori what the
-        // subnet IDs will look like, we are remapping the static subnet IDs provided as an input
-        // (e.g. SUBNET_1, SUBNET_2) to the dynamically created ones. This simplifies slightly
+        // then derive the node IDs from these public keys. Since, we can't know a priori what these
+        // derived node IDs will look like, we are remapping the static node IDs provided as an
+        // input (e.g. NODE_1, NODE_2) to the dynamically created ones. This simplifies slightly
         // setting up the test cases.
         let payload_node_ids = payload
             .destination_node_ids
