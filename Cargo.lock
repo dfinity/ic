@@ -2730,7 +2730,6 @@ dependencies = [
  "ic_consensus_threshold_sig_system_test_utils",
  "registry-canister",
  "slog",
- "ssh2",
  "tempfile",
  "tokio",
  "url",

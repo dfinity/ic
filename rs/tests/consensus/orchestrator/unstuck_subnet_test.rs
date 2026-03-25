@@ -36,7 +36,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{JournalStreamer, block_on};
 use ic_types::Height;
 use slog::info;
-use ssh2::Session;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;

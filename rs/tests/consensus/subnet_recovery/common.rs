@@ -34,7 +34,6 @@ use crate::utils::{
     local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
     remote_recovery, unhalt_subnet,
 };
-use anyhow::bail;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{

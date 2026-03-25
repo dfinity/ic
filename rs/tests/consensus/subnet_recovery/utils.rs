@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use candid::Principal;
 use ic_consensus_system_test_utils::{
     rw_message::{can_read_msg, cannot_store_msg},
