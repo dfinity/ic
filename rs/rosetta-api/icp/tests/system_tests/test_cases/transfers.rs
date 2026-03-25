@@ -116,12 +116,12 @@ fn test_duplicate_transfer_is_rejected() {
             owner: candid::Principal::anonymous(),
             subaccount: None,
         };
-        let amount = Nat::from(100_000u64);
+        let amount = Nat::from(100_000_u64);
         let created_at_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
-        let memo = 12345u64;
+        let memo = 12345_u64;
 
         let transfer_args = RosettaTransferArgs::builder(to, amount)
             .with_memo(memo)
