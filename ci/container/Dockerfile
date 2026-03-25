@@ -115,19 +115,19 @@ FROM base as dev
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
-# Install additional packages for development but not needed on CI:
-ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
-COPY ${PACKAGE_DEV_FILE} /tmp/
-RUN apt -yq update && \
-    apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
-    rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
-
-# Install GitHub CLI `gh` following: https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian
+# Add GitHub CLI repository to get the latest version
 RUN mkdir -p -m 755 /etc/apt/keyrings \
 	&& out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 	&& cat $out | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
 	&& chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
 	&& mkdir -p -m 755 /etc/apt/sources.list.d \
 	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+
+# Install additional packages for development but not needed on CI:
+ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
+COPY ${PACKAGE_DEV_FILE} /tmp/
+RUN apt -yq update && \
+    apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
+    rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
 
 USER ubuntu
