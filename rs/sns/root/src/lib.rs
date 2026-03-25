@@ -2403,14 +2403,14 @@ mod tests {
                 ],
                 settings: CanisterSettings {
                     controllers: None,
-                    compute_allocation: Some(Nat::from(50u64)),
-                    memory_allocation: Some(Nat::from(1u64 << 30)),
-                    freezing_threshold: Some(Nat::from(100_000u64)),
-                    reserved_cycles_limit: Some(Nat::from(1_000_000_000_000u64)),
+                    compute_allocation: Some(Nat::from(50_u64)),
+                    memory_allocation: Some(Nat::from(1_u64 << 30)),
+                    freezing_threshold: Some(Nat::from(100_000_u64)),
+                    reserved_cycles_limit: Some(Nat::from(1_000_000_000_000_u64)),
                     log_visibility: Some(LogVisibility::Controllers),
                     snapshot_visibility: Some(SnapshotVisibility::Controllers),
-                    wasm_memory_limit: Some(Nat::from(1_000_000_000u64)),
-                    wasm_memory_threshold: Some(Nat::from(1_000_000u64)),
+                    wasm_memory_limit: Some(Nat::from(1_000_000_000_u64)),
+                    wasm_memory_threshold: Some(Nat::from(1_000_000_u64)),
                 },
             }
         );

@@ -26,7 +26,10 @@ use ic_system_test_driver::{
     driver::{
         farm::HostFeature,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{
+            AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
+            VmResourceOverrides,
+        },
         prometheus_vm::HasPrometheus,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, load_wasm},
@@ -68,15 +71,13 @@ pub fn setup(env: TestEnv) {
         "Step 1: Starting the IC with a subnet of size {SUBNET_SIZE}.",
     );
 
-    // Production-like resources
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(64)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), //  512 GB
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-    };
-
     InternetComputer::new()
-        .with_default_vm_resources(vm_resources)
+        // Production-like resources
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(64)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), //  512 GB
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
             Subnet::new(SubnetType::Application)

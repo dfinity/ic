@@ -897,6 +897,7 @@ TOP_COLUMNS = [
     ("total",               "total",                 "decimal"),
     ("last_non_success_at", "last non success at",   "right"),
     ("non_success",         "non_success",           "decimal"),
+    ("last_flaky_at",       "last flaky at",         "right"),
     ("flaky",               "flaky",                 "decimal"),
     ("timeout",             "timeout",               "decimal"),
     ("fail",                "fail",                  "decimal"),
@@ -992,6 +993,10 @@ Each attempt directory will either contain a `FAILED.log` or `PASSED.log` file w
     readme_path.write_text(readme)
 
 
+def fmt_time(t):
+    return t.strftime("%a %Y-%m-%d %X") if pd.notna(t) else ""
+
+
 def top(args):
     """
     Get the top N non-successful / flaky / failed / timed-out tests
@@ -1017,7 +1022,7 @@ def top(args):
                 value = pd.Timedelta(value).to_pytimedelta()
             except ValueError as e:
                 die(f"Can't parse '{value}' to an interval because: {e}!")
-        elif args.order_by in ("last_non_success_at"):
+        elif args.order_by in ("last_non_success_at", "last_flaky_at"):
             try:
                 value = parse_datetime(value)
             except ValueError as e:
@@ -1036,6 +1041,7 @@ def top(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
         order_by=order_by,
         N=sql.Literal(args.N),
         condition=sql.Literal(True)
@@ -1054,9 +1060,8 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
-    df["last_non_success_at"] = df["last_non_success_at"].apply(
-        lambda t: t.strftime("%a %Y-%m-%d %X") if pd.notna(t) else ""
-    )
+    df["last_non_success_at"] = df["last_non_success_at"].apply(fmt_time)
+    df["last_flaky_at"] = df["last_flaky_at"].apply(fmt_time)
     df["impact"] = df["impact"].apply(normalize_duration)
     df["total_duration"] = df["total_duration"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
@@ -1112,6 +1117,7 @@ def last(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
     )
 
     log_psql_query(args.verbose, query.as_string(), args.conninfo)
@@ -1140,7 +1146,7 @@ def last(args):
     )
 
     # Bazel's first_start_time is really the time the last attempt started.
-    df["last_started_at"] = df["first_start_time"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
+    df["last_started_at"] = df["first_start_time"].apply(fmt_time)
 
     df["branch"] = df["head_branch"].apply(
         lambda branch: terminal_hyperlink(shorten(branch, 16), f"https://github.com/{ORG}/{REPO}/tree/{branch}")
@@ -1233,6 +1239,14 @@ Mutually exclusive with --day/--week/--month""",
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
     filter_parser.add_argument("--branch", metavar="B", type=str, help="Filter by branch SQL LIKE pattern")
+    filter_parser.add_argument(
+        "--exclude-pr",
+        metavar="PR_NUMBER",
+        type=int,
+        action="append",
+        default=[],
+        help="Exclude workflow runs on this PR number (can be repeated)",
+    )
 
     subparsers = parser.add_subparsers(required=True)
 
@@ -1272,6 +1286,7 @@ Examples:
             "total",
             "last_non_success_at",
             "non_success",
+            "last_flaky_at",
             "flaky",
             "timeout",
             "fail",
@@ -1288,6 +1303,7 @@ Examples:
 total:\t\t\tTotal runs in the specified period
 last_non_success_at:\tTimestamp of the last non-successful run in the specified period
 non_success:\t\tNumber of non-successful runs in the specified period
+last_flaky_at:\t\tTimestamp of the last flaky run in the specified period
 flaky:\t\t\tNumber of flaky runs in the specified period
 timeout:\t\tNumber of timed-out runs in the specified period
 fail:\t\t\tNumber of failed runs in the specified period

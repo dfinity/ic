@@ -24,7 +24,7 @@ fn large_u128_amount() -> impl Strategy<Value = U256> {
 }
 
 fn large_u256_amount() -> impl Strategy<Value = U256> {
-    (1u128..).prop_map(|lo| U256::from_words(u128::MAX, lo))
+    (1_u128..).prop_map(|lo| U256::from_words(u128::MAX, lo))
 }
 
 fn check_block_conversion<T: TokensType>(block: Block<T>) -> Result<(), TestCaseError> {
@@ -212,15 +212,15 @@ mod block_encoding_stability {
 
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(5).0,
-            subaccount: Some([0x17u8; 32]),
+            subaccount: Some([0x17_u8; 32]),
         };
         let account2 = Account {
             owner: PrincipalId::new_user_test_id(6).0,
-            subaccount: Some([0x71u8; 32]),
+            subaccount: Some([0x71_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(2, 0x68686767)
-            .with_parent_hash(vec![0x22u8; 32])
-            .approve(account1, account2, Tokens::from_e8s(0x991199119911u64));
+            .with_parent_hash(vec![0x22_u8; 32])
+            .approve(account1, account2, Tokens::from_e8s(0x991199119911_u64));
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
 
@@ -230,11 +230,11 @@ mod block_encoding_stability {
 
         let account = Account {
             owner: PrincipalId::new_user_test_id(13).0,
-            subaccount: Some([0x51u8; 32]),
+            subaccount: Some([0x51_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(3, 0x58585757)
-            .with_parent_hash(vec![27u8; 32])
-            .burn(account, Tokens::from_e8s(0x441144114411u64));
+            .with_parent_hash(vec![27_u8; 32])
+            .burn(account, Tokens::from_e8s(0x441144114411_u64));
 
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
@@ -245,15 +245,15 @@ mod block_encoding_stability {
 
         let account = Account {
             owner: PrincipalId::new_user_test_id(1).0,
-            subaccount: Some([37u8; 32]),
+            subaccount: Some([37_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(1, 12345678)
             .with_btype(BTYPE_107.to_string())
-            .with_parent_hash(vec![67u8; 32])
+            .with_parent_hash(vec![67_u8; 32])
             .fee_collector(
                 Some(account),
                 Some(PrincipalId::new_user_test_id(2).0),
-                Some(22334455u64),
+                Some(22334455_u64),
                 Some(SET_FEE_COL_107.to_string()),
             );
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
@@ -265,11 +265,11 @@ mod block_encoding_stability {
 
         let account = Account {
             owner: PrincipalId::new_user_test_id(1).0,
-            subaccount: Some([37u8; 32]),
+            subaccount: Some([37_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(2, 68686767)
-            .with_parent_hash(vec![43u8; 32])
-            .mint(account, Tokens::from_e8s(998899889988u64));
+            .with_parent_hash(vec![43_u8; 32])
+            .mint(account, Tokens::from_e8s(998899889988_u64));
 
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
@@ -280,15 +280,15 @@ mod block_encoding_stability {
 
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(7).0,
-            subaccount: Some([0x26u8; 32]),
+            subaccount: Some([0x26_u8; 32]),
         };
         let account2 = Account {
             owner: PrincipalId::new_user_test_id(8).0,
-            subaccount: Some([0x38u8; 32]),
+            subaccount: Some([0x38_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(7, 0x10102020)
-            .with_parent_hash(vec![0xb8u8; 32])
-            .transfer(account1, account2, Tokens::from_e8s(0x55215521u64));
+            .with_parent_hash(vec![0xb8_u8; 32])
+            .transfer(account1, account2, Tokens::from_e8s(0x55215521_u64));
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
 
@@ -298,19 +298,19 @@ mod block_encoding_stability {
 
         let account1 = Account {
             owner: PrincipalId::new_user_test_id(7).0,
-            subaccount: Some([0x26u8; 32]),
+            subaccount: Some([0x26_u8; 32]),
         };
         let account2 = Account {
             owner: PrincipalId::new_user_test_id(8).0,
-            subaccount: Some([0x38u8; 32]),
+            subaccount: Some([0x38_u8; 32]),
         };
         let account3 = Account {
             owner: PrincipalId::new_user_test_id(9).0,
-            subaccount: Some([0x47u8; 32]),
+            subaccount: Some([0x47_u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(7, 0x31313131)
-            .with_parent_hash(vec![0xa6u8; 32])
-            .transfer(account1, account2, Tokens::from_e8s(0x73377337u64))
+            .with_parent_hash(vec![0xa6_u8; 32])
+            .transfer(account1, account2, Tokens::from_e8s(0x73377337_u64))
             .with_spender(account3);
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }

@@ -58,8 +58,7 @@ impl StructIO {
     }
 
     pub fn save_header(&mut self, header: &Header) {
-        self.header_cache = OnceLock::new();
-        let _ = self.header_cache.set(*header);
+        self.header_cache = OnceLock::from(*header);
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
         addr = self.write_raw_u8(addr, header.version);
@@ -211,8 +210,8 @@ impl StructIO {
     }
 
     fn remaining(position: MemoryPosition, capacity: MemorySize) -> MemorySize {
-        if position < MemoryPosition::new(capacity.get()) {
-            capacity - position
+        if position.get() < capacity.get() {
+            MemorySize::new(capacity.get() - position.get())
         } else {
             MemorySize::new(0)
         }
@@ -247,7 +246,7 @@ impl StructIO {
         offset: MemoryAddress,
         capacity: MemorySize,
     ) -> ([u8; N], MemoryPosition) {
-        let mut result = [0u8; N];
+        let mut result = [0_u8; N];
         let len = MemorySize::new(N as u64);
         let remaining = Self::remaining(position, capacity);
         if len <= remaining {
@@ -398,7 +397,7 @@ mod tests {
         let loaded_index = io.load_index_table();
         let loaded = loaded_index.raw_entries();
 
-        // For 10 MB data capacity, 28 bytes per entry = 146 entries
+        // Entry count is fixed by index table size: 4096 / 28 bytes per entry = 146.
         assert_eq!(loaded.len(), 146);
         // All loaded entries are invalid.
         for entry in loaded {

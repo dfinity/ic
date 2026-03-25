@@ -15,7 +15,7 @@ use ic_management_canister_types_private::{
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     CanisterId, CanisterTimer, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
-    MAX_WASM64_MEMORY_IN_BYTES, NumBytes, PrincipalId, SnapshotId, Time,
+    MAX_WASM64_MEMORY_IN_BYTES, NumBytes, SnapshotId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -136,17 +136,32 @@ impl CanisterSnapshots {
     /// Returns the amount of memory taken by all canister snapshots
     /// of a single canister.
     pub fn memory_taken(&self) -> NumBytes {
-        // The running sum of the memory usage of all canister snapshots should
-        // be the same as the one computed by iterating over all snapshots.
-        debug_assert_eq!(
-            self.snapshots
-                .values()
-                .map(|snapshot| snapshot.size())
-                .sum::<NumBytes>(),
-            self.memory_usage
-        );
+        if cfg!(debug_assertions) {
+            self.check_invariants()
+                .expect("Canister invariant check failed");
+        }
 
         self.memory_usage
+    }
+
+    /// Checks that the sum of the memory usage of all canister snapshots is equal
+    /// to the pre-computed value stored directly in this struct.
+    pub fn check_invariants(&self) -> Result<(), String> {
+        // The running sum of the memory usage of all canister snapshots should
+        // be the same as the one computed by iterating over all snapshots.
+        let actual_memory_usage = self
+            .snapshots
+            .values()
+            .map(|snapshot| snapshot.size())
+            .sum::<NumBytes>();
+        if actual_memory_usage != self.memory_usage {
+            return Err(format!(
+                "Actual canister snapshot memory usage {} does not match cached memory usage {}",
+                actual_memory_usage, self.memory_usage
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -213,8 +228,6 @@ pub struct ExecutionStateSnapshot {
 /// Contains all information related to a canister snapshot.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct CanisterSnapshot {
-    /// Identifies the canister to which this snapshot belongs.
-    canister_id: CanisterId,
     /// Whether this snapshot was created from the canister or uploaded manually.
     source: SnapshotSource,
     /// The timestamp indicating the moment the snapshot was captured.
@@ -234,7 +247,6 @@ pub struct CanisterSnapshot {
 
 impl CanisterSnapshot {
     pub fn new(
-        canister_id: CanisterId,
         source: SnapshotSource,
         taken_at_timestamp: Time,
         canister_version: u64,
@@ -244,7 +256,6 @@ impl CanisterSnapshot {
         size: NumBytes,
     ) -> CanisterSnapshot {
         Self {
-            canister_id,
             source,
             taken_at_timestamp,
             canister_version,
@@ -282,7 +293,6 @@ impl CanisterSnapshot {
         };
 
         Ok(CanisterSnapshot {
-            canister_id,
             source: SnapshotSource::taken_from_canister(),
             taken_at_timestamp,
             canister_version: canister.system_state.canister_version(),
@@ -326,7 +336,6 @@ impl CanisterSnapshot {
         };
         let chunk_store = WasmChunkStore::new(Arc::clone(&fd_factory));
         Self {
-            canister_id: CanisterId::try_from(metadata.canister_id).unwrap(),
             source: SnapshotSource::metadata_upload(),
             taken_at_timestamp,
             canister_version,
@@ -335,10 +344,6 @@ impl CanisterSnapshot {
             chunk_store,
             execution_snapshot,
         }
-    }
-
-    pub fn canister_id(&self) -> CanisterId {
-        self.canister_id
     }
 
     pub fn source(&self) -> SnapshotSource {
@@ -463,7 +468,6 @@ pub enum CanisterSnapshotError {
 
 #[derive(Clone, Debug)]
 pub struct ValidatedSnapshotMetadata {
-    canister_id: PrincipalId,
     replace_snapshot: Option<SnapshotId>,
     wasm_module_size: NumBytes,
     exported_globals: Vec<Global>,
@@ -515,7 +519,6 @@ impl ValidatedSnapshotMetadata {
         }
 
         Ok(Self {
-            canister_id: raw.canister_id,
             replace_snapshot: raw.replace_snapshot,
             wasm_module_size: NumBytes::new(raw.wasm_module_size),
             exported_globals: raw.globals,
@@ -539,10 +542,6 @@ impl ValidatedSnapshotMetadata {
             + self.certified_data.len() as u64
             + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
         NumBytes::new(num_bytes)
-    }
-
-    pub fn canister_id(&self) -> PrincipalId {
-        self.canister_id
     }
 
     pub fn replace_snapshot(&self) -> Option<SnapshotId> {
@@ -617,7 +616,6 @@ mod tests {
             on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
         };
         let snapshot = CanisterSnapshot::new(
-            canister_id,
             SnapshotSource::taken_from_canister(),
             UNIX_EPOCH,
             0,

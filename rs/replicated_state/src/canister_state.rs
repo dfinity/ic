@@ -331,7 +331,9 @@ impl CanisterState {
             }
         }
 
-        self.system_state.check_invariants()
+        self.system_state.check_invariants()?;
+
+        self.canister_snapshots.check_invariants()
     }
 
     /// The amount of memory currently being used by the canister.
@@ -425,7 +427,7 @@ impl CanisterState {
     }
 
     pub fn snapshots_memory_usage(&self) -> NumBytes {
-        self.system_state.snapshots_memory_usage
+        self.canister_snapshots.memory_taken()
     }
 
     /// Returns the snapshot size estimation in bytes based on the current canister's state.

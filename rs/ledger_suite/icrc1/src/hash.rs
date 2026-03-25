@@ -24,7 +24,7 @@ fn hash_value(value: &Value) -> Result<Hash, String> {
 
             // We need at most ⌈ 128 / 7 ⌉ = 19 bytes to encode a 128 bit
             // integer in LEB128.
-            let mut buf = [0u8; 19];
+            let mut buf = [0_u8; 19];
             let mut i = 0;
             leb128_encode(v, |byte| {
                 buf[i] = byte;
@@ -85,7 +85,7 @@ where
         let byte = (n.clone() & N::from(0x7f))
             .to_u8()
             .expect("bug: cannot cast to u8");
-        n >>= 7u8;
+        n >>= 7_u8;
 
         if n.is_zero() {
             sink(byte);

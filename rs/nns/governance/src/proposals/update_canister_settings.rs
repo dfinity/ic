@@ -344,14 +344,14 @@ mod tests {
                 canister_id: SNS_WASM_CANISTER_ID.get(),
                 settings: RootCanisterSettings {
                     controllers: Some(vec![ROOT_CANISTER_ID.get()]),
-                    memory_allocation: Some(Nat::from(1u64 << 32)),
-                    wasm_memory_limit: Some(Nat::from(1u64 << 31)),
-                    compute_allocation: Some(Nat::from(10u64)),
-                    freezing_threshold: Some(Nat::from(100u64)),
+                    memory_allocation: Some(Nat::from(1_u64 << 32)),
+                    wasm_memory_limit: Some(Nat::from(1_u64 << 31)),
+                    compute_allocation: Some(Nat::from(10_u64)),
+                    freezing_threshold: Some(Nat::from(100_u64)),
                     log_visibility: Some(RootLogVisibility::Public),
                     snapshot_visibility: Some(RootSnapshotVisibility::Public),
                     reserved_cycles_limit: None,
-                    wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
+                    wasm_memory_threshold: Some(Nat::from(1_u64 << 30)),
                 }
             }
         );
@@ -396,14 +396,14 @@ mod tests {
             decoded_payload,
             RootCanisterSettings {
                 controllers: Some(vec![LIFELINE_CANISTER_ID.get()]),
-                memory_allocation: Some(Nat::from(1u64 << 32)),
-                wasm_memory_limit: Some(Nat::from(1u64 << 31)),
-                compute_allocation: Some(Nat::from(10u64)),
-                freezing_threshold: Some(Nat::from(100u64)),
+                memory_allocation: Some(Nat::from(1_u64 << 32)),
+                wasm_memory_limit: Some(Nat::from(1_u64 << 31)),
+                compute_allocation: Some(Nat::from(10_u64)),
+                freezing_threshold: Some(Nat::from(100_u64)),
                 log_visibility: Some(RootLogVisibility::Public),
                 snapshot_visibility: Some(RootSnapshotVisibility::Public),
                 reserved_cycles_limit: None,
-                wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
+                wasm_memory_threshold: Some(Nat::from(1_u64 << 30)),
             }
         );
     }

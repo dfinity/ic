@@ -182,7 +182,7 @@ mod verify_dealing_public {
                     internal_dealing_raw: valid_internal_dealing_raw(),
                 },
                 signature: BasicSignature {
-                    signature: BasicSigOf::new(BasicSig(vec![0u8; ic_ed25519::SIGNATURE_BYTES])),
+                    signature: BasicSigOf::new(BasicSig(vec![0_u8; ic_ed25519::SIGNATURE_BYTES])),
                     signer: dealer_id,
                 },
             };
