@@ -5492,9 +5492,9 @@ dependencies = [
  "clap 4.6.0",
  "config_tool",
  "config_types",
- "ic_os_logging",
  "ic-sys",
  "ic_device",
+ "ic_os_logging",
  "itertools 0.12.1",
  "libcryptsetup-rs",
  "nix 0.24.3",
@@ -5617,9 +5617,9 @@ dependencies = [
  "goldenfile",
  "gpt",
  "grub",
- "ic_os_logging",
  "ic-os-metrics-utils",
  "ic_device",
+ "ic_os_logging",
  "macaddr",
  "memchr",
  "mockall",
@@ -6040,9 +6040,9 @@ dependencies = [
  "config_types",
  "deterministic_ips",
  "grub",
- "ic_os_logging",
  "ic-os-metrics-utils",
  "ic_device",
+ "ic_os_logging",
  "manual_guestos_recovery",
  "network",
  "prometheus",
@@ -9747,8 +9747,8 @@ dependencies = [
  "assert_matches",
  "clap 4.6.0",
  "ic-crypto-test-utils-reproducible-rng",
- "ic_os_logging",
  "ic-sys",
+ "ic_os_logging",
  "predicates",
  "prometheus",
  "rand 0.8.5",
@@ -12613,14 +12613,6 @@ version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build 0.13.5",
-]
-
-[[package]]
-name = "ic_os_logging"
-version = "1.0.0"
-dependencies = [
- "tracing-journald",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -16125,6 +16117,14 @@ dependencies = [
  "serde_json",
  "slog",
  "tokio",
+]
+
+[[package]]
+name = "ic_os_logging"
+version = "0.0.0"
+dependencies = [
+ "tracing-journald",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -22866,10 +22866,10 @@ dependencies = [
  "config_tool",
  "config_types",
  "deterministic_ips",
- "ic_os_logging",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
+ "ic_os_logging",
  "network",
  "prost 0.13.5",
  "tokio",
