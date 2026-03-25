@@ -3309,6 +3309,41 @@ mod tests {
     }
 
     #[test]
+    fn test_unassignment_now_when_subnet_deleted() {
+        let key_id = make_vetkd_key_id();
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let latest_registry_version = RegistryVersion::from(10);
+        let oldest_relevant_version = 5;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+
+        let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
+        let key_transcript = setup.generate_key_transcript(&key_id);
+        let cup = make_cup_with_key_transcript(Height::from(15), Some(key_transcript));
+
+        // Return a deleted-subnet record: value is None and version > 0.
+        registry_client
+            .expect_get_versioned_value()
+            .once()
+            .return_const(Ok(RegistryVersionedRecord {
+                key: make_subnet_record_key(subnet_id),
+                version: RegistryVersion::new(1),
+                value: None,
+            }));
+
+        let response = should_node_become_unassigned(
+            &registry_client,
+            latest_registry_version,
+            node_id,
+            subnet_id,
+            &cup,
+        );
+
+        assert_eq!(response, UnassignmentDecision::Now);
+    }
+
+    #[test]
     fn test_stay_in_subnet_on_subnet_missing() {
         let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
