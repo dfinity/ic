@@ -737,10 +737,6 @@ fn call_strip_page_map_deltas(
     (canister_before, canister_after)
 }
 
-fn ptr_eq(left: &Arc<CanisterState>, right: &Arc<CanisterState>) -> bool {
-    left.as_ref() as *const CanisterState == right.as_ref() as *const CanisterState
-}
-
 #[test]
 fn strip_page_map_deltas_skips_canister_with_no_deltas() {
     let canister_id = canister_test_id(10);
@@ -751,9 +747,9 @@ fn strip_page_map_deltas_skips_canister_with_no_deltas() {
         NumSeconds::from(100_000),
     );
 
-    let (canister_before, canister_after) = call_strip_page_map_deltas(canister_state);
+    let (before, after) = call_strip_page_map_deltas(canister_state);
 
-    assert!(ptr_eq(&canister_before, &canister_after));
+    assert!(std::ptr::eq(before.as_ref(), after.as_ref()));
 }
 
 #[test]
@@ -769,7 +765,7 @@ fn strip_page_map_deltas_strips_wasm_chunk_store() {
         .system_state
         .wasm_chunk_store
         .page_map_mut()
-        .update(&[(PageIndex::from(0), &[1u8; PAGE_SIZE])]);
+        .update(&[(PageIndex::from(0), &[1_u8; PAGE_SIZE])]);
     // Wasm chunk store has deltas to strip.
     assert!(
         canister_state
@@ -779,14 +775,14 @@ fn strip_page_map_deltas_strips_wasm_chunk_store() {
             .should_strip_deltas()
     );
 
-    let (canister_before, canister_after) = call_strip_page_map_deltas(canister_state);
+    let (before, after) = call_strip_page_map_deltas(canister_state);
 
     // `CanisterState` was mutated.
-    assert!(!ptr_eq(&canister_before, &canister_after));
+    assert!(!std::ptr::eq(before.as_ref(), after.as_ref()));
 
     // Deltas were stripped.
     assert!(
-        !canister_after
+        !after
             .system_state
             .wasm_chunk_store
             .page_map()
@@ -819,13 +815,13 @@ fn strip_page_map_deltas_strips_execution_state_memories() {
     assert!(execution_state.stable_memory.page_map.should_strip_deltas());
     canister_state.execution_state = Some(execution_state);
 
-    let (canister_before, canister_after) = call_strip_page_map_deltas(canister_state);
+    let (before, after) = call_strip_page_map_deltas(canister_state);
 
     // `CanisterState` was mutated.
-    assert!(!ptr_eq(&canister_before, &canister_after));
+    assert!(!std::ptr::eq(before.as_ref(), after.as_ref()));
 
     // Deltas were stripped.
-    let execution_state = canister_after.execution_state.as_ref().unwrap();
+    let execution_state = after.execution_state.as_ref().unwrap();
     assert!(!execution_state.wasm_memory.page_map.should_strip_deltas());
     assert!(!execution_state.stable_memory.page_map.should_strip_deltas());
 }
@@ -862,13 +858,13 @@ fn strip_page_map_deltas_strips_snapshot_page_maps() {
     snapshots.insert(snapshot_id, Arc::new(snapshot));
     canister_state.canister_snapshots = CanisterSnapshots::new(snapshots);
 
-    let (canister_before, canister_after) = call_strip_page_map_deltas(canister_state);
+    let (before, after) = call_strip_page_map_deltas(canister_state);
 
     // `CanisterState` was mutated.
-    assert!(!ptr_eq(&canister_before, &canister_after));
+    assert!(!std::ptr::eq(before.as_ref(), after.as_ref()));
 
     // Deltas were stripped.
-    let snapshot = canister_after.canister_snapshots.get(snapshot_id).unwrap();
+    let snapshot = after.canister_snapshots.get(snapshot_id).unwrap();
     assert!(!snapshot.chunk_store().page_map().should_strip_deltas());
     assert!(
         !snapshot
@@ -908,7 +904,7 @@ fn strip_page_map_deltas_handles_mixed_canisters() {
         .system_state
         .wasm_chunk_store
         .page_map_mut()
-        .update(&[(PageIndex::from(0), &[1u8; PAGE_SIZE])]);
+        .update(&[(PageIndex::from(0), &[1_u8; PAGE_SIZE])]);
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     state.put_canister_state(clean_canister);
@@ -924,16 +920,11 @@ fn strip_page_map_deltas_handles_mixed_canisters() {
 
     let clean_after = state.canister_state_arc(&clean_id).unwrap();
     let dirty_after = state.canister_state_arc(&dirty_id).unwrap();
+
     // Clean canister was not mutated.
-    assert_eq!(
-        clean_before.as_ref() as *const CanisterState,
-        clean_after.as_ref() as *const CanisterState
-    );
+    assert!(std::ptr::eq(clean_before.as_ref(), clean_after.as_ref()));
     // Dirty canister was mutated.
-    assert_ne!(
-        dirty_before.as_ref() as *const CanisterState,
-        dirty_after.as_ref() as *const CanisterState
-    );
+    assert!(!std::ptr::eq(dirty_before.as_ref(), dirty_after.as_ref()));
 
     // Deltas were stripped.
     assert!(
