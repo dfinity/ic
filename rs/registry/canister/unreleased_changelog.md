@@ -8,20 +8,10 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
-* Added an optional field `resource_limits` to `CreateSubnetPayload` which, when present,
-  sets limits on resource usage (e.g., disk usage) of the created subnet.
-
-* Rate limit the number of subnet admin updates that can happen for a subnet.
-
-### Node operator migration
-
-Node providers can now migrate nodes from one node operator to another within the same data center without reinstalling nodes or disrupting subnet membership. The source and destination node operators must belong to the same node provider.
-
-If the destination node operator does not yet exist, it is created automatically, effectively allowing a node provider to rotate to a fresh node operator identity.
+* Added an optional field `maximum_state_delta` to `ResourceLimits` in `CreateSubnetPayload` which, when present,
+  sets a soft limit on the maximum (replicated) state *delta* (kept in main memory) in bytes.
 
 ## Changed
-
-* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
 
 ## Deprecated
 

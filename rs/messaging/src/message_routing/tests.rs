@@ -729,6 +729,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // Own subnet characteristics.
         let own_subnet_id = subnet_test_id(13);
         let own_maximum_state_size = NumBytes::new(1 << 30);
+        let own_maximum_state_delta = NumBytes::new(1 << 20);
         let own_subnet_record = SubnetRecord {
             membership: &[node_test_id(1), node_test_id(2)],
             subnet_type: SubnetType::Application,
@@ -763,6 +764,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
 
             resource_limits: ResourceLimits {
                 maximum_state_size: Some(own_maximum_state_size),
+                maximum_state_delta: Some(own_maximum_state_delta),
             },
 
             ..Default::default()
@@ -1066,6 +1068,13 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         assert_eq!(
             latest_state.metadata.own_resource_limits.maximum_state_size,
             Some(own_maximum_state_size)
+        );
+        assert_eq!(
+            latest_state
+                .metadata
+                .own_resource_limits
+                .maximum_state_delta,
+            Some(own_maximum_state_delta)
         );
         assert_eq!(
             *registry_settings.lock().unwrap(),

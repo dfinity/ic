@@ -167,7 +167,7 @@ pub fn should_compute_and_export_total_volume_metric<T>(
     T: CandidType,
 {
     const TOTAL_VOLUME_METRIC: &str = "total_volume";
-    let mut expected_total = 0f64;
+    let mut expected_total = 0_f64;
 
     let initial_balances = vec![(
         PrincipalId::new_user_test_id(1).0.into(),
@@ -175,7 +175,7 @@ pub fn should_compute_and_export_total_volume_metric<T>(
     )];
     let env = StateMachine::new();
 
-    let transfer_fee = 10f64.powf(DECIMAL_PLACES as f64 - 1f64) as u64;
+    let transfer_fee = 10_f64.powf(DECIMAL_PLACES as f64 - 1_f64) as u64;
     println!("transfer_fee: {transfer_fee}");
     let args = InitArgs {
         transfer_fee: transfer_fee.into(),
@@ -184,7 +184,7 @@ pub fn should_compute_and_export_total_volume_metric<T>(
     let args = Encode!(&encode_init_args(args)).unwrap();
     let canister_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
-    let denominator = 10f64.powf(DECIMAL_PLACES as f64);
+    let denominator = 10_f64.powf(DECIMAL_PLACES as f64);
 
     let mut increase_expected_total_volume_and_assert = |amount: u64| {
         expected_total += amount as f64 / denominator;

@@ -94,7 +94,7 @@ if [ $# -eq 0 ]; then
         # The completion itself requires `.bazelversion` to exist.
         # We avoid generating the completion in the container _build_ so that
         # the container itself does not depend on the bazel version.
-        cmd=("/usr/bin/bash" -c "exec bash --rcfile <(bazel completion bash)")
+        cmd=("/usr/bin/bash" -c "exec bash --rcfile <(echo 'source ~/.bashrc'; bazel completion bash)")
     else
         cmd=("$USHELL")
     fi

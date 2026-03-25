@@ -119,7 +119,7 @@ fn test(env: TestEnv) {
             log,
             "1. Verifying that signature and public key requests fail before signing is enabled."
         );
-        let message_hash = vec![0xabu8; 32];
+        let message_hash = vec![0xab_u8; 32];
         for key_id in &later_key_ids {
             let method_name = public_key_method_name(key_id);
             let err = get_public_key_with_retries(key_id, &msg_can, log, 20)

@@ -5,8 +5,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
+use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy};
 use crate::driver::log_events;
+use crate::driver::test_env::TestEnv;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
 use crate::driver::test_env_api::HasFarmUrl;
 use anyhow::Result;
@@ -21,8 +22,6 @@ use std::fmt;
 use std::io::Write;
 use thiserror::Error;
 use url::Url;
-
-use crate::driver::{ic::ImageSizeGiB, test_env::TestEnv};
 
 pub type FarmResult<T> = Result<T, FarmError>;
 
