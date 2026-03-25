@@ -1,6 +1,5 @@
 use crate::driver::ic::VmResourceOverrides;
 use crate::driver::test_env::TestEnvAttribute;
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
