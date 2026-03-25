@@ -2269,7 +2269,6 @@ impl ExecutionTest {
                 CompoundCycles::<ic_types_cycles::Memory>::new(cycles, cost_schedule),
                 Cycles::zero(),
                 false,
-                cost_schedule,
             )
             .unwrap();
     }

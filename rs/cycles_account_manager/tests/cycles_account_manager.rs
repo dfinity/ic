@@ -766,7 +766,6 @@ fn test_consume_with_threshold() {
                 CompoundCycles::<Memory>::new(Cycles::zero(), cost_schedule),
                 threshold,
                 false,
-                cost_schedule,
             )
             .is_ok()
     );
@@ -778,7 +777,7 @@ fn test_consume_with_threshold() {
     let amount = CompoundCycles::<Memory>::new(Cycles::from(i128::MAX as u128), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_with_threshold(&mut system_state, amount, threshold, false, cost_schedule,)
+            .consume_with_threshold(&mut system_state, amount, threshold, false)
             .is_ok()
     );
     cycles_balance_expected -= amount.real();
@@ -789,7 +788,7 @@ fn test_consume_with_threshold() {
 
     assert!(
         cycles_account_manager
-            .consume_with_threshold(&mut system_state, amount, threshold, false, cost_schedule)
+            .consume_with_threshold(&mut system_state, amount, threshold, false)
             .is_ok()
     );
     cycles_balance_expected -= amount.real();
@@ -798,7 +797,7 @@ fn test_consume_with_threshold() {
     let amount = CompoundCycles::<Memory>::new(Cycles::new(1), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_with_threshold(&mut system_state, amount, threshold, false, cost_schedule,)
+            .consume_with_threshold(&mut system_state, amount, threshold, false)
             .is_ok()
     );
     cycles_balance_expected -= amount.real();
@@ -806,7 +805,7 @@ fn test_consume_with_threshold() {
 
     assert!(
         cycles_account_manager
-            .consume_with_threshold(&mut system_state, amount, threshold, false, cost_schedule,)
+            .consume_with_threshold(&mut system_state, amount, threshold, false)
             .is_err()
     );
     cycles_balance_expected -= amount.real();
@@ -1156,7 +1155,6 @@ fn consume_cycles_for_memory_drains_reserved_balance() {
         CompoundCycles::<Memory>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
         false,
-        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -1185,7 +1183,6 @@ fn consume_cycles_for_compute_drains_reserved_balance() {
         ),
         Cycles::new(0),
         false,
-        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -1211,7 +1208,6 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
         CompoundCycles::<Uninstall>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
         false,
-        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -1237,7 +1233,6 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
         CompoundCycles::<Instructions>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
         false,
-        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(1_000_000));

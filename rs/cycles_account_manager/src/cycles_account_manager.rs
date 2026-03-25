@@ -368,7 +368,6 @@ impl CyclesAccountManager {
                 CompoundCycles::new(cycles, cost_schedule),
                 threshold,
                 reveal_top_up,
-                cost_schedule,
             )
         }
     }
@@ -403,13 +402,7 @@ impl CyclesAccountManager {
             cost_schedule,
             system_state.reserved_balance(),
         );
-        self.consume_with_threshold(
-            system_state,
-            cycles,
-            threshold,
-            reveal_top_up,
-            cost_schedule,
-        )
+        self.consume_with_threshold(system_state, cycles, threshold, reveal_top_up)
     }
 
     /// Withdraws and consumes the cost of executing the given number of
@@ -501,7 +494,6 @@ impl CyclesAccountManager {
                 system_state.reserved_balance(),
             ),
             reveal_top_up,
-            cost_schedule,
         )
         .map(|_| cost)
     }
@@ -963,46 +955,39 @@ impl CyclesAccountManager {
         cycles: CompoundCycles<T>,
         threshold: Cycles,
         reveal_top_up: bool,
-        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let use_case = T::cycles_use_case();
-        match cost_schedule {
-            CanisterCyclesCostSchedule::Free => {}
-            CanisterCyclesCostSchedule::Normal => {
-                let effective_cycles_balance = match use_case {
-                    CyclesUseCase::Memory
-                    | CyclesUseCase::ComputeAllocation
-                    | CyclesUseCase::Uninstall => {
-                        // The resource use cases first drain the `reserved_balance` and
-                        // after that the main balance.
-                        system_state.balance() + system_state.reserved_balance()
-                    }
-                    CyclesUseCase::IngressInduction
-                    | CyclesUseCase::Instructions
-                    | CyclesUseCase::RequestAndResponseTransmission
-                    | CyclesUseCase::CanisterCreation
-                    | CyclesUseCase::ECDSAOutcalls
-                    | CyclesUseCase::SchnorrOutcalls
-                    | CyclesUseCase::VetKd
-                    | CyclesUseCase::HTTPOutcalls
-                    | CyclesUseCase::DeletedCanisters
-                    | CyclesUseCase::NonConsumed
-                    | CyclesUseCase::BurnedCycles
-                    | CyclesUseCase::DroppedMessages => system_state.balance(),
-                };
 
-                self.verify_cycles_balance_with_threshold(
-                    system_state.canister_id(),
-                    effective_cycles_balance,
-                    cycles.real(),
-                    threshold,
-                    reveal_top_up,
-                )?;
-
-                debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
-                system_state.remove_cycles(cycles);
+        let effective_cycles_balance = match use_case {
+            CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
+                // The resource use cases first drain the `reserved_balance` and
+                // after that the main balance.
+                system_state.balance() + system_state.reserved_balance()
             }
-        }
+            CyclesUseCase::IngressInduction
+            | CyclesUseCase::Instructions
+            | CyclesUseCase::RequestAndResponseTransmission
+            | CyclesUseCase::CanisterCreation
+            | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::SchnorrOutcalls
+            | CyclesUseCase::VetKd
+            | CyclesUseCase::HTTPOutcalls
+            | CyclesUseCase::DeletedCanisters
+            | CyclesUseCase::NonConsumed
+            | CyclesUseCase::BurnedCycles
+            | CyclesUseCase::DroppedMessages => system_state.balance(),
+        };
+
+        self.verify_cycles_balance_with_threshold(
+            system_state.canister_id(),
+            effective_cycles_balance,
+            cycles.real(),
+            threshold,
+            reveal_top_up,
+        )?;
+
+        debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
+        system_state.remove_cycles(cycles);
         Ok(())
     }
 
@@ -1193,7 +1178,6 @@ impl CyclesAccountManager {
         log: &ReplicaLogger,
         canister: &mut CanisterState,
         duration_since_last_charge: Duration,
-        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let cycles = rate * duration_since_last_charge.as_secs() / SECONDS_PER_DAY;
 
@@ -1203,7 +1187,6 @@ impl CyclesAccountManager {
             cycles,
             Cycles::zero(),
             false, // caller is system => no need to reveal top up balance
-            cost_schedule,
         ) {
             info!(
                 log,
@@ -1246,21 +1229,18 @@ impl CyclesAccountManager {
             log,
             canister,
             duration_since_last_charge,
-            cost_schedule,
         )?;
         self.charge_canister_for_single_resource(
             message_memory,
             log,
             canister,
             duration_since_last_charge,
-            cost_schedule,
         )?;
         self.charge_canister_for_single_resource(
             compute_allocation,
             log,
             canister,
             duration_since_last_charge,
-            cost_schedule,
         )?;
 
         Ok(())
