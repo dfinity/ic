@@ -146,10 +146,8 @@ impl ProposalWithMainnetState {
         )
         .await;
         let new_canister_record = nns_canister_records.canisters.get(&payload.name).unwrap();
-        let new_canister_id =
-            CanisterId::try_from(new_canister_record.id.clone().unwrap()).unwrap();
 
-        new_canister_id
+        CanisterId::try_from(new_canister_record.id.clone().unwrap()).unwrap()
     }
 
     /// Code duplicate of rs/tests/consensus/utils/src/upgrade.rs:bless_replica_version
