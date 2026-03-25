@@ -281,6 +281,89 @@ pub fn should_compute_and_export_total_volume_metric<T>(
     increase_expected_total_volume_and_assert(u64::MAX - 10_000_000_000 + transfer_fee);
 }
 
+pub fn assert_archiving_histogram_metrics_present_after_archiving<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    ledger_suite_type: LedgerSuiteType,
+) where
+    T: CandidType,
+{
+    let (env, ledger_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    // Verify that archiving histogram metrics are NOT present before any archiving
+    let metrics_before = retrieve_metrics(&env, ledger_id);
+    assert!(
+        !metrics_before
+            .iter()
+            .any(|line| line.contains("ledger_archiving_duration_seconds")),
+        "Archiving duration histogram should not be present before archiving"
+    );
+
+    // Make enough transactions to trigger archiving
+    let p1 = PrincipalId::new_user_test_id(1);
+    for i in 0..=ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, MINTER, p1.0, 10_000_000 + i).expect("mint failed");
+    }
+
+    // Verify that archiving histogram metrics ARE present after archiving
+    let metrics_after = retrieve_metrics(&env, ledger_id);
+
+    // Check for ledger_archiving_duration_seconds histogram
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_duration_seconds_bucket")),
+        "Expected ledger_archiving_duration_seconds_bucket metric after archiving"
+    );
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_duration_seconds_sum")),
+        "Expected ledger_archiving_duration_seconds_sum metric after archiving"
+    );
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_duration_seconds_count")),
+        "Expected ledger_archiving_duration_seconds_count metric after archiving"
+    );
+
+    // Check for ledger_archiving_chunk_duration_seconds histogram
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_chunk_duration_seconds_bucket")),
+        "Expected ledger_archiving_chunk_duration_seconds_bucket metric after archiving"
+    );
+
+    // Check for ledger_archiving_chunks histogram
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_chunks_bucket")),
+        "Expected ledger_archiving_chunks_bucket metric after archiving"
+    );
+
+    // Verify that the count metrics show 1 observation
+    let count_value = parse_metric(&env, ledger_id, "ledger_archiving_duration_seconds_count");
+    assert_eq!(
+        count_value, 1,
+        "Expected 1 archiving operation, got {}",
+        count_value
+    );
+
+    let archived_metric = match ledger_suite_type {
+        LedgerSuiteType::ICP => "ledger_archived_blocks",
+        LedgerSuiteType::ICRC => "ledger_archived_transactions",
+    };
+    let blocks_archived = parse_metric(&env, ledger_id, archived_metric);
+    assert_eq!(
+        blocks_archived, NUM_BLOCKS_TO_ARCHIVE,
+        "Expected {} blocks to be archived, got {}",
+        NUM_BLOCKS_TO_ARCHIVE, blocks_archived
+    );
+}
+
 fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) {
     let metrics = retrieve_metrics(env, canister_id);
     assert!(

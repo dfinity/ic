@@ -16,7 +16,8 @@ use ic_icrc1::{
     endpoints::{StandardRecord, convert_transfer_error},
 };
 use ic_icrc1_ledger::{
-    InitArgs, LEDGER_VERSION, Ledger, LedgerArgument, UPGRADES_MEMORY, balances_len,
+    ARCHIVING_CHUNK_DURATION_HISTOGRAM, ARCHIVING_CHUNKS_HISTOGRAM, ARCHIVING_DURATION_HISTOGRAM,
+    HistogramData, InitArgs, LEDGER_VERSION, Ledger, LedgerArgument, UPGRADES_MEMORY, balances_len,
     get_allowances, read_first_balance, wasm_token_type,
 };
 use ic_ledger_canister_core::ledger::{
@@ -409,8 +410,53 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             ledger.approvals().get_num_approvals() as f64,
             "Total number of approvals.",
         )?;
-        Ok(())
-    })
+        Ok::<(), std::io::Error>(())
+    })?;
+
+    ARCHIVING_DURATION_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_duration_seconds",
+            "Duration of archiving operations in seconds.",
+            h,
+        )
+    })?;
+    ARCHIVING_CHUNK_DURATION_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_chunk_duration_seconds",
+            "Duration of individual archive chunk operations (append_blocks calls) in seconds.",
+            h,
+        )
+    })?;
+    ARCHIVING_CHUNKS_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_chunks",
+            "Number of chunks per archiving operation.",
+            h,
+        )
+    })?;
+    Ok(())
+}
+
+/// Encodes a histogram in Prometheus format. No-op if the histogram has no observations.
+fn encode_histogram<const N: usize>(
+    w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
+    name: &str,
+    help: &str,
+    histogram: &HistogramData<N>,
+) -> std::io::Result<()> {
+    if histogram.count() == 0 {
+        return Ok(());
+    }
+    w.encode_histogram(
+        name,
+        histogram.per_bucket_counts().into_iter(),
+        histogram.sum(),
+        help,
+    )?;
+    Ok(())
 }
 
 /// Update the total volume of token transactions. Since the total volume counter is an `f64`, it

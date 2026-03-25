@@ -14,6 +14,7 @@ use ic_certification::{
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_canister_core::archive::ArchivingStats;
 use ic_ledger_canister_core::runtime::{CdkRuntime, Runtime};
 use ic_ledger_canister_core::{archive::Archive, blockchain::BlockDataContainer};
 use ic_ledger_canister_core::{
@@ -506,6 +507,12 @@ pub enum LedgerArgument {
     Upgrade(Option<UpgradeArgs>),
 }
 
+/// Bucket boundaries for archiving histograms.
+pub const ARCHIVING_DURATION_BUCKETS: [f64; 8] = [0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0]; // seconds
+pub const ARCHIVING_CHUNKS_BUCKETS: [f64; 4] = [1.0, 2.0, 5.0, 10.0]; // chunk count
+
+pub use ic_ledger_canister_core::metrics::HistogramData;
+
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
@@ -540,6 +547,13 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 
     static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
+
+    pub static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
+        const { RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS)) };
+    pub static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
+        const { RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS)) };
+    pub static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData<4>> =
+        const { RefCell::new(HistogramData::new(&ARCHIVING_CHUNKS_BUCKETS)) };
 }
 
 type StableLedgerBalances = Balances<StableBalances>;
@@ -831,6 +845,29 @@ impl LedgerData for Ledger {
 
     fn get_archiving_failure_metric(&self) -> u64 {
         ARCHIVING_FAILURES.get()
+    }
+
+    fn record_archiving_stats(&mut self, stats: ArchivingStats) {
+        const NANOS_PER_SECOND: f64 = 1_000_000_000.0;
+
+        // Record total duration
+        ARCHIVING_DURATION_HISTOGRAM.with(|h| {
+            h.borrow_mut()
+                .observe(stats.duration_nanos as f64 / NANOS_PER_SECOND);
+        });
+
+        // Record per-chunk durations
+        ARCHIVING_CHUNK_DURATION_HISTOGRAM.with(|h| {
+            let mut h = h.borrow_mut();
+            for chunk_duration in &stats.chunk_durations_nanos {
+                h.observe(*chunk_duration as f64 / NANOS_PER_SECOND);
+            }
+        });
+
+        // Record number of chunks
+        ARCHIVING_CHUNKS_HISTOGRAM.with(|h| {
+            h.borrow_mut().observe(stats.num_chunks as f64);
+        });
     }
 }
 
