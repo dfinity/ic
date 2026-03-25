@@ -81,6 +81,32 @@ impl InstallCode {
             .ok_or(invalid_proposal_error("Argument is required"))
     }
 
+    /// Returns a copy with potentially large fields (wasm_module, arg) elided.
+    /// (Hashes are preserved.)
+    pub fn abridge(&self) -> Self {
+        let Self {
+            canister_id,
+            install_mode,
+            wasm_module_hash,
+            arg_hash,
+            skip_stopping_before_installing,
+
+            // Elided.
+            wasm_module: _,
+            arg: _,
+        } = self;
+
+        Self {
+            canister_id: *canister_id,
+            install_mode: *install_mode,
+            wasm_module: None,
+            wasm_module_hash: wasm_module_hash.clone(),
+            arg: None,
+            arg_hash: arg_hash.clone(),
+            skip_stopping_before_installing: *skip_stopping_before_installing,
+        }
+    }
+
     pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
         let canister_id = self.valid_canister_id()?;
         Ok(topic_to_manage_canister(&canister_id))

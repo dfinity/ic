@@ -515,6 +515,7 @@ impl Action {
             }
             Action::TakeCanisterSnapshot(_) => "ACTION_TAKE_CANISTER_SNAPSHOT",
             Action::LoadCanisterSnapshot(_) => "ACTION_LOAD_CANISTER_SNAPSHOT",
+            Action::CreateCanisterAndInstallCode(_) => "ACTION_CREATE_CANISTER_AND_INSTALL_CODE",
         }
     }
 }
@@ -4192,6 +4193,13 @@ impl Governance {
                 self.perform_load_canister_snapshot(pid, load_canister_snapshot)
                     .await;
             }
+            ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
+                self.perform_create_canister_and_install_code(
+                    pid,
+                    create_canister_and_install_code,
+                )
+                .await;
+            }
         }
     }
 
@@ -4270,6 +4278,17 @@ impl Governance {
     ) {
         let result = self
             .perform_call_canister(proposal_id, load_canister_snapshot)
+            .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_create_canister_and_install_code(
+        &mut self,
+        proposal_id: u64,
+        create_canister_and_install_code: pb::v1::CreateCanisterAndInstallCode,
+    ) {
+        let result = self
+            .perform_call_canister(proposal_id, create_canister_and_install_code)
             .await;
         self.set_proposal_execution_status(proposal_id, result);
     }
@@ -4816,6 +4835,9 @@ impl Governance {
             }
             ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
                 load_canister_snapshot.validate()
+            }
+            ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
+                create_canister_and_install_code.validate()
             }
         }
     }

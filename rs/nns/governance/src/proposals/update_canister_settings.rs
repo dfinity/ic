@@ -188,8 +188,7 @@ mod tests {
 
     use crate::pb::v1::{
         CanisterSettings, SelfDescribingValue as SelfDescribingValuePb,
-        canister_settings::Controllers,
-        governance_error::ErrorType,
+        canister_settings::Controllers, governance_error::ErrorType,
     };
 
     use candid::Decode;
