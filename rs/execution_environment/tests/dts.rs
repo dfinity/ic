@@ -977,11 +977,7 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
 
 #[test]
 fn dts_aborted_execution_does_not_block_subnet_messages() {
-    fn test<F: Fn(CanisterId) -> (Method, CallArgs)>(
-        subnet_complete: bool,
-        aborted_complete: bool,
-        f: F,
-    ) {
+    fn test<F: Fn(CanisterId) -> (Method, CallArgs)>(subnet_complete: bool, f: F) {
         let slice_instruction_limit = 1_000_000;
         let env = dts_env(
             NumInstructions::from(slice_instruction_limit * 10),
@@ -1053,17 +1049,10 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         }
 
         // Make sure the aborted execution is still processing.
-        if aborted_complete {
-            assert_eq!(
-                ingress_state(env.ingress_status(&long_execution_id)),
-                Some(IngressState::Processing)
-            );
-        } else {
-            assert_matches!(
-                ingress_state(env.ingress_status(&long_execution_id)),
-                Some(IngressState::Failed(_))
-            );
-        }
+        assert_eq!(
+            ingress_state(env.ingress_status(&long_execution_id)),
+            Some(IngressState::Processing)
+        );
 
         // Make sure the method is completed, despite the effective canister is aborted.
         if subnet_complete {
@@ -1087,10 +1076,10 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         }
     }
     fn test_supported<F: Fn(CanisterId) -> (Method, CallArgs)>(f: F) {
-        test(true, true, f);
+        test(true, f);
     }
     fn test_unsupported<F: Fn(CanisterId) -> (Method, CallArgs)>(f: F) {
-        test(false, true, f);
+        test(false, f);
     }
 
     for method in Method::iter() {
