@@ -2035,11 +2035,6 @@ crate.annotation(
     crate = "openssl-sys",
 )
 crate.annotation(
-    crate = "askama_derive",
-    patch_args = ["-p2"],
-    patches = ["@@//bazel:askama.patch"],
-)
-crate.annotation(
     crate = "canbench",
     gen_binaries = ["canbench"],
 )

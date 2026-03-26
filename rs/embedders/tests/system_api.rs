@@ -1374,10 +1374,13 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         .build();
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
-    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    ) - Cycles::from(10_u128);
+    let initial_cycles = cycles_account_manager
+        .xnet_call_performed_fee(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real()
+        - Cycles::from(10_u128);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(initial_cycles)
         .build();
