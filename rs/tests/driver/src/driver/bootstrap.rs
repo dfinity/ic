@@ -582,6 +582,7 @@ fn create_guestos_config_for_node(
             .ok(),
         hostname: Some(node.node_id.to_string()),
         generate_ic_boundary_tls_cert: node.node_config.domain.clone(),
+        ic_boundary_tls_cert: None,
         nns_pub_key_override,
     };
 
