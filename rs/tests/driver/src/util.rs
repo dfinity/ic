@@ -1732,7 +1732,8 @@ impl JournalStreamer {
     /// Builds and executes the `journalctl` command over SSH, parses the JSON output, and returns
     /// `(message, cursor)` pairs for entries matching `search_regex`.
     fn search_and_return_cursors(&self, search_regex: &str) -> anyhow::Result<Vec<JournalOutput>> {
-        let mut command = "journalctl --output json --output-fields='MESSAGE,__CURSOR' --all".to_string();
+        let mut command =
+            "journalctl --output json --output-fields='MESSAGE,__CURSOR' --all".to_string();
 
         if !self.journalctl_flags.is_empty() {
             command.push(' ');
