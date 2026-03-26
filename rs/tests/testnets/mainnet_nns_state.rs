@@ -43,7 +43,7 @@ use std::time::Duration;
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_timeout_per_test(Duration::from_secs(90 * 60))
-        .with_setup(setup_mainnet_nns)
+        .with_setup(|env| setup_mainnet_nns(env, None))
         .execute_from_args()?;
     Ok(())
 }

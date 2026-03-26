@@ -493,9 +493,12 @@ impl IcConfig {
                     principal_id: node_operator_id,
                     node_provider_principal_id: self.initial_node_provider,
                     dc_id: "".into(),
-                    rewardable_nodes: BTreeMap::new(),
+                    rewardable_nodes: BTreeMap::from([("type3.1".into(), 0)]),
                     ipv6: None,
-                    max_rewardable_nodes: BTreeMap::new(),
+                    max_rewardable_nodes: BTreeMap::from([(
+                        "type3.1".into(),
+                        node_allowance.try_into().unwrap_or(u32::MAX),
+                    )]),
                 });
         }
 

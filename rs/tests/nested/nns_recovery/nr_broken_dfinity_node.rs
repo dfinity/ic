@@ -37,6 +37,7 @@ fn main() -> Result<()> {
                 env,
                 SetupConfig {
                     impersonate_upstreams: true,
+                    use_mainnet_state: false,
                     subnet_size: SUBNET_SIZE,
                     dkg_interval: DKG_INTERVAL,
                     nested_nodes_vm_resource_overrides: NNS_RECOVERY_VM_RESOURCE_OVERRIDES,
@@ -44,6 +45,7 @@ fn main() -> Result<()> {
             )
         })
         .add_test(systest!(test; TestConfig {
+            use_mainnet_state: false,
             local_recovery: false,
             break_dfinity_owned_node: true,
             num_broken_nodes: F + 1,
