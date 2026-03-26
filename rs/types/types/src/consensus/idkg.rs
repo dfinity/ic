@@ -11,6 +11,7 @@ pub use crate::consensus::idkg::common::{
 };
 use crate::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation};
 use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
+use crate::messages::CallbackId;
 use crate::{
     Height, NodeId, RegistryVersion, SubnetId,
     consensus::BasicSignature,
@@ -1589,6 +1590,10 @@ impl SigShare {
             SigShare::Schnorr(share) => share.request_id,
             SigShare::VetKd(share) => share.request_id,
         }
+    }
+
+    pub fn callback_id(&self) -> CallbackId {
+        self.request_id().callback_id
     }
 
     pub fn scheme(&self) -> SignatureScheme {
