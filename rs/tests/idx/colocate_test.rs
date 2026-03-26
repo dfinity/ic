@@ -6,7 +6,7 @@ use ic_system_test_driver::driver::driver_setup::{
 };
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::{CliArguments, SystemTestGroup};
-use ic_system_test_driver::driver::ic::VmResources;
+use ic_system_test_driver::driver::ic::VmResourceOverrides;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::{
@@ -40,6 +40,7 @@ fn main() -> Result<()> {
         .with_overall_timeout(Duration::from_secs(3 * 60 * 60))
         .with_timeout_per_test(Duration::from_secs(3 * 60 * 60))
         .with_setup(setup)
+        .remove_all_metrics_to_check()
         .execute_from_args()?;
     Ok(())
 }
@@ -61,14 +62,14 @@ fn setup(env: TestEnv) {
             .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
             .unwrap_or_default();
 
-    let vm_resources: VmResources = env::var("COLOCATED_TEST_DRIVER_VM_RESOURCES")
+    let vm_resource_overrides: VmResourceOverrides = env::var("COLOCATED_TEST_DRIVER_VM_RESOURCES")
         .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
         .unwrap_or_default();
 
     let uvm = UniversalVm::new(UVM_NAME.to_string())
         .with_required_host_features(host_features)
-        .with_vm_resources(vm_resources)
+        .with_resource_overrides(vm_resource_overrides)
         .with_config_img(
             Path::new(&env::var("COLOCATED_UVM_CONFIG_IMAGE_PATH").unwrap()).to_path_buf(),
         );
@@ -131,6 +132,10 @@ fn setup(env: TestEnv) {
     let session = uvm
         .block_on_ssh_session()
         .unwrap_or_else(|e| panic!("Failed to setup SSH session to {UVM_NAME} because: {e}"));
+
+    // Set a timeout so blocking SSH operations fail instead of hanging
+    // indefinitely during network splits.
+    session.set_timeout(180_000);
 
     scp_send_to(
         log.clone(),
@@ -308,7 +313,9 @@ chmod +x /home/admin/run
         .join()
         .expect("test execution thread failed");
 
-    fetch_test_dir(env.clone(), &uvm, &session);
+    if env::var("FETCH_TEST_DIR").is_ok() {
+        fetch_test_dir(env.clone(), &uvm, &session);
+    }
 
     info!(
         log,
@@ -365,17 +372,17 @@ fn start_test(env: TestEnv, uvm: &DeployedUniversalVm) {
 
 fn fetch_test_dir(env: TestEnv, uvm: &DeployedUniversalVm, session: &Session) {
     let log = env.logger();
-    let test_dir_tar = Path::new("/home/admin/test.tar");
+    let test_dir_tar = Path::new("/home/admin/test.tar.zst");
     info!(
         log,
         "Tarring the test directory on the {UVM_NAME} to {test_dir_tar:?}..."
     );
     uvm.block_on_bash_script_from_session(
         session,
-        &format!("sudo tar -cf {test_dir_tar:?} -C /home/admin/test ."),
+        &format!("sudo tar --auto-compress -cf {test_dir_tar:?} -C /home/admin/test ."),
     )
     .unwrap_or_else(|e| panic!("Failed to tar the test directory on {UVM_NAME} because: {e}"));
-    let local_test_dir_tar = env.get_path("test.tar");
+    let local_test_dir_tar = env.get_path("test.tar.zst");
     info!(
         log,
         "Copying {test_dir_tar:?} from the {UVM_NAME} to the local test-driver at {local_test_dir_tar:?}..."

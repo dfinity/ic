@@ -2243,7 +2243,7 @@ mod tests {
 
     #[test]
     fn test_encode_decode_idkg_key() {
-        let data = [1u8; PrincipalId::MAX_LENGTH_IN_BYTES];
+        let data = [1_u8; PrincipalId::MAX_LENGTH_IN_BYTES];
         let max_principal = PrincipalId::new(data.len(), data);
         let small_principal = PrincipalId::new(20, data);
         let one_byte_principal = PrincipalId::new(1, data);
@@ -2258,9 +2258,9 @@ mod tests {
 
         let hashes = [
             CryptoHash(vec![]),
-            CryptoHash(vec![2u8; 1]),
-            CryptoHash(vec![2u8; 32]),
-            CryptoHash(vec![2u8; 128]),
+            CryptoHash(vec![2_u8; 1]),
+            CryptoHash(vec![2_u8; 32]),
+            CryptoHash(vec![2_u8; 128]),
         ];
 
         let message_types = [IDkgMessageType::Dealing, IDkgMessageType::EcdsaSigShare];

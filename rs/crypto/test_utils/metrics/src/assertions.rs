@@ -115,7 +115,7 @@ impl MetricsObservationsAssert {
                 false
             }
             Some(actual_value) => {
-                if actual_value > &0f64 {
+                if actual_value > &0_f64 {
                     true
                 } else {
                     println!("Expected boolean counter value ge 0, found {actual_value}");

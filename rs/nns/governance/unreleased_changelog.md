@@ -9,7 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-* Add a `total_maturity_disbursements_in_progress_e8s_equivalent` metric (calculated daily).
+- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
 
 ## Changed
 

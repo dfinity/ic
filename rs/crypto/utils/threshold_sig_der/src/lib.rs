@@ -54,7 +54,7 @@ pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String
                 }
 
                 if ids[0] == bls_algorithm_id() && ids[1] == bls_curve_id() {
-                    let mut key_bytes = [0u8; PUBLIC_KEY_SIZE];
+                    let mut key_bytes = [0_u8; PUBLIC_KEY_SIZE];
                     key_bytes.copy_from_slice(key.as_slice());
                     Ok(key_bytes)
                 } else {

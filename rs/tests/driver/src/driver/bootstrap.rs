@@ -15,7 +15,7 @@ use crate::driver::{
     nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
-    resource::AllocatedVm,
+    resource::{AllocatedVm, HOSTOS_MEMORY_RESERVED_GIB, HOSTOS_VCPUS_RESERVED},
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
         HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
@@ -83,7 +83,7 @@ pub fn init_ic(
     logger: &Logger,
     specific_ids: bool,
 ) -> Result<InitializedIc> {
-    let mut next_node_index = 0u64;
+    let mut next_node_index = 0_u64;
     let ic_name = ic.name();
     let working_dir = test_env.create_prep_dir(&ic_name)?;
 
@@ -555,7 +555,6 @@ fn create_guestos_config_for_node(
         mgmt_mac,
         deployment_environment,
         nns_urls,
-        use_node_operator_private_key: false,
         node_operator_private_key: None,
         enable_trusted_execution_environment: false,
         use_ssh_authorized_keys: true,
@@ -692,16 +691,36 @@ fn create_setupos_config_image(
         .filter(|s| !s.trim().is_empty())
         .map(PathBuf::from);
 
-    const DEFAULT_BARE_METAL_VCPUS: u64 = 64;
-    const DEFAULT_BARE_METAL_MEMORY_GIB: u64 = 470;
-
     let bare_metal = nested_vm.get_vm()?.bare_metal;
     let config = nested_vm.get_nested_vm_config()?;
     let (nr_of_cpus, memory) = if bare_metal {
-        (DEFAULT_BARE_METAL_VCPUS, DEFAULT_BARE_METAL_MEMORY_GIB)
+        let memory_gibibytes = config.memory_kibibytes.get() / 1024 / 1024;
+
+        (config.vcpus.get(), memory_gibibytes)
     } else {
-        let vm_spec = nested_vm.get_vm_spec()?;
-        (vm_spec.v_cpus / 2, vm_spec.memory_ki_b / 2 / 1024 / 1024)
+        let memory_gibibytes = config.memory_kibibytes.get() / 1024 / 1024;
+        let total_vcpus = config.vcpus.get();
+
+        if total_vcpus % 4 != 0 {
+            panic!("The requested VCPUs must be divisible by 4.");
+        }
+
+        // Save some resources for HostOS
+        let vcpus = match total_vcpus.checked_sub(HOSTOS_VCPUS_RESERVED) {
+            Some(0) | None => panic!(
+                "A nested node requires > {HOSTOS_VCPUS_RESERVED} vCPUs. {HOSTOS_VCPUS_RESERVED} are reserved for HostOS."
+            ),
+            Some(v) => v,
+        };
+
+        let memory_gibibytes = match memory_gibibytes.checked_sub(HOSTOS_MEMORY_RESERVED_GIB) {
+            Some(0) | None => panic!(
+                "A nested node requires > {HOSTOS_MEMORY_RESERVED_GIB} GiB of memory. {HOSTOS_MEMORY_RESERVED_GIB} GiBs are reserved for HostOS."
+            ),
+            Some(v) => v,
+        };
+
+        (vcpus, memory_gibibytes)
     };
     setupos_image_config::create_setupos_config(
         &config_dir,

@@ -81,6 +81,7 @@ rust_library(
         "//rs/tests/test_canisters/message:lib",
         "//rs/tests/test_canisters/signer:lib",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",

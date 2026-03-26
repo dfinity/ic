@@ -7,14 +7,15 @@ use crate::{
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
-    process_manager::ProcessManager,
+    process_manager::ProcessManagerImpl,
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
     upgrade::{OrchestratorControlFlow, Upgrade},
 };
+use anyhow::Context;
 use backoff::ExponentialBackoffBuilder;
-use get_if_addrs::get_if_addrs;
+use config_tool::guestos::network::{get_best_interface_name, get_interface_addresses};
 use guest_upgrade_server::orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator;
 use ic_config::{
     Config,
@@ -23,7 +24,7 @@ use ic_config::{
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_image_upgrader::ImageUpgrader;
+use ic_image_upgrader::{ImageUpgrader, ManagebootRunnerImpl};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
@@ -33,7 +34,7 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     future::Future,
-    net::SocketAddr,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     thread,
@@ -151,16 +152,24 @@ impl Orchestrator {
             loop {
                 // Sleep early because IPv4 takes several minutes to configure
                 thread::sleep(Duration::from_secs(10 * 60));
-                let (ipv4, ipv6) = Self::get_ip_addresses();
+                let (ipv4, ipv6) = Self::get_ip_addresses().unwrap_or_default();
 
                 let message = indoc::formatdoc!(
                     r#"
                     Node-id: {node_id}
                     Replica version: {version}
-                    IPv6: {ipv6}
-                    IPv4: {ipv4}
+                    IPv6: {}
+                    IPv4: {}
 
-                "#
+                "#,
+                    match ipv6 {
+                        Some(ip) => ip.to_string(),
+                        None => "none configured".to_string(),
+                    },
+                    match ipv4 {
+                        Some(ip) => ip.to_string(),
+                        None => "none configured".to_string(),
+                    },
                 );
 
                 UtilityCommand::notify_host(&message, 1);
@@ -191,8 +200,6 @@ impl Orchestrator {
             }
         }
 
-        // Filesystem API to local registry copy
-        let registry_local_store = registry_replicator.get_local_store();
         // Caches local registry by regularly polling local store
         let registry_client = registry_replicator.get_registry_client();
         // Wrapper to `RegistryClient`
@@ -231,15 +238,17 @@ impl Orchestrator {
             node_id,
             Arc::clone(&crypto) as _,
             Arc::clone(&crypto) as _,
-            registry_local_store.clone(),
         );
 
-        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
+        let replica_process = Arc::new(Mutex::new(ProcessManagerImpl::new(logger.clone())));
         let ic_binary_directory = args
             .ic_binary_directory
             .as_ref()
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
+        let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
+            ic_binary_directory.join("manageboot.sh"),
+        ));
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall
         // They read from the same file, so they'll see the same persisted CUP
@@ -272,7 +281,8 @@ impl Orchestrator {
             Upgrade::new(
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
-                Arc::clone(&replica_process),
+                Arc::clone(&replica_process) as _,
+                manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),
@@ -676,30 +686,11 @@ impl Orchestrator {
         (metrics, metrics_endpoint)
     }
 
-    fn get_ip_addresses() -> (String, String) {
-        let ifaces = get_if_addrs().unwrap_or_default();
-
-        let ipv4 = ifaces
-            .iter()
-            .find_map(|iface| match iface.addr {
-                get_if_addrs::IfAddr::V4(ref addr) if !addr.ip.is_loopback() => {
-                    Some(addr.ip.to_string())
-                }
-                _ => None,
-            })
-            .unwrap_or_else(|| "none configured".to_string());
-
-        let ipv6 = ifaces
-            .iter()
-            .find_map(|iface| match iface.addr {
-                get_if_addrs::IfAddr::V6(ref addr) if !addr.ip.is_loopback() => {
-                    Some(addr.ip.to_string())
-                }
-                _ => None,
-            })
-            .unwrap_or_else(|| "none configured".to_string());
-
-        (ipv4, ipv6)
+    fn get_ip_addresses() -> anyhow::Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
+        let interface = get_best_interface_name().context("unable to get interface")?;
+        let (ipv4, ipv6) =
+            get_interface_addresses(&interface).context("unable to get addresses")?;
+        Ok((ipv4, ipv6))
     }
 }
 

@@ -19,8 +19,8 @@ pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
-    IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
-    execute_canister,
+    IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits, WasmSource,
+    abort_all_paused_executions, execute_canister, wasm_execution_mode,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -36,11 +36,12 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
     CanisterUpgradeOptions, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
-    LogVisibilityV2, MasterPublicKeyId, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    SchnorrAlgorithm, UpdateSettingsArgs,
+    LoadCanisterSnapshotArgs, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, WellFormedError,
 };
@@ -51,7 +52,6 @@ use ic_replicated_state::{
     PageIndex, ReplicatedState, SubnetTopology,
     canister_state::{
         NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
-        system_state::CyclesUseCase,
     },
     metadata_state::testing::NetworkTopologyTesting,
     page_map::{
@@ -62,26 +62,30 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
-use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
+use ic_types::batch::ChainKeyData;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
+use ic_types::messages::SignedIngressContent;
 use ic_types::{
-    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
+    CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterCall, CanisterTask, CertificateDelegationMetadata,
+        CallbackId, CanisterCall, CanisterMessage, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
-        QuerySource, RequestOrResponse, Response, SubnetMessage,
+        QuerySource, RequestOrResponse, Response, SubnetMessage, extract_effective_canister_id,
     },
     time::UNIX_EPOCH,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::{BinaryEncodedWasm, CanisterModule, WasmHash};
 use maplit::{btreemap, btreeset};
 use num_traits::ops::saturating::SaturatingAdd;
 use prometheus::IntCounter;
@@ -99,7 +103,7 @@ use tempfile::NamedTempFile;
 mod wat_canister;
 pub use wat_canister::{WatCanisterBuilder, WatFnCode, wat_canister, wat_fn};
 
-const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(2_500_000_000_000);
 
 // These are well formed example public keys.
 // We need to have well formed keys for the "*_public_key" tests, otherwise crypto will
@@ -245,6 +249,15 @@ pub fn cycles_reserved_for_app_and_verified_app_subnets<T: Fn(SubnetType)>(test:
     }
 }
 
+struct PausedSubnetMessage {
+    message: SubnetMessage,
+    /// cycles for instructions used so far before starting execution of the message
+    cycles_used_before: NominalCycles,
+    /// instructions executed by a paused message since the message started execution;
+    /// the value is reset when the execution gets aborted
+    instructions: NumInstructions,
+}
+
 /// A helper for execution tests.
 ///
 /// Example usage:
@@ -274,9 +287,9 @@ pub struct ExecutionTest {
     executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
     execution_cost: HashMap<CanisterId, Cycles>,
-    // Instructions executed by a paused subnet message execution per canister.
-    // The value is reset when the execution finishes or gets aborted.
-    paused_subnet_message_instructions: HashMap<CanisterId, NumInstructions>,
+    // Tracks paused subnet message executions per canister.
+    // The value is reset when the execution finishes.
+    paused_subnet_messages: HashMap<CanisterId, PausedSubnetMessage>,
     // Messages to canisters on other subnets.
     xnet_messages: Vec<RequestOrResponse>,
     // Messages that couldn't be delivered to other canisters
@@ -301,6 +314,8 @@ pub struct ExecutionTest {
     chain_key_data: ChainKeyData,
     replica_version: ReplicaVersion,
     canister_snapshot_baseline_instructions: NumInstructions,
+    execution_config: Config,
+    resource_limits: ResourceLimits,
 
     // The actual implementation.
     exec_env: Arc<ExecutionEnvironment>,
@@ -430,15 +445,10 @@ impl ExecutionTest {
         let instructions = self
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
-        self.cycles_account_manager.execution_cost(
+        self.cycles_account_manager.management_canister_cost(
             instructions,
             self.subnet_size(),
             self.cost_schedule(),
-            // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
-            // since the number of instructions charged depends on constant set fee and snapshot size
-            // and Wasm64 does not bring any additional overhead for this operation.
-            // The only overhead is during execution time.
-            WasmExecutionMode::Wasm32,
         )
     }
 
@@ -583,6 +593,18 @@ impl ExecutionTest {
             execution_memory,
             self.subnet_available_memory
                 .get_guaranteed_response_message_memory(),
+            self.subnet_available_memory
+                .get_wasm_custom_sections_memory(),
+        );
+    }
+
+    fn set_available_guaranteed_response_message_memory(
+        &mut self,
+        guaranteed_response_message_memory: i64,
+    ) {
+        self.subnet_available_memory = SubnetAvailableMemory::new_for_testing(
+            self.subnet_available_memory.get_execution_memory(),
+            guaranteed_response_message_memory,
             self.subnet_available_memory
                 .get_wasm_custom_sections_memory(),
         );
@@ -1244,6 +1266,7 @@ impl ExecutionTest {
             Arc::clone(&network_topology),
             self.time,
             &mut round_limits,
+            self.resource_limits,
             self.subnet_size(),
             cost_schedule,
         );
@@ -1257,6 +1280,7 @@ impl ExecutionTest {
             result.instructions_used.unwrap(),
             cost_schedule,
         );
+        self.check_invariants();
     }
 
     /// Executes a query sent by the system in the given canister.
@@ -1345,6 +1369,35 @@ impl ExecutionTest {
         let canister = state.take_canister_state(&canister_id).unwrap();
         let mut canister = Arc::unwrap_or_clone(canister);
         let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let response_arc = Arc::new(response);
+        // We push and then immediately pop the response from the canister queues
+        // to ensure all invariants on the canister (system) state are preserved.
+        let mut subnet_available_guaranteed_response_memory = self
+            .subnet_available_memory
+            .get_guaranteed_response_message_memory();
+        let res = canister
+            .push_input(
+                RequestOrResponse::Response(response_arc.clone()),
+                &mut subnet_available_guaranteed_response_memory,
+                state.metadata.own_subnet_type,
+                InputQueueType::LocalSubnet,
+            )
+            .unwrap();
+        assert!(res, "Response should be successfully inducted");
+        let input = canister.pop_input().unwrap();
+        let callback = match input {
+            CanisterMessage::Response { response, callback } => {
+                assert_eq!(response, response_arc);
+                callback
+            }
+            _ => panic!(
+                "Unexpected input popped from canister queues (there should be no messages in the canister queues before calling `execute_response`): {:?}",
+                input
+            ),
+        };
+        self.set_available_guaranteed_response_message_memory(
+            subnet_available_guaranteed_response_memory,
+        );
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1352,19 +1405,15 @@ impl ExecutionTest {
             compute_allocation_used,
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
-        let callback = canister
-            .system_state
-            .unregister_callback(response.originator_reply_callback)
-            .unwrap()
-            .unwrap();
         let result = self.exec_env.execute_canister_response(
             canister,
-            Arc::new(response),
+            response_arc,
             callback,
             self.instruction_limits.clone(),
             UNIX_EPOCH,
             network_topology,
             &mut round_limits,
+            self.resource_limits,
             self.subnet_size(),
             cost_schedule,
         );
@@ -1387,6 +1436,7 @@ impl ExecutionTest {
         self.update_execution_stats(canister_id, instructions_used, cost_schedule);
         state.put_canister_state(canister);
         self.state = Some(state);
+        self.check_invariants();
         response
     }
 
@@ -1446,6 +1496,139 @@ impl ExecutionTest {
         message_id
     }
 
+    fn expected_cycles_balance_change(
+        &self,
+        message: SubnetMessage,
+        instructions_used: NumInstructions,
+    ) -> Cycles {
+        assert_ne!(
+            instructions_used.get(),
+            0,
+            "expected_cycles_balance_change assumes that some instructions were actually used"
+        );
+        let subnet_size = self.subnet_size();
+        let cost_schedule = self.cost_schedule();
+        let message = match message {
+            SubnetMessage::Response(_) => return Cycles::zero(),
+            SubnetMessage::Request(request) => CanisterCall::Request(request),
+            SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
+        };
+        let method = Method::from_str(message.method_name());
+        match method {
+            Ok(Method::InstallCode) | Ok(Method::InstallChunkedCode) => {
+                let wasm_source = match method {
+                    Ok(Method::InstallCode) => {
+                        let wasm_module = InstallCodeArgsV2::decode(message.method_payload())
+                            .unwrap()
+                            .wasm_module;
+                        WasmSource::CanisterModule(CanisterModule::new(wasm_module))
+                    }
+                    Ok(Method::InstallChunkedCode) => {
+                        let payload =
+                            InstallChunkedCodeArgs::decode(message.method_payload()).unwrap();
+                        let store_canister_id: CanisterId = payload
+                            .store_canister
+                            .unwrap_or(payload.target_canister)
+                            .try_into()
+                            .unwrap();
+                        let wasm_chunk_store = self
+                            .state
+                            .as_ref()
+                            .unwrap()
+                            .canister_state(&store_canister_id)
+                            .unwrap()
+                            .system_state
+                            .wasm_chunk_store
+                            .clone();
+                        let chunk_hashes_list = payload
+                            .chunk_hashes_list
+                            .into_iter()
+                            .map(|chunk_hash| chunk_hash.hash)
+                            .collect();
+                        let wasm_module_hash =
+                            WasmHash::try_from(payload.wasm_module_hash).unwrap();
+                        WasmSource::ChunkStore {
+                            wasm_chunk_store,
+                            chunk_hashes_list,
+                            wasm_module_hash,
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+                let execution_mode = wasm_execution_mode(wasm_source);
+                self.cycles_account_manager().execution_cost(
+                    instructions_used,
+                    subnet_size,
+                    cost_schedule,
+                    execution_mode,
+                )
+            }
+            Ok(Method::LoadCanisterSnapshot) => {
+                let payload = LoadCanisterSnapshotArgs::decode(message.method_payload()).unwrap();
+                let snapshot = self.canister_state(payload.get_canister_id()).canister_snapshots.get(payload.snapshot_id()).expect("Loading a non-existing snapshot should fail during validation and no instructions should be used in that case!");
+                let wasm_module = snapshot.execution_snapshot().wasm_binary.clone();
+                let wasm_source = WasmSource::CanisterModule(wasm_module);
+                let execution_mode = wasm_execution_mode(wasm_source);
+                self.cycles_account_manager().execution_cost(
+                    instructions_used,
+                    subnet_size,
+                    cost_schedule,
+                    execution_mode,
+                )
+            }
+            Ok(Method::UploadChunk)
+            | Ok(Method::TakeCanisterSnapshot)
+            | Ok(Method::ReadCanisterSnapshotData)
+            | Ok(Method::UploadCanisterSnapshotMetadata)
+            | Ok(Method::UploadCanisterSnapshotData) => self
+                .cycles_account_manager()
+                .management_canister_cost(instructions_used, subnet_size, cost_schedule),
+            _ => {
+                // no instructions should be charged for other methods and thus
+                // we should never attempt to compute their cycles cost
+                unreachable!()
+            }
+        }
+    }
+
+    fn assert_expected_cycles_balance_change(
+        &self,
+        canister: &CanisterState,
+        message: SubnetMessage,
+        cycles_used_before: NominalCycles,
+        instructions_used: NumInstructions,
+    ) {
+        let cycles_used_after = canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::Instructions)
+            .cloned()
+            .unwrap_or_default();
+        assert!(cycles_used_after >= cycles_used_before);
+        let cycles_used = cycles_used_after - cycles_used_before;
+        if instructions_used.get() != 0 {
+            let expected_cycles_balance_change =
+                self.expected_cycles_balance_change(message, instructions_used);
+            assert_eq!(
+                cycles_used,
+                NominalCycles::new(expected_cycles_balance_change.get())
+            );
+        } else {
+            let baseline_cost = self.cycles_account_manager().execution_cost(
+                NumInstructions::new(0),
+                self.subnet_size(),
+                self.cost_schedule(),
+                WasmExecutionMode::Wasm32,
+            );
+            // the base cost could still be charged in some cases even if no instructions
+            // were used (e.g., depending on how early validation fails)
+            assert!(
+                cycles_used.get() == 0 || cycles_used == NominalCycles::new(baseline_cost.get())
+            );
+        }
+    }
+
     /// Executes a single subnet message from the subnet input queue.
     /// Return a progress flag indicating if the message was executed or not.
     pub fn execute_subnet_message(&mut self) -> bool {
@@ -1459,7 +1642,8 @@ impl ExecutionTest {
                 return false;
             }
         };
-        let maybe_canister_id = get_canister_id_if_install_code(message.clone());
+        let maybe_canister_id = get_effective_canister_id(message.clone());
+        let is_install_code = check_is_install_code(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1469,8 +1653,19 @@ impl ExecutionTest {
         };
 
         let remaining_round_instructions_before = round_limits.instructions;
+        let cycles_used_before = maybe_canister_id.as_ref().and_then(|canister_id| {
+            let canister = state.canister_state(canister_id)?;
+            let cycles_used_before = canister
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
+                .get(&CyclesUseCase::Instructions)
+                .cloned()
+                .unwrap_or_default();
+            Some(cycles_used_before)
+        });
         let (new_state, execute_subnet_message_result_type) = self.exec_env.execute_subnet_message(
-            message,
+            message.clone(),
             state,
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
@@ -1487,34 +1682,56 @@ impl ExecutionTest {
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             match execute_subnet_message_result_type {
-                ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
+                ExecuteSubnetMessageResultType::Finished => {
                     // cycles charging proceeds by prepaying for the message instruction limit
-                    // and subsequently refunding based on `message_instructions_used`
-                    // and thus `message_instructions_used` are capped
+                    // and subsequently refunding based on `slice_instructions_used`
+                    // and thus `slice_instructions_used` are capped
                     // at the message instruction limit
                     let capped_slice_instructions_used = std::cmp::min(
                         NumInstructions::from(slice_instructions_used.get() as u64),
                         self.install_code_instruction_limits.message(),
                     );
-                    assert_eq!(message_instructions_used, capped_slice_instructions_used);
-                    self.update_execution_stats(
-                        canister_id,
-                        message_instructions_used,
-                        cost_schedule,
-                    );
+                    if let Some(canister) =
+                        self.state.as_ref().unwrap().canister_state(&canister_id)
+                    {
+                        self.assert_expected_cycles_balance_change(
+                            canister,
+                            message,
+                            cycles_used_before.unwrap(),
+                            capped_slice_instructions_used,
+                        );
+                    } else {
+                        // If the canister no longer exists (because it was deleted),
+                        // then no instructions should be used.
+                        assert_eq!(capped_slice_instructions_used.get(), 0);
+                    }
+                    // For backward compatibility, we only perform stats updates for install code messages.
+                    if is_install_code {
+                        self.update_execution_stats(
+                            canister_id,
+                            capped_slice_instructions_used,
+                            cost_schedule,
+                        );
+                    }
                 }
                 ExecuteSubnetMessageResultType::Processing => {
                     // such subnet messages should not consume any instructions
                     assert_eq!(slice_instructions_used.get(), 0);
                 }
                 ExecuteSubnetMessageResultType::Paused => {
-                    self.paused_subnet_message_instructions.insert(
-                        canister_id,
-                        NumInstructions::from(slice_instructions_used.get() as u64),
-                    );
+                    let paused_subnet_message = PausedSubnetMessage {
+                        message,
+                        cycles_used_before: cycles_used_before.unwrap(),
+                        instructions: NumInstructions::from(slice_instructions_used.get() as u64),
+                    };
+                    self.paused_subnet_messages
+                        .insert(canister_id, paused_subnet_message);
                 }
             }
+        } else {
+            assert_eq!(slice_instructions_used.get(), 0);
         }
+        self.check_invariants();
         true
     }
 
@@ -1566,6 +1783,7 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
+                    self.resource_limits,
                     self.subnet_size(),
                     cost_schedule,
                 );
@@ -1587,6 +1805,7 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         state.put_canister_states(canisters);
         self.state = Some(state);
+        self.check_invariants();
         executed_any
     }
 
@@ -1615,6 +1834,7 @@ impl ExecutionTest {
             NextExecution::None => {
                 canisters.insert(canister_id, canister);
                 state.put_canister_states(canisters);
+                self.state = Some(state);
             }
             NextExecution::ContinueInstallCode => {
                 canisters.insert(canister_id, canister);
@@ -1637,31 +1857,42 @@ impl ExecutionTest {
                     );
                 let slice_instructions_used =
                     remaining_round_instructions_before - round_limits.instructions;
-                state = new_state;
+                self.state = Some(new_state);
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
                 match execute_subnet_message_result_type {
-                    ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
-                        let instructions_used_before = self
-                            .paused_subnet_message_instructions
-                            .remove(&canister_id)
-                            .unwrap_or_default();
+                    ExecuteSubnetMessageResultType::Finished => {
+                        let paused_subnet_message =
+                            self.paused_subnet_messages.remove(&canister_id).unwrap();
+                        let instructions_used_before = paused_subnet_message.instructions;
                         let instructions_used =
                             NumInstructions::from(slice_instructions_used.get() as u64)
                                 + instructions_used_before;
                         // cycles charging proceeds by prepaying for the message instruction limit
-                        // and subsequently refunding based on `message_instructions_used`
+                        // and subsequently refunding based on `instructions_used`
                         // and thus `instructions_used` are capped
                         // at the message instruction limit
                         let capped_instructions_used = std::cmp::min(
                             instructions_used,
                             self.install_code_instruction_limits.message(),
                         );
-                        assert_eq!(message_instructions_used, capped_instructions_used);
+                        let cycles_used_before = paused_subnet_message.cycles_used_before;
+                        let canister = self
+                            .state
+                            .as_ref()
+                            .unwrap()
+                            .canister_state(&canister_id)
+                            .unwrap();
+                        self.assert_expected_cycles_balance_change(
+                            canister,
+                            paused_subnet_message.message,
+                            cycles_used_before,
+                            capped_instructions_used,
+                        );
                         self.update_execution_stats(
                             canister_id,
-                            message_instructions_used,
+                            capped_instructions_used,
                             cost_schedule,
                         );
                     }
@@ -1669,10 +1900,10 @@ impl ExecutionTest {
                         unreachable!()
                     }
                     ExecuteSubnetMessageResultType::Paused => {
-                        *self
-                            .paused_subnet_message_instructions
-                            .entry(canister_id)
-                            .or_insert(NumInstructions::from(0)) +=
+                        self.paused_subnet_messages
+                            .get_mut(&canister_id)
+                            .unwrap()
+                            .instructions +=
                             NumInstructions::from(slice_instructions_used.get() as u64);
                     }
                 };
@@ -1693,6 +1924,7 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
+                    self.resource_limits,
                     self.subnet_size(),
                     cost_schedule,
                 );
@@ -1709,17 +1941,19 @@ impl ExecutionTest {
                 };
                 canisters.insert(canister_id, canister);
                 state.put_canister_states(canisters);
+                self.state = Some(state);
             }
         }
-        self.state = Some(state);
+        self.check_invariants();
     }
 
     /// Aborts all paused executions.
     pub fn abort_all_paused_executions(&mut self) {
         let mut state = self.state.take().unwrap();
-        self.exec_env
-            .abort_all_paused_executions(&mut state, &self.log);
-        self.paused_subnet_message_instructions = HashMap::default();
+        abort_all_paused_executions(&mut state, &self.exec_env, &self.log);
+        for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
+            paused_subnet_message.instructions = NumInstructions::new(0);
+        }
         self.state = Some(state);
     }
 
@@ -1965,7 +2199,7 @@ impl ExecutionTest {
 
     pub fn subnet_memory_saturation(&self) -> ResourceSaturation {
         self.exec_env
-            .subnet_memory_saturation(&self.subnet_available_memory)
+            .subnet_memory_saturation(&self.subnet_available_memory, self.resource_limits)
     }
 
     pub fn expected_storage_reservation_cycles(
@@ -2027,6 +2261,14 @@ impl ExecutionTest {
         let state_after_split = state.online_split(subnet_id, other_subnet_id).unwrap();
         self.state = Some(state_after_split);
     }
+
+    pub fn check_invariants(&self) {
+        for canister in self.state.as_ref().unwrap().canisters_iter() {
+            canister
+                .check_invariants(&self.execution_config.embedders_config)
+                .expect("Canister invariant check failed");
+        }
+    }
 }
 
 /// A builder for `ExecutionTest`.
@@ -2058,6 +2300,7 @@ pub struct ExecutionTestBuilder {
     subnet_admins: BTreeSet<PrincipalId>,
     network_topology: Option<NetworkTopology>,
     log_level: Option<Level>,
+    resource_limits: ResourceLimits,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -2095,6 +2338,7 @@ impl Default for ExecutionTestBuilder {
             subnet_admins: BTreeSet::new(),
             network_topology: None,
             log_level: Some(Level::Warning),
+            resource_limits: Default::default(),
         }
     }
 }
@@ -2547,6 +2791,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = resource_limits;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2781,7 +3030,7 @@ impl ExecutionTestBuilder {
             message_id: 0,
             executed_instructions: HashMap::new(),
             execution_cost: HashMap::new(),
-            paused_subnet_message_instructions: HashMap::new(),
+            paused_subnet_messages: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
             subnet_available_memory,
@@ -2833,6 +3082,8 @@ impl ExecutionTestBuilder {
                 .subnet_config
                 .scheduler_config
                 .canister_snapshot_baseline_instructions,
+            execution_config: self.execution_config,
+            resource_limits: self.resource_limits,
         }
     }
 }
@@ -2904,23 +3155,31 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
     output
 }
 
-fn get_canister_id_if_install_code(message: SubnetMessage) -> Option<CanisterId> {
+fn get_effective_canister_id(message: SubnetMessage) -> Option<CanisterId> {
+    match message {
+        SubnetMessage::Response(_) => None,
+        SubnetMessage::Request(request) => request.extract_effective_canister_id(),
+        SubnetMessage::Ingress(ingress) => {
+            let signed_ingress_content = SignedIngressContent::new_for_testing(
+                ingress.source,
+                ingress.receiver,
+                ingress.method_name.clone(),
+                ingress.method_payload.clone(),
+                0,
+                None,
+            );
+            extract_effective_canister_id(&signed_ingress_content).ok()?
+        }
+    }
+}
+
+fn check_is_install_code(message: SubnetMessage) -> bool {
     let message = match message {
-        SubnetMessage::Response(_) => return None,
+        SubnetMessage::Response(_) => return false,
         SubnetMessage::Request(request) => CanisterCall::Request(request),
         SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
-    if message.method_name() == "install_code" {
-        InstallCodeArgsV2::decode(message.method_payload())
-            .map(|args| CanisterId::try_from(args.canister_id).unwrap())
-            .ok()
-    } else if message.method_name() == "install_chunked_code" {
-        InstallChunkedCodeArgs::decode(message.method_payload())
-            .map(|args| CanisterId::try_from(args.target_canister).unwrap())
-            .ok()
-    } else {
-        None
-    }
+    message.method_name() == "install_code" || message.method_name() == "install_chunked_code"
 }
 
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
@@ -2998,7 +3257,7 @@ macro_rules! assert_delta {
 }
 
 fn mock_random_number_generator() -> Box<ReproducibleRng> {
-    Box::new(ReproducibleRng::from_seed_for_debugging([0u8; 32]))
+    Box::new(ReproducibleRng::from_seed_for_debugging([0_u8; 32]))
 }
 
 #[cfg(test)]

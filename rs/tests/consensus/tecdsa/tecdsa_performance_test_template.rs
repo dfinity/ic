@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1 --test_env NODES_COUNT=40
+//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance  --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1 --test_env NODES_COUNT=40
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -69,7 +69,9 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{
+        AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
+    },
     prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
@@ -196,26 +198,23 @@ pub fn setup(env: TestEnv) {
     let key_ids = make_key_ids();
     info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
 
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(64)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-    };
-
     InternetComputer::new()
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(64)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_required_host_features(vec![
                     HostFeature::Performance,
                     HostFeature::Supermicro,
                 ])
-                .with_default_vm_resources(vm_resources)
                 .add_nodes(1),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
-                .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs: key_ids

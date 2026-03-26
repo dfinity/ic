@@ -55,7 +55,6 @@
 //!    the name.
 //!
 mod bitcoin;
-pub mod canister_snapshots;
 pub mod canister_state;
 pub(crate) mod hash;
 pub mod metadata_state;
@@ -74,7 +73,7 @@ pub use canister_state::{
 };
 pub use metadata_state::subnet_schedule::{CanisterPriority, SubnetSchedule};
 pub use metadata_state::{
-    IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
+    FullTopology, IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
 };
 pub use page_map::{PageIndex, PageMap};
 pub use replicated_state::{InputQueueType, InputSource, ReplicatedState, StateError};

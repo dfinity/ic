@@ -156,7 +156,7 @@ fn ni_dkg_transcript() -> NiDkgTranscript {
     let registry_version = RegistryVersion::new(1);
     let dealer_subnet = SUBNET_1;
     let dkg_tag = NiDkgTag::LowThreshold;
-    let target_id = NiDkgTargetId::new([42u8; 32]);
+    let target_id = NiDkgTargetId::new([42_u8; 32]);
     let rng = &mut reproducible_rng();
     let receiver_keys = generate_node_keys(2);
     let nodes_set: BTreeSet<NodeId> = receiver_keys.keys().cloned().collect();

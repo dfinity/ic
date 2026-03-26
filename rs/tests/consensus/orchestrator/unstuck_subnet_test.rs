@@ -134,7 +134,7 @@ fn test(test_env: TestEnv) {
         sudo chmod 777 /var/lib/ic/data/images
         cd /var/lib/ic/data/images/
         sudo curl {guestos_update_img_url} -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500 --fail
-        SHA256SUM="$(sha256sum image.bin | cut -d' ' -f1)"
+        SHA256SUM="$(sudo sha256sum image.bin | cut -d' ' -f1)"
         if [ "$SHA256SUM" != "{expected_sha256}" ]; then
             echo "Downloaded image.bin has SHA256 hash: $SHA256SUM but expected {expected_sha256}!"
             exit 1

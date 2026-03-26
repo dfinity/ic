@@ -7,18 +7,16 @@ use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, SystemState,
-    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
+    CanisterState, SystemState, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, SubnetId,
-    batch::CanisterCyclesCostSchedule,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    SubnetId,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
-    nominal_cycles::NominalCycles,
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::{cmp::min, str::FromStr, time::Duration};
@@ -34,7 +32,7 @@ const DAY: Duration = Duration::from_secs(SECONDS_PER_DAY as u64);
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 324;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 338;
 
 /// Handles any operation related to cycles accounting, such as charging (due to
 /// using system resources) or refunding unused cycles.
@@ -442,6 +440,32 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Withdraws and consumes the cost of executing the given number of
+    /// instructions in the management canister.
+    pub fn consume_cycles_for_management_canister_instructions(
+        &self,
+        sender: &PrincipalId,
+        canister: &mut CanisterState,
+        amount: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let memory_usage = canister.memory_usage();
+        let message_memory = canister.message_memory_usage();
+        let cycles = self.management_canister_cost(amount, subnet_size, cost_schedule);
+        let reveal_top_up = canister.controllers().contains(sender);
+        self.consume_cycles(
+            &mut canister.system_state,
+            memory_usage,
+            message_memory,
+            cycles,
+            subnet_size,
+            cost_schedule,
+            CyclesUseCase::Instructions,
+            reveal_top_up,
+        )
+    }
+
     /// Prepays the cost of executing a message with the given number of
     /// instructions. See the comment of `execution_cost()` for details
     /// about the execution cost.
@@ -592,12 +616,8 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
-        self.scale_cost(
-            self.config.ingress_message_reception_fee
-                + self.config.ingress_byte_reception_fee * bytes.get(),
-            subnet_size,
-            cost_schedule,
-        )
+        self.ingress_message_received_fee(subnet_size, cost_schedule)
+            + self.ingress_byte_received_fee(subnet_size, cost_schedule) * bytes.get()
     }
 
     /// How often canisters should be charged for memory and compute allocation.
@@ -1154,6 +1174,24 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Returns the cost of executing a management canister message with the given number of
+    /// instructions. The cost only consists of the fee that depends on the number of instructions.
+    /// In particular, there's no flat fee to account for sandboxed execution.
+    /// The management canister is executed as native replica code and thus Wasm64
+    /// does not bring any additional overhead.
+    pub fn management_canister_cost(
+        &self,
+        num_instructions: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        self.scale_cost(
+            self.convert_instructions_to_cycles(num_instructions, WasmExecutionMode::Wasm32),
+            subnet_size,
+            cost_schedule,
+        )
+    }
+
     /// Charges a canister for its resource allocation and usage for the
     /// duration specified. If fees were successfully charged, then returns
     /// Ok() else returns Err(CanisterOutOfCyclesError).
@@ -1317,7 +1355,8 @@ impl CyclesAccountManager {
         &self,
         system_state: &SystemState,
     ) -> NominalCycles {
-        NominalCycles::from(system_state.balance() + system_state.reserved_balance())
+        let raw_amount = (system_state.balance() + system_state.reserved_balance()).get();
+        NominalCycles::from(raw_amount)
     }
 
     // The fee for `UpdateSettings` is charged after applying

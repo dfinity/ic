@@ -8,8 +8,8 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
-
-* Adding support for recalling replica versions for subnets.
+* Added an optional field `maximum_state_delta` to `ResourceLimits` in `CreateSubnetPayload` which, when present,
+  sets a soft limit on the maximum (replicated) state *delta* (kept in main memory) in bytes.
 
 ## Changed
 

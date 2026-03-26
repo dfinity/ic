@@ -46,7 +46,7 @@ use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Lifecycle};
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, SnsCanisterIds, SnsCanisterType, SnsWasm, UpdateSnsSubnetListRequest,
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::{str::FromStr, time::SystemTime};
@@ -130,7 +130,7 @@ impl SnsClient {
             app_node.effective_canister_id(),
             // Mint a very large amount of cycles, to make sure nothing fails
             // because this canister doesn't have enough cycles.
-            900_000_000_000_000_000u64,
+            900_000_000_000_000_000_u64,
             &log,
         ));
         block_on(deposit_cycles(

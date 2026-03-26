@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
+//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -66,7 +66,9 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::get_ic_build_version;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{
+        AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
+    },
     prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
@@ -116,22 +118,14 @@ fn setup(env: TestEnv) {
 
     ic_builder
         .with_required_host_features(vec![HostFeature::Performance])
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(1),
-        )
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(64)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_max_ingress_bytes_per_block(max_ingress_bytes)
                 .add_nodes(NODES_COUNT),
@@ -230,7 +224,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test; TestParameters { message_size: 9_500, rps: 1_000.0 }))
         .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 1.0 }))
         .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 5.0 }))
-        .with_teardown(teardown)
+        .add_teardown(teardown)
         .execute_from_args()?;
     Ok(())
 }

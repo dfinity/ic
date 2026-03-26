@@ -1,10 +1,17 @@
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use std::sync::Arc;
+
+use ic_base_types::{CanisterId, NodeId, PrincipalId, SubnetId};
 use ic_management_canister_types_private::{CanisterIdRecord, Payload};
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_types::Cycles;
+use ic_test_utilities_registry::{
+    SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
+    insert_initial_dkg_transcript,
+};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -18,7 +25,7 @@ struct Env {
 fn setup() -> Env {
     // Create a `StateMachine` with a routing table of the form:
     // - "local" (the `StateMachine`): (0, CANISTER_IDS_PER_SUBNET - 1),
-    // - "remote" (in this test non-existent): (CANISTER_IDS_PER_SUBNET, 2 * CANISTER_IDS_PER_SUBNET - 1).
+    // - "remote" (registered in the registry, but without a `StateMachine`): (CANISTER_IDS_PER_SUBNET, 2 * CANISTER_IDS_PER_SUBNET - 1).
     let mut routing_table = RoutingTable::new();
     // use a subnet ID of length 29 (as in production)
     // so that it does not resemble a canister ID
@@ -43,10 +50,38 @@ fn setup() -> Env {
     routing_table
         .insert(remote_canister_id_range, remote_subnet_id)
         .unwrap();
+    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let sm = StateMachineBuilder::new()
         .with_routing_table(routing_table)
         .with_subnet_id(subnet_id)
+        .with_registry_data_provider(registry_data_provider.clone())
         .build();
+
+    // Register the remote subnet in the registry so that `load_network_topology`
+    // includes its canister range in the routing table (otherwise the stream builder
+    // immediately rejects messages to the remote subnet with "No route to canister").
+    let version = registry_data_provider.latest_version().get() + 1;
+    let remote_subnet_record = SubnetRecordBuilder::new()
+        .with_membership(&[NodeId::from(PrincipalId::new_node_test_id(1))])
+        .build();
+    insert_initial_dkg_transcript(
+        version,
+        remote_subnet_id,
+        &remote_subnet_record,
+        &registry_data_provider,
+    );
+    add_single_subnet_record(
+        &registry_data_provider,
+        version,
+        remote_subnet_id,
+        remote_subnet_record,
+    );
+    add_subnet_list_record(
+        &registry_data_provider,
+        version,
+        vec![subnet_id, remote_subnet_id],
+    );
+    sm.reload_registry();
 
     // Deploy a universal canister to the `StateMachine` acting as the main canister under test.
     let canister_id = sm
@@ -96,7 +131,7 @@ fn reject_remote_callbacks() {
     } = setup();
 
     // Send an ingress message to the main canister
-    // that calls a "remote" (in this test non-existent) canister.
+    // that calls a canister on the "remote" subnet.
     let remote_payload = wasm()
         .inter_update(
             remote_canister_id,

@@ -218,7 +218,7 @@ impl SnapshotId {
     }
 
     pub fn get_local_snapshot_id(&self) -> u64 {
-        let mut slice = [0u8; 8];
+        let mut slice = [0_u8; 8];
         slice.copy_from_slice(&self.bytes[..Self::LOCAL_ID_LENGTH_IN_BYTES]);
         u64::from_be_bytes(slice)
     }
@@ -255,7 +255,7 @@ impl SnapshotId {
             )
         })?;
 
-        let mut slice = [0u8; 8];
+        let mut slice = [0_u8; 8];
         slice.copy_from_slice(&bytes.as_ref()[..Self::LOCAL_ID_LENGTH_IN_BYTES]);
         let local_id = u64::from_be_bytes(slice);
 
@@ -270,7 +270,7 @@ impl From<(CanisterId, u64)> for SnapshotId {
         // takes exactly 8 bytes
         let val: [u8; 8] = local_id.to_be_bytes();
 
-        let mut bytes = [0u8; Self::MAX_LENGTH_IN_BYTES];
+        let mut bytes = [0_u8; Self::MAX_LENGTH_IN_BYTES];
         bytes[..Self::LOCAL_ID_LENGTH_IN_BYTES].copy_from_slice(&val);
 
         let len = canister_id.get().as_slice().len();
@@ -371,7 +371,7 @@ mod tests {
         let canister_id = CanisterId::from_u64(243425);
         let local_id: u64 = 4;
 
-        let mut expect_snapshot_id = [0u8; SnapshotId::MAX_LENGTH_IN_BYTES];
+        let mut expect_snapshot_id = [0_u8; SnapshotId::MAX_LENGTH_IN_BYTES];
         let len = canister_id.get().as_slice().len();
         expect_snapshot_id[..8].copy_from_slice(&local_id.to_be_bytes());
         expect_snapshot_id[8..8 + len].copy_from_slice(canister_id.get().as_slice());
