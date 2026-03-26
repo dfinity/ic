@@ -2410,7 +2410,7 @@ fn flexible_invalid_unknown_callback_id() {
 }
 
 #[test]
-fn flexible_invalid_reject_response() {
+fn flexible_invalid_rejects_in_ok_responses() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
