@@ -532,7 +532,7 @@ async fn connect_to_api_bn(
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    let addr = (domain.as_str(), 443u16);
+    let addr = (domain.as_str(), 443_u16);
     info!(log, "Establishing TCP connection to {api_bn_id} @ {addr:?}");
     let tcp_stream: TcpStream = TcpStream::connect(addr)
         .await
