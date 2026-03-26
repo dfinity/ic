@@ -4075,7 +4075,7 @@ fn maliciously_return_wrong_hash(
             height.get();
             malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::CorruptOwnStateAtHeights as i32}
         );
-        CryptoHashOfState::from(CryptoHash(vec![0u8; 32]))
+        CryptoHashOfState::from(CryptoHash(vec![0_u8; 32]))
     } else {
         CryptoHashOfState::from(CryptoHash(
             crate::manifest::manifest_hash(manifest).to_vec(),

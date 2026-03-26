@@ -2255,7 +2255,7 @@ fn wasm64_msg_caller_copy() {
     )"#;
 
     let caller = user_test_id(24).get();
-    let payload = vec![0u8; 32];
+    let payload = vec![0_u8; 32];
     let api = ApiType::update(
         UNIX_EPOCH,
         payload,

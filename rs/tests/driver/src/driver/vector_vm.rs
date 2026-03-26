@@ -23,7 +23,7 @@ use crate::driver::{
 
 use super::{
     config::NODES_INFO,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResourceOverrides},
     test_env::TestEnv,
     test_env_api::get_dependency_path_from_env,
     universal_vm::UniversalVm,
@@ -67,7 +67,7 @@ impl VectorVm {
         Self {
             universal_vm: UniversalVm::new("vector".to_string())
                 .with_config_img(get_dependency_path_from_env("VECTOR_VM_PATH"))
-                .with_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(30)),
@@ -78,8 +78,10 @@ impl VectorVm {
         }
     }
 
-    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
-        self.universal_vm = self.universal_vm.with_vm_resources(vm_resources);
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_resource_overrides(vm_resource_overrides);
         self
     }
 

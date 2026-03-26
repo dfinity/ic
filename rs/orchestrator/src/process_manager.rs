@@ -5,8 +5,10 @@ use nix::{
 };
 use std::{
     collections::HashMap,
+    ffi::OsString,
     fmt::Debug,
     io::Result,
+    path::Path,
     sync::{Arc, Mutex},
 };
 
@@ -30,13 +32,13 @@ pub(crate) trait Process {
     fn get_version(&self) -> &Self::Version;
 
     /// Return the path to the binary of the [`Process`]
-    fn get_binary(&self) -> &str;
+    fn get_binary(&self) -> &Path;
 
     /// Return the arguments passed to the [`Process`]
-    fn get_args(&self) -> &[String];
+    fn get_args(&self) -> &[OsString];
 
     /// Return the env vars passed to the [`Process`]
-    fn get_env(&self) -> HashMap<String, String>;
+    fn get_env(&self) -> HashMap<OsString, OsString>;
 }
 
 /// Trait for managing a single versioned [`Process`]
@@ -208,41 +210,5 @@ fn wait_on_exit(
             info!(log, "{} exited. Exit Status: {:?}", name, exit_status);
         }
         let _pid = pid_cell.lock().unwrap().take();
-    }
-}
-
-#[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-
-    pub(crate) struct FakeProcessManager {
-        running: bool,
-    }
-
-    impl FakeProcessManager {
-        pub(crate) fn new() -> Self {
-            Self { running: false }
-        }
-    }
-
-    impl<P: Process> ProcessManager<P> for FakeProcessManager {
-        fn start(&mut self, _process: P) -> Result<()> {
-            self.running = true;
-            Ok(())
-        }
-
-        fn stop(&mut self) -> Result<()> {
-            self.running = false;
-            Ok(())
-        }
-
-        fn is_running(&self) -> bool {
-            self.running
-        }
-
-        fn get_pid(&self) -> Option<Pid> {
-            // Return a dummy PID if the process is running.
-            self.running.then_some(Pid::from_raw(12345))
-        }
     }
 }

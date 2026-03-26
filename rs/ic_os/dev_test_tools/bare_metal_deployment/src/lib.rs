@@ -9,6 +9,7 @@ use macaddr::MacAddr6;
 use rexpect::session::PtySession;
 use rexpect::{ReadUntil, spawn};
 use std::net::Ipv6Addr;
+use std::process::Command;
 use std::time::Duration;
 
 /// A wrapper around a command line session for managing a baremetal host via IPMI Serial Over LAN
@@ -27,51 +28,55 @@ impl BareMetalIpmiSession {
     /// As long as the impitool process is running, the SOL session is active and no other sessions
     /// can be started on the same host.
     pub fn start(login_info: &LoginInfo) -> Result<Self> {
+        let _ = Command::new("ipmitool")
+            .args([
+                "-I",
+                "lanplus",
+                "-H",
+                &login_info.host,
+                "-U",
+                &login_info.username,
+                "-P",
+                &login_info.password,
+                "sol",
+                "deactivate",
+            ])
+            .status();
         let cmd = format!(
             "ipmitool -I lanplus -H {} -U {} -P {} sol activate",
             login_info.host, login_info.username, login_info.password
         );
 
         // Single expect timeout for all exp_* operations in this session
-        let expect_timeout_ms = 5_000;
+        const EXPECT_TIMEOUT_MS: u64 = 5_000;
 
-        for _ in 0..30 {
-            let mut session = spawn(&cmd, Some(expect_timeout_ms))
-                .with_context(|| format!("Failed to start ipmitool with command: {}", cmd))?;
+        let mut session = spawn(&cmd, Some(EXPECT_TIMEOUT_MS))
+            .with_context(|| format!("Failed to start ipmitool with command: {}", cmd))?;
 
-            let (_, matched) = session
-                .exp_any(vec![
-                    ReadUntil::String("SOL payload already active on another session".to_string()),
-                    ReadUntil::String("SOL Session operational".to_string()),
-                ])
-                .context("Timed out waiting for SOL session to become operational")?;
+        session
+            .exp_any(vec![ReadUntil::String(
+                "SOL Session operational".to_string(),
+            )])
+            .context("Timed out waiting for SOL session to become operational")?;
 
-            if !matched.contains("SOL Session operational") {
-                eprintln!("SOL payload already active on another session; retrying...");
-                std::thread::sleep(Duration::from_secs(30));
-                continue;
-            }
+        Self::init_session(&mut session)?;
+        // Wait a moment to get a prompt
+        std::thread::sleep(Duration::from_millis(500));
 
-            Self::init_session(&mut session)?;
-            // Wait a moment to get a prompt
-            std::thread::sleep(Duration::from_millis(500));
+        // Get the global IPv6 address of the HostOS
+        session.send_line(
+            "ip -6 addr show br6 scope global | awk '/inet6 / {print $2}' | cut -d/ -f1",
+        )?;
+        let (_, host_ip) = session.exp_regex(r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}")?;
 
-            // Get the global IPv6 address of the HostOS
-            session.send_line(
-                "ip -6 addr show br6 scope global | awk '/inet6 / {print $2}' | cut -d/ -f1",
-            )?;
-            let (_, host_ip) = session.exp_regex(r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}")?;
-            return Ok(BareMetalIpmiSession {
-                session,
-                host_address: host_ip
-                    .parse()
-                    .with_context(|| format!("Failed to parse Host IPv6 address {host_ip}"))?,
-                mgmt_mac: login_info.mgmt_mac,
-                keep_alive_after_drop: false,
-            });
-        }
-
-        bail!("Could not start SOL session after multiple attempts");
+        Ok(BareMetalIpmiSession {
+            session,
+            host_address: host_ip
+                .parse()
+                .with_context(|| format!("Failed to parse Host IPv6 address {host_ip}"))?,
+            mgmt_mac: login_info.mgmt_mac,
+            keep_alive_after_drop: false,
+        })
     }
 
     fn init_session(session: &mut PtySession) -> Result<()> {
@@ -180,11 +185,12 @@ impl Drop for BareMetalIpmiSession {
 
 /// Login info for a baremetal host
 pub struct LoginInfo {
-    host: String,
-    username: String,
-    password: String,
-    mgmt_mac: MacAddr6,
-    addr_prefix: String,
+    pub host: String,
+    pub username: String,
+    pub password: String,
+    pub mgmt_mac: MacAddr6,
+    pub addr_prefix: String,
+    pub chip_id_hex: String,
 }
 
 impl LoginInfo {
@@ -221,6 +227,9 @@ pub fn parse_login_info_from_ini(data: &str) -> Result<LoginInfo> {
     let addr_prefix = host_section
         .get("addr_prefix")
         .context("No addr_prefix in [host] section")?;
+    let chip_id_hex = host_section
+        .get("chip_id_hex")
+        .context("No chip_id_hex in [host] section")?;
 
     Ok(LoginInfo {
         host: host.to_string(),
@@ -228,5 +237,6 @@ pub fn parse_login_info_from_ini(data: &str) -> Result<LoginInfo> {
         password: password.to_string(),
         mgmt_mac,
         addr_prefix: addr_prefix.to_string(),
+        chip_id_hex: chip_id_hex.to_string(),
     })
 }

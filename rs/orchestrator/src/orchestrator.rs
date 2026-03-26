@@ -24,7 +24,7 @@ use ic_config::{
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_image_upgrader::ImageUpgrader;
+use ic_image_upgrader::{ImageUpgrader, ManagebootRunnerImpl};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
@@ -246,6 +246,9 @@ impl Orchestrator {
             .as_ref()
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
+        let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
+            ic_binary_directory.join("manageboot.sh"),
+        ));
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall
         // They read from the same file, so they'll see the same persisted CUP
@@ -279,6 +282,7 @@ impl Orchestrator {
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
                 Arc::clone(&replica_process) as _,
+                manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),
