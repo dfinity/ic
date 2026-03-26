@@ -16,6 +16,7 @@ use ic_system_test_driver::{
 
 use ic_system_test_driver::driver::nested::NestedNodes;
 use ic_system_test_driver::driver::resource::BootImage;
+use ic_system_test_driver::util::{JournalStreamer, LogStream};
 use nested::util::{
     NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, setup_ic_infrastructure,
     try_logging_guestos_diagnostics,
@@ -127,12 +128,12 @@ pub fn test_alternative_guestos_recovery(env: TestEnv) {
         panic!("Failed to see GuestOS come back up: {e}");
     }
 
-    host.block_on_bash_script_from_session(
-        &session,
-        "journalctl -t guestos-serial | grep 'Successfully opened root device with recovery root hash';
-        exit $?",
-    )
-    .expect("Failed to check guestos logs for recovery success");
+    assert!(
+        JournalStreamer::new(session.clone())
+            .contains("Successfully opened root device with recovery root hash")
+            .expect("Failed to query journald"),
+        "Failed to find 'Successfully opened root device with recovery root hash' in guestos logs"
+    );
 
     info!(
         logger,
