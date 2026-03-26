@@ -1,3 +1,0 @@
-# GitHub CI
-rsync # container-base-images.yml
-lcov # used for bazel coverage

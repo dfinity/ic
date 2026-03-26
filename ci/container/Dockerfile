@@ -101,13 +101,6 @@ CMD ["/bin/bash"]
 
 FROM base as build
 
-# Install packages only needed fro ci
-ARG PACKAGE_CI_FILE=ci/container/files/packages.ci
-COPY ${PACKAGE_CI_FILE} /tmp/
-RUN apt -yq update && \
-    apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_CI_FILE)") && \
-    rm "/tmp/$(basename $PACKAGE_CI_FILE)"
-
 USER buildifier
 
 FROM base as dev
