@@ -202,7 +202,7 @@ fn fake_schnorr_matched_pre_signature(
     }
 }
 
-fn fake_signature_request_args(
+pub fn fake_signature_request_args(
     key_id: MasterPublicKeyId,
     height: Height,
     pre_sig_id: Option<PreSigId>,

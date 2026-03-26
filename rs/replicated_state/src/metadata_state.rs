@@ -1961,6 +1961,10 @@ impl UnflushedCheckpointOps {
         self.operations.len()
     }
 
+    pub fn push(&mut self, op: UnflushedCheckpointOp) {
+        self.operations.push(op);
+    }
+
     pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
             canister_id,
