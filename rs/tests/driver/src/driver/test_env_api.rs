@@ -1627,7 +1627,7 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
-fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
+pub fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
     let mut channel = session.channel_session()?;
     channel.exec("bash").map_err(|e| {
         anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
