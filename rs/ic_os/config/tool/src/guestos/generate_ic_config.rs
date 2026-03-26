@@ -44,7 +44,7 @@ pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) ->
     perms.set_mode(0o644);
     std::fs::set_permissions(output_path, perms)?;
 
-    // Set up TLS certificate and key for ic-boundary (system tests only).
+    // Set up TLS certificate and key for ic-boundary (system test use only).
     // A pre-generated cert (e.g. from a playnet) takes priority over self-signed generation.
     let dev_settings = &guestos_config.guestos_settings.guestos_dev_settings;
     if let Some(tls_cert) = &dev_settings.ic_boundary_tls_cert {

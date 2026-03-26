@@ -256,7 +256,7 @@ pub fn setup_and_start_vms(
     } else {
         None
     };
-    let api_bn_node_ids: std::collections::HashSet<NodeId> = initialized_ic
+    let api_bn_node_ids: Vec<NodeId> = initialized_ic
         .api_boundary_nodes
         .values()
         .map(|n| n.node_id)

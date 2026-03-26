@@ -220,7 +220,7 @@ pub struct GuestOSSettings {
 }
 
 /// Pre-generated TLS certificate and key for ic-boundary.
-/// Used to inject a real (e.g. playnet) certificate instead of a self-signed one.
+/// Used in system tests to inject a Farm-issued certificate.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct IcBoundaryTlsCert {
     /// PEM-encoded certificate (leaf + chain concatenated).
@@ -245,7 +245,6 @@ pub struct GuestOSDevSettings {
     /// for the given domain name. To be used in system tests only.
     pub generate_ic_boundary_tls_cert: Option<String>,
     /// Pre-generated TLS certificate and key for ic-boundary.
-    /// When set, takes priority over `generate_ic_boundary_tls_cert`.
     #[serde(default)]
     pub ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
     /// PEM-encoded NNS public key.
