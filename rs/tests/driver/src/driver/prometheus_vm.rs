@@ -18,24 +18,19 @@ use ic_registry_local_registry::LocalRegistry;
 
 use crate::driver::{
     constants::SSH_USERNAME,
-    farm::HostFeature,
+    farm::{DnsRecord, DnsRecordType, HostFeature},
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResourceOverrides},
-    ic_gateway_vm::HasIcGatewayVm,
-    ic_gateway_vm::Playnet,
+    ic_gateway_vm::{HasIcGatewayVm, Playnet},
     log_events,
+    nested::HasNestedVms,
     resource::{DiskImage, ImageType},
-    test_env::{HasIcPrepDir, TestEnv},
+    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
-        TopologySnapshot, scp_recv_from, scp_send_to,
+        CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
+        SshSession, TopologySnapshot, scp_recv_from, scp_send_to,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
-};
-use crate::driver::{
-    farm::{DnsRecord, DnsRecordType},
-    test_env::TestEnvAttribute,
-    test_env_api::CreateDnsRecords,
 };
 use crate::util::block_on;
 
@@ -89,6 +84,7 @@ const DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET: &str = "dogecoin_mainnet_cani
 const DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET: &str = "dogecoin_testnet_canister.json";
 const IC_GATEWAY_PROMETHEUS_TARGET: &str = "ic_gateways.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
+const NESTED_HOSTS_PROMETHEUS_TARGET: &str = "nested_hosts.json";
 const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
 
 pub struct PrometheusVm {
@@ -443,6 +439,11 @@ impl HasPrometheus for TestEnv {
         sync_prometheus_config_dir_with_ic_gateways(
             self,
             prometheus_config_dir.clone(),
+            group_name.clone(),
+        )?;
+        sync_prometheus_config_dir_with_nested_hosts(
+            self,
+            prometheus_config_dir.clone(),
             group_name,
         )?;
 
@@ -452,6 +453,7 @@ impl HasPrometheus for TestEnv {
             NODE_EXPORTER_PROMETHEUS_TARGET,
             IC_BOUNDARY_PROMETHEUS_TARGET,
             IC_GATEWAY_PROMETHEUS_TARGET,
+            NESTED_HOSTS_PROMETHEUS_TARGET,
         ];
         if playnet_domain.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
@@ -559,6 +561,8 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_BOUNDARY_PROMETHEUS_TARGET);
     let ic_gateways_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_GATEWAY_PROMETHEUS_TARGET);
+    let nested_hosts_scraping_targets_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(NESTED_HOSTS_PROMETHEUS_TARGET);
     let replica_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(REPLICA_PROMETHEUS_TARGET);
     let orchestrator_scraping_targets_path =
@@ -589,6 +593,13 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "job_name": "ic_gateways",
                 "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [ic_gateways_scraping_targets_path]}],
+            },
+            {
+                "job_name": "nested_hosts",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [nested_hosts_scraping_targets_path]}],
+                "scheme": "https",
+                "tls_config": {"insecure_skip_verify": true},
             },
             {
                 "job_name": "ic_boundary",
@@ -722,6 +733,43 @@ fn sync_prometheus_config_dir_with_ic_gateways(
     ::serde_json::to_writer(
         &File::create(prometheus_config_dir.join(IC_GATEWAY_PROMETHEUS_TARGET))?,
         &ic_gateways_p8s_static_configs,
+    )?;
+
+    Ok(())
+}
+
+fn sync_prometheus_config_dir_with_nested_hosts(
+    env: &TestEnv,
+    prometheus_config_dir: PathBuf,
+    group_name: String,
+) -> Result<()> {
+    let mut nested_hosts_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
+
+    let hosts: Vec<(String, Ipv6Addr)> = env
+        .get_all_nested_vms()?
+        .into_iter()
+        .map(|host| {
+            let allocated_vm = host.get_vm()?;
+            Ok((allocated_vm.name, allocated_vm.ipv6))
+        })
+        .collect::<Result<_>>()?;
+
+    for (name, ipv6) in hosts.iter() {
+        let labels: BTreeMap<String, String> = [
+            ("ic".to_string(), group_name.clone()),
+            ("nested_hosts".to_string(), name.to_string()),
+        ]
+        .into_iter()
+        .collect();
+        nested_hosts_p8s_static_configs.push(PrometheusStaticConfig {
+            targets: vec![format!("[{:?}]:{:?}", ipv6, NODE_EXPORTER_METRICS_PORT)],
+            labels: labels.clone(),
+        });
+    }
+
+    ::serde_json::to_writer(
+        &File::create(prometheus_config_dir.join(NESTED_HOSTS_PROMETHEUS_TARGET))?,
+        &nested_hosts_p8s_static_configs,
     )?;
 
     Ok(())

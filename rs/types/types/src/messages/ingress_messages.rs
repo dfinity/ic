@@ -110,6 +110,7 @@ impl HasCanisterId for SignedIngressContent {
 
 impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
+        //TODO(CON-1687): Avoid cloning fields when hashing
         MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
             self.canister_id.get_ref().as_slice(),
