@@ -187,7 +187,7 @@ mod update_balance {
             block_index: 0,
             received_at: 0,
             kyt_provider: None,
-            reimbursement_account: Some(account.clone()),
+            reimbursement_account: Some(account),
         };
         mutate_state(|s| {
             audit::accept_retrieve_btc_request(s, pending_withdrawal.clone(), &runtime)
@@ -638,7 +638,12 @@ mod update_balance {
 
     #[tokio::test]
     async fn should_observe_get_utxos_latency_metrics() {
-        init_state_with_ecdsa_public_key();
+        init_state(crate::lifecycle::init::InitArgs {
+            // disable cache for this test
+            get_utxos_cache_expiration_seconds: None,
+            ..init_args()
+        });
+        mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()));
 
         fn mock_get_utxos_for_account_with_num_pages(
             runtime: &mut MockCanisterRuntime,
