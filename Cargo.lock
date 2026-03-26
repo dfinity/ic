@@ -18918,6 +18918,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-types",
  "ic_device",
  "linux_kernel_command_line",
  "pem",
