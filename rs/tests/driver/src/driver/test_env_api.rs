@@ -1070,7 +1070,7 @@ impl IcNodeSnapshot {
         arg: Option<Vec<u8>>,
     ) -> Principal {
         self.canister_installer(name)
-            .maybe_with_arg(arg)
+            .with_optional_arg(arg)
             .block_on_install()
             .expect("Could not install install the canister")
     }
@@ -1217,7 +1217,7 @@ impl<'a> CanisterInstaller<'a> {
         }
     }
 
-    pub fn maybe_with_arg(mut self, arg: Option<Vec<u8>>) -> Self {
+    pub fn with_optional_arg(mut self, arg: Option<Vec<u8>>) -> Self {
         self.arg = arg;
 
         self
