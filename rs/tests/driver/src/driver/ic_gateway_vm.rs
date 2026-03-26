@@ -315,22 +315,9 @@ docker run --name=ic-gateway -d \
     ) -> Result<()> {
         use crate::driver::prometheus_vm::PROMETHEUS_VM_NAME;
 
-        let prometheus_vm_dir = env.get_deployed_universal_vm_dir(PROMETHEUS_VM_NAME);
-        info!(
-            env.logger(),
-            "Checking for Prometheus VM at {:?} (exists={})",
-            prometheus_vm_dir,
-            prometheus_vm_dir.is_dir()
-        );
         let deployed_prometheus_vm = match env.get_deployed_universal_vm(PROMETHEUS_VM_NAME) {
             Ok(vm) => vm,
-            Err(e) => {
-                info!(
-                    env.logger(),
-                    "Prometheus VM not found, skipping playnet DNS: {e}"
-                );
-                return Ok(());
-            }
+            Err(_) => return Ok(()), // No Prometheus VM, nothing to do
         };
         let prometheus_vm = deployed_prometheus_vm.get_vm()?;
         let logger = env.logger();
