@@ -2842,38 +2842,69 @@ impl StateMachine {
                 }
 
                 OrderedMessage::Request { source, target }
-                | OrderedMessage::Response { source, target } => {
-                    let is_mgmt = target == ic_management_canister_types_private::IC_00;
-                    let dts_canister = if is_mgmt { source } else { target };
-
+                | OrderedMessage::Response { source, target }
+                    if target == ic_management_canister_types_private::IC_00 =>
+                {
+                    // Management canister: message goes through loopback
+                    // stream → Demux → subnet_queues. May need one tick
+                    // for induction if the loopback hasn't been processed.
                     if !self.sender_in_queue(target, source) {
                         self.tick();
                         assert!(
                             self.sender_in_queue(target, source),
-                            "Message from {} not in {}'s queue",
+                            "Message from {} not in subnet_queues",
                             source,
-                            target
                         );
                     }
-
-                    if !is_mgmt {
-                        self.ensure_next_scheduled(target, NextScheduledMethod::Message, strict);
-                        self.set_ordering_target(Some(target));
-                    }
+                    // No priority boost — drain_subnet_queues runs at
+                    // round start regardless of canister priorities.
                     let count_before = self.message_count(target);
                     self.tick();
                     let count_after = self.message_count(target);
                     assert_eq!(
                         count_after,
                         count_before - 1,
-                        "Expected exactly one message consumed from {}'s queue \
-                         (from {}). Before: {}, after: {}",
-                        target,
+                        "Subnet message from {} not consumed. Before: {}, after: {}",
                         source,
                         count_before,
                         count_after,
                     );
-                    self.complete_dts(dts_canister, MAX_TICKS);
+                    // DTS for install_code lands on the source canister
+                    // (the canister being installed), not IC_00.
+                    self.complete_dts(source, MAX_TICKS);
+                }
+
+                OrderedMessage::Request { source, target }
+                | OrderedMessage::Response { source, target } => {
+                    // Normal canister: message was inducted by the previous
+                    // step's induct_messages_on_same_subnet. Must be in
+                    // target's queue already — no extra tick needed.
+                    assert!(
+                        self.sender_in_queue(target, source),
+                        "Message from {} not in {}'s queue",
+                        source,
+                        target,
+                    );
+                    // Set Message to skip heartbeat/timer. Boost target.
+                    self.ensure_next_scheduled(target, NextScheduledMethod::Message, strict);
+                    self.set_ordering_target(Some(target));
+                    // One tick: pops the message from input queue (count
+                    // drops immediately). If DTS-sliced, execution continues
+                    // via complete_dts — the message is already out of the
+                    // queue, living as a PausedExecution in the task_queue.
+                    let count_before = self.message_count(target);
+                    self.tick();
+                    let count_after = self.message_count(target);
+                    assert_eq!(
+                        count_after,
+                        count_before - 1,
+                        "Message from {} not consumed from {}'s queue. Before: {}, after: {}",
+                        source,
+                        target,
+                        count_before,
+                        count_after,
+                    );
+                    self.complete_dts(target, MAX_TICKS);
                 }
             }
         }

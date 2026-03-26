@@ -1028,7 +1028,6 @@ fn test_self_call() {
 #[test]
 fn test_strict_basic_ordering() {
     use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
-    use ic_state_machine_tests::OrderingMode;
 
     let sm = setup();
     let canister_a = install_uc(&sm);
@@ -1073,8 +1072,6 @@ fn test_strict_basic_ordering() {
 // Then the request executes.
 #[test]
 fn test_strict_heartbeat_then_request() {
-    use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
-
     fn heartbeat_wasm() -> Vec<u8> {
         wat::parse_str(
             r#"(module
