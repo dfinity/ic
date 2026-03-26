@@ -491,6 +491,11 @@ pub struct Subnet {
 
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
+        // An invariant in the registry ensures that cloud engines have a free cost schedule
+        let canister_cycles_cost_schedule = match subnet_type {
+            SubnetType::CloudEngine => CanisterCyclesCostSchedule::Free,
+            _ => CanisterCyclesCostSchedule::Normal,
+        };
         Self {
             vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
@@ -511,7 +516,7 @@ impl Subnet {
             features: None,
             max_number_of_canisters: None,
             subnet_type,
-            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
+            canister_cycles_cost_schedule,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
