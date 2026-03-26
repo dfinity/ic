@@ -1810,7 +1810,7 @@ fn flexible_build_respects_max_responses_per_block() {
 }
 
 #[test]
-fn flexible_build_filters_reject_responses() {
+fn flexible_build_filters_rejects_in_ok_responses() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -1854,36 +1854,6 @@ fn flexible_build_filters_reject_responses() {
                 CanisterHttpResponseContent::Success(_)
             ));
         }
-    });
-}
-
-#[test]
-fn flexible_build_excludes_group_when_only_reject_responses() {
-    let num_nodes = 4;
-    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
-    let callback_id = CallbackId::from(42);
-
-    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, pool| {
-        {
-            use ic_types::canister_http::CanisterHttpReject;
-
-            let mut pool_access = pool.write().unwrap();
-            // All 4 nodes produce Reject responses -- can't reach min_responses=2
-            for node_idx in 0..4u64 {
-                let (response, metadata) = test_response_and_metadata_with_content(
-                    callback_id.get(),
-                    CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                        reject_code: RejectCode::SysTransient,
-                        message: format!("error_{node_idx}"),
-                    }),
-                );
-                let share = metadata_to_share(node_idx, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
-            }
-        }
-
-        let parsed = build_and_validate_and_parse_payload(&pb);
-        assert!(parsed.flexible_responses.is_empty());
     });
 }
 

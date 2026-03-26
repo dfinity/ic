@@ -658,7 +658,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
-                // Reject responses are not allowed in flexible payloads
+                // Rejects are not allowed in flexible ok-responses
                 if matches!(
                     entry.response.content,
                     CanisterHttpResponseContent::Reject(_)
