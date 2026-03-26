@@ -73,7 +73,7 @@ pub struct CanisterHttpBatchStats {
     pub timeouts: usize,
     pub divergence_responses: usize,
     pub single_signature_responses: usize,
-    pub flexible_responses: usize,
+    pub flexible_ok_responses: usize,
     pub payload_bytes: usize,
 }
 
@@ -855,15 +855,15 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             )
         });
 
-        let divergece_responses = messages
+        let divergence_responses = messages
             .divergence_responses
             .iter()
             .filter_map(divergence_response_into_reject)
             .inspect(|_| stats.divergence_responses += 1);
 
-        let flexible_responses = messages.flexible_responses.into_iter().map(|group| {
-            stats.flexible_responses += 1;
-            let payloads_result = group
+        let flexible_ok_responses = messages.flexible_responses.into_iter().map(|group| {
+            stats.flexible_ok_responses += 1;
+            let payload_result = group
                 .responses
                 .into_iter()
                 .filter_map(|entry| match entry.response.content {
@@ -873,8 +873,8 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
                         }))
                     }
                     CanisterHttpResponseContent::Reject(_) => {
-                        // Payload building/validation guarantee that this case
-                        // is unreachable as there are no reject responses here.
+                        // Unreachable: payload building/validation ensure
+                        // that there are no rejects in the ok-responses.
                         None
                     }
                 })
@@ -884,7 +884,7 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
                         .map_err(|err| format!("Failed to encode FlexibleHttpRequestResult: {err}"))
                 });
 
-            match payloads_result {
+            match payload_result {
                 Ok(bytes) => ConsensusResponse::new(group.callback_id, Payload::Data(bytes)),
                 Err(msg) => ConsensusResponse::new(
                     group.callback_id,
@@ -895,8 +895,8 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
 
         let responses = responses
             .chain(timeouts)
-            .chain(divergece_responses)
-            .chain(flexible_responses)
+            .chain(divergence_responses)
+            .chain(flexible_ok_responses)
             .collect();
 
         (responses, stats)
