@@ -14,8 +14,8 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
     CanisterMetadataRequest, CanisterSettingsArgsBuilder, CanisterSnapshotDataKind,
     CanisterSnapshotDataOffset, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
-    GlobalTimer, IC_00, InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload,
+    FetchCanisterLogsRequest, GlobalTimer, IC_00, InstallChunkedCodeArgs, InstallCodeArgs,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload,
     ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
     RenameCanisterArgs, RenameToArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
     UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
@@ -1083,7 +1083,14 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
     for method in Method::iter() {
         match method {
             // TODO: fix this test: assert `test_supported` once the feature flag for the API is enabled.
-            Method::FetchCanisterLogs => {}
+            Method::FetchCanisterLogs => test_unsupported(|aborted_canister_id| {
+                let args = FetchCanisterLogsRequest {
+                    canister_id: aborted_canister_id.get(),
+                    filter: None,
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
             // Supported methods: they do not modify the canister state (changes to the cycles balance are allowed).
             // The only exception is `update_settings` to enable changing an aborted canister's compute allocation.
             Method::CanisterStatus | Method::DepositCycles => {
