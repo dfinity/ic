@@ -12,7 +12,7 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    ImageUpgrader, Rebooting,
+    ImageUpgrader, ManagebootRunner, Rebooting,
     error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -32,7 +32,8 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, HashMap},
-    path::PathBuf,
+    ffi::OsString,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
@@ -60,8 +61,8 @@ pub(crate) enum OrchestratorControlFlow {
 
 pub struct ReplicaProcess {
     version: ReplicaVersion,
-    binary: String,
-    args: Vec<String>,
+    binary: PathBuf,
+    args: Vec<OsString>,
 }
 
 impl Process for ReplicaProcess {
@@ -73,15 +74,15 @@ impl Process for ReplicaProcess {
         &self.version
     }
 
-    fn get_binary(&self) -> &str {
+    fn get_binary(&self) -> &Path {
         &self.binary
     }
 
-    fn get_args(&self) -> &[String] {
+    fn get_args(&self) -> &[OsString] {
         &self.args
     }
 
-    fn get_env(&self) -> HashMap<String, String> {
+    fn get_env(&self) -> HashMap<OsString, OsString> {
         HashMap::new()
     }
 }
@@ -117,7 +118,8 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
+    replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    manageboot_runner: Box<dyn ManagebootRunner>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
@@ -139,7 +141,8 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
+        replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        manageboot_runner: Box<dyn ManagebootRunner>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
@@ -158,6 +161,7 @@ impl Upgrade {
             registry,
             metrics,
             replica_process,
+            manageboot_runner,
             cup_provider,
             subnet_assignment,
             node_id,
@@ -612,9 +616,9 @@ impl Upgrade {
         Ok(())
     }
 
-    // Stop the replica if the given CUP is unsigned and higher than the given height.
-    // Without restart, consensus would reject the unsigned artifact.
-    // If stopping the replica fails, restart the current process instead.
+    /// Stop the replica if the given CUP is unsigned and higher than the given height.
+    /// Without restart, consensus would reject the unsigned artifact.
+    /// If stopping the replica fails, restart the current process instead.
     fn stop_replica_if_new_recovery_cup(
         &self,
         cup: &CatchUpPackage,
@@ -635,7 +639,7 @@ impl Upgrade {
         }
     }
 
-    // Start the replica process if not running already
+    /// Start the replica process if not running already
     fn ensure_replica_is_running(
         &self,
         replica_version: &ReplicaVersion,
@@ -647,20 +651,16 @@ impl Upgrade {
         info!(self.logger, "Starting new replica process");
         self.metrics.replica_process_start_attempts.inc();
         let cup_path = self.cup_provider.get_cup_path();
-        let replica_binary = self
-            .ic_binary_dir
-            .join("replica")
-            .as_path()
-            .display()
-            .to_string();
+        let replica_binary = self.ic_binary_dir.join("replica");
         let cmd = vec![
-            format!("--replica-version={}", replica_version.as_ref()),
+            format!("--replica-version={}", replica_version.as_ref()).into(),
             format!(
                 "--config-file={}",
                 self.replica_config_file.as_path().display()
-            ),
-            format!("--catch-up-package={}", cup_path.as_path().display()),
-            format!("--force-subnet={}", subnet_id),
+            )
+            .into(),
+            format!("--catch-up-package={}", cup_path.as_path().display()).into(),
+            format!("--force-subnet={}", subnet_id).into(),
         ];
 
         self.replica_process
@@ -689,16 +689,16 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         self.prepared_upgrade_version = version
     }
 
-    fn binary_dir(&self) -> &PathBuf {
-        &self.ic_binary_dir
-    }
-
     fn image_path(&self) -> &PathBuf {
         &self.image_path
     }
 
     fn data_dir(&self) -> Option<&PathBuf> {
         Some(&self.orchestrator_data_directory)
+    }
+
+    fn manageboot_runner(&self) -> &dyn ManagebootRunner {
+        self.manageboot_runner.as_ref()
     }
 
     fn get_release_package_urls_and_hash(
@@ -742,7 +742,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
     }
 }
 
-// Returns the subnet id for the given CUP.
+/// Returns the subnet id for the given CUP.
 fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<SubnetId, String> {
     let dkg_summary = &cup
         .content
@@ -807,10 +807,10 @@ enum UnassignmentDecision {
     StayInSubnet,
 }
 
-// Checks if the node still belongs to the subnet it was assigned the last time.
-// We decide this by checking the subnet membership starting from the oldest
-// relevant version of the local CUP and ending with the latest registry
-// version.
+/// Checks if the node still belongs to the subnet it was assigned the last time.
+/// We decide this by checking the subnet membership starting from the oldest
+/// relevant version of the local CUP and ending with the latest registry
+/// version.
 fn should_node_become_unassigned(
     registry: &dyn RegistryClient,
     latest_registry_version: RegistryVersion,
@@ -827,6 +827,12 @@ fn should_node_become_unassigned(
         return UnassignmentDecision::StayInSubnet;
     }
 
+    if let Ok(true) =
+        registry.is_subnet_deleted(subnet_id, RegistryVersion::from(latest_registry_version))
+    {
+        return UnassignmentDecision::Now;
+    }
+
     // If the node is at the latest registry version in a subnet it shouldn't be unassigned.
     if node_is_in_subnet_at_version(registry, node_id, subnet_id, latest_registry_version) {
         return UnassignmentDecision::StayInSubnet;
@@ -841,17 +847,22 @@ fn should_node_become_unassigned(
     UnassignmentDecision::Now
 }
 
-// Checks if the given node belongs to the given subnet at the given registry version, by looking
-// at the corresponding subnet record's membership in the registry.
-// If the record is missing, or there is any error (like a corrupted local store), then this
-// function returns true, to avoid removing the subnet state by mistake, as a conservative
-// approach. This function thus assumes that the caller has verified that the subnet ID exists.
+/// Checks if the given node belongs to the given subnet at the given registry version, by looking
+/// at the corresponding subnet record's membership in the registry.
+/// If the record is missing, or there is any error (like a corrupted local store), then this
+/// function returns true, to avoid removing the subnet state by mistake, as a conservative
+/// approach. This function thus assumes that the caller has verified that the subnet ID exists.
+///
+/// Shortcuts to `false` if the subnet was explicitly deleted.
 fn node_is_in_subnet_at_version(
     registry: &dyn RegistryClient,
     node_id: NodeId,
     subnet_id: SubnetId,
     version: u64,
 ) -> bool {
+    if let Ok(true) = registry.is_subnet_deleted(subnet_id, RegistryVersion::from(version)) {
+        return false;
+    }
     registry
         .get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
         .map(|maybe_members| {
@@ -862,7 +873,7 @@ fn node_is_in_subnet_at_version(
         .unwrap_or(true)
 }
 
-// Call `sync` and `fstrim` on the data partition
+/// Call `sync` and `fstrim` on the data partition
 async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
     let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
     info!(logger, "Running command '{:?}'...", fstrim_script);
@@ -882,8 +893,8 @@ async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
     }
 }
 
-// Deletes the subnet state consisting of the consensus pool, execution state,
-// the local CUP and the persisted error metric of threshold key changes.
+/// Deletes the subnet state consisting of the consensus pool, execution state,
+/// the local CUP and the persisted error metric of threshold key changes.
 fn remove_node_state(
     replica_config_file: PathBuf,
     cup_path: PathBuf,
@@ -988,7 +999,7 @@ fn remove_node_state(
     Ok(())
 }
 
-// Re-execute the current process, exactly as it was originally called.
+/// Re-execute the current process, exactly as it was originally called.
 fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     let args: Vec<String> = std::env::args().collect();
     info!(
@@ -1194,20 +1205,65 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use mockall::mock;
+    use nix::unistd::Pid;
     use prost::Message;
     use rand::RngCore;
     use rstest::rstest;
     use slog::Level;
-    use std::collections::BTreeSet;
-    use std::io::Write;
-    use std::os::fd::AsRawFd;
-    use std::os::unix::fs::PermissionsExt;
-    use std::{collections::BTreeMap, path::Path};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        ffi::OsStr,
+        path::Path,
+        process::Output,
+    };
     use tempfile::{TempDir, tempdir};
 
     impl Upgrade {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
             *self.subnet_assignment.read().unwrap()
+        }
+    }
+
+    pub(crate) struct FakeProcessManager {
+        running: bool,
+    }
+    impl FakeProcessManager {
+        pub(crate) fn new() -> Self {
+            Self { running: false }
+        }
+    }
+    impl<P: Process> ProcessManager<P> for FakeProcessManager {
+        fn start(&mut self, _process: P) -> std::io::Result<()> {
+            self.running = true;
+            Ok(())
+        }
+
+        fn stop(&mut self) -> std::io::Result<()> {
+            self.running = false;
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            self.running
+        }
+
+        fn get_pid(&self) -> Option<Pid> {
+            // Return a dummy PID if the process is running.
+            self.running.then_some(Pid::from_raw(12345))
+        }
+    }
+
+    pub struct FakeManagebootRunner;
+    #[async_trait]
+    impl ManagebootRunner for FakeManagebootRunner {
+        async fn run(&self, _args: &[&OsStr]) -> std::io::Result<Output> {
+            // Mock implementation that simulates a successful execution of the manageboot command.
+            use std::os::unix::process::ExitStatusExt;
+            Ok(Output {
+                status: std::process::ExitStatus::from_raw(0),
+                stdout: vec![],
+                stderr: vec![],
+            })
         }
     }
 
@@ -1443,29 +1499,6 @@ mod tests {
             .unwrap();
     }
 
-    // Create a fake binary file with the given bash script content
-    fn create_binary(binary_path: &Path, bash_script: &str) {
-        let mut file = std::fs::File::create(binary_path).unwrap();
-        file.write_all(bash_script.as_bytes()).unwrap();
-        file.set_permissions(std::fs::Permissions::from_mode(0o755))
-            .unwrap();
-
-        // The ugly hack below is to work around rstest running the tests in multiple threads but
-        // in the same process. Each of them creates their own binary file and later executes it.
-        // This means a parallel test might still have the file open for writing while the current
-        // one is trying to execute it. This yields ETXTBSY errors on Linux. To avoid this, we use
-        // the below hack, taken from https://github.com/rust-lang/rust/issues/114554, see
-        // "Implementation of the `flock` algorithm"
-        std::thread::sleep(std::time::Duration::from_micros(2));
-
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-        drop(file);
-
-        let file = std::fs::File::open(binary_path).unwrap();
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_SH) };
-        drop(file);
-    }
-
     async fn create_upgrade_for_test(
         dir: &Path,
         logger: ReplicaLogger,
@@ -1492,10 +1525,8 @@ mod tests {
 
         let ic_binary_dir = dir.join("ic_binary");
         std::fs::create_dir_all(&ic_binary_dir).unwrap();
-        create_binary(&ic_binary_dir.join("replica"), "#!/bin/sh\nsleep 60\n");
-        create_binary(&ic_binary_dir.join("manageboot.sh"), "#!/bin/sh\nexit 0\n");
 
-        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
+        let replica_process = Arc::new(Mutex::new(FakeProcessManager::new()));
         // Start the replica process if the test scenario indicates so
         if test_scenario.was_replica_process_started_previously() {
             replica_process
@@ -1503,11 +1534,13 @@ mod tests {
                 .unwrap()
                 .start(ReplicaProcess {
                     version: current_replica_version.clone(),
-                    binary: ic_binary_dir.join("replica").display().to_string(),
+                    binary: ic_binary_dir.join("replica"),
                     args: vec![],
                 })
                 .unwrap();
         }
+
+        let manageboot_runner = Box::new(FakeManagebootRunner);
 
         let cup_dir = dir.join("cups");
         std::fs::create_dir_all(&cup_dir).unwrap();
@@ -1562,6 +1595,7 @@ mod tests {
             registry,
             metrics,
             replica_process,
+            manageboot_runner,
             cup_provider,
             subnet_assignment,
             current_replica_version.clone(),
@@ -3298,7 +3332,66 @@ mod tests {
     }
 
     #[test]
+    fn test_unassignment_now_when_subnet_deleted() {
+        let key_id = make_vetkd_key_id();
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let latest_registry_version = RegistryVersion::from(10);
+        let oldest_relevant_version = 5;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+
+        let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
+        let key_transcript = setup.generate_key_transcript(&key_id);
+        let cup = make_cup_with_key_transcript(Height::from(15), Some(key_transcript));
+
+        // Return a deleted-subnet record: value is None and version > 0.
+        registry_client
+            .expect_get_versioned_value()
+            .once()
+            .return_const(Ok(RegistryVersionedRecord {
+                key: make_subnet_record_key(subnet_id),
+                version: RegistryVersion::new(1),
+                value: None,
+            }));
+
+        let response = should_node_become_unassigned(
+            &registry_client,
+            latest_registry_version,
+            node_id,
+            subnet_id,
+            &cup,
+        );
+
+        assert_eq!(response, UnassignmentDecision::Now);
+    }
+
+    #[test]
     fn test_stay_in_subnet_on_subnet_missing() {
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let version = 10;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+        registry_client
+            .expect_get_versioned_value()
+            .times(2)
+            .return_const(Ok(RegistryVersionedRecord {
+                key: make_subnet_record_key(subnet_id),
+                version: RegistryVersion::new(0),
+                value: None,
+            }));
+
+        assert!(node_is_in_subnet_at_version(
+            &registry_client,
+            node_id,
+            subnet_id,
+            version
+        ))
+    }
+
+    #[test]
+    fn test_do_not_stay_in_subnet_on_subnet_deleted() {
         let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let version = 10;
@@ -3309,11 +3402,11 @@ mod tests {
             .once()
             .return_const(Ok(RegistryVersionedRecord {
                 key: make_subnet_record_key(subnet_id),
-                version: RegistryVersion::new(0),
+                version: RegistryVersion::new(1),
                 value: None,
             }));
 
-        assert!(node_is_in_subnet_at_version(
+        assert!(!node_is_in_subnet_at_version(
             &registry_client,
             node_id,
             subnet_id,
@@ -3330,7 +3423,7 @@ mod tests {
         let mut registry_client = MockFakeRegistryClient::new();
         registry_client
             .expect_get_versioned_value()
-            .once()
+            .times(2)
             .return_const(Err(RegistryClientError::VersionNotAvailable {
                 version: RegistryVersion::new(version),
             }));
