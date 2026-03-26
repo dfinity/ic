@@ -128,28 +128,29 @@ fn setup(env: TestEnv) {
 
     info!(
         env.logger(),
-        "Installing certified variables canister on the Application subnet"
+        "Installing certified variables canister on the application subnet and cloud engine"
     );
-    let (_subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
-    let agent = node.build_default_agent();
-    let management_canister = ManagementCanister::create(&agent);
     let wasm = wat::parse_str(CERTIFIED_VAR_WAT).expect("Failed to parse certified variables WAT");
+    for subnet_type in [SubnetType::Application, SubnetType::CloudEngine] {
+        let (_subnet, node) = get_subnet_and_node(&env, subnet_type);
+        let agent = node.build_default_agent();
+        let management_canister = ManagementCanister::create(&agent);
+        block_on(async {
+            management_canister
+                .create_canister()
+                .as_provisional_create_with_amount(None)
+                .with_effective_canister_id(node.effective_canister_id())
+                .call_and_wait()
+                .await
+                .expect("Failed to create the certified variables canister");
 
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        management_canister
-            .create_canister()
-            .as_provisional_create_with_amount(None)
-            .with_effective_canister_id(node.effective_canister_id())
-            .call_and_wait()
-            .await
-            .expect("Failed to create the certified variables canister");
-
-        management_canister
-            .install_code(&node.effective_canister_id().0, &wasm)
-            .call_and_wait()
-            .await
-            .expect("Failed to install the certified variables canister");
-    });
+            management_canister
+                .install_code(&node.effective_canister_id().0, &wasm)
+                .call_and_wait()
+                .await
+                .expect("Failed to install the certified variables canister");
+        });
+    }
 
     upgrade_non_nns_subnets_if_necessary(&env);
 }
