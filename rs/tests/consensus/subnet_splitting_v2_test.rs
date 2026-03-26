@@ -356,17 +356,11 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
                 .expect("XNET_TEST_CANISTER_WASM_PATH not set"),
         ));
 
-        let mut installed_canisters: Vec<Canister> = Vec::new();
-        for _ in 0..count {
-            installed_canisters.push(
-                wasm.clone()
-                    .install_(runtime, /*payload=*/ vec![])
-                    .await
-                    .expect("Failed to install the chatting canister"),
-            );
-        }
-
-        installed_canisters
+        futures::future::try_join_all(
+            (0..count).map(|_| wasm.clone().install_(runtime, /*payload=*/ vec![])),
+        )
+        .await
+        .expect("Failed to install the chatting canister")
     };
 
     let (source_subnet_canisters, third_subnet_canisters) = tokio::join!(
@@ -434,23 +428,18 @@ async fn install_counting_canisters(env: &TestEnv) -> Vec<CanisterId> {
         .next()
         .expect("There should be at least one node on the source subnet");
 
-    let mut canister_ids = Vec::new();
-
-    for _ in 0..COUNTER_CANISTERS_COUNT {
-        let canister_id = source_node
+    let canister_ids = futures::future::try_join_all((0..COUNTER_CANISTERS_COUNT).map(|_| async {
+        source_node
             .create_and_install_canister_with_arg_async(
                 &std::env::var("COUNTER_CANISTER_WAT_PATH")
                     .expect("COUNTER_CANISTER_WAT_PATH should be set"),
                 /*arg=*/ None,
             )
             .await
-            .expect("Failed to create a counter canister");
-
-        info!(env.logger(), "Installed counter canister {canister_id}");
-        canister_ids.push(CanisterId::unchecked_from_principal(PrincipalId(
-            canister_id,
-        )));
-    }
+            .map(|canister_id| CanisterId::unchecked_from_principal(PrincipalId(canister_id)))
+    }))
+    .await
+    .expect("Failed to install counter canisters");
 
     let agent = source_node.build_canister_agent().await;
     for canister_id in &canister_ids {
