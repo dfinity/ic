@@ -7,6 +7,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use candid::{Decode, Encode};
+use ic_consensus_system_test_utils::node::assert_node_is_unassigned;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
@@ -174,6 +175,11 @@ pub fn test(env: TestEnv) {
             .map(|x| x.node_id)
             .collect::<BTreeSet<_>>();
         assert_eq!(unassigned_node_ids, engine_node_ids);
+
+        // The nodes' states should be wiped.
+        for node in new_topology_snapshot.unassigned_nodes() {
+            assert_node_is_unassigned(&node, &env.logger());
+        }
     });
 }
 
