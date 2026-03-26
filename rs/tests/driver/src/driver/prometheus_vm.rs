@@ -26,16 +26,11 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
-        CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
-        SshSession, TopologySnapshot, scp_recv_from, scp_send_to,
+        CreateDnsRecords, CreatePlaynetDnsRecords, HasTopologySnapshot, IcNodeContainer,
+        IcNodeSnapshot, RetrieveIpv4Addr, SshSession, TopologySnapshot, scp_recv_from, scp_send_to,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
-};
-use crate::driver::{
-    farm::{DnsRecord, DnsRecordType},
-    test_env::TestEnvAttribute,
-    test_env_api::{CreateDnsRecords, CreatePlaynetDnsRecords},
 };
 use crate::util::block_on;
 
