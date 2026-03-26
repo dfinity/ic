@@ -83,4 +83,4 @@ path = "sr_app_no_upgrade_with_chain_keys_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-large-no-upgrade-with-chain-keys"
-path = "sr_app_large_no_upgrade_with_chain_keys_test.rs"
+path = "sr_large.rs"

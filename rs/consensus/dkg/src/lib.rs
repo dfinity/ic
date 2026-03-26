@@ -18,7 +18,7 @@ use ic_metrics::{
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, ReplicaVersion, SubnetId,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::dkg::{DealingContent, DkgMessageId, DkgSummary, InvalidDkgPayloadReason, Message},
     crypto::{
         Signed,
@@ -47,11 +47,11 @@ pub use dkg_key_manager::DkgKeyManager;
 pub use payload_builder::{create_payload, get_dkg_summary_from_cup_contents};
 
 /// The maximal number of DKGs for other subnets we want to run in one interval.
-const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
+const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 10;
 
 /// The maximum number of early remote DKG transcripts we want to include in a data payload.
 /// Note that responses for `SetupInitialDKG` requests contain two transcripts.
-const MAX_EARLY_REMOTE_TRANSCRIPTS: usize = 2;
+const MAX_EARLY_REMOTE_TRANSCRIPTS: usize = 4;
 
 /// The maximum number of intervals during which an initial DKG request is
 /// attempted.
@@ -307,7 +307,7 @@ fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T)
 pub(crate) fn get_configs_for_start_height(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_manager: &dyn StateReader<State = ReplicatedState>,
     registry_version: RegistryVersion,
     start_height: Height,
     dkg_summary: &DkgSummary,

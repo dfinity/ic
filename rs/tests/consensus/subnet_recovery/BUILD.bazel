@@ -228,9 +228,11 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "sr_app_large_no_upgrade_with_chain_keys_test",
+    name = "sr_large",
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
+    enable_metrics = True,
     guestos_update = "test",
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
         "subnet_recovery",

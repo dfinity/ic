@@ -365,6 +365,30 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "nidkg_performance_test",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    enable_head_nns_variant = False,
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
+    tags = [
+        "colocate",
+        "manual",
+    ],
+    test_timeout = "eternal",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
     name = "adding_nodes_to_subnet_test",
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
