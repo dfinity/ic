@@ -110,13 +110,7 @@ struct Args {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .without_time()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    ic_os_logging::init_logging();
 
     // TODO: We could replace this with Linux capabilities but this works well for now.
     if !getuid().is_root() {
@@ -780,9 +774,8 @@ impl GuestVmService {
     }
 
     // We have two different ways to log:
-    // 1. Log via tracing. These logs will end up in the systemd journal. Upon error,
-    //    display_systemd_logs() writes the journal logs to the console.
-    // 2. Log to the console. These logs will show up in the terminal but not in the journal.
+    // 1. Log to the console. These logs will show up in the terminal but not in the journal.
+    // 2. Log via tracing. These logs will end up in the systemd journal.
     fn write_to_console_and_stdout(&self, message: &str) {
         self.write_to_console(message);
         info!("{message}");

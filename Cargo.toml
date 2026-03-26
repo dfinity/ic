@@ -896,6 +896,7 @@ tower-http = { version = "0.6.4", features = [
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-flame = "0.2.0"
+tracing-journald = "0.3"
 tracing-opentelemetry = "0.28.0"
 tracing-subscriber = { version = "0.3.19", features = [
     "env-filter",

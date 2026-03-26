@@ -8,6 +8,9 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
+
+* Subnet deletion endpoint. Limited to CloudEngine subnets. 
+* Implemented the `do_split_subnet` method
 * Added an optional field `maximum_state_delta` to `ResourceLimits` in `CreateSubnetPayload` which, when present,
   sets a soft limit on the maximum (replicated) state *delta* (kept in main memory) in bytes.
 * Added an optional field `resource_limits` to `UpdateSubnetPayload` which, when present,
