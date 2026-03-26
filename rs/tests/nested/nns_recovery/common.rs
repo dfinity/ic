@@ -1,6 +1,7 @@
+use std::cmp::min;
 use std::path::{Path, PathBuf};
 
-use anyhow::bail;
+use anyhow::{Context, bail};
 use ic_consensus_system_test_subnet_recovery::utils::{
     BACKUP_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes, get_ssh_keys_for_user,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
@@ -491,6 +492,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     // If we fix the DFINITY-owned node like the other NPs, we include it in the nodes to fix. If we
     // do not, it has already been fixed as part of the recovery tool. We thus fix 2f other nodes to
     // reach 2f+1 in total.
+    //
+    // We select a few extra nodes beyond the minimum required (2f) to tolerate transient
+    // infrastructure failures (e.g. kernel panics on individual VMs). The subnet only needs 2f+1
+    // nodes on the upgrade version for consensus, so we can afford some NP actions to fail.
+    let np_failure_tolerance: usize = 2;
     let (dfinity_owned_host, other_hosts): (Vec<NestedVm>, Vec<NestedVm>) = env
         .get_all_nested_vms()
         .unwrap()
@@ -499,17 +505,25 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .partition(|vm| {
             vm.get_nested_network().unwrap().guest_ip == dfinity_owned_node.get_ip_addr()
         });
+    let num_hosts_to_select = min(2 * f + np_failure_tolerance, other_hosts.len());
     let mut hosts_to_fix = other_hosts
-        .choose_multiple(&mut rand::thread_rng(), 2 * f)
+        .choose_multiple(&mut rand::thread_rng(), num_hosts_to_select)
         .collect::<Vec<_>>();
     if cfg.fix_dfinity_owned_node_like_np {
         hosts_to_fix.push(dfinity_owned_host.first().unwrap());
     }
+    let min_np_successes = 2 * f
+        + if cfg.fix_dfinity_owned_node_like_np {
+            1
+        } else {
+            0
+        };
 
     info!(
         logger,
-        "Simulate node provider action on {} nodes{}",
+        "Simulate node provider action on {} nodes (need at least {} to succeed){}",
         hosts_to_fix.len(),
+        min_np_successes,
         if cfg.fix_dfinity_owned_node_like_np {
             ", including the DFINITY-owned node"
         } else {
@@ -539,7 +553,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             });
 
             if cfg.sequential_np_actions {
-                handles
+                let _ = handles
                     .join_next()
                     .await
                     .unwrap()
@@ -547,7 +561,38 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             }
         }
 
-        handles.join_all().await;
+        let mut successes = 0_usize;
+        let mut failures = Vec::new();
+        while let Some(result) = handles.join_next().await {
+            match result {
+                Ok(Ok(())) => successes += 1,
+                Ok(Err(err)) => {
+                    info!(logger, "Node provider action failed: {:?}", err);
+                    failures.push(err);
+                }
+                Err(join_err) => {
+                    info!(logger, "Node provider action panicked: {:?}", join_err);
+                    failures.push(anyhow::anyhow!("Task panicked: {:?}", join_err));
+                }
+            }
+        }
+        assert!(
+            successes >= min_np_successes,
+            "Only {} out of {} node provider actions succeeded (need at least {}). Failures: {:?}",
+            successes,
+            successes + failures.len(),
+            min_np_successes,
+            failures
+        );
+        if !failures.is_empty() {
+            info!(
+                logger,
+                "{} node provider action(s) failed but {} succeeded (>= {} required)",
+                failures.len(),
+                successes,
+                min_np_successes,
+            );
+        }
     });
 
     info!(logger, "Ensure the subnet is healthy after the recovery");
@@ -569,18 +614,18 @@ async fn simulate_node_provider_action(
     img_version: &str,
     recovery_hash_prefix: &str,
     upgrade_version: &ReplicaVersion,
-) {
+) -> anyhow::Result<()> {
+    let vm_name = host.vm_name();
+
     // Spoof the HostOS DNS such that it downloads the GuestOS image from the UVM
     let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
-        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}",
-        host.vm_name(),
-        server_ipv6
+        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}", vm_name, server_ipv6
     );
     impersonate_upstreams::spoof_node_dns_async(host, &server_ipv6)
         .await
-        .expect("Failed to spoof HostOS DNS");
+        .context(format!("Failed to spoof HostOS DNS on {}", vm_name))?;
 
     // Run guestos-recovery-upgrader via limited-console's rbash-console
     // This tests the backup recovery path that node providers can use if the recovery TUI fails.
@@ -589,7 +634,7 @@ async fn simulate_node_provider_action(
     info!(
         logger,
         "Running guestos-recovery-upgrader via rbash-console on HostOS {} with version={}, recovery-hash-prefix={}",
-        host.vm_name(),
+        vm_name,
         img_version,
         recovery_hash_prefix,
     );
@@ -606,26 +651,26 @@ async fn simulate_node_provider_action(
 
     host.block_on_bash_script_async(&script)
         .await
-        .expect("Failed to run guestos-recovery-upgrader via rbash-console");
+        .context(format!(
+            "Failed to run guestos-recovery-upgrader via rbash-console on {}",
+            vm_name,
+        ))?;
 
     // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();
     info!(
         logger,
-        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}",
-        host.vm_name(),
-        server_ipv6
+        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}", vm_name, server_ipv6
     );
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await
-        .expect("Failed to spoof GuestOS DNS");
+        .context(format!("Failed to spoof GuestOS DNS on {}", vm_name))?;
 
     // Wait until the node has booted the expected GuestOS version
     retry_with_msg_async!(
         format!(
             "Waiting until GuestOS {} boots on the upgrade version {}",
-            host.vm_name(),
-            upgrade_version
+            vm_name, upgrade_version
         ),
         &logger,
         secs(600),
@@ -653,7 +698,12 @@ async fn simulate_node_provider_action(
         }
     )
     .await
-    .expect("GuestOS did not reboot on the upgrade version");
+    .context(format!(
+        "GuestOS {} did not reboot on the upgrade version",
+        vm_name,
+    ))?;
+
+    Ok(())
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, logger: &Logger) {
