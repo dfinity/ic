@@ -418,6 +418,10 @@ pub fn get_governance_canister(nns_api: &'_ Runtime) -> Canister<'_> {
     get_canister(nns_api, GOVERNANCE_CANISTER_ID)
 }
 
+pub fn get_registry_canister(nns_api: &'_ Runtime) -> Canister<'_> {
+    get_canister(nns_api, REGISTRY_CANISTER_ID)
+}
+
 pub fn get_sns_wasm_canister(nns_api: &'_ Runtime) -> Canister<'_> {
     get_canister(nns_api, SNS_WASM_CANISTER_ID)
 }
