@@ -2695,7 +2695,7 @@ fn flexible_into_messages_stats_count_multiple_groups() {
 }
 
 #[test]
-fn flexible_into_messages_decode_failure_yields_reject() {
+fn flexible_into_messages_decode_failure_is_skipped() {
     let callback_id = CallbackId::from(42);
 
     let entry = flexible_response(42, 0, b"this is not valid candid");
@@ -2708,18 +2708,8 @@ fn flexible_into_messages_decode_failure_yields_reject() {
 
     let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
-    assert_eq!(responses.len(), 1);
-    assert_eq!(responses[0].callback, callback_id);
-    let Payload::Reject(ref reject) = responses[0].payload else {
-        panic!("Expected Payload::Reject, got {:?}", responses[0].payload);
-    };
-    assert_eq!(reject.code(), RejectCode::SysTransient);
-    assert!(
-        reject.message().contains("Failed to decode"),
-        "Unexpected reject message: {}",
-        reject.message()
-    );
-    assert_eq!(stats.flexible_ok_responses, 1);
+    assert_eq!(responses.len(), 0);
+    assert_eq!(stats.flexible_ok_responses, 0);
 }
 
 fn setup_test_with_contexts(
