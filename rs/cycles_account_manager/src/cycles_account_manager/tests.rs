@@ -121,7 +121,7 @@ fn http_requests_fee_scale() {
                 CanisterCyclesCostSchedule::Normal,
             )
             .real(),
-        Cycles::from(1_603_786_800u64) * reference_subnet_size
+        Cycles::from(1_603_786_800_u64) * reference_subnet_size
     );
 
     // Check the fee for a 34-node subnet.
@@ -134,7 +134,7 @@ fn http_requests_fee_scale() {
                 CanisterCyclesCostSchedule::Normal,
             )
             .real(),
-        Cycles::from(1_605_046_800u64) * subnet_size
+        Cycles::from(1_605_046_800_u64) * subnet_size
     );
 }
 

@@ -953,14 +953,14 @@ fn update_balance_and_consumed_cycles_correctly() {
 #[test]
 fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-    let cycles_to_consume = Cycles::from(1000u128);
+    let cycles_to_consume = Cycles::from(1000_u128);
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     system_state.remove_cycles(CompoundCycles::<ic_types_cycles::Memory>::new(
         cycles_to_consume,
         cost_schedule,
     ));
 
-    let cycles_to_add = Cycles::from(100u128);
+    let cycles_to_add = Cycles::from(100_u128);
     system_state.add_cycles(CompoundCycles::<ic_types_cycles::Memory>::new(
         cycles_to_add,
         cost_schedule,
