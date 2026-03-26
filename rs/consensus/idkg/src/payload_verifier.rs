@@ -28,13 +28,14 @@ use crate::{
     payload_builder::{create_data_payload_helper, create_summary_payload},
     pre_signer::IDkgTranscriptBuilder,
     signer::ThresholdSignatureBuilder,
-    utils::build_signature_inputs,
     utils::{
         IDkgBlockReaderImpl, InvalidChainCacheError, block_chain_cache,
         get_idkg_chain_key_config_if_enabled,
     },
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{
+    chain_key::build_signature_inputs, crypto::ConsensusCrypto, pool_reader::PoolReader,
+};
 use ic_interfaces::{
     crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifier},
     validation::{ValidationError, ValidationResult},
