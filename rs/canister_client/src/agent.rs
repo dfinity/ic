@@ -1,6 +1,8 @@
 //! An agent to talk to the Internet Computer through the public endpoints.
 use crate::{
-    cbor::{parse_query_response, prepare_query, prepare_read_state, prepare_update},
+    cbor::{
+        parse_query_response, prepare_query, prepare_read_state, prepare_update_with_sender_info,
+    },
     http_client::{HttpClient, HttpClientConfig},
 };
 use backoff::backoff::Backoff;
@@ -13,7 +15,7 @@ use ic_types::{
     CanisterId,
     consensus::catchup::CatchUpPackageParam,
     crypto::threshold_sig::ThresholdSigPublicKey,
-    messages::{Blob, HttpStatusResponse, MessageId, ReplicaHealthStatus},
+    messages::{Blob, HttpStatusResponse, MessageId, ReplicaHealthStatus, SenderInfo},
     time::expiry_time_from_now,
 };
 use prost::Message;
@@ -253,9 +255,30 @@ impl Agent {
         arguments: Vec<u8>,
         nonce: Vec<u8>,
     ) -> Result<Option<Vec<u8>>, String> {
+        self.execute_update_with_sender_info(
+            effective_canister_id,
+            canister_id,
+            method,
+            arguments,
+            nonce,
+            None,
+        )
+        .await
+    }
+
+    /// Calls the update method 'method' on the given canister with optional sender info.
+    pub async fn execute_update_with_sender_info<S: ToString>(
+        &self,
+        effective_canister_id: &CanisterId,
+        canister_id: &CanisterId,
+        method: S,
+        arguments: Vec<u8>,
+        nonce: Vec<u8>,
+        sender_info: Option<SenderInfo>,
+    ) -> Result<Option<Vec<u8>>, String> {
         let deadline = Instant::now() + self.ingress_timeout;
         let mut backoff = get_backoff_policy();
-        let (http_body, request_id) = prepare_update(
+        let (http_body, request_id) = prepare_update_with_sender_info(
             &self.sender,
             canister_id,
             method,
@@ -263,6 +286,7 @@ impl Agent {
             nonce,
             expiry_time_from_now(),
             self.sender_field.clone(),
+            sender_info,
         )
         .map_err(|err| format!("{err}"))?;
         self.http_client

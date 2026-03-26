@@ -47,6 +47,7 @@ impl V2CallAgent {
             arg: Blob(ARG),
             sender: Blob(SENDER.into_vec()),
             nonce: None,
+            sender_info: None,
         };
 
         // Try submitting update call to V2 endpoint

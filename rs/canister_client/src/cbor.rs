@@ -5,7 +5,8 @@ use ic_types::{
     CanisterId, Time,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-        HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedRequestBytes,
+        HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SenderInfo,
+        SignedRequestBytes,
     },
     time::expiry_time_from_now,
 };
@@ -80,6 +81,29 @@ pub fn prepare_update<S: ToString>(
     ingress_expiry: Time,
     sender_field: Blob,
 ) -> Result<(SignedRequestBytes, MessageId), Box<dyn Error>> {
+    prepare_update_with_sender_info(
+        sender,
+        canister_id,
+        method,
+        arguments,
+        nonce,
+        ingress_expiry,
+        sender_field,
+        None,
+    )
+}
+
+/// Prepares an update request with optional sender info.
+pub fn prepare_update_with_sender_info<S: ToString>(
+    sender: &Sender,
+    canister_id: &CanisterId,
+    method: S,
+    arguments: Vec<u8>,
+    nonce: Vec<u8>,
+    ingress_expiry: Time,
+    sender_field: Blob,
+    sender_info: Option<SenderInfo>,
+) -> Result<(SignedRequestBytes, MessageId), Box<dyn Error>> {
     let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: to_blob(canister_id),
@@ -88,6 +112,7 @@ pub fn prepare_update<S: ToString>(
             nonce: Some(Blob(nonce)),
             sender: sender_field,
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            sender_info,
         },
     };
 
@@ -260,6 +285,7 @@ mod tests {
                     .into_vec(),
                 ),
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         let sender = Sender::from_keypair(&keypair);
@@ -304,6 +330,7 @@ mod tests {
                 nonce: None,
                 sender: Blob(sender_id.get().into_vec()),
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         let sender =
@@ -343,6 +370,7 @@ mod tests {
                 nonce: None,
                 sender: Blob(UserId::from(PrincipalId::new_anonymous()).get().into_vec()),
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         let (submit, id) = sign_submit(content.clone(), &Sender::Anonymous).unwrap();
