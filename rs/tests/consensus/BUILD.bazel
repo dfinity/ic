@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
-load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -231,11 +231,9 @@ system_test_nns(
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
-        "subnet_splitting",
     ],
     runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
-        "//rs/protobuf",
         "//rs/recovery",
         "//rs/recovery/subnet_splitting",
         "//rs/registry/routing_table",
@@ -246,9 +244,42 @@ system_test_nns(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
-        "@crate_index//:prost",
         "@crate_index//:reqwest",
         "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "subnet_splitting_v2_test",
+    enable_metrics = True,
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/canister_client",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/xnet_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
     ],
 )
 

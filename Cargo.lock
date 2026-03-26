@@ -6430,6 +6430,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-nns-data-provider-wrappers",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -13261,6 +13262,7 @@ name = "ic-registry-resource-limits"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "clap 4.6.0",
  "ic-protobuf",
  "ic-types",
  "serde",
@@ -15975,15 +15977,20 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
+ "dfn_candid",
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-canister-client",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-cup-explorer",
  "ic-limits",
  "ic-management-canister-types-private",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-nns-test-utils",
  "ic-protobuf",
  "ic-recovery",
  "ic-registry-routing-table",
@@ -16010,6 +16017,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "xnet-test",
 ]
 
 [[package]]
