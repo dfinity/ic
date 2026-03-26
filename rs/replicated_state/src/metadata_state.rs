@@ -183,7 +183,26 @@ pub struct SystemMetadata {
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 }
 
+/// Unfiltered topology, including all subnets and the full routing table.
+///
+/// Only populated on the NNS subnet, where the certified state tree must
+/// contain entries for every subnet in the network (including cloud engines).
+/// On all other subnets this is `None` and the state tree falls back to the
+/// (filtered) data in [`NetworkTopology`].
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct FullTopology {
+    pub subnets: BTreeMap<SubnetId, SubnetTopology>,
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    pub routing_table: Arc<RoutingTable>,
+}
+
 /// Full description of the IC network toplogy.
+///
+/// The `subnets` and `routing_table` fields contain the **filtered** view:
+/// only the subnets this subnet may interact with. For the NNS subnet an
+/// optional [`FullTopology`] stores the unfiltered data so that the certified
+/// state tree can cover every subnet.
 ///
 /// Contains [`Arc`] references, so it is only safe to serialize for read-only
 /// use.
@@ -207,6 +226,10 @@ pub struct NetworkTopology {
 
     /// The ID of the canister to forward bitcoin mainnet requests to.
     pub bitcoin_mainnet_canister_id: Option<CanisterId>,
+
+    /// Unfiltered topology for the certified state tree.
+    /// Only set on the NNS subnet; `None` everywhere else.
+    full_topology: Option<FullTopology>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -234,6 +257,7 @@ impl Default for NetworkTopology {
             chain_key_enabled_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
+            full_topology: None,
         }
     }
 }
@@ -248,6 +272,7 @@ impl NetworkTopology {
         chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
         bitcoin_testnet_canister_id: Option<CanisterId>,
         bitcoin_mainnet_canister_id: Option<CanisterId>,
+        full_topology: Option<FullTopology>,
     ) -> Self {
         Self {
             subnets,
@@ -257,6 +282,7 @@ impl NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
+            full_topology,
         }
     }
 
@@ -282,6 +308,29 @@ impl NetworkTopology {
         self.subnets
             .get(subnet_id)
             .map(|subnet_topology| subnet_topology.nodes.len())
+    }
+
+    /// Returns the subnets map used for the certified state tree.
+    ///
+    /// On the NNS subnet this returns the full, unfiltered map (including cloud
+    /// engines); on every other subnet it falls back to `subnets()`.
+    pub fn subnets_for_certification(&self) -> &BTreeMap<SubnetId, SubnetTopology> {
+        self.full_topology
+            .as_ref()
+            .map(|ft| &ft.subnets)
+            .unwrap_or(&self.subnets)
+    }
+
+    /// Returns the routing table used for the certified state tree.
+    ///
+    /// On the NNS subnet this returns the full, unfiltered table (including
+    /// cloud engine ranges); on every other subnet it falls back to
+    /// `routing_table()`.
+    pub fn routing_table_for_certification(&self) -> &Arc<RoutingTable> {
+        self.full_topology
+            .as_ref()
+            .map(|ft| &ft.routing_table)
+            .unwrap_or(&self.routing_table)
     }
 
     /// Find the subnet for `principal_id`. The input can either be a canister id, or a subnet id.
@@ -1912,6 +1961,10 @@ impl UnflushedCheckpointOps {
         self.operations.len()
     }
 
+    pub fn push(&mut self, op: UnflushedCheckpointOp) {
+        self.operations.push(op);
+    }
+
     pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
             canister_id,
@@ -1947,6 +2000,8 @@ pub mod testing {
         fn routing_table_mut(&mut self) -> &mut RoutingTable;
         /// Sets the routing table.
         fn set_routing_table(&mut self, routing_table: RoutingTable);
+        /// Sets the full (unfiltered) topology for the state tree.
+        fn set_full_topology(&mut self, full_topology: Option<FullTopology>);
     }
 
     impl NetworkTopologyTesting for NetworkTopology {
@@ -1961,6 +2016,9 @@ pub mod testing {
         }
         fn set_routing_table(&mut self, routing_table: RoutingTable) {
             self.routing_table = Arc::new(routing_table);
+        }
+        fn set_full_topology(&mut self, full_topology: Option<FullTopology>) {
+            self.full_topology = full_topology;
         }
     }
 
