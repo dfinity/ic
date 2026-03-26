@@ -226,6 +226,19 @@ impl InternetComputer {
         &mut self,
         env: &TestEnv,
     ) -> Result<BTreeMap<String, AllocatedVm>> {
+        if self
+            .subnets
+            .iter()
+            .any(|s| s.subnet_type == SubnetType::CloudEngine)
+        {
+            // Cloud engines use API boundary nodes to replicate their registry and to fetch
+            // delegations since the firewall on the NNS blocks them.
+            assert!(
+                !self.api_boundary_nodes.is_empty(),
+                "At least one API boundary node is required when using a cloud engine subnet"
+            );
+        }
+
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for node in self
