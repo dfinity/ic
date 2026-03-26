@@ -61,6 +61,7 @@ pub fn input_deduplication_test(env: TestEnv) {
                             sender: Blob(vec![4]), // the anonymous user.
                             ingress_expiry,
                             nonce: Some(nonce.to_le_bytes().into()),
+                            sender_info: None,
                         },
                     },
                     sender_delegation: None,
