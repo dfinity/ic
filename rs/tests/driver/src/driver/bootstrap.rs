@@ -163,6 +163,7 @@ pub fn init_ic(
                 subnet.dkg_interval_length,
                 subnet.dkg_dealings_per_block,
                 subnet.subnet_type,
+                subnet.canister_cycles_cost_schedule.into(),
                 subnet.max_instructions_per_message,
                 subnet.max_instructions_per_round,
                 subnet.max_instructions_per_install_code,
