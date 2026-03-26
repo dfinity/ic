@@ -258,21 +258,8 @@ mod update_balance {
         use_ckbtc_event_logger(&mut runtime);
         mock_increasing_time(&mut runtime, time.into(), Duration::from_secs(1));
         mock_derive_user_address(&mut runtime, account);
-        expect_check_transaction_returning(
-            &mut runtime,
-            utxo.clone(),
-            CheckTransactionResponse::Passed,
-        );
-        runtime
-            .expect_mint_ckbtc()
-            .times(1)
-            .withf(move |amount_, account_, _memo| {
-                amount_ == &minted_amount && account_ == &account
-            })
-            .return_const(Ok(2));
         runtime.expect_caller().return_const(account.owner);
         runtime.expect_id().return_const(MINTER_CANISTER_ID);
-        mock_schedule_now_process_logic(&mut runtime);
 
         let result = update_balance(
             UpdateBalanceArgs {
@@ -283,6 +270,13 @@ mod update_balance {
         )
         .await;
         assert_matches!(result, Err(UpdateBalanceError::NoNewUtxos{pending_utxos, ..}) if pending_utxos == Some(vec![]));
+        read_state(|s| {
+            assert!(
+                s.deduplicated_outpoints.contains(&utxo.outpoint),
+                "Expected deduplicated_outpoints to contain {:?}",
+                utxo.outpoint
+            );
+        });
     }
 
     #[tokio::test]

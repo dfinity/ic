@@ -202,6 +202,11 @@ pub async fn update_balance<R: CanisterRuntime>(
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+        state::mutate_state(|s| {
+            for utxo in &deduplicated_utxos {
+                s.deduplicated_outpoints.insert(utxo.outpoint.clone());
+            }
+        });
     }
 
     // Remove pending finalized transactions for the affected account.
