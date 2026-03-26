@@ -6,7 +6,7 @@ use ic_replicated_state::{
     page_map::{TestPageAllocatorFileDescriptorImpl, test_utils::base_only_storage_layout},
 };
 use ic_sys::{PAGE_SIZE, PageBytes};
-use ic_types::{Height, NumBytes, NumOsPages};
+use ic_types::{NumBytes, NumOsPages};
 use libc::c_void;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use rstest::rstest;
