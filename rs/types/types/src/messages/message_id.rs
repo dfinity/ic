@@ -480,7 +480,7 @@ mod tests {
         let expiry_time = expiry_time_from_now();
 
         let signed_ingress1 = signed_ingress(
-            receiver.clone(),
+            receiver,
             method_name.clone(),
             method_payload.clone(),
             expiry_time,
@@ -526,7 +526,7 @@ mod tests {
         let sender_pubkey = vec![2; 32];
 
         let ingress_without_sender_info = signed_ingress(
-            receiver.clone(),
+            receiver,
             method_name.clone(),
             method_payload.clone(),
             expiry_time,
