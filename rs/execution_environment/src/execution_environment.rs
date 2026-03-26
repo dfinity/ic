@@ -794,18 +794,27 @@ impl ExecutionEnvironment {
                 let res = UninstallCodeArgs::decode(payload).and_then(|args| {
                     let subnet_admins = state.get_own_subnet_admins();
                     let time = state.time();
-                    self.canister_manager
-                        .uninstall_code(
-                            msg.canister_change_origin(args.get_sender_canister_version()),
-                            args.get_canister_id(),
-                            &mut state,
-                            round_limits,
-                            &self.metrics.canister_not_found_error,
-                            subnet_admins,
-                            time,
-                        )
-                        .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
-                        .map_err(|err| err.into())
+                    let result = self.canister_manager.uninstall_code(
+                        msg.canister_change_origin(args.get_sender_canister_version()),
+                        args.get_canister_id(),
+                        &mut state,
+                        round_limits,
+                        subnet_admins,
+                        time,
+                    );
+                    match result {
+                        Ok(rejects) => {
+                            crate::util::process_responses(
+                                rejects,
+                                &mut state,
+                                Arc::clone(&self.ingress_history_writer),
+                                self.log.clone(),
+                                &self.metrics.canister_not_found_error,
+                            );
+                            Ok((EmptyBlob.encode(), Some(args.get_canister_id())))
+                        }
+                        Err(err) => Err(err.into()),
+                    }
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,

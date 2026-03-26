@@ -1828,7 +1828,7 @@ mod fees_in_burn_and_mint_blocks {
         let expected_balance = MINT_AMOUNT - MINT_FEE;
 
         assert_eq!(
-            Nat::from(0u64),
+            Nat::from(0_u64),
             add_block(&env, ledger_id, &mint)
                 .expect("error adding mint block to ICRC-3 test ledger")
         );
@@ -1898,13 +1898,13 @@ mod fees_in_burn_and_mint_blocks {
         expected_balance -= BURN_AMOUNT + BURN_FEE;
 
         assert_eq!(
-            Nat::from(0u64),
+            Nat::from(0_u64),
             add_block(&env, ledger_id, &mint)
                 .expect("error adding mint block to ICRC-3 test ledger")
         );
 
         assert_eq!(
-            Nat::from(1u64),
+            Nat::from(1_u64),
             add_block(&env, ledger_id, &burn)
                 .expect("error adding mint block to ICRC-3 test ledger")
         );
