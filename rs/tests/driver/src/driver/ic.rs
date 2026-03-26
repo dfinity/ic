@@ -492,6 +492,7 @@ pub struct Subnet {
 
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
+        // An invariant in the registry ensures that cloud engines have a free cost schedule
         let canister_cycles_cost_schedule = match subnet_type {
             SubnetType::CloudEngine => CanisterCyclesCostSchedule::Free,
             _ => CanisterCyclesCostSchedule::Normal,
