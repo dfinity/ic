@@ -1046,8 +1046,15 @@ impl IcNodeSnapshot {
         }
     }
 
-    pub fn canister_installer<'a>(&'a self, name: &str) -> CanisterInstaller<'a> {
-        CanisterInstaller::new(self, name)
+    pub fn canister_installer<'a>(&'a self, wasm_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(self, wasm_name)
+    }
+
+    pub fn canister_installer_from_env<'a>(&'a self, env_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(
+            self,
+            std::env::var(env_name).unwrap_or_else(|err| panic!("{env_name} not set: {err}")),
+        )
     }
 
     /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and

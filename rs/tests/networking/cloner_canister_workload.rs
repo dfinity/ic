@@ -128,10 +128,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
             "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Installing cloner canister."
         );
         let cloner_canister_id = app_node
-            .canister_installer(
-                &std::env::var("CLONER_CANISTER_WASM_PATH")
-                    .expect("CLONER_CANISTER_WASM_PATH not set"),
-            )
+            .canister_installer_from_env("CLONER_CANISTER_WASM_PATH")
             .with_cycles_amount(1_001_000_000_000_000) // 1001T cycles is enough to spin up 500 canisters
             .block_on_install()
             .expect("Failed to install the canister");
