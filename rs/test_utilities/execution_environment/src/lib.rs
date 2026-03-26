@@ -3188,6 +3188,7 @@ fn get_effective_canister_id(message: SubnetMessage) -> Option<CanisterId> {
                 ingress.method_payload.clone(),
                 0,
                 None,
+                None,
             );
             extract_effective_canister_id(&signed_ingress_content).ok()?
         }
