@@ -135,42 +135,42 @@ fn test_basic_add_and_get_blocks() {
 
     // Add blocks to the ledger
     let result0 = add_block(&env, canister_id, &block0).expect("Failed to add block 0");
-    assert_eq!(result0, Nat::from(0u64));
+    assert_eq!(result0, Nat::from(0_u64));
 
     let result1 = add_block(&env, canister_id, &block1).expect("Failed to add block 1");
-    assert_eq!(result1, Nat::from(1u64));
+    assert_eq!(result1, Nat::from(1_u64));
 
     let result2 = add_block(&env, canister_id, &block2).expect("Failed to add block 2");
-    assert_eq!(result2, Nat::from(2u64));
+    assert_eq!(result2, Nat::from(2_u64));
 
     let result3 = add_block(&env, canister_id, &block3).expect("Failed to add block 3");
-    assert_eq!(result3, Nat::from(3u64));
+    assert_eq!(result3, Nat::from(3_u64));
 
     // Test retrieving blocks
     let get_blocks_result = icrc3_get_blocks(
         &env,
         canister_id,
         vec![GetBlocksRequest {
-            start: Nat::from(0u64),
-            length: Nat::from(4u64),
+            start: Nat::from(0_u64),
+            length: Nat::from(4_u64),
         }],
     );
 
-    assert_eq!(get_blocks_result.log_length, Nat::from(4u64));
+    assert_eq!(get_blocks_result.log_length, Nat::from(4_u64));
     assert_eq!(get_blocks_result.blocks.len(), 4);
     assert!(get_blocks_result.archived_blocks.is_empty());
 
     // Verify the blocks are returned in the correct order
-    assert_eq!(get_blocks_result.blocks[0].id, Nat::from(0u64));
+    assert_eq!(get_blocks_result.blocks[0].id, Nat::from(0_u64));
     assert_eq!(get_blocks_result.blocks[0].block, block0);
 
-    assert_eq!(get_blocks_result.blocks[1].id, Nat::from(1u64));
+    assert_eq!(get_blocks_result.blocks[1].id, Nat::from(1_u64));
     assert_eq!(get_blocks_result.blocks[1].block, block1);
 
-    assert_eq!(get_blocks_result.blocks[2].id, Nat::from(2u64));
+    assert_eq!(get_blocks_result.blocks[2].id, Nat::from(2_u64));
     assert_eq!(get_blocks_result.blocks[2].block, block2);
 
-    assert_eq!(get_blocks_result.blocks[3].id, Nat::from(3u64));
+    assert_eq!(get_blocks_result.blocks[3].id, Nat::from(3_u64));
     assert_eq!(get_blocks_result.blocks[3].block, block3);
 }
 
@@ -197,39 +197,39 @@ fn test_get_blocks_with_different_ranges() {
         &env,
         canister_id,
         vec![GetBlocksRequest {
-            start: Nat::from(0u64),
-            length: Nat::from(2u64),
+            start: Nat::from(0_u64),
+            length: Nat::from(2_u64),
         }],
     );
     assert_eq!(result.blocks.len(), 2);
-    assert_eq!(result.blocks[0].id, Nat::from(0u64));
-    assert_eq!(result.blocks[1].id, Nat::from(1u64));
+    assert_eq!(result.blocks[0].id, Nat::from(0_u64));
+    assert_eq!(result.blocks[1].id, Nat::from(1_u64));
 
     // Test getting blocks 2-4
     let result = icrc3_get_blocks(
         &env,
         canister_id,
         vec![GetBlocksRequest {
-            start: Nat::from(2u64),
-            length: Nat::from(3u64),
+            start: Nat::from(2_u64),
+            length: Nat::from(3_u64),
         }],
     );
     assert_eq!(result.blocks.len(), 3);
-    assert_eq!(result.blocks[0].id, Nat::from(2u64));
-    assert_eq!(result.blocks[1].id, Nat::from(3u64));
-    assert_eq!(result.blocks[2].id, Nat::from(4u64));
+    assert_eq!(result.blocks[0].id, Nat::from(2_u64));
+    assert_eq!(result.blocks[1].id, Nat::from(3_u64));
+    assert_eq!(result.blocks[2].id, Nat::from(4_u64));
 
     // Test getting non-existent blocks
     let result = icrc3_get_blocks(
         &env,
         canister_id,
         vec![GetBlocksRequest {
-            start: Nat::from(10u64),
-            length: Nat::from(2u64),
+            start: Nat::from(10_u64),
+            length: Nat::from(2_u64),
         }],
     );
     assert_eq!(result.blocks.len(), 0);
-    assert_eq!(result.log_length, Nat::from(5u64));
+    assert_eq!(result.log_length, Nat::from(5_u64));
 }
 
 #[test]
@@ -254,22 +254,22 @@ fn test_get_blocks_with_multiple_requests() {
         canister_id,
         vec![
             GetBlocksRequest {
-                start: Nat::from(0u64),
-                length: Nat::from(2u64),
+                start: Nat::from(0_u64),
+                length: Nat::from(2_u64),
             },
             GetBlocksRequest {
-                start: Nat::from(3u64),
-                length: Nat::from(2u64),
+                start: Nat::from(3_u64),
+                length: Nat::from(2_u64),
             },
         ],
     );
 
     // Should return 4 blocks total (blocks 0, 1, 3, 4)
     assert_eq!(result.blocks.len(), 4);
-    assert_eq!(result.blocks[0].id, Nat::from(0u64));
-    assert_eq!(result.blocks[1].id, Nat::from(1u64));
-    assert_eq!(result.blocks[2].id, Nat::from(3u64));
-    assert_eq!(result.blocks[3].id, Nat::from(4u64));
+    assert_eq!(result.blocks[0].id, Nat::from(0_u64));
+    assert_eq!(result.blocks[1].id, Nat::from(1_u64));
+    assert_eq!(result.blocks[2].id, Nat::from(3_u64));
+    assert_eq!(result.blocks[3].id, Nat::from(4_u64));
 
     // Test multiple requests with overlapping ranges
     let result = icrc3_get_blocks(
@@ -278,24 +278,24 @@ fn test_get_blocks_with_multiple_requests() {
         vec![
             // Request blocks 1, 2, 3
             GetBlocksRequest {
-                start: Nat::from(1u64),
-                length: Nat::from(3u64),
+                start: Nat::from(1_u64),
+                length: Nat::from(3_u64),
             },
             // Request blocks 2, 3
             GetBlocksRequest {
-                start: Nat::from(2u64),
-                length: Nat::from(2u64),
+                start: Nat::from(2_u64),
+                length: Nat::from(2_u64),
             },
         ],
     );
 
     // Should return blocks 1, 2, 3, 2, 3 (two blocks twice)
     assert_eq!(result.blocks.len(), 5);
-    assert_eq!(result.blocks[0].id, Nat::from(1u64));
-    assert_eq!(result.blocks[1].id, Nat::from(2u64));
-    assert_eq!(result.blocks[2].id, Nat::from(3u64));
-    assert_eq!(result.blocks[3].id, Nat::from(2u64));
-    assert_eq!(result.blocks[4].id, Nat::from(3u64));
+    assert_eq!(result.blocks[0].id, Nat::from(1_u64));
+    assert_eq!(result.blocks[1].id, Nat::from(2_u64));
+    assert_eq!(result.blocks[2].id, Nat::from(3_u64));
+    assert_eq!(result.blocks[3].id, Nat::from(2_u64));
+    assert_eq!(result.blocks[4].id, Nat::from(3_u64));
 }
 
 #[test]
@@ -305,7 +305,7 @@ fn test_get_blocks_empty_request() {
     // Test getting blocks when no blocks exist
     let result = icrc3_get_blocks(&env, canister_id, vec![]);
     assert_eq!(result.blocks.len(), 0);
-    assert_eq!(result.log_length, Nat::from(0u64));
+    assert_eq!(result.log_length, Nat::from(0_u64));
 
     // Add a block
     let block = BlockBuilder::new(0, 1000)
@@ -316,7 +316,7 @@ fn test_get_blocks_empty_request() {
     // Test empty request with blocks present
     let result = icrc3_get_blocks(&env, canister_id, vec![]);
     assert_eq!(result.blocks.len(), 0);
-    assert_eq!(result.log_length, Nat::from(1u64));
+    assert_eq!(result.log_length, Nat::from(1_u64));
 }
 
 #[test]
@@ -334,12 +334,12 @@ fn test_get_blocks_zero_length() {
         &env,
         canister_id,
         vec![GetBlocksRequest {
-            start: Nat::from(0u64),
-            length: Nat::from(0u64),
+            start: Nat::from(0_u64),
+            length: Nat::from(0_u64),
         }],
     );
     assert_eq!(result.blocks.len(), 0);
-    assert_eq!(result.log_length, Nat::from(1u64));
+    assert_eq!(result.log_length, Nat::from(1_u64));
 }
 
 #[test]
@@ -375,15 +375,15 @@ fn test_add_complex_block() {
 
     // Add the complex block
     let result = add_block(&env, canister_id, &complex_block).expect("Failed to add complex block");
-    assert_eq!(result, Nat::from(0u64));
+    assert_eq!(result, Nat::from(0_u64));
 
     // Retrieve and verify the complex block
     let get_result = icrc3_get_blocks(
         &env,
         canister_id,
         vec![GetBlocksRequest {
-            start: Nat::from(0u64),
-            length: Nat::from(1u64),
+            start: Nat::from(0_u64),
+            length: Nat::from(1_u64),
         }],
     );
 
@@ -515,13 +515,13 @@ fn test_icrc3_get_tip_certificate() {
 
     // Add block and check if it is reflected in the certificate.
     let result0 = add_block(&env, canister_id, &block0).expect("Failed to add block 0");
-    assert_eq!(result0, Nat::from(0u64));
+    assert_eq!(result0, Nat::from(0_u64));
     let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
     check_tip_certificate(cert, canister_id, Some((0, block0.clone().hash().to_vec())));
 
     // Add another block and check if it is reflected in the certificate.
     let result1 = add_block(&env, canister_id, &block1).expect("Failed to add block 1");
-    assert_eq!(result1, Nat::from(1u64));
+    assert_eq!(result1, Nat::from(1_u64));
     let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
     check_tip_certificate(cert, canister_id, Some((1, block1.clone().hash().to_vec())));
 }
@@ -650,7 +650,7 @@ fn test_archiving() {
         env.advance_time(Duration::from_secs(60));
         env.tick();
         let balance = balance_of(&env, index, TEST_ACCOUNT_1);
-        assert_eq!(balance, 2u64.pow(NUM_BLOCKS) - 1);
+        assert_eq!(balance, 2_u64.pow(NUM_BLOCKS) - 1);
     };
 
     test_blocks_with_index();
@@ -711,7 +711,7 @@ fn test_archiving_all_blocks() {
     env.advance_time(Duration::from_secs(60));
     env.tick();
     let balance = balance_of(&env, index, TEST_ACCOUNT_1);
-    assert_eq!(balance, 2u64.pow(NUM_BLOCKS as u32) - 1);
+    assert_eq!(balance, 2_u64.pow(NUM_BLOCKS as u32) - 1);
 
     let block = BlockBuilder::new(NUM_BLOCKS, NUM_BLOCKS)
         .mint(TEST_ACCOUNT_1, Tokens::from(2_u64.pow(NUM_BLOCKS as u32)))
@@ -722,7 +722,7 @@ fn test_archiving_all_blocks() {
     env.advance_time(Duration::from_secs(60));
     env.tick();
     let balance = balance_of(&env, index, TEST_ACCOUNT_1);
-    assert_eq!(balance, 2u64.pow((NUM_BLOCKS + 1) as u32) - 1);
+    assert_eq!(balance, 2_u64.pow((NUM_BLOCKS + 1) as u32) - 1);
 
     let blocks = get_blocks(&env, ledger_id, &blocks_req);
     assert_eq!(blocks.first_index, NUM_BLOCKS);

@@ -107,6 +107,7 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, RoutingTable, routing_table_insert_subnet,
 };
@@ -457,6 +458,7 @@ fn add_subnet_local_registry_records(
     registry_version: RegistryVersion,
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
+    resource_limits: ResourceLimits,
 ) {
     for node in nodes {
         let node_record = NodeRecord {
@@ -570,6 +572,7 @@ fn add_subnet_local_registry_records(
         .with_features(features)
         .with_cost_schedule(cost_schedule)
         .with_subnet_admins(subnet_admins)
+        .with_resource_limits(resource_limits)
         .build();
 
     // Insert initial DKG transcripts
@@ -1289,6 +1292,7 @@ pub struct StateMachineBuilder {
     create_at_registry_version: Option<RegistryVersion>,
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
+    resource_limits: ResourceLimits,
     flexible_ordering: bool,
 }
 
@@ -1331,6 +1335,7 @@ impl StateMachineBuilder {
             create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: vec![],
+            resource_limits: Default::default(),
             flexible_ordering: false,
         }
     }
@@ -1571,6 +1576,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_resource_limits(self, resource_limits: ResourceLimits) -> Self {
+        Self {
+            resource_limits,
+            ..self
+        }
+    }
+
     /// Enable flexible message ordering (scheduler_cores=1, one message per round).
     pub fn with_flexible_ordering(self) -> Self {
         Self {
@@ -1624,6 +1636,7 @@ impl StateMachineBuilder {
             self.create_at_registry_version,
             self.cost_schedule,
             self.subnet_admins,
+            self.resource_limits,
             self.flexible_ordering,
         )
     }
@@ -1993,6 +2006,7 @@ impl StateMachine {
         create_at_registry_version: Option<RegistryVersion>,
         cost_schedule: CanisterCyclesCostSchedule,
         subnet_admins: Vec<PrincipalId>,
+        resource_limits: ResourceLimits,
         flexible_ordering: bool,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
@@ -2088,6 +2102,7 @@ impl StateMachine {
                 create_registry_version,
                 cost_schedule,
                 subnet_admins,
+                resource_limits,
             );
         }
 
@@ -3807,6 +3822,7 @@ impl StateMachine {
         let chain_keys_enabled_status = Default::default();
         let cost_schedule = CanisterCyclesCostSchedule::Normal;
         let subnet_admins = vec![];
+        let resource_limits = Default::default();
 
         add_subnet_local_registry_records(
             subnet_id,
@@ -3820,6 +3836,7 @@ impl StateMachine {
             next_version,
             cost_schedule,
             subnet_admins,
+            resource_limits,
         );
     }
 
@@ -5132,7 +5149,7 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory;
 
-        let mut dst = vec![0u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
+        let mut dst = vec![0_u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
         let buffer = Buffer::new(memory.page_map.clone());
         buffer.read(&mut dst, 0);
         dst

@@ -1011,6 +1011,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             .unwrap();
 
         env.set_checkpoints_enabled(true);
+        // With checkpoints enabled, the update call will be aborted.
         let long_execution_id = env.send_ingress(
             user_id,
             aborted_canister_id,
@@ -1020,12 +1021,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 .reply_data(&[42])
                 .build(),
         );
-
-        for _ in 0..5 {
-            // With checkpoints enabled, the update message will be repeatedly
-            // aborted, so there will be no progress.
-            env.tick();
-        }
 
         let (method, args) = f(aborted_canister_id);
         if method == Method::DeleteCanisterSnapshot
@@ -1067,7 +1062,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         let subnet_message_id =
             env.send_ingress(user_id, other_canister_id, "update", subnet_message);
 
-        for _ in 0..5 {
+        // Need 2 rounds for the response to the subnet message to be inducted.
+        for _ in 0..2 {
             env.tick();
         }
 
@@ -2275,7 +2271,7 @@ fn dts_heartbeat_works() {
     let base_canister_version = get_canister_version(&env, canister_id);
     assert_eq!(3, base_canister_version);
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();
@@ -2319,7 +2315,7 @@ fn dts_heartbeat_resume_after_abort() {
         .execute_ingress(canister_id, "update", set_heartbeat)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2381,7 +2377,7 @@ fn dts_heartbeat_with_trap() {
         .execute_ingress(canister_id, "update", set_heartbeat)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2425,7 +2421,7 @@ fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
         .execute_ingress(canister_id, "update", set_heartbeat)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();
@@ -2469,7 +2465,7 @@ fn dts_heartbeat_does_not_prevent_upgrade() {
         .execute_ingress(canister_id, "update", set_heartbeat)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();
@@ -2521,7 +2517,7 @@ fn dts_global_timer_one_shot_works() {
         .execute_ingress(canister_id, "update", set_heartbeat_and_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2586,7 +2582,7 @@ fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
         .execute_ingress(canister_id, "update", set_heartbeat_and_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2663,7 +2659,7 @@ fn dts_global_timer_resume_after_abort() {
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     env.set_checkpoints_enabled(true);
 
@@ -2713,7 +2709,7 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();
@@ -2768,7 +2764,7 @@ fn dts_global_timer_with_trap() {
         .execute_ingress(canister_id, "update", set_heartbeat_and_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2816,7 +2812,7 @@ fn dts_global_timer_does_not_prevent_upgrade() {
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();

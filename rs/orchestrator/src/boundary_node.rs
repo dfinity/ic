@@ -9,15 +9,16 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{NodeId, ReplicaVersion};
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    ffi::OsString,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
 struct BoundaryNodeProcess {
     version: ReplicaVersion,
-    binary: String,
-    args: Vec<String>,
-    env: HashMap<String, String>,
+    binary: PathBuf,
+    args: Vec<OsString>,
+    env: HashMap<OsString, OsString>,
 }
 
 impl Process for BoundaryNodeProcess {
@@ -29,15 +30,15 @@ impl Process for BoundaryNodeProcess {
         &self.version
     }
 
-    fn get_binary(&self) -> &str {
+    fn get_binary(&self) -> &Path {
         &self.binary
     }
 
-    fn get_args(&self) -> &[String] {
+    fn get_args(&self) -> &[OsString] {
         &self.args
     }
 
-    fn get_env(&self) -> HashMap<String, String> {
+    fn get_env(&self) -> HashMap<OsString, OsString> {
         self.env.clone()
     }
 }
@@ -153,29 +154,34 @@ impl BoundaryNodeManager {
         }
         info!(self.logger, "Starting new boundary node process");
 
-        let binary = self
-            .ic_binary_dir
-            .join("ic-boundary")
-            .as_path()
-            .display()
-            .to_string();
+        let binary = self.ic_binary_dir.join("ic-boundary");
 
         let domain_name = self
             .domain_name
             .as_ref()
             .ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id))?;
 
-        let env = env_file_reader::read_file("/opt/ic/share/ic-boundary.env").map_err(|e| {
-            OrchestratorError::IoError("unable to read ic-boundary environment variables".into(), e)
-        })?;
+        let env = match env_file_reader::read_file("/opt/ic/share/ic-boundary.env") {
+            Ok(env) => env
+                .into_iter()
+                .map(|(k, v)| (OsString::from(k), OsString::from(v)))
+                .collect(),
+            Err(e) => {
+                return Err(OrchestratorError::IoError(
+                    "unable to read ic-boundary environment variables".to_string(),
+                    e,
+                ));
+            }
+        };
 
         let args = vec![
-            format!("--tls-hostname={}", domain_name),
+            format!("--tls-hostname={}", domain_name).into(),
             format!(
                 "--crypto-config={}",
                 serde_json::to_string(&self.crypto_config)
                     .map_err(OrchestratorError::SerializeCryptoConfigError)?
-            ),
+            )
+            .into(),
         ];
 
         process
