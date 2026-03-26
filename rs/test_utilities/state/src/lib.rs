@@ -31,18 +31,18 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
-    SubnetId, Time,
-    batch::{CanisterCyclesCostSchedule, RawQueryStats},
+    CanisterId, ComputeAllocation, MemoryAllocation, NodeId, NumBytes, PrincipalId, SubnetId, Time,
+    batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
     methods::{Callback, WasmClosure},
-    nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
+};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -59,6 +59,7 @@ pub use history::MockIngressHistory;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
 
 /// Valid, but minimal wasm code.
 const EMPTY_WASM: &[u8] = &[
@@ -229,6 +230,7 @@ pub struct CanisterStateBuilder {
     time_of_last_allocation_charge: Time,
     certified_data: Vec<u8>,
     log_visibility: LogVisibilityV2,
+    log_memory_limit: usize,
 }
 
 impl CanisterStateBuilder {
@@ -322,6 +324,11 @@ impl CanisterStateBuilder {
         self
     }
 
+    pub fn with_log_memory_limit(mut self, log_memory_limit: usize) -> Self {
+        self.log_memory_limit = log_memory_limit;
+        self
+    }
+
     pub fn build(self) -> CanisterState {
         let mut system_state = match self.status {
             CanisterStatusType::Running => SystemState::new_running_for_testing(
@@ -348,6 +355,10 @@ impl CanisterStateBuilder {
         system_state.compute_allocation = self.compute_allocation;
         system_state.certified_data = self.certified_data;
         system_state.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
+        // Allocate log memory store according to log_memory_limit.
+        system_state
+            .log_memory_store
+            .resize_for_testing(self.log_memory_limit);
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
@@ -414,6 +425,7 @@ impl Default for CanisterStateBuilder {
             time_of_last_allocation_charge: UNIX_EPOCH,
             certified_data: vec![],
             log_visibility: Default::default(),
+            log_memory_limit: TEST_DEFAULT_LOG_MEMORY_LIMIT,
         }
     }
 }
@@ -976,8 +988,8 @@ prop_compose! {
     /// count values for extracting a slice from the stream.
     pub fn arb_stream_slice(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
         stream in arb_stream(min_size, max_size, min_signal_count, max_signal_count),
-        from_percent in -20..120i64,
-        percent_above_min_size in 0..120i64,
+        from_percent in -20..120_i64,
+        percent_above_min_size in 0..120_i64,
     ) ->  (Stream, StreamIndex, usize) {
         let from_percent = from_percent.clamp(0, 100) as usize;
         let percent_above_min_size = percent_above_min_size.clamp(0, 100) as usize;
@@ -996,8 +1008,8 @@ prop_compose! {
         max_signal_count: usize,
         with_reject_reasons: Vec<RejectReason>,
     )(
-        msg_start in 0..10000u64,
-        msg_len in 0..10000u64,
+        msg_start in 0..10000_u64,
+        msg_len in 0..10000_u64,
         (_signals_begin, signals_end, reject_signals) in arb_stream_signals(
             0..=10000,
             min_signal_count..=max_signal_count,
@@ -1058,7 +1070,7 @@ prop_compose! {
 
 prop_compose! {
     pub(crate) fn arb_nominal_cycles()(cycles in any::<u64>()) -> NominalCycles {
-        NominalCycles::from(cycles as u128)
+        NominalCycles::new(cycles as u128)
     }
 }
 

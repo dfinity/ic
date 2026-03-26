@@ -125,6 +125,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         chain_key_config: None,
         canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         subnet_admins: vec![],
+        resource_limits: None,
         recalled_replica_version_ids: vec![],
     }
 }
@@ -339,6 +340,7 @@ pub fn setup_test_router(
         &cli,
         &metrics_registry,
         enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
+        None,
         salt,
         proxy_router,
     );

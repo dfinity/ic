@@ -26,10 +26,12 @@ ic-management-canister-types-private = { path = "../types/management_canister_ty
 ic-metrics = { path = "../monitoring/metrics" }
 ic-query-stats = { path = "../query_stats" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-resource-limits = { path = "../registry/resource_limits" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
 ic-sys = { path = "../sys" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }

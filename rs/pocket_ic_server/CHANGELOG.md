@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 13.0.0 - 2026-03-23
+
 ### Added
 - The endpoint `/instances/` takes an additional optional field `mainnet_nns_subnet_id` specifying that the NNS subnet should be created with the mainnet NNS subnet ID.
 - The CLI option `--hard-ttl` to specify that the PocketIC server should perform a hard exit after the provided number of seconds since its launch.
@@ -18,7 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   takes a new optional field `domain_custom_provider_local_file` specifying a path to a local file that maps custom domain names to canister IDs.
   The file format is one mapping per line: `<domain>:<canister-id>` (e.g., `my-app.example.com:rdmx6-jaaaa-aaaaa-aaadq-cai`).
 - A new cloud engine subnet kind: a new variant in `SubnetKind` and a new field in `SubnetConfigSet` and `ExtendedSubnetConfigSet`.
-- A new optional field to specify subnet admins in `SubnetSpec` and `SubnetConfig`. The field can only be set for cloud engines!
+- A new optional field to specify subnet admins in `SubnetSpec` and `SubnetConfig`.
+  The field can only be set for application subnets and cloud engines on a "free" cost schedule (see below)!
+- A new field to specify subnet cost schedule in `SubnetSpec` and `SubnetConfig`.
+  The field can only be set to a non-default value for application subnets and cloud engines!
+  Moreover, the field has to be set to the "free" cost schedule on cloud engines!
 
 ### Changed
 - All subnets with mainnet canister ranges but the NNS subnet are always created with mainnet subnet IDs.

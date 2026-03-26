@@ -1,6 +1,7 @@
 use crate::HostSevCertificateProvider;
 use crate::firmware::MockSevHostFirmware;
 use anyhow::Result;
+use sev::Generation;
 use sev::firmware::host::{Identifier, SnpPlatformStatus, TcbVersion};
 use tempfile::TempDir;
 
@@ -28,6 +29,7 @@ pub fn mock_host_sev_certificate_provider() -> Result<(HostSevCertificateProvide
         HostSevCertificateProvider::new_for_test(
             dir.path().to_path_buf(),
             Box::new(mock_sev_host_firmware()),
+            Generation::Milan,
         ),
         dir,
     ))

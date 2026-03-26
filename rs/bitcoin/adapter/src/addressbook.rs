@@ -190,7 +190,7 @@ impl AddressBook {
                 max_amount: MAX_ADDR_MESSAGE_SIZE,
             });
         }
-        let mut added_addresses = 0u32;
+        let mut added_addresses = 0_u32;
         for (_, address) in addresses {
             if self.has_max_address() {
                 break;

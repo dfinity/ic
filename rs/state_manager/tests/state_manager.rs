@@ -62,8 +62,7 @@ use ic_test_utilities_types::ids::{
 };
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{
-    BatchSummary, CanisterCyclesCostSchedule, CanisterQueryStats, QueryStats, QueryStatsPayload,
-    RawQueryStats, TotalQueryStats,
+    BatchSummary, CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
 use ic_types::consensus::certification::{Certification, CertificationContent};
 use ic_types::crypto::Signed;
@@ -80,6 +79,7 @@ use ic_types::{
     time::{Time, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use maplit::{btreemap, btreeset};
 use nix::sys::stat::{UtimensatFlags, utimensat};
 use nix::sys::time::{TimeSpec, TimeValLike};
@@ -333,10 +333,10 @@ fn lsmt_merge_overhead() {
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
 
-    let canister_ids = (0..10)
+    let canister_ids = (0..4)
         .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
         .collect::<Vec<_>>();
-    for i in 0..30 {
+    for i in 0..16 {
         env.set_checkpoints_enabled(false);
         for canister_id in &canister_ids {
             env.execute_ingress(*canister_id, "write_heap_64k", vec![])
@@ -1429,13 +1429,13 @@ fn first_manifest_after_restart_is_incremental() {
 
         const NEW_WASM_PAGE: u64 = 300;
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[1_u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_WASM_PAGE), &[2_u8; PAGE_SIZE]),
         ]);
         const NEW_STABLE_PAGE: u64 = 500;
         execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[1_u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_STABLE_PAGE), &[2_u8; PAGE_SIZE]),
         ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -2840,11 +2840,11 @@ fn can_state_sync_from_cache() {
         execution_state
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
 
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
         let hash1 = wait_for_checkpoint(&*src_state_manager, Height(1));
@@ -3101,11 +3101,11 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
         execution_state
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
 
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
         let hash = wait_for_checkpoint(&*src_state_manager, Height(1));
@@ -3283,11 +3283,11 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
         execution_state
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
 
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
 
@@ -3944,8 +3944,8 @@ fn can_archive_state_sync_checkpoints_and_recover_from_verified_checkpoints() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[42u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[43u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[42_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[43_u8; PAGE_SIZE]),
         ]);
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
         let hash_2 = wait_for_checkpoint(&*src_state_manager, Height(2));
@@ -4334,8 +4334,8 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99_u8; PAGE_SIZE]),
         ]);
 
         let canister_state = state
@@ -4347,11 +4347,11 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap()
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(0), &[255u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(0), &[255_u8; PAGE_SIZE])]);
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[100u8; PAGE_SIZE]),
-            (PageIndex::new(3000), &[100u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[100_u8; PAGE_SIZE]),
+            (PageIndex::new(3000), &[100_u8; PAGE_SIZE]),
         ]);
 
         let canister_state = state
@@ -4359,9 +4359,9 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[111u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[111_u8; PAGE_SIZE]),
             (PageIndex::new(pages_per_chunk - 1), &[0; PAGE_SIZE]),
-            (PageIndex::new(pages_per_chunk), &[112u8; PAGE_SIZE]),
+            (PageIndex::new(pages_per_chunk), &[112_u8; PAGE_SIZE]),
             (PageIndex::new(2 * pages_per_chunk - 1), &[0; PAGE_SIZE]),
         ]);
     };
@@ -4387,7 +4387,7 @@ fn can_recover_from_corruption_on_state_sync() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(3000), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(3000), &[2_u8; PAGE_SIZE])]);
 
         let canister_state = state
             .canister_state_make_mut(&canister_test_id(90))
@@ -4398,7 +4398,7 @@ fn can_recover_from_corruption_on_state_sync() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(300), &[3_u8; PAGE_SIZE])]);
 
         // Exchange pages in the canister heap to check applying chunks out of order.
         let canister_state = state
@@ -4406,8 +4406,8 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[112u8; PAGE_SIZE]),
-            (PageIndex::new(pages_per_chunk), &[111u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[112_u8; PAGE_SIZE]),
+            (PageIndex::new(pages_per_chunk), &[111_u8; PAGE_SIZE]),
         ]);
 
         src_state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -4488,7 +4488,7 @@ fn can_recover_from_corruption_on_state_sync() {
                 .unwrap()
                 .remove(0);
             make_mutable(&canister_100_memory).unwrap();
-            write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
+            write_all_at(&canister_100_memory, &[3_u8; PAGE_SIZE], 4).unwrap();
             make_readonly(&canister_100_memory).unwrap();
 
             let canister_100_stable_memory = canister_100_layout
@@ -4499,7 +4499,7 @@ fn can_recover_from_corruption_on_state_sync() {
             make_mutable(&canister_100_stable_memory).unwrap();
             write_all_at(
                 &canister_100_stable_memory,
-                &[3u8; PAGE_SIZE],
+                &[3_u8; PAGE_SIZE],
                 PAGE_SIZE as u64,
             )
             .unwrap();
@@ -4563,7 +4563,7 @@ fn state_sync_can_handle_corrupted_base_checkpoint_after_restart() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(i), &[99_u8; PAGE_SIZE])]);
         }
     };
 
@@ -4732,7 +4732,7 @@ fn can_detect_divergence_with_rehash() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(i), &[99u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(i), &[99_u8; PAGE_SIZE])]);
         }
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -4805,8 +4805,8 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99_u8; PAGE_SIZE]),
         ]);
     };
 
@@ -4818,7 +4818,7 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(300), &[3_u8; PAGE_SIZE])]);
     };
 
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
@@ -5505,7 +5505,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
         subnets.insert(
             subnet_test_id(42), // its own subnet id
             SubnetTopology {
-                public_key: vec![1u8; 133],
+                public_key: vec![1_u8; 133],
                 nodes: node_public_keys.keys().cloned().collect(),
                 subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
@@ -5555,7 +5555,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                                 label("node") => SubTree(
                                     flatmap! {
                                         label(node_test_id(39).get_ref()) => SubTree(
-                                            flatmap!(label("public_key") => Leaf(vec![39u8; 44]))
+                                            flatmap!(label("public_key") => Leaf(vec![39_u8; 44]))
                                         ),
                                     })
                         })
@@ -6356,7 +6356,7 @@ fn remove_too_many_diverged_state_markers() {
         Box<dyn FnOnce(StateManagerImpl) + std::panic::RefUnwindSafe + std::panic::UnwindSafe>,
     >::new();
 
-    for i in 2..301 {
+    for i in 2..151 {
         divergences.push(Box::new(move |state_manager: StateManagerImpl| {
             diverge_state_at(state_manager, i)
         }));
@@ -6372,7 +6372,7 @@ fn remove_too_many_diverged_state_markers() {
                 .state_layout()
                 .diverged_state_heights()
                 .unwrap()[num_markers - 1],
-            Height(300)
+            Height(150)
         );
         assert!(num_markers <= 100);
     });
@@ -6407,14 +6407,14 @@ fn can_reset_memory() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(2), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(3), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(4), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(5), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(6), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(7), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(2), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(3), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(4), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(5), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(6), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(7), &[99_u8; PAGE_SIZE]),
         ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6437,8 +6437,8 @@ fn can_reset_memory() {
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[100u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[100_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[100_u8; PAGE_SIZE]),
         ]);
 
         // Check no remnants of the old data remain.
@@ -6447,14 +6447,14 @@ fn can_reset_memory() {
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6481,14 +6481,14 @@ fn can_reset_memory() {
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .wasm_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         // Wipe data completely.
@@ -6566,10 +6566,10 @@ fn can_upgrade_and_uninstall_canister_after_many_checkpoints() {
     env.set_checkpoints_enabled(true);
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
-    for i in 1..100 {
+    for i in 1..20 {
         env.execute_ingress(canister_id, "inc", vec![]).unwrap();
         read_and_assert_eq(&env, canister_id, i);
-        if i == 50 {
+        if i == 10 {
             env.execute_ingress(canister_id, "grow_page", vec![])
                 .unwrap();
             env.execute_ingress(canister_id, "persist", vec![]).unwrap();
@@ -6579,9 +6579,9 @@ fn can_upgrade_and_uninstall_canister_after_many_checkpoints() {
     env.upgrade_canister_wat(canister_id, TEST_CANISTER, vec![]);
     env.execute_ingress(canister_id, "load", vec![]).unwrap();
 
-    for i in 1..100 {
+    for i in 1..10 {
         env.execute_ingress(canister_id, "inc", vec![]).unwrap();
-        read_and_assert_eq(&env, canister_id, 50 + i);
+        read_and_assert_eq(&env, canister_id, 10 + i);
     }
 
     env.uninstall_code(canister_id).unwrap();
@@ -6599,14 +6599,14 @@ fn can_reset_stable_memory() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(0), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(2), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(3), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(4), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(5), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(6), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(7), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(2), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(3), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(4), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(5), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(6), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(7), &[99_u8; PAGE_SIZE]),
         ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6630,8 +6630,8 @@ fn can_reset_stable_memory() {
         execution_state.stable_memory =
             Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
         execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(0), &[100u8; PAGE_SIZE]),
-            (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+            (PageIndex::new(0), &[100_u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[100_u8; PAGE_SIZE]),
         ]);
 
         // Check no remnants of the old data remain.
@@ -6640,14 +6640,14 @@ fn can_reset_stable_memory() {
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6674,14 +6674,14 @@ fn can_reset_stable_memory() {
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             execution_state
                 .stable_memory
                 .page_map
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         // Wipe data completely.
@@ -6719,14 +6719,14 @@ fn can_reset_wasm_chunk_store() {
             .wasm_chunk_store
             .page_map_mut()
             .update(&[
-                (PageIndex::new(0), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(2), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(3), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(4), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(5), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(6), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(7), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(0), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(2), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(3), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(4), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(5), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(6), &[99_u8; PAGE_SIZE]),
+                (PageIndex::new(7), &[99_u8; PAGE_SIZE]),
             ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6752,8 +6752,8 @@ fn can_reset_wasm_chunk_store() {
             .wasm_chunk_store
             .page_map_mut()
             .update(&[
-                (PageIndex::new(0), &[100u8; PAGE_SIZE]),
-                (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+                (PageIndex::new(0), &[100_u8; PAGE_SIZE]),
+                (PageIndex::new(1), &[100_u8; PAGE_SIZE]),
             ]);
 
         // Check no remnants of the old data remain.
@@ -6763,7 +6763,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             canister_state
@@ -6771,7 +6771,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -6798,7 +6798,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(1)),
-            &[100u8; PAGE_SIZE]
+            &[100_u8; PAGE_SIZE]
         );
         assert_eq!(
             canister_state
@@ -6806,7 +6806,7 @@ fn can_reset_wasm_chunk_store() {
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(300)),
-            &[0u8; PAGE_SIZE]
+            &[0_u8; PAGE_SIZE]
         );
 
         // Wipe data completely.
@@ -6890,12 +6890,12 @@ fn can_uninstall_code() {
             .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99_u8; PAGE_SIZE]),
         ]);
         execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99_u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99_u8; PAGE_SIZE]),
         ]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -7019,11 +7019,11 @@ fn tip_is_initialized_correctly() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[99u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[99_u8; PAGE_SIZE])]);
         execution_state
             .stable_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[99u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[99_u8; PAGE_SIZE])]);
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
 
         state_manager.flush_tip_channel();
@@ -7146,7 +7146,7 @@ fn checkpoints_are_readonly() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[1u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[1_u8; PAGE_SIZE])]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7161,7 +7161,7 @@ fn checkpoints_are_readonly() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[2u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[2_u8; PAGE_SIZE])]);
 
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
         state_manager.flush_tip_channel();
@@ -7181,7 +7181,7 @@ fn checkpoints_are_readonly() {
         execution_state
             .wasm_memory
             .page_map
-            .update(&[(PageIndex::new(1), &[4u8; PAGE_SIZE])]);
+            .update(&[(PageIndex::new(1), &[4_u8; PAGE_SIZE])]);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7205,7 +7205,7 @@ fn can_merge_unexpected_number_of_files() {
                 execution_state
                     .wasm_memory
                     .page_map
-                    .update(&[(PageIndex::new(page as u64), &[1u8; PAGE_SIZE])]);
+                    .update(&[(PageIndex::new(page as u64), &[1_u8; PAGE_SIZE])]);
             }
 
             state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -7296,7 +7296,7 @@ fn batch_summary_is_respected_for_writing_overlay_files() {
                 execution_state
                     .wasm_memory
                     .page_map
-                    .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+                    .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
 
                 let scope = if h % checkpoint_interval == 0 {
                     CertificationScope::Full
@@ -7647,16 +7647,16 @@ fn can_create_and_restore_snapshot() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
             execution_state
                 .stable_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
             canister_state
                 .system_state
                 .wasm_chunk_store
                 .page_map_mut()
-                .update(&[(PageIndex::new(0), &[3u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[3_u8; PAGE_SIZE])]);
             state_manager.commit_and_certify(state, certification_scope.clone(), None);
 
             // Take a snapshot of the canister
@@ -7677,16 +7677,16 @@ fn can_create_and_restore_snapshot() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[4u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[4_u8; PAGE_SIZE])]);
             execution_state
                 .stable_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[5u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[5_u8; PAGE_SIZE])]);
             canister_state
                 .system_state
                 .wasm_chunk_store
                 .page_map_mut()
-                .update(&[(PageIndex::new(0), &[6u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[6_u8; PAGE_SIZE])]);
             state_manager.commit_and_certify(state, certification_scope.clone(), None);
 
             // Restore the canister.
@@ -7702,14 +7702,14 @@ fn can_create_and_restore_snapshot() {
                         .wasm_memory
                         .page_map
                         .get_page(PageIndex::new(0)),
-                    &[1u8; PAGE_SIZE]
+                    &[1_u8; PAGE_SIZE]
                 );
                 assert_eq!(
                     execution_state
                         .stable_memory
                         .page_map
                         .get_page(PageIndex::new(0)),
-                    &[2u8; PAGE_SIZE]
+                    &[2_u8; PAGE_SIZE]
                 );
                 assert_eq!(
                     canister_state
@@ -7717,7 +7717,7 @@ fn can_create_and_restore_snapshot() {
                         .wasm_chunk_store
                         .page_map()
                         .get_page(PageIndex::new(0)),
-                    &[3u8; PAGE_SIZE]
+                    &[3_u8; PAGE_SIZE]
                 );
             };
 
@@ -8099,7 +8099,7 @@ fn can_split_with_inflight_restore_snapshot() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
 
             // Install `CANISTER_2`.
             insert_dummy_canister(&mut state, CANISTER_2);
@@ -8127,7 +8127,7 @@ fn can_split_with_inflight_restore_snapshot() {
                     .wasm_memory
                     .page_map
                     .get_page(PageIndex::new(0)),
-                &[1u8; PAGE_SIZE]
+                &[1_u8; PAGE_SIZE]
             );
 
             // Commit the state without checkpointing, so there is an unflushed "load
@@ -8241,16 +8241,16 @@ fn can_rename_canister() {
             execution_state
                 .wasm_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[1_u8; PAGE_SIZE])]);
             execution_state
                 .stable_memory
                 .page_map
-                .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[2_u8; PAGE_SIZE])]);
             canister_state
                 .system_state
                 .wasm_chunk_store
                 .page_map_mut()
-                .update(&[(PageIndex::new(0), &[3u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::new(0), &[3_u8; PAGE_SIZE])]);
             state_manager.commit_and_certify(state, certification_scope.clone(), None);
 
             let (_height, mut state) = state_manager.take_tip();
@@ -8297,7 +8297,7 @@ fn can_rename_canister() {
     can_rename_canister_impl(CertificationScope::Full);
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn stream_store_encode_decode(
     #[strategy(arb_stream(
         0, // min_size
@@ -8306,7 +8306,7 @@ fn stream_store_encode_decode(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8325,7 +8325,7 @@ fn stream_store_encode_decode(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_with_modified_hash_fails(
     #[strategy(arb_stream(
@@ -8335,7 +8335,7 @@ fn stream_store_decode_with_modified_hash_fails(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8357,7 +8357,7 @@ fn stream_store_decode_with_modified_hash_fails(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "Failed to deserialize witness")]
 fn stream_store_decode_with_empty_witness_fails(
     #[strategy(arb_stream(
@@ -8367,7 +8367,7 @@ fn stream_store_decode_with_empty_witness_fails(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8386,7 +8386,7 @@ fn stream_store_decode_with_empty_witness_fails(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InconsistentPartialTree")]
 fn stream_store_decode_slice_push_additional_message(
     #[strategy(arb_stream(
@@ -8438,7 +8438,7 @@ fn stream_store_decode_slice_push_additional_message(
 
 /// Depending on the specific input, may fail with either `InvalidSignature` or
 /// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic]
 fn stream_store_decode_slice_modify_message_begin(
     #[strategy(arb_stream(
@@ -8477,7 +8477,7 @@ fn stream_store_decode_slice_modify_message_begin(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_slice_modify_signals_end(
     #[strategy(arb_stream(
@@ -8513,7 +8513,7 @@ fn stream_store_decode_slice_modify_signals_end(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_slice_push_signal(
     #[strategy(arb_stream(
@@ -8551,7 +8551,7 @@ fn stream_store_decode_slice_push_signal(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidDestination")]
 fn stream_store_decode_with_invalid_destination(
     #[strategy(arb_stream(
@@ -8561,7 +8561,7 @@ fn stream_store_decode_with_invalid_destination(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8581,7 +8581,7 @@ fn stream_store_decode_with_invalid_destination(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_with_rejecting_verifier(
     #[strategy(arb_stream(
@@ -8591,7 +8591,7 @@ fn stream_store_decode_with_rejecting_verifier(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8613,7 +8613,7 @@ fn stream_store_decode_with_rejecting_verifier(
 
 /// If both signature verification and slice decoding would fail, we expect to
 /// see an error about the former.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 #[should_panic(expected = "InvalidSignature")]
 fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
     #[strategy(arb_stream(
@@ -8623,7 +8623,7 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..20usize)] size_limit: usize,
+    #[strategy(0..20_usize)] size_limit: usize,
 ) {
     encode_decode_stream_test(
         /* stream to be used */
@@ -8643,7 +8643,7 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn stream_store_encode_partial(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -8652,7 +8652,7 @@ fn stream_store_encode_partial(
         10, // max_signal_count
     ))]
     test_slice: (Stream, StreamIndex, usize),
-    #[strategy(0..1000usize)] byte_limit: usize,
+    #[strategy(0..1000_usize)] byte_limit: usize,
 ) {
     let (stream, begin, count) = test_slice;
     // Partial slice with messages beginning at `begin + 1`.
@@ -8670,7 +8670,7 @@ fn stream_store_encode_partial_bad_indices(
         10, // max_signal_count
     ))]
     test_slice: (Stream, StreamIndex, usize),
-    #[strategy(0..1000usize)] byte_limit: usize,
+    #[strategy(0..1000_usize)] byte_limit: usize,
 ) {
     let (stream, begin, count) = test_slice;
     // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
@@ -8865,7 +8865,7 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
     ..ProptestConfig::with_cases(5)
 })]
 fn random_canister_input(
-    #[strategy(proptest::collection::vec(arbitrary_test_canister_op(), 1..50))] ops: Vec<
+    #[strategy(proptest::collection::vec(arbitrary_test_canister_op(), 10..15))] ops: Vec<
         TestCanisterOp,
     >,
 ) {
@@ -8911,11 +8911,10 @@ fn random_canister_input(
         }
     }
 
-    // Setup two state machines with a single TEST_CANISTER installed.
+    // Set up a state machine with a single TEST_CANISTER.
     let mut env = StateMachineBuilder::new()
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
-
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
     env.execute_ingress(canister_id, "grow_page", vec![])

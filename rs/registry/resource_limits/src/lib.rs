@@ -1,0 +1,38 @@
+//! This crate contains types used both as registry canister API types
+//! and internal replica implementation types.
+
+use candid::CandidType;
+use ic_protobuf::registry::subnet::v1 as pb;
+use ic_types::NumBytes;
+use serde::{Deserialize, Serialize};
+
+/// Limits on resource consumption (e.g., memory usage).
+#[derive(CandidType, Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
+pub struct ResourceLimits {
+    /// The maximum size of the (replicated) state in bytes.
+    /// This is a hard limit, i.e., messages that attempt to increase the state size
+    /// beyond the limit fail.
+    pub maximum_state_size: Option<NumBytes>,
+    /// The maximum size of the (replicated) state *delta* (kept in main memory) in bytes.
+    /// This is a soft limit, i.e., the actual size of the state delta can exceed the limit,
+    /// but no more messages are executed while the limit is exceeded.
+    pub maximum_state_delta: Option<NumBytes>,
+}
+
+impl From<ResourceLimits> for pb::ResourceLimits {
+    fn from(resource_limits: ResourceLimits) -> Self {
+        Self {
+            maximum_state_size: resource_limits.maximum_state_size.map(|x| x.get()),
+            maximum_state_delta: resource_limits.maximum_state_delta.map(|x| x.get()),
+        }
+    }
+}
+
+impl From<pb::ResourceLimits> for ResourceLimits {
+    fn from(resource_limits: pb::ResourceLimits) -> Self {
+        Self {
+            maximum_state_size: resource_limits.maximum_state_size.map(NumBytes::from),
+            maximum_state_delta: resource_limits.maximum_state_delta.map(NumBytes::from),
+        }
+    }
+}

@@ -10,7 +10,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_types::ingress::IngressStatus;
 use ic_types::methods::SystemMethod;
-use ic_types::{ComputeAllocation, Cycles, LongExecutionMode};
+use ic_types::{ComputeAllocation, LongExecutionMode};
+use ic_types_cycles::Cycles;
 use more_asserts::{assert_ge, assert_le, assert_lt};
 use std::cmp::min;
 use std::collections::HashMap;
@@ -29,6 +30,9 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
         })
         .build();
 
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
     let num_canisters = 3;
     for _ in 0..num_canisters {
         let canister_id = test.create_canister();
@@ -39,12 +43,9 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
 
     for canister in test.state().canisters_iter() {
         assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
-        assert_eq!(
-            test.state()
-                .canister_priority(&canister.canister_id())
-                .last_full_execution_round,
-            test.last_round()
-        );
+        assert!(test.was_fully_executed(canister.canister_id()));
+        let execution_state = canister.execution_state.as_ref().unwrap();
+        assert_eq!(execution_state.last_executed_round.get(), 1);
         let canister_metrics = canister.system_state.canister_metrics();
         assert_eq!(canister_metrics.rounds_scheduled(), 1);
         assert_eq!(canister_metrics.executed(), 1);
@@ -77,13 +78,9 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
             max_instructions_per_install_code_slice: NumInstructions::new(50),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -124,13 +121,9 @@ fn test_multiple_iterations_of_inner_loop() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(200),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_query_message: NumInstructions::new(50),
             max_instructions_per_slice: NumInstructions::from(50),
             max_instructions_per_install_code_slice: NumInstructions::from(50),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -172,14 +165,10 @@ fn execute_idle_and_canisters_with_messages() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::from(50),
             max_instructions_per_install_code_slice: NumInstructions::from(50),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -192,23 +181,17 @@ fn execute_idle_and_canisters_with_messages() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // We won't update `last_full_execution_round` for the canister without any
+    // We update `last_full_execution_round` for the canister without any
     // input messages.
-    assert_eq!(
-        test.state()
-            .canister_priority(&idle)
-            .last_full_execution_round,
-        test.last_round()
-    );
+    assert!(test.was_fully_executed(idle));
+    // But not its counts of rounds scheduled or executed.
     let idle = test.canister_state(idle);
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
+    assert_eq!(idle.system_state.canister_metrics().executed(), 0);
+    let execution_state = idle.execution_state.as_ref().unwrap();
+    assert_eq!(execution_state.last_executed_round.get(), 0);
 
-    assert_eq!(
-        test.state()
-            .canister_priority(&active)
-            .last_full_execution_round,
-        ExecutionRound::from(1)
-    );
+    assert!(test.was_fully_executed(active));
     let active = test.canister_state(active);
     assert_eq!(active.system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
@@ -219,6 +202,8 @@ fn execute_idle_and_canisters_with_messages() {
             .interrupted_during_execution(),
         0
     );
+    let execution_state = active.execution_state.as_ref().unwrap();
+    assert_eq!(execution_state.last_executed_round.get(), 1);
 
     assert_eq!(
         test.state()
@@ -255,12 +240,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
     for canister_state in test.state().canisters_iter() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
-        assert_eq!(
-            test.state()
-                .canister_priority(&canister_state.canister_id())
-                .last_full_execution_round,
-            ExecutionRound::new(1)
-        );
+        assert!(test.was_fully_executed(canister_state.canister_id()));
         assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         assert_eq!(
@@ -297,12 +277,9 @@ fn scheduler_long_execution_progress_across_checkpoints() {
             scheduler_cores,
             max_instructions_per_round: slice_instructions.into(),
             max_instructions_per_message: message_instructions.into(),
-            max_instructions_per_query_message: slice_instructions.into(),
             max_instructions_per_slice: slice_instructions.into(),
             max_instructions_per_install_code_slice: slice_instructions.into(),
-            instruction_overhead_per_execution: 0.into(),
-            instruction_overhead_per_canister: 0.into(),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -316,7 +293,7 @@ fn scheduler_long_execution_progress_across_checkpoints() {
 
     // Penalize canister for a long execution.
     let message_id = test.send_ingress(penalized_long_id, ingress(message_instructions));
-    assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    assert_eq!(test.ingress_state(&message_id), IngressState::Received);
     for i in 0..message_instructions / slice_instructions {
         // Without short executions, all idle canister will be equally executed.
         if let Some(canister_id) = canister_ids.get(i as usize % num_canisters) {
@@ -324,14 +301,7 @@ fn scheduler_long_execution_progress_across_checkpoints() {
         }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
-    assert_matches!(
-        test.ingress_status(&message_id),
-        IngressStatus::Known {
-            // Canister did not reply.
-            state: IngressState::Failed(_),
-            ..
-        }
-    );
+    assert_matches!(test.ingress_state(&message_id), IngressState::Failed(_));
     // Assert penalized canister accumulated priority is lower.
     let penalized = test.state().canister_priority(&penalized_long_id);
     let other = test.state().canister_priority(&other_long_id);
@@ -393,13 +363,9 @@ fn execution_round_does_not_end_too_early() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(150),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -434,14 +400,7 @@ fn scheduler_maintains_canister_order() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(100),
-            max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
-            max_instructions_per_slice: NumInstructions::from(1),
-            max_instructions_per_install_code_slice: NumInstructions::from(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -496,27 +455,29 @@ fn get_available_messages(state: &ReplicatedState) -> u64 {
 
 fn construct_scheduler_for_prop_test(
     scheduler_cores: usize,
-    last_round: usize,
-    mut canister_params: Vec<(ComputeAllocation, ExecutionRound)>,
+    mut canister_params: Vec<ComputeAllocation>,
     messages_per_canister: usize,
     instructions_per_round: usize,
     instructions_per_message: usize,
     heartbeat: bool,
-) -> (SchedulerTest, usize, NumInstructions, NumInstructions) {
+) -> (
+    SchedulerTest,
+    usize,
+    usize,
+    NumInstructions,
+    NumInstructions,
+) {
     // Note: the DTS scheduler requires at least 2 scheduler cores
     assert_ge!(scheduler_cores, 2);
     let scheduler_config = SchedulerConfig {
         scheduler_cores,
         max_instructions_per_round: NumInstructions::from(instructions_per_round as u64),
         max_instructions_per_message: NumInstructions::from(instructions_per_message as u64),
-        max_instructions_per_query_message: NumInstructions::from(instructions_per_message as u64),
         max_instructions_per_slice: NumInstructions::from(instructions_per_message as u64),
         max_instructions_per_install_code_slice: NumInstructions::from(
             instructions_per_message as u64,
         ),
-        instruction_overhead_per_execution: NumInstructions::from(0),
-        instruction_overhead_per_canister: NumInstructions::from(0),
-        ..SchedulerConfig::application_subnet()
+        ..zero_instruction_overhead_config()
     };
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(scheduler_config)
@@ -526,18 +487,18 @@ fn construct_scheduler_for_prop_test(
     let capacity = RoundSchedule::compute_capacity_percent(scheduler_cores) as u64 - 1;
     let total = canister_params
         .iter()
-        .fold(0, |acc, (ca, _)| acc + ca.as_percent());
+        .fold(0, |acc, ca| acc + ca.as_percent());
     if total > capacity {
         canister_params = canister_params
             .into_iter()
-            .map(|(ca, lr)| {
+            .map(|ca| {
                 let ca = ((ca.as_percent() * capacity) / total).min(100);
-                (ComputeAllocation::try_from(ca).unwrap(), lr)
+                ComputeAllocation::try_from(ca).unwrap()
             })
             .collect();
     };
 
-    for (ca, last_round) in canister_params.into_iter() {
+    for ca in canister_params.into_iter() {
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000_000),
             ca,
@@ -550,17 +511,15 @@ fn construct_scheduler_for_prop_test(
             None,
             None,
         );
-        test.state_mut()
-            .canister_priority_mut(canister)
-            .last_full_execution_round = last_round;
         for _ in 0..messages_per_canister {
             test.send_ingress(canister, ingress(instructions_per_message as u64));
         }
     }
-    test.advance_to_round(ExecutionRound::from(last_round as u64 + 1));
+
     (
         test,
         scheduler_cores,
+        messages_per_canister,
         NumInstructions::from(instructions_per_round as u64),
         NumInstructions::from(instructions_per_message as u64),
     )
@@ -573,19 +532,17 @@ prop_compose! {
         messages_per_canister: Range<usize>,
         instructions_per_round: Range<usize>,
         instructions_per_message: Range<usize>,
-        last_round: usize,
         heartbeat: bool,
     )
     (
         scheduler_cores in scheduler_cores,
-        canister_params in prop::collection::vec(arb_canister_params(last_round), canisters),
+        canister_params in prop::collection::vec(arb_canister_params(), canisters),
         messages_per_canister in messages_per_canister,
         instructions_per_round in instructions_per_round,
         instructions_per_message in instructions_per_message,
-    ) -> (SchedulerTest, usize, NumInstructions, NumInstructions) {
+    ) -> (SchedulerTest, usize, usize, NumInstructions, NumInstructions) {
         construct_scheduler_for_prop_test(
             scheduler_cores,
-            last_round,
             canister_params,
             messages_per_canister,
             instructions_per_round,
@@ -602,18 +559,17 @@ prop_compose! {
         messages_per_canister: Range<usize>,
         instructions_per_round: Range<usize>,
         instructions_per_message: Range<usize>,
-        last_round: usize,
         heartbeat: bool,
     )
     (
         scheduler_cores in scheduler_cores,
-        canister_params in prop::collection::vec(arb_canister_params(last_round), canisters),
+        canister_params in prop::collection::vec(arb_canister_params(), canisters),
         messages_per_canister in messages_per_canister,
         instructions_per_round in instructions_per_round,
         instructions_per_message in instructions_per_message,
-    ) -> (SchedulerTest, SchedulerTest, usize, NumInstructions, NumInstructions) {
+    ) -> (SchedulerTest, SchedulerTest, usize, usize, NumInstructions, NumInstructions) {
         let r1 = construct_scheduler_for_prop_test(
-            scheduler_cores, last_round,
+            scheduler_cores,
             canister_params.clone(),
             messages_per_canister,
             instructions_per_round,
@@ -622,33 +578,25 @@ prop_compose! {
         );
         let r2 = construct_scheduler_for_prop_test(
             scheduler_cores,
-            last_round,
             canister_params,
             messages_per_canister,
             instructions_per_round,
             instructions_per_message,
             heartbeat,
         );
-        (r1.0, r2.0, r1.1, r1.2, r1.3)
+        (r1.0, r2.0, r1.1, r1.2, r1.3, r2.4)
     }
 }
 
 prop_compose! {
-    fn arb_canister_params(
-        last_round: usize,
-    )
+    fn arb_canister_params()
     (
         a in -100_i16..120_i16,
-        round in 0..=last_round,
-    ) -> (ComputeAllocation, ExecutionRound) {
+    ) -> ComputeAllocation {
         // Clamp `a` to [0, 100], but with high probability for 0 and somewhat
         // higher probability for 100.
         let a = a.clamp(0, 100);
-
-        (
-            ComputeAllocation::try_from(a as u64).unwrap(),
-            ExecutionRound::from(round as u64),
-        )
+        ComputeAllocation::try_from(a as u64).unwrap()
     }
 }
 
@@ -657,18 +605,25 @@ prop_compose! {
 // floor(`max_instructions_per_round` / `max_instructions_per_message`))`. `available_messages` are the sum of
 // messages in the input queues of all canisters.
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler will never consume more than
 // `max_instructions_per_round` in a single execution round per core.
 fn should_never_consume_more_than_max_instructions_per_round_in_a_single_execution_round(
-    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M,  false))] test: (
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test, scheduler_cores, instructions_per_round, instructions_per_message) = test;
+    let (
+        mut test,
+        scheduler_cores,
+        _messages_per_canister,
+        instructions_per_round,
+        instructions_per_message,
+    ) = test;
     let available_messages = get_available_messages(test.state());
     let minimum_executed_messages = min(
         available_messages,
@@ -699,38 +654,53 @@ fn should_never_consume_more_than_max_instructions_per_round_in_a_single_executi
     );
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler is deterministic, i.e. given
 // the same input, if we execute a round of computation, we always
 // get the same result.
 fn scheduler_deterministically_produces_same_output_given_same_input(
-    #[strategy(arb_scheduler_test_double(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+    #[strategy(arb_scheduler_test_double(2..10, 1..20, 1..100, M..B, 1..M, false))] test: (
         SchedulerTest,
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test1, mut test2, _cores, _instructions_per_round, _instructions_per_message) = test;
+    let (
+        mut test1,
+        mut test2,
+        _cores,
+        _messages_per_canister,
+        _instructions_per_round,
+        _instructions_per_message,
+    ) = test;
     assert_eq!(test1.state(), test2.state());
     test1.execute_round(ExecutionRoundType::OrdinaryRound);
     test2.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test1.state(), test2.state());
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler can successfully deplete the induction
 // pool given sufficient consecutive execution rounds.
 fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
-    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, false))] test: (
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test, _scheduler_cores, instructions_per_round, instructions_per_message) = test;
+    let (
+        mut test,
+        _scheduler_cores,
+        _messages_per_canister,
+        instructions_per_round,
+        instructions_per_message,
+    ) = test;
     let available_messages = get_available_messages(test.state());
     let minimum_executed_messages = min(
         available_messages,
@@ -749,36 +719,50 @@ fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
     }
 }
 
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // This test verifies that the scheduler does not lose any canisters
 // after an execution round.
 fn scheduler_does_not_lose_canisters(
-    #[strategy(arb_scheduler_test(2..3, 1..10, 1..100, M..B, 1..M, 100, false))] test: (
+    #[strategy(arb_scheduler_test(2..3, 1..10, 1..100, M..B, 1..M, false))] test: (
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test, _scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
+    let (
+        mut test,
+        _scheduler_cores,
+        _messages_per_canister,
+        _instructions_per_round,
+        _instructions_per_message,
+    ) = test;
     let canisters_before = test.state().canister_states().len();
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let canisters_after = test.state().canister_states().len();
     assert_eq!(canisters_before, canisters_after);
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
 // Verifies that each canister is scheduled as the first of its thread as
 // much as its compute_allocation requires.
 fn scheduler_respects_compute_allocation(
-    #[strategy(arb_scheduler_test(2..10, 1..20, 0..1, B..B+1, B..B+1, 0, true))] test: (
+    #[strategy(arb_scheduler_test(2..6, 1..10, 1..2, B..B+1, B..B+1, true))] test: (
         SchedulerTest,
+        usize,
         usize,
         NumInstructions,
         NumInstructions,
     ),
 ) {
-    let (mut test, scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
+    let (
+        mut test,
+        scheduler_cores,
+        _messages_per_canister,
+        _instructions_per_round,
+        _instructions_per_message,
+    ) = test;
     let replicated_state = test.state();
     let number_of_canisters = replicated_state.canister_states().len();
     let total_compute_allocation = replicated_state.total_compute_allocation();
@@ -801,11 +785,9 @@ fn scheduler_respects_compute_allocation(
             test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
-        for canister_id in test.state().canister_states().keys() {
-            let priority = test.state().canister_priority(canister_id);
-            if priority.last_full_execution_round == test.last_round() {
-                let count = scheduled_first_counters.entry(*canister_id).or_insert(0);
-                *count += 1;
+        for canister in canister_ids.iter() {
+            if test.was_fully_executed(*canister) {
+                *scheduled_first_counters.entry(*canister).or_insert(0) += 1;
             }
         }
     }
@@ -948,13 +930,9 @@ fn inner_round_first_execution_is_not_a_full_execution() {
             scheduler_cores,
             max_instructions_per_round: (instructions * max_messages_per_round).into(),
             max_instructions_per_message: instructions.into(),
-            max_instructions_per_query_message: instructions.into(),
             max_instructions_per_slice: instructions.into(),
             max_instructions_per_install_code_slice: instructions.into(),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -981,17 +959,16 @@ fn inner_round_first_execution_is_not_a_full_execution() {
 
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
-        let priority = test.state().canister_priority(&canister.canister_id());
-        // All ingresses should be executed in the previous round.
+        // All ingress messages should have been executed in the previous round.
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         if canister.canister_id() == target_id {
             // The target canister, despite being executed first in the second inner round,
             // should not be marked as fully executed.
             assert_ne!(test.last_round(), 0.into());
-            assert_eq!(priority.last_full_execution_round, 0.into());
+            assert!(!test.was_fully_executed(canister.canister_id()));
         } else {
-            assert_eq!(priority.last_full_execution_round, test.last_round());
+            assert!(test.was_fully_executed(canister.canister_id()));
         }
     }
     let mut total_accumulated_priority = 0;
@@ -1013,13 +990,9 @@ fn inner_round_long_execution_is_a_full_execution() {
             scheduler_cores,
             max_instructions_per_round: (slice * 2).into(),
             max_instructions_per_message: (slice * 10).into(),
-            max_instructions_per_query_message: slice.into(),
             max_instructions_per_slice: slice.into(),
             max_instructions_per_install_code_slice: slice.into(),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -1045,6 +1018,8 @@ fn inner_round_long_execution_is_a_full_execution() {
         let priority = test.state().canister_priority(&canister.canister_id());
         // All canisters should be executed.
         assert_eq!(system_state.canister_metrics().executed(), 1);
+        let execution_state = canister.execution_state.as_ref().unwrap();
+        assert_eq!(execution_state.last_executed_round.get(), 1);
         if canister.canister_id() == target_id {
             // The target canister was not executed first, and still have messages.
             assert_eq!(system_state.queues().ingress_queue_size(), 1);
@@ -1074,13 +1049,9 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
             scheduler_cores,
             max_instructions_per_round: (instructions * messages_per_round).into(),
             max_instructions_per_message: instructions.into(),
-            max_instructions_per_query_message: instructions.into(),
             max_instructions_per_slice: instructions.into(),
             max_instructions_per_install_code_slice: instructions.into(),
-            instruction_overhead_per_execution: 0.into(),
-            instruction_overhead_per_canister: 0.into(),
-            instruction_overhead_per_canister_for_finalization: 0.into(),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -1101,17 +1072,16 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     for (i, canister) in test.state().canisters_iter().enumerate() {
-        let priority = test.state().canister_priority(&canister.canister_id());
         if i < num_canisters as usize / 2 {
             // The first half of the canisters should finish their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
             prop_assert_eq!(canister.system_state.canister_metrics().executed(), 1);
-            prop_assert_eq!(priority.last_full_execution_round, test.last_round());
+            prop_assert!(test.was_fully_executed(canister.canister_id()));
         } else {
             // The second half of the canisters should still have their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 1);
             prop_assert_eq!(canister.system_state.canister_metrics().executed(), 0);
-            prop_assert_eq!(priority.last_full_execution_round, 0.into());
+            prop_assert!(!test.was_fully_executed(canister.canister_id()));
         }
     }
     let mut total_accumulated_priority = 0;
@@ -1135,6 +1105,7 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         // Now all the canisters should be executed once.
         prop_assert_eq!(canister.system_state.canister_metrics().executed(), 1);
         let priority = test.state().canister_priority(&canister.canister_id());
+        let execution_state = canister.execution_state.as_ref().unwrap();
         if i < num_canisters as usize / 2 {
             // The first half of the canisters should have messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 1);
@@ -1143,11 +1114,19 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
                 priority.last_full_execution_round.get(),
                 test.last_round().get() - 1
             );
+            prop_assert_eq!(
+                execution_state.last_executed_round.get(),
+                test.last_round().get() - 1
+            );
         } else {
             // The second half of the canisters should finish their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
             // The second half of the canisters should be executed in the last round.
-            prop_assert_eq!(priority.last_full_execution_round, test.last_round());
+            prop_assert!(test.was_fully_executed(canister.canister_id()));
+            prop_assert_eq!(
+                execution_state.last_executed_round.get(),
+                test.last_round().get()
+            );
         }
     }
     let mut total_accumulated_priority = 0;
@@ -1169,13 +1148,9 @@ fn charge_idle_canisters_for_full_execution_round() {
             scheduler_cores,
             max_instructions_per_round: slice.into(),
             max_instructions_per_message: slice.into(),
-            max_instructions_per_query_message: slice.into(),
             max_instructions_per_slice: slice.into(),
             max_instructions_per_install_code_slice: slice.into(),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -1300,9 +1275,8 @@ fn frozen_canisters_are_fully_executed() {
     };
     for (i, canister) in canisters.iter().enumerate() {
         if (i as u64) < (canisters_per_core - 1) * 2 {
-            assert_eq!(
-                canister_priority(canister).last_full_execution_round,
-                1.into(),
+            assert!(
+                test.was_fully_executed(*canister),
                 "Canister {i} should have been fully executed",
             );
             assert!(
@@ -1310,9 +1284,8 @@ fn frozen_canisters_are_fully_executed() {
                 "Canister {i} should have been charged"
             );
         } else {
-            assert_eq!(
-                canister_priority(canister).last_full_execution_round,
-                0.into(),
+            assert!(
+                !test.was_fully_executed(*canister),
                 "Canister {i} should not have been executed",
             );
             assert!(

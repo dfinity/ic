@@ -6,7 +6,7 @@ use ic_system_test_driver::driver::driver_setup::{
 };
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::{CliArguments, SystemTestGroup};
-use ic_system_test_driver::driver::ic::VmResources;
+use ic_system_test_driver::driver::ic::VmResourceOverrides;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::{
@@ -40,7 +40,6 @@ fn main() -> Result<()> {
         .with_overall_timeout(Duration::from_secs(3 * 60 * 60))
         .with_timeout_per_test(Duration::from_secs(3 * 60 * 60))
         .with_setup(setup)
-        .without_assert_no_replica_restarts()
         .remove_all_metrics_to_check()
         .execute_from_args()?;
     Ok(())
@@ -63,14 +62,14 @@ fn setup(env: TestEnv) {
             .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
             .unwrap_or_default();
 
-    let vm_resources: VmResources = env::var("COLOCATED_TEST_DRIVER_VM_RESOURCES")
+    let vm_resource_overrides: VmResourceOverrides = env::var("COLOCATED_TEST_DRIVER_VM_RESOURCES")
         .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
         .unwrap_or_default();
 
     let uvm = UniversalVm::new(UVM_NAME.to_string())
         .with_required_host_features(host_features)
-        .with_vm_resources(vm_resources)
+        .with_resource_overrides(vm_resource_overrides)
         .with_config_img(
             Path::new(&env::var("COLOCATED_UVM_CONFIG_IMAGE_PATH").unwrap()).to_path_buf(),
         );
@@ -136,7 +135,7 @@ fn setup(env: TestEnv) {
 
     // Set a timeout so blocking SSH operations fail instead of hanging
     // indefinitely during network splits.
-    session.set_timeout(60_000);
+    session.set_timeout(180_000);
 
     scp_send_to(
         log.clone(),

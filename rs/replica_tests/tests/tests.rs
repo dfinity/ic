@@ -356,14 +356,14 @@ fn test_query_trap_recovery() {
     let canister_id = env.install_canister_wat(wat, vec![], None);
     assert_reply(
         env.query(canister_id, "read", vec![]),
-        &0u32.to_le_bytes()[..],
+        &0_u32.to_le_bytes()[..],
     );
 
     assert!(env.query(canister_id, "trap", vec![]).is_err());
 
     assert_reply(
         env.query(canister_id, "read", vec![]),
-        &0u32.to_le_bytes()[..],
+        &0_u32.to_le_bytes()[..],
     );
 }
 
@@ -412,7 +412,7 @@ fn test_memory_persistence() {
         //    points to.
         write_data_query(
             199 * WASM_PAGE_SIZE as i32,
-            (1u8..9).collect(),
+            (1_u8..9).collect(),
             test.clone(),
         )
         .await;
@@ -430,7 +430,7 @@ fn test_memory_persistence() {
         );
 
         // 3) Same message as 2) but this time as an ingress message and not a query
-        write_data_ingress(199 * WASM_PAGE_SIZE as i32, (1u8..9).collect());
+        write_data_ingress(199 * WASM_PAGE_SIZE as i32, (1_u8..9).collect());
         let expected_after_ingress_1 =
             // heap[0;4] is the `target` address, i.e. beginning of the last Wasm page
             // heap[target;8] is where the payload [1, 2, .., 8] is written to
@@ -453,7 +453,7 @@ fn test_memory_persistence() {
         // 4) Another query. Does not modify the memory file.
         write_data_query(
             100 * WASM_PAGE_SIZE as i32,
-            (1u8..17).collect(),
+            (1_u8..17).collect(),
             test.clone(),
         )
         .await;
@@ -470,7 +470,7 @@ fn test_memory_persistence() {
         );
 
         // 5) Same as 4) but this time as an ingress
-        write_data_ingress(100 * WASM_PAGE_SIZE as i32, (1u8..5).collect());
+        write_data_ingress(100 * WASM_PAGE_SIZE as i32, (1_u8..5).collect());
         let expected_after_ingress_2 =
             "[2×00 1×64 6553597×00 1×01 1×02 1×03 1×04 6488060×00 1×01 1×02 1×03 1×04 1×05 1×06 1×07 1×08 65528×00]"
             //                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -590,7 +590,7 @@ fn test_heap_initialized_from_data_section_only_once() {
         assert_eq!(val, 120);
 
         // result[0;4] is set to 0xbeef by the ingress message
-        test.ingress(canister_id, "write", 0xbeefi32.to_le_bytes().to_vec())
+        test.ingress(canister_id, "write", 0xbeef_i32.to_le_bytes().to_vec())
             .unwrap();
         assert_eq!(
             display_page_map(

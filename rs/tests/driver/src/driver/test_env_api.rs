@@ -196,7 +196,7 @@ use slog::{Logger, debug, info, warn};
 use ssh2::Session;
 use std::{
     cmp::max,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     convert::TryFrom,
     fs,
     future::Future,
@@ -1094,11 +1094,12 @@ impl IcNodeSnapshot {
         .expect("Could not install canister");
     }
 
-    pub fn create_and_install_canister_with_arg_and_cycles(
+    pub fn create_and_install_canister_with_effetive_id_with_arg_and_cycles(
         &self,
         name: &str,
         arg: Option<Vec<u8>>,
         cycles_amount: Option<u128>,
+        effective_canister_id: Principal,
     ) -> Principal {
         block_on(self.create_and_install_canister_with_arg_and_cycles_async(
             name,
@@ -1140,6 +1141,21 @@ impl IcNodeSnapshot {
         Ok(canister_id)
     }
 
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
+        let effective_canister_id = self.effective_canister_id();
+        self.create_and_install_canister_with_effetive_id_with_arg_and_cycles(
+            name,
+            arg,
+            cycles_amount,
+            effective_canister_id.0,
+        )
+    }
+
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
         let result = retry_with_msg!(
             "wait_for_orchestrator_rule",
@@ -1153,13 +1169,14 @@ impl IcNodeSnapshot {
     }
 
     fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
-        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
-        // This is a hardcoded rule that is applied regardless of what is in the registry
-        // Hence a change in the registry won't affect this check
+        // This checks that the rule to block access from the ic-http-adapter to
+        // all locally-configured addressess was applied.
+        // This is a hardcoded rule that is applied regardless of what is in the registry.
+        // Hence a change in the registry won't affect this check.
         let script = r#"
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
-            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            RULE_PATTERN="meta skuid $ADAPTER_UID fib daddr type local"
 
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
@@ -1216,7 +1233,7 @@ impl IcNodeSnapshot {
         ))
     }
 
-    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>, port: u16) {
+    pub fn assert_metrics_values(&self, metrics_to_check: &BTreeMap<&str, u64>, port: u16) {
         if metrics_to_check.is_empty() {
             return;
         }
@@ -1224,7 +1241,7 @@ impl IcNodeSnapshot {
         block_on(async {
             let metrics_fetcher = MetricsFetcher::new_with_port(
                 std::iter::once(self.clone()),
-                metrics_to_check,
+                metrics_to_check.keys().map(ToString::to_string).collect(),
                 port,
             );
             let metrics = match metrics_fetcher.fetch::<u64>().await {
@@ -1243,41 +1260,21 @@ impl IcNodeSnapshot {
                 self.node_id
             );
             for (name, value) in metrics {
-                assert_eq!(
-                    value[0], 0,
-                    "The metric `{name}` on node {} has non-zero value. \
-                    If the metric is allowed to be non-zero in the test, \
-                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
+                let max_value = metrics_to_check
+                    .get(name.split('(').next().unwrap())
+                    .copied()
+                    .unwrap_or_default();
+                assert!(
+                    value[0] <= max_value,
+                    "The metric `{name}` on node {} exceeded the maximum allowed value: \
+                    {} > {max_value}. \
+                    If this is expected to happen in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")` or \
+                    with `update_orchestrator_metrics_to_check(\"{name}\", $max_value)`",
                     self.node_id,
+                    value[0],
                 );
             }
-        });
-    }
-
-    pub fn assert_no_replica_restarts(&self) {
-        block_on(async {
-            let orchestrator_metric_name = "orchestrator_replica_process_start_attempts_total";
-            let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
-                std::iter::once(self.clone()),
-                vec![orchestrator_metric_name.to_string()],
-                ORCHESTRATOR_METRICS_PORT,
-            );
-            let orchestrator_metrics_result = orchestrator_metrics_fetcher.fetch::<u64>().await;
-            let orchestrator_metrics = match orchestrator_metrics_result {
-                Ok(orchestrator_metrics) => orchestrator_metrics,
-                Err(e) => {
-                    info!(
-                        self.env.logger(),
-                        "Could not fetch orchestrator metrics for node {}: {e:?}", self.node_id
-                    );
-                    return;
-                }
-            };
-            assert_eq!(
-                orchestrator_metrics[orchestrator_metric_name][0], 1,
-                "The replica process on node {} was restarted during test. Create `SystemTestGroup` using `without_assert_no_replica_restarts` if replica restarts are expected in your test",
-                self.node_id
-            );
         });
     }
 }
@@ -2323,11 +2320,18 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
+    // Set a timeout for the SSH handshake and authentication to prevent
+    // indefinite hangs when the remote host accepts TCP but stalls during
+    // the SSH protocol exchange.
+    sess.set_timeout(30_000);
     sess.handshake()?;
     let priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
     sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
+    // Clear the timeout so subsequent operations on this session
+    // (e.g. long-running commands) are not subject to the handshake timeout.
+    sess.set_timeout(0);
     Ok(sess)
 }
 

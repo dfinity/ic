@@ -17,7 +17,8 @@ use ic_replica_tests::assert_reject;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::universal_canister::management::CanisterUpgradeOptions;
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, management, wasm};
-use ic_types::{CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId, ingress::WasmResult};
+use ic_types::{CanisterId, ComputeAllocation, NumBytes, PrincipalId, ingress::WasmResult};
+use ic_types_cycles::Cycles;
 use maplit::btreeset;
 use std::{collections::BTreeSet, mem::size_of, str::FromStr};
 
@@ -724,18 +725,18 @@ fn can_get_canister_information() {
                 ComputeAllocation::default().as_percent(),
                 None,
                 2592000,
-                Some(5_000_000_000_000u128),
+                Some(5_000_000_000_000_u128),
                 LogVisibilityV2::default(),
                 SnapshotVisibility::default(),
                 TEST_DEFAULT_LOG_MEMORY_LIMIT,
-                0u128,
-                0u128,
-                0u128,
-                0u128,
-                0u128,
-                0u128,
+                0_u128,
+                0_u128,
+                0_u128,
+                0_u128,
+                0_u128,
+                0_u128,
                 Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
-                0u64,
+                0_u64,
                 Default::default(),
             )
         );
@@ -799,14 +800,14 @@ fn can_get_canister_information() {
                     LogVisibilityV2::default(),
                     SnapshotVisibility::default(),
                     TEST_DEFAULT_LOG_MEMORY_LIMIT,
-                    0u128,
-                    0u128,
-                    0u128,
-                    0u128,
-                    0u128,
-                    0u128,
+                    0_u128,
+                    0_u128,
+                    0_u128,
+                    0_u128,
+                    0_u128,
+                    0_u128,
                     Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
-                    0u64,
+                    0_u64,
                     Default::default(),
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),

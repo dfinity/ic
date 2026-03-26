@@ -16,11 +16,12 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, SnapshotId, SubnetId,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    SnapshotId, SubnetId,
     ingress::IngressStatus,
     messages::{CanisterCall, MessageId, RejectContext},
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::{AsErrorHelp, CanisterModule, ErrorHelp, WasmHash, doc_ref};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -75,7 +76,6 @@ pub(crate) enum StopCanisterResult {
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub(crate) struct CanisterMgrConfig {
-    pub(crate) subnet_memory_capacity: NumBytes,
     pub(crate) default_provisional_cycles_balance: Cycles,
     pub(crate) default_freeze_threshold: NumSeconds,
     pub(crate) compute_capacity: u64,
@@ -99,7 +99,6 @@ pub(crate) struct CanisterMgrConfig {
 impl CanisterMgrConfig {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        subnet_memory_capacity: NumBytes,
         default_provisional_cycles_balance: Cycles,
         default_freeze_threshold: NumSeconds,
         own_subnet_id: SubnetId,
@@ -121,7 +120,6 @@ impl CanisterMgrConfig {
         max_environment_variable_value_length: usize,
     ) -> Self {
         Self {
-            subnet_memory_capacity,
             default_provisional_cycles_balance,
             default_freeze_threshold,
             own_subnet_id,
