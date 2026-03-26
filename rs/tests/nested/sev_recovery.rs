@@ -16,7 +16,7 @@ use ic_system_test_driver::{
 
 use ic_system_test_driver::driver::nested::NestedNodes;
 use ic_system_test_driver::driver::resource::BootImage;
-use ic_system_test_driver::util::{JournalStreamer, LogStream};
+use ic_system_test_driver::util::JournalStreamer;
 use nested::util::{
     NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, setup_ic_infrastructure,
     try_logging_guestos_diagnostics,
