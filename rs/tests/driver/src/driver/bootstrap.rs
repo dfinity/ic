@@ -2,6 +2,7 @@ use crate::driver::ic_gateway_vm::HasIcGatewayVm;
 use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
 use crate::driver::ic_images::try_get_setupos_img_version;
 use crate::driver::nested::NestedVm;
+use crate::driver::resource::BootImage;
 use crate::driver::test_env_api::{
     SshSession, get_guestos_img_url, get_guestos_launch_measurements,
     get_hostos_initial_update_img_url,
@@ -629,11 +630,17 @@ pub fn setup_baremetal_instance(
         .join(SSH_USERNAME);
 
     let hostos_url = get_hostos_initial_update_img_url().as_str().parse()?;
-    let guestos_url = get_guestos_img_url().as_str().parse()?;
+
+    let nested_vm_config = nested_vm.get_nested_vm_config()?;
+    let guestos_image_source = match &nested_vm_config.boot_image {
+        BootImage::GroupDefault => ImageSource::Url(get_guestos_img_url().as_str().parse()?),
+        BootImage::Image(disk_image) => ImageSource::Url(disk_image.url.as_str().parse()?),
+        BootImage::File(_) => bail!("BootImage::File is not supported for bare metal deployment"),
+    };
 
     let config = DeploymentConfig {
         hostos_upgrade_image: Some(ImageSource::Url(hostos_url)),
-        guestos_image: Some(ImageSource::Url(guestos_url)),
+        guestos_image: Some(guestos_image_source),
         setupos_config_image: Some(ImageSource::File(config_image.to_path_buf())),
     };
 
