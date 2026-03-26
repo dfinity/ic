@@ -46,11 +46,12 @@ use ic_consensus_system_test_utils::{
 };
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Subnet},
+        ic::{InternetComputer, Node, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
@@ -111,11 +112,19 @@ const DKG_LENGTH: Height = Height::new(9);
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
+        .with_api_boundary_nodes(1)
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System).with_dkg_interval_length(DKG_LENGTH),
         )
         .add_subnet(
             Subnet::fast_single_node(SubnetType::Application).with_dkg_interval_length(DKG_LENGTH),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::CloudEngine)
+                .with_unit_delay(Duration::from_millis(200))
+                .with_initial_notary_delay(Duration::from_millis(200))
+                .add_node(Node::new().with_node_reward_type(NodeRewardType::Type4))
+                .with_dkg_interval_length(DKG_LENGTH),
         )
         .setup_and_start(&env)
         .expect("Should be able to set up IC under test");
@@ -147,18 +156,15 @@ fn setup(env: TestEnv) {
             .expect("Failed to install the certified variables canister");
     });
 
-    upgrade_application_subnet_if_necessary(&env);
+    upgrade_non_nns_subnets_if_necessary(&env);
 }
 
-fn nns_delegation_on_nns_test(env: TestEnv) {
-    block_on(nns_delegation_test(env, SubnetType::System))
+/// NNS delegations update over time
+fn nns_delegation_updates(env: TestEnv, subnet_type: SubnetType) {
+    block_on(nns_delegation_updates_async(env, subnet_type));
 }
 
-fn nns_delegation_on_app_subnet_test(env: TestEnv) {
-    block_on(nns_delegation_test(env, SubnetType::Application))
-}
-
-async fn nns_delegation_test(env: TestEnv, subnet_type: SubnetType) {
+async fn nns_delegation_updates_async(env: TestEnv, subnet_type: SubnetType) {
     let (_subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let agent = node.build_default_agent_async().await;
@@ -166,18 +172,21 @@ async fn nns_delegation_test(env: TestEnv, subnet_type: SubnetType) {
     let maybe_initial_delegation_timestamp =
         get_nns_delegation_timestamp(&agent, node.effective_canister_id()).await;
 
-    if subnet_type == SubnetType::System {
+    let Some(initial_delegation_timestamp) = maybe_initial_delegation_timestamp else {
         assert!(
-            maybe_initial_delegation_timestamp.is_none(),
-            "There shouldn't be delegation on the NNS subnet"
+            subnet_type == SubnetType::System,
+            "Non-NNS subnet should return an NNS delegation with the response"
         );
 
         // We can return, there is nothing more to be checked.
         return;
-    }
+    };
 
-    let initial_delegation_timestamp = maybe_initial_delegation_timestamp
-        .expect("Non-NNS subnet should return an NNS delegation with the response");
+    assert!(
+        subnet_type != SubnetType::System,
+        "NNS subnet should not return an NNS delegation with the response"
+    );
+
     let initial_delegation_time = SystemTime::UNIX_EPOCH
         .checked_add(std::time::Duration::from_nanos(
             initial_delegation_timestamp,
@@ -248,8 +257,8 @@ async fn get_nns_delegation_timestamp(
 }
 
 /// Responses to `api/v2/subnet/{subnet_id}/read_state` have valid delegations with canister ranges in the flat format.
-fn subnet_read_state_v2_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn subnet_read_state_v2_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: HttpReadStateResponse = block_on(send(
         &node,
@@ -260,18 +269,17 @@ fn subnet_read_state_v2_returns_correct_delegation(env: TestEnv) {
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         None,
         CertificateDelegationFormat::Flat,
     );
 }
 
 /// Responses to `api/v3/subnet/{subnet_id}/read_state` have valid delegations with canister ranges in the flat format.
-fn subnet_read_state_v3_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn subnet_read_state_v3_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: HttpReadStateResponse = block_on(send(
         &node,
@@ -282,18 +290,17 @@ fn subnet_read_state_v3_returns_correct_delegation(env: TestEnv) {
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         None,
         CertificateDelegationFormat::Pruned,
     );
 }
 
 /// Responses to `api/v2/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
-fn canister_read_state_v2_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn canister_read_state_v2_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: HttpReadStateResponse = block_on(send(
         &node,
@@ -307,18 +314,17 @@ fn canister_read_state_v2_returns_correct_delegation(env: TestEnv) {
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         Some(node.effective_canister_id()),
         CertificateDelegationFormat::Flat,
     );
 }
 
 /// Responses to `api/v3/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
-fn canister_read_state_v3_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn canister_read_state_v3_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: HttpReadStateResponse = block_on(send(
         &node,
@@ -332,18 +338,20 @@ fn canister_read_state_v3_returns_correct_delegation(env: TestEnv) {
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         Some(node.effective_canister_id()),
         CertificateDelegationFormat::Tree,
     );
 }
 
 /// Responses to `api/v3/canister/aaaaa-aa/read_state` have valid delegations without canister ranges.
-fn canister_read_state_v3_management_canister_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn canister_read_state_v3_management_canister_returns_correct_delegation(
+    env: TestEnv,
+    subnet_type: SubnetType,
+) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let response: HttpReadStateResponse = block_on(send(
         &node,
         format!("api/v3/canister/{}/read_state", CanisterId::ic_00()),
@@ -353,10 +361,9 @@ fn canister_read_state_v3_management_canister_returns_correct_delegation(env: Te
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         None,
         CertificateDelegationFormat::Pruned,
     );
@@ -370,8 +377,8 @@ struct SyncCallResponse {
 }
 
 /// Responses to `api/v3/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
-fn call_v3_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn call_v3_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: SyncCallResponse = block_on(send(
         &node,
@@ -382,18 +389,17 @@ fn call_v3_returns_correct_delegation(env: TestEnv) {
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         Some(node.effective_canister_id()),
         CertificateDelegationFormat::Flat,
     );
 }
 
 /// Responses to `api/v4/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
-fn call_v4_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn call_v4_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: SyncCallResponse = block_on(send(
         &node,
@@ -404,10 +410,9 @@ fn call_v4_returns_correct_delegation(env: TestEnv) {
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         Some(node.effective_canister_id()),
         CertificateDelegationFormat::Tree,
     );
@@ -415,8 +420,8 @@ fn call_v4_returns_correct_delegation(env: TestEnv) {
 
 /// Responses to `api/v4/canister/{canister_id}/call` targeting the management canister
 /// have valid delegations without canister ranges.
-fn call_v4_management_canister_returns_correct_delegation(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn call_v4_management_canister_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let expiration = OffsetDateTime::now_utc() + Duration::from_secs(3 * 60);
 
     #[derive(CandidType)]
@@ -446,10 +451,9 @@ fn call_v4_management_canister_returns_correct_delegation(env: TestEnv) {
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         Some(node.effective_canister_id()),
         CertificateDelegationFormat::Tree,
     );
@@ -464,8 +468,8 @@ struct QueryResponse {
 
 /// For `api/v2/canister/{canister_id}/query` we pass valid delegations with
 /// canister ranges in the flat format to the canister.
-fn query_v2_passes_correct_delegation_to_canister(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn query_v2_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: SubnetType) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let arg = vec![];
 
     let response: QueryResponse = block_on(send(
@@ -477,10 +481,9 @@ fn query_v2_passes_correct_delegation_to_canister(env: TestEnv) {
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         Some(node.effective_canister_id()),
         CertificateDelegationFormat::Flat,
     );
@@ -488,8 +491,8 @@ fn query_v2_passes_correct_delegation_to_canister(env: TestEnv) {
 
 /// For `api/v3/canister/{canister_id}/query` we pass valid delegations with
 /// canister ranges in the tree format to the canister.
-fn query_v3_passes_correct_delegation_to_canister(env: TestEnv) {
-    let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
+fn query_v3_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: SubnetType) {
+    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let arg = vec![];
 
     let response: QueryResponse = block_on(send(
@@ -501,20 +504,19 @@ fn query_v3_passes_correct_delegation_to_canister(env: TestEnv) {
 
     validate_delegation(
         &env,
-        &certificate
-            .delegation
-            .expect("Should have an NNS delegation attached"),
+        certificate.delegation.as_ref(),
         subnet.subnet_id,
+        subnet_type,
         Some(node.effective_canister_id()),
         CertificateDelegationFormat::Tree,
     );
 }
 
 /// Run query tests several times sequentially to check that we don't return incorrect cached response.
-fn interlaced_v2_and_v3_query_requests(env: TestEnv) {
+fn interlaced_v2_and_v3_query_requests(env: TestEnv, subnet_type: SubnetType) {
     for _ in 0..10 {
-        query_v2_passes_correct_delegation_to_canister(env.clone());
-        query_v3_passes_correct_delegation_to_canister(env.clone());
+        query_v2_passes_correct_delegation_to_canister(env.clone(), subnet_type);
+        query_v3_passes_correct_delegation_to_canister(env.clone(), subnet_type);
     }
 }
 
@@ -571,11 +573,26 @@ fn sign_envelope(content: &EnvelopeContent) -> Vec<u8> {
 
 fn validate_delegation(
     env: &TestEnv,
-    delegation: &CertificateDelegation,
+    maybe_delegation: Option<&CertificateDelegation>,
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     effective_canister_id: Option<PrincipalId>,
     expected_delegation_format: CertificateDelegationFormat,
 ) {
+    let Some(delegation) = maybe_delegation else {
+        assert!(
+            subnet_type == SubnetType::System,
+            "Every non-NNS subnet should have a delegation attached to the response"
+        );
+
+        // We can return, there is nothing more to be checked.
+        return;
+    };
+    assert!(
+        subnet_type != SubnetType::System,
+        "NNS subnet should not have a delegation attached to the response"
+    );
+
     let nns_public_key = env.prep_dir("").unwrap().root_public_key().unwrap();
     verify_delegation_certificate(
         &delegation.certificate,
@@ -602,7 +619,11 @@ fn validate_delegation(
         .expect("Every delegation has a '/subnet/<subnet_id>/type' path")
     {
         LabeledTree::Leaf(value) => {
-            assert_eq!(*value, "application".as_bytes().to_vec());
+            assert_eq!(
+                value,
+                subnet_type.as_ref().as_bytes(),
+                "Subnet type in the delegation should match the subnet type of the responding node"
+            );
         }
         LabeledTree::SubTree(_) => panic!("Not a leaf"),
     };
@@ -710,8 +731,9 @@ where
         .map_err(|err| format!("Failed to deserialize response: {err:?}. Response: {response:?}",))
 }
 
-fn upgrade_application_subnet_if_necessary(env: &TestEnv) {
-    let (subnet, node) = get_subnet_and_node(env, SubnetType::Application);
+fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
+    let (app_subnet, app_node) = get_subnet_and_node(env, SubnetType::Application);
+    let (cloud_engine, cloud_engine_node) = get_subnet_and_node(env, SubnetType::CloudEngine);
     let nns_node = get_nns_node(&env.topology_snapshot());
 
     let initial_version = get_guestos_img_version();
@@ -724,8 +746,8 @@ fn upgrade_application_subnet_if_necessary(env: &TestEnv) {
 
     info!(
         env.logger(),
-        "Upgrade the application subnet from {initial_version:?} to {target_version:?} to test the protocol \
-        compatibility between subnets running different replica versions."
+        "Upgrade the application subnet and cloud engine from {initial_version:?} to {target_version:?} to
+        test the protocol compatibility between subnets running different replica versions."
     );
 
     let sha256 = get_guestos_update_img_sha256();
@@ -743,35 +765,59 @@ fn upgrade_application_subnet_if_necessary(env: &TestEnv) {
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
         &target_version,
-        subnet.subnet_id,
+        app_subnet.subnet_id,
     ));
 
-    assert_assigned_replica_version(&node, &target_version, env.logger());
+    block_on(deploy_guestos_to_all_subnet_nodes(
+        &nns_node,
+        &target_version,
+        cloud_engine.subnet_id,
+    ));
+
+    assert_assigned_replica_version(&app_node, &target_version, env.logger());
+    assert_assigned_replica_version(&cloud_engine_node, &target_version, env.logger());
+}
+
+macro_rules! systest_all_subnet_types {
+    ($group: expr, $function_name:path) => {
+        $group = $group.add_test(systest!($function_name; SubnetType::System));
+        $group = $group.add_test(systest!($function_name; SubnetType::Application));
+        $group = $group.add_test(systest!($function_name; SubnetType::CloudEngine));
+    };
 }
 
 fn main() -> Result<()> {
-    SystemTestGroup::new()
+    let mut test_group = SystemTestGroup::new()
         .with_setup(setup)
         // We potentially upgrade the app subnet in the setup which could take several minutes
         .with_overall_timeout(std::time::Duration::from_secs(25 * 60))
-        .with_timeout_per_test(std::time::Duration::from_secs(15 * 60))
-        .add_test(systest!(nns_delegation_on_nns_test))
-        .add_test(systest!(nns_delegation_on_app_subnet_test))
-        .add_test(systest!(canister_read_state_v2_returns_correct_delegation))
-        .add_test(systest!(canister_read_state_v3_returns_correct_delegation))
-        .add_test(systest!(
-            canister_read_state_v3_management_canister_returns_correct_delegation
-        ))
-        .add_test(systest!(subnet_read_state_v2_returns_correct_delegation))
-        .add_test(systest!(subnet_read_state_v3_returns_correct_delegation))
-        // note: the v2 call endpoint doesn't return an NNS delegation, so there is nothing to test
-        .add_test(systest!(call_v3_returns_correct_delegation))
-        .add_test(systest!(call_v4_returns_correct_delegation))
-        .add_test(systest!(
-            call_v4_management_canister_returns_correct_delegation
-        ))
-        .add_test(systest!(query_v2_passes_correct_delegation_to_canister))
-        .add_test(systest!(query_v3_passes_correct_delegation_to_canister))
-        .add_test(systest!(interlaced_v2_and_v3_query_requests))
-        .execute_from_args()
+        .with_timeout_per_test(std::time::Duration::from_secs(15 * 60));
+
+    systest_all_subnet_types!(test_group, nns_delegation_updates);
+    systest_all_subnet_types!(
+        test_group,
+        canister_read_state_v2_returns_correct_delegation
+    );
+    systest_all_subnet_types!(
+        test_group,
+        canister_read_state_v3_returns_correct_delegation
+    );
+    systest_all_subnet_types!(
+        test_group,
+        canister_read_state_v3_management_canister_returns_correct_delegation
+    );
+    systest_all_subnet_types!(test_group, subnet_read_state_v2_returns_correct_delegation);
+    systest_all_subnet_types!(test_group, subnet_read_state_v3_returns_correct_delegation);
+    // note: the v2 call endpoint doesn't return an NNS delegation, so there is nothing to test
+    systest_all_subnet_types!(test_group, call_v3_returns_correct_delegation);
+    systest_all_subnet_types!(test_group, call_v4_returns_correct_delegation);
+    systest_all_subnet_types!(
+        test_group,
+        call_v4_management_canister_returns_correct_delegation
+    );
+    systest_all_subnet_types!(test_group, query_v2_passes_correct_delegation_to_canister);
+    systest_all_subnet_types!(test_group, query_v3_passes_correct_delegation_to_canister);
+    systest_all_subnet_types!(test_group, interlaced_v2_and_v3_query_requests);
+
+    test_group.execute_from_args()
 }

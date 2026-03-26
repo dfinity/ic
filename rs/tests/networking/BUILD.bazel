@@ -236,6 +236,7 @@ rust_binary(
         "//rs/certification",
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
+        "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
