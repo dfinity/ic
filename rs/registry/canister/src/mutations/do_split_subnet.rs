@@ -1,4 +1,7 @@
-use crate::registry::{Registry, Version};
+use crate::{
+    flags::is_subnet_splitting_enabled,
+    registry::{Registry, Version},
+};
 use candid::{CandidType, Encode};
 use dfn_core::call;
 use ic_base_types::SubnetId;
@@ -41,13 +44,6 @@ enum PayloadValidationError {
     SourceSubnetHalted,
     SourceSubnetIsRentalSubnet,
 }
-
-#[cfg(not(test))]
-/// TODO: enable once the consensus is ready.
-const ENABLED: bool = false;
-#[cfg(test)]
-/// In the test cases assume the feature is enabled.
-const ENABLED: bool = true;
 
 /// For now we only support splitting application subnets. Splitting system subnets is not allowed.
 const SUPPORTED_SUBNET_TYPES: [SubnetType; 2] =
@@ -241,7 +237,7 @@ impl Registry {
         payload: &SplitSubnetPayload,
         registry_version: Version,
     ) -> Result<(SubnetRecord, CanisterIdRanges), PayloadValidationError> {
-        if !ENABLED {
+        if !is_subnet_splitting_enabled() {
             return Err(PayloadValidationError::NotEnabled);
         }
 
@@ -480,6 +476,7 @@ mod tests {
             add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
             prepare_registry_with_nodes,
         },
+        flags::{temporarily_disable_subnet_splitting, temporarily_enable_subnet_splitting},
         mutations::routing_table::routing_table_into_registry_mutation,
     };
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
@@ -504,6 +501,20 @@ mod tests {
     // created node IDs to the static IDs below. Thus, from the tests point of view we can pretend
     // that, for example, `NODE_1` is in the registry even though in reality it isn't.
     const FAKE_NODE_IDS_IN_THE_REGISTRY: &[NodeId; 4] = &[NODE_1, NODE_2, NODE_3, NODE_4];
+
+    #[rstest]
+    fn should_fail_when_disabled() {
+        let _guard = temporarily_disable_subnet_splitting();
+        let (registry, _node_infos) = set_up_registry(invariants_compliant_subnet_info());
+        let payload = invariants_compliant_payload();
+
+        assert_eq!(
+            registry
+                .validate_subnet_splitting_payload(&payload, registry.latest_version())
+                .expect_err("Should fail when disabled"),
+            PayloadValidationError::NotEnabled
+        );
+    }
 
     #[rstest]
     #[case::happy_path(
@@ -537,6 +548,17 @@ mod tests {
             ..invariants_compliant_payload()
         },
         Err(PayloadValidationError::DisallowedSourceSubnetType(SubnetType::System))
+    )]
+    #[case::cannot_split_engine_subnet(
+        SubnetInfo {
+            subnet_type: SubnetType::CloudEngine,
+            cost_schedule: CanisterCyclesCostSchedule::Free,
+            ..invariants_compliant_subnet_info()
+        },
+        SplitSubnetPayload {
+            ..invariants_compliant_payload()
+        },
+        Err(PayloadValidationError::DisallowedSourceSubnetType(SubnetType::CloudEngine))
     )]
     #[case::too_few_nodes_on_the_destination_subnet(
         SubnetInfo {
@@ -704,6 +726,7 @@ mod tests {
         #[case] payload: SplitSubnetPayload,
         #[case] expected_result: Result<(), PayloadValidationError>,
     ) {
+        let _guard = temporarily_enable_subnet_splitting();
         let (registry, node_infos) = set_up_registry(source_subnet_info);
         // Warning: hack ahead! When we set up the registry, we create public keys of the nodes, and
         // then derive the node IDs from these public keys. Since, we can't know a priori what these
