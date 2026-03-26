@@ -85,7 +85,7 @@ pub async fn await_proposal_execution(
     retry_delay: Duration,
     timeout: Duration,
 ) -> bool {
-    let mut i = 0usize;
+    let mut i = 0_usize;
     let start_time = std::time::Instant::now();
     loop {
         i += 1;
@@ -740,6 +740,7 @@ pub async fn submit_create_application_subnet_proposal(
         chain_key_config: None,
         canister_cycles_cost_schedule: cost_schedule,
         subnet_admins: None,
+        resource_limits: Default::default(),
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),

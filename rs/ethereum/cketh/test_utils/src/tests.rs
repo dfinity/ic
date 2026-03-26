@@ -37,7 +37,7 @@ fn should_use_meaningful_constants() {
 #[test]
 fn should_have_meaningful_ckerc20_withdrawal_transaction_fee() {
     fn convert_fee_history(fee_history: ethers_core::types::FeeHistory) -> FeeHistory {
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         fee_history.oldest_block.to_big_endian(&mut bytes);
         let oldest_block: Nat256 = Nat256::from_be_bytes(bytes);
 
@@ -45,7 +45,7 @@ fn should_have_meaningful_ckerc20_withdrawal_transaction_fee() {
             .base_fee_per_gas
             .into_iter()
             .map(|val| {
-                let mut bytes = [0u8; 32];
+                let mut bytes = [0_u8; 32];
                 val.to_big_endian(&mut bytes);
                 Nat256::from_be_bytes(bytes)
             })
@@ -58,7 +58,7 @@ fn should_have_meaningful_ckerc20_withdrawal_transaction_fee() {
                 inner_vec
                     .into_iter()
                     .map(|val| {
-                        let mut bytes = [0u8; 32];
+                        let mut bytes = [0_u8; 32];
                         val.to_big_endian(&mut bytes);
                         Nat256::from_be_bytes(bytes)
                     })

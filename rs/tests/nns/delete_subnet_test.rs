@@ -6,7 +6,8 @@ Goal:: Ensure that CloudEngines can be deleted, and that regular App and System 
 end::catalog[] */
 
 use anyhow::Result;
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{Decode, Encode};
+use ic_consensus_system_test_utils::node::assert_node_is_unassigned;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
@@ -21,7 +22,9 @@ use ic_system_test_driver::nns::get_subnet_list_from_registry;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
 use ic_types::{Height, RegistryVersion, SubnetId};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
@@ -31,9 +34,6 @@ const DKG_INTERVAL_LENGTH: u64 = 29;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        // Currently, the orchestrator/replica does not handle subnet deletion gracefully, so this test can experience
-        // node restarts. However, this is ok because it can only affect the nodes of a deleted subnet.
-        .without_assert_no_replica_restarts()
         .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
@@ -57,7 +57,7 @@ pub fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::fast(SubnetType::CloudEngine, NUM_ENGINE_NODES)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH))
-                .with_cost_schedule(ic_types::batch::CanisterCyclesCostSchedule::Free),
+                .with_cost_schedule(CanisterCyclesCostSchedule::Free),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -172,6 +172,11 @@ pub fn test(env: TestEnv) {
             .map(|x| x.node_id)
             .collect::<BTreeSet<_>>();
         assert_eq!(unassigned_node_ids, engine_node_ids);
+
+        // The nodes' states should be wiped.
+        for node in new_topology_snapshot.unassigned_nodes() {
+            assert_node_is_unassigned(&node, &env.logger());
+        }
     });
 }
 
@@ -201,9 +206,4 @@ async fn try_delete_subnet<'a>(
     } else {
         Decode!(&result_bytes, Result<(), String>).unwrap().unwrap();
     }
-}
-
-#[derive(CandidType)]
-pub struct DeleteSubnetPayload {
-    subnet_id: Principal,
 }

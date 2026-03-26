@@ -43,7 +43,7 @@ fn should_return_correct_ed25519_secret_key_bytes_for_ed25519_secret_key() {
 #[test]
 fn should_return_no_ed25519_secret_key_bytes_for_non_ed25519_secret_key() {
     let secret_key = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
-        SecretArray::new_and_dont_zeroize_argument(&[0u8; multi_types::SecretKeyBytes::SIZE]),
+        SecretArray::new_and_dont_zeroize_argument(&[0_u8; multi_types::SecretKeyBytes::SIZE]),
     ));
     assert!(sk_ed25519_bytes(&secret_key).is_none())
 }
@@ -51,7 +51,7 @@ fn should_return_no_ed25519_secret_key_bytes_for_non_ed25519_secret_key() {
 #[test]
 fn should_redact_csp_secret_key_ed25519_debug() {
     let cspsk_ed25519 = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&[1u8; ed25519_types::SecretKeyBytes::SIZE]),
+        SecretArray::new_and_dont_zeroize_argument(&[1_u8; ed25519_types::SecretKeyBytes::SIZE]),
     ));
     assert_eq!(
         "CspSecretKey::Ed25519 - REDACTED",
@@ -62,7 +62,7 @@ fn should_redact_csp_secret_key_ed25519_debug() {
 #[test]
 fn should_redact_csp_secret_key_multi_debug() {
     let cspsk_multi = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
-        SecretArray::new_and_dont_zeroize_argument(&[1u8; multi_types::SecretKeyBytes::SIZE]),
+        SecretArray::new_and_dont_zeroize_argument(&[1_u8; multi_types::SecretKeyBytes::SIZE]),
     ));
     assert_eq!(
         "CspSecretKey::MultiBls12_381 - REDACTED",
@@ -73,7 +73,7 @@ fn should_redact_csp_secret_key_multi_debug() {
 #[test]
 fn should_redact_csp_secret_key_thres_debug() {
     let cspsk_thresh = CspSecretKey::ThresBls12_381(threshold_types::SecretKeyBytes::new(
-        SecretArray::new_and_dont_zeroize_argument(&[1u8; threshold_types::SecretKeyBytes::SIZE]),
+        SecretArray::new_and_dont_zeroize_argument(&[1_u8; threshold_types::SecretKeyBytes::SIZE]),
     ));
     assert_eq!(
         "CspSecretKey::ThresBls12_381 - REDACTED",
@@ -83,7 +83,7 @@ fn should_redact_csp_secret_key_thres_debug() {
 
 #[test]
 fn should_redact_csp_secret_key_tls_ed25519_debug() {
-    let cspsk_tls = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(vec![1u8; 3]));
+    let cspsk_tls = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(vec![1_u8; 3]));
     assert_eq!(
         "CspSecretKey::TlsEd25519 - REDACTED",
         format!("{cspsk_tls:?}")
@@ -94,7 +94,7 @@ fn should_redact_csp_secret_key_tls_ed25519_debug() {
 fn should_redact_csp_secret_key_fs_encryption_debug() {
     let cspsk_fs = CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(
         FsEncryptionKeySetWithPop {
-            public_key: FsEncryptionPublicKey(G1Bytes([1u8; G1Bytes::SIZE])),
+            public_key: FsEncryptionPublicKey(G1Bytes([1_u8; G1Bytes::SIZE])),
             pop: FsEncryptionPop {
                 pop_key: G1Bytes([1; G1Bytes::SIZE]),
                 challenge: FrBytes([1; FrBytes::SIZE]),
@@ -159,7 +159,7 @@ fn should_return_correct_enum_variant() {
     ));
     assert_eq!(key.enum_variant(), "FsEncryption");
 
-    let rng = &mut Seed::from_bytes(&[0u8; 32]).into_rng();
+    let rng = &mut Seed::from_bytes(&[0_u8; 32]).into_rng();
     let mega_private_key = MEGaPrivateKey::generate(EccCurveType::K256, rng);
     let mega_private_key_bytes = MEGaPrivateKeyK256Bytes::try_from(&mega_private_key).unwrap();
     let mega_public_key = mega_private_key.public_key();
@@ -171,7 +171,7 @@ fn should_return_correct_enum_variant() {
     assert_eq!(key.enum_variant(), "MEGaEncryptionK256");
 
     let key = CspSecretKey::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(
-        EccScalarBytes::K256(Box::new([0u8; 32])),
+        EccScalarBytes::K256(Box::new([0_u8; 32])),
     ));
     assert_eq!(key.enum_variant(), "IDkgCommitmentOpening");
 
@@ -211,7 +211,7 @@ fn should_return_correct_ed25519_signature_bytes_for_ed25519_signature() {
 #[test]
 fn should_return_no_ed25519_signature_bytes_for_non_ed25519_signature() {
     let signature = CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(
-        multi_types::IndividualSignatureBytes([0u8; multi_types::IndividualSignatureBytes::SIZE]),
+        multi_types::IndividualSignatureBytes([0_u8; multi_types::IndividualSignatureBytes::SIZE]),
     ));
     assert!(signature.ed25519_bytes().is_none())
 }
@@ -286,26 +286,26 @@ fn csp_signatures_should_have_a_nice_debug_representation() {
     let test_vectors = vec![
         (
             CspSignature::EcdsaP256(ecdsa_secp256r1_types::SignatureBytes(
-                [0u8; ecdsa_secp256r1_types::SignatureBytes::SIZE],
+                [0_u8; ecdsa_secp256r1_types::SignatureBytes::SIZE],
             )),
             "CspSignature::EcdsaP256(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")",
         ),
         (
             CspSignature::EcdsaSecp256k1(ecdsa_secp256k1_types::SignatureBytes(
-                [0u8; ecdsa_secp256k1_types::SignatureBytes::SIZE],
+                [0_u8; ecdsa_secp256k1_types::SignatureBytes::SIZE],
             )),
             "CspSignature::EcdsaSecp256k1(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")",
         ),
         (
             CspSignature::Ed25519(ed25519_types::SignatureBytes(
-                [0u8; ed25519_types::SignatureBytes::SIZE],
+                [0_u8; ed25519_types::SignatureBytes::SIZE],
             )),
             "CspSignature::Ed25519(SignatureBytes(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\"))",
         ),
         (
             CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(
                 multi_types::IndividualSignatureBytes(
-                    [0u8; multi_types::IndividualSignatureBytes::SIZE],
+                    [0_u8; multi_types::IndividualSignatureBytes::SIZE],
                 ),
             )),
             "CspSignature::MultiBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
@@ -313,7 +313,7 @@ fn csp_signatures_should_have_a_nice_debug_representation() {
         (
             CspSignature::MultiBls12_381(MultiBls12_381_Signature::Combined(
                 multi_types::CombinedSignatureBytes(
-                    [0u8; multi_types::CombinedSignatureBytes::SIZE],
+                    [0_u8; multi_types::CombinedSignatureBytes::SIZE],
                 ),
             )),
             "CspSignature::MultiBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
@@ -321,7 +321,7 @@ fn csp_signatures_should_have_a_nice_debug_representation() {
         (
             CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual(
                 threshold_types::IndividualSignatureBytes(
-                    [0u8; multi_types::IndividualSignatureBytes::SIZE],
+                    [0_u8; multi_types::IndividualSignatureBytes::SIZE],
                 ),
             )),
             "CspSignature::ThresBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
@@ -329,7 +329,7 @@ fn csp_signatures_should_have_a_nice_debug_representation() {
         (
             CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined(
                 threshold_types::CombinedSignatureBytes(
-                    [0u8; multi_types::CombinedSignatureBytes::SIZE],
+                    [0_u8; multi_types::CombinedSignatureBytes::SIZE],
                 ),
             )),
             "CspSignature::ThresBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",

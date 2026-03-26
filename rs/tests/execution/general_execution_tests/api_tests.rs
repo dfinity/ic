@@ -100,7 +100,7 @@ pub fn test_controller(env: TestEnv) {
                     )
                     .await
                     .unwrap(),
-                vec![1u8, 0u8, 0u8, 0u8]
+                vec![1_u8, 0_u8, 0_u8, 0_u8]
             );
 
             // Passed Principal ID is not the controller canister_a, hence we
@@ -114,14 +114,14 @@ pub fn test_controller(env: TestEnv) {
                     )
                     .await
                     .unwrap(),
-                vec![0u8; 4]
+                vec![0_u8; 4]
             );
 
             // The passed argument is not Principal ID, hence we
             // expect is_controller to be rejected.
             assert_reject(
                 canister_a
-                    .update(wasm().is_controller(&[0u8; 128]).reply_int())
+                    .update(wasm().is_controller(&[0_u8; 128]).reply_int())
                     .await,
                 RejectCode::CanisterError,
             );
@@ -141,8 +141,8 @@ pub fn test_in_replicated_execution(env: TestEnv) {
             )
             .await;
 
-            const REPLICATED_EXECUTION: [u8; 4] = [1u8, 0u8, 0u8, 0u8];
-            const NON_REPLICATED_EXECUTION: [u8; 4] = [0u8, 0u8, 0u8, 0u8];
+            const REPLICATED_EXECUTION: [u8; 4] = [1_u8, 0_u8, 0_u8, 0_u8];
+            const NON_REPLICATED_EXECUTION: [u8; 4] = [0_u8, 0_u8, 0_u8, 0_u8];
 
             // Assert update is in replicated execution.
             assert_eq!(

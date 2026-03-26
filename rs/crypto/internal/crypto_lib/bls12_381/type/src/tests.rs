@@ -18,7 +18,7 @@ macro_rules! window_extraction_works_correctly_init {
                 }
                 result
             };
-            for scalar in 0..1u32 << SCALAR_BIT_LEN {
+            for scalar in 0..1_u32 << SCALAR_BIT_LEN {
                 $(
                 for bit_offset in 0..SCALAR_BIT_LEN - $window_size {
                     let expected = extract_bits(&scalar.to_be_bytes(), bit_offset, $window_size);
@@ -42,7 +42,7 @@ fn random_bit_indices_works_correctly() {
 
     assert_eq!(
         crate::Scalar::random_bit_indices(rng, 0, SCALAR_FLOORED_BIT_LENGTH),
-        vec![0u8; 0]
+        vec![0_u8; 0]
     );
 
     for num_true_bits in 1..=SCALAR_FLOORED_BIT_LENGTH {

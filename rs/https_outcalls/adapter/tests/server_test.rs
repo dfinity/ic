@@ -159,7 +159,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let get_response_size = warp::get()
             .and(warp::path("size"))
             .and(warp::body::json())
-            .map(|req: usize| Response::builder().body(vec![0u8; req]));
+            .map(|req: usize| Response::builder().body(vec![0_u8; req]));
 
         let get_delay = warp::get()
             .and(warp::path("delay"))

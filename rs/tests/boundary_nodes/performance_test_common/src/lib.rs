@@ -9,7 +9,10 @@ use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{
+            AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
+            VmResourceOverrides,
+        },
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
@@ -43,7 +46,7 @@ pub fn setup(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(64)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),

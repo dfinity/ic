@@ -32,6 +32,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
 use virt::connect::Connect;
 use virt::sys::{
     VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING,
@@ -109,6 +110,8 @@ struct Args {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
+    ic_os_logging::init_logging();
+
     // TODO: We could replace this with Linux capabilities but this works well for now.
     if !getuid().is_root() {
         bail!("This program requires root privileges.");
@@ -127,7 +130,7 @@ async fn run(vm_type: GuestVMType) -> Result<()> {
         GuestVMType::Default => "Launching GuestOS Virtual Machine...",
         GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
     };
-    println!("{startup_message}");
+    info!("{startup_message}");
     for path in [CONSOLE_TTY1_PATH, CONSOLE_TTY_SERIAL_PATH] {
         if let Ok(mut tty) = File::options().write(true).open(path) {
             let _ = writeln!(tty, "\n{startup_message}\n");
@@ -147,11 +150,11 @@ fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
     tokio::spawn(async move {
         tokio::select! {
             _ = sigterm.recv() =>  {
-                println!("Caught SIGTERM, terminating");
+                info!("Caught SIGTERM, terminating");
                 termination_token.cancel()
             },
             _ = sigint.recv() => {
-                println!("Caught SIGINT, terminating");
+                info!("Caught SIGINT, terminating");
                 termination_token.cancel()
             },
         }
@@ -185,20 +188,20 @@ impl VirtualMachine {
             let domain_result = libvirt_connect.create_domain_xml(xml_config, VIR_DOMAIN_NONE);
             match domain_result {
                 Ok(domain) => {
-                    eprintln!("Domain successfully created: {vm_domain_name}");
+                    info!("Domain successfully created: {vm_domain_name}");
                     break domain;
                 }
                 Err(e) if retries > 0 => {
-                    eprintln!("Domain creation failed, retrying: {e}");
+                    warn!("Domain creation failed, retrying: {e}");
                     // TODO: Monitor if this code path is ever triggered - remove if unused
                     if let Ok(stale_domain) = libvirt_connect.lookup_domain_by_name(vm_domain_name)
                     {
-                        eprintln!(
+                        warn!(
                             "VM domain '{vm_domain_name}' exists even though create_xml failed, \
                              attempting to destroy it before retry"
                         );
                         if let Err(err) = stale_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
-                            eprintln!("destroy_flags failed: {err}");
+                            warn!("destroy_flags failed: {err}");
                         }
                     }
                     retries -= 1;
@@ -235,7 +238,7 @@ impl VirtualMachine {
                         .downcast_ref::<virt::error::Error>()
                         .is_some_and(|e| e.code() == virt::error::ErrorNumber::NoDomain) =>
                 {
-                    println!("No existing domain found, skipping cleanup.");
+                    info!("No existing domain found, skipping cleanup.");
                     return Ok(());
                 }
                 Err(err) => {
@@ -246,7 +249,7 @@ impl VirtualMachine {
             };
 
             let domain_active = existing_domain.is_active().unwrap_or_else(|err| {
-                eprintln!(
+                warn!(
                     "Failed to check if domain '{vm_domain_name}' is active: {err}. \
                          Assuming it's inactive."
                 );
@@ -254,9 +257,9 @@ impl VirtualMachine {
             });
 
             if domain_active {
-                eprintln!("Existing domain '{vm_domain_name}' is active, attempting to destroy it");
+                warn!("Existing domain '{vm_domain_name}' is active, attempting to destroy it");
                 if let Err(err) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
-                    eprintln!("destroy_flags failed: {err}");
+                    warn!("destroy_flags failed: {err}");
                 }
                 return Ok(());
             }
@@ -266,7 +269,7 @@ impl VirtualMachine {
             }
 
             // Domain is inactive: restart libvirtd to recover.
-            eprintln!(
+            warn!(
                 "Existing domain '{vm_domain_name}' is not active - probably hit \
                  https://gitlab.com/libvirt/libvirt/-/issues/853 - restarting libvirtd \
                  ({} attempts remaining)",
@@ -282,11 +285,11 @@ impl VirtualMachine {
                 )
                 .await
             {
-                eprintln!("Failed to restart libvirtd: {err}");
+                warn!("Failed to restart libvirtd: {err}");
             }
         }
 
-        eprintln!("Too many libvirtd restarts, issuing HostOS reboot");
+        error!("Too many libvirtd restarts, issuing HostOS reboot");
         Err(GuestVmServiceError::UnrecoverableNeedsReboot)
     }
 
@@ -303,20 +306,20 @@ impl VirtualMachine {
         match self.get_domain() {
             Ok(domain) => {
                 if let Err(e) = domain.shutdown() {
-                    eprintln!("Failed to send ACPI shutdown signal to GuestOS: {e}");
+                    warn!("Failed to send ACPI shutdown signal to GuestOS: {e}");
                     return;
                 }
-                println!("Sent ACPI shutdown signal to GuestOS, waiting for it to stop...");
+                info!("Sent ACPI shutdown signal to GuestOS, waiting for it to stop...");
             }
             Err(e) => {
-                eprintln!("Failed to get domain for graceful shutdown: {e}");
+                warn!("Failed to get domain for graceful shutdown: {e}");
                 return;
             }
         }
 
         match tokio::time::timeout(GRACEFUL_SHUTDOWN_TIMEOUT, self.wait_for_shutdown()).await {
-            Ok(()) => println!("GuestOS shut down gracefully"),
-            Err(_) => eprintln!(
+            Ok(()) => info!("GuestOS shut down gracefully"),
+            Err(_) => warn!(
                 "GuestOS did not shut down within {:?}, proceeding with force shutdown",
                 GRACEFUL_SHUTDOWN_TIMEOUT
             ),
@@ -329,7 +332,7 @@ impl VirtualMachine {
             let domain = match self.get_domain() {
                 Ok(domain) => domain,
                 Err(e) => {
-                    eprintln!("Failed to get domain: {e}");
+                    warn!("Failed to get domain: {e}");
                     break;
                 }
             };
@@ -338,17 +341,17 @@ impl VirtualMachine {
                     // all good, VM is running
                 }
                 Ok((VIR_DOMAIN_CRASHED, reason)) => {
-                    eprintln!("VM crashed, reason: {reason}");
+                    warn!("VM crashed, reason: {reason}");
                     break;
                 }
                 Ok((VIR_DOMAIN_SHUTDOWN, reason)) => {
-                    eprintln!("VM shutting down, reason: {reason}");
+                    warn!("VM shutting down, reason: {reason}");
                 }
                 Ok((state, reason)) => {
-                    eprintln!("VM is in state {state}, reason: {reason}");
+                    warn!("VM is in state {state}, reason: {reason}");
                 }
                 Err(e) => {
-                    eprintln!("Failed to get domain state: {e}");
+                    warn!("Failed to get domain state: {e}");
                     break;
                 }
             }
@@ -367,9 +370,9 @@ impl Drop for VirtualMachine {
     /// Ensures the VM is properly shut down when the object is dropped
     fn drop(&mut self) {
         if let Ok(domain) = self.get_domain() {
-            println!("Shutting down {} domain gracefully", self.domain_name);
+            info!("Shutting down {} domain gracefully", self.domain_name);
             if let Err(e) = domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
-                eprintln!("Failed to gracefully destroy domain: {e}");
+                warn!("Failed to gracefully destroy domain: {e}");
             }
         }
     }
@@ -509,16 +512,16 @@ impl GuestVmService {
                 Ok(()) => return Ok(()),
                 Err(GuestVmServiceError::VirtualMachineStopped) => match self.guest_vm_type {
                     GuestVMType::Default => {
-                        println!("Guest VM stopped, restarting");
+                        info!("Guest VM stopped, restarting");
                         continue;
                     }
                     GuestVMType::Upgrade => {
-                        println!("Upgrade VM stopped, exiting");
+                        info!("Upgrade VM stopped, exiting");
                         return Ok(());
                     }
                 },
                 Err(GuestVmServiceError::UnrecoverableNeedsReboot) => {
-                    println!("Issuing HostOS reboot");
+                    info!("Issuing HostOS reboot");
                     let mut cmd = tokio::process::Command::new("reboot");
                     self.command_runner.status(&mut cmd).await?;
                     bail!("Found unrecoverable error, issued reboot");
@@ -572,22 +575,25 @@ impl GuestVmService {
         let config_media = NamedTempFile::with_prefix("config_media")
             .context("Failed to create config media file")?;
 
-        println!("Extracting direct boot dependencies");
-        let direct_boot = prepare_direct_boot(self.guest_vm_type, self.partition_provider.as_ref())
-            .await
-            .context("Failed to prepare direct boot")?;
-
-        if direct_boot.is_none() {
-            println!(
-                "Direct boot dependencies not found (old GuestOS version?). Falling back to \
-                 legacy boot."
-            );
-        }
-
+        info!("Extracting direct boot dependencies");
         let enable_tee = self
             .hostos_config
             .icos_settings
             .enable_trusted_execution_environment;
+        let direct_boot = prepare_direct_boot(
+            self.guest_vm_type,
+            enable_tee,
+            self.partition_provider.as_ref(),
+        )
+        .await
+        .context("Failed to prepare direct boot")?;
+
+        if direct_boot.is_none() {
+            info!(
+                "Direct boot dependencies not found (old GuestOS version?). Falling back to \
+                 legacy boot."
+            );
+        }
         if enable_tee && direct_boot.is_none() {
             return Err(GuestVmServiceError::Other(anyhow!(
                 "enable_trusted_execution_environment is true but direct boot could not be \
@@ -610,7 +616,7 @@ impl GuestVmService {
         .context("Failed to assemble config media")?;
 
         let available_hugepages_gib = read_available_hugepages_gib();
-        println!("Available huge pages: {} GiB", available_hugepages_gib);
+        info!("Available huge pages: {} GiB", available_hugepages_gib);
 
         let vm_config = generate_vm_config(
             &self.hostos_config,
@@ -624,7 +630,7 @@ impl GuestVmService {
         )
         .context("Failed to generate GuestOS VM config")?;
 
-        println!("Creating GuestOS virtual machine");
+        info!("Creating GuestOS virtual machine");
 
         let virtual_machine = VirtualMachine::new(
             self.libvirt_connection.clone(),
@@ -638,7 +644,7 @@ impl GuestVmService {
         // Notify systemd that we're ready
         self.systemd_notifier.notify_ready()?;
 
-        println!("Started GuestOS virtual machine");
+        info!("Started GuestOS virtual machine");
 
         // Wait before printing messages to console
         // (but not in unit tests otherwise tests take too long to finish).
@@ -757,7 +763,7 @@ impl GuestVmService {
             biased;
             // Wait for either VM shutdown event or stop signal
             _ = termination_token.cancelled() => {
-                println!("Shutting down VM gracefully");
+                info!("Shutting down VM gracefully");
                 vm.shutdown_gracefully().await;
                 Ok(())
             },
@@ -768,12 +774,11 @@ impl GuestVmService {
     }
 
     // We have two different ways to log:
-    // 1. Log to stdout. These logs will end up in the systemd journal. Upon error,
-    //    display_systemd_logs() writes the journal logs to the console.
-    // 2. Log to the console. These logs will show up in the terminal but not in the journal.
+    // 1. Log to the console. These logs will show up in the terminal but not in the journal.
+    // 2. Log via tracing. These logs will end up in the systemd journal.
     fn write_to_console_and_stdout(&self, message: &str) {
         self.write_to_console(message);
-        println!("{message}");
+        info!("{message}");
     }
 
     fn write_to_console(&self, message: &str) {

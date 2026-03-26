@@ -246,7 +246,7 @@ fn global_timer_can_be_cancelled() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
@@ -254,7 +254,7 @@ fn global_timer_can_be_cancelled() {
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let cancel_global_timer = wasm().api_global_timer_set(0).reply_int64().build();
 
@@ -272,7 +272,7 @@ fn global_timer_can_be_cancelled() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
     }
 }
 
@@ -307,7 +307,7 @@ fn global_timer_can_be_immediately_cancelled() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
     }
 }
 
@@ -331,7 +331,7 @@ fn global_timer_is_one_off() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
@@ -339,14 +339,14 @@ fn global_timer_is_one_off() {
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     // The timer should reach the deadline now
     env.tick();
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
 
     // The timer should be called just once
     // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
@@ -356,7 +356,7 @@ fn global_timer_is_one_off() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
     }
 }
 
@@ -380,7 +380,7 @@ fn global_timer_in_far_future_does_not_run() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
@@ -390,7 +390,7 @@ fn global_timer_in_far_future_does_not_run() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
     }
 }
 
@@ -411,7 +411,7 @@ fn global_timer_can_be_reactivated() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
@@ -419,7 +419,7 @@ fn global_timer_can_be_reactivated() {
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
 
     // The timer should be called just once
     env.advance_time(Duration::from_secs(1));
@@ -428,7 +428,7 @@ fn global_timer_can_be_reactivated() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
     }
 
     let set_global_timer = wasm()
@@ -442,14 +442,14 @@ fn global_timer_can_be_reactivated() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
 
     // The timer should be called again
     env.advance_time(Duration::from_secs(1));
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(2u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(2_u64.to_le_bytes().into()));
 }
 
 #[test]
@@ -469,11 +469,11 @@ fn global_timer_can_be_reactivated_in_canister_global_timer_method() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
-    for i in 1..20u64 {
+    for i in 1..20_u64 {
         // In every third execution, NextScheduledMethod is Message, hence in such
         // executions only the message will be executed.
         // While in the other executions, NextScheduledMethod is either GlobalTimer
@@ -538,7 +538,7 @@ fn system_task_metrics_are_observable() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     // The timer should be triggered and reactivated each round.
     for _ in 0..5 {
@@ -585,7 +585,7 @@ fn global_timer_is_not_set_if_execution_traps() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     // The timer should trap and never reactivated again.
     for _ in 0..5 {

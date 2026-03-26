@@ -332,11 +332,10 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
         ComputeAllocation, NumBytes, NumInstructions, SubnetId, Time,
-        batch::CanisterCyclesCostSchedule,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
     };
-    use ic_types_cycles::Cycles;
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
     use crate::protocol::{
         id::{ExecId, MemoryId, WasmId},

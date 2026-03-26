@@ -457,7 +457,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -468,7 +468,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2521,7 +2521,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4131,7 +4131,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4535,7 +4535,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5494,6 +5494,7 @@ dependencies = [
  "config_types",
  "ic-sys",
  "ic_device",
+ "ic_os_logging",
  "itertools 0.12.1",
  "libcryptsetup-rs",
  "nix 0.24.3",
@@ -5503,6 +5504,7 @@ dependencies = [
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -5617,6 +5619,7 @@ dependencies = [
  "grub",
  "ic-os-metrics-utils",
  "ic_device",
+ "ic_os_logging",
  "macaddr",
  "memchr",
  "mockall",
@@ -5631,6 +5634,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "tracing",
  "uuid",
  "virt",
 ]
@@ -5643,11 +5647,13 @@ dependencies = [
  "clap 4.6.0",
  "config_tool",
  "config_types",
+ "ic_os_logging",
  "indoc 1.0.9",
  "network",
  "nix 0.24.3",
  "serde",
  "serde_json",
+ "tracing",
  "utils",
 ]
 
@@ -6036,11 +6042,13 @@ dependencies = [
  "grub",
  "ic-os-metrics-utils",
  "ic_device",
+ "ic_os_logging",
  "manual_guestos_recovery",
  "network",
  "prometheus",
  "regex",
  "tempfile",
+ "tracing",
  "utils",
  "uuid",
 ]
@@ -7114,9 +7122,9 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-interface"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4209c650d166815b01336cbbab6310f44895a0fa6571a952b6a84097e5fd87ae"
+checksum = "7b07cca9319498684a7477a77a66d87377ecd698b5465a3b8523484fcca16bff"
 dependencies = [
  "candid",
  "datasize",
@@ -7654,7 +7662,9 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
+ "flate2",
  "hex",
+ "ic-agent",
  "ic-base-types",
  "ic-cdk",
  "ic-ckbtc-minter",
@@ -7814,11 +7824,11 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-certification",
+ "ic-consensus-chain-key",
  "ic-consensus-dkg",
  "ic-consensus-idkg",
  "ic-consensus-mocks",
  "ic-consensus-utils",
- "ic-consensus-vetkd",
  "ic-crypto-prng",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-crypto-returning-ok",
@@ -7910,6 +7920,41 @@ dependencies = [
  "prometheus",
  "slog",
  "tokio",
+]
+
+[[package]]
+name = "ic-consensus-chain-key"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "ic-artifact-pool",
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
+ "ic-error-types 0.2.0",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-management-canister-types-private",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-subnet-features",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-registry",
+ "ic-test-utilities-state",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-types-test-utils",
+ "num-traits",
+ "prometheus",
+ "prost 0.13.5",
+ "rayon",
+ "slog",
+ "strum 0.26.3",
 ]
 
 [[package]]
@@ -8100,41 +8145,6 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "slog",
-]
-
-[[package]]
-name = "ic-consensus-vetkd"
-version = "0.9.0"
-dependencies = [
- "assert_matches",
- "ic-artifact-pool",
- "ic-consensus-mocks",
- "ic-consensus-utils",
- "ic-error-types 0.2.0",
- "ic-interfaces",
- "ic-interfaces-registry",
- "ic-interfaces-state-manager",
- "ic-logger",
- "ic-management-canister-types-private",
- "ic-metrics",
- "ic-protobuf",
- "ic-registry-client-fake",
- "ic-registry-client-helpers",
- "ic-registry-keys",
- "ic-registry-subnet-features",
- "ic-replicated-state",
- "ic-test-utilities",
- "ic-test-utilities-registry",
- "ic-test-utilities-state",
- "ic-test-utilities-types",
- "ic-types",
- "ic-types-test-utils",
- "num-traits",
- "prometheus",
- "prost 0.13.5",
- "rayon",
- "slog",
- "strum 0.26.3",
 ]
 
 [[package]]
@@ -9472,9 +9482,9 @@ dependencies = [
 
 [[package]]
 name = "ic-doge-interface"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b36c851b8fc6ec45666e3a912c8b22878e4f12f6d1d9f7033a153c7684903829"
+checksum = "b6d9bf312c324521ce174560c002e90aef179bf16befb46c62bdffbccff8f14b"
 dependencies = [
  "candid",
  "datasize",
@@ -9665,6 +9675,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-query-stats",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -9737,11 +9748,13 @@ dependencies = [
  "clap 4.6.0",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-sys",
+ "ic_os_logging",
  "predicates",
  "prometheus",
  "rand 0.8.5",
  "regex",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -11212,6 +11225,7 @@ dependencies = [
  "ic-registry-local-registry",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -11291,6 +11305,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-config",
  "ic-http-types",
  "ic-limits",
  "ic-management-canister-types 0.5.0",
@@ -13241,6 +13256,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-resource-limits"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-protobuf",
+ "ic-types",
+ "serde",
+]
+
+[[package]]
 name = "ic-registry-routing-table"
 version = "0.9.0"
 dependencies = [
@@ -13449,12 +13474,12 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-certification",
+ "ic-consensus-chain-key",
  "ic-consensus-dkg",
  "ic-consensus-features",
  "ic-consensus-idkg",
  "ic-consensus-manager",
  "ic-consensus-utils",
- "ic-consensus-vetkd",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
@@ -13556,6 +13581,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics",
  "ic-protobuf",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -13677,7 +13703,6 @@ dependencies = [
  "num-traits",
  "on_wire",
  "pocket-ic",
- "prometheus",
  "proptest",
  "prost 0.13.5",
  "rand 0.8.5",
@@ -13694,6 +13719,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
+ "test-strategy 0.4.5",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -14543,6 +14569,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -14990,6 +15017,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-wasm-types",
  "wat",
 ]
@@ -15013,6 +15041,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -15091,9 +15120,11 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-local-store-artifacts",
  "ic-registry-proto-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-types",
+ "ic-types-cycles",
  "tempfile",
 ]
 
@@ -16089,6 +16120,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_os_logging"
+version = "0.0.0"
+dependencies = [
+ "tracing-journald",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ic_principal"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16735,7 +16774,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -17701,6 +17740,7 @@ dependencies = [
  "ratatui",
  "scopeguard",
  "shell-escape",
+ "tracing",
  "tui-textarea",
 ]
 
@@ -17904,9 +17944,12 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "canister-test",
+ "ic-agent",
+ "ic-error-types 0.2.0",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-universal-canister",
  "ic_consensus_system_test_utils",
  "slog",
  "systest-message-routing-common",
@@ -18193,11 +18236,9 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
- "nix 0.24.3",
  "prost 0.13.5",
  "regex",
  "reqwest",
- "serde",
  "slog",
 ]
 
@@ -18558,7 +18599,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -18882,6 +18923,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-types",
  "ic_device",
  "linux_kernel_command_line",
  "pem",
@@ -19768,7 +19810,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "12.0.0"
+version = "13.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -19828,7 +19870,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "12.0.0"
+version = "13.0.0"
 dependencies = [
  "aide",
  "askama",
@@ -20362,7 +20404,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.12.1",
  "log",
  "multimap",
@@ -20382,7 +20424,7 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -21307,6 +21349,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-node-provider-rewards",
  "ic-registry-proto-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -21517,7 +21560,10 @@ name = "rewards-calculation"
 version = "0.9.0"
 dependencies = [
  "chrono",
+ "futures",
  "ic-base-types",
+ "ic-cdk",
+ "ic-nns-constants",
  "ic-protobuf",
  "itertools 0.12.1",
  "lazy_static",
@@ -21995,7 +22041,7 @@ dependencies = [
  "errno 0.3.14",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -22104,7 +22150,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -22829,9 +22875,11 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
+ "ic_os_logging",
  "network",
  "prost 0.13.5",
  "tokio",
+ "tracing",
  "url",
  "utils",
 ]
@@ -23007,7 +23055,7 @@ version = "1.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
 dependencies = [
- "errno 0.2.8",
+ "errno 0.3.14",
  "libc",
 ]
 
@@ -23274,7 +23322,7 @@ version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -23370,7 +23418,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -23920,10 +23968,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -23954,7 +24002,7 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8c27177b12a6399ffc08b98f76f7c9a1f4fe9fc967c784c5a071fa8d93cf7e1"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -24761,6 +24809,17 @@ checksum = "0bae117ee14789185e129aaee5d93750abe67fdc5a9a62650452bfe4e122a3a9"
 dependencies = [
  "lazy_static",
  "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "tracing-journald"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d3a81ed245bfb62592b1e2bc153e77656d94ee6a0497683a65a12ccaf2438d0"
+dependencies = [
+ "libc",
+ "tracing-core",
  "tracing-subscriber",
 ]
 
@@ -26035,7 +26094,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

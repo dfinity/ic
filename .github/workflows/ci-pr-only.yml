@@ -37,7 +37,7 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:0a0cff0b12c7586c2f312c739176924edf0c9e71df92f382eba836913da9f1c6
+      image: ghcr.io/dfinity/ic-build@sha256:1e37fc8e31e67c4c19969077d8d3495688a95293f9401b51a37bae93f944434c
       options: >-
          -e NODE_NAME --mount type=tmpfs,target="/tmp/containers"
     steps:
@@ -54,9 +54,7 @@ jobs:
           run: |
             export DID_CHECK_REV="$(git merge-base HEAD 'origin/${{ inputs.base-ref }}')"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
-            bazel test //... \
-              --build_tag_filters="didc" \
-              --test_tag_filters="didc"
+            bazel run //pre-commit:did-check
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
 # Runs linters and formatters on code to automatically fix issues
@@ -88,8 +86,17 @@ jobs:
 
             EXIT_STATUS=0
 
+            checks=(
+              //pre-commit:{shfmt-check,ruff-check,buf-check,DFINITY-capitalization-check,do-not-merge-check,buildifier-check,gazelle-check}
+            )
+
+            # if the CI_OVERRIDE_BUF_BREAKING label is not set on the PR, then run the buf compatibility checks
+            if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' != 'true' ]]; then
+              checks+=( //pre-commit:buf-breaking-check )
+            fi
+
             # First run all checks and record any potential error
-            for check in //pre-commit:{shfmt-check,ruff-check,buf-check,DFINITY-capitalization-check,do-not-merge-check,buildifier-check,gazelle-check} ; do
+            for check in ${checks[@]} ; do
               echo -n "Checking $check ... "
               if bazel run "$check"; then
                 echo "ok"

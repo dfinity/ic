@@ -27,6 +27,8 @@ struct FsTrimArgs {
 }
 
 pub fn main() -> Result<()> {
+    ic_os_logging::init_logging();
+
     let opts = FsTrimArgs::parse();
 
     ic_fstrim_tool::run(

@@ -81,6 +81,11 @@ type CompleteCanisterMigrationPayload = record {
   migration_trace : vec principal;
 };
 
+type ResourceLimits = record {
+  maximum_state_size : opt nat64;
+  maximum_state_delta : opt nat64;
+};
+
 type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
   features : SubnetFeatures;
@@ -105,6 +110,8 @@ type CreateSubnetPayload = record {
   canister_cycles_cost_schedule: opt CanisterCyclesCostSchedule;
 
   subnet_admins: opt vec principal;
+
+  resource_limits : opt ResourceLimits;
 
   // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
   ingress_bytes_per_block_soft_cap : nat64;
@@ -493,6 +500,11 @@ type UpdateUnassignedNodesConfigPayload = record {
   ssh_readonly_access : opt vec text;
 };
 
+type MigrateNodeOperatorPayload = record {
+  new_node_operator_id : opt principal;
+  old_node_operator_id : opt principal;
+};
+
 type SwapNodeInSubnetDirectlyPayload = record {
     new_node_id : opt principal;
     old_node_id : opt principal;
@@ -574,6 +586,7 @@ service : {
   get_node_providers_monthly_xdr_rewards : (opt GetNodeProvidersMonthlyXdrRewardsRequest) -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
   migrate_canisters: (MigrateCanistersPayload) -> (MigrateCanistersResponse);
+  migrate_node_operator_directly : (MigrateNodeOperatorPayload) -> ();
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();
   recover_subnet : (RecoverSubnetPayload) -> ();
   remove_api_boundary_nodes : (RemoveApiBoundaryNodesPayload) -> ();
