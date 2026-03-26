@@ -245,7 +245,7 @@ mod tests {
 
     #[test]
     fn find_leaf_pruned_tree_returns_none() {
-        let tree = pruned([0u8; 32]);
+        let tree = pruned([0_u8; 32]);
         assert_eq!(find_leaf_for_principal(tree.as_ref(), b"\x10"), None);
     }
 
