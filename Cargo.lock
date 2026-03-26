@@ -6430,6 +6430,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-nns-data-provider-wrappers",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -13261,6 +13262,7 @@ name = "ic-registry-resource-limits"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "clap 4.6.0",
  "ic-protobuf",
  "ic-types",
  "serde",
