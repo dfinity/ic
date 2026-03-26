@@ -214,7 +214,8 @@ system_test_nns(
         "manual",
     ],
     runtime_deps = SNS_CANISTER_RUNTIME_DEPS | IC_GATEWAY_RUNTIME_DEPS | {
-        "II_WASM_PATH": "@ii_dev_canister//file",
+        "II_BACKEND_WASM_PATH": "@ii_backend_canister//file",
+        "II_FRONTEND_WASM_PATH": "@ii_frontend_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
         "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",

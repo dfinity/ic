@@ -466,13 +466,20 @@ http_file(
     url = "https://download.dfinity.systems/testdata/doge/doge_headers_testnet_293100_308099_auxpow_parsed.csv",
 )
 
-# Internet Identity canister (test build)
+# Internet Identity canisters (release-2026-03-23)
 
 http_file(
-    name = "ii_dev_canister",
+    name = "ii_backend_canister",
     downloaded_file_path = "internet_identity_production.wasm.gz",
-    sha256 = "4f3f67591644049a1a60ed83ad36d64af79f6ccb51aaf649d7c10ff05c5642d9",
-    url = "file:///ic/canisters/internet_identity_production.wasm.gz",
+    sha256 = "5cb8c487e001174b47a5ed02db328e593c77aa48f9d21caf63524e0567d9177c",
+    url = "https://github.com/dfinity/internet-identity/releases/download/release-2026-03-23/internet_identity_production.wasm.gz",
+)
+
+http_file(
+    name = "ii_frontend_canister",
+    downloaded_file_path = "internet_identity_frontend.wasm.gz",
+    sha256 = "188a441f647f22ed5ebe5208726b2ed772b6a4396096d86810168af828939d0a",
+    url = "https://github.com/dfinity/internet-identity/releases/download/release-2026-03-23/internet_identity_frontend.wasm.gz",
 )
 
 # NNS frontend dapp canister
