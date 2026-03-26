@@ -6552,17 +6552,13 @@ dependencies = [
 name = "ic-artifact-manager"
 version = "0.9.0"
 dependencies = [
- "assert_matches",
- "ic-artifact-pool",
- "ic-config",
  "ic-consensus-manager",
  "ic-interfaces",
  "ic-limits",
  "ic-metrics",
- "ic-protobuf",
- "ic-test-utilities",
  "ic-types",
  "prometheus",
+ "static_assertions",
  "tokio",
  "tracing",
 ]
