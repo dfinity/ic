@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "MAINNET_ENV", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -105,5 +105,19 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:slog",
         "@crate_index//:tokio",
+    ],
+)
+
+system_test(
+    name = "xnet_cloud_engine_isolation_test",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//packages/ic-error-types",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
     ],
 )
