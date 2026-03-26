@@ -114,7 +114,7 @@ fn subnet_splitting_test(env: TestEnv) {
             "Sleeping for 10 seconds before splitting the subnet \
             so the canisters have some time to chit chat"
         );
-        std::thread::sleep(Duration::from_secs(10));
+        tokio::time::sleep(Duration::from_secs(10)).await;
 
         if !TEST_ENABLED {
             info!(
@@ -831,7 +831,7 @@ async fn wait_for_cup_with_subnet_id(
             match get_cup_from_node(node, &env.logger()).await {
                 Ok(cup) => {
                     let cup_registry_version = cup.content.registry_version();
-                    if cup_registry_version >= minimum_registry_version {
+                    if cup_registry_version < minimum_registry_version {
                         bail!(
                             "The downloaded CUP still has an \
                             old registry version: {cup_registry_version}. \
