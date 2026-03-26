@@ -490,7 +490,10 @@ http_file(
     name = "kong_backend_canister",
     downloaded_file_path = "kong_backend.wasm.gz",
     sha256 = "bed9a193158348843c8661616c65b152f57f875863f75dad3b75627ad6a2b4fc",
-    url = "https://github.com/KongSwap/kong/raw/4bf8f99df53dbd34bef0e55ab6364d85bb31c71a/wasm/kong_backend.wasm.gz",
+    # The kong repository disappeared so the old URL of
+    # https://github.com/KongSwap/kong/raw/4bf8f99df53dbd34bef0e55ab6364d85bb31c71a/wasm/kong_backend.wasm.gz
+    # no longer works. So we uploaded the wasm.gz to the DFINITY CDN at:
+    url = "https://download.dfinity.systems/testdata/kong_backend-4bf8f99df53dbd34bef0e55ab6364d85bb31c71a.wasm.gz",
 )
 
 # SNS-KongSwap Adaptor canister (an SNS extension of the TreasuryManager kind)
