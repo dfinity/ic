@@ -1,5 +1,5 @@
 {
-  "checksum": "8f577132c78faa53399dc593b350de231281a3fe1d5e265b3344c7b797ddd25e",
+  "checksum": "6ade956e3d3f2e450bff9c7584b3b38ce8eb18674e94c7859ce90beaeb5fb0f5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22653,6 +22653,10 @@
             {
               "id": "tracing-flame 0.2.0",
               "target": "tracing_flame"
+            },
+            {
+              "id": "tracing-journald 0.3.2",
+              "target": "tracing_journald"
             },
             {
               "id": "tracing-opentelemetry 0.28.0",
@@ -84937,6 +84941,61 @@
       ],
       "license_file": "LICENSE"
     },
+    "tracing-journald 0.3.2": {
+      "name": "tracing-journald",
+      "version": "0.3.2",
+      "package_url": "https://github.com/tokio-rs/tracing",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tracing-journald/0.3.2/download",
+          "sha256": "2d3a81ed245bfb62592b1e2bc153e77656d94ee6a0497683a65a12ccaf2438d0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_journald",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tracing_journald",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.177",
+              "target": "libc"
+            },
+            {
+              "id": "tracing-core 0.1.33",
+              "target": "tracing_core"
+            },
+            {
+              "id": "tracing-subscriber 0.3.20",
+              "target": "tracing_subscriber"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "tracing-log 0.2.0": {
       "name": "tracing-log",
       "version": "0.2.0",
@@ -98947,6 +99006,7 @@
     "tracing 0.1.41",
     "tracing-appender 0.2.3",
     "tracing-flame 0.2.0",
+    "tracing-journald 0.3.2",
     "tracing-opentelemetry 0.28.0",
     "tracing-serde 0.1.3",
     "tracing-slog 0.2.0",

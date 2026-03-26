@@ -1,4 +1,8 @@
 //! This module implements the IDKG payload builder.
+
+// TODO(CON-1682): Remove once old signature aggregation code is removed.
+#![allow(dead_code)]
+#![allow(unused_variables)]
 use crate::{
     metrics::{CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING, IDkgPayloadMetrics},
     pre_signer::IDkgTranscriptBuilder,
@@ -353,6 +357,9 @@ fn create_summary_payload_helper(
 
     idkg_summary.idkg_transcripts.clear();
 
+    // Purge deprecated signature agreements in the idkg payload.
+    idkg_summary.signature_agreements.clear();
+
     // We purge available pre-signatures of the parent payload,
     // because they were already delivered with the previous payload.
     idkg_summary.available_pre_signatures.clear();
@@ -687,15 +694,8 @@ pub(crate) fn create_data_payload_helper_2(
         .signature_request_timeout_ns
         .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
 
-    signatures::update_signature_agreements(
-        &all_signing_requests,
-        signature_builder,
-        request_expiry_time,
-        idkg_payload,
-        valid_keys,
-        idkg_payload_metrics,
-        thread_pool,
-    );
+    // Purge deprecated signature agreements in the idkg payload.
+    idkg_payload.signature_agreements.clear();
 
     let new_transcripts = [
         pre_signatures::update_pre_signatures_in_creation(
@@ -754,9 +754,7 @@ mod tests {
     use crate::{
         MAX_IDKG_THREADS,
         test_utils::*,
-        utils::{
-            block_chain_reader, build_thread_pool, generate_responses_to_signature_request_contexts,
-        },
+        utils::{block_chain_reader, build_thread_pool},
     };
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{Dependencies, dependencies};
@@ -792,15 +790,11 @@ mod tests {
         },
         crypto::{
             AlgorithmId, CryptoHash, CryptoHashOf, ExtendedDerivationPath,
-            canister_threshold_sig::{
-                ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
-                idkg::IDkgTranscript,
-            },
+            canister_threshold_sig::idkg::IDkgTranscript,
         },
         messages::CallbackId,
         time::UNIX_EPOCH,
     };
-    use idkg::common::CombinedSignature;
     use std::{collections::BTreeSet, convert::TryInto};
 
     fn create_summary_block_with_transcripts(
@@ -1128,98 +1122,6 @@ mod tests {
 
         // The pre-signature matched with the expired context should not be deleted
         assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
-    }
-
-    #[test]
-    fn test_signature_is_only_delivered_once_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            println!("Running test for key ID {key_id}");
-            test_signature_is_only_delivered_once(&key_id);
-        }
-    }
-
-    fn test_signature_is_only_delivered_once(key_id: &IDkgMasterPublicKeyId) {
-        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
-        let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
-        let pre_sig_id = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 13);
-        let request_id = request_id(0, Height::from(0));
-        let context =
-            fake_signature_request_context_from_id(key_id.clone().into(), pre_sig_id, request_id);
-        let signature_request_contexts = BTreeMap::from([context.clone()]);
-        let signature_request_contexts = into_idkg_contexts(&signature_request_contexts);
-
-        let valid_keys = BTreeSet::from([key_id.clone()]);
-
-        let block_reader = TestIDkgBlockReader::new();
-        let transcript_builder = TestIDkgTranscriptBuilder::new();
-        let mut signature_builder = TestThresholdSignatureBuilder::new();
-
-        signature_builder.signatures.insert(
-            request_id,
-            match key_id.inner() {
-                MasterPublicKeyId::Ecdsa(_) => {
-                    CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
-                        signature: vec![1; 32],
-                    })
-                }
-                MasterPublicKeyId::Schnorr(_) => {
-                    CombinedSignature::Schnorr(ThresholdSchnorrCombinedSignature {
-                        signature: vec![2; 32],
-                    })
-                }
-                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
-            },
-        );
-
-        // create first payload
-        create_data_payload_helper_2(
-            &mut idkg_payload,
-            Height::from(5),
-            UNIX_EPOCH,
-            &ChainKeyConfig::default(),
-            &valid_keys,
-            RegistryVersion::from(9),
-            &[node_test_id(0)],
-            signature_request_contexts.clone(),
-            &BTreeMap::default(),
-            BTreeMap::default(),
-            &block_reader,
-            &transcript_builder,
-            &signature_builder,
-            thread_pool.as_ref(),
-            /*idkg_payload_metrics*/ None,
-            &ic_logger::replica_logger::no_op_logger(),
-        )
-        .unwrap();
-
-        // Assert that we got a response
-        let response1 = generate_responses_to_signature_request_contexts(&idkg_payload);
-        assert_eq!(response1.len(), 1);
-
-        // create next payload
-        create_data_payload_helper_2(
-            &mut idkg_payload,
-            Height::from(5),
-            UNIX_EPOCH,
-            &ChainKeyConfig::default(),
-            &valid_keys,
-            RegistryVersion::from(9),
-            &[node_test_id(0)],
-            signature_request_contexts,
-            &BTreeMap::default(),
-            BTreeMap::default(),
-            &block_reader,
-            &transcript_builder,
-            &signature_builder,
-            thread_pool.as_ref(),
-            /*idkg_payload_metrics*/ None,
-            &ic_logger::replica_logger::no_op_logger(),
-        )
-        .unwrap();
-
-        // assert that same signature isn't delivered again.
-        let response2 = generate_responses_to_signature_request_contexts(&idkg_payload);
-        assert!(response2.is_empty());
     }
 
     #[test]
