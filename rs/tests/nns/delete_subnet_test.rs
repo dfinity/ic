@@ -34,9 +34,6 @@ const DKG_INTERVAL_LENGTH: u64 = 29;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        // Currently, the orchestrator/replica does not handle subnet deletion gracefully, so this test can experience
-        // node restarts. However, this is ok because it can only affect the nodes of a deleted subnet.
-        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
         .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
