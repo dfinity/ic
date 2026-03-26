@@ -76,10 +76,7 @@ pub fn try_get_tagged_guestos_img_version(tag: &str) -> Result<ReplicaVersion> {
 
 /// Pull the URL of the initial GuestOS image from the environment.
 pub fn get_guestos_img_url() -> Url {
-    let env = "ENV_DEPS__GUESTOS_DISK_IMG_URL";
-
-    Url::parse(&std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
-        .expect("Invalid Url")
+    get_tagged_guestos_img_url("")
 }
 
 /// Pull the URL of a tagged GuestOS image from the environment.
@@ -93,9 +90,7 @@ pub fn get_tagged_guestos_img_url(tag: &str) -> Url {
 
 /// Pull the hash of the initial GuestOS image from the environment.
 pub fn get_guestos_img_sha256() -> String {
-    let env = "ENV_DEPS__GUESTOS_DISK_IMG_HASH";
-
-    std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
+    get_tagged_guestos_img_sha256("")
 }
 
 /// Pull the hash of a tagged GuestOS image from the environment.
@@ -122,6 +117,18 @@ pub fn get_tagged_guestos_disk_image(tag: &str) -> DiskImage {
         url: get_tagged_guestos_img_url(tag),
         sha256: get_tagged_guestos_img_sha256(tag),
     }
+}
+
+pub fn get_guestos_rootfs_hash() -> String {
+    get_tagged_guestos_rootfs_hash("")
+}
+
+/// Get a tagged GuestOS rootfs hash from the environment.
+pub fn get_tagged_guestos_rootfs_hash(tag: &str) -> String {
+    let suffix = tag_to_env_suffix(tag);
+    let env = format!("ENV_DEPS__GUESTOS{suffix}_ROOTFS_HASH");
+
+    std::env::var(&env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
 }
 
 /// Pull the URL of the initial GuestOS update image from the environment.
