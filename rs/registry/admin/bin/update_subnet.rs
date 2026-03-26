@@ -336,21 +336,20 @@ impl ProposeToUpdateSubnetCmd {
             }
         }
 
-        let resource_limits = self.resource_limits.map(
-            |ResourceLimits {
-                 maximum_state_size,
-                 maximum_state_delta,
-             }| {
-                let maximum_state_size =
-                    maximum_state_size.or(subnet_record.resource_limits.maximum_state_size);
-                let maximum_state_delta =
-                    maximum_state_delta.or(subnet_record.resource_limits.maximum_state_delta);
-                ResourceLimits {
-                    maximum_state_size,
-                    maximum_state_delta,
-                }
-            },
-        );
+        let resource_limits = self.resource_limits.map(|resource_limits| {
+            let ResourceLimits {
+                maximum_state_size,
+                maximum_state_delta,
+            } = resource_limits;
+            let maximum_state_size =
+                maximum_state_size.or(subnet_record.resource_limits.maximum_state_size);
+            let maximum_state_delta =
+                maximum_state_delta.or(subnet_record.resource_limits.maximum_state_delta);
+            ResourceLimits {
+                maximum_state_size,
+                maximum_state_delta,
+            }
+        });
 
         do_update_subnet::UpdateSubnetPayload {
             subnet_id,
@@ -828,20 +827,26 @@ mod tests {
         let _ = parse_chain_key_configs_option(&Some(chain_key_configs_to_generate));
     }
 
-    fn test_resource_limits(
-        subnet_record: SubnetRecord,
-        input_resource_limits: Option<ResourceLimits>,
-        resource_limits: Option<ResourceLimits>,
+    #[track_caller]
+    fn assert_expected_resource_limits_eq(
+        initial_resource_limits: ResourceLimits,
+        resource_limits_mutation: Option<ResourceLimits>,
+        expected_resource_limits: Option<ResourceLimits>,
     ) {
         let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(1));
+        let existing_subnet_record = SubnetRecord {
+            resource_limits: initial_resource_limits,
+            ..Default::default()
+        };
         let cmd = ProposeToUpdateSubnetCmd {
-            resource_limits: input_resource_limits,
+            resource_limits: resource_limits_mutation,
             ..empty_propose_to_update_subnet_cmd(subnet_id)
         };
         assert_eq!(
-            cmd.new_payload_for_subnet(subnet_id, subnet_record),
+            cmd.new_payload_for_subnet(subnet_id, existing_subnet_record),
             do_update_subnet::UpdateSubnetPayload {
-                resource_limits: resource_limits.map(|resource_limits| resource_limits.into()),
+                resource_limits: expected_resource_limits
+                    .map(|resource_limits| resource_limits.into()),
                 ..make_empty_update_payload(subnet_id)
             },
         );
@@ -849,130 +854,123 @@ mod tests {
 
     #[test]
     fn cli_to_payload_conversion_works_for_resource_limits_no_change() {
-        // Existing subnet record.
-        let subnet_record = SubnetRecord {
-            resource_limits: ResourceLimits {
-                maximum_state_size: Some(NumBytes::new(42)),
-                maximum_state_delta: Some(NumBytes::new(64)),
-            },
-            ..Default::default()
+        let initial_resource_limits = ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(42)),
+            maximum_state_delta: Some(NumBytes::new(64)),
         };
 
-        // The modification input by the user.
-        let input_resource_limits = None;
+        let resource_limits_mutation = None;
 
-        // The expected value in `UpdateSubnetPayload`.
-        let resource_limits = None;
+        // `expected_resource_limits` are `None` if and only if `resource_limits_mutation` is None
+        let expected_resource_limits = None;
 
-        // Run the test.
-        test_resource_limits(subnet_record, input_resource_limits, resource_limits);
+        assert_expected_resource_limits_eq(
+            initial_resource_limits,
+            resource_limits_mutation,
+            expected_resource_limits,
+        );
     }
 
     #[test]
     fn cli_to_payload_conversion_works_for_resource_limits_noop_change() {
-        // Existing subnet record.
-        let subnet_record = SubnetRecord {
-            resource_limits: ResourceLimits {
-                maximum_state_size: Some(NumBytes::new(42)),
-                maximum_state_delta: Some(NumBytes::new(64)),
-            },
-            ..Default::default()
+        let initial_resource_limits = ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(42)),
+            maximum_state_delta: Some(NumBytes::new(64)),
         };
 
-        // The modification input by the user.
-        let input_resource_limits = Some(ResourceLimits {
+        let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: None,
             maximum_state_delta: None,
         });
 
-        // The expected value in `UpdateSubnetPayload`.
-        let resource_limits = Some(ResourceLimits {
+        // `expected_resource_limits` are `None` if and only if `resource_limits_mutation` is None
+        let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
         });
 
-        // Run the test.
-        test_resource_limits(subnet_record, input_resource_limits, resource_limits);
+        assert_expected_resource_limits_eq(
+            initial_resource_limits,
+            resource_limits_mutation,
+            expected_resource_limits,
+        );
     }
 
     #[test]
     fn cli_to_payload_conversion_works_for_resource_limits_override_one() {
-        // Existing subnet record.
-        let subnet_record = SubnetRecord {
-            resource_limits: ResourceLimits {
-                maximum_state_size: Some(NumBytes::new(42)),
-                maximum_state_delta: Some(NumBytes::new(64)),
-            },
-            ..Default::default()
+        let initial_resource_limits = ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(42)),
+            maximum_state_delta: Some(NumBytes::new(64)),
         };
 
-        // The modification input by the user.
-        let input_resource_limits = Some(ResourceLimits {
+        let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: None,
         });
 
-        // The expected value in `UpdateSubnetPayload`.
-        let resource_limits = Some(ResourceLimits {
+        // `maximum_state_size` is overriden according to `resource_limits_mutation`,
+        // `maximum_state_delta` is not set in `resource_limits_mutation` and thus
+        // the value from `initial_resource_limits` is used
+        let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(64)),
         });
 
-        // Run the test.
-        test_resource_limits(subnet_record, input_resource_limits, resource_limits);
+        assert_expected_resource_limits_eq(
+            initial_resource_limits,
+            resource_limits_mutation,
+            expected_resource_limits,
+        );
     }
 
     #[test]
     fn cli_to_payload_conversion_works_for_resource_limits_override_one_unset() {
-        // Existing subnet record.
-        let subnet_record = SubnetRecord {
-            resource_limits: ResourceLimits {
-                maximum_state_size: None,
-                maximum_state_delta: Some(NumBytes::new(64)),
-            },
-            ..Default::default()
+        let initial_resource_limits = ResourceLimits {
+            maximum_state_size: None,
+            maximum_state_delta: Some(NumBytes::new(64)),
         };
 
-        // The modification input by the user.
-        let input_resource_limits = Some(ResourceLimits {
+        let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: None,
         });
 
-        // The expected value in `UpdateSubnetPayload`.
-        let resource_limits = Some(ResourceLimits {
+        // `maximum_state_size` is overriden according to `resource_limits_mutation`,
+        // `maximum_state_delta` is not set in `resource_limits_mutation` and thus
+        // the value from `initial_resource_limits` is used
+        let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(64)),
         });
 
-        // Run the test.
-        test_resource_limits(subnet_record, input_resource_limits, resource_limits);
+        assert_expected_resource_limits_eq(
+            initial_resource_limits,
+            resource_limits_mutation,
+            expected_resource_limits,
+        );
     }
 
     #[test]
     fn cli_to_payload_conversion_works_for_resource_limits_override_both() {
-        // Existing subnet record.
-        let subnet_record = SubnetRecord {
-            resource_limits: ResourceLimits {
-                maximum_state_size: Some(NumBytes::new(42)),
-                maximum_state_delta: Some(NumBytes::new(64)),
-            },
-            ..Default::default()
+        let initial_resource_limits = ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(42)),
+            maximum_state_delta: Some(NumBytes::new(64)),
         };
 
-        // The modification input by the user.
-        let input_resource_limits = Some(ResourceLimits {
+        let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(256)),
         });
 
-        // The expected value in `UpdateSubnetPayload`.
-        let resource_limits = Some(ResourceLimits {
+        let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(256)),
         });
 
-        // Run the test.
-        test_resource_limits(subnet_record, input_resource_limits, resource_limits);
+        assert_expected_resource_limits_eq(
+            initial_resource_limits,
+            resource_limits_mutation,
+            expected_resource_limits,
+        );
     }
 }
