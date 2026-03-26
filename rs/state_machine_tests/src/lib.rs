@@ -292,10 +292,15 @@ impl MessageOrdering {
 /// Scheduler wrapper that boosts one canister's priority per round.
 /// With scheduler_cores=1 and tight instruction budgets, this guarantees
 /// only the boosted canister executes one message (or DTS slice) per round.
-/// No-op when `enabled` is false.
 struct FlexibleOrderingScheduler {
     inner: Box<dyn Scheduler<State = ReplicatedState>>,
     target: Arc<RwLock<Option<CanisterId>>>,
+    /// When true, subnet_queues are temporarily emptied before the inner
+    /// execute_round so that drain_subnet_queues has nothing to process.
+    /// This prevents implicit subnet message consumption during steps
+    /// that only target normal canisters (Request, Response, Heartbeat,
+    /// Timer, DTS continuation). The queues are restored after the round.
+    suppress_subnet_messages: Arc<RwLock<bool>>,
 }
 
 impl Scheduler for FlexibleOrderingScheduler {
@@ -312,6 +317,8 @@ impl Scheduler for FlexibleOrderingScheduler {
         current_round_type: ic_interfaces::execution_environment::ExecutionRoundType,
         registry_settings: &ic_interfaces::execution_environment::RegistryExecutionSettings,
     ) -> ReplicatedState {
+        use ic_replicated_state::testing::ReplicatedStateTesting;
+
         let target = self.target.write().unwrap().take();
         if let Some(canister_id) = target {
             let zero = AccumulatedPriority::new(0);
@@ -325,6 +332,24 @@ impl Scheduler for FlexibleOrderingScheduler {
                 .get_mut(canister_id)
                 .accumulated_priority = AccumulatedPriority::new(i64::MAX / 4);
         }
+
+        // When suppressed, swap out subnet_queues so drain_subnet_queues
+        // finds nothing. This prevents implicit subnet message execution
+        // during non-management-canister steps (Request, Heartbeat, DTS).
+        //
+        // Safe to restore after execute_round: no new messages can appear in
+        // subnet_queues during the round. Messages to IC_00 stay in the
+        // canister's output queue until build_streams (which runs after
+        // execute_round) moves them to the loopback stream, and only the
+        // next round's Demux moves them into subnet_queues.
+        let suppress = *self.suppress_subnet_messages.read().unwrap();
+        let saved_subnet_queues = if suppress {
+            let saved = std::mem::take(state.subnet_queues_mut());
+            Some(saved)
+        } else {
+            None
+        };
+
         let mut result = self.inner.execute_round(
             state,
             randomness,
@@ -335,6 +360,12 @@ impl Scheduler for FlexibleOrderingScheduler {
             current_round_type,
             registry_settings,
         );
+
+        // Restore subnet_queues after the round.
+        if let Some(saved) = saved_subnet_queues {
+            result.put_subnet_queues(saved);
+        }
+
         if target.is_some() {
             let zero = AccumulatedPriority::new(0);
             for (_, p) in result.metadata.subnet_schedule.iter_mut() {
@@ -1247,6 +1278,7 @@ pub struct StateMachine {
     hypervisor_config: HypervisorConfig,
     flexible_ordering: bool,
     ordering_target: Arc<RwLock<Option<CanisterId>>>,
+    suppress_subnet_messages: Arc<RwLock<bool>>,
     ingress_buffer: RwLock<BTreeMap<MessageId, SignedIngress>>,
 }
 
@@ -2208,10 +2240,12 @@ impl StateMachine {
         });
 
         let ordering_target: Arc<RwLock<Option<CanisterId>>> = Arc::new(RwLock::new(None));
+        let suppress_subnet_messages: Arc<RwLock<bool>> = Arc::new(RwLock::new(false));
         let scheduler: Box<dyn Scheduler<State = ReplicatedState>> = if flexible_ordering {
             Box::new(FlexibleOrderingScheduler {
                 inner: execution_services.scheduler,
                 target: Arc::clone(&ordering_target),
+                suppress_subnet_messages: Arc::clone(&suppress_subnet_messages),
             })
         } else {
             execution_services.scheduler
@@ -2453,6 +2487,7 @@ impl StateMachine {
             hypervisor_config,
             flexible_ordering,
             ordering_target,
+            suppress_subnet_messages,
             ingress_buffer: RwLock::new(BTreeMap::new()),
         }
     }
@@ -2742,6 +2777,10 @@ impl StateMachine {
         *self.ordering_target.write().unwrap() = target;
     }
 
+    fn set_suppress_subnet_messages(&self, suppress: bool) {
+        *self.suppress_subnet_messages.write().unwrap() = suppress;
+    }
+
     pub fn buffer_ingress_as(
         &self,
         sender: PrincipalId,
@@ -2794,16 +2833,21 @@ impl StateMachine {
         for msg in ordering.messages {
             match msg {
                 OrderedMessage::Ingress(target, ref ingress_id) => {
-                    // Ingress is injected via the batch. Always set Message
-                    // to prevent system tasks from running instead.
+                    // Do not suppress subnet messages — the canister may call
+                    // the management canister, whose response returns via
+                    // loopback → subnet_queues → drain_subnet_queues.
+                    self.set_suppress_subnet_messages(false);
+                    // For normal canisters, set Message to prevent system tasks
+                    // from running, and boost priority. Management canister
+                    // ingress needs neither — drain_subnet_queues handles it.
                     if target != ic_management_canister_types_private::IC_00 {
                         self.set_next_scheduled_method(target, NextScheduledMethod::Message);
+                        self.set_ordering_target(Some(target));
                     }
                     let signed = self.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
                         .signed_ingress(signed);
-                    self.set_ordering_target(Some(target));
                     self.tick_with_config(payload);
 
                     for tick in 0..MAX_TICKS {
@@ -2830,6 +2874,9 @@ impl StateMachine {
                 }
 
                 OrderedMessage::Heartbeat(canister) | OrderedMessage::Timer(canister) => {
+                    // Suppress subnet messages to prevent implicit consumption
+                    // of management canister responses during system tasks.
+                    self.set_suppress_subnet_messages(true);
                     let method = match msg {
                         OrderedMessage::Heartbeat(_) => NextScheduledMethod::Heartbeat,
                         OrderedMessage::Timer(_) => NextScheduledMethod::GlobalTimer,
@@ -2848,6 +2895,8 @@ impl StateMachine {
                     // Management canister: message goes through loopback
                     // stream → Demux → subnet_queues. May need one tick
                     // for induction if the loopback hasn't been processed.
+                    // Do not suppress — drain_subnet_queues must run.
+                    self.set_suppress_subnet_messages(false);
                     if !self.sender_in_queue(target, source) {
                         self.tick();
                         assert!(
@@ -2871,6 +2920,8 @@ impl StateMachine {
                     );
                     // DTS for install_code lands on the source canister
                     // (the canister being installed), not IC_00.
+                    // Suppress subnet messages during DTS continuation.
+                    self.set_suppress_subnet_messages(true);
                     self.complete_dts(source, MAX_TICKS);
                 }
 
@@ -2879,6 +2930,8 @@ impl StateMachine {
                     // Normal canister: message was inducted by the previous
                     // step's induct_messages_on_same_subnet. Must be in
                     // target's queue already — no extra tick needed.
+                    // Suppress subnet messages to prevent implicit consumption.
+                    self.set_suppress_subnet_messages(true);
                     assert!(
                         self.sender_in_queue(target, source),
                         "Message from {} not in {}'s queue",
