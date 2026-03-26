@@ -39,7 +39,7 @@ fn should_fail_verify_canister_sig_on_wrong_msg() {
     let rng = &mut ReproducibleRng::new();
     for with_delegation in [false, true] {
         let sig_data = new_valid_sig_and_crypto_component(rng, with_delegation);
-        let wrong_msg = [1u8, 2, 3, 4];
+        let wrong_msg = [1_u8, 2, 3, 4];
 
         let result = ic_signature_verification::verify_canister_sig(
             &wrong_msg,

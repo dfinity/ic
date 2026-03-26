@@ -29,7 +29,7 @@ pub fn decode<Ctx>(d: &mut Decoder<'_>, _ctx: &mut Ctx) -> Result<u256, Error> {
             bytes.len()
         )));
     }
-    let mut be_bytes = [0u8; 32];
+    let mut be_bytes = [0_u8; 32];
     be_bytes[32 - bytes.len()..32].copy_from_slice(bytes);
     Ok(u256::from_be_bytes(be_bytes))
 }

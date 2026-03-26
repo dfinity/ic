@@ -156,11 +156,15 @@ fn test(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .without_assert_no_replica_restarts()
         .add_test(systest!(test))
         // One of the nodes has a corrupted state and proposes a CUP share which will be invalidated
         // by the peers (and vice versa), so it's expected that the metric is increased.
         .remove_metrics_to_check("consensus_invalidated_artifacts")
+        // It is expected that malicious node crashes due to state divergence and restarts
+        .update_orchestrator_metrics_to_check(
+            "orchestrator_replica_process_start_attempts_total",
+            2,
+        )
         .execute_from_args()?;
     Ok(())
 }
