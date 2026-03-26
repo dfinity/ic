@@ -430,11 +430,11 @@ async fn install_counting_canisters(env: &TestEnv) -> Vec<CanisterId> {
 
     let canister_ids = futures::future::try_join_all((0..COUNTER_CANISTERS_COUNT).map(|_| async {
         source_node
-            .create_and_install_canister_with_arg_async(
+            .canister_installer(
                 &std::env::var("COUNTER_CANISTER_WAT_PATH")
                     .expect("COUNTER_CANISTER_WAT_PATH should be set"),
-                /*arg=*/ None,
             )
+            .install()
             .await
             .map(|canister_id| CanisterId::unchecked_from_principal(PrincipalId(canister_id)))
     }))
