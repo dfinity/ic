@@ -28,6 +28,7 @@ Success::
  */
 use std::{
     borrow::Cow,
+    collections::BTreeMap,
     time::{Duration, SystemTime},
 };
 
@@ -104,10 +105,22 @@ const CERTIFIED_VAR_WAT: &str = r#"
 )
 "#;
 
+const INSTALLED_CANISTER_IDS: &str = "installed_canister_ids";
+
 /// How long to wait between subsequent nns delegation fetch requests.
 const RETRY_DELAY: tokio::time::Duration = tokio::time::Duration::from_secs(60);
 
 const DKG_LENGTH: Height = Height::new(9);
+
+fn get_installed_canister_ids(env: &TestEnv) -> BTreeMap<SubnetType, PrincipalId> {
+    env.read_json_object(INSTALLED_CANISTER_IDS)
+        .expect("Could not read installed canister IDs from test environment.")
+}
+
+fn set_installed_canister_ids(env: &TestEnv, canister_ids: BTreeMap<SubnetType, PrincipalId>) {
+    env.write_json_object(INSTALLED_CANISTER_IDS, &canister_ids)
+        .expect("Could not write installed canister IDs to test environment.");
+}
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -128,29 +141,45 @@ fn setup(env: TestEnv) {
 
     info!(
         env.logger(),
-        "Installing certified variables canister on the application subnet and cloud engine"
+        "Installing certified variables canister on all subnets"
     );
     let wasm = wat::parse_str(CERTIFIED_VAR_WAT).expect("Failed to parse certified variables WAT");
-    for subnet_type in [SubnetType::Application, SubnetType::CloudEngine] {
-        let (_subnet, node) = get_subnet_and_node(&env, subnet_type);
-        let agent = node.build_default_agent();
-        let management_canister = ManagementCanister::create(&agent);
-        block_on(async {
-            management_canister
-                .create_canister()
-                .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait()
-                .await
-                .expect("Failed to create the certified variables canister");
+    let canister_ids = block_on(futures::future::join_all(
+        [
+            SubnetType::System,
+            SubnetType::Application,
+            SubnetType::CloudEngine,
+        ]
+        .map(|subnet_type| {
+            let env = env.clone();
+            let wasm = wasm.clone();
+            async move {
+                let (_subnet, node) = get_subnet_and_node(&env, subnet_type);
+                let agent = node.build_default_agent_async().await;
+                let management_canister = ManagementCanister::create(&agent);
+                let canister_id = management_canister
+                    .create_canister()
+                    .as_provisional_create_with_amount(None)
+                    .with_effective_canister_id(node.effective_canister_id())
+                    .call_and_wait()
+                    .await
+                    .expect("Failed to create the certified variables canister")
+                    .0;
 
-            management_canister
-                .install_code(&node.effective_canister_id().0, &wasm)
-                .call_and_wait()
-                .await
-                .expect("Failed to install the certified variables canister");
-        });
-    }
+                management_canister
+                    .install_code(&canister_id, &wasm)
+                    .call_and_wait()
+                    .await
+                    .expect("Failed to install the certified variables canister");
+
+                (subnet_type, PrincipalId::from(canister_id))
+            }
+        }),
+    ))
+    .into_iter()
+    .collect();
+
+    set_installed_canister_ids(&env, canister_ids);
 
     upgrade_non_nns_subnets_if_necessary(&env);
 }
@@ -296,14 +325,12 @@ fn subnet_read_state_v3_returns_correct_delegation(env: TestEnv, subnet_type: Su
 
 /// Responses to `api/v2/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
 fn canister_read_state_v2_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: HttpReadStateResponse = block_on(send(
         &node,
-        format!(
-            "api/v2/canister/{}/read_state",
-            node.effective_canister_id()
-        ),
+        format!("api/v2/canister/{canister_id}/read_state"),
         sign_envelope(&read_state_content()),
     ));
     let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
@@ -313,21 +340,19 @@ fn canister_read_state_v2_returns_correct_delegation(env: TestEnv, subnet_type: 
         certificate.delegation.as_ref(),
         subnet.subnet_id,
         subnet_type,
-        Some(node.effective_canister_id()),
+        Some(canister_id),
         CertificateDelegationFormat::Flat,
     );
 }
 
 /// Responses to `api/v3/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
 fn canister_read_state_v3_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: HttpReadStateResponse = block_on(send(
         &node,
-        format!(
-            "api/v3/canister/{}/read_state",
-            node.effective_canister_id()
-        ),
+        format!("api/v3/canister/{canister_id}/read_state"),
         sign_envelope(&read_state_content()),
     ));
     let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
@@ -337,7 +362,7 @@ fn canister_read_state_v3_returns_correct_delegation(env: TestEnv, subnet_type: 
         certificate.delegation.as_ref(),
         subnet.subnet_id,
         subnet_type,
-        Some(node.effective_canister_id()),
+        Some(canister_id),
         CertificateDelegationFormat::Tree,
     );
 }
@@ -374,12 +399,13 @@ struct SyncCallResponse {
 
 /// Responses to `api/v3/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
 fn call_v3_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: SyncCallResponse = block_on(send(
         &node,
-        format!("api/v3/canister/{}/call", node.effective_canister_id()),
-        sign_envelope(&call_content(node.effective_canister_id())),
+        format!("api/v3/canister/{canister_id}/call"),
+        sign_envelope(&call_content(canister_id)),
     ));
     let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
 
@@ -388,19 +414,20 @@ fn call_v3_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
         certificate.delegation.as_ref(),
         subnet.subnet_id,
         subnet_type,
-        Some(node.effective_canister_id()),
+        Some(canister_id),
         CertificateDelegationFormat::Flat,
     );
 }
 
 /// Responses to `api/v4/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
 fn call_v4_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: SyncCallResponse = block_on(send(
         &node,
-        format!("api/v4/canister/{}/call", node.effective_canister_id()),
-        sign_envelope(&call_content(node.effective_canister_id())),
+        format!("api/v4/canister/{canister_id}/call"),
+        sign_envelope(&call_content(canister_id)),
     ));
     let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
 
@@ -409,7 +436,7 @@ fn call_v4_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
         certificate.delegation.as_ref(),
         subnet.subnet_id,
         subnet_type,
-        Some(node.effective_canister_id()),
+        Some(canister_id),
         CertificateDelegationFormat::Tree,
     );
 }
@@ -417,6 +444,7 @@ fn call_v4_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
 /// Responses to `api/v4/canister/{canister_id}/call` targeting the management canister
 /// have valid delegations without canister ranges.
 fn call_v4_management_canister_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
+    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let expiration = OffsetDateTime::now_utc() + Duration::from_secs(3 * 60);
 
@@ -431,16 +459,13 @@ fn call_v4_management_canister_returns_correct_delegation(env: TestEnv, subnet_t
         sender: get_identity().sender().unwrap(),
         canister_id: CanisterId::ic_00().into(),
         method_name: String::from("start_canister"),
-        arg: Encode!(&Arg {
-            canister_id: node.effective_canister_id()
-        })
-        .unwrap(),
+        arg: Encode!(&Arg { canister_id }).unwrap(),
         nonce: None,
     };
 
     let response: SyncCallResponse = block_on(send(
         &node,
-        format!("api/v4/canister/{}/call", node.effective_canister_id()),
+        format!("api/v4/canister/{canister_id}/call"),
         sign_envelope(&call_content),
     ));
     let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
@@ -450,7 +475,7 @@ fn call_v4_management_canister_returns_correct_delegation(env: TestEnv, subnet_t
         certificate.delegation.as_ref(),
         subnet.subnet_id,
         subnet_type,
-        Some(node.effective_canister_id()),
+        Some(canister_id),
         CertificateDelegationFormat::Tree,
     );
 }
@@ -465,13 +490,14 @@ struct QueryResponse {
 /// For `api/v2/canister/{canister_id}/query` we pass valid delegations with
 /// canister ranges in the flat format to the canister.
 fn query_v2_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: SubnetType) {
+    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let arg = vec![];
 
     let response: QueryResponse = block_on(send(
         &node,
-        format!("api/v2/canister/{}/query", node.effective_canister_id()),
-        sign_envelope(&query_content(node.effective_canister_id(), arg)),
+        format!("api/v2/canister/{canister_id}/query"),
+        sign_envelope(&query_content(canister_id, arg)),
     ));
     let certificate: Certificate = serde_cbor::from_slice(&response.reply.arg).unwrap();
 
@@ -480,7 +506,7 @@ fn query_v2_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: Sub
         certificate.delegation.as_ref(),
         subnet.subnet_id,
         subnet_type,
-        Some(node.effective_canister_id()),
+        Some(canister_id),
         CertificateDelegationFormat::Flat,
     );
 }
@@ -488,13 +514,14 @@ fn query_v2_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: Sub
 /// For `api/v3/canister/{canister_id}/query` we pass valid delegations with
 /// canister ranges in the tree format to the canister.
 fn query_v3_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: SubnetType) {
+    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let arg = vec![];
 
     let response: QueryResponse = block_on(send(
         &node,
-        format!("api/v3/canister/{}/query", node.effective_canister_id()),
-        sign_envelope(&query_content(node.effective_canister_id(), arg)),
+        format!("api/v3/canister/{canister_id}/query"),
+        sign_envelope(&query_content(canister_id, arg)),
     ));
     let certificate: Certificate = serde_cbor::from_slice(&response.reply.arg).unwrap();
 
@@ -503,7 +530,7 @@ fn query_v3_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: Sub
         certificate.delegation.as_ref(),
         subnet.subnet_id,
         subnet_type,
-        Some(node.effective_canister_id()),
+        Some(canister_id),
         CertificateDelegationFormat::Tree,
     );
 }

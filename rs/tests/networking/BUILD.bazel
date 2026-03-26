@@ -243,6 +243,7 @@ rust_binary(
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-utils",
         "@crate_index//:leb128",
