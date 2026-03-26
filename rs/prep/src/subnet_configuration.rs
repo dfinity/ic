@@ -112,6 +112,9 @@ pub struct SubnetConfig {
     /// Optional chain key configuration for this subnet.
     pub chain_key_config: Option<ChainKeyConfig>,
 
+    /// The cost schedule for canister execution on this subnet.
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
+
     /// The number of canisters allowed to be created on this subnet.
     pub max_number_of_canisters: u64,
 
@@ -248,6 +251,7 @@ impl SubnetConfig {
         max_instructions_per_install_code: Option<u64>,
         features: Option<SubnetFeatures>,
         chain_key_config: Option<ChainKeyConfig>,
+        canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
         max_number_of_canisters: Option<u64>,
         ssh_readonly_access: Vec<String>,
         ssh_backup_access: Vec<String>,
@@ -283,6 +287,7 @@ impl SubnetConfig {
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
             features: features.unwrap_or_default(),
             chain_key_config,
+            canister_cycles_cost_schedule: canister_cycles_cost_schedule.unwrap_or_default(),
             max_number_of_canisters: max_number_of_canisters.unwrap_or(0),
             ssh_readonly_access,
             ssh_backup_access,
@@ -340,7 +345,7 @@ impl SubnetConfig {
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
             chain_key_config: self.chain_key_config,
-            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            canister_cycles_cost_schedule: self.canister_cycles_cost_schedule.into(),
             subnet_admins: vec![],
             resource_limits: Default::default(),
             recalled_replica_version_ids: vec![],

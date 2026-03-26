@@ -243,6 +243,7 @@ pub fn get_ic_config() -> IcConfig {
             /*max_instructions_per_install_code=*/ None,
             /*features=*/ None,
             /*chain_key_config=*/ None,
+            /*canister_cycles_cost_schedule*/ None,
             /*max_number_of_canisters=*/ None,
             /*ssh_readonly_access=*/ vec![],
             /*ssh_backup_access=*/ vec![],

@@ -168,6 +168,7 @@ pub fn init_ic(
                 subnet.max_instructions_per_install_code,
                 subnet.features,
                 subnet.chain_key_config.clone().map(|c| c.into()),
+                subnet.canister_cycles_cost_schedule.map(|s| s.into()),
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),
                 subnet.ssh_backup_access.clone(),

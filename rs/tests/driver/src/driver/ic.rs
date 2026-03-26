@@ -19,6 +19,7 @@ use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::{Height, NodeId, PrincipalId};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -479,6 +480,7 @@ pub struct Subnet {
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeatures>,
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
     pub max_number_of_canisters: Option<u64>,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
@@ -490,6 +492,10 @@ pub struct Subnet {
 
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
+        let canister_cycles_cost_schedule = match subnet_type {
+            SubnetType::CloudEngine => Some(CanisterCyclesCostSchedule::Free),
+            _ => None,
+        };
         Self {
             vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
@@ -508,6 +514,7 @@ impl Subnet {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            canister_cycles_cost_schedule,
             max_number_of_canisters: None,
             subnet_type,
             ssh_readonly_access: vec![],
@@ -679,6 +686,14 @@ impl Subnet {
         self
     }
 
+    pub fn with_canister_cycles_cost_schedule(
+        mut self,
+        schedule: CanisterCyclesCostSchedule,
+    ) -> Self {
+        self.canister_cycles_cost_schedule = Some(schedule);
+        self
+    }
+
     pub fn with_max_number_of_canisters(mut self, max_number_of_canisters: u64) -> Self {
         self.max_number_of_canisters = Some(max_number_of_canisters);
         self
@@ -774,6 +789,7 @@ impl Default for Subnet {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            canister_cycles_cost_schedule: None,
             max_number_of_canisters: None,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
