@@ -119,7 +119,8 @@ use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
     canister_state::{
         NextExecution, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
-        canister_snapshots::CanisterSnapshots, system_state::CanisterHistory,
+        canister_snapshots::CanisterSnapshots, execution_state::NextScheduledMethod,
+        system_state::CanisterHistory,
     },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
@@ -251,8 +252,42 @@ pub enum OrderedMessage {
     Timer(CanisterId),
 }
 
+/// Controls how execute_with_ordering handles the scheduler's
+/// next_scheduled_method round-robin (GlobalTimer → Heartbeat → Message).
+pub enum OrderingMode {
+    /// Sets next_scheduled_method before each step so the scheduler
+    /// always executes what the ordering specifies.
+    Relaxed,
+    /// Verifies the ordering matches the scheduler's natural round-robin.
+    /// Panics on mismatch. The vec sets each canister's initial
+    /// next_scheduled_method for deterministic starting state.
+    Strict(Vec<(CanisterId, NextScheduledMethod)>),
+}
+
 /// A sequence of messages to execute in order.
-pub struct MessageOrdering(pub Vec<OrderedMessage>);
+pub struct MessageOrdering {
+    pub messages: Vec<OrderedMessage>,
+    pub mode: OrderingMode,
+}
+
+impl MessageOrdering {
+    pub fn new(messages: Vec<OrderedMessage>) -> Self {
+        Self {
+            messages,
+            mode: OrderingMode::Relaxed,
+        }
+    }
+
+    pub fn strict(
+        initial: Vec<(CanisterId, NextScheduledMethod)>,
+        messages: Vec<OrderedMessage>,
+    ) -> Self {
+        Self {
+            messages,
+            mode: OrderingMode::Strict(initial),
+        }
+    }
+}
 
 /// Scheduler wrapper that boosts one canister's priority per round.
 /// With scheduler_cores=1 and tight instruction budgets, this guarantees
@@ -2733,29 +2768,34 @@ impl StateMachine {
 
     /// Execute tasks in user-specified order.
     ///
-    /// One global loop: for each step, set next_scheduled_method on the
-    /// canister so the scheduler executes exactly the right task type
-    /// (Heartbeat, Timer, or Message), boost the canister, tick one round,
-    /// verify the effect, complete DTS if sliced.
+    /// For each step: set next_scheduled_method on the target canister,
+    /// boost priority, tick one round, verify, complete DTS.
     ///
-    /// The round-robin next_scheduled_method (GlobalTimer → Heartbeat →
-    /// Message) controls what initialize_inner_round adds to the task_queue.
-    /// By setting it before each tick, we guarantee the scheduler executes
-    /// exactly what the ordering specifies.
+    /// In relaxed mode (default): sets next_scheduled_method before each
+    /// step so the scheduler always executes what the ordering specifies.
+    ///
+    /// In strict mode: uses predict_next_execution to verify the ordering
+    /// matches the scheduler's natural round-robin. Panics on mismatch.
     pub fn execute_with_ordering(&self, ordering: MessageOrdering) {
         assert!(
             self.flexible_ordering,
             "call with_flexible_ordering() first"
         );
-        use ic_replicated_state::canister_state::NextExecution;
-        use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
         const MAX_TICKS: usize = 100;
+        let strict = matches!(ordering.mode, OrderingMode::Strict(_));
 
-        for msg in ordering.0 {
+        // In strict mode, set initial next_scheduled_method for each canister.
+        if let OrderingMode::Strict(initial) = &ordering.mode {
+            for (canister_id, method) in initial {
+                self.set_next_scheduled_method(*canister_id, *method);
+            }
+        }
+
+        for msg in ordering.messages {
             match msg {
                 OrderedMessage::Ingress(target, ref ingress_id) => {
-                    // Set Message so no system task interferes.
-                    // Skip for IC_00 (management canister, not a real canister).
+                    // Ingress is injected via the batch. Always set Message
+                    // to prevent system tasks from running instead.
                     if target != ic_management_canister_types_private::IC_00 {
                         self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     }
@@ -2766,8 +2806,6 @@ impl StateMachine {
                     self.set_ordering_target(Some(target));
                     self.tick_with_config(payload);
 
-                    // Keep ticking while target has in-flight work
-                    // (self-calls, mgmt canister pipeline).
                     for tick in 0..MAX_TICKS {
                         match self.ingress_status(ingress_id) {
                             IngressStatus::Known {
@@ -2791,21 +2829,15 @@ impl StateMachine {
                     }
                 }
 
-                OrderedMessage::Heartbeat(canister) => {
-                    // Set Heartbeat so initialize_inner_round adds it.
-                    self.set_next_scheduled_method(canister, NextScheduledMethod::Heartbeat);
+                OrderedMessage::Heartbeat(canister) | OrderedMessage::Timer(canister) => {
+                    let method = match msg {
+                        OrderedMessage::Heartbeat(_) => NextScheduledMethod::Heartbeat,
+                        OrderedMessage::Timer(_) => NextScheduledMethod::GlobalTimer,
+                        _ => unreachable!(),
+                    };
+                    self.ensure_next_scheduled(canister, method, strict);
                     self.set_ordering_target(Some(canister));
                     self.tick();
-                    // Complete DTS if heartbeat was sliced.
-                    self.complete_dts(canister, MAX_TICKS);
-                }
-
-                OrderedMessage::Timer(canister) => {
-                    // Set GlobalTimer so initialize_inner_round adds it.
-                    self.set_next_scheduled_method(canister, NextScheduledMethod::GlobalTimer);
-                    self.set_ordering_target(Some(canister));
-                    self.tick();
-                    // Complete DTS if timer was sliced.
                     self.complete_dts(canister, MAX_TICKS);
                 }
 
@@ -2814,8 +2846,6 @@ impl StateMachine {
                     let is_mgmt = target == ic_management_canister_types_private::IC_00;
                     let dts_canister = if is_mgmt { source } else { target };
 
-                    // Message must be in queue from previous step's induction.
-                    // Mgmt canister may need one tick for loopback stream.
                     if !self.sender_in_queue(target, source) {
                         self.tick();
                         assert!(
@@ -2826,18 +2856,22 @@ impl StateMachine {
                         );
                     }
 
-                    // Set Message so no system task interferes.
                     if !is_mgmt {
-                        self.set_next_scheduled_method(target, NextScheduledMethod::Message);
+                        self.ensure_next_scheduled(target, NextScheduledMethod::Message, strict);
                         self.set_ordering_target(Some(target));
                     }
                     let count_before = self.message_count(target);
                     self.tick();
-                    assert!(
-                        self.message_count(target) < count_before,
-                        "Message from {} not consumed from {}'s queue",
+                    let count_after = self.message_count(target);
+                    assert_eq!(
+                        count_after,
+                        count_before - 1,
+                        "Expected exactly one message consumed from {}'s queue \
+                         (from {}). Before: {}, after: {}",
+                        target,
                         source,
-                        target
+                        count_before,
+                        count_after,
                     );
                     self.complete_dts(dts_canister, MAX_TICKS);
                 }
@@ -2845,16 +2879,32 @@ impl StateMachine {
         }
     }
 
-    /// Set the canister's next_scheduled_method. This controls what
-    /// initialize_inner_round will add to the task_queue:
-    /// - Message: no system task added, input message executes.
-    /// - Heartbeat: heartbeat task added, executes before input.
-    /// - GlobalTimer: timer task added, executes before input.
-    fn set_next_scheduled_method(
+    /// Predict what the scheduler will execute next for this canister.
+    /// Replicates the round-robin logic in maybe_add_heartbeat_or_global_timer_tasks.
+    /// In strict mode: assert prediction matches expected.
+    /// In relaxed mode: set next_scheduled_method to expected.
+    fn ensure_next_scheduled(
         &self,
         canister_id: CanisterId,
-        method: ic_replicated_state::canister_state::execution_state::NextScheduledMethod,
+        expected: NextScheduledMethod,
+        strict: bool,
     ) {
+        if strict {
+            let predicted = self.predict_next_execution(canister_id);
+            assert!(
+                predicted == expected,
+                "Canister {} will execute {:?}, not {:?}. \
+                 Reorder steps to match the round-robin.",
+                canister_id,
+                predicted,
+                expected,
+            );
+        } else {
+            self.set_next_scheduled_method(canister_id, expected);
+        }
+    }
+
+    fn set_next_scheduled_method(&self, canister_id: CanisterId, method: NextScheduledMethod) {
         let (_, mut state) = self.state_manager.take_tip();
         let canister = state
             .canister_state_make_mut(&canister_id)
@@ -2864,6 +2914,33 @@ impl StateMachine {
         }
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+    }
+
+    /// Replicates the round-robin logic in scheduler's
+    /// maybe_add_heartbeat_or_global_timer_tasks / is_next_method_chosen.
+    /// WARNING: this depends on scheduler internals and will break if the
+    /// scheduler's task selection logic changes.
+    fn predict_next_execution(&self, canister_id: CanisterId) -> NextScheduledMethod {
+        let state = self.get_latest_state();
+        let canister = state
+            .canister_state(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
+        let has_heartbeat = canister.exports_heartbeat_method();
+        let has_timer = canister.exports_global_timer_method()
+            && canister
+                .system_state
+                .global_timer
+                .has_reached_deadline(state.time());
+        let mut method = canister.get_next_scheduled_method();
+        for _ in 0..3 {
+            match method {
+                NextScheduledMethod::Heartbeat if has_heartbeat => return method,
+                NextScheduledMethod::GlobalTimer if has_timer => return method,
+                NextScheduledMethod::Message if canister.has_input() => return method,
+                _ => method.inc(),
+            }
+        }
+        NextScheduledMethod::Message
     }
 
     fn complete_dts(&self, canister_id: CanisterId, max_ticks: usize) {
@@ -2884,7 +2961,9 @@ impl StateMachine {
         }
     }
 
-    /// Total input message count for a canister (or subnet_queues for IC_00).
+    /// Input message count (requests + responses + ingress). Does NOT count
+    /// heartbeats/timers — those live in the separate task_queue, so system
+    /// task execution doesn't change this count.
     fn message_count(&self, target: CanisterId) -> usize {
         let state = self.get_latest_state();
         if target == ic_management_canister_types_private::IC_00 {
