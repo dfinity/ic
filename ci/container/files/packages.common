@@ -5,9 +5,12 @@ git
 git-lfs
 gnupg
 iproute2
+jq
+rclone
 retry
 shellcheck
 sudo
+time
 uuid-dev
 vim
 xxd
@@ -46,6 +49,7 @@ libsystemd-dev
 libvirt-dev
 mtools # used for mcopy and mmd
 nasm # to build OVMF
+podman
 zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
 
