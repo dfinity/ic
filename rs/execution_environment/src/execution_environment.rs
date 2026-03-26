@@ -3,8 +3,8 @@ use crate::{
     canister_manager::{
         CanisterManager,
         types::{
-            CanisterManagerError, DtsInstallCodeResult, InstallCodeContext,
-            PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
+            CanisterManagerError, CanisterManagerResponse, DtsInstallCodeResult,
+            InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
         },
     },
     canister_settings::CanisterSettings,
@@ -803,15 +803,10 @@ impl ExecutionEnvironment {
                         time,
                     );
                     match result {
-                        Ok(rejects) => {
-                            crate::util::process_responses(
-                                rejects,
-                                &mut state,
-                                Arc::clone(&self.ingress_history_writer),
-                                self.log.clone(),
-                                &self.metrics.canister_not_found_error,
-                            );
-                            Ok((EmptyBlob.encode(), Some(args.get_canister_id())))
+                        Ok(response) => {
+                            let bytes =
+                                self.process_canister_manager_response(response, &mut state);
+                            Ok((bytes, Some(args.get_canister_id())))
                         }
                         Err(err) => Err(err.into()),
                     }
@@ -1888,6 +1883,36 @@ impl ExecutionEnvironment {
         // If you modify code below, please also update
         // these cases.
         self.finish_subnet_message_execution(state, msg, result, since)
+    }
+
+    /// Applies changes to `ReplicatedState` according to `CanisterManagerResponse`
+    /// and returns the reply (success) contained in that `CanisterManagerResponse`
+    /// (that reply is supposed to be handled by the caller).
+    fn process_canister_manager_response(
+        &self,
+        response: CanisterManagerResponse,
+        state: &mut ReplicatedState,
+    ) -> Vec<u8> {
+        state.metadata.heap_delta_estimate += response.heap_delta_increase;
+        if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
+            state
+                .metadata
+                .unflushed_checkpoint_ops
+                .push(unflushed_checkpoint_op);
+        }
+        crate::util::process_responses(
+            response.deleted_call_context_responses,
+            state,
+            Arc::clone(&self.ingress_history_writer),
+            self.log.clone(),
+            &self.metrics.canister_not_found_error,
+        );
+        self.reject_stop_requests(
+            response.canister_id,
+            response.stop_contexts_to_reject,
+            state,
+        );
+        response.reply
     }
 
     fn try_add_http_context_to_replicated_state(

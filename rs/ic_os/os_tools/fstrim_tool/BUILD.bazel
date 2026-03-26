@@ -4,12 +4,12 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/ic_os/logging",
     "//rs/sys",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
     "@crate_index//:prometheus",
     "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
 ]
 
 DEV_DEPENDENCIES = [

@@ -37,7 +37,7 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:bc2db35e2971778317029c2933440c53e24b4d005020097c4d19a275cc1e65db
+      image: ghcr.io/dfinity/ic-build@sha256:499982f5b61fd9a11e7988c2be0d42e2634282a0e397db4dc338b18bd3b75a31
       options: >-
          -e NODE_NAME --mount type=tmpfs,target="/tmp/containers"
     steps:
