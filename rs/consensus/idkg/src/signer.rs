@@ -3,9 +3,9 @@
 use crate::{
     complaints::IDkgTranscriptLoader,
     metrics::{IDkgPayloadMetrics, ThresholdSignerMetrics, timed_call},
-    utils::{IDkgSchedule, build_signature_inputs, load_transcripts},
+    utils::{IDkgSchedule, load_transcripts},
 };
-use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::{chain_key::build_signature_inputs, crypto::ConsensusCrypto};
 use ic_interfaces::{
     crypto::{
         ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
