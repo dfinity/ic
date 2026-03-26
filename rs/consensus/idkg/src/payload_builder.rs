@@ -1,17 +1,12 @@
 //! This module implements the IDKG payload builder.
-
-// TODO(CON-1682): Remove once old signature aggregation code is removed.
-#![allow(dead_code)]
-#![allow(unused_variables)]
 use crate::{
     metrics::{CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING, IDkgPayloadMetrics},
     pre_signer::IDkgTranscriptBuilder,
-    signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl},
     utils::{InvalidChainCacheError, block_chain_reader, get_idkg_chain_key_config_if_enabled},
 };
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::retrieve_mega_public_key_from_registry;
 use ic_interfaces::idkg::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
@@ -21,7 +16,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{ReplicatedState, metadata_state::subnet_call_context_manager::*};
 use ic_types::{
-    Height, NodeId, RegistryVersion, SubnetId, Time,
+    Height, NodeId, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
         Block, HasHeight,
@@ -35,19 +30,16 @@ use ic_types::{
     },
     messages::CallbackId,
 };
-use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Deref,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 
 mod errors;
 mod key_transcript;
 mod pre_signatures;
 pub(super) mod resharing;
-pub(super) mod signatures;
 
 /// A helper wrapper around [`ReshareChainKeyContext`], that guarantees,
 /// that the context is about an IDKG key.
@@ -488,8 +480,6 @@ impl<'a> IDkgTranscriptBuilder for PoolTranscriptBuilder<'a> {
 pub fn create_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    crypto: &dyn ConsensusCrypto,
-    thread_pool: &ThreadPool,
     pool_reader: &PoolReader<'_>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
@@ -535,9 +525,6 @@ pub fn create_data_payload(
     )?;
     let idkg_pool = idkg_pool.read().unwrap();
     let idkg_pool = idkg_pool.deref();
-
-    let signature_builder =
-        ThresholdSignatureBuilderImpl::new(crypto, idkg_pool, idkg_payload_metrics, log.clone());
     let transcript_builder = PoolTranscriptBuilder { idkg_pool };
 
     let new_payload = create_data_payload_helper(
@@ -547,11 +534,8 @@ pub fn create_data_payload(
         &summary_block,
         &block_reader,
         &transcript_builder,
-        &signature_builder,
-        thread_pool,
         state_manager,
         registry_client,
-        Some(idkg_payload_metrics),
         log,
     )?;
 
@@ -589,11 +573,8 @@ pub(crate) fn create_data_payload_helper(
     summary_block: &Block,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
-    signature_builder: &dyn ThresholdSignatureBuilder,
-    thread_pool: &ThreadPool,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     registry_client: &dyn RegistryClient,
-    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<Option<IDkgPayload>, IDkgPayloadError> {
     let height = parent_block.height().increment();
@@ -610,12 +591,6 @@ pub(crate) fn create_data_payload_helper(
         return Ok(None);
     };
 
-    let valid_keys: BTreeSet<_> = chain_key_config
-        .key_configs
-        .iter()
-        .filter_map(|key_config| key_config.key_id.clone().try_into().ok())
-        .collect();
-
     let mut idkg_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_idkg() {
         prev_payload.clone()
     } else {
@@ -624,12 +599,6 @@ pub(crate) fn create_data_payload_helper(
 
     let receivers = get_subnet_nodes(registry_client, next_interval_registry_version, subnet_id)?;
     let state = state_manager.get_state_at(context.certified_height)?;
-    let all_signing_requests = state
-        .get_ref()
-        .signature_request_contexts()
-        .iter()
-        .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
-        .collect();
 
     let reshare_contexts = state.get_ref().reshare_chain_key_contexts();
     let idkg_dealings_contexts = filter_idkg_reshare_chain_key_contexts(reshare_contexts);
@@ -638,42 +607,29 @@ pub(crate) fn create_data_payload_helper(
     create_data_payload_helper_2(
         &mut idkg_payload,
         height,
-        context.time,
         &chain_key_config,
-        &valid_keys,
         next_interval_registry_version,
         &receivers,
-        all_signing_requests,
         &idkg_dealings_contexts,
         total_pre_signatures,
         block_reader,
         transcript_builder,
-        signature_builder,
-        thread_pool,
-        idkg_payload_metrics,
         log,
     )?;
 
     Ok(Some(idkg_payload))
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn create_data_payload_helper_2(
     idkg_payload: &mut IDkgPayload,
     height: Height,
-    context_time: Time,
     chain_key_config: &ChainKeyConfig,
-    valid_keys: &BTreeSet<IDkgMasterPublicKeyId>,
     next_interval_registry_version: RegistryVersion,
     receivers: &[NodeId],
-    all_signing_requests: BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>>,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
     total_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, usize>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
-    signature_builder: &dyn ThresholdSignatureBuilder,
-    thread_pool: &ThreadPool,
-    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<(), IDkgPayloadError> {
     // Check if we are creating a new key, if so, start using it immediately.
@@ -689,10 +645,6 @@ pub(crate) fn create_data_payload_helper_2(
     // We purge available pre-signatures of the parent payload,
     // because they were already delivered with the previous payload.
     idkg_payload.available_pre_signatures.clear();
-
-    let request_expiry_time = chain_key_config
-        .signature_request_timeout_ns
-        .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
 
     // Purge deprecated signature agreements in the idkg payload.
     idkg_payload.signature_agreements.clear();
@@ -751,11 +703,7 @@ pub(crate) fn create_data_payload_helper_2(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        MAX_IDKG_THREADS,
-        test_utils::*,
-        utils::{block_chain_reader, build_thread_pool},
-    };
+    use crate::{test_utils::*, utils::block_chain_reader};
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -784,7 +732,7 @@ mod tests {
             BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
             dkg::{DkgDataPayload, DkgSummary},
             idkg::{
-                IDkgPayload, PreSigId, ReshareOfUnmaskedParams, TranscriptRef, UnmaskedTranscript,
+                IDkgPayload, ReshareOfUnmaskedParams, TranscriptRef, UnmaskedTranscript,
                 UnmaskedTranscriptWithAttributes,
             },
         },
@@ -792,7 +740,6 @@ mod tests {
             AlgorithmId, CryptoHash, CryptoHashOf, ExtendedDerivationPath,
             canister_threshold_sig::idkg::IDkgTranscript,
         },
-        messages::CallbackId,
         time::UNIX_EPOCH,
     };
     use std::{collections::BTreeSet, convert::TryInto};
@@ -886,22 +833,6 @@ mod tests {
         (idkg_payload, env)
     }
 
-    fn set_up_signature_request_contexts(
-        parameters: Vec<(IDkgMasterPublicKeyId, u64, Time, Option<PreSigId>)>,
-    ) -> BTreeMap<CallbackId, SignWithThresholdContext> {
-        let mut contexts = BTreeMap::new();
-        for (key_id, id, batch_time, pre_sig) in parameters {
-            let (callback_id, mut context) = fake_signature_request_context_with_pre_sig(
-                request_id(id, Height::from(0)),
-                key_id,
-                pre_sig,
-            );
-            context.batch_time = batch_time;
-            contexts.insert(callback_id, context);
-        }
-        contexts
-    }
-
     #[test]
     fn test_pre_signature_recreation_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
@@ -912,21 +843,11 @@ mod tests {
 
     fn test_pre_signature_recreation(key_id: &IDkgMasterPublicKeyId) {
         const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
-        let valid_keys = BTreeSet::from([key_id.clone()]);
-        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
 
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
         // The parent payload has two pre-signatures
-        let pre_sig1 = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 10);
-        let _pre_sig2 = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 11);
-
-        let contexts = set_up_signature_request_contexts(vec![
-            // One request context without pre-signature
-            (key_id.clone(), 0, UNIX_EPOCH, None),
-            // One context with matched pre-signature
-            (key_id.clone(), 2, UNIX_EPOCH, Some(pre_sig1)),
-        ]);
-        let contexts = into_idkg_contexts(&contexts);
+        create_available_pre_signature(&mut idkg_payload, key_id.clone(), 10);
+        create_available_pre_signature(&mut idkg_payload, key_id.clone(), 11);
 
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
@@ -943,20 +864,14 @@ mod tests {
         create_data_payload_helper_2(
             &mut idkg_payload,
             Height::from(5),
-            UNIX_EPOCH,
             &chain_key_config,
-            &valid_keys,
             RegistryVersion::from(9),
             &[node_test_id(0)],
-            contexts,
             &BTreeMap::default(),
             // The state and previous payloads contain 2 pre-signatures
             BTreeMap::from([(key_id.clone(), 2)]),
             &TestIDkgBlockReader::new(),
             &TestIDkgTranscriptBuilder::new(),
-            &TestThresholdSignatureBuilder::new(),
-            thread_pool.as_ref(),
-            /*idkg_payload_metrics*/ None,
             &ic_logger::replica_logger::no_op_logger(),
         )
         .unwrap();
@@ -969,159 +884,6 @@ mod tests {
             idkg_payload.pre_signatures_in_creation.len() as u32,
             PRE_SIGNATURES_TO_CREATE_IN_ADVANCE - 2
         );
-    }
-
-    #[test]
-    fn test_signing_request_timeout_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            println!("Running test for key ID {key_id}");
-            test_signing_request_timeout(&key_id);
-        }
-    }
-
-    fn test_signing_request_timeout(key_id: &IDkgMasterPublicKeyId) {
-        let expired_time = UNIX_EPOCH + Duration::from_secs(10);
-        let expiry_time = UNIX_EPOCH + Duration::from_secs(11);
-        let non_expired_time = UNIX_EPOCH + Duration::from_secs(12);
-
-        let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
-        // Add pre-signatures
-        let discarded_pre_sig_id =
-            create_available_pre_signature(&mut idkg_payload, key_id.clone(), 10);
-        let matched_pre_sig_id =
-            create_available_pre_signature(&mut idkg_payload, key_id.clone(), 11);
-
-        let contexts = set_up_signature_request_contexts(vec![
-            // One expired context without pre-signature
-            (key_id.clone(), 0, expired_time, None),
-            // One expired context with matched pre-signature
-            (key_id.clone(), 1, expired_time, Some(discarded_pre_sig_id)),
-            // One non-expired context with matched pre-signature
-            (
-                key_id.clone(),
-                2,
-                non_expired_time,
-                Some(matched_pre_sig_id),
-            ),
-        ]);
-        let contexts = into_idkg_contexts(&contexts);
-
-        assert_eq!(idkg_payload.signature_agreements.len(), 0);
-        assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
-
-        let signature_builder = TestThresholdSignatureBuilder::new();
-        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
-        signatures::update_signature_agreements(
-            &contexts,
-            &signature_builder,
-            Some(expiry_time),
-            &mut idkg_payload,
-            &BTreeSet::from([key_id.clone()]),
-            None,
-            thread_pool.as_ref(),
-        );
-
-        // The expired context with matched pre-signature should receive a reject response
-        let Some(idkg::CompletedSignature::Unreported(response)) =
-            idkg_payload.signature_agreements.get(&[1; 32])
-        else {
-            panic!("Request 1 should have a response");
-        };
-        assert_matches!(
-            &response.payload,
-            ic_types::messages::Payload::Reject(context)
-            if context.message().contains("request expired")
-        );
-
-        // Contexts should be expired regardless if they were matched or not
-        assert_eq!(idkg_payload.signature_agreements.len(), 2);
-
-        // The expired context without matched pre-signature should receive a reject response
-        let Some(idkg::CompletedSignature::Unreported(response)) =
-            idkg_payload.signature_agreements.get(&[0; 32])
-        else {
-            panic!("Request 0 should have a response");
-        };
-        assert_matches!(
-            &response.payload,
-            ic_types::messages::Payload::Reject(context)
-            if context.message().contains("request expired")
-        );
-
-        // No pre-signatures should be deleted when calling `update_signature_agreements`
-        assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
-    }
-
-    #[test]
-    fn test_request_with_invalid_key_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            println!("Running test for key ID {key_id}");
-            test_request_with_invalid_key(&key_id);
-        }
-    }
-
-    fn test_request_with_invalid_key(valid_key_id: &IDkgMasterPublicKeyId) {
-        let invalid_key_id: IDkgMasterPublicKeyId = key_id_with_name(valid_key_id, "invalid")
-            .try_into()
-            .unwrap();
-        let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![valid_key_id.clone()]);
-        // Add pre-signatures
-        let pre_sig_id1 =
-            create_available_pre_signature(&mut idkg_payload, valid_key_id.clone(), 1);
-        let pre_sig_id2 =
-            create_available_pre_signature(&mut idkg_payload, invalid_key_id.clone(), 2);
-
-        let contexts = set_up_signature_request_contexts(vec![
-            // One matched context with valid key
-            (valid_key_id.clone(), 1, UNIX_EPOCH, Some(pre_sig_id1)),
-            // One matched context with invalid key
-            (invalid_key_id.clone(), 2, UNIX_EPOCH, Some(pre_sig_id2)),
-            // One unmatched context with invalid key
-            (invalid_key_id.clone(), 3, UNIX_EPOCH, None),
-        ]);
-        let contexts = into_idkg_contexts(&contexts);
-
-        assert_eq!(idkg_payload.signature_agreements.len(), 0);
-        assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
-
-        let signature_builder = TestThresholdSignatureBuilder::new();
-        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
-        signatures::update_signature_agreements(
-            &contexts,
-            &signature_builder,
-            None,
-            &mut idkg_payload,
-            &BTreeSet::from([valid_key_id.clone()]),
-            None,
-            thread_pool.as_ref(),
-        );
-
-        // The contexts with invalid key should receive a reject response
-        assert_eq!(idkg_payload.signature_agreements.len(), 2);
-        let Some(idkg::CompletedSignature::Unreported(response_1)) =
-            idkg_payload.signature_agreements.get(&[2; 32])
-        else {
-            panic!("Request 2 should have a response");
-        };
-        assert_matches!(
-            &response_1.payload,
-            ic_types::messages::Payload::Reject(context)
-            if context.message().contains("Invalid key_id")
-        );
-
-        let Some(idkg::CompletedSignature::Unreported(response_2)) =
-            idkg_payload.signature_agreements.get(&[3; 32])
-        else {
-            panic!("Request 3 should have a response");
-        };
-        assert_matches!(
-            &response_2.payload,
-            ic_types::messages::Payload::Reject(context)
-            if context.message().contains("Invalid key_id")
-        );
-
-        // The pre-signature matched with the expired context should not be deleted
-        assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
     }
 
     #[test]
@@ -1824,7 +1586,6 @@ mod tests {
     }
 
     fn test_incomplete_reshare_doesnt_purge_pre_signatures(key_id: &IDkgMasterPublicKeyId) {
-        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -1833,8 +1594,6 @@ mod tests {
                 ..
             } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let mut valid_keys = BTreeSet::new();
-            valid_keys.insert(key_id.clone());
             let mut block_reader = TestIDkgBlockReader::new();
 
             // Create a key transcript
@@ -2099,7 +1858,6 @@ mod tests {
             );
 
             let transcript_builder = TestIDkgTranscriptBuilder::new();
-            let signature_builder = TestThresholdSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone().into(),
@@ -2115,19 +1873,13 @@ mod tests {
             create_data_payload_helper_2(
                 &mut payload_5,
                 Height::from(3),
-                UNIX_EPOCH,
                 &chain_key_config,
-                &valid_keys,
                 next_key_transcript.registry_version(),
                 &node_ids,
-                BTreeMap::default(),
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
-                &signature_builder,
-                thread_pool.as_ref(),
-                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -2144,19 +1896,13 @@ mod tests {
             create_data_payload_helper_2(
                 &mut payload_6,
                 Height::from(4),
-                UNIX_EPOCH,
                 &chain_key_config,
-                &valid_keys,
                 next_key_transcript.registry_version(),
                 &node_ids,
-                BTreeMap::default(),
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
-                &signature_builder,
-                thread_pool.as_ref(),
-                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -2174,7 +1920,6 @@ mod tests {
     }
 
     fn test_if_next_in_creation_continues(key_id: &IDkgMasterPublicKeyId) {
-        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 registry,
@@ -2189,11 +1934,8 @@ mod tests {
             add_subnet_record(&registry_data_provider, 11, subnet_id, subnet_record);
             registry.update_to_latest_version();
             let registry_version = registry.get_latest_version();
-            let mut valid_keys = BTreeSet::new();
-            valid_keys.insert(key_id.clone());
             let block_reader = TestIDkgBlockReader::new();
             let transcript_builder = TestIDkgTranscriptBuilder::new();
-            let signature_builder = TestThresholdSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone().into(),
@@ -2236,19 +1978,13 @@ mod tests {
             let result = create_data_payload_helper_2(
                 &mut payload_2,
                 Height::from(2),
-                UNIX_EPOCH,
                 &chain_key_config,
-                &valid_keys,
                 registry_version,
                 &node_ids,
-                BTreeMap::default(),
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
-                &signature_builder,
-                thread_pool.as_ref(),
-                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2326,7 +2062,6 @@ mod tests {
     }
 
     fn test_next_in_creation_with_initial_dealings(key_id: &IDkgMasterPublicKeyId) {
-        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -2339,11 +2074,8 @@ mod tests {
             let subnet_record = SubnetRecordBuilder::from(&node_ids)
                 .with_dkg_interval_length(9)
                 .build();
-            let mut valid_keys = BTreeSet::new();
-            valid_keys.insert(key_id.clone());
             let mut block_reader = TestIDkgBlockReader::new();
             let transcript_builder = TestIDkgTranscriptBuilder::new();
-            let signature_builder = TestThresholdSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone().into(),
@@ -2413,19 +2145,13 @@ mod tests {
             let result = create_data_payload_helper_2(
                 &mut payload_2,
                 Height::from(2),
-                UNIX_EPOCH,
                 &chain_key_config,
-                &valid_keys,
                 registry_version,
                 &node_ids,
-                BTreeMap::default(),
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
-                &signature_builder,
-                thread_pool.as_ref(),
-                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2443,19 +2169,13 @@ mod tests {
             let result = create_data_payload_helper_2(
                 &mut payload_3,
                 Height::from(3),
-                UNIX_EPOCH,
                 &chain_key_config,
-                &valid_keys,
                 registry_version,
                 &node_ids,
-                BTreeMap::default(),
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
-                &signature_builder,
-                thread_pool.as_ref(),
-                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2471,19 +2191,13 @@ mod tests {
             let result = create_data_payload_helper_2(
                 &mut payload_4,
                 Height::from(3),
-                UNIX_EPOCH,
                 &chain_key_config,
-                &valid_keys,
                 registry_version,
                 &node_ids,
-                BTreeMap::default(),
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
-                &signature_builder,
-                thread_pool.as_ref(),
-                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
