@@ -53,13 +53,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
-    ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm, HasIcGatewayVm},
+    ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
 };
-use nns_dapp::{
-    install_ii_nns_dapp_and_subnet_rental, set_authorized_subnets,
-};
+use nns_dapp::{install_ii_nns_dapp_and_subnet_rental, set_authorized_subnets};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
