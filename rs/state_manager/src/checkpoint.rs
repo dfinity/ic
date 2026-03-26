@@ -71,12 +71,13 @@ pub(crate) fn make_unvalidated_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["strip_page_map_deltas"])
             .start_timer();
-        strip_page_map_deltas(&mut state, Arc::clone(&fd_factory));
+        strip_page_map_deltas(&mut state);
     }
 
     tip_channel
         .send(TipRequest::FilterTipCanisters {
             height,
+            // XXX Wouldn't it be more efficient to pass a clone of `canister_states`?
             canister_ids: state.canister_states().keys().copied().collect(),
             snapshot_ids: state
                 .canister_states()
@@ -280,56 +281,15 @@ impl PageMapType {
 /// We execute this procedure before making a checkpoint because we
 /// don't want those deltas to be persisted to TIP as we apply deltas
 /// incrementally.
-fn strip_page_map_deltas(
-    state: &mut ReplicatedState,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) {
-    for canister in state.canisters_iter_mut() {
-        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
-        let canister = Arc::make_mut(canister);
-        canister
-            .system_state
-            .wasm_chunk_store
-            .page_map_mut()
-            .strip_all_deltas(Arc::clone(&fd_factory));
-        if let Some(page_map) = canister.system_state.log_memory_store.maybe_page_map_mut() {
-            page_map.strip_all_deltas(Arc::clone(&fd_factory));
-        }
-        if let Some(execution_state) = canister.execution_state.as_mut() {
-            execution_state
-                .wasm_memory
-                .page_map
-                .strip_all_deltas(Arc::clone(&fd_factory));
-            execution_state
-                .stable_memory
-                .page_map
-                .strip_all_deltas(Arc::clone(&fd_factory));
-        }
-        for (_id, canister_snapshot) in canister.canister_snapshots.iter_mut() {
-            let new_snapshot = Arc::make_mut(canister_snapshot);
-            new_snapshot
-                .chunk_store_mut()
-                .page_map_mut()
-                .strip_all_deltas(Arc::clone(&fd_factory));
-            new_snapshot
-                .execution_snapshot_mut()
-                .wasm_memory
-                .page_map
-                .strip_all_deltas(Arc::clone(&fd_factory));
-            new_snapshot
-                .execution_snapshot_mut()
-                .stable_memory
-                .page_map
-                .strip_all_deltas(Arc::clone(&fd_factory));
-        }
-    }
-
+fn strip_page_map_deltas(state: &mut ReplicatedState) {
     // Reset the sandbox state to force full synchronization on the next execution
     // since the page deltas are out of sync now.
     for canister in state.canisters_iter_mut() {
         if canister.execution_state.is_none() {
             continue;
         }
+        // XXX Could we move this into `switch_to_checkpoint`? Unless there's an issue
+        // with doing this in the tip thread, that would be the more appropriate place.
         let canister = Arc::make_mut(canister);
         if let Some(execution_state) = &mut canister.execution_state {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
