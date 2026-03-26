@@ -9,6 +9,7 @@ use crate::payload_builder::{
     parse::{bytes_to_payload, payload_to_bytes},
 };
 use assert_matches::assert_matches;
+use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_error_types::RejectCode;
@@ -24,6 +25,9 @@ use ic_interfaces::{
 };
 use ic_interfaces_mocks::crypto::MockCrypto;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::{
+    CanisterHttpResponsePayload, FlexibleHttpRequestResult, HttpHeader,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::state_manager::RefMockStateManager;
@@ -2563,12 +2567,7 @@ fn flexible_invalid_signature_error() {
 }
 
 #[test]
-fn flexible_into_messages_success_round_trip() {
-    use candid::{Decode, Encode};
-    use ic_management_canister_types_private::{
-        CanisterHttpResponsePayload, FlexibleHttpRequestResult, HttpHeader,
-    };
-
+fn flexible_ok_responses_into_messages_success_round_trip() {
     let callback_id = CallbackId::from(42);
 
     let payload_a = CanisterHttpResponsePayload {
@@ -2612,12 +2611,7 @@ fn flexible_into_messages_success_round_trip() {
 }
 
 #[test]
-fn flexible_into_messages_skips_reject_entries() {
-    use candid::{Decode, Encode};
-    use ic_management_canister_types_private::{
-        CanisterHttpResponsePayload, FlexibleHttpRequestResult,
-    };
-
+fn flexible_ok_responses_into_messages_skips_reject_entries() {
     let callback_id = CallbackId::from(99);
 
     let good_payload = CanisterHttpResponsePayload {
@@ -2661,10 +2655,7 @@ fn flexible_into_messages_skips_reject_entries() {
 }
 
 #[test]
-fn flexible_into_messages_stats_count_multiple_groups() {
-    use candid::Encode;
-    use ic_management_canister_types_private::CanisterHttpResponsePayload;
-
+fn flexible_ok_responses_into_messages_stats_count_multiple_groups() {
     let payload_data = Encode!(&CanisterHttpResponsePayload {
         status: 200,
         headers: vec![],
@@ -2695,10 +2686,10 @@ fn flexible_into_messages_stats_count_multiple_groups() {
 }
 
 #[test]
-fn flexible_into_messages_decode_failure_is_skipped() {
+fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
     let callback_id = CallbackId::from(42);
 
-    let entry = flexible_response(42, 0, b"this is not valid candid");
+    let entry = flexible_response(42, 0, b"this is invalid candid");
 
     let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
         callback_id,
