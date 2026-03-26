@@ -465,13 +465,16 @@ mod tests {
     /// on two messages containing different public keys and signatures and
     /// asserts that the computed MessageIds should be the same.
     fn message_id_icf_reference() {
+        let receiver =
+            CanisterId::unchecked_from_principal(PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap());
+        let method_name = "hello".to_string();
+        let method_payload = b"DIDL\x00\xFD*".to_vec();
         let expiry_time = expiry_time_from_now();
+
         let signed_ingress1 = signed_ingress(
-            CanisterId::unchecked_from_principal(
-                PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap(),
-            ),
-            "hello".to_string(),
-            b"DIDL\x00\xFD*".to_vec(),
+            receiver.clone(),
+            method_name.clone(),
+            method_payload.clone(),
             expiry_time,
             vec![3; 32],
             vec![6; 32],
@@ -479,11 +482,9 @@ mod tests {
         );
         let message_id1 = signed_ingress1.id();
         let signed_ingress2 = signed_ingress(
-            CanisterId::unchecked_from_principal(
-                PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap(),
-            ),
-            "hello".to_string(),
-            b"DIDL\x00\xFD*".to_vec(),
+            receiver,
+            method_name,
+            method_payload,
             expiry_time,
             vec![1; 32],
             vec![5; 32],
@@ -508,23 +509,30 @@ mod tests {
 
     #[test]
     fn message_id_changes_when_sender_info_is_present() {
+        let receiver =
+            CanisterId::unchecked_from_principal(PrincipalId::try_from(&[42; 8][..]).unwrap());
+        let method_name = "some_method".to_string();
+        let method_payload = b"".to_vec();
         let expiry_time = Time::from_nanos_since_unix_epoch(1_000);
+        let sender_sig = vec![1; 32];
+        let sender_pubkey = vec![2; 32];
+
         let ingress_without_sender_info = signed_ingress(
-            CanisterId::unchecked_from_principal(PrincipalId::try_from(&[42; 8][..]).unwrap()),
-            "some_method".to_string(),
-            b"".to_vec(),
+            receiver.clone(),
+            method_name.clone(),
+            method_payload.clone(),
             expiry_time,
-            vec![1; 32],
-            vec![2; 32],
+            sender_sig.clone(),
+            sender_pubkey.clone(),
             None,
         );
         let ingress_with_sender_info = signed_ingress(
-            CanisterId::unchecked_from_principal(PrincipalId::try_from(&[42; 8][..]).unwrap()),
-            "some_method".to_string(),
-            b"".to_vec(),
+            receiver,
+            method_name,
+            method_payload,
             expiry_time,
-            vec![1; 32],
-            vec![2; 32],
+            sender_sig,
+            sender_pubkey,
             Some(SenderInfo {
                 info: Blob(vec![1, 2, 3]),
                 signer: Blob(vec![42; 8]),
