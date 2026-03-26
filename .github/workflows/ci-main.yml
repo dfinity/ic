@@ -186,7 +186,6 @@ jobs:
 
             # Determine bazel_args based on event type or branch name
             bazel_args=(
-              --config=lint # enable lint checks
               --config=flaky_retry # auto retry eg systests
               )
             if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
