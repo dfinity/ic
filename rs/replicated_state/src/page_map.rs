@@ -428,15 +428,14 @@ pub struct PageMap {
     #[validate_eq(Ignore)]
     page_allocator: PageAllocator,
 
-    /// Whether the page map is actually backed by `storage`. `true`if the page map
-    /// was loaded from a checkpoint (i.e. created with `PageMap::open()`); or if
-    /// any pages have already been flushed to disk.
+    /// Whether this page map is backed by a checkpoint (e.g. via `PageMap::open()`)
+    /// or if any of its pages have already been flushed to disk.
     ///
-    /// If `false` (e.g. after creation with `PageMap::new()` and before any flush),
-    /// then any pre-existing backing files must be deleted / truncated before the
-    /// first flush.
+    /// If `false` (e.g. created with `PageMap::new()` and never flushed), then any
+    /// pre-existing checkpoint files must be deleted / truncated before its next
+    /// flush.
     #[validate_eq(Ignore)]
-    is_backed_by_storage: bool,
+    has_files_in_tip: bool,
 }
 
 impl PageMap {
@@ -453,7 +452,7 @@ impl PageMap {
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
             page_allocator: PageAllocator::new(fd_factory),
-            is_backed_by_storage: false,
+            has_files_in_tip: false,
         }
     }
 
@@ -464,7 +463,7 @@ impl PageMap {
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
             page_allocator: PageAllocator::new_for_testing(),
-            is_backed_by_storage: false,
+            has_files_in_tip: false,
         }
     }
 
@@ -480,7 +479,7 @@ impl PageMap {
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
             page_allocator: PageAllocator::new(fd_factory),
-            is_backed_by_storage: true,
+            has_files_in_tip: true,
         })
     }
 
@@ -495,7 +494,7 @@ impl PageMap {
                 .page_allocator
                 .serialize_page_delta(self.unflushed_delta.iter()),
             page_allocator: self.page_allocator.serialize(),
-            is_backed_by_storage: self.is_backed_by_storage,
+            has_files_in_tip: self.has_files_in_tip,
         }
     }
 
@@ -519,7 +518,7 @@ impl PageMap {
             page_delta,
             unflushed_delta,
             page_allocator,
-            is_backed_by_storage: page_map.is_backed_by_storage,
+            has_files_in_tip: page_map.has_files_in_tip,
         })
     }
 
@@ -801,8 +800,8 @@ impl PageMap {
 
     /// Removes the unflushed delta, after it was flushed to disk.
     pub fn strip_unflushed_delta(&mut self) {
-        // Pages have been flushed to disk, so the page map is now backed by `storage`.
-        self.is_backed_by_storage = true;
+        // Pages have been flushed to disk, so the page map is now consistent with tip.
+        self.has_files_in_tip = true;
 
         std::mem::take(&mut self.unflushed_delta);
     }
@@ -821,9 +820,10 @@ impl PageMap {
         self.unflushed_delta.is_empty()
     }
 
-    /// Whether the page map is backed by storage.
-    pub fn is_backed_by_storage(&self) -> bool {
-        self.is_backed_by_storage
+    /// Whether the page map is consistent with tip (i.e. is based on a checkpoint
+    /// or has had pages flushed to tip).
+    pub fn has_files_in_tip(&self) -> bool {
+        self.has_files_in_tip
     }
 
     /// Returns the length of the modified prefix in host pages.
@@ -843,7 +843,7 @@ impl PageMap {
     /// by the given page map. Page deltas of both page maps must be empty.
     pub fn switch_to_checkpoint(&mut self, checkpointed_page_map: &PageMap) {
         self.storage = checkpointed_page_map.storage.clone();
-        self.is_backed_by_storage = checkpointed_page_map.is_backed_by_storage;
+        self.has_files_in_tip = checkpointed_page_map.has_files_in_tip;
         assert!(self.page_delta.is_empty());
         assert!(self.unflushed_delta.is_empty());
         assert!(checkpointed_page_map.page_delta.is_empty());
@@ -886,7 +886,7 @@ impl PageMap {
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
             page_allocator: PageAllocator::new(fd_factory),
-            is_backed_by_storage: self.is_backed_by_storage,
+            has_files_in_tip: self.has_files_in_tip,
         })
     }
 }
@@ -1049,7 +1049,7 @@ pub struct PageMapSerialization {
     pub page_delta: PageDeltaSerialization,
     pub unflushed_delta: PageDeltaSerialization,
     pub page_allocator: PageAllocatorSerialization,
-    pub is_backed_by_storage: bool,
+    pub has_files_in_tip: bool,
 }
 
 /// Interface for generating unique file descriptors
