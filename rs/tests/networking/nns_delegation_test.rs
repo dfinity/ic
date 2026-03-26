@@ -46,12 +46,11 @@ use ic_consensus_system_test_utils::{
 };
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Node, Subnet},
+        ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
