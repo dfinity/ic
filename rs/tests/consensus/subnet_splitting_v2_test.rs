@@ -818,26 +818,26 @@ async fn wait_for_cup_with_subnet_id(
         std::time::Duration::from_secs(5),
         || async {
             match get_cup_from_node(node, &env.logger()).await {
+                Ok(cup) if cup.content.registry_version() < minimum_registry_version => {
+                    bail!(
+                        "The downloaded CUP still has an old registry version: {}. \
+                        The minimum expected registry version: {minimum_registry_version}",
+                        cup.content.registry_version()
+                    )
+                }
+                Ok(cup)
+                    if cup.signature.signer.target_subnet == NiDkgTargetSubnet::Local
+                        && cup.signature.signer.dealer_subnet == subnet_id =>
+                {
+                    Ok(())
+                }
                 Ok(cup) => {
-                    let cup_registry_version = cup.content.registry_version();
-                    if cup_registry_version < minimum_registry_version {
-                        bail!(
-                            "The downloaded CUP still has an \
-                            old registry version: {cup_registry_version}. \
-                            The minimum expected registry version: {minimum_registry_version}",
-                        )
-                    } else if cup.signature.signer.target_subnet == NiDkgTargetSubnet::Local
-                        && cup.signature.signer.dealer_subnet == subnet_id
-                    {
-                        Ok(())
-                    } else {
-                        bail!(
-                            "The downloaded CUP doesn't have the expected subnet id. \
-                            {} vs expected {}",
-                            cup.signature.signer.dealer_subnet,
-                            subnet_id,
-                        )
-                    }
+                    bail!(
+                        "The downloaded CUP doesn't have the expected subnet id. \
+                        {} vs expected {}",
+                        cup.signature.signer.dealer_subnet,
+                        subnet_id,
+                    )
                 }
                 Err(err) => {
                     bail!("Failed to fetch the CUP: {err:#}")
