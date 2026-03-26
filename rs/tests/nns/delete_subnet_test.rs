@@ -22,7 +22,6 @@ use ic_system_test_driver::nns::get_subnet_list_from_registry;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
 use ic_types::{Height, RegistryVersion, SubnetId};
-use ic_types_cycles::CanisterCyclesCostSchedule;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
 use std::collections::BTreeSet;
