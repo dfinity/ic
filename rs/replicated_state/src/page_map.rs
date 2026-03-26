@@ -410,10 +410,6 @@ pub struct PageMap {
     #[validate_eq(Ignore)]
     storage: Storage,
 
-    /// The height of the checkpoint that backs the page map.
-    #[validate_eq(Ignore)]
-    pub base_height: Option<Height>,
-
     /// The map containing pages overriding pages from `storage`.
     /// We need these pages to be able to reconstruct the full heap.
     /// It is reset when `strip_all_deltas()` method is called.
@@ -427,13 +423,20 @@ pub struct PageMap {
     #[validate_eq(Ignore)]
     unflushed_delta: PageDelta,
 
-    #[validate_eq(Ignore)]
-    has_stripped_unflushed_deltas: bool,
-
     /// The allocator for PageDelta pages.
     /// It is reset when `strip_all_deltas()` method is called.
     #[validate_eq(Ignore)]
     page_allocator: PageAllocator,
+
+    /// Whether the page map is actually backed by `storage`. `true`if the page map
+    /// was loaded from a checkpoint (i.e. created with `PageMap::open()`); or if
+    /// any pages have already been flushed to disk.
+    ///
+    /// If `false` (e.g. after creation with `PageMap::new()` and before any flush),
+    /// then any pre-existing backing files must be deleted / truncated before the
+    /// first flush.
+    #[validate_eq(Ignore)]
+    is_backed_by_storage: bool,
 }
 
 impl PageMap {
@@ -447,11 +450,10 @@ impl PageMap {
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         Self {
             storage: Default::default(),
-            base_height: Default::default(),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
-            has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new(fd_factory),
+            is_backed_by_storage: false,
         }
     }
 
@@ -459,11 +461,10 @@ impl PageMap {
     pub fn new_for_testing() -> Self {
         Self {
             storage: Default::default(),
-            base_height: Default::default(),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
-            has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new_for_testing(),
+            is_backed_by_storage: false,
         }
     }
 
@@ -472,16 +473,14 @@ impl PageMap {
     /// Note that the file is assumed to be read-only.
     pub fn open(
         storage_layout: Box<dyn StorageLayout + Send + Sync>,
-        base_height: Height,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {
         Ok(Self {
             storage: Storage::lazy_load(storage_layout)?,
-            base_height: Some(base_height),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
-            has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new(fd_factory),
+            is_backed_by_storage: true,
         })
     }
 
@@ -489,15 +488,14 @@ impl PageMap {
     pub fn serialize(&self) -> PageMapSerialization {
         PageMapSerialization {
             storage: self.storage.serialize(),
-            base_height: self.base_height,
             page_delta: self
                 .page_allocator
                 .serialize_page_delta(self.page_delta.iter()),
             unflushed_delta: self
                 .page_allocator
                 .serialize_page_delta(self.unflushed_delta.iter()),
-            has_stripped_unflushed_deltas: self.has_stripped_unflushed_deltas,
             page_allocator: self.page_allocator.serialize(),
+            is_backed_by_storage: self.is_backed_by_storage,
         }
     }
 
@@ -518,11 +516,10 @@ impl PageMap {
             PageDelta::from(page_allocator.deserialize_page_delta(page_map.unflushed_delta));
         Ok(Self {
             storage,
-            base_height: page_map.base_height,
             page_delta,
             unflushed_delta,
-            has_stripped_unflushed_deltas: page_map.has_stripped_unflushed_deltas,
             page_allocator,
+            is_backed_by_storage: page_map.is_backed_by_storage,
         })
     }
 
@@ -802,9 +799,10 @@ impl PageMap {
         self.page_allocator = PageAllocator::new(Arc::clone(&fd_factory));
     }
 
-    /// Removes the unflushed delta from this page map.
+    /// Removes the unflushed delta, after it was flushed to disk.
     pub fn strip_unflushed_delta(&mut self) {
-        self.has_stripped_unflushed_deltas = true;
+        // Pages have been flushed to disk, so the page map is now backed by `storage`.
+        self.is_backed_by_storage = true;
 
         std::mem::take(&mut self.unflushed_delta);
     }
@@ -823,9 +821,9 @@ impl PageMap {
         self.unflushed_delta.is_empty()
     }
 
-    /// Whether strip_unflushed_deltas has been called before
-    pub fn has_stripped_unflushed_deltas(&self) -> bool {
-        self.has_stripped_unflushed_deltas
+    /// Whether the page map is backed by storage.
+    pub fn is_backed_by_storage(&self) -> bool {
+        self.is_backed_by_storage
     }
 
     /// Returns the length of the modified prefix in host pages.
@@ -845,8 +843,7 @@ impl PageMap {
     /// by the given page map. Page deltas of both page maps must be empty.
     pub fn switch_to_checkpoint(&mut self, checkpointed_page_map: &PageMap) {
         self.storage = checkpointed_page_map.storage.clone();
-        // Also copy the base height to reflect the height of the new checkpoint.
-        self.base_height = checkpointed_page_map.base_height;
+        self.is_backed_by_storage = checkpointed_page_map.is_backed_by_storage;
         assert!(self.page_delta.is_empty());
         assert!(self.unflushed_delta.is_empty());
         assert!(checkpointed_page_map.page_delta.is_empty());
@@ -886,11 +883,10 @@ impl PageMap {
         }
         Ok(Self {
             storage: self.storage.clone(),
-            base_height: self.base_height,
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
-            has_stripped_unflushed_deltas: self.has_stripped_unflushed_deltas,
             page_allocator: PageAllocator::new(fd_factory),
+            is_backed_by_storage: self.is_backed_by_storage,
         })
     }
 }
@@ -1050,11 +1046,10 @@ impl std::fmt::Debug for PageMap {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct PageMapSerialization {
     pub storage: StorageSerialization,
-    pub base_height: Option<Height>,
     pub page_delta: PageDeltaSerialization,
     pub unflushed_delta: PageDeltaSerialization,
-    pub has_stripped_unflushed_deltas: bool,
     pub page_allocator: PageAllocatorSerialization,
+    pub is_backed_by_storage: bool,
 }
 
 /// Interface for generating unique file descriptors

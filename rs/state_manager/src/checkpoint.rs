@@ -357,7 +357,7 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
         // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
         // we have not persisted unflushed deltas before, then there are no relevant pages beyond the ones in the
         // unlushed delta, and we truncate the file on disk to size 0.
-        let truncate = page_map.base_height.is_none() && !page_map.has_stripped_unflushed_deltas();
+        let truncate = !page_map.is_backed_by_storage();
         let page_map_clone = if !page_map.unflushed_delta_is_empty() {
             Some(page_map.clone())
         } else {
@@ -366,7 +366,7 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
         if truncate || page_map_clone.is_some() {
             pagemaps.push(PageMapToFlush {
                 page_map_type: entry,
-                truncate,
+                truncate: !page_map.is_backed_by_storage(),
                 page_map: page_map_clone,
             });
         }
@@ -792,11 +792,7 @@ pub fn load_canister_state(
             let starting_time = Instant::now();
             let wasm_memory_layout = canister_layout.vmemory_0();
             let wasm_memory = Memory::new(
-                PageMap::open(
-                    Box::new(wasm_memory_layout),
-                    height,
-                    Arc::clone(&fd_factory),
-                )?,
+                PageMap::open(Box::new(wasm_memory_layout), Arc::clone(&fd_factory))?,
                 execution_state_bits.heap_size,
             );
             durations.insert("wasm_memory", starting_time.elapsed());
@@ -804,11 +800,7 @@ pub fn load_canister_state(
             let starting_time = Instant::now();
             let stable_memory_layout = canister_layout.stable_memory();
             let stable_memory = Memory::new(
-                PageMap::open(
-                    Box::new(stable_memory_layout),
-                    height,
-                    Arc::clone(&fd_factory),
-                )?,
+                PageMap::open(Box::new(stable_memory_layout), Arc::clone(&fd_factory))?,
                 canister_state_bits.stable_memory_size,
             );
             durations.insert("stable_memory", starting_time.elapsed());
@@ -875,11 +867,8 @@ pub fn load_canister_state(
 
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = canister_layout.wasm_chunk_store();
-    let wasm_chunk_store_data = PageMap::open(
-        Box::new(wasm_chunk_store_layout),
-        height,
-        Arc::clone(&fd_factory),
-    )?;
+    let wasm_chunk_store_data =
+        PageMap::open(Box::new(wasm_chunk_store_layout), Arc::clone(&fd_factory))?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
 
     // PageMap is a lazy pointer that doesn't verify file existence on creation.
@@ -888,11 +877,8 @@ pub fn load_canister_state(
     let log_memory_store_data = if canister_state_bits.log_memory_limit.get() > 0 {
         let starting_time = Instant::now();
         let log_memory_store_layout = canister_layout.log_memory_store();
-        let log_memory_store_data = PageMap::open(
-            Box::new(log_memory_store_layout),
-            height,
-            Arc::clone(&fd_factory),
-        )?;
+        let log_memory_store_data =
+            PageMap::open(Box::new(log_memory_store_layout), Arc::clone(&fd_factory))?;
         durations.insert("log_memory_store", starting_time.elapsed());
         Some(log_memory_store_data)
     } else {
@@ -985,7 +971,6 @@ fn load_canister_state_from_checkpoint(
 pub fn load_snapshot(
     snapshot_layout: &SnapshotLayout<ReadOnly>,
     snapshot_id: &SnapshotId,
-    height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
     let mut durations = BTreeMap::<&str, Duration>::default();
@@ -1013,11 +998,7 @@ pub fn load_snapshot(
         let starting_time = Instant::now();
         let wasm_memory_layout = snapshot_layout.vmemory_0();
         let wasm_memory = PageMemory {
-            page_map: PageMap::open(
-                Box::new(wasm_memory_layout),
-                height,
-                Arc::clone(&fd_factory),
-            )?,
+            page_map: PageMap::open(Box::new(wasm_memory_layout), Arc::clone(&fd_factory))?,
             size: canister_snapshot_bits.wasm_memory_size,
         };
         durations.insert("snapshot_wasm_memory", starting_time.elapsed());
@@ -1025,11 +1006,7 @@ pub fn load_snapshot(
         let starting_time = Instant::now();
         let stable_memory_layout = snapshot_layout.stable_memory();
         let stable_memory = PageMemory {
-            page_map: PageMap::open(
-                Box::new(stable_memory_layout),
-                height,
-                Arc::clone(&fd_factory),
-            )?,
+            page_map: PageMap::open(Box::new(stable_memory_layout), Arc::clone(&fd_factory))?,
             size: canister_snapshot_bits.stable_memory_size,
         };
         durations.insert("snapshot_stable_memory", starting_time.elapsed());
@@ -1055,11 +1032,8 @@ pub fn load_snapshot(
 
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = snapshot_layout.wasm_chunk_store();
-    let wasm_chunk_store_data = PageMap::open(
-        Box::new(wasm_chunk_store_layout),
-        height,
-        Arc::clone(&fd_factory),
-    )?;
+    let wasm_chunk_store_data =
+        PageMap::open(Box::new(wasm_chunk_store_layout), Arc::clone(&fd_factory))?;
     let wasm_chunk_store = WasmChunkStore::from_checkpoint(
         wasm_chunk_store_data,
         canister_snapshot_bits.wasm_chunk_store_metadata,
@@ -1087,10 +1061,5 @@ fn load_snapshot_from_checkpoint(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
     let snapshot_layout = checkpoint_layout.snapshot(snapshot_id)?;
-    load_snapshot(
-        &snapshot_layout,
-        snapshot_id,
-        checkpoint_layout.height(),
-        Arc::clone(&fd_factory),
-    )
+    load_snapshot(&snapshot_layout, snapshot_id, Arc::clone(&fd_factory))
 }
