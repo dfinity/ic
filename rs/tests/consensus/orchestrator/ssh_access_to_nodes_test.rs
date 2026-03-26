@@ -225,6 +225,58 @@ fn keys_in_the_node_record_can_be_updated(env: TestEnv) {
     wait_until_authentication_fails(&logger, &node_ip, "recovery", &recovery_mean);
 }
 
+fn set_subnet_operational_level_updates_readonly_and_recovery_keys(env: TestEnv) {
+    let logger = env.logger();
+    let (nns_node, app_node, _unassigned_node, app_subnet) =
+        topology_entities(env.topology_snapshot());
+
+    let app_subnet_id = app_subnet.subnet_id;
+    let node_ip: IpAddr = app_node.get_ip_addr();
+
+    info!(logger, "Updating the registry with new pairs of keys...");
+    let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
+    let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
+    let payload = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        Some(vec![readonly_public_key]),
+        Some(vec![(app_node.node_id, vec![recovery_public_key])]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        payload,
+    ));
+
+    // Orchestrator updates checks if there is a new version of the registry every
+    // 10 seconds. If so, it updates first the readonly, then the backup and then
+    // the recovery keys. If recovery key can authenticate we know that the
+    // readonly and backup keys are already updated too.
+    info!(
+        logger,
+        "Waiting for recovery authentication to be granted..."
+    );
+    wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean);
+    info!(
+        logger,
+        "Readonly authentication should now also be granted."
+    );
+    assert_authentication_works(&node_ip, "readonly", &readonly_mean);
+
+    // Clear the keys in the registry
+    let no_key_payload = get_setsubnetoperationallevelpayload_with_keys(
+        Some(app_subnet_id),
+        Some(vec![]),
+        Some(vec![(app_node.node_id, vec![])]),
+    );
+    block_on(set_subnet_operational_level(
+        nns_node.get_public_url(),
+        no_key_payload,
+    ));
+
+    // Check that the access for these keys are also removed.
+    wait_until_authentication_fails(&logger, &node_ip, "recovery", &recovery_mean);
+    assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
+}
+
 fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     let logger = env.logger();
     let (nns_node, _, unassigned_node, _) = topology_entities(env.topology_snapshot());
@@ -823,6 +875,9 @@ fn main() -> Result<()> {
         .add_test(systest!(ssh_users_cannot_authenticate_with_random_key))
         .add_test(systest!(keys_in_the_subnet_record_can_be_updated))
         .add_test(systest!(keys_in_the_node_record_can_be_updated))
+        .add_test(systest!(
+            set_subnet_operational_level_updates_readonly_and_recovery_keys
+        ))
         .add_test(systest!(keys_for_unassigned_nodes_can_be_updated))
         .add_test(systest!(multiple_keys_can_access_one_account))
         .add_test(systest!(
