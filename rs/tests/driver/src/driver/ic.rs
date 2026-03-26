@@ -476,11 +476,11 @@ pub struct Subnet {
     // NOTE: Some values in this config, like the http port,
     // are overwritten in `update_and_write_node_config`.
     pub subnet_type: SubnetType,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
     pub max_instructions_per_message: Option<u64>,
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeatures>,
-    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
     pub max_number_of_canisters: Option<u64>,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
@@ -493,8 +493,8 @@ pub struct Subnet {
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
         let canister_cycles_cost_schedule = match subnet_type {
-            SubnetType::CloudEngine => Some(CanisterCyclesCostSchedule::Free),
-            _ => None,
+            SubnetType::CloudEngine => CanisterCyclesCostSchedule::Free,
+            _ => CanisterCyclesCostSchedule::Normal,
         };
         Self {
             vm_resource_overrides: Default::default(),
@@ -514,9 +514,9 @@ impl Subnet {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
-            canister_cycles_cost_schedule,
             max_number_of_canisters: None,
             subnet_type,
+            canister_cycles_cost_schedule,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
@@ -686,14 +686,6 @@ impl Subnet {
         self
     }
 
-    pub fn with_canister_cycles_cost_schedule(
-        mut self,
-        schedule: CanisterCyclesCostSchedule,
-    ) -> Self {
-        self.canister_cycles_cost_schedule = Some(schedule);
-        self
-    }
-
     pub fn with_max_number_of_canisters(mut self, max_number_of_canisters: u64) -> Self {
         self.max_number_of_canisters = Some(max_number_of_canisters);
         self
@@ -706,6 +698,11 @@ impl Subnet {
 
     pub fn with_query_stats_epoch_length(mut self, length: u64) -> Self {
         self.query_stats_epoch_length = Some(length);
+        self
+    }
+
+    pub fn with_cost_schedule(mut self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        self.canister_cycles_cost_schedule = cost_schedule;
         self
     }
 
@@ -785,11 +782,11 @@ impl Default for Subnet {
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             subnet_type: SubnetType::System,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
-            canister_cycles_cost_schedule: None,
             max_number_of_canisters: None,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],

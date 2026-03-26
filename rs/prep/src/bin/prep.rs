@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use reqwest::blocking::ClientBuilder;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use url::Url;
@@ -203,12 +204,12 @@ fn main() -> Result<()> {
             valid_args.dkg_interval_length,
             /*dkg_dealings_per_block=*/ None,
             subnet_type,
+            CanisterCyclesCostSchedule::Normal,
             /*max_instructions_per_message=*/ None,
             /*max_instructions_per_round=*/ None,
             /*max_instructions_per_install_code=*/ None,
             /*features=*/ None,
             /*chain_key_config=*/ None,
-            /*canister_cycles_cost_schedule*/ None,
             /*max_number_of_canisters=*/ None,
             valid_args.ssh_readonly_access.clone(),
             valid_args.ssh_backup_access.clone(),

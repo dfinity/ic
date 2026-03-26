@@ -56,6 +56,7 @@ mod tests {
     use crate::node::{NodeConfiguration, NodeIndex};
     use crate::subnet_configuration::{SubnetConfig, SubnetRunningState};
     use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+    use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
     use ic_registry_subnet_type::SubnetType;
     use ic_types::ReplicaVersion;
     use std::collections::BTreeMap;
@@ -122,7 +123,7 @@ mod tests {
                 None,
                 None,
                 SubnetType::System,
-                None,
+                CanisterCyclesCostSchedule::Normal,
                 None,
                 None,
                 None,

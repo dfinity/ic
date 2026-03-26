@@ -94,6 +94,10 @@ pub struct SubnetConfig {
     /// The type of the subnet
     pub subnet_type: SubnetType,
 
+    /// Whether this subnet uses Cycles. Not applicable to system subnets,
+    /// which don't use Cycles via a different mechanism.
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
+
     /// The maximum number of instructions a message can execute.
     /// See the comments in `subnet_config.rs` for more details.
     pub max_instructions_per_message: u64,
@@ -111,9 +115,6 @@ pub struct SubnetConfig {
 
     /// Optional chain key configuration for this subnet.
     pub chain_key_config: Option<ChainKeyConfig>,
-
-    /// The cost schedule for canister execution on this subnet.
-    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
 
     /// The number of canisters allowed to be created on this subnet.
     pub max_number_of_canisters: u64,
@@ -246,12 +247,12 @@ impl SubnetConfig {
         dkg_interval_length: Option<Height>,
         dkg_dealings_per_block: Option<usize>,
         subnet_type: SubnetType,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
         max_instructions_per_message: Option<u64>,
         max_instructions_per_round: Option<u64>,
         max_instructions_per_install_code: Option<u64>,
         features: Option<SubnetFeatures>,
         chain_key_config: Option<ChainKeyConfig>,
-        canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
         max_number_of_canisters: Option<u64>,
         ssh_readonly_access: Vec<String>,
         ssh_backup_access: Vec<String>,
@@ -279,6 +280,7 @@ impl SubnetConfig {
             dkg_interval_length: dkg_interval_length.unwrap_or(config.dkg_interval_length),
             dkg_dealings_per_block: dkg_dealings_per_block.unwrap_or(config.dkg_dealings_per_block),
             subnet_type,
+            canister_cycles_cost_schedule,
             max_instructions_per_message: max_instructions_per_message
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_message.get()),
             max_instructions_per_round: max_instructions_per_round
@@ -287,7 +289,6 @@ impl SubnetConfig {
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
             features: features.unwrap_or_default(),
             chain_key_config,
-            canister_cycles_cost_schedule: canister_cycles_cost_schedule.unwrap_or_default(),
             max_number_of_canisters: max_number_of_canisters.unwrap_or(0),
             ssh_readonly_access,
             ssh_backup_access,
@@ -345,7 +346,7 @@ impl SubnetConfig {
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
             chain_key_config: self.chain_key_config,
-            canister_cycles_cost_schedule: self.canister_cycles_cost_schedule.into(),
+            canister_cycles_cost_schedule: i32::from(self.canister_cycles_cost_schedule),
             subnet_admins: vec![],
             resource_limits: Default::default(),
             recalled_replica_version_ids: vec![],

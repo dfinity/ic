@@ -11,6 +11,7 @@ use ic_prep_lib::{
     prep_state_directory::IcPrepStateDir,
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
@@ -155,7 +156,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             None,
             None,
             SubnetType::System,
-            None,
+            CanisterCyclesCostSchedule::Normal,
             None,
             None,
             None,

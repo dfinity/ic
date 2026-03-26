@@ -19,6 +19,7 @@ use ic_prep_lib::{
     node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore},
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -238,12 +239,12 @@ pub fn get_ic_config() -> IcConfig {
             /*dkg_interval_length=*/ Some(Height::from(19)),
             /*dkg_dealings_per_block=*/ None,
             SubnetType::System,
+            CanisterCyclesCostSchedule::Normal,
             /*max_instructions_per_message=*/ None,
             /*max_instructions_per_round=*/ None,
             /*max_instructions_per_install_code=*/ None,
             /*features=*/ None,
             /*chain_key_config=*/ None,
-            /*canister_cycles_cost_schedule*/ None,
             /*max_number_of_canisters=*/ None,
             /*ssh_readonly_access=*/ vec![],
             /*ssh_backup_access=*/ vec![],
