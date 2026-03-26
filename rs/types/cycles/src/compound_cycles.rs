@@ -26,7 +26,7 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// ```
 /// use ic_types_cycles::{
 ///     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
-///     Instructions, NominalCycles, NominalCyclesTesting,
+///     CyclesUseCaseKind, Instructions, NominalCycles, NominalCyclesTesting,
 /// };
 /// use std::collections::BTreeMap;
 ///
@@ -35,18 +35,18 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// let mut metrics = BTreeMap::new();
 /// metrics.insert(CyclesUseCase::Instructions, NominalCycles::new(5));
 ///
-/// let cc_instructions = CompoundCycles::new(
-///     Cycles::new(20), Instructions, CanisterCyclesCostSchedule::Normal,
+/// let cc_instructions = CompoundCycles::<Instructions>::new(
+///     Cycles::new(20), CanisterCyclesCostSchedule::Normal,
 /// );
 ///
 /// balance += cc_instructions.real();
 /// *metrics
-///     .entry(cc_instructions.use_case())
+///     .entry(Instructions::cycles_use_case())
 ///     .or_insert_with(|| NominalCycles::zero()) += cc_instructions.nominal();
 ///
 /// assert_eq!(balance, Cycles::new(30));
 /// assert_eq!(
-///     metrics.get(&cc_instructions.use_case()).unwrap(),
+///     metrics.get(&Instructions::cycles_use_case()).unwrap(),
 ///     &NominalCycles::new(25),
 /// );
 /// ```
@@ -62,11 +62,11 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 ///     CompoundCycles, Cycles, Instructions, Memory, CanisterCyclesCostSchedule,
 /// };
 ///
-/// let cc_instructions = CompoundCycles::new(
-///     Cycles::new(10), Instructions, CanisterCyclesCostSchedule::Normal,
+/// let cc_instructions = CompoundCycles::<Instructions>::new(
+///     Cycles::new(10), CanisterCyclesCostSchedule::Normal,
 /// );
-/// let cc_memory = CompoundCycles::new(
-///     Cycles::new(20), Memory, CanisterCyclesCostSchedule::Normal,
+/// let cc_memory = CompoundCycles::<Memory>::new(
+///     Cycles::new(20), CanisterCyclesCostSchedule::Normal,
 /// );
 ///
 /// let total = cc_instructions + cc_memory;
