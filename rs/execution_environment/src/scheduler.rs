@@ -29,6 +29,7 @@ use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
 use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
 use ic_registry_resource_limits::ResourceLimits;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
@@ -1372,11 +1373,28 @@ impl Scheduler for SchedulerImpl {
             }
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
 
+            // Throughout a checkpoint interval, the heap delta limit smoothly increases
+            // from the initial reserve up to the heap delta capacity.
+            // For that behavior to be meaningful, we ensure that the initial reserve
+            // does not exceed one half of the heap delta capacity.
+            let subnet_heap_delta_capacity =
+                subnet_heap_delta_capacity(&self.config, state.resource_limits());
+            let heap_delta_initial_reserve = if state.metadata.own_subnet_type == SubnetType::System
+            {
+                // On system subnets, the initial reserve should not be overriden
+                // for backward-compatibility.
+                self.config.heap_delta_initial_reserve
+            } else {
+                std::cmp::min(
+                    self.config.heap_delta_initial_reserve,
+                    subnet_heap_delta_capacity / 2,
+                )
+            };
             let scheduled_heap_delta_limit = scheduled_heap_delta_limit(
                 current_round,
                 round_summary,
-                self.config.subnet_heap_delta_capacity,
-                self.config.heap_delta_initial_reserve,
+                subnet_heap_delta_capacity,
+                heap_delta_initial_reserve,
             );
             if state.metadata.heap_delta_estimate >= scheduled_heap_delta_limit {
                 warn!(
@@ -1387,7 +1405,7 @@ impl Scheduler for SchedulerImpl {
                     state.time(),
                     state.metadata.heap_delta_estimate,
                     scheduled_heap_delta_limit,
-                    self.config.subnet_heap_delta_capacity,
+                    subnet_heap_delta_capacity,
                 );
                 self.finish_round(&mut state, current_round, current_round_type, &round_log);
                 self.metrics
@@ -2203,6 +2221,25 @@ fn scheduled_heap_delta_limit(
         .get()
         .saturating_sub(remaining_heap_delta_reserve)
         .into()
+}
+
+/// Returns the subnet heap delta capacity.
+/// A value of `Some(0)` for a resource limit means that the default value from `SchedulerConfig`
+/// should be used.
+fn subnet_heap_delta_capacity(
+    config: &SchedulerConfig,
+    resource_limits: ResourceLimits,
+) -> NumBytes {
+    resource_limits
+        .maximum_state_delta
+        .and_then(|maximum_state_delta| {
+            if maximum_state_delta.get() != 0 {
+                Some(maximum_state_delta)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(config.subnet_heap_delta_capacity)
 }
 
 /// Aborts the paused execution, if any, of the given canister.
