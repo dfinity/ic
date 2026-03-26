@@ -32,7 +32,10 @@ use ic_types::{
     methods::Callback,
     time::CoarseTime,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
+use ic_types_cycles::{
+    BurnedCycles, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions,
+    NonConsumed, RequestAndResponseTransmission,
+};
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -350,8 +353,11 @@ impl SystemStateModifications {
             .append_delta_log(&mut self.canister_log);
 
         // Verify total cycle change is not positive and update cycles balance.
+        let cost_schedule = network_topology
+            .get_cost_schedule(&own_subnet_id)
+            .unwrap_or_default();
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
-        self.apply_balance_changes(system_state);
+        self.apply_balance_changes(system_state, cost_schedule);
 
         if let Some(hook_condition_check_result) =
             self.on_low_wasm_memory_hook_condition_check_result
@@ -540,7 +546,11 @@ impl SystemStateModifications {
     }
 
     /// Applies the balance change to the given state.
-    pub fn apply_balance_changes(&self, state: &mut SystemState) {
+    pub fn apply_balance_changes(
+        &self,
+        state: &mut SystemState,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) {
         let initial_balance = state.balance();
 
         // `self.cycles_balance_change` consists of:
@@ -563,16 +573,27 @@ impl SystemStateModifications {
         // Apply the main cycles balance change without the consumed and reserved cycles.
         match adjusted_balance_change {
             CyclesBalanceChange::Added(added) => {
-                state.add_cycles(added, CyclesUseCase::NonConsumed)
+                state.add_cycles(CompoundCycles::<NonConsumed>::new(added, cost_schedule))
             }
             CyclesBalanceChange::Removed(removed) => {
-                state.remove_cycles(removed, CyclesUseCase::NonConsumed)
+                state.remove_cycles(CompoundCycles::<NonConsumed>::new(removed, cost_schedule))
             }
         }
 
         // Apply the consumed cycles with the use case metrics recording.
         for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
-            state.remove_cycles(*amount, *use_case);
+            match use_case {
+                CyclesUseCase::BurnedCycles => {
+                    state.remove_cycles(CompoundCycles::<BurnedCycles>::new(*amount, cost_schedule))
+                }
+                CyclesUseCase::Instructions => {
+                    state.remove_cycles(CompoundCycles::<Instructions>::new(*amount, cost_schedule))
+                }
+                CyclesUseCase::RequestAndResponseTransmission => state.remove_cycles(
+                    CompoundCycles::<RequestAndResponseTransmission>::new(*amount, cost_schedule),
+                ),
+                _ => panic!("Unexpected cycles use case in System API"),
+            }
         }
 
         // Apply the reserved cycles. This must succeed because the cycle
@@ -589,12 +610,15 @@ impl SystemStateModifications {
         assert_eq!(state.balance(), expected_balance);
     }
 
-    fn add_consumed_cycles(&mut self, consumed_cycles: &[(CyclesUseCase, Cycles)]) {
-        for (use_case, amount) in consumed_cycles.iter() {
+    fn add_consumed_cycles(
+        &mut self,
+        consumed_cycles: impl Iterator<Item = (CyclesUseCase, Cycles)>,
+    ) {
+        for (use_case, amount) in consumed_cycles {
             *self
                 .consumed_cycles_by_use_case
-                .entry(*use_case)
-                .or_insert_with(|| Cycles::new(0)) += *amount;
+                .entry(use_case)
+                .or_insert_with(|| Cycles::new(0)) += amount;
         }
     }
 
@@ -975,7 +999,7 @@ impl SandboxSafeSystemState {
     fn update_balance_change_consuming(
         &mut self,
         new_balance: Cycles,
-        consumed_cycles: &[(CyclesUseCase, Cycles)],
+        consumed_cycles: impl Iterator<Item = (CyclesUseCase, Cycles)>,
     ) {
         let old_balance = self.cycles_balance();
         assert!(
@@ -1023,7 +1047,7 @@ impl SandboxSafeSystemState {
         );
         self.update_balance_change_consuming(
             new_balance,
-            &[(CyclesUseCase::BurnedCycles, burned_cycles)],
+            [(CyclesUseCase::BurnedCycles, burned_cycles)].into_iter(),
         );
         burned_cycles
     }
@@ -1082,11 +1106,13 @@ impl SandboxSafeSystemState {
                 self.cost_schedule,
                 WasmExecutionMode::from_is_wasm64(self.is_wasm64_execution),
             )
+            .real()
     }
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {
         self.cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size, self.cost_schedule)
+            .real()
     }
 
     pub(super) fn withdraw_cycles_for_transfer(
@@ -1133,28 +1159,29 @@ impl SandboxSafeSystemState {
         self.available_callbacks -= 1;
 
         let mut new_balance = self.cycles_balance();
-        let consumed_cycles = match self.cycles_account_manager.withdraw_request_cycles(
-            self.canister_id,
-            &mut new_balance,
-            self.freeze_threshold,
-            self.memory_allocation,
-            canister_current_memory_usage,
-            canister_current_message_memory_usage,
-            self.compute_allocation,
-            &msg,
-            prepayment_for_response_execution,
-            prepayment_for_response_transmission,
-            self.subnet_size,
-            self.cost_schedule,
-            self.reserved_balance(),
-            // if the canister is frozen, the controller should call canister_status
-            // to learn the top up balance instead of getting it from an error
-            // message to a canister method making downstream call
-            false,
-        ) {
-            Ok(consumed_cycles) => consumed_cycles,
-            Err(_) => return Err(msg),
-        };
+        let (instructions_consumed_cycles, request_and_response_trasmission_consumed_cycles) =
+            match self.cycles_account_manager.withdraw_request_cycles(
+                self.canister_id,
+                &mut new_balance,
+                self.freeze_threshold,
+                self.memory_allocation,
+                canister_current_memory_usage,
+                canister_current_message_memory_usage,
+                self.compute_allocation,
+                &msg,
+                CompoundCycles::new(prepayment_for_response_execution, self.cost_schedule),
+                CompoundCycles::new(prepayment_for_response_transmission, self.cost_schedule),
+                self.subnet_size,
+                self.cost_schedule,
+                self.reserved_balance(),
+                // if the canister is frozen, the controller should call canister_status
+                // to learn the top up balance instead of getting it from an error
+                // message to a canister method making downstream call
+                false,
+            ) {
+                Ok(consumed_cycles) => consumed_cycles,
+                Err(_) => return Err(msg),
+            };
 
         // If the request is targeted to any of the known aliases of IC_00,
         // count it towards the available slots for IC_00 requests.
@@ -1179,7 +1206,18 @@ impl SandboxSafeSystemState {
         }
         self.system_state_modifications.requests.push(msg);
         *used_slots += 1;
-        self.update_balance_change_consuming(new_balance, &consumed_cycles);
+        let consumed_cycles = vec![
+            (
+                CyclesUseCase::Instructions,
+                instructions_consumed_cycles.real(),
+            ),
+            (
+                CyclesUseCase::RequestAndResponseTransmission,
+                request_and_response_trasmission_consumed_cycles.real(),
+            ),
+        ]
+        .into_iter();
+        self.update_balance_change_consuming(new_balance, consumed_cycles);
         Ok(())
     }
 
@@ -1340,12 +1378,15 @@ impl SandboxSafeSystemState {
         allocated_bytes: NumBytes,
         subnet_memory_saturation: &ResourceSaturation,
     ) -> HypervisorResult<()> {
-        let cycles_to_reserve = self.cycles_account_manager.storage_reservation_cycles(
-            allocated_bytes,
-            subnet_memory_saturation,
-            self.subnet_size,
-            self.cost_schedule,
-        );
+        let cycles_to_reserve = self
+            .cycles_account_manager
+            .storage_reservation_cycles(
+                allocated_bytes,
+                subnet_memory_saturation,
+                self.subnet_size,
+                self.cost_schedule,
+            )
+            .real();
 
         if let Some(limit) = self.reserved_balance_limit
             && self.reserved_balance() + cycles_to_reserve > limit
@@ -1510,8 +1551,9 @@ mod tests {
             CyclesBalanceChange::Removed(removed),
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
+        let cost_schedule = CanisterCyclesCostSchedule::Normal;
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1524,7 +1566,7 @@ mod tests {
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1537,7 +1579,7 @@ mod tests {
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
 
@@ -1550,7 +1592,7 @@ mod tests {
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
     }

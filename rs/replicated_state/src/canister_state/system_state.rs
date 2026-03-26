@@ -44,7 +44,10 @@ use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, Time,
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
+    IngressInduction, NominalCycles, NonConsumed, Uninstall,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
@@ -865,6 +868,7 @@ impl SystemState {
     pub fn apply_ingress_induction_cycles_debit(
         &mut self,
         canister_id: CanisterId,
+        cost_schedule: CanisterCyclesCostSchedule,
         log: &ReplicaLogger,
         charging_from_balance_error: &IntCounter,
     ) {
@@ -884,10 +888,10 @@ impl SystemState {
             // Continue the execution by dropping the remaining debit, which makes
             // some of the postponed charges free.
         }
-        self.remove_cycles(
+        self.remove_cycles(CompoundCycles::<IngressInduction>::new(
             self.ingress_induction_cycles_debit,
-            CyclesUseCase::IngressInduction,
-        );
+            cost_schedule,
+        ));
         self.ingress_induction_cycles_debit = Cycles::zero();
     }
 
@@ -1178,6 +1182,7 @@ impl SystemState {
         msg: RequestOrResponse,
         subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
+        own_cost_schedule: CanisterCyclesCostSchedule,
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         #[cfg(debug_assertions)]
@@ -1187,6 +1192,7 @@ impl SystemState {
             msg,
             subnet_available_guaranteed_response_memory,
             own_subnet_type,
+            own_cost_schedule,
             input_queue_type,
         );
 
@@ -1207,6 +1213,7 @@ impl SystemState {
         msg: RequestOrResponse,
         subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
+        own_cost_schedule: CanisterCyclesCostSchedule,
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         assert_eq!(
@@ -1222,7 +1229,7 @@ impl SystemState {
             (RequestOrResponse::Response(response), CanisterStatus::Stopped)
                 if response.is_best_effort() =>
             {
-                self.credit_refund(response);
+                self.credit_refund(response, own_cost_schedule);
                 Ok(false)
             }
 
@@ -1255,7 +1262,7 @@ impl SystemState {
                         .map_err(|err| (err, msg.clone()))?
                 {
                     // Best effort response whose callback is gone. Silently drop it.
-                    self.credit_refund(response);
+                    self.credit_refund(response, own_cost_schedule);
                     return Ok(false);
                 }
                 push_input(
@@ -1268,7 +1275,7 @@ impl SystemState {
                 .map(|dropped| {
                     if let Some(response) = dropped {
                         // Duplicate best-effort response that was silently dropped.
-                        self.credit_refund(&response);
+                        self.credit_refund(&response, own_cost_schedule);
                         false
                     } else {
                         true
@@ -1784,7 +1791,7 @@ impl SystemState {
     }
 
     /// Credits the canister with the refund in the inbound `Response`.
-    fn credit_refund(&mut self, response: &Response) {
+    fn credit_refund(&mut self, response: &Response, cost_schedule: CanisterCyclesCostSchedule) {
         debug_assert_eq!(
             self.canister_id, response.originator,
             "Can only credit refunds from `Responses` originating from self ({}), got {:?}",
@@ -1793,26 +1800,35 @@ impl SystemState {
         debug_assert!(response.is_best_effort());
 
         if !response.refund.is_zero() {
-            self.add_cycles(response.refund, CyclesUseCase::NonConsumed);
+            self.add_cycles(CompoundCycles::<NonConsumed>::new(
+                response.refund,
+                cost_schedule,
+            ));
         }
     }
 
     /// Increments 'cycles_balance' and in case of refund for consumed cycles
     /// decrements the metric `consumed_cycles`.
-    pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
-        self.cycles_balance += amount;
-        self.observe_consumed_cycles_with_use_case(amount, use_case, ConsumingCycles::No);
+    pub fn add_cycles<T: CyclesUseCaseKind>(&mut self, amount: CompoundCycles<T>) {
+        self.cycles_balance += amount.real();
+        self.observe_consumed_cycles_with_use_case(
+            amount.nominal(),
+            T::cycles_use_case(),
+            ConsumingCycles::No,
+        );
     }
 
     /// Decreases 'cycles_balance' for 'requested_amount'.
     /// The resource use cases first drain the `reserved_balance` and only after
     /// that drain the main `cycles_balance`.
-    pub fn remove_cycles(&mut self, requested_amount: Cycles, use_case: CyclesUseCase) {
+    pub fn remove_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
+        let requested_real = requested_amount.real();
+        let use_case = T::cycles_use_case();
         let remaining_amount = match use_case {
             CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
-                let covered_by_reserved_balance = requested_amount.min(self.reserved_balance);
+                let covered_by_reserved_balance = requested_real.min(self.reserved_balance);
                 self.reserved_balance -= covered_by_reserved_balance;
-                requested_amount - covered_by_reserved_balance
+                requested_real - covered_by_reserved_balance
             }
             CyclesUseCase::IngressInduction
             | CyclesUseCase::Instructions
@@ -1825,11 +1841,11 @@ impl SystemState {
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
             | CyclesUseCase::BurnedCycles
-            | CyclesUseCase::DroppedMessages => requested_amount,
+            | CyclesUseCase::DroppedMessages => requested_real,
         };
         self.cycles_balance -= remaining_amount;
         self.observe_consumed_cycles_with_use_case(
-            requested_amount,
+            requested_amount.nominal(),
             use_case,
             ConsumingCycles::Yes,
         );
@@ -1875,14 +1891,17 @@ impl SystemState {
 
     /// Removes all cycles from `cycles_balance` and `reserved_balance` as part
     /// of canister uninstallation due to it running out of cycles.
-    pub fn burn_remaining_balance_for_uninstall(&mut self) {
+    pub fn burn_remaining_balance_for_uninstall(
+        &mut self,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) {
         let balance = self.cycles_balance + self.reserved_balance;
-        self.remove_cycles(balance, CyclesUseCase::Uninstall);
+        self.remove_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
     }
 
     fn observe_consumed_cycles_with_use_case(
         &mut self,
-        amount: Cycles,
+        amount: NominalCycles,
         use_case: CyclesUseCase,
         consuming_cycles: ConsumingCycles,
     ) {
@@ -1902,16 +1921,14 @@ impl SystemState {
 
         let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
-        let nominal_amount = NominalCycles::from(amount.get());
-
         match consuming_cycles {
             ConsumingCycles::Yes => {
-                *use_case_consumption += nominal_amount;
-                self.canister_metrics.consumed_cycles += nominal_amount;
+                *use_case_consumption += amount;
+                self.canister_metrics.consumed_cycles += amount;
             }
             ConsumingCycles::No => {
-                *use_case_consumption -= nominal_amount;
-                self.canister_metrics.consumed_cycles -= nominal_amount;
+                *use_case_consumption -= amount;
+                self.canister_metrics.consumed_cycles -= amount;
             }
         }
     }
