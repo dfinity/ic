@@ -2434,7 +2434,7 @@ fn flexible_invalid_rejects_in_ok_responses() {
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleRejectResponseNotAllowed {
+                    InvalidCanisterHttpPayloadReason::FlexibleRejectNotAllowedInOkResponses {
                         callback_id: id,
                     },
                 ),

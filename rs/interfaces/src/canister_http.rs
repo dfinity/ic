@@ -92,8 +92,8 @@ pub enum InvalidCanisterHttpPayloadReason {
         callback_id: CallbackId,
         signer: NodeId,
     },
-    /// A flexible response entry contains a Reject response, which is not allowed.
-    FlexibleRejectResponseNotAllowed {
+    /// A flexible ok-response group contains a Reject response.
+    FlexibleRejectNotAllowedInOkResponses {
         callback_id: CallbackId,
     },
     /// The payload is not in its designated section.

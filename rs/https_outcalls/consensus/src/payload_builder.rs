@@ -664,7 +664,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     CanisterHttpResponseContent::Reject(_)
                 ) {
                     return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::FlexibleRejectResponseNotAllowed {
+                        InvalidCanisterHttpPayloadReason::FlexibleRejectNotAllowedInOkResponses {
                             callback_id,
                         },
                     );
