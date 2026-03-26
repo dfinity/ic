@@ -217,10 +217,11 @@ pub(crate) fn find_non_replicated_response(
     })
 }
 
-/// Collects distinct HTTP outcall responses from flexible committee members.
+/// Collects distinct HTTP outcall OK-responses from flexible committee members.
 ///
-/// Gathers up to `max_responses` individually-signed `(response, share)` pairs
-/// from unique committee members, skipping any that would exceed `max_payload_size`.
+/// Gathers up to `max_responses` individually-signed `(ok-response, share)` pairs
+/// from unique committee members while disregarding rejects, and skipping any
+/// that would exceed `max_payload_size`.
 /// Returns the group and its accumulated byte size if at least `min_responses`
 /// were collected.
 pub(crate) fn find_flexible_responses(
@@ -254,6 +255,7 @@ pub(crate) fn find_flexible_responses(
                     http_response.content,
                     CanisterHttpResponseContent::Reject(_)
                 ) {
+                    // Disregard rejects, as we are collecting ok-responses.
                     continue;
                 }
                 let response = FlexibleCanisterHttpResponseWithProof {
