@@ -30,10 +30,10 @@ use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
     CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Global, GlobalTimer,
-    Method as Ic00Method, ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse,
-    SnapshotSource, StoredChunksReply, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
+    CanisterStatusResultV2, CanisterStatusType, ChunkHash, EmptyBlob, Global, GlobalTimer,
+    Method as Ic00Method, Payload as _, ReadCanisterSnapshotDataResponse,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource, StoredChunksReply,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -975,10 +975,6 @@ impl CanisterManager {
 
     /// Uninstalls code from a canister.
     ///
-    /// Returns a list of reject responses to callers of the uninstalled canister
-    /// which must be enqueued to `ReplicatedState`
-    /// by separately calling `crate::util::process_responses`.
-    ///
     /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-uninstall_code
     pub(crate) fn uninstall_code(
         &self,
@@ -988,7 +984,7 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
         time: Time,
-    ) -> Result<Vec<Response>, CanisterManagerError> {
+    ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
         let canister = match state.canister_state(&canister_id) {
             Some(canister) => canister,
@@ -1020,7 +1016,14 @@ impl CanisterManager {
             .subnet_available_memory
             .update_execution_memory_unchecked(available_execution_memory_change);
 
-        Ok(rejects)
+        Ok(CanisterManagerResponse {
+            canister_id,
+            reply: EmptyBlob.encode(),
+            heap_delta_increase: NumBytes::new(0),
+            unflushed_checkpoint_op: None,
+            deleted_call_context_responses: rejects,
+            stop_contexts_to_reject: vec![],
+        })
     }
 
     /// Signals a canister to stop.
