@@ -28,6 +28,9 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
 use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
+use ic_registry_resource_limits::ResourceLimits;
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
@@ -532,6 +535,7 @@ impl SchedulerImpl {
                 cost_schedule,
                 is_first_iteration,
                 &mut round_limits,
+                state.resource_limits(),
                 &measurement_scope,
             );
             let instructions_consumed = instructions_before - round_limits.instructions;
@@ -685,6 +689,7 @@ impl SchedulerImpl {
         cost_schedule: CanisterCyclesCostSchedule,
         is_first_iteration: bool,
         round_limits: &mut RoundLimits,
+        resource_limits: ResourceLimits,
         measurement_scope: &MeasurementScope,
     ) -> (
         Vec<Arc<CanisterState>>,
@@ -745,6 +750,7 @@ impl SchedulerImpl {
                         cost_schedule,
                         is_first_iteration,
                         round_limits,
+                        resource_limits,
                         metrics,
                         logger,
                     );
@@ -1083,12 +1089,13 @@ impl SchedulerImpl {
             .collect::<Vec<_>>();
         paused_round_states.sort();
 
+        let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         paused_round_states
             .iter()
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
-                let canister = state.canister_state_mut_arc(&rs.canister_id()).unwrap();
-                self.exec_env.abort_canister(canister, &self.log);
+                let canister = canister_states.get_mut(&rs.canister_id()).unwrap();
+                abort_canister(canister, subnet_schedule, &self.exec_env, &self.log);
             });
     }
 
@@ -1109,10 +1116,10 @@ impl SchedulerImpl {
                 // The set of compiled Wasms must be cleared when taking a
                 // checkpoint to keep it in sync with the protobuf serialization
                 // of `ReplicatedState` which doesn't store this field.
-                state.metadata.expected_compiled_wasms.clear();
+                state.metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
 
                 // Abort all paused execution before the checkpoint.
-                self.exec_env.abort_all_paused_executions(state, &self.log);
+                abort_all_paused_executions(state, &self.exec_env, &self.log);
             }
             ExecutionRoundType::OrdinaryRound => {
                 self.abort_paused_executions_above_limit(state);
@@ -1156,7 +1163,9 @@ impl SchedulerImpl {
                 .memory_allocation()
                 .allocated_bytes(canister.memory_usage());
         }
-        let subnet_memory_capacity = self.exec_env.subnet_memory_capacity();
+        let subnet_memory_capacity = self
+            .exec_env
+            .subnet_memory_capacity(state.resource_limits());
 
         // Check that subnet memory usage invariant still holds after the round execution.
         // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
@@ -1352,11 +1361,28 @@ impl Scheduler for SchedulerImpl {
             }
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
 
+            // Throughout a checkpoint interval, the heap delta limit smoothly increases
+            // from the initial reserve up to the heap delta capacity.
+            // For that behavior to be meaningful, we ensure that the initial reserve
+            // does not exceed one half of the heap delta capacity.
+            let subnet_heap_delta_capacity =
+                subnet_heap_delta_capacity(&self.config, state.resource_limits());
+            let heap_delta_initial_reserve = if state.metadata.own_subnet_type == SubnetType::System
+            {
+                // On system subnets, the initial reserve should not be overriden
+                // for backward-compatibility.
+                self.config.heap_delta_initial_reserve
+            } else {
+                std::cmp::min(
+                    self.config.heap_delta_initial_reserve,
+                    subnet_heap_delta_capacity / 2,
+                )
+            };
             let scheduled_heap_delta_limit = scheduled_heap_delta_limit(
                 current_round,
                 round_summary,
-                self.config.subnet_heap_delta_capacity,
-                self.config.heap_delta_initial_reserve,
+                subnet_heap_delta_capacity,
+                heap_delta_initial_reserve,
             );
             if state.metadata.heap_delta_estimate >= scheduled_heap_delta_limit {
                 warn!(
@@ -1367,7 +1393,7 @@ impl Scheduler for SchedulerImpl {
                     state.time(),
                     state.metadata.heap_delta_estimate,
                     scheduled_heap_delta_limit,
-                    self.config.subnet_heap_delta_capacity,
+                    subnet_heap_delta_capacity,
                 );
                 self.finish_round(&mut state, current_round, current_round_type, &round_log);
                 self.metrics
@@ -1595,6 +1621,12 @@ impl Scheduler for SchedulerImpl {
                 );
             }
 
+            // Update canister priorities.
+            {
+                let _timer = self.metrics.round_finalization_scheduling.start_timer();
+                round_schedule.finish_round(&mut final_state, fully_executed_canister_ids);
+            }
+
             self.finish_round(
                 &mut final_state,
                 current_round,
@@ -1607,12 +1639,6 @@ impl Scheduler for SchedulerImpl {
                 .update_transactions_total += root_measurement_scope.messages().get();
             final_state.metadata.subnet_metrics.num_canisters =
                 final_state.canister_states().len() as u64;
-        }
-
-        // Update canister priorities.
-        {
-            let _timer = self.metrics.round_scheduling_duration.start_timer();
-            round_schedule.finish_round(&mut final_state, fully_executed_canister_ids);
         }
 
         final_state
@@ -1717,6 +1743,7 @@ fn execute_canisters_on_thread(
     cost_schedule: CanisterCyclesCostSchedule,
     is_first_iteration: bool,
     mut round_limits: RoundLimits,
+    resource_limits: ResourceLimits,
     metrics: Arc<SchedulerMetrics>,
     logger: ReplicaLogger,
 ) -> ExecutionThreadResult {
@@ -1789,6 +1816,7 @@ fn execute_canisters_on_thread(
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
+                resource_limits,
                 subnet_size,
                 cost_schedule,
             );
@@ -2181,4 +2209,56 @@ fn scheduled_heap_delta_limit(
         .get()
         .saturating_sub(remaining_heap_delta_reserve)
         .into()
+}
+
+/// Returns the subnet heap delta capacity.
+/// A value of `Some(0)` for a resource limit means that the default value from `SchedulerConfig`
+/// should be used.
+fn subnet_heap_delta_capacity(
+    config: &SchedulerConfig,
+    resource_limits: ResourceLimits,
+) -> NumBytes {
+    resource_limits
+        .maximum_state_delta
+        .and_then(|maximum_state_delta| {
+            if maximum_state_delta.get() != 0 {
+                Some(maximum_state_delta)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(config.subnet_heap_delta_capacity)
+}
+
+/// Aborts the paused execution, if any, of the given canister.
+///
+/// If a paused execution was aborted, resets the canister's priority credit to
+/// zero. Canisters must not be charged for aborted DTS executions.
+fn abort_canister(
+    canister: &mut Arc<CanisterState>,
+    subnet_schedule: &mut SubnetSchedule,
+    exec_env: &ExecutionEnvironment,
+    log: &ReplicaLogger,
+) {
+    if exec_env.abort_canister(canister, log) {
+        // Reset the priority credit to zero.
+        subnet_schedule
+            .get_mut(canister.canister_id())
+            .priority_credit = Default::default();
+    }
+}
+
+/// Aborts all paused executions in the given state.
+///
+/// Public for testing only.
+#[doc(hidden)]
+pub fn abort_all_paused_executions(
+    state: &mut ReplicatedState,
+    exec_env: &ExecutionEnvironment,
+    log: &ReplicaLogger,
+) {
+    let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
+    for canister in canister_states.values_mut() {
+        abort_canister(canister, subnet_schedule, exec_env, log);
+    }
 }

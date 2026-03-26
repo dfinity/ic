@@ -1384,11 +1384,13 @@ mod tests {
                 ));
                 let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
                 assert_matches!(
-                    validation.unwrap_err(),
-                    ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidChainKeyPayload(
-                        InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
-                            ChainKeyAgreementValidationError::BuildSignatureInputsError(
-                                BuildSignatureInputsError::ContextIncomplete
+                    validation,
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidPayloadReason::InvalidChainKeyPayload(
+                            InvalidChainKeyPayloadReason::InvalidChainKeyAgreement(
+                                ChainKeyAgreementValidationError::BuildSignatureInputsError(
+                                    BuildSignatureInputsError::ContextIncomplete
+                                )
                             )
                         )
                     ))

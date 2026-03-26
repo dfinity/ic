@@ -113,3 +113,13 @@ sh_binary(
     },
     visibility = ["//visibility:public"],
 )
+
+sh_binary(
+    name = "did-check",
+    srcs = ["did-check.sh"],
+    data = ["//rs/tools/check_did"],
+    env = {
+        "DID_CHECK_BIN": "$(rootpath //rs/tools/check_did)",
+    },
+    visibility = ["//visibility:public"],
+)

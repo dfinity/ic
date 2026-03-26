@@ -19,6 +19,7 @@ After changing Rust code (`*.rs`) follow these steps in order:
        -D warnings \
        -D clippy::all \
        -D clippy::mem_forget \
+       -D clippy::unseparated_literal_suffix \
        -A clippy::uninlined_format_args
    ```
    where `<CRATES>` is a space separated list of

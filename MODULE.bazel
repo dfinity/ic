@@ -1,6 +1,4 @@
 # Bazel modules for the IC build.
-# NOTE: Some dependencies are still listed in the WORKSPACE file. See WORKSPACE
-# for details.
 
 module(
     name = "ic",
@@ -351,8 +349,8 @@ http_file(
 http_file(
     name = "btc_canister",
     downloaded_file_path = "ic-btc-canister.wasm.gz",
-    sha256 = "f18d28cbebf49cbd2b6a3dba8f6da1399b95714c7cf100d3fb31ba9c33941daa",
-    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release/2024-07-28/ic-btc-canister.wasm.gz",
+    sha256 = "a0dfef8f5c52e628ce3a197277f0d5fc427f3b34f6f4deb771572855616c9749",
+    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release/2026-03-06/ic-btc-canister.wasm.gz",
 )
 
 # Dogecoin canister
@@ -360,8 +358,8 @@ http_file(
 http_file(
     name = "doge_canister",
     downloaded_file_path = "ic-doge-canister.wasm.gz",
-    sha256 = "5d61d0fbccca7bb7e86b9c914a36c2cacbf4c01dcaee9c4fae04b54bfca4802c",
-    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2026-02-06/ic-doge-canister.wasm.gz",
+    sha256 = "1fe3ce73e9422a0a3e0444ea7b5a615d2b36c4b940d3cbcfe9e3d5c6cdc32494",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2026-03-12/ic-doge-canister.wasm.gz",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test
@@ -492,7 +490,10 @@ http_file(
     name = "kong_backend_canister",
     downloaded_file_path = "kong_backend.wasm.gz",
     sha256 = "bed9a193158348843c8661616c65b152f57f875863f75dad3b75627ad6a2b4fc",
-    url = "https://github.com/KongSwap/kong/raw/4bf8f99df53dbd34bef0e55ab6364d85bb31c71a/wasm/kong_backend.wasm.gz",
+    # The kong repository disappeared so the old URL of
+    # https://github.com/KongSwap/kong/raw/4bf8f99df53dbd34bef0e55ab6364d85bb31c71a/wasm/kong_backend.wasm.gz
+    # no longer works. So we uploaded the wasm.gz to the DFINITY CDN at:
+    url = "https://download.dfinity.systems/testdata/kong_backend-4bf8f99df53dbd34bef0e55ab6364d85bb31c71a.wasm.gz",
 )
 
 # SNS-KongSwap Adaptor canister (an SNS extension of the TreasuryManager kind)
