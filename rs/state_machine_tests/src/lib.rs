@@ -59,7 +59,7 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::test_logger;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset, IC_00,
     InstallCodeArgs, ListCanisterSnapshotArgs, ListCanisterSnapshotResponse, MasterPublicKeyId,
     Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
     ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
@@ -125,6 +125,7 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
     replicated_state::ReplicatedStateMessageRouting,
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
@@ -305,8 +306,6 @@ impl Scheduler for FlexibleOrderingScheduler {
         current_round_type: ic_interfaces::execution_environment::ExecutionRoundType,
         registry_settings: &ic_interfaces::execution_environment::RegistryExecutionSettings,
     ) -> ReplicatedState {
-        use ic_replicated_state::testing::ReplicatedStateTesting;
-
         let target = self.target.write().unwrap().take();
         if let Some(canister_id) = target {
             let zero = AccumulatedPriority::new(0);
@@ -2799,17 +2798,9 @@ impl StateMachine {
 
         for msg in ordering.messages {
             match msg {
-                OrderedMessage::Ingress(target, ref ingress_id) => {
-                    // Cannot suppress: the canister's code may call IC_00
-                    // (e.g. create_canister), and the response returns via
-                    // loopback → subnet_queues → drain_subnet_queues. If
-                    // suppressed, the response never drains and ingress hangs.
+                // IC_00 ingress: loop until completed (install_code may DTS).
+                OrderedMessage::Ingress(target, ref ingress_id) if target == IC_00 => {
                     self.set_suppress_subnet_messages(false);
-                    // IC_00 ingress needs no boost — drain_subnet_queues handles it.
-                    if target != ic_management_canister_types_private::IC_00 {
-                        self.set_next_scheduled_method(target, NextScheduledMethod::Message);
-                        self.set_ordering_target(Some(target));
-                    }
                     let signed = self.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
@@ -2834,9 +2825,22 @@ impl StateMachine {
                             ingress_id,
                             self.ingress_status(ingress_id),
                         );
-                        self.set_ordering_target(Some(target));
                         self.tick();
                     }
+                }
+
+                // Normal canister ingress: single tick + DTS. Side-effect
+                // calls (to IC_00 or other canisters) need explicit steps.
+                OrderedMessage::Ingress(target, ref ingress_id) => {
+                    self.set_suppress_subnet_messages(true);
+                    self.set_next_scheduled_method(target, NextScheduledMethod::Message);
+                    self.set_ordering_target(Some(target));
+                    let signed = self.take_buffered_ingress(ingress_id);
+                    let payload = PayloadBuilder::new()
+                        .with_max_expiry_time_from_now(self.get_time().into())
+                        .signed_ingress(signed);
+                    self.tick_with_config(payload);
+                    self.complete_dts(target, MAX_TICKS);
                 }
 
                 OrderedMessage::Heartbeat(canister) | OrderedMessage::Timer(canister) => {
@@ -2852,34 +2856,24 @@ impl StateMachine {
                     self.complete_dts(canister, MAX_TICKS);
                 }
 
-                OrderedMessage::Request { source, target }
-                | OrderedMessage::Response { source, target }
-                    if target == ic_management_canister_types_private::IC_00 =>
-                {
+                // Request to IC_00: Demux inducts from loopback and
+                // drain_subnet_queues executes in the same tick.
+                OrderedMessage::Request { source, target } if target == IC_00 => {
                     self.set_suppress_subnet_messages(false);
-                    // May need a tick for loopback → Demux → subnet_queues.
-                    if !self.sender_in_queue(target, source) {
-                        self.tick();
-                        assert!(
-                            self.sender_in_queue(target, source),
-                            "Message from {} not in subnet_queues",
-                            source,
-                        );
-                    }
-                    let count_before = self.message_count(target);
                     self.tick();
-                    let count_after = self.message_count(target);
-                    assert_eq!(
-                        count_after,
-                        count_before - 1,
-                        "Subnet message from {} not consumed. Before: {}, after: {}",
-                        source,
-                        count_before,
-                        count_after,
-                    );
-                    // DTS for install_code targets the source canister, not IC_00.
                     self.set_suppress_subnet_messages(true);
                     self.complete_dts(source, MAX_TICKS);
+                }
+
+                // IC_00 response: in loopback, Demux inducts and canister
+                // executes callback in one tick. No count check — message
+                // is inducted and consumed in the same tick.
+                OrderedMessage::Response { source, target } if source == IC_00 => {
+                    self.set_suppress_subnet_messages(true);
+                    self.ensure_next_scheduled(target, NextScheduledMethod::Message, strict);
+                    self.set_ordering_target(Some(target));
+                    self.tick();
+                    self.complete_dts(target, MAX_TICKS);
                 }
 
                 OrderedMessage::Request { source, target }
@@ -2896,15 +2890,24 @@ impl StateMachine {
                     let count_before = self.message_count(target);
                     self.tick();
                     let count_after = self.message_count(target);
-                    assert_eq!(
-                        count_after,
-                        count_before - 1,
-                        "Message from {} not consumed from {}'s queue. Before: {}, after: {}",
-                        source,
-                        target,
-                        count_before,
-                        count_after,
-                    );
+                    if source == target && matches!(msg, OrderedMessage::Request { .. }) {
+                        // Self-call request: response inducted back in same tick.
+                        assert_eq!(
+                            count_after, count_before,
+                            "Self-call on {} unexpected count. Before: {}, after: {}",
+                            target, count_before, count_after,
+                        );
+                    } else {
+                        assert_eq!(
+                            count_after,
+                            count_before - 1,
+                            "Message from {} not consumed from {}'s queue. Before: {}, after: {}",
+                            source,
+                            target,
+                            count_before,
+                            count_after,
+                        );
+                    }
                     self.complete_dts(target, MAX_TICKS);
                 }
             }
@@ -2971,7 +2974,6 @@ impl StateMachine {
     }
 
     fn complete_dts(&self, canister_id: CanisterId, max_ticks: usize) {
-        use ic_replicated_state::canister_state::NextExecution;
         for tick in 0..max_ticks {
             match self
                 .get_latest_state()
@@ -2991,7 +2993,7 @@ impl StateMachine {
     /// Input queue count only (not task_queue), so heartbeat/timer won't affect it.
     fn message_count(&self, target: CanisterId) -> usize {
         let state = self.get_latest_state();
-        if target == ic_management_canister_types_private::IC_00 {
+        if target == IC_00 {
             state.subnet_queues().input_queues_message_count()
                 + state.subnet_queues().ingress_queue_message_count()
         } else {
@@ -3006,7 +3008,6 @@ impl StateMachine {
     }
 
     fn has_in_flight_work(&self, canister: CanisterId) -> bool {
-        use ic_replicated_state::canister_state::NextExecution;
         let state = self.get_latest_state();
 
         if let Some(c) = state.canister_state(&canister) {
@@ -3030,9 +3031,8 @@ impl StateMachine {
     }
 
     fn sender_in_queue(&self, target: CanisterId, source: CanisterId) -> bool {
-        use ic_replicated_state::testing::CanisterQueuesTesting;
         let state = self.get_latest_state();
-        let queues = if target == ic_management_canister_types_private::IC_00 {
+        let queues = if target == IC_00 {
             state.subnet_queues()
         } else {
             match state.canister_state(&target) {
@@ -3043,6 +3043,7 @@ impl StateMachine {
         queues
             .local_sender_schedule()
             .iter()
+            .chain(queues.remote_sender_schedule().iter())
             .any(|id| *id == source)
     }
 

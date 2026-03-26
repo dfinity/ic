@@ -1,10 +1,15 @@
 use ic_base_types::PrincipalId;
+use ic_management_canister_types_private::{
+    CanisterInstallMode, IC_00, InstallCodeArgs, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
+};
+use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_state_machine_tests::{
     MessageOrdering, OrderedMessage, StateMachine, StateMachineBuilder, WasmResult,
 };
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types_cycles::Cycles;
-use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
+use ic_universal_canister::{CallArgs, CallInterface, UNIVERSAL_CANISTER_WASM, management, wasm};
 use std::panic;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -269,8 +274,6 @@ fn test_interleaved_inter_canister_calls() {
 /// install_code interleaved with inter-canister calls.
 #[test]
 fn test_subnet_message_ordering() {
-    use ic_management_canister_types_private::{CanisterInstallMode, InstallCodeArgs, Payload};
-
     let sm = setup();
     let canister_a = install_uc(&sm);
     let canister_b = install_uc(&sm);
@@ -295,7 +298,7 @@ fn test_subnet_message_ordering() {
     let install_ingress = sm
         .buffer_ingress_as(
             PrincipalId::new_anonymous(),
-            ic_management_canister_types_private::IC_00,
+            IC_00,
             "install_code",
             install_args.encode(),
         )
@@ -325,10 +328,7 @@ fn test_subnet_message_ordering() {
             source: canister_b,
             target: canister_a,
         },
-        OrderedMessage::Ingress(
-            ic_management_canister_types_private::IC_00,
-            install_ingress.clone(),
-        ),
+        OrderedMessage::Ingress(IC_00, install_ingress.clone()),
         OrderedMessage::Ingress(canister_a, ingress_a2.clone()),
         OrderedMessage::Request {
             source: canister_a,
@@ -354,8 +354,6 @@ fn test_subnet_message_ordering() {
 /// Canister calls create_canister on IC_00 via inter-canister call.
 #[test]
 fn test_canister_calls_management_canister() {
-    use ic_universal_canister::{CallInterface, management};
-
     let sm = setup();
     let canister_a = install_uc(&sm);
 
@@ -373,10 +371,17 @@ fn test_canister_calls_management_canister() {
         )
         .unwrap();
 
-    sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
-        canister_a,
-        ingress_a.clone(),
-    )]));
+    sm.execute_with_ordering(MessageOrdering::new(vec![
+        OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+        OrderedMessage::Request {
+            source: canister_a,
+            target: IC_00,
+        },
+        OrderedMessage::Response {
+            source: IC_00,
+            target: canister_a,
+        },
+    ]));
 
     let reply = get_reply(&sm, &ingress_a);
     assert!(
@@ -388,10 +393,6 @@ fn test_canister_calls_management_canister() {
 /// Two mgmt canister ingress in separate steps — only one completes per step.
 #[test]
 fn test_one_subnet_message_per_round() {
-    use ic_management_canister_types_private::{
-        Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    };
-
     let sm = setup();
 
     let args = ProvisionalCreateCanisterWithCyclesArgs {
@@ -405,7 +406,7 @@ fn test_one_subnet_message_per_round() {
     let id1 = sm
         .buffer_ingress_as(
             PrincipalId::new_anonymous(),
-            ic_management_canister_types_private::IC_00,
+            IC_00,
             Method::ProvisionalCreateCanisterWithCycles,
             args.clone(),
         )
@@ -413,14 +414,14 @@ fn test_one_subnet_message_per_round() {
     let id2 = sm
         .buffer_ingress_as(
             PrincipalId::new_anonymous(),
-            ic_management_canister_types_private::IC_00,
+            IC_00,
             Method::ProvisionalCreateCanisterWithCycles,
             args,
         )
         .unwrap();
 
     sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
-        ic_management_canister_types_private::IC_00,
+        IC_00,
         id1.clone(),
     )]));
 
@@ -445,7 +446,7 @@ fn test_one_subnet_message_per_round() {
     );
 
     sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
-        ic_management_canister_types_private::IC_00,
+        IC_00,
         id2.clone(),
     )]));
 
@@ -858,18 +859,23 @@ fn test_self_call() {
         .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "update", payload)
         .unwrap();
 
-    sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
-        canister,
-        ingress_id.clone(),
-    )]));
+    sm.execute_with_ordering(MessageOrdering::new(vec![
+        OrderedMessage::Ingress(canister, ingress_id.clone()),
+        OrderedMessage::Request {
+            source: canister,
+            target: canister,
+        },
+        OrderedMessage::Response {
+            source: canister,
+            target: canister,
+        },
+    ]));
 
     assert_eq!(get_reply(&sm, &ingress_id), b"self-reply");
 }
 
 #[test]
 fn test_strict_basic_ordering() {
-    use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
-
     let sm = setup();
     let canister_a = install_uc(&sm);
     let canister_b = install_uc(&sm);
@@ -978,8 +984,6 @@ fn test_strict_heartbeat_then_request() {
 
 #[test]
 fn test_strict_wrong_ordering_panics() {
-    use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
-
     let sm = setup();
     let canister = install_uc(&sm);
 
