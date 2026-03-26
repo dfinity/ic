@@ -114,14 +114,6 @@ pub struct SenderInfo {
     pub sig: Blob,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(Arbitrary))]
-pub struct SenderInfo {
-    pub info: Blob,
-    pub signer: Blob,
-    pub sig: Blob,
-}
-
 /// Describes the fields of a canister update call as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#http-call>`.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
