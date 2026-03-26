@@ -40,7 +40,10 @@ use ic_nns_governance_api::{
     self as api, ManageNeuronResponse, Visibility, manage_neuron_response,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
+};
 use rand::{RngCore, SeedableRng, prelude::StdRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
@@ -183,7 +186,7 @@ impl Default for EnvironmentBuilder {
         EnvironmentBuilder {
             environment_fixture_state: EnvironmentFixtureState {
                 now: 0,
-                rng: Some(ChaCha20Rng::from_seed([1u8; 32])),
+                rng: Some(ChaCha20Rng::from_seed([1_u8; 32])),
                 observed_canister_calls: VecDeque::new(),
                 mocked_canister_replies: VecDeque::new(),
             },
@@ -501,6 +504,17 @@ impl IcpLedger for NNSFixture {
         );
 
         Ok(0)
+    }
+
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
@@ -930,6 +944,17 @@ impl IcpLedger for NNS {
         self.fixture
             .transfer_funds(amount_e8s, fee_e8s, from_subaccount, to_account, arg)
             .await
+    }
+
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {

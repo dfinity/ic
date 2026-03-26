@@ -17,9 +17,9 @@ use crate::{
         ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
         Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
         ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-        RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
-        TransferSnsTreasuryFunds, UpgradeExtension, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
+        RegisterExtension, SetTopicsForCustomProposals, SnapshotVisibility, SnsVersion, Tally,
+        Topic, Topic as TopicPb, TransferSnsTreasuryFunds, UpgradeExtension,
+        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
         governance::{SnsMetadata, Version},
         governance_error::ErrorType,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
@@ -1851,6 +1851,13 @@ fn validate_and_render_manage_dapp_canister_settings(
         );
         no_change = false;
     }
+    if let Some(snapshot_visibility) = &manage_dapp_canister_settings.snapshot_visibility {
+        render += &format!(
+            "# Set snapshot visibility to: {:?} \n",
+            SnapshotVisibility::try_from(*snapshot_visibility).unwrap_or_default()
+        );
+        no_change = false;
+    }
     if let Some(wasm_memory_limit) = &manage_dapp_canister_settings.wasm_memory_limit {
         render += &format!("# Set Wasm memory limit to: {wasm_memory_limit}\n");
         no_change = false;
@@ -2412,7 +2419,7 @@ impl ProposalData {
         let required_yes_of_total_basis_points =
             u128::from(percentage_of_total_required.basis_points.unwrap());
         let required_no_of_total_basis_points =
-            10_000u128.saturating_sub(required_yes_of_total_basis_points);
+            10_000_u128.saturating_sub(required_yes_of_total_basis_points);
 
         debug_assert!(required_yes_of_total_basis_points <= 10_000);
 
@@ -5136,6 +5143,7 @@ Version {
             freezing_threshold: Some(1_000),
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(LogVisibility::Public as i32),
+            snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             wasm_memory_limit: Some(1_000_000_000),
             wasm_memory_threshold: Some(1_000_000),
         })
@@ -5267,6 +5275,7 @@ Payload rendering here"#
                 freezing_threshold: Some(1_000),
                 reserved_cycles_limit: Some(1_000_000_000_000),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
                 wasm_memory_limit: Some(1_000_000_000),
                 wasm_memory_threshold: Some(1_000_000),
             })
@@ -5282,6 +5291,7 @@ Payload rendering here"#
              # Set freezing threshold to: 1000 seconds\n\
              # Set reserved cycles limit to: 1000000000000 \n\
              # Set log visibility to: Public \n\
+             # Set snapshot visibility to: Public \n\
              # Set Wasm memory limit to: 1000000000\n"
         );
     }
@@ -5559,6 +5569,7 @@ Payload rendering here"#
             max_age_bonus_percentage: None,
             maturity_modulation_disabled: None,
             automatically_advance_target_version: None,
+            custom_proposal_criticality: None,
         };
 
         let result = validate_and_render_manage_nervous_system_parameters(

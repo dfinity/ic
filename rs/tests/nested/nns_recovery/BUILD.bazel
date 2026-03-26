@@ -42,14 +42,11 @@ rust_library(
 system_test_nns(
     name = "nr_broken_dfinity_node",
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS | {
-        "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
-    },
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -62,7 +59,6 @@ system_test_nns(
     name = "nr_large",
     enable_head_nns_variant = False,
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = [
@@ -81,16 +77,11 @@ system_test_nns(
 system_test_nns(
     name = "nr_local",
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS | {
-        # Different parts of the codebase expect different variable names
-        "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
-        "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
-    },
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -102,14 +93,11 @@ system_test_nns(
 system_test_nns(
     name = "nr_no_bless_fix_like_np",
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS | {
-        "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
-    },
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -119,16 +107,13 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "nr_seq_np_actions",
+    name = "nr_all_broken_seq_np_actions",
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS | {
-        "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
-    },
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",

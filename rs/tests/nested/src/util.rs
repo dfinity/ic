@@ -7,6 +7,7 @@ use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     replica_version::v1::BlessedReplicaVersions,
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
@@ -38,16 +39,14 @@ use ic_types::{Height, NodeId, ReplicaVersion, hostos_version::HostosVersion};
 use prost::Message;
 use regex::Regex;
 use reqwest::Client;
+use slog::{Logger, info, warn};
 use std::net::Ipv6Addr;
 use std::time::Duration;
 
-use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use slog::{Logger, info, warn};
-
-pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
-pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 pub const NODE_UPGRADE_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
@@ -323,18 +322,18 @@ pub async fn wait_for_expected_guest_version(
     .await
 }
 
-/// Get the current boot ID from a HostOS node.
-pub fn get_host_boot_id(node: &NestedVm) -> String {
-    block_on(get_host_boot_id_async(node))
+/// Try to get the current boot ID from a HostOS node.
+pub fn try_get_host_boot_id(node: &NestedVm) -> Result<String> {
+    block_on(try_get_host_boot_id_async(node))
 }
 
-/// Get the current boot ID from a HostOS node. Asynchronous version
-pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
-    node.block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+/// Try to get the current boot ID from a HostOS node. Asynchronous version.
+pub async fn try_get_host_boot_id_async(node: &NestedVm) -> Result<String> {
+    let output = node
+        .block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
         .await
-        .expect("Failed to retrieve boot ID")
-        .trim()
-        .to_string()
+        .with_context(|| "Failed to retrieve host boot ID via journalctl")?;
+    Ok(output.trim().to_string())
 }
 
 /// Execute a bash script on a node via SSH and log the output.

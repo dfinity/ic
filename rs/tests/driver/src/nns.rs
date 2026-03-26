@@ -85,7 +85,7 @@ pub async fn await_proposal_execution(
     retry_delay: Duration,
     timeout: Duration,
 ) -> bool {
-    let mut i = 0usize;
+    let mut i = 0_usize;
     let start_time = std::time::Instant::now();
     loop {
         i += 1;
@@ -418,6 +418,10 @@ pub fn get_governance_canister(nns_api: &'_ Runtime) -> Canister<'_> {
     get_canister(nns_api, GOVERNANCE_CANISTER_ID)
 }
 
+pub fn get_registry_canister(nns_api: &'_ Runtime) -> Canister<'_> {
+    get_canister(nns_api, REGISTRY_CANISTER_ID)
+}
+
 pub fn get_sns_wasm_canister(nns_api: &'_ Runtime) -> Canister<'_> {
     get_canister(nns_api, SNS_WASM_CANISTER_ID)
 }
@@ -718,6 +722,7 @@ pub async fn submit_create_application_subnet_proposal(
         node_ids,
         subnet_id_override: None,
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block: Some(config.max_ingress_bytes_per_block),
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,
         replica_version_id: replica_version.to_string(),
@@ -734,6 +739,8 @@ pub async fn submit_create_application_subnet_proposal(
         ssh_backup_access: vec![],
         chain_key_config: None,
         canister_cycles_cost_schedule: cost_schedule,
+        subnet_admins: None,
+        resource_limits: Default::default(),
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),

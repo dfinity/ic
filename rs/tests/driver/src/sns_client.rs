@@ -30,7 +30,7 @@ use ic_nns_governance_api::{
     ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest,
     create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
-        governance_parameters::VotingRewardParameters,
+        governance_parameters::{CustomProposalCriticality, VotingRewardParameters},
         initial_token_distribution::{
             DeveloperDistribution, SwapDistribution, TreasuryDistribution,
             developer_distribution::NeuronDistribution,
@@ -46,7 +46,7 @@ use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Lifecycle};
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, SnsCanisterIds, SnsCanisterType, SnsWasm, UpdateSnsSubnetListRequest,
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::{str::FromStr, time::SystemTime};
@@ -130,7 +130,7 @@ impl SnsClient {
             app_node.effective_canister_id(),
             // Mint a very large amount of cycles, to make sure nothing fails
             // because this canister doesn't have enough cycles.
-            900_000_000_000_000_000u64,
+            900_000_000_000_000_000_u64,
             &log,
         ));
         block_on(deposit_cycles(
@@ -282,6 +282,9 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
                 initial_reward_rate: Some(Percentage::from_percentage(2.5)),
                 final_reward_rate: Some(Percentage::from_percentage(2.5)),
                 reward_rate_transition_duration: Some(Duration::from_secs(0)),
+            }),
+            custom_proposal_criticality: Some(CustomProposalCriticality {
+                additional_critical_native_action_ids: Some(vec![3_u64]),
             }),
         }),
     }

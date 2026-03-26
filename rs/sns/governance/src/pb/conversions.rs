@@ -804,6 +804,7 @@ impl From<pb::ManageDappCanisterSettings> for pb_api::ManageDappCanisterSettings
             freezing_threshold: item.freezing_threshold,
             reserved_cycles_limit: item.reserved_cycles_limit,
             log_visibility: item.log_visibility,
+            snapshot_visibility: item.snapshot_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
         }
@@ -818,6 +819,7 @@ impl From<pb_api::ManageDappCanisterSettings> for pb::ManageDappCanisterSettings
             freezing_threshold: item.freezing_threshold,
             reserved_cycles_limit: item.reserved_cycles_limit,
             log_visibility: item.log_visibility,
+            snapshot_visibility: item.snapshot_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
         }
@@ -1481,6 +1483,7 @@ impl From<pb::NervousSystemParameters> for pb_api::NervousSystemParameters {
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
             automatically_advance_target_version: item.automatically_advance_target_version,
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -1509,6 +1512,23 @@ impl From<pb_api::NervousSystemParameters> for pb::NervousSystemParameters {
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
             automatically_advance_target_version: item.automatically_advance_target_version,
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::CustomProposalCriticality> for pb_api::CustomProposalCriticality {
+    fn from(item: pb::CustomProposalCriticality) -> Self {
+        Self {
+            additional_critical_native_action_ids: item.additional_critical_native_action_ids,
+        }
+    }
+}
+
+impl From<pb_api::CustomProposalCriticality> for pb::CustomProposalCriticality {
+    fn from(item: pb_api::CustomProposalCriticality) -> Self {
+        Self {
+            additional_critical_native_action_ids: item.additional_critical_native_action_ids,
         }
     }
 }

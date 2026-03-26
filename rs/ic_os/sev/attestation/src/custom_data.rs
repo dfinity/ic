@@ -22,6 +22,8 @@ pub enum SevCustomDataNamespace {
     GetDiskEncryptionKeyToken = 2,
     /// Custom data for node registration attestation to prove its chip_id.
     NodeRegistration = 3,
+    /// Custom data for verifying alternative GuestOS proposal.
+    VerifyAlternativeGuestOsProposal = 4,
 }
 
 impl SevCustomDataNamespace {
@@ -45,7 +47,7 @@ impl SevCustomData {
     /// Generates a random `SevCustomData` with the given `namespace`.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn random(namespace: SevCustomDataNamespace, rng: &mut impl rand::Rng) -> Self {
-        let mut data = [0u8; 32];
+        let mut data = [0_u8; 32];
         rng.fill(&mut data[..]);
         Self { namespace, data }
     }
@@ -60,7 +62,7 @@ impl SevCustomData {
     /// Returns the raw bytes of the custom data which can be passed to the SEV firmware for use in
     /// attestation report generation.
     pub fn to_bytes(&self) -> [u8; 64] {
-        let mut result = [0u8; 64];
+        let mut result = [0_u8; 64];
         result[0..4].copy_from_slice(&self.namespace.as_bytes());
         result[32..].copy_from_slice(&self.data);
         result

@@ -24,7 +24,8 @@ fn main() {
         "SNS_LEDGER_ARCHIVE",
         "SNS_LEDGER_INDEX",
         "SNS_AGGREGATOR_TEST",
-        "INTERNET_IDENTITY_TEST",
+        "INTERNET_IDENTITY_BACKEND",
+        "INTERNET_IDENTITY_FRONTEND",
         "NNS_DAPP_TEST",
         "BITCOIN_TESTNET",
         "DOGECOIN",
@@ -48,7 +49,7 @@ fn main() {
     // for the PocketIC server to compile. There are two flows to support:
     // - code validation using `cargo`: we create a dummy file and point `MAINNET_ROUTING_TABLE` to that file for code validation to succeed;
     // - building the PocketIC server using `bazel`: `bazel` always sets `MAINNET_ROUTING_TABLE` to an actual file storing the mainnet routing table
-    //   (built separately) and thus we don't override `MAINNET_ROUTING_TABLE` if already set.
+    //   and thus we don't override `MAINNET_ROUTING_TABLE` if already set.
     let mainnet_routing_table_var_name = "MAINNET_ROUTING_TABLE".to_string();
     if std::env::var(&mainnet_routing_table_var_name).is_err() {
         let mainnet_routing_table_file_name = "mainnet_routing_table.json";

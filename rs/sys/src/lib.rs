@@ -13,6 +13,7 @@ lazy_static! {
 #[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 pub const PAGE_SIZE: usize = 16384;
 
+/// The size of an OS memory page.
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 pub const PAGE_SIZE: usize = 4096;
 
@@ -63,7 +64,7 @@ mod test {
     use super::*;
     #[test]
     fn test_page_bytes_from_ptr() {
-        let mut page_bytes = [0u8; PAGE_SIZE];
+        let mut page_bytes = [0_u8; PAGE_SIZE];
         for (i, byte) in page_bytes.iter_mut().enumerate() {
             *byte = (i + 1) as u8;
         }

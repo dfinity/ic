@@ -12,21 +12,20 @@ use ic_embedders::{
         system_api_complexity,
     },
 };
-use ic_interfaces::execution_environment::{
-    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
-};
+use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_test_utilities_embedders::{DEFAULT_NUM_INSTRUCTIONS, WasmtimeInstanceBuilder};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::{
-    Cycles, NumBytes, NumInstructions, PrincipalId,
+    NumBytes, NumInstructions, PrincipalId,
     ingress::WasmResult,
     messages::RejectContext,
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use wirm::wasmparser;
 
 use ic_embedders::WASM_PAGE_SIZE;
@@ -316,9 +315,11 @@ fn stack_overflow_traps() {
                 panic!("Unexpected error {err:?}");
             };
             assert_eq!(trap_code, TrapCode::StackOverflow);
-            for (_index, name) in backtrace.unwrap().0 {
-                assert_eq!(name, Some("f".to_string()));
-            }
+            // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
+            // for (_index, name) in backtrace.unwrap().0 {
+            //     assert_eq!(name, Some("f".to_string()));
+            // }
+            assert!(backtrace.is_none());
         })
         .unwrap();
 
@@ -1654,11 +1655,19 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
+    // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
+    // assert_eq!(
+    //     err,
+    //     HypervisorError::Trapped {
+    //         trap_code: TrapCode::HeapOutOfBounds,
+    //         backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
+    //     }
+    // );
     assert_eq!(
         err,
         HypervisorError::Trapped {
             trap_code: TrapCode::HeapOutOfBounds,
-            backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
+            backtrace: None
         }
     );
 }
@@ -2246,7 +2255,7 @@ fn wasm64_msg_caller_copy() {
     )"#;
 
     let caller = user_test_id(24).get();
-    let payload = vec![0u8; 32];
+    let payload = vec![0_u8; 32];
     let api = ApiType::update(
         UNIX_EPOCH,
         payload,
@@ -3097,7 +3106,7 @@ fn wasm64_msg_cycles_refunded128() {
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
 
-    let x = 777u128;
+    let x = 777_u128;
 
     let mut expected_heap = vec![0; dirty_heap_size];
     expected_heap[0..16].copy_from_slice(&x.to_le_bytes());
@@ -3159,7 +3168,7 @@ fn wasm64_cycles_burn128() {
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
 
-    let x = 33u128;
+    let x = 33_u128;
 
     let mut expected_heap = vec![0; dirty_heap_size];
     expected_heap[0..16].copy_from_slice(&x.to_le_bytes());

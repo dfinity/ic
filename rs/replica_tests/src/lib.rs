@@ -19,6 +19,7 @@ use ic_prep_lib::{
     node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore},
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -229,24 +230,26 @@ pub fn get_ic_config() -> IcConfig {
             subnet_index,
             subnet_nodes,
             ReplicaVersion::default(),
-            None,
-            None,
-            None,
-            None,
-            Some(Duration::from_millis(0)), // Notary time out
-            Some(Height::from(19)),         // DKG interval length
-            None,
+            /*max_ingress_bytes_per_message=*/ None,
+            /*max_ingress_bytes_per_block=*/ None,
+            /*max_ingress_messages_per_block=*/ None,
+            /*max_block_payload_size=*/ None,
+            /*unit_delay=*/ None,
+            /*initial_notary_delay=*/ Some(Duration::from_millis(0)),
+            /*dkg_interval_length=*/ Some(Height::from(19)),
+            /*dkg_dealings_per_block=*/ None,
             SubnetType::System,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            vec![],
-            vec![],
+            CanisterCyclesCostSchedule::Normal,
+            /*max_instructions_per_message=*/ None,
+            /*max_instructions_per_round=*/ None,
+            /*max_instructions_per_install_code=*/ None,
+            /*features=*/ None,
+            /*chain_key_config=*/ None,
+            /*max_number_of_canisters=*/ None,
+            /*ssh_readonly_access=*/ vec![],
+            /*ssh_backup_access=*/ vec![],
             SubnetRunningState::Active,
-            None,
+            /*initial_height=*/ None,
         ),
     );
 

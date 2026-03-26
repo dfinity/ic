@@ -14,11 +14,11 @@ use ic_consensus::consensus::{
     ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
 };
 use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
+use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -66,13 +66,6 @@ use std::{
 use tokio::sync::{mpsc::Sender, watch};
 use tower_http::trace::TraceLayer;
 
-/// [IC-1718]: Whether the `hashes-in-blocks` feature is enabled. If the flag is set to `true`, we
-/// will strip all ingress messages from blocks, before sending them to peers. On a receiver side,
-/// we will reconstruct the blocks by looking up the referenced ingress messages in the ingress
-/// pool or, if they are not there, by fetching missing ingress messages from peers who are
-/// advertising the blocks.
-const HASHES_IN_BLOCKS_FEATURE_ENABLED: bool = true;
-
 /// This limit is used to protect against a malicious peer advertising many ingress messages.
 /// If no malicious peers are present the ingress pools are bounded by a separate limit.
 const SLOT_TABLE_LIMIT_INGRESS: usize = 50_000;
@@ -103,6 +96,7 @@ impl ArtifactPools {
         )));
 
         let mut idkg_pool = IDkgPoolImpl::new(
+            node_id,
             config.clone(),
             log.clone(),
             metrics_registry.clone(),
@@ -225,7 +219,7 @@ impl AbortableBroadcastChannels {
                 metrics_registry.clone(),
             );
 
-        let consensus = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
+        let consensus = if ic_consensus_features::HASHES_IN_BLOCKS_ENABLED {
             let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
@@ -535,7 +529,7 @@ fn start_consensus(
         log.clone(),
     ));
 
-    let vetkd_payload_builder = Arc::new(VetKdPayloadBuilderImpl::new(
+    let chain_key_payload_builder = Arc::new(ChainKeyPayloadBuilderImpl::new(
         artifact_pools.idkg_pool.clone(),
         consensus_pool_cache.clone(),
         consensus_crypto.clone(),
@@ -568,7 +562,7 @@ fn start_consensus(
         self_validating_payload_builder,
         https_outcalls_payload_builder,
         Arc::from(query_stats_payload_builder),
-        vetkd_payload_builder,
+        chain_key_payload_builder,
         Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
         Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
         Arc::clone(&dkg_key_manager) as Arc<_>,

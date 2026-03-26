@@ -63,7 +63,10 @@ impl Ic00MethodPermissions {
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
-            Ic00Method::CreateCanister | Ic00Method::HttpRequest | Ic00Method::RawRand => Self {
+            Ic00Method::CreateCanister
+            | Ic00Method::HttpRequest
+            | Ic00Method::FlexibleHttpRequest
+            | Ic00Method::RawRand => Self {
                 method,
                 allow_remote_subnet_sender: false,
                 allow_only_nns_subnet_sender: false,
@@ -71,16 +74,18 @@ impl Ic00MethodPermissions {
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
-            Ic00Method::DeleteCanister | Ic00Method::StopCanister => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: false,
-                // Deleting an aborted canister requires to stop it first.
-                // Stopping an aborted canister does not generate a reply.
-                does_not_run_on_aborted_canister: true,
-                installs_code: false,
-            },
+            Ic00Method::DeleteCanister | Ic00Method::StopCanister => {
+                Self {
+                    method,
+                    allow_remote_subnet_sender: true,
+                    allow_only_nns_subnet_sender: false,
+                    counts_toward_round_limit: false,
+                    // Deleting an aborted canister requires to stop it first.
+                    // Stopping an aborted canister does not generate a reply.
+                    does_not_run_on_aborted_canister: true,
+                    installs_code: false,
+                }
+            }
             Ic00Method::InstallCode | Ic00Method::InstallChunkedCode => Self {
                 method,
                 allow_remote_subnet_sender: true,
@@ -90,14 +95,22 @@ impl Ic00MethodPermissions {
                 // Only one install code message allowed at a time.
                 installs_code: true,
             },
-            Ic00Method::SetupInitialDKG
-            | Ic00Method::ReshareChainKey
-            | Ic00Method::RenameCanister => Self {
+            Ic00Method::SetupInitialDKG | Ic00Method::ReshareChainKey => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
+                installs_code: false,
+            },
+            // Renaming a canister can only be called by NNS and it requires
+            // to stop the canister if it's aborted.
+            Ic00Method::RenameCanister => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: true,
+                counts_toward_round_limit: false,
+                does_not_run_on_aborted_canister: true,
                 installs_code: false,
             },
             Ic00Method::FetchCanisterLogs => Self {

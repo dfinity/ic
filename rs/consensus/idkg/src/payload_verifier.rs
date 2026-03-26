@@ -28,13 +28,14 @@ use crate::{
     payload_builder::{create_data_payload_helper, create_summary_payload},
     pre_signer::IDkgTranscriptBuilder,
     signer::ThresholdSignatureBuilder,
-    utils::build_signature_inputs,
     utils::{
         IDkgBlockReaderImpl, InvalidChainCacheError, block_chain_cache,
         get_idkg_chain_key_config_if_enabled,
     },
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{
+    chain_key::build_signature_inputs, crypto::ConsensusCrypto, pool_reader::PoolReader,
+};
 use ic_interfaces::{
     crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifier},
     validation::{ValidationError, ValidationResult},
@@ -623,7 +624,7 @@ fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidID
         }
     };
 
-    InitialIDkgDealings::try_from(&initial_dealings)
+    InitialIDkgDealings::try_from(initial_dealings)
         .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{err:?}")))
 }
 
@@ -982,15 +983,11 @@ mod test {
     fn test_validate_new_signature_agreements_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_new_signature_agreements(&key_id, false);
-            test_validate_new_signature_agreements(&key_id, true);
+            test_validate_new_signature_agreements(&key_id);
         }
     }
 
-    fn test_validate_new_signature_agreements(
-        key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: bool,
-    ) {
+    fn test_validate_new_signature_agreements(key_id: &IDkgMasterPublicKeyId) {
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
         let height = Height::from(1);
@@ -1029,6 +1026,7 @@ mod test {
         };
 
         // Only the first context has a completed signature so far
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         let mut signature_builder = TestThresholdSignatureBuilder::new();
         signature_builder.signatures.insert(
             ids[0],
@@ -1044,7 +1042,7 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
-            store_pre_signatures_in_state,
+            thread_pool.as_ref(),
         );
         // First signature should now be in "unreported" agreement
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
@@ -1071,7 +1069,7 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
-            store_pre_signatures_in_state,
+            thread_pool.as_ref(),
         );
         // First signature should now be reported, second unreported.
         assert_eq!(idkg_payload.signature_agreements.len(), 2);

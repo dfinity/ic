@@ -12,7 +12,7 @@ use nested::{HOST_VM_NAME, registration};
 
 use nested::util::{
     NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, check_hostos_version, elect_hostos_version,
-    get_host_boot_id, try_logging_guestos_diagnostics, update_nodes_hostos_version,
+    try_get_host_boot_id, try_logging_guestos_diagnostics, update_nodes_hostos_version,
 };
 
 fn main() -> Result<()> {
@@ -31,8 +31,7 @@ fn main() -> Result<()> {
 pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
-    // The original HostOS version is the deployed version (i.e., the SetupOS image version).
-    let original_version = get_setupos_img_version();
+    let original_version = get_hostos_version();
     let target_version = get_hostos_update_img_version();
     let update_image_url = get_hostos_update_img_url();
     let update_image_sha256 = get_hostos_update_img_sha256();
@@ -75,7 +74,7 @@ pub fn upgrade_hostos(env: TestEnv) {
         logger,
         "Retrieving the current boot ID from the host before upgrade to detect reboot after upgrade..."
     );
-    let host_boot_id_pre_upgrade = get_host_boot_id(&host);
+    let host_boot_id_pre_upgrade = try_get_host_boot_id(&host).expect("Failed to retrieve boot ID");
     info!(
         logger,
         "Host boot ID pre upgrade: '{host_boot_id_pre_upgrade}'"
@@ -104,7 +103,9 @@ pub fn upgrade_hostos(env: TestEnv) {
         NODE_UPGRADE_TIMEOUT,
         NODE_UPGRADE_BACKOFF,
         || {
-            let host_boot_id = get_host_boot_id(&host);
+            // Use try_get_host_boot_id instead of get_host_boot_id to avoid
+            // panicking when SSH is unavailable during the reboot cycle.
+            let host_boot_id = try_get_host_boot_id(&host)?;
             if host_boot_id != host_boot_id_pre_upgrade {
                 info!(
                     logger,

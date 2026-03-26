@@ -31,6 +31,7 @@ use ic_nns_governance_api::{
     self as api, ManageNeuronResponse, manage_neuron_response::Command as CommandResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
 use std::convert::TryFrom;
@@ -74,6 +75,17 @@ impl IcpLedger for DegradedEnv {
         _: Option<Subaccount>,
         _: AccountIdentifier,
         _: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
     ) -> Result<u64, NervousSystemError> {
         unimplemented!()
     }

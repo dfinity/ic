@@ -46,7 +46,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
@@ -124,6 +124,8 @@ lazy_static! {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        .with_timeout_per_test(Duration::from_secs(20 * 60))
+        .with_overall_timeout(Duration::from_secs(30 * 60))
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
@@ -140,10 +142,10 @@ pub fn setup(env: TestEnv) {
     for _ in 0..32 {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(1)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(8_389_000)),
-                    boot_image_minimal_size_gibibytes: None,
+                    ..VmResourceOverrides::default()
                 })
                 .add_nodes(1),
         );
@@ -353,9 +355,7 @@ async fn assert_rented_subnet_works(
 
     let a_rented_subnet_node = rented_subnet.nodes().next().unwrap();
     let mut agent = assert_create_agent(a_rented_subnet_node.get_public_url().as_str()).await;
-    agent.set_identity(
-        BasicIdentity::from_pem(std::io::Cursor::new(SUBNET_USER_KEYPAIR.to_pem())).unwrap(),
-    );
+    agent.set_identity(BasicIdentity::from_pem(SUBNET_USER_KEYPAIR.to_pem()).unwrap());
 
     // Verify 2: Can create a canister. Unlike the usual case, this requires 0
     // ICP. The reason for this special exception is that in subnet rental,

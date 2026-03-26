@@ -19,6 +19,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 #[cfg(any(test, feature = "test"))]
 use std::sync::RwLock;
+use std::thread::LocalKey;
 
 thread_local! {
     pub(crate) static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
@@ -94,6 +95,10 @@ pub fn with_governance_mut<R>(f: impl FnOnce(&mut Governance) -> R) -> R {
     GOVERNANCE.with(|g| f(&mut g.borrow_mut()))
 }
 
+pub fn governance_ref() -> &'static LocalKey<RefCell<Governance>> {
+    &GOVERNANCE
+}
+
 // Sets governance global state to the given object.
 pub fn set_governance(gov: Governance) {
     GOVERNANCE.set(gov);
@@ -144,7 +149,7 @@ impl RandomnessGenerator for CanisterRandomnessGenerator {
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         match self.rng.as_mut() {
             Some(rand) => {
-                let mut bytes = [0u8; 32];
+                let mut bytes = [0_u8; 32];
                 rand.fill_bytes(&mut bytes);
                 Ok(bytes)
             }

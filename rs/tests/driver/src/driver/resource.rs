@@ -5,9 +5,10 @@ use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use crate::driver::farm::VMCreateResponse;
 use crate::driver::farm::{CreateVmRequest, HostFeature};
 use crate::driver::farm::{Farm, VmType};
+use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
-use crate::driver::nested::NestedNode;
+use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResourceOverrides};
+use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
     get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
@@ -15,6 +16,7 @@ use crate::driver::test_env_api::{
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -22,9 +24,22 @@ use url::Url;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
+const DEFAULT_VM_RESOURCES: VmResources = VmResources {
+    vcpus: DEFAULT_VCPUS_PER_VM,
+    memory_kibibytes: DEFAULT_MEMORY_KIB_PER_VM,
+    boot_image_minimal_size_gibibytes: None,
+};
 
-pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(32);
+pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
 pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
+const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
+    vcpus: HOSTOS_VCPUS_PER_VM,
+    memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
+    boot_image_minimal_size_gibibytes: None,
+};
+
+pub const HOSTOS_VCPUS_RESERVED: u64 = 4;
+pub const HOSTOS_MEMORY_RESERVED_GIB: u64 = 8;
 
 /// A declaration of resources needed to instantiate a InternetComputer.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -36,14 +51,14 @@ pub struct ResourceRequest {
     pub vm_configs: Vec<VmSpec>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct DiskImage {
     pub image_type: ImageType,
     pub url: Url,
     pub sha256: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub enum ImageType {
     IcOsImage,
     PrometheusImage,
@@ -94,19 +109,30 @@ impl ResourceRequest {
 /// We assume that there is only one possible VM configuration available.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct VmSpec {
-    pub name: String,
-    pub vcpus: NrOfVCPUs,
-    pub memory_kibibytes: AmountOfMemoryKiB,
-    pub boot_image: BootImage,
-    pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
-    pub has_ipv4: bool,
-    pub vm_allocation: Option<VmAllocationStrategy>,
-    pub required_host_features: Vec<HostFeature>,
-    pub alternate_template: Option<VmType>,
+    name: String,
+    vcpus: NrOfVCPUs,
+    memory_kibibytes: AmountOfMemoryKiB,
+    boot_image: BootImage,
+    boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
+    has_ipv4: bool,
+    vm_allocation: Option<VmAllocationStrategy>,
+    required_host_features: Vec<HostFeature>,
+    alternate_template: Option<VmType>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+impl VmSpec {
+    pub fn vcpus(&self) -> NrOfVCPUs {
+        self.vcpus
+    }
+
+    pub fn memory_kibibytes(&self) -> AmountOfMemoryKiB {
+        self.memory_kibibytes
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Serialize, Deserialize)]
 pub enum BootImage {
+    #[default]
     GroupDefault,
     Image(DiskImage),
     File(FileId),
@@ -139,6 +165,7 @@ pub struct AllocatedVm {
     pub ipv6: Ipv6Addr,
     pub mac6: String,
     pub ipv4: Option<Ipv4Addr>,
+    pub bare_metal: bool,
 }
 
 /// This translates the configuration structure from InternetComputer to a
@@ -152,23 +179,41 @@ pub fn get_resource_request(
 
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
     let group_setup = GroupSetup::read_attribute(test_env);
-    let default_vm_resources = group_setup.default_vm_resources;
+    let group_resource_overrides = group_setup.vm_resource_overrides;
+    let ic_resource_overrides = config.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
     for s in &config.subnets {
+        let subnet_resource_overrides = Some(s.vm_resource_overrides);
         for n in &s.nodes {
-            res_req.add_vm_request(vm_spec_from_node(n, default_vm_resources));
+            res_req.add_vm_request(vm_spec_from_node(
+                n,
+                subnet_resource_overrides,
+                ic_resource_overrides,
+                group_resource_overrides,
+            ));
         }
     }
     for n in &config.unassigned_nodes {
-        res_req.add_vm_request(vm_spec_from_node(n, default_vm_resources));
+        res_req.add_vm_request(vm_spec_from_node(
+            n,
+            None,
+            ic_resource_overrides,
+            group_resource_overrides,
+        ));
     }
     for n in &config.api_boundary_nodes {
-        res_req.add_vm_request(vm_spec_from_node(n, default_vm_resources));
+        res_req.add_vm_request(vm_spec_from_node(
+            n,
+            None,
+            ic_resource_overrides,
+            group_resource_overrides,
+        ));
     }
     Ok(res_req)
 }
 
 /// Create a `ResourceRequest` for a set of nested nodes.
+/// This function only supports virtual (non-bare metal) nodes.
 pub fn get_resource_request_for_nested_nodes(
     nodes: &[NestedNode],
     test_env: &TestEnv,
@@ -184,20 +229,22 @@ pub fn get_resource_request_for_nested_nodes(
         empty_disk_img_sha256,
     );
     let group_setup = GroupSetup::read_attribute(test_env);
-    let default_vm_resources = group_setup.default_vm_resources;
+    let group_resource_overrides = group_setup.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
     for node in nodes {
-        res_req.add_vm_request(vm_spec_from_nested_node(node, default_vm_resources));
+        res_req.add_vm_request(vm_spec_from_nested_node(node, group_resource_overrides)?);
     }
 
     Ok(res_req)
 }
 
 /// The SHA-256 hash of the Universal VM disk image.
-/// The latest hash can be retrieved by downloading the SHA256SUMS file from:
-/// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
+/// The latest hash can be retrieved by checking the latest successful test of the farm repo on the master branch:
+/// https://github.com/dfinity-lab/farm/actions?query=branch%3Amaster+is%3Asuccess
+/// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
+/// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/universal-vm/<SHA256-HASH>/x86_64-linux/universal-vm.img.zst
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "36977fe6e829631376dd0bc4b1a8e05b53a7e3a0248a6373f1d7fbdae4bc00ed";
+    "c314e927f9ad976db110910cfef262eec2dddfff05ef3a84b0717a901630b367";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
@@ -215,29 +262,18 @@ pub fn get_resource_request_for_universal_vm(
         primary_image.sha256,
     );
     res_req.group_name = group_name.to_string();
-    let vm_resources = universal_vm.vm_resources;
+
+    let resolved_vm_resources = universal_vm
+        .vm_resource_overrides
+        .layer(&group_setup.vm_resource_overrides)
+        .base(&DEFAULT_VM_RESOURCES);
+
     res_req.add_vm_request(VmSpec {
         name: universal_vm.name.clone(),
-        vcpus: vm_resources.vcpus.unwrap_or_else(|| {
-            group_setup
-                .default_vm_resources
-                .and_then(|vm_resources| vm_resources.vcpus)
-                .unwrap_or(DEFAULT_VCPUS_PER_VM)
-        }),
-        memory_kibibytes: vm_resources.memory_kibibytes.unwrap_or_else(|| {
-            group_setup
-                .default_vm_resources
-                .and_then(|vm_resources| vm_resources.memory_kibibytes)
-                .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
-        }),
+        vcpus: resolved_vm_resources.vcpus,
+        memory_kibibytes: resolved_vm_resources.memory_kibibytes,
         boot_image: BootImage::GroupDefault,
-        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
-            || {
-                group_setup
-                    .default_vm_resources
-                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
-            },
-        ),
+        boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: universal_vm.has_ipv4,
         vm_allocation: universal_vm.vm_allocation.clone(),
         required_host_features: universal_vm.required_host_features.clone(),
@@ -309,34 +345,35 @@ pub fn allocate_resources(
                     ipv4: None,
                     ipv6,
                     mac6,
-                })
+                    bare_metal: false,
+                });
             }
         }
     }
     Ok(res_group)
 }
 
-fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmSpec {
-    let vm_resources = &n.vm_resources;
+fn vm_spec_from_node(
+    n: &Node,
+    subnet_vm_resource_overrides: Option<VmResourceOverrides>,
+    ic_vm_resource_overrides: VmResourceOverrides,
+    group_vm_resource_overrides: VmResourceOverrides,
+) -> VmSpec {
+    let mut vm_resources = n.vm_resource_overrides;
+    if let Some(subnet_vm_resource_overrides) = subnet_vm_resource_overrides {
+        vm_resources = vm_resources.layer(&subnet_vm_resource_overrides);
+    }
+    let resolved_vm_resources = vm_resources
+        .layer(&ic_vm_resource_overrides)
+        .layer(&group_vm_resource_overrides)
+        .base(&DEFAULT_VM_RESOURCES);
+
     VmSpec {
         name: n.id().to_string(),
-        vcpus: vm_resources.vcpus.unwrap_or_else(|| {
-            default_vm_resources
-                .and_then(|vm_resources| vm_resources.vcpus)
-                .unwrap_or(DEFAULT_VCPUS_PER_VM)
-        }),
-        memory_kibibytes: vm_resources.memory_kibibytes.unwrap_or_else(|| {
-            default_vm_resources
-                .and_then(|vm_resources| vm_resources.memory_kibibytes)
-                .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
-        }),
-        boot_image: BootImage::GroupDefault,
-        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
-            || {
-                default_vm_resources
-                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
-            },
-        ),
+        vcpus: resolved_vm_resources.vcpus,
+        memory_kibibytes: resolved_vm_resources.memory_kibibytes,
+        boot_image: n.boot_image.clone(),
+        boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
         vm_allocation: n.vm_allocation.clone(),
         required_host_features: n.required_host_features.clone(),
@@ -345,34 +382,33 @@ fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmS
 }
 
 /// Create a `VmSpec` for a given Nested VM, using the specified image file.
+///
+/// Note: There must be enough vCPUs and memory for the HostOS VM and nested
+/// GuestOS VM.
 fn vm_spec_from_nested_node(
     node: &NestedNode,
-    default_vm_resources: Option<VmResources>,
-) -> VmSpec {
-    let vm_resources = &node.vm_resources;
-    VmSpec {
+    group_vm_resource_overrides: VmResourceOverrides,
+) -> anyhow::Result<VmSpec> {
+    let node_vm_resource_overrides = match &node.node_spec {
+        NestedNodeSpec::Vm(overrides) => overrides,
+        NestedNodeSpec::BareMetal { .. } => {
+            bail!("Bare metal nodes are not supported by get_resource_request_for_nested_nodes")
+        }
+    };
+
+    let resolved_vm_resources = node_vm_resource_overrides
+        .layer(&group_vm_resource_overrides)
+        .base(&DEFAULT_NESTED_VM_RESOURCES);
+
+    Ok(VmSpec {
         name: node.name.clone(),
-        // Note that the nested GuestOS VM uses half the vCPUs and memory of this host VM.
-        vcpus: vm_resources.vcpus.unwrap_or_else(|| {
-            default_vm_resources
-                .and_then(|vm_resources| vm_resources.vcpus)
-                .unwrap_or(HOSTOS_VCPUS_PER_VM)
-        }),
-        memory_kibibytes: vm_resources.memory_kibibytes.unwrap_or_else(|| {
-            default_vm_resources
-                .and_then(|vm_resources| vm_resources.memory_kibibytes)
-                .unwrap_or(HOSTOS_MEMORY_KIB_PER_VM)
-        }),
-        boot_image: BootImage::GroupDefault,
-        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
-            || {
-                default_vm_resources
-                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
-            },
-        ),
+        vcpus: resolved_vm_resources.vcpus,
+        memory_kibibytes: resolved_vm_resources.memory_kibibytes,
+        boot_image: node.boot_image.clone(),
+        boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
         vm_allocation: None,
         required_host_features: Vec::new(),
         alternate_template: None,
-    }
+    })
 }

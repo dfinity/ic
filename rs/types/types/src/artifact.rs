@@ -74,7 +74,7 @@ impl HasHash for ConsensusMessageId {
 impl From<ConsensusMessageId> for pb::ConsensusMessageId {
     fn from(value: ConsensusMessageId) -> Self {
         Self {
-            hash: Some(pb::ConsensusMessageHash::from(&value.hash)),
+            hash: Some(pb::ConsensusMessageHash::from(value.hash)),
             height: value.height.get(),
         }
     }
@@ -84,7 +84,7 @@ impl TryFrom<pb::ConsensusMessageId> for ConsensusMessageId {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::ConsensusMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
-            hash: try_from_option_field(value.hash.as_ref(), "ConsensusMessageId::hash")?,
+            hash: try_from_option_field(value.hash, "ConsensusMessageId::hash")?,
             height: Height::new(value.height),
         })
     }
@@ -203,7 +203,7 @@ impl TryFrom<pb::CertificationMessageId> for CertificationMessageId {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::CertificationMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
-            hash: try_from_option_field(value.hash.as_ref(), "CertificationMessageId::hash")?,
+            hash: try_from_option_field(value.hash, "CertificationMessageId::hash")?,
             height: Height::new(value.height),
         })
     }

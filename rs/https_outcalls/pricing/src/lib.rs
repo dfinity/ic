@@ -2,12 +2,27 @@ mod legacy;
 
 use std::time::Duration;
 
-use ic_types::{NumBytes, canister_http::CanisterHttpRequestContext};
+use ic_types::{NumBytes, NumInstructions, canister_http::CanisterHttpRequestContext};
 use legacy::LegacyTracker;
 
 pub trait BudgetTracker: Send {
+    /// Returns the maximum network resources the Adapter is allowed to consume.
     fn get_adapter_limits(&self) -> AdapterLimits;
+    /// Deducts the actual network resources consumed.
+    ///
+    /// # Invariants
+    ///  - This method returns `Ok(())` if `network_usage <= get_adapter_limits()`.
+    ///  - This method returns `Err(PricingError)` if `network_usage > get_adapter_limits()`.
+    ///
+    /// Note that "<=" is used here to mean field-wise less than or equal to.
     fn subtract_network_usage(&mut self, network_usage: NetworkUsage) -> Result<(), PricingError>;
+    /// Returns the maximum instructions allowed for the transformation function.
+    fn get_transform_limit(&self) -> NumInstructions;
+    /// Deducts the actual instructions consumed by the transformation.
+    ///
+    /// # Invariants
+    ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
+    fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
 }
 
 pub struct AdapterLimits {

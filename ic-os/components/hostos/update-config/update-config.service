@@ -1,0 +1,14 @@
+[Unit]
+Description=Update HostOS Configuration
+RequiresMountsFor=/boot/config
+Before=node_exporter.service
+Before=guestos.service
+Before=log-config.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/config_tool update-config
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

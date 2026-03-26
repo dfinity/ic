@@ -13,7 +13,7 @@ use rand::Rng;
 fn potpourri() {
     let sys = SysParam::global();
     let rng = &mut reproducible_rng();
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 0u8, 2u8, 1u8];
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2_u8, 0_u8, 2_u8, 1_u8];
 
     println!("generating key pair...");
     let (pk, mut dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
@@ -91,7 +91,7 @@ fn potpourri() {
 fn encrypted_chunks_should_validate(epoch: Epoch) {
     let sys = SysParam::global();
     let rng = &mut reproducible_rng();
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1u8, 9u8, 8u8, 4u8];
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1_u8, 9_u8, 8_u8, 4_u8];
 
     let num_receivers = 3;
     let threshold = 2;
@@ -285,5 +285,3 @@ fn encrypted_chunks_should_validate_00() {
 fn encrypted_chunks_should_validate_01() {
     encrypted_chunks_should_validate(Epoch::from(1))
 }
-
-// TODO (CRP-831): Add a test that incorrect encryptions do not validate.

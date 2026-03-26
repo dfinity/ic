@@ -1,7 +1,6 @@
 use anyhow::Result;
 use ic_base_types::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
-use ic_consensus_system_test_utils::set_sandbox_env_vars;
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
@@ -9,7 +8,9 @@ use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use ic_system_test_driver::driver::ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources};
+use ic_system_test_driver::driver::ic::{
+    ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
+};
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
 };
@@ -33,10 +34,9 @@ use crate::proposals::NEURON_CONTROLLER;
 use crate::proposals::NEURON_SECRET_KEY_PEM;
 use crate::proposals::ProposalWithMainnetState;
 
-pub const MAINNET_NODE_VM_RESOURCES: VmResources = VmResources {
-    vcpus: None,
-    memory_kibibytes: None,
+pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
+    ..VmResourceOverrides::const_default()
 };
 
 // Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
@@ -186,9 +186,6 @@ fn setup_recovered_nns(
     let recovered_nns_node = topology.unassigned_nodes().next().unwrap();
     fetch_ic_config(&env, &nns_node);
 
-    // The following ensures ic-replay and ic-recovery know where to get their required dependencies.
-    set_sandbox_env_vars();
-
     // Wait until we have fetched ic-replay before setting the test neuron (which needs ic-replay)
     fetch_mainnet_ic_replay_thread
         .join()
@@ -222,6 +219,7 @@ fn setup_recovered_nns(
         subnet_id: SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap()),
         max_ingress_bytes_per_message: None,
         max_ingress_messages_per_block: None,
+        max_ingress_bytes_per_block: None,
         max_block_payload_size: None,
         unit_delay_millis: None,
         initial_notary_delay_millis: None,
@@ -686,7 +684,7 @@ fn setup_ic(env: TestEnv) {
             .unwrap();
 
     InternetComputer::new()
-        .with_default_vm_resources(MAINNET_NODE_VM_RESOURCES)
+        .with_resource_overrides(MAINNET_NODE_VM_RESOURCE_OVERRIDES)
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)

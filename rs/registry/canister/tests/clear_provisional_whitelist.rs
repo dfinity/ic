@@ -5,8 +5,8 @@ use ic_base_types::PrincipalId;
 use ic_nns_test_utils::registry::invariant_compliant_mutation_as_atomic_req;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::get_value_or_panic,
 };
@@ -22,7 +22,7 @@ use std::str::FromStr;
 
 #[test]
 fn anonymous_user_cannot_clear_the_provisional_whitelist() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let principal_id = PrincipalId::from_str(
             "5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae",
         )
@@ -71,7 +71,7 @@ fn anonymous_user_cannot_clear_the_provisional_whitelist() {
 
 #[test]
 fn a_canister_other_than_the_governance_canister_cannot_change_the_provisional_whitelist() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -132,7 +132,7 @@ fn a_canister_other_than_the_governance_canister_cannot_change_the_provisional_w
 
 #[test]
 fn clear_provisional_whitelist_succeeds() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let principal_id = PrincipalId::from_str(
             "5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae",
         )

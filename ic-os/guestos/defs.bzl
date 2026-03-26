@@ -52,7 +52,7 @@ def image_deps(mode, malicious = False):
             "//rs/ic_os/release:vsock_guest": "/opt/ic/bin/vsock_guest:0755",  # HostOS <--> GuestOS communication client.
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
-            "//rs/ic_os/release:metrics_tool": "/opt/ic/bin/metrics_tool:0755",  # Collects and reports custom metrics.
+            "//rs/ic_os/release:custom_metrics": "/opt/ic/bin/custom_metrics:0755",  # Collects and reports custom metrics.
             "//rs/ic_os/remote_attestation/server": "/opt/ic/bin/remote_attestation_server:0755",  # Remote Attestation service
             "//rs/ic_os/guest_upgrade/client": "/opt/ic/bin/guest_upgrade_client:0755",  # Disk encryption key exchange client
 
@@ -63,7 +63,7 @@ def image_deps(mode, malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
-        "component_files": dict(component_files),  # Make a copy because we might update it later
+        "component_files": component_files(mode),
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",

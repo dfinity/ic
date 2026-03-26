@@ -37,7 +37,7 @@ fn should_pass_nist_variable_output_test_vectors() {
         let mut shake256 = Shake256::new();
         shake256.update(msg);
         let mut xof_reader = shake256.finalize_xof();
-        let buf = &mut vec![0u8; outputlen / 8];
+        let buf = &mut vec![0_u8; outputlen / 8];
         xof_reader.read(buf);
 
         assert_eq!(buf, &output, "test vec with COUNT = {count} failed");
@@ -81,7 +81,7 @@ fn should_pass_nist_short_msg_test_vectors() {
             shake256.update(msg);
         }
         let mut xof_reader = shake256.finalize_xof();
-        let buf = &mut vec![0u8; output.len()];
+        let buf = &mut vec![0_u8; output.len()];
         xof_reader.read(buf);
 
         assert_eq!(buf, &output, "test vec for Len = {len} failed");

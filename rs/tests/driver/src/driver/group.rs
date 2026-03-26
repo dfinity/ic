@@ -1,17 +1,17 @@
 #![allow(dead_code)]
 use crate::driver::{
+    action_graph::ActionGraph,
+    context::{GroupContext, ProcessContext},
+    dsl::{SubprocessFn, TestFunction},
+    event::TaskId,
     farm::{Farm, HostFeature},
-    task_scheduler::TaskScheduler,
-    test_env_api::{FarmBaseUrl, HasFarmUrl, HasGroupSetup},
-    {
-        action_graph::ActionGraph,
-        context::{GroupContext, ProcessContext},
-        dsl::{SubprocessFn, TestFunction},
-        event::TaskId,
-        plan::{EvalOrder, Plan},
-        report::Outcome,
-        task::{DebugKeepaliveTask, EmptyTask},
-        task_scheduler::TaskTable,
+    plan::{EvalOrder, Plan},
+    report::Outcome,
+    task::{DebugKeepaliveTask, EmptyTask},
+    task_scheduler::{TaskScheduler, TaskTable},
+    test_env_api::{
+        FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
+        ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT,
     },
 };
 use crate::driver::{
@@ -45,11 +45,12 @@ use tokio::runtime::{Builder, Handle, Runtime};
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
 pub const MAX_RUNTIME_THREADS: usize = 16;
-pub const MAX_RUNTIME_BLOCKING_THREADS: usize = 16;
 
 const REPORT_TASK_NAME: &str = "report";
 const SETUP_TASK_NAME: &str = "setup";
 const TEARDOWN_TASK_NAME: &str = "teardown";
+const ASSERT_NO_METRICS_ERRORS_TASK_NAME: &str = "assert_no_metrics_errors";
+const ASSERT_NO_REPLICA_RESTARTS_TASK_NAME: &str = "assert_no_replica_restarts";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 
 #[derive(Debug, Parser)]
@@ -419,11 +420,13 @@ impl SystemTestSubGroup {
 
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
-    teardown: Option<Box<dyn PotSetupFn>>,
+    teardowns: Vec<Box<dyn PotSetupFn>>,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
     with_farm: bool,
+    replica_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
+    orchestrator_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
 }
 
 impl Default for SystemTestGroup {
@@ -457,11 +460,25 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             setup: Default::default(),
-            teardown: Default::default(),
+            teardowns: Default::default(),
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
+            replica_metrics_to_check: BTreeMap::from([
+                ("critical_errors", 0),
+                ("consensus_invalidated_artifacts", 0),
+                ("dkg_invalidated_artifacts", 0),
+                ("idkg_invalidated_artifacts", 0),
+                ("certification_invalidated_artifacts", 0),
+                ("canister_http_invalidated_artifacts", 0),
+            ]),
+            orchestrator_metrics_to_check: BTreeMap::from([
+                ("orchestrator_cup_deserialization_failed_total", 0),
+                ("orchestrator_state_removal_failed_total", 0),
+                ("orchestrator_tasks_failed_total", 0),
+                ("orchestrator_replica_process_start_attempts_total", 1),
+            ]),
         }
     }
 
@@ -484,8 +501,33 @@ impl SystemTestGroup {
         self
     }
 
-    pub fn with_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
-        self.teardown = Some(Box::new(teardown));
+    pub fn add_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
+        self.teardowns.push(Box::new(teardown));
+        self
+    }
+
+    /// If the provided metric has value larger than the provided one, for any of the
+    /// nodes, the test will fail.
+    pub fn update_orchestrator_metrics_to_check(
+        mut self,
+        metric_name: &'static str,
+        max_value: u64,
+    ) -> Self {
+        self.orchestrator_metrics_to_check
+            .insert(metric_name, max_value);
+        self
+    }
+
+    pub fn remove_metrics_to_check(mut self, metric_name: &str) -> Self {
+        self.replica_metrics_to_check.remove(metric_name);
+        self.orchestrator_metrics_to_check.remove(metric_name);
+        self
+    }
+
+    pub fn remove_all_metrics_to_check(mut self) -> Self {
+        self.replica_metrics_to_check = BTreeMap::new();
+        self.orchestrator_metrics_to_check = BTreeMap::new();
+
         self
     }
 
@@ -681,29 +723,71 @@ impl SystemTestGroup {
             false,
         );
 
-        let teardown_plan = self.teardown.map(|teardown_fn| {
-            let logger = logger.clone();
-            let group_ctx = group_ctx.clone();
-            let teardown_task = subproc(
-                TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
-                move || {
-                    debug!(logger, ">>> teardown_fn");
-                    let env = ensure_setup_env(group_ctx);
-                    teardown_fn(env);
-                },
-                &mut compose_ctx,
-                false,
-            );
-            timed(
-                vec![Plan::Leaf {
-                    task: Box::from(teardown_task),
-                }],
-                EvalOrder::Sequential,
-                compose_ctx.timeout_per_test,
-                None,
-                &mut compose_ctx,
-            )
-        });
+        let assert_no_metric_errors_fn: Option<(String, Box<dyn PotSetupFn>)> =
+            if !self.replica_metrics_to_check.is_empty()
+                || !self.orchestrator_metrics_to_check.is_empty()
+            {
+                let teardown_fn = move |env: TestEnv| {
+                    let topology = match env.safe_topology_snapshot() {
+                        Ok(topology) => topology,
+                        Err(e) => {
+                            info!(
+                                env.logger(),
+                                "Could not get topology ({e:?}) => skipping checks of metrics."
+                            );
+                            return;
+                        }
+                    };
+
+                    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
+                        node.assert_metrics_values(
+                            &self.replica_metrics_to_check,
+                            REPLICA_METRICS_PORT,
+                        );
+                        node.assert_metrics_values(
+                            &self.orchestrator_metrics_to_check,
+                            ORCHESTRATOR_METRICS_PORT,
+                        );
+                    }
+                };
+                Some((
+                    ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
+                    Box::new(teardown_fn),
+                ))
+            } else {
+                None
+            };
+
+        let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
+            .teardowns
+            .into_iter()
+            .enumerate()
+            .map(|(i, teardown)| (format!("{TEARDOWN_TASK_NAME}_{i}"), teardown))
+            .chain(assert_no_metric_errors_fn)
+            .map(|(teardown_name, teardown_fn)| {
+                let logger = logger.clone();
+                let group_ctx = group_ctx.clone();
+                let teardown_task = subproc(
+                    TaskId::Test(teardown_name.clone()),
+                    move || {
+                        debug!(logger, ">>> {teardown_name}_fn");
+                        let env = ensure_setup_env(group_ctx);
+                        teardown_fn(env);
+                    },
+                    &mut compose_ctx,
+                    false,
+                );
+                timed(
+                    vec![Plan::Leaf {
+                        task: Box::from(teardown_task),
+                    }],
+                    EvalOrder::Sequential,
+                    compose_ctx.timeout_per_test,
+                    None,
+                    &mut compose_ctx,
+                )
+            })
+            .collect();
 
         let setup_plan: Plan<Box<dyn Task>> = Plan::Leaf {
             task: Box::from(setup_task),
@@ -908,16 +992,12 @@ impl SystemTestGroup {
             let cpus = num_cpus::get();
             info!(group_ctx.log(), "Number of CPUs {}", cpus);
             let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
-            let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
             info!(
                 group_ctx.log(),
-                "Set tokio runtime: worker_threads={}, blocking_threads={}",
-                workers,
-                blocking_threads
+                "Set tokio runtime: worker_threads={}", workers,
             );
             Builder::new_multi_thread()
                 .worker_threads(workers)
-                .max_blocking_threads(blocking_threads)
                 .enable_all()
                 .build()
                 .unwrap()
@@ -1039,6 +1119,7 @@ impl SystemTestGroup {
         let farm_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
-        farm.delete_group(&group_name);
+        farm.delete_group(&group_name)
+            .expect("failed to delete the farm group");
     }
 }

@@ -71,7 +71,7 @@ pub(crate) fn check_replica_version_invariants(
     for version in blessed_set {
         let r = get_replica_version_record(snapshot, version);
 
-        // Check whether release package URLs (update image) and corresponding hash is well-formed.
+        // Check whether release package URLs (update image) and corresponding hash are well-formed.
         // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
         assert_valid_urls_and_hash(
             &r.release_package_urls,

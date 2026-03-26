@@ -4,11 +4,12 @@ use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
 use ic_types::Time;
 use ic_types::{
-    CanisterId, Cycles, NumBytes, PrincipalId,
+    CanisterId, NumBytes, PrincipalId,
     messages::{CallContextId, NO_DEADLINE, Request},
     methods::{Callback, WasmClosure},
     time::CoarseTime,
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::doc_ref;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
@@ -269,7 +270,6 @@ pub(crate) fn into_request(
 
     let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
         call_context_id,
-        sender,
         destination_canister,
         cycles,
         prepayment_for_response_execution,

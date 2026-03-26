@@ -4,25 +4,23 @@ use crate::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
     args_merger::merge,
     error::GracefulExpect,
-    get_node_heights_from_metrics,
+    get_available_nodes_heights_from_metrics,
     nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs},
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryHelper,
     steps::Step,
-    util,
-    util::data_location_from_str,
-    util::subnet_id_from_str,
+    util::{data_location_from_str, node_id_from_str, subnet_id_from_str},
 };
 use core::fmt::Debug;
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use ic_types::{NodeId, SubnetId};
 use serde::{Serialize, de::DeserializeOwned};
 use slog::{Logger, info, warn};
 use std::{
-    convert::TryFrom,
     fmt::Display,
     io::{Write, stdin, stdout},
+    path::Path,
     str::FromStr,
 };
 use strum::EnumMessage;
@@ -46,6 +44,28 @@ On a high level, this process consists of the following steps:
 5. Proposing the recovery CUP.
 6. Uploading the obtained state to one of the nodes.
 7. Unhalting the recovered subnet.";
+
+fn nns_recovery_disclaimer(dir_path: &Path) -> String {
+    format!(
+        r#"
+The initialization of the local store uses the given NNS URL to make query calls to
+`get_certified_changes_since` to the registry canister. In case all NNS nodes are down in
+such a way that they cannot even serve query calls, then the local store initialization will
+stay stuck in an infinite loop.
+
+In such a case, it is possible to manually initialize the local store before starting the
+recovery, because then `ic-recovery` will not perform any calls to the registry canister.
+To do so, you should download the local store of a node that is up-to-date and honest,
+and place it in the expected location (i.e.
+`{dir}/recovery/working_dir/data/ic_registry_local_store`),
+for example using the following commands:
+
+mkdir -p {dir}/recovery/working_dir/data/ic_registry_local_store
+rsync --archive --checksum --delete --partial --progress --no-g backup@[IPV6]:/var/lib/ic/data/ic_registry_local_store/ {dir}/recovery/working_dir/data/ic_registry_local_store -e "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A
+"#,
+        dir = dir_path.display()
+    )
+}
 
 pub fn app_subnet_recovery(
     logger: Logger,
@@ -94,6 +114,9 @@ pub fn nns_recovery_same_nodes(
     if !args.skip_prompts {
         wait_for_confirmation(&logger);
     }
+
+    info!(logger, "{}", nns_recovery_disclaimer(&args.dir));
+
     let nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args.clone(), nns_recovery_args);
 
     execute_steps(&logger, args.skip_prompts, nns_recovery);
@@ -125,6 +148,8 @@ pub fn nns_recovery_failover_nodes(
     if neuron_args.is_none() && !args.test_mode {
         neuron_args = Some(read_neuron_args(&logger));
     }
+
+    info!(logger, "{}", nns_recovery_disclaimer(&args.dir));
 
     let nns_recovery =
         NNSRecoveryFailoverNodes::new(logger.clone(), args.clone(), neuron_args, nns_recovery_args);
@@ -188,7 +213,7 @@ fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) {
 pub fn print_height_info(logger: &Logger, registry_helper: &RegistryHelper, subnet_id: SubnetId) {
     info!(logger, "Collecting node heights from metrics...");
     info!(logger, "Select a node with highest finalization height:");
-    match get_node_heights_from_metrics(logger, registry_helper, subnet_id) {
+    match get_available_nodes_heights_from_metrics(logger, registry_helper, subnet_id) {
         Ok(heights) => info!(logger, "{:#?}", heights),
         Err(err) => warn!(logger, "Failed to query height info: {:?}", err),
     }
@@ -227,7 +252,7 @@ pub fn wait_for_confirmation(logger: &Logger) {
 }
 
 /// Request and read input from the user with the given prompt.
-pub fn read_input(logger: &Logger, prompt: &str) -> String {
+fn read_input(logger: &Logger, prompt: &str) -> String {
     info!(logger, "{}", prompt);
     let _ = stdout().flush();
     let mut input = String::new();
@@ -235,22 +260,8 @@ pub fn read_input(logger: &Logger, prompt: &str) -> String {
     input.trim().to_string()
 }
 
-/// Request and read input from the user with the given prompt. Convert empty
-/// input to `None`.
-fn read_optional_input(logger: &Logger, prompt: &str) -> Option<String> {
-    let input = read_input(logger, &format!("(Optional) {prompt}"));
-    if input.is_empty() { None } else { Some(input) }
-}
-
-pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeId>> {
-    read_optional_type(logger, prompt, |input| {
-        input
-            .split(' ')
-            .map(util::node_id_from_str)
-            .collect::<Result<Vec<NodeId>, _>>()
-    })
-}
-
+/// Read an optional input that can be parsed from a string. If the user input is empty, `None` is
+/// returned. Otherwise, the input is parsed and returned as `Some(value)`.
 pub fn read_optional<T: FromStr>(logger: &Logger, prompt: &str) -> Option<T>
 where
     <T as FromStr>::Err: std::fmt::Display,
@@ -258,8 +269,13 @@ where
     read_optional_type(logger, prompt, FromStr::from_str)
 }
 
-pub fn read_optional_version(logger: &Logger, prompt: &str) -> Option<ReplicaVersion> {
-    read_optional_type(logger, prompt, |s| ReplicaVersion::try_from(s))
+pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeId>> {
+    read_optional_type(logger, prompt, |input| {
+        input
+            .split(' ')
+            .map(node_id_from_str)
+            .collect::<Result<Vec<NodeId>, _>>()
+    })
 }
 
 pub fn read_optional_subnet_id(logger: &Logger, prompt: &str) -> Option<SubnetId> {
@@ -270,18 +286,43 @@ pub fn read_optional_data_location(logger: &Logger, prompt: &str) -> Option<Data
     read_optional_type(logger, prompt, data_location_from_str)
 }
 
-/// Optionally read an input of the generic type by applying the given deserialization function.
+/// Read an optional input of the generic type by applying the given deserialization function if the
+/// input is not empty.
 pub fn read_optional_type<T, E: Display>(
     logger: &Logger,
     prompt: &str,
     mapper: impl Fn(&str) -> Result<T, E>,
 ) -> Option<T> {
+    read_type(logger, &format!("(Optional) {prompt}"), |input| {
+        if input.is_empty() {
+            Ok(None)
+        } else {
+            mapper(input).map(Some)
+        }
+    })
+}
+
+/// Read an input that can be parsed from a string. In contrast to `read_optional`, an empty input
+/// will still be parsed and returned as a value of the generic type.
+pub fn read<T: FromStr>(logger: &Logger, prompt: &str) -> T
+where
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    read_type(logger, prompt, FromStr::from_str)
+}
+
+/// Read an input of the generic type by applying the given deserialization function.
+fn read_type<T, E: Display>(
+    logger: &Logger,
+    prompt: &str,
+    mapper: impl Fn(&str) -> Result<T, E>,
+) -> T {
     loop {
-        match mapper(&read_optional_input(logger, prompt)?) {
+        match mapper(&read_input(logger, prompt)) {
             Err(e) => {
                 warn!(logger, "Could not parse input: {}", e);
             }
-            Ok(v) => return Some(v),
+            Ok(v) => return v,
         }
     }
 }

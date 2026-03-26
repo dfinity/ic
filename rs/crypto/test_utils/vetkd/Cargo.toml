@@ -11,5 +11,6 @@ ic-types = { path = "../../../types/types" }
 rand_chacha = { workspace = true }
 
 [dev-dependencies]
+ic-crypto-test-utils-reproducible-rng = { path = "../reproducible_rng" }
 ic-vetkeys = { workspace = true }
 rand = { workspace = true }

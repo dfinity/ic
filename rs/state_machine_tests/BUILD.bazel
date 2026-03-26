@@ -39,6 +39,7 @@ DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "//rs/registry/provisional_whitelist",
+    "//rs/registry/resource_limits",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
@@ -50,11 +51,11 @@ DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/xnet/payload_builder",
     "@crate_index//:candid",
-    "@crate_index//:ed25519-dalek",
     "@crate_index//:fs_extra",
     "@crate_index//:hex",
     "@crate_index//:maplit",
@@ -90,6 +91,7 @@ BIN_DEPENDENCIES = [
     "//rs/crypto/iccsa",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/registry/subnet_type",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",
@@ -124,19 +126,18 @@ rust_binary(
 )
 
 rust_ic_test(
-    name = "state_machine_multi_subnet_test",
-    srcs = ["tests/multi_subnet.rs"],
+    name = "state_machine_integration_tests",
+    srcs = [
+        "tests/dts.rs",
+        "tests/mod.rs",
+        "tests/multi_subnet.rs",
+        "tests/reject_remote_callbacks.rs",
+    ],
+    crate_root = "tests/mod.rs",
     data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
     env = {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":state_machine_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_ic_test(
-    name = "state_machine_dts_test",
-    srcs = ["tests/dts.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":state_machine_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

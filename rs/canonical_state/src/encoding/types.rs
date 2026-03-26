@@ -147,7 +147,7 @@ pub struct Refund {
     pub amount: Cycles,
 }
 
-/// Canonical representation of `ic_types::funds::Cycles`.
+/// Canonical representation of `ic_types_cycles::Cycles`.
 #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cycles {
@@ -591,9 +591,9 @@ impl TryFrom<Refund> for ic_types::messages::Refund {
     }
 }
 
-impl From<(&ic_types::funds::Cycles, CertificationVersion)> for Cycles {
+impl From<(&ic_types_cycles::Cycles, CertificationVersion)> for Cycles {
     fn from(
-        (cycles, _certification_version): (&ic_types::funds::Cycles, CertificationVersion),
+        (cycles, _certification_version): (&ic_types_cycles::Cycles, CertificationVersion),
     ) -> Self {
         let (high, low) = cycles.into_parts();
         Self {
@@ -607,7 +607,7 @@ impl From<(&ic_types::funds::Cycles, CertificationVersion)> for Cycles {
     }
 }
 
-impl TryFrom<Cycles> for ic_types::funds::Cycles {
+impl TryFrom<Cycles> for ic_types_cycles::Cycles {
     type Error = ProxyDecodeError;
 
     fn try_from(cycles: Cycles) -> Result<Self, Self::Error> {
@@ -615,25 +615,6 @@ impl TryFrom<Cycles> for ic_types::funds::Cycles {
             None => Ok(Self::from(cycles.low)),
             Some(high) => Ok(Self::from_parts(high, cycles.low)),
         }
-    }
-}
-
-impl From<(&ic_types::funds::Funds, CertificationVersion)> for Funds {
-    fn from(
-        (funds, certification_version): (&ic_types::funds::Funds, CertificationVersion),
-    ) -> Self {
-        Self {
-            cycles: (&funds.cycles(), certification_version).into(),
-            icp: 0,
-        }
-    }
-}
-
-impl TryFrom<Funds> for ic_types::funds::Funds {
-    type Error = ProxyDecodeError;
-
-    fn try_from(funds: Funds) -> Result<Self, Self::Error> {
-        Ok(Self::new(funds.cycles.try_into()?))
     }
 }
 

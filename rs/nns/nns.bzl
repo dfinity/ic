@@ -12,11 +12,16 @@ but other things could be added here later.
 #
 # This way, there is some room to grow, but an alarm eventually gets triggered after a "significant"
 # amount of growth happens.
-
+#
+# Since these canisters live in the NNS subnet, these files cannot be > 3.5 MiB,
+# because then, it will not be possible to submit upgrade proposals and/or
+# execute them (whereas, normally, the limit would be 2 MiB). See
+# MAX_INGRESS_BYTES_PER_MESSAGE_NNS_SUBNET, which is defined in
+# rs/limits/src/lib.rs .
 CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = {
     "cycles-minting-canister.wasm.gz": 6,
     "genesis-token-canister.wasm.gz": 3,
-    "governance-canister.wasm.gz": 21,
+    "governance-canister.wasm.gz": 22,
     "governance-canister_test.wasm.gz": 23,
     "registry-canister.wasm.gz": 16,
     "root-canister.wasm.gz": 5,

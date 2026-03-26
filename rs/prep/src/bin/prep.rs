@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
 use reqwest::blocking::ClientBuilder;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use url::Url;
@@ -195,6 +196,7 @@ fn main() -> Result<()> {
             nodes.to_owned(),
             replica_version.clone(),
             valid_args.max_ingress_bytes_per_message,
+            /*max_ingress_bytes_per_block=*/ None,
             /*max_ingress_messages_per_block=*/ None,
             valid_args.max_block_payload_size,
             /*unit_delay=*/ None,
@@ -202,6 +204,7 @@ fn main() -> Result<()> {
             valid_args.dkg_interval_length,
             /*dkg_dealings_per_block=*/ None,
             subnet_type,
+            CanisterCyclesCostSchedule::Normal,
             /*max_instructions_per_message=*/ None,
             /*max_instructions_per_round=*/ None,
             /*max_instructions_per_install_code=*/ None,

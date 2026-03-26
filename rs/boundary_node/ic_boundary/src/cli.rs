@@ -53,6 +53,9 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "Caching")]
     pub cache: Cache,
 
+    #[command(flatten, next_help_heading = "Subnet Read State Caching")]
+    pub subnet_read_state_cache: SubnetReadStateCache,
+
     #[command(flatten, next_help_heading = "Retries")]
     pub retry: Retry,
 
@@ -149,6 +152,11 @@ pub struct Health {
     /// Should be longer than HTTP client connect timeout.
     #[clap(env, long, default_value = "4s", value_parser = parse_duration)]
     pub health_check_timeout: Duration,
+
+    /// How frequently to fetch the certified membership set (per-subnet) from the subnet's state tree.
+    /// This runs in a background task independent of the health update cycle.
+    #[clap(env, long, default_value = "10s", value_parser = parse_duration)]
+    pub health_membership_fetch_interval: Duration,
 
     /// Maximum block height lag for a replica to be included in the routing table
     #[clap(env, long, default_value = "50")]
@@ -332,6 +340,30 @@ pub struct Cache {
     /// Whether to cache non-anonymous requests
     #[clap(env, long)]
     pub cache_non_anonymous: bool,
+}
+
+#[derive(Args)]
+pub struct SubnetReadStateCache {
+    /// Disable subnet read_state caching
+    #[clap(env, long)]
+    pub subnet_read_state_cache_disable: bool,
+
+    /// TTL for cached subnet read_state responses
+    #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
+    pub subnet_read_state_cache_ttl: Duration,
+
+    /// Maximum size of the subnet read_state cache in bytes
+    #[clap(env, long, default_value = "10MB", value_parser = parse_size)]
+    pub subnet_read_state_cache_size: u64,
+
+    /// Maximum size of a single cached response body in bytes.
+    /// Responses larger than this will not be cached.
+    #[clap(env, long, default_value = "1MB", value_parser = parse_size_usize)]
+    pub subnet_read_state_cache_max_item_size: usize,
+
+    /// Timeout for buffering the response body before caching
+    #[clap(env, long, default_value = "10s", value_parser = parse_duration)]
+    pub subnet_read_state_cache_body_timeout: Duration,
 }
 
 #[derive(Args)]

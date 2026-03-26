@@ -15,7 +15,6 @@ ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
-ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
 ic-crypto-internal-logmon = { path = "internal/logmon" }
 ic-crypto-internal-seed = { path = "internal/crypto_lib/seed" }
@@ -59,6 +58,7 @@ criterion = { workspace = true }
 ic-certification-test-utils = { path = "../certification/test-utils" }
 ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
+ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp-proptest-utils = { path = "internal/crypto_service_provider/csp_proptest_utils" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }

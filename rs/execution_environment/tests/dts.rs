@@ -16,16 +16,19 @@ use ic_management_canister_types_private::{
     CanisterSnapshotDataOffset, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
     GlobalTimer, IC_00, InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, StoredChunksArgs,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    RenameToArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, execution_state::NextScheduledMethod};
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig};
+use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
-use ic_types::{CryptoHashOfState, Cycles, NumInstructions};
+use ic_types::{CryptoHashOfState, NumInstructions};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{
     CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, call_args, wasm,
 };
@@ -483,6 +486,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
             CanisterSettingsArgsBuilder::new()
                 .with_compute_allocation(1)
                 .with_freezing_threshold(freezing_threshold)
+                .with_log_memory_limit(0) // Disable canister logging.
                 .build(),
         ),
     );
@@ -978,7 +982,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         aborted_complete: bool,
         f: F,
     ) {
-        let slice_instruction_limit = 10_000_000;
+        let slice_instruction_limit = 1_000_000;
         let env = dts_env(
             NumInstructions::from(slice_instruction_limit * 10),
             NumInstructions::from(slice_instruction_limit),
@@ -1007,6 +1011,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             .unwrap();
 
         env.set_checkpoints_enabled(true);
+        // With checkpoints enabled, the update call will be aborted.
         let long_execution_id = env.send_ingress(
             user_id,
             aborted_canister_id,
@@ -1016,12 +1021,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 .reply_data(&[42])
                 .build(),
         );
-
-        for _ in 0..5 {
-            // With checkpoints enabled, the update message will be repeatedly
-            // aborted, so there will be no progress.
-            env.tick();
-        }
 
         let (method, args) = f(aborted_canister_id);
         if method == Method::DeleteCanisterSnapshot
@@ -1063,7 +1062,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         let subnet_message_id =
             env.send_ingress(user_id, other_canister_id, "update", subnet_message);
 
-        for _ in 0..5 {
+        // Need 2 rounds for the response to the subnet message to be inducted.
+        for _ in 0..2 {
             env.tick();
         }
 
@@ -1135,6 +1135,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             // No effective canister id.
             Method::CreateCanister
             | Method::HttpRequest
+            | Method::FlexibleHttpRequest
             | Method::ECDSAPublicKey
             | Method::RawRand
             | Method::SetupInitialDKG
@@ -1154,17 +1155,31 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::NodeMetricsHistory
             | Method::SubnetInfo
             | Method::ProvisionalCreateCanisterWithCycles
-            | Method::ProvisionalTopUpCanister
-            | Method::RenameCanister => {}
+            | Method::ProvisionalTopUpCanister => {}
             // Unsupported methods accepting just one argument.
             // Deleting an aborted canister requires to stop it first.
             // Stopping an aborted canister does not generate a reply.
+            // Renaming a canister requires to stop it first.
             Method::DeleteCanister | Method::StopCanister => {
                 test_unsupported(|aborted_canister_id| {
                     let args = CanisterIdRecord::from(aborted_canister_id).encode();
                     (method, call_args().other_side(args))
                 })
             }
+            Method::RenameCanister => test_unsupported(|aborted_canister_id| {
+                let args = RenameCanisterArgs {
+                    canister_id: aborted_canister_id.get(),
+                    rename_to: RenameToArgs {
+                        canister_id: canister_test_id(42).get(),
+                        version: 1,
+                        total_num_changes: 5,
+                    },
+                    requested_by: user_test_id(1).get(),
+                    sender_canister_version: 1,
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
             // Installing code is not supported on aborted canister.
             Method::InstallCode => test_unsupported(|aborted_canister_id| {
                 let args = InstallCodeArgs {
@@ -1305,7 +1320,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
 
 #[test]
 fn dts_paused_execution_blocks_deposit_cycles() {
-    let slice_instruction_limit = 10_000_000;
+    let slice_instruction_limit = 1_000_000;
     let env = dts_env(
         NumInstructions::from(slice_instruction_limit * 10),
         NumInstructions::from(slice_instruction_limit),
@@ -1460,7 +1475,7 @@ fn dts_long_running_install_and_update() {
 
     let user_id = PrincipalId::new_anonymous();
 
-    let n = 10;
+    let n = 5;
 
     let mut controller = vec![];
     for _ in 0..n {
@@ -1528,7 +1543,7 @@ fn dts_long_running_install_and_update() {
     let mut long_update = vec![];
     let mut short_update = vec![];
 
-    for i in 0..30 {
+    for i in 0..3 * n {
         let work = wasm()
             .instruction_counter_is_at_least(slice_instruction_limit)
             .message_payload()
@@ -1545,7 +1560,7 @@ fn dts_long_running_install_and_update() {
         );
         short_update.push(id);
 
-        if i % 20 == 0 {
+        if i % (2 * n) == 0 {
             env.set_checkpoints_enabled(true);
             env.tick();
             env.set_checkpoints_enabled(false);
@@ -2256,7 +2271,7 @@ fn dts_heartbeat_works() {
     let base_canister_version = get_canister_version(&env, canister_id);
     assert_eq!(3, base_canister_version);
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();
@@ -2300,7 +2315,7 @@ fn dts_heartbeat_resume_after_abort() {
         .execute_ingress(canister_id, "update", set_heartbeat)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2362,7 +2377,7 @@ fn dts_heartbeat_with_trap() {
         .execute_ingress(canister_id, "update", set_heartbeat)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2406,7 +2421,7 @@ fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
         .execute_ingress(canister_id, "update", set_heartbeat)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();
@@ -2450,7 +2465,7 @@ fn dts_heartbeat_does_not_prevent_upgrade() {
         .execute_ingress(canister_id, "update", set_heartbeat)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();
@@ -2502,7 +2517,7 @@ fn dts_global_timer_one_shot_works() {
         .execute_ingress(canister_id, "update", set_heartbeat_and_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2567,7 +2582,7 @@ fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
         .execute_ingress(canister_id, "update", set_heartbeat_and_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2644,7 +2659,7 @@ fn dts_global_timer_resume_after_abort() {
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     env.set_checkpoints_enabled(true);
 
@@ -2694,7 +2709,7 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();
@@ -2749,7 +2764,7 @@ fn dts_global_timer_with_trap() {
         .execute_ingress(canister_id, "update", set_heartbeat_and_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
@@ -2797,7 +2812,7 @@ fn dts_global_timer_does_not_prevent_upgrade() {
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
 
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
     for i in 1..10 {
         env.tick();

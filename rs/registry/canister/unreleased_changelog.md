@@ -9,6 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+* Subnet deletion endpoint. Limited to CloudEngine subnets. 
+* Added an optional field `maximum_state_delta` to `ResourceLimits` in `CreateSubnetPayload` which, when present,
+  sets a soft limit on the maximum (replicated) state *delta* (kept in main memory) in bytes.
+* Implemented the `do_split_subnet` method
+
 ## Changed
 
 ## Deprecated
@@ -16,7 +21,5 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
-
-* When performing `RemoveNodes`, generate 1 update mutation per node operator key. Before this change, a single node operator record would be changed multiple times in a single version if the remove nodes proposal removed multiple nodes from the same node operator, which caused confusion. This bug resulted in incorrect tracking of node operator allowance depending on how they are fetched from the registry (given the different implementations in the registry utility functions).
 
 ## Security

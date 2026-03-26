@@ -12,7 +12,6 @@ documentation.workspace = true
 candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true }
-ed25519-dalek = { workspace = true }
 fs_extra = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
@@ -50,6 +49,7 @@ ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-resource-limits = { path = "../registry/resource_limits" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
@@ -63,6 +63,7 @@ ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 maplit = "1.0.2"

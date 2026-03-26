@@ -19,7 +19,8 @@ use ic_registry_transport::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
-    RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryClientError,
+    RegistryVersion, Time, crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError, time::current_time,
 };
 use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use rand::{Rng, RngCore};
@@ -70,14 +71,32 @@ impl PocketIcHelper {
         )
     }
 
-    async fn get_all_certified_records(&self) -> (Vec<RegistryRecord>, RegistryVersion) {
-        let (records, latest_version, _t) = self
-            .registry_canister
-            .get_certified_changes_since(0, &self.nns_pub_key)
-            .await
-            .unwrap();
-
-        (records, latest_version)
+    async fn get_all_certified_records(&self) -> (Vec<RegistryRecord>, RegistryVersion, Time) {
+        // We retry in a loop here to avoid test flakes due to transient errors in the registry
+        // canister calls.
+        const MAX_RETRIES: usize = 5;
+        let mut last_err = None;
+        for _ in 0..MAX_RETRIES {
+            match self
+                .registry_canister
+                .get_certified_changes_since(0, &self.nns_pub_key)
+                .await
+            {
+                Ok(result) => return result,
+                Err(e) => {
+                    last_err = Some(e);
+                    eprintln!(
+                        "Retrying to get certified records due to error: {:?} ...",
+                        last_err
+                    );
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
+            }
+        }
+        panic!(
+            "Failed to get certified records after {MAX_RETRIES} retries. Last error: {:?}",
+            last_err.unwrap()
+        );
     }
 
     async fn atomic_mutate(&self, mutation: RegistryMutation) -> Result<u64, String> {
@@ -244,7 +263,7 @@ fn assert_registry_client_and_local_store_have_expected_records(
 }
 
 async fn random_mutate(pocket_ic: &PocketIcHelper, rng: &mut ReproducibleRng) -> RegistryRecord {
-    let (_, version) = pocket_ic.get_all_certified_records().await;
+    let (_, version, _) = pocket_ic.get_all_certified_records().await;
     let key = format!("key_{}", version.get() + 1);
     let value = (0..(rng.next_u64() & 64) as u8).collect::<Vec<_>>();
 
@@ -261,6 +280,60 @@ async fn random_mutate(pocket_ic: &PocketIcHelper, rng: &mut ReproducibleRng) ->
         version: RegistryVersion::from(new_version),
         value: Some(value),
     }
+}
+
+const CONDITION_TIMEOUT: Duration = Duration::from_mins(2);
+const CONDITION_BACKOFF: Duration = Duration::from_millis(500);
+
+async fn wait_for_condition<F, Fut>(condition: F, message_on_timeout: &str)
+where
+    Fut: Future<Output = bool>,
+    F: Fn() -> Fut,
+{
+    let start = tokio::time::Instant::now();
+    while !condition().await {
+        assert!(
+            start.elapsed() < CONDITION_TIMEOUT,
+            "{}",
+            message_on_timeout
+        );
+        tokio::time::sleep(CONDITION_BACKOFF).await;
+    }
+}
+
+async fn wait_for_canister_certified_time_gt(pocket_ic: &PocketIcHelper, time: Time) {
+    wait_for_condition(
+        || async {
+            let (_, _, certified_time) = pocket_ic.get_all_certified_records().await;
+            certified_time > time
+        },
+        &format!("Timed out waiting for canister's certified time to exceed {time:?}"),
+    )
+    .await;
+}
+
+async fn wait_for_replicator_version(replicator: &RegistryReplicator, version: RegistryVersion) {
+    wait_for_condition(
+        || async { replicator.get_registry_client().get_latest_version() >= version },
+        &format!("Timed out waiting for replicator to reach version {version}"),
+    )
+    .await;
+}
+
+async fn wait_for_not_polling(replicator: &RegistryReplicator) {
+    wait_for_condition(
+        || async { !replicator.is_polling() },
+        "Timed out waiting for replicator to stop polling",
+    )
+    .await;
+}
+
+async fn wait_for_replicator_certified_time_gt(replicator: &RegistryReplicator, time: Time) {
+    wait_for_condition(
+        || async { *replicator.get_latest_certified_time().read().unwrap() > time },
+        &format!("Timed out waiting for replicator's latest certified time to exceed {time:?}"),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -304,13 +377,27 @@ async fn test_poll_is_error_without_nns_urls_nor_in_store_nor_in_config() {
 }
 
 #[tokio::test]
+async fn test_replicator_correctly_initializes_local_store() {
+    let mut rng = reproducible_rng();
+    let (pocket_ic, nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
+
+    let record_1 = random_mutate(&pocket_ic, &mut rng).await;
+    let record_2 = random_mutate(&pocket_ic, &mut rng).await;
+    let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
+
+    let replicator = new_test_replicator(None, nns_urls, Some(nns_pub_key)).await;
+    assert_replicator_up_to_date(&replicator, latest_version, &records, &record_1).await;
+    assert_replicator_up_to_date(&replicator, latest_version, &records, &record_2).await;
+}
+
+#[tokio::test]
 async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_store_and_client() {
     let mut rng = reproducible_rng();
     let (pocket_ic, nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
     let replicator = new_test_replicator(None, nns_urls, Some(nns_pub_key)).await;
     let token = CancellationToken::new();
 
-    let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+    let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
 
     let new_record = random_mutate(&pocket_ic, &mut rng).await;
     tokio::time::sleep(replicator.get_poll_delay() + DELAY_LEEWAY).await;
@@ -322,7 +409,7 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
     // Poll once, local store and client should contain latest changes
     replicator.poll().await.unwrap();
 
-    let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+    let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
     assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
 
     let new_record = random_mutate(&pocket_ic, &mut rng).await;
@@ -339,37 +426,28 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
 
     // `start_polling` polls the registry canister in the background, so we wait until the
     // replicator has updated to the latest version
-    while replicator.get_registry_client().get_latest_version() < new_record.version {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    wait_for_replicator_version(&replicator, new_record.version).await;
 
     // Starting to poll should update local store and client to latest changes
-    let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+    let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
     assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
 
     let new_record = random_mutate(&pocket_ic, &mut rng).await;
 
-    // Even though, we started polling, we haven't waited for the poll delay yet, so local store
-    // and client should still contain the previous state
-    assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
+    // Wait until background polling picks up the new version
+    wait_for_replicator_version(&replicator, new_record.version).await;
 
-    tokio::time::sleep(replicator.get_poll_delay() + DELAY_LEEWAY).await;
-
-    // Now that we waited for the poll delay, local store and client should contain latest
-    // changes
-    let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+    // Now local store and client should contain latest changes
+    let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
     assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
 
     let new_record = random_mutate(&pocket_ic, &mut rng).await;
 
-    // Again, we haven't waited for the poll delay yet, so local store and client should still
-    // contain the previous state
-    assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
-
+    // Manually poll to pick up the new version
     replicator.poll().await.unwrap();
 
-    // But after manually polling, local store and client should contain latest changes
-    let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+    // After manually polling, local store and client should contain latest changes
+    let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
     assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
 
     //
@@ -377,12 +455,11 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
     //
     replicator.stop_polling();
 
+    // Wait until polling has actually stopped
+    wait_for_not_polling(&replicator).await;
+
     let new_record = random_mutate(&pocket_ic, &mut rng).await;
     tokio::time::sleep(replicator.get_poll_delay() + DELAY_LEEWAY).await;
-
-    // After stopping polling, ensure that replicator is indeed not polling after waiting for
-    // the poll delay
-    assert!(!replicator.is_polling());
 
     // Since we stopped polling, even though we waited for the poll delay, local store and
     // client should still contain the previous state
@@ -391,8 +468,93 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
     // Poll once, local store and client should contain latest changes
     replicator.poll().await.unwrap();
 
-    let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+    let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
     assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
+}
+
+#[tokio::test]
+async fn test_has_replicated_all_versions_certified_before_init() {
+    let mut rng = reproducible_rng();
+    let (pocket_ic, nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
+    let time_before_init = current_time();
+
+    // Wait until the canister replies with a certified time that is before the replicator's
+    // initialization time, so that we can test that the replicator does not claim to have
+    // replicated all versions certified before init until it actually starts polling
+    wait_for_canister_certified_time_gt(&pocket_ic, time_before_init).await;
+
+    let replicator =
+        new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, Some(nns_pub_key)).await;
+    let token = CancellationToken::new();
+    let time_after_init = current_time();
+
+    // Before the replicator starts polling, it should not claim to have replicated all versions
+    // certified before its initialization time
+    assert!(*replicator.get_latest_certified_time().read().unwrap() < time_before_init);
+    assert!(!replicator.has_replicated_all_versions_certified_before_init());
+
+    // Wait until the canister replies with a certified time that is after the replicator's
+    // initialization time
+    wait_for_canister_certified_time_gt(&pocket_ic, time_after_init).await;
+
+    tokio::spawn(replicator.start_polling(token).unwrap());
+
+    // Wait for the replicator to poll the NNS and get a response certified after the replicator's
+    // initialization time, even if the canister is behind (it has only 1 version). This mocks the
+    // scenario where the replicator contacts a node that is behind.
+    wait_for_replicator_certified_time_gt(&replicator, time_after_init).await;
+    assert!(replicator.has_replicated_all_versions_certified_before_init());
+    let latest_certified_time = *replicator.get_latest_certified_time().read().unwrap();
+
+    for _ in 0..(INIT_NUM_VERSIONS + 2) {
+        random_mutate(&pocket_ic, &mut rng).await;
+    }
+
+    // Wait until the canister replies with a larger certified time
+    wait_for_canister_certified_time_gt(&pocket_ic, latest_certified_time).await;
+
+    // Wait for the replicator to poll the NNS again and get an even newer certified time
+    wait_for_replicator_certified_time_gt(&replicator, latest_certified_time).await;
+    assert!(replicator.has_replicated_all_versions_certified_before_init());
+}
+
+#[tokio::test]
+async fn test_has_not_replicated_all_versions_certified_before_init_when_canister_is_ahead() {
+    let mut rng = reproducible_rng();
+    let (pocket_ic, nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
+
+    for _ in 0..(INIT_NUM_VERSIONS + 2) {
+        random_mutate(&pocket_ic, &mut rng).await;
+    }
+
+    let time_before_init = current_time();
+
+    // Wait until the canister replies with a certified time that is before the replicator's
+    // initialization time, so that we can test that the replicator does not claim to have
+    // replicated all versions certified before init until it actually starts polling
+    wait_for_canister_certified_time_gt(&pocket_ic, time_before_init).await;
+
+    let replicator =
+        new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, Some(nns_pub_key)).await;
+    let token = CancellationToken::new();
+    let time_after_init = current_time();
+
+    // Before the replicator starts polling, it should not claim to have replicated all versions
+    // certified before its initialization time, even if the canister is ahead
+    assert!(*replicator.get_latest_certified_time().read().unwrap() < time_before_init);
+    assert!(!replicator.has_replicated_all_versions_certified_before_init());
+
+    // Wait until the canister replies with a certified time that is after the replicator's
+    // initialization time
+    wait_for_canister_certified_time_gt(&pocket_ic, time_after_init).await;
+
+    tokio::spawn(replicator.start_polling(token).unwrap());
+
+    // Wait for the replicator to poll the NNS and get a response certified after the replicator's
+    // initialization time
+    wait_for_replicator_certified_time_gt(&replicator, time_after_init).await;
+
+    assert!(replicator.has_replicated_all_versions_certified_before_init());
 }
 
 #[tokio::test]
@@ -408,12 +570,10 @@ async fn test_drop_stops_polling() {
 
     // `start_polling` polls the registry canister in the background, so we wait until the
     // replicator has updated to the latest version
-    while replicator.get_registry_client().get_latest_version() < new_record.version {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    wait_for_replicator_version(&replicator, new_record.version).await;
 
     // Ensure that replicator is up to date
-    let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+    let (records, latest_version, _) = pocket_ic.get_all_certified_records().await;
     assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
 
     // Clone parameters before dropping replicator

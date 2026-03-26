@@ -1,7 +1,9 @@
 use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
-use ic_consensus_system_test_utils::node::await_node_certified_height;
+use ic_consensus_system_test_utils::node::{
+    await_node_certified_height, get_node_certified_height,
+};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterHttpRequestArgs, HttpMethod, Payload, TransformContext, TransformFunc,
 };
@@ -11,7 +13,8 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
 };
-use ic_types::{Cycles, Height, epoch_from_height};
+use ic_types::{Height, epoch_from_height};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use itertools::Itertools;
 use slog::{Logger, info};
@@ -21,7 +24,7 @@ pub mod aggregation;
 
 const QUERY_STATS_TEST_EPOCH_LENGTH: u64 = 120;
 
-const QUERY_STATS_WAIT_PERIOD: u64 = 30;
+const QUERY_STATS_WAIT_PERIOD: u64 = 60;
 
 pub fn query_stats_config(env: TestEnv) {
     InternetComputer::new()
@@ -47,27 +50,15 @@ pub fn query_stats_config(env: TestEnv) {
 }
 
 pub(crate) fn wait_until_next_epoch(subnet: &SubnetSnapshot, logger: &Logger) {
-    let current_height = subnet
-        .nodes()
-        .next()
-        .unwrap()
-        .status()
-        .unwrap()
-        .certified_height
-        .unwrap()
-        .get();
+    let node = subnet.nodes().next().unwrap();
+    let current_height = get_node_certified_height(&node, logger.clone());
 
-    let current_epoch =
-        epoch_from_height(current_height.into(), QUERY_STATS_TEST_EPOCH_LENGTH).get();
+    let current_epoch = epoch_from_height(current_height, QUERY_STATS_TEST_EPOCH_LENGTH).get();
     let next_epoch = current_epoch + 1;
     let target_height = next_epoch * QUERY_STATS_TEST_EPOCH_LENGTH + QUERY_STATS_WAIT_PERIOD;
 
     info!(logger, "Waiting until height {}", target_height);
-    await_node_certified_height(
-        &subnet.nodes().next().unwrap(),
-        Height::new(target_height),
-        logger.clone(),
-    );
+    await_node_certified_height(&node, Height::new(target_height), logger.clone());
 }
 
 pub(crate) async fn single_update_call(canister: &Principal, agents: &[Agent]) {

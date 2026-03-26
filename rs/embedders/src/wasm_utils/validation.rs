@@ -27,14 +27,14 @@ use crate::{
 use wirm::{
     DataSegment, DataSegmentKind, DataType, InitInstr, Module,
     ir::{
-        id::TypeID,
+        id::{FunctionID, TypeID},
         module::{
             LocalOrImport, module_functions::FuncKind, module_globals::GlobalKind,
             module_types::Types,
         },
         types::{Body, Value},
     },
-    wasmparser::{ExternalKind, Operator, TypeRef, ValType},
+    wasmparser::{ExternalKind, Operator, RefType, TypeRef, ValType},
 };
 
 use crate::WASM_PAGE_SIZE;
@@ -65,6 +65,7 @@ pub const WASM_VALID_SYSTEM_FUNCTIONS: [&str; 7] = [
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
+pub const MAX_WASM_FUNCTION_NAME_LENGTH: usize = 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -1156,6 +1157,18 @@ fn validate_export_section(
     Ok(())
 }
 
+fn validate_table_section(module: &Module) -> Result<(), WasmValidationError> {
+    for table in module.tables.iter() {
+        if table.ty.element_type != RefType::FUNCREF {
+            return Err(WasmValidationError::InvalidTableSection(format!(
+                "Table element type must be funcref, got {:?}",
+                table.ty.element_type
+            )));
+        }
+    }
+    Ok(())
+}
+
 // Checks that offset-expressions in active data segments consist of only one constant
 // expression. Required because of OP. See also:
 // instrumentation.rs
@@ -1229,18 +1242,45 @@ fn validate_global_section(module: &Module, max_globals: usize) -> Result<(), Wa
 }
 
 // Checks that no more than `max_functions` are defined in the
-// module.
+// module and all function names are less than MAX_WASM_FUNCTION_NAME_LENGTH
+// bytes.
 fn validate_function_section(
     module: &Module,
     max_functions: usize,
 ) -> Result<(), WasmValidationError> {
-    let func_count = module.functions.iter().filter(|f| f.is_local()).count();
+    let local_indexes = module
+        .functions
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.is_local())
+        .map(|(i, _)| FunctionID(i as u32))
+        .collect::<Vec<FunctionID>>();
+
+    let func_count = local_indexes.len();
     if func_count > max_functions {
         return Err(WasmValidationError::TooManyFunctions {
             defined: func_count,
             allowed: max_functions,
         });
     }
+    // We only need to look at local functions, since `validate_import_section`
+    // already checks and only allows a fixed set of valid imports.
+    for id in local_indexes {
+        if let Some(name) = module.functions.get_name(id)
+            && name.len() > MAX_WASM_FUNCTION_NAME_LENGTH
+        {
+            let limit = std::cmp::min(name.len(), 100);
+            let truncated_name: String = name.chars().take(limit).collect();
+            let truncated_name = format!("{truncated_name}...");
+            return Err(WasmValidationError::FunctionNameTooLarge {
+                index: *id as usize,
+                size: name.len(),
+                allowed: MAX_WASM_FUNCTION_NAME_LENGTH,
+                name: truncated_name,
+            });
+        }
+    }
+
     Ok(())
 }
 
@@ -1625,7 +1665,7 @@ pub fn wasmtime_validation_config(_embedders_config: &EmbeddersConfig) -> wasmti
     config.generate_address_map(false);
     // The signal handler uses Posix signals, not Mach ports on MacOS.
     config.macos_use_mach_ports(false);
-    config.wasm_backtrace(true);
+    config.wasm_backtrace(false);
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
     config.wasm_bulk_memory(true);
     config.wasm_function_references(false);
@@ -1730,6 +1770,7 @@ pub(super) fn validate_wasm_binary<'a>(
         config.max_number_exported_functions,
         config.max_sum_exported_function_name_lengths,
     )?;
+    validate_table_section(&module)?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;

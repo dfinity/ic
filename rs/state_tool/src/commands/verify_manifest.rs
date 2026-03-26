@@ -95,7 +95,7 @@ fn extract_root_hash(lines: &[String]) -> Result<StateHash, String> {
     .map_err(|err| format!("Failed to decode the root hash: {err:?}"))
 }
 
-pub(crate) fn parse_manifest(
+pub fn parse_manifest(
     file: File,
 ) -> Result<(StateSyncVersion, Vec<FileInfo>, Vec<ChunkInfo>, StateHash), String> {
     let manifest_lines: Vec<String> = BufReader::new(file)

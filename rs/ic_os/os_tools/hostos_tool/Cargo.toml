@@ -10,14 +10,24 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
+ic_os_logging = { path = "../../logging" }
+tracing = { workspace = true }
+command_runner = { path = "../../command_runner" }
+ic-os-metrics-utils = { path = "../../metrics/utils" }
 config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
 deterministic_ips = { path = "../../networking/deterministic_ips" }
 manual_guestos_recovery = { path = "../manual_guestos_recovery" }
-itertools = { workspace = true }
+grub = { path = "../../boot/grub" }
+ic_device = { path = "../../device" }
 network = { path = "../../networking/network" }
+prometheus = { workspace = true }
 regex = { workspace = true }
 utils = { path = "../../utils" }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [features]
 dev = ["config_tool/dev"]

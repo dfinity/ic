@@ -436,9 +436,6 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                     state::InFlightStatus::Signing => {
                         write!(buf, "<td>Signing...</td>").unwrap();
                     }
-                    state::InFlightStatus::Sending { txid } => {
-                        write!(buf, "<td>Sending TX {}</td>", self.txid_link(txid)).unwrap();
-                    }
                 }
                 writeln!(buf, "</tr>").unwrap();
             }

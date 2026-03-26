@@ -52,6 +52,7 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_machine_tests",
     "//rs/state_manager",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/validator/ingress_message",
@@ -100,6 +101,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:wat",
+    "@crate_index//:wsl",
 ]
 
 TEST_DEPENDENCIES = [
@@ -148,7 +150,8 @@ ALIASES = {}
 
 EXTERNAL_CANISTER_DATA = [
     "@mainnet_canisters//:cycles_ledger.wasm.gz",
-    "@mainnet_canisters//:internet_identity_test.wasm.gz",
+    "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+    "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
     "@mainnet_canisters//:sns_aggregator_test.wasm.gz",
     "@mainnet_canisters//:nns_dapp_test.wasm.gz",
     "@mainnet_canisters//:bitcoin_testnet.wasm.gz",
@@ -157,7 +160,8 @@ EXTERNAL_CANISTER_DATA = [
 
 EXTERNAL_CANISTER_ENV = {
     "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:cycles_ledger.wasm.gz)",
-    "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:internet_identity_test.wasm.gz)",
+    "INTERNET_IDENTITY_BACKEND_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:internet_identity_backend.wasm.gz)",
+    "INTERNET_IDENTITY_FRONTEND_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:internet_identity_frontend.wasm.gz)",
     "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_aggregator_test.wasm.gz)",
     "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:nns_dapp_test.wasm.gz)",
     "BITCOIN_TESTNET_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:bitcoin_testnet.wasm.gz)",
@@ -183,6 +187,9 @@ HEAD_NNS_CANISTER_DATA = [
 ]
 
 HEAD_NNS_CANISTER_ENV = {
+    # Head build uses current canister interfaces (e.g. unified ICP Index init/upgrade args).
+    # TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
+    "POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS": "0",
     "REGISTRY_CANISTER_WASM_PATH": "$(location //rs/registry/canister:registry-canister)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location //rs/nns/cmc:cycles-minting-canister)",
     "ICP_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
@@ -219,6 +226,9 @@ MAINNET_NNS_CANISTER_DATA = [
 ]
 
 MAINNET_NNS_CANISTER_ENV = {
+    # Mainnet embeds older canister WASMs; use legacy ICP Index init args until mainnet is updated (see DEFI-2617).
+    # TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
+    "POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS": "1",
     "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:registry.wasm.gz)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:cycles-minting.wasm.gz)",
     "ICP_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:ledger.wasm.gz)",
@@ -267,7 +277,7 @@ MAINNET_NNS_CANISTER_ENV = {
         crate_name = "pocket_ic_server",
         proc_macro_deps = MACRO_DEPENDENCIES,
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "12.0.0",
+        version = "13.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [
@@ -276,26 +286,16 @@ MAINNET_NNS_CANISTER_ENV = {
     ]
 ]
 
-# The latest registry version to bump the hard-coded registry version can be determined using:
-# `bazel run //rs/registry/admin:ic-admin -- get-registry-version`
-genrule(
-    name = "mainnet_routing_table",
-    testonly = True,
-    srcs = [],
-    outs = ["mainnet_routing_table.json"],
-    cmd = "$(location //rs/registry/admin:ic-admin) get-routing-table --json --registry-version 55267 > $@",
-    tags = ["requires-network"],
-    tools = ["//rs/registry/admin:ic-admin"],
-)
-
 [
     rust_binary(
         name = "pocket-ic-server" + name_suffix,
         testonly = True,
         srcs = ["src/main.rs"],
-        compile_data = [":mainnet_routing_table"],
+        compile_data = ["//:mainnet-routing-table.json"],
         proc_macro_deps = MACRO_DEPENDENCIES,
-        rustc_env = {"MAINNET_ROUTING_TABLE": "$(location :mainnet_routing_table)"},
+        rustc_env = {
+            "MAINNET_ROUTING_TABLE": "$(location //:mainnet-routing-table.json)",
+        },
         # TODO: restrict the visibility
         visibility = ["//visibility:public"],
         deps = LIB_DEPENDENCIES + [
@@ -343,13 +343,15 @@ rust_test(
         aliases = {},
         data = [
             ":pocket-ic-server",
-            "@ii_dev_canister//file",
+            "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+            "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
             "@mozilla_root_ca_store//file",
         ],
         env = {
             "RUST_TEST_THREADS": "2",
             "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-            "II_WASM": "$(rootpath @ii_dev_canister//file)",
+            "II_WASM": "$(rootpath @mainnet_canisters//:internet_identity_backend.wasm.gz)",
+            "II_FRONTEND_WASM": "$(rootpath @mainnet_canisters//:internet_identity_frontend.wasm.gz)",
             "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         },
         tags = [
@@ -359,7 +361,7 @@ rust_test(
             "requires-network",
             "test_all_platforms",
         ],
-        deps = TEST_DEPENDENCIES,
+        deps = [":pocket-ic-server-lib"] + TEST_DEPENDENCIES,
     )
     for name in [
         "test",
@@ -386,7 +388,7 @@ rust_test(
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     tags = [
-        "test_all_platforms",
+        "test_all_platforms_slow",
     ],
     deps = TEST_DEPENDENCIES,
 )

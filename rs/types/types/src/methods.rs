@@ -1,7 +1,7 @@
 //! This module contains a collection of types and structs that define the
 //! various types of methods in the IC.
 
-use crate::{Cycles, messages::CallContextId, time::CoarseTime};
+use crate::{messages::CallContextId, time::CoarseTime};
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -9,6 +9,7 @@ use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom},
@@ -268,8 +269,6 @@ pub const UNKNOWN_CANISTER_ID: CanisterId =
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Callback {
     pub call_context_id: CallContextId,
-    /// The request sender's ID.
-    pub originator: CanisterId,
     /// The ID of the principal that the request was addressed to.
     pub respondent: CanisterId,
     /// The number of cycles that were sent in the original request.
@@ -296,7 +295,6 @@ pub struct Callback {
 impl Callback {
     pub fn new(
         call_context_id: CallContextId,
-        originator: CanisterId,
         respondent: CanisterId,
         cycles_sent: Cycles,
         prepayment_for_response_execution: Cycles,
@@ -308,7 +306,6 @@ impl Callback {
     ) -> Self {
         Self {
             call_context_id,
-            originator,
             respondent,
             cycles_sent,
             prepayment_for_response_execution,
@@ -325,7 +322,6 @@ impl From<&Callback> for pb::Callback {
     fn from(item: &Callback) -> Self {
         Self {
             call_context_id: item.call_context_id.get(),
-            originator: Some(pb_types::CanisterId::from(item.originator)),
             respondent: Some(pb_types::CanisterId::from(item.respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
             prepayment_for_response_execution: Some(item.prepayment_for_response_execution.into()),
@@ -349,13 +345,10 @@ impl From<&Callback> for pb::Callback {
     }
 }
 
-// `own_canister_id` is used for forward compatibility: `originator` will be
-// dropped in a future replica version, but we still need to populate it if
-// rolling back.
-impl TryFrom<(pb::Callback, CanisterId)> for Callback {
+impl TryFrom<pb::Callback> for Callback {
     type Error = ProxyDecodeError;
 
-    fn try_from((value, own_canister_id): (pb::Callback, CanisterId)) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::Callback) -> Result<Self, Self::Error> {
         let on_reply: pb::WasmClosure =
             try_from_option_field(value.on_reply, "Callback::on_reply")?;
         let on_reject: pb::WasmClosure =
@@ -374,8 +367,6 @@ impl TryFrom<(pb::Callback, CanisterId)> for Callback {
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
-            originator: try_from_option_field(value.originator, "Callback::originator")
-                .unwrap_or(own_canister_id),
             respondent: try_from_option_field(value.respondent, "Callback::respondent")?,
             cycles_sent: Cycles::from(cycles_sent),
             prepayment_for_response_execution,

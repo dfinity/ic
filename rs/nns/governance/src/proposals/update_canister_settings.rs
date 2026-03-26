@@ -1,14 +1,12 @@
 use crate::{
     pb::v1::{
         GovernanceError, SelfDescribingValue, Topic, UpdateCanisterSettings,
-        update_canister_settings::{CanisterSettings, LogVisibility},
+        update_canister_settings::{CanisterSettings, LogVisibility, SnapshotVisibility},
     },
     proposals::{
         call_canister::CallCanister,
         invalid_proposal_error,
-        self_describing::{
-            LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
-        },
+        self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
         topic_to_manage_canister,
     },
 };
@@ -17,6 +15,7 @@ use candid::{Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::update_settings::{
     CanisterSettings as RootCanisterSettings, LogVisibility as RootLogVisibility,
+    SnapshotVisibility as RootSnapshotVisibility,
 };
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root_interface::UpdateCanisterSettingsRequest;
@@ -56,36 +55,63 @@ impl UpdateCanisterSettings {
         }
     }
 
+    fn valid_snapshot_visibility(
+        snapshot_visibility_i32: i32,
+    ) -> Result<RootSnapshotVisibility, GovernanceError> {
+        let snapshot_visibility = SnapshotVisibility::try_from(snapshot_visibility_i32);
+        match snapshot_visibility {
+            Ok(SnapshotVisibility::Controllers) => Ok(RootSnapshotVisibility::Controllers),
+            Ok(SnapshotVisibility::Public) => Ok(RootSnapshotVisibility::Public),
+            Ok(SnapshotVisibility::Unspecified) | Err(_) => Err(invalid_proposal_error(&format!(
+                "Invalid snapshot visibility {snapshot_visibility_i32}"
+            ))),
+        }
+    }
+
     fn valid_canister_settings(&self) -> Result<RootCanisterSettings, GovernanceError> {
-        let settings = self
+        let CanisterSettings {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            log_visibility,
+            wasm_memory_limit,
+            wasm_memory_threshold,
+            snapshot_visibility,
+        } = self
             .settings
             .as_ref()
-            .ok_or(invalid_proposal_error("Settings are required"))?;
+            .ok_or(invalid_proposal_error("Settings are required"))?
+            .clone();
 
-        if settings.controllers.is_none()
-            && settings.compute_allocation.is_none()
-            && settings.memory_allocation.is_none()
-            && settings.freezing_threshold.is_none()
-            && settings.log_visibility.is_none()
-            && settings.wasm_memory_limit.is_none()
-            && settings.wasm_memory_threshold.is_none()
+        if controllers.is_none()
+            && compute_allocation.is_none()
+            && memory_allocation.is_none()
+            && freezing_threshold.is_none()
+            && log_visibility.is_none()
+            && snapshot_visibility.is_none()
+            && wasm_memory_limit.is_none()
+            && wasm_memory_threshold.is_none()
         {
             return Err(invalid_proposal_error(
                 "At least one setting must be provided",
             ));
         }
 
-        let controllers = settings
-            .controllers
-            .as_ref()
-            .map(|controllers| controllers.controllers.clone());
-        let compute_allocation = settings.compute_allocation.map(Nat::from);
-        let memory_allocation = settings.memory_allocation.map(Nat::from);
-        let freezing_threshold = settings.freezing_threshold.map(Nat::from);
-        let wasm_memory_limit = settings.wasm_memory_limit.map(Nat::from);
-        let wasm_memory_threshold = settings.wasm_memory_threshold.map(Nat::from);
-        let log_visibility = match settings.log_visibility {
+        let controllers = controllers.map(|controllers| controllers.controllers);
+        let compute_allocation = compute_allocation.map(Nat::from);
+        let memory_allocation = memory_allocation.map(Nat::from);
+        let freezing_threshold = freezing_threshold.map(Nat::from);
+        let wasm_memory_limit = wasm_memory_limit.map(Nat::from);
+        let wasm_memory_threshold = wasm_memory_threshold.map(Nat::from);
+        let log_visibility = match log_visibility {
             Some(log_visibility) => Some(Self::valid_log_visibility(log_visibility)?),
+            None => None,
+        };
+        let snapshot_visibility = match snapshot_visibility {
+            Some(snapshot_visibility) => {
+                Some(Self::valid_snapshot_visibility(snapshot_visibility)?)
+            }
             None => None,
         };
         // Reserved cycles limit is not supported yet.
@@ -97,6 +123,7 @@ impl UpdateCanisterSettings {
             freezing_threshold,
             wasm_memory_limit,
             log_visibility,
+            snapshot_visibility,
             reserved_cycles_limit,
             wasm_memory_threshold,
         })
@@ -138,14 +165,16 @@ impl CallCanister for UpdateCanisterSettings {
     }
 }
 
-impl LocallyDescribableProposalAction for UpdateCanisterSettings {
-    const TYPE_NAME: &'static str = "Update Canister Settings";
-    const TYPE_DESCRIPTION: &'static str = "Updates the settings of an NNS canister.";
+impl DocumentedAction for UpdateCanisterSettings {
+    const NAME: &'static str = "Update Canister Settings";
+    const DESCRIPTION: &'static str = "Update the settings of an NNS-controlled canister.";
+}
 
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
+impl From<UpdateCanisterSettings> for SelfDescribingValue {
+    fn from(value: UpdateCanisterSettings) -> Self {
         ValueBuilder::new()
-            .add_field("canister_id", self.canister_id)
-            .add_field("settings", self.settings.clone())
+            .add_field("canister_id", value.canister_id)
+            .add_field("settings", value.settings)
             .build()
     }
 }
@@ -160,6 +189,7 @@ impl From<CanisterSettings> for SelfDescribingValue {
             log_visibility,
             wasm_memory_limit,
             wasm_memory_threshold,
+            snapshot_visibility,
         } = settings;
 
         // Flatten the nested `controllers` field. More specifically, get rid of the intermediate
@@ -169,6 +199,8 @@ impl From<CanisterSettings> for SelfDescribingValue {
         let controllers = controllers.map(|controllers| controllers.controllers);
 
         let log_visibility = log_visibility.map(SelfDescribingProstEnum::<LogVisibility>::new);
+        let snapshot_visibility =
+            snapshot_visibility.map(SelfDescribingProstEnum::<SnapshotVisibility>::new);
 
         ValueBuilder::new()
             .add_field("controllers", controllers)
@@ -178,6 +210,7 @@ impl From<CanisterSettings> for SelfDescribingValue {
             .add_field("wasm_memory_limit", wasm_memory_limit)
             .add_field("wasm_memory_threshold", wasm_memory_threshold)
             .add_field("log_visibility", log_visibility)
+            .add_field("snapshot_visibility", snapshot_visibility)
             .build()
     }
 }
@@ -186,12 +219,10 @@ impl From<CanisterSettings> for SelfDescribingValue {
 mod tests {
     use super::*;
 
-    use crate::{
-        pb::v1::{
-            governance_error::ErrorType,
-            update_canister_settings::{CanisterSettings, Controllers},
-        },
-        proposals::self_describing::LocallyDescribableProposalAction,
+    use crate::pb::v1::{
+        SelfDescribingValue as SelfDescribingValuePb,
+        governance_error::ErrorType,
+        update_canister_settings::{CanisterSettings, Controllers},
     };
 
     use candid::Decode;
@@ -287,6 +318,7 @@ mod tests {
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             }),
         };
 
@@ -312,13 +344,14 @@ mod tests {
                 canister_id: SNS_WASM_CANISTER_ID.get(),
                 settings: RootCanisterSettings {
                     controllers: Some(vec![ROOT_CANISTER_ID.get()]),
-                    memory_allocation: Some(Nat::from(1u64 << 32)),
-                    wasm_memory_limit: Some(Nat::from(1u64 << 31)),
-                    compute_allocation: Some(Nat::from(10u64)),
-                    freezing_threshold: Some(Nat::from(100u64)),
+                    memory_allocation: Some(Nat::from(1_u64 << 32)),
+                    wasm_memory_limit: Some(Nat::from(1_u64 << 31)),
+                    compute_allocation: Some(Nat::from(10_u64)),
+                    freezing_threshold: Some(Nat::from(100_u64)),
                     log_visibility: Some(RootLogVisibility::Public),
+                    snapshot_visibility: Some(RootSnapshotVisibility::Public),
                     reserved_cycles_limit: None,
-                    wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
+                    wasm_memory_threshold: Some(Nat::from(1_u64 << 30)),
                 }
             }
         );
@@ -339,6 +372,7 @@ mod tests {
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             }),
         };
 
@@ -362,13 +396,14 @@ mod tests {
             decoded_payload,
             RootCanisterSettings {
                 controllers: Some(vec![LIFELINE_CANISTER_ID.get()]),
-                memory_allocation: Some(Nat::from(1u64 << 32)),
-                wasm_memory_limit: Some(Nat::from(1u64 << 31)),
-                compute_allocation: Some(Nat::from(10u64)),
-                freezing_threshold: Some(Nat::from(100u64)),
+                memory_allocation: Some(Nat::from(1_u64 << 32)),
+                wasm_memory_limit: Some(Nat::from(1_u64 << 31)),
+                compute_allocation: Some(Nat::from(10_u64)),
+                freezing_threshold: Some(Nat::from(100_u64)),
                 log_visibility: Some(RootLogVisibility::Public),
+                snapshot_visibility: Some(RootSnapshotVisibility::Public),
                 reserved_cycles_limit: None,
-                wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
+                wasm_memory_threshold: Some(Nat::from(1_u64 << 30)),
             }
         );
     }
@@ -412,11 +447,12 @@ mod tests {
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
+                snapshot_visibility: Some(SnapshotVisibility::Public as i32),
             }),
         };
 
-        let action = update_canister_settings.to_self_describing_action();
-        let value = SelfDescribingValue::from(action.value.unwrap());
+        let value =
+            SelfDescribingValue::from(SelfDescribingValuePb::from(update_canister_settings));
 
         assert_eq!(
             value,
@@ -433,6 +469,7 @@ mod tests {
                     "compute_allocation".to_string() => SelfDescribingValue::from(10_u64),
                     "freezing_threshold".to_string() => SelfDescribingValue::from(100_u64),
                     "log_visibility".to_string() => SelfDescribingValue::from("Public"),
+                    "snapshot_visibility".to_string() => SelfDescribingValue::from("Public"),
                 }),
             })
         );
@@ -448,8 +485,8 @@ mod tests {
             }),
         };
 
-        let action = update_canister_settings.to_self_describing_action();
-        let value = SelfDescribingValue::from(action.value.unwrap());
+        let value =
+            SelfDescribingValue::from(SelfDescribingValuePb::from(update_canister_settings));
 
         assert_eq!(
             value,
@@ -463,6 +500,7 @@ mod tests {
                     "wasm_memory_limit".to_string() => SelfDescribingValue::Null,
                     "wasm_memory_threshold".to_string() => SelfDescribingValue::Null,
                     "log_visibility".to_string() => SelfDescribingValue::Null,
+                    "snapshot_visibility".to_string() => SelfDescribingValue::Null,
                 }),
             })
         );

@@ -187,8 +187,7 @@ def _custom_partitions(mode):
         ":partition-data.tzst",
     ]
 
-def create_test_img(name, source, compat = False, **kwargs):
-    # TODO: Remove compat with NODE-1791
+def create_test_img(name, source, **kwargs):
     native.genrule(
         name = name,
         srcs = [source],
@@ -197,9 +196,9 @@ def create_test_img(name, source, compat = False, **kwargs):
             tmpdir="$$(mktemp -d)"
             trap "rm -rf $$tmpdir" EXIT
             tar -xf $< -C $$tmpdir
-            $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path $$tmpdir/disk.img{compat_flag}
+            $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path $$tmpdir/disk.img
             tar --zstd -Scf $@ -C $$tmpdir disk.img
-        """.format(compat_flag = " --compat" if compat else ""),
+        """,
         target_compatible_with = ["@platforms//os:linux"],
         tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
         **kwargs

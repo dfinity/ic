@@ -458,6 +458,7 @@ type ManageDappCanisterSettings = record {
   canister_ids : vec principal;
   reserved_cycles_limit : opt nat64;
   log_visibility : opt int32;
+  snapshot_visibility : opt int32;
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
@@ -549,6 +550,10 @@ type NervousSystemFunction = record {
   function_type : opt FunctionType;
 };
 
+type CustomProposalCriticality = record {
+  additional_critical_native_action_ids : vec nat64;
+};
+
 type NervousSystemParameters = record {
   default_followees : opt DefaultFollowees;
   max_dissolve_delay_seconds : opt nat64;
@@ -571,6 +576,7 @@ type NervousSystemParameters = record {
   maturity_modulation_disabled : opt bool;
   max_number_of_principals_per_neuron : opt nat64;
   automatically_advance_target_version : opt bool;
+  custom_proposal_criticality : opt CustomProposalCriticality;
 };
 
 type FolloweesForTopic = record {

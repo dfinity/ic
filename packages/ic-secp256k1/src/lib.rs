@@ -125,7 +125,7 @@ impl DerivationPath {
 
         // If iL >= order, try again with the "next" index as described in SLIP-10
         if next_offset.to_bytes().to_vec() != hmac_output[..32] {
-            let mut next_input = [0u8; 33];
+            let mut next_input = [0_u8; 33];
             next_input[0] = 0x01;
             next_input[1..].copy_from_slice(&next_chain_key);
             Self::ckd(idx, &next_input, chain_code)
@@ -489,7 +489,7 @@ impl PrivateKey {
         if digest.len() < 16 {
             // k256 arbitrarily rejects digests that are < 128 bits
             // handle this by prefixing with a sufficient number of zero bytes
-            let mut zdigest = [0u8; 32];
+            let mut zdigest = [0_u8; 32];
             let z_prefix_len = zdigest.len() - digest.len();
             zdigest[z_prefix_len..].copy_from_slice(digest);
             return self.sign_digest_with_ecdsa(&zdigest);
@@ -617,7 +617,7 @@ impl PrivateKey {
     /// for details on the derivation scheme.
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -819,7 +819,7 @@ impl PublicKey {
             )));
         }
 
-        let mut sec1 = [0u8; 33];
+        let mut sec1 = [0_u8; 33];
         sec1[0] = 0x02; // even y
         sec1[1..].copy_from_slice(bytes);
 
@@ -832,6 +832,23 @@ impl PublicKey {
         let key = k256::PublicKey::from_public_key_der(bytes)
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self { key })
+    }
+
+    /// Deserialize a public key stored in DER SubjectPublicKeyInfo format
+    ///
+    /// The public key must be in uncompressed format. The originally provided
+    /// input is compared with the re-encoded DER to prevent using non-canonical
+    /// encodings that might be accepted otherwise
+    pub fn deserialize_canonical_der(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
+        let pk = Self::deserialize_der(bytes)?;
+
+        if pk.serialize_der() != bytes {
+            return Err(KeyDecodingError::InvalidKeyEncoding(
+                "Non-canonical encoding".to_string(),
+            ));
+        }
+
+        Ok(pk)
     }
 
     /// Deserialize a public key stored in PEM SubjectPublicKeyInfo format
@@ -963,7 +980,7 @@ impl PublicKey {
     /// Verify a (message digest,signature) pair
     pub fn verify_ecdsa_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
         if digest.len() < 16 {
-            let mut zdigest = [0u8; 32];
+            let mut zdigest = [0_u8; 32];
             let z_prefix_len = zdigest.len() - digest.len();
             zdigest[z_prefix_len..].copy_from_slice(digest);
             return self.verify_ecdsa_signature_prehashed(&zdigest, signature);
@@ -998,7 +1015,7 @@ impl PublicKey {
         signature: &[u8],
     ) -> bool {
         if digest.len() < 16 {
-            let mut zdigest = [0u8; 32];
+            let mut zdigest = [0_u8; 32];
             let z_prefix_len = zdigest.len() - digest.len();
             zdigest[z_prefix_len..].copy_from_slice(digest);
             return self.verify_ecdsa_signature_prehashed_with_malleability(&zdigest, signature);
@@ -1103,7 +1120,7 @@ impl PublicKey {
     /// deriving subkeys for threshold ECDSA with secp256k1 and BIP340 Schnorr
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 

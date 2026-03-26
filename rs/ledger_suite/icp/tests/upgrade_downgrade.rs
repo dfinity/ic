@@ -26,7 +26,7 @@ const ARCHIVE_NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 /// Trigger archiving after 20 blocks.
 const ARCHIVE_TRIGGER_THRESHOLD_SMALL: usize = 20;
 const INITIAL_USER_ACCOUNT_BALANCE_E8S: u64 = 1_000_000_000_000;
-const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
+const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0_u8; 29]);
 const TOO_MANY_BLOCKS: u64 = 100;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -161,9 +161,9 @@ impl Setup {
         self.pocket_ic.advance_time(Duration::from_secs(1));
         self.pocket_ic.tick();
         let time: SystemTime = self.pocket_ic.get_time().try_into().unwrap();
-        let amount = 1_000_000u64;
+        let amount = 1_000_000_u64;
         let transfer_args = TransferArgs {
-            memo: Memo(121u64),
+            memo: Memo(121_u64),
             amount: Tokens::from_e8s(amount),
             fee: DEFAULT_TRANSFER_FEE,
             from_subaccount: Some(self.user1.subaccount),
@@ -179,7 +179,7 @@ impl Setup {
         loop {
             let block_index = self.execute_icp_transfer();
             let all_blocks = query_encoded_blocks(&self.pocket_ic, true);
-            assert_eq!(all_blocks.len(), block_index as usize + 1usize);
+            assert_eq!(all_blocks.len(), block_index as usize + 1_usize);
 
             assert_eq!(block_index + 1, self.ledger_blocks_created);
             assert!(
@@ -349,9 +349,9 @@ struct SetupBuilder {
 impl SetupBuilder {
     fn build(self) -> Setup {
         let user1_principal = PrincipalId::new_user_test_id(101);
-        let user1_subaccount = Subaccount([1u8; 32]);
+        let user1_subaccount = Subaccount([1_u8; 32]);
         let user2_principal = PrincipalId::new_user_test_id(102);
-        let user2_subaccount = Subaccount([2u8; 32]);
+        let user2_subaccount = Subaccount([2_u8; 32]);
         let user1 = User {
             principal: user1_principal,
             subaccount: user1_subaccount,
@@ -388,6 +388,7 @@ impl SetupBuilder {
             .unwrap();
         let index_canister_init_args = ic_icp_index::InitArg {
             ledger_id: candid::Principal::from(LEDGER_CANISTER_ID),
+            retrieve_blocks_from_ledger_interval_seconds: None,
         };
 
         let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
@@ -397,7 +398,7 @@ impl SetupBuilder {
             std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap())
                 .expect("Could not read mainnet ledger wasm");
         let canister_settings = Some(CanisterSettings {
-            memory_allocation: Some(Nat::from(4 * 1024 * 1024 * 1024u64)), // 4 GiB
+            memory_allocation: Some(Nat::from(4 * 1024 * 1024 * 1024_u64)), // 4 GiB
             ..Default::default()
         });
         install_canister(
@@ -498,7 +499,7 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     // Verify the initial account balances
     assert_eq!(
         account_balance(&setup.pocket_ic, &setup.user1.account_identifier()).get_e8s(),
-        0u64
+        0_u64
     );
     assert_eq!(
         account_balance(
@@ -510,7 +511,7 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     );
     assert_eq!(
         account_balance(&setup.pocket_ic, &setup.user2.account_identifier()).get_e8s(),
-        0u64
+        0_u64
     );
     assert_eq!(
         account_balance(
@@ -518,11 +519,11 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
             &setup.user2.account_identifier_with_subaccount()
         )
         .get_e8s(),
-        0u64
+        0_u64
     );
 
     // Verify that we have two blocks that are the initial mints.
-    let get_blocks_response = query_blocks(&setup.pocket_ic, BlockIndex::from(0u64), 2);
+    let get_blocks_response = query_blocks(&setup.pocket_ic, BlockIndex::from(0_u64), 2);
     assert_eq!(get_blocks_response.blocks.len(), 1);
     let first_ledger_block = get_blocks_response
         .blocks

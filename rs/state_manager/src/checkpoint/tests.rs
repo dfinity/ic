@@ -26,10 +26,11 @@ use ic_test_utilities_types::{
     messages::IngressBuilder,
 };
 use ic_types::{
-    CanisterId, Cycles, Height,
+    CanisterId, Height,
     malicious_flags::MaliciousFlags,
     messages::{StopCanisterCallId, StopCanisterContext},
 };
+use ic_types_cycles::Cycles;
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::CanisterModule;
 use std::{collections::BTreeSet, fs::OpenOptions, path::Path};
@@ -334,7 +335,7 @@ fn can_recover_an_empty_state() {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
         .unwrap();
-        assert!(recovered_state.canisters_iter().next().is_none());
+        assert!(recovered_state.canister_states().is_empty());
     });
 }
 
@@ -404,6 +405,7 @@ fn can_recover_a_stopping_canister() {
             ),
             execution_state: None,
             scheduler_state: Default::default(),
+            canister_snapshots: CanisterSnapshots::default(),
         };
 
         let stop_context = StopCanisterContext::Ingress {
@@ -462,6 +464,7 @@ fn can_recover_a_stopped_canister() {
             ),
             execution_state: None,
             scheduler_state: Default::default(),
+            canister_snapshots: CanisterSnapshots::default(),
         };
 
         let own_subnet_type = SubnetType::Application;
@@ -505,6 +508,7 @@ fn can_recover_a_running_canister() {
             ),
             execution_state: None,
             scheduler_state: Default::default(),
+            canister_snapshots: CanisterSnapshots::default(),
         };
 
         let own_subnet_type = SubnetType::Application;

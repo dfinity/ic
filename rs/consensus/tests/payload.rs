@@ -65,13 +65,16 @@ fn consensus_produces_expected_batches() {
         let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
         let query_stats_payload_builder = Arc::new(query_stats_payload_builder);
 
-        let vetkd_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
-        let vetkd_payload_builder = Arc::new(vetkd_payload_builder);
+        let chain_key_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let chain_key_payload_builder = Arc::new(chain_key_payload_builder);
 
         let mut state_manager = MockStateManager::new();
         state_manager.expect_remove_states_below().return_const(());
         state_manager
             .expect_list_state_hashes_to_certify()
+            .return_const(vec![]);
+        state_manager
+            .expect_list_state_heights_to_certify()
             .return_const(vec![]);
         state_manager
             .expect_latest_certified_height()
@@ -109,6 +112,7 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
         )));
         let idkg_pool = Arc::new(RwLock::new(idkg_pool::IDkgPoolImpl::new(
+            replica_config.node_id,
             pool_config.clone(),
             no_op_logger(),
             metrics_registry.clone(),
@@ -137,7 +141,7 @@ fn consensus_produces_expected_batches() {
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            (&make_genesis(summary)).into(),
+            make_genesis(summary).into(),
             pool_config.clone(),
             MetricsRegistry::new(),
             no_op_logger(),
@@ -163,7 +167,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&self_validating_payload_builder) as Arc<_>,
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             query_stats_payload_builder,
-            vetkd_payload_builder,
+            chain_key_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&idkg_pool) as Arc<_>,
             dkg_key_manager.clone(),

@@ -33,7 +33,7 @@ use crate::{
 use candid::{CandidType, Deserialize, Principal};
 use canlog::log;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{OutPoint, Txid, Utxo};
+use ic_btc_interface::{Height, OutPoint, Txid, Utxo};
 use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
@@ -271,8 +271,6 @@ pub enum FinalizedStatus {
 pub enum InFlightStatus {
     /// Awaiting signatures for transaction inputs.
     Signing,
-    /// Awaiting the Bitcoin canister to accept the transaction.
-    Sending { txid: Txid },
 }
 
 /// The status of a retrieve_btc request.
@@ -579,8 +577,14 @@ pub struct CkBtcMinterState {
     /// Map from burn block index to the reimbursed withdrawal request.
     pub reimbursed_withdrawals: BTreeMap<LedgerBurnIndex, ReimbursedWithdrawalResult>,
 
-    /// Cache of get_utxos call results
+    /// Cache of get_utxos call results.
     pub get_utxos_cache: GetUtxosCache,
+
+    /// Block tip height returned in the last get_utxos call.
+    pub last_get_utxos_tip_height: Option<Height>,
+
+    /// All OutPoints ever minted.
+    pub minted_outpoints: BTreeSet<OutPoint>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
@@ -772,6 +776,7 @@ impl CkBtcMinterState {
         let account_bucket = self.utxos_state_addresses.entry(account).or_default();
 
         for utxo in utxos {
+            self.minted_outpoints.insert(utxo.outpoint.clone());
             self.outpoint_account.insert(utxo.outpoint.clone(), account);
             self.available_utxos.insert(utxo.clone());
             self.checked_utxos.remove(&utxo);
@@ -869,7 +874,6 @@ impl CkBtcMinterState {
         if let Some(status) = self.requests_in_flight.get(&block_index).cloned() {
             return match status {
                 InFlightStatus::Signing => RetrieveBtcStatus::Signing,
-                InFlightStatus::Sending { txid } => RetrieveBtcStatus::Sending { txid },
             };
         }
 
@@ -1988,27 +1992,51 @@ fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) ->
 
 impl From<InitArgs> for CkBtcMinterState {
     #[allow(deprecated)]
-    fn from(args: InitArgs) -> Self {
+    fn from(
+        InitArgs {
+            btc_network,
+            ecdsa_key_name,
+            deposit_btc_min_amount,
+            retrieve_btc_min_amount,
+            ledger_id,
+            max_time_in_queue_nanos,
+            min_confirmations,
+            mode,
+            check_fee,
+            kyt_fee: _,
+            btc_checker_principal,
+            kyt_principal: _,
+            get_utxos_cache_expiration_seconds,
+            utxo_consolidation_threshold,
+            max_num_inputs_in_transaction,
+        }: InitArgs,
+    ) -> Self {
         Self {
-            btc_network: args.btc_network,
-            ecdsa_key_name: args.ecdsa_key_name,
+            btc_network,
+            ecdsa_key_name,
             ecdsa_public_key: None,
-            min_confirmations: args
-                .min_confirmations
+            min_confirmations: min_confirmations
                 .unwrap_or(crate::lifecycle::init::DEFAULT_MIN_CONFIRMATIONS),
-            max_time_in_queue_nanos: args.max_time_in_queue_nanos,
+            max_time_in_queue_nanos,
             update_balance_accounts: Default::default(),
             retrieve_btc_accounts: Default::default(),
-            deposit_btc_min_amount: args.deposit_btc_min_amount.unwrap_or_default(),
-            retrieve_btc_min_amount: args.retrieve_btc_min_amount,
-            fee_based_retrieve_btc_min_amount: args.retrieve_btc_min_amount,
+            deposit_btc_min_amount: deposit_btc_min_amount.unwrap_or_default(),
+            retrieve_btc_min_amount,
+            fee_based_retrieve_btc_min_amount: retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),
             requests_in_flight: Default::default(),
             last_transaction_submission_time_ns: None,
             last_consolidate_utxos_request_time_ns: 0,
             current_consolidate_utxos_request: None,
-            utxo_consolidation_threshold: DEFAULT_UTXO_CONSOLIDATION_THRESHOLD,
-            max_num_inputs_in_transaction: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+            utxo_consolidation_threshold: usize::try_from(
+                utxo_consolidation_threshold.unwrap_or(DEFAULT_UTXO_CONSOLIDATION_THRESHOLD as u64),
+            )
+            .expect("utxo_consolidation_threshold does not fit in usize"),
+            max_num_inputs_in_transaction: usize::try_from(
+                max_num_inputs_in_transaction
+                    .unwrap_or(DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION as u64),
+            )
+            .expect("max_num_inputs_in_transaction does not fit in usize"),
             submitted_transactions: Default::default(),
             replacement_txid: Default::default(),
             retrieve_btc_account_to_block_indices: Default::default(),
@@ -2018,30 +2046,30 @@ impl From<InitArgs> for CkBtcMinterState {
             finalized_requests_count: 0,
             tokens_minted: 0,
             tokens_burned: 0,
-            ledger_id: args.ledger_id,
-            btc_checker_principal: args.btc_checker_principal,
+            ledger_id,
+            btc_checker_principal,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),
             finalized_utxos: Default::default(),
             is_timer_running: false,
             is_distributing_fee: false,
-            mode: args.mode,
+            mode,
             last_fee_per_vbyte: vec![FeeRate::from_millis_per_byte(1); 100],
             last_median_fee_per_vbyte: Some(FeeRate::from_millis_per_byte(1)),
-            check_fee: args
-                .check_fee
-                .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),
+            check_fee: check_fee.unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),
             owed_kyt_amount: Default::default(),
             checked_utxos: Default::default(),
             suspended_utxos: Default::default(),
             pending_reimbursements: Default::default(),
             reimbursed_transactions: Default::default(),
             get_utxos_cache: GetUtxosCache::new(Duration::from_secs(
-                args.get_utxos_cache_expiration_seconds.unwrap_or_default(),
+                get_utxos_cache_expiration_seconds.unwrap_or_default(),
             )),
+            last_get_utxos_tip_height: None,
             pending_withdrawal_reimbursements: Default::default(),
             reimbursed_withdrawals: Default::default(),
+            minted_outpoints: Default::default(),
         }
     }
 }

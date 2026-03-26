@@ -2,12 +2,18 @@
 Enumerate every component file dependency for SetupOS
 """
 
+load(":defs.bzl", "OS_TYPE_DEST")
+
 component_files = {
+    # OS-type marker file, this can be used to identify the OS
+    Label("upgrade/systemd-generators/os-type-setupos"): OS_TYPE_DEST,
+
     # commit-time is checked in the setupOS installation to verify that images are not too old.
     Label("//ic-os/components:commit_timestamp_txt"): "/commit-time",
 
     # setupos components
     Label("//ic-os/components/setupos:check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
+    Label("//ic-os/components/setupos:check-guestos-blessed.sh"): "/opt/ic/bin/check-guestos-blessed.sh",
     Label("//ic-os/components/setupos:check-config.sh"): "/opt/ic/bin/check-config.sh",
     Label("//ic-os/components/setupos:preload-config.sh"): "/opt/ic/bin/preload-config.sh",
     Label("//ic-os/components/setupos:setup-hostos-config.sh"): "/opt/ic/bin/setup-hostos-config.sh",

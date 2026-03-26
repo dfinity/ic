@@ -1,4 +1,4 @@
-use crate::driver::ic::VmResources;
+use crate::driver::ic::VmResourceOverrides;
 use crate::driver::test_env::TestEnvAttribute;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -10,17 +10,10 @@ pub struct GroupSetup {
     /// For now, the group timeout strictly translates to the corresponding group
     /// TTL.
     pub group_timeout: Option<Duration>,
-    pub default_vm_resources: Option<VmResources>,
+    pub vm_resource_overrides: VmResourceOverrides,
 }
 
 impl GroupSetup {
-    // CI
-    // old: hourly__node_reassignment_pot-3099270401
-    // new: hourly__node_reassignment-3099270401
-
-    // Local
-    // old: boundary_nodes_pre_master__boundary_nodes_pot-username-zh1-spm99_zh7_dfinity_network-2784039865
-    // new:
     pub fn new(group_base_name: String, timeout: Option<Duration>) -> Self {
         // binary_name-timestamp
         let mut res = GroupSetup {
@@ -30,7 +23,7 @@ impl GroupSetup {
         let time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("bad things")
-            .as_millis();
+            .as_micros();
         res.infra_group_name = format!("{group_base_name}--{time:?}").replace('_', "-");
         res.group_timeout = timeout;
         res

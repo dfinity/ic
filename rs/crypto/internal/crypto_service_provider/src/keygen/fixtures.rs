@@ -18,13 +18,13 @@ pub fn multi_bls_test_vector() -> MultiBlsTestVector {
     MultiBlsTestVector {
         seed: 42,
         key_id: KeyId::from(hex_to_32_bytes(
-            "6ddef5dfbbd4b641a7cc838ea5d2018c892dd6ef21d641a93f9d3b73b95c6258",
+            "3d62cc7907437135fcfb396bddbd26406af4ebeb28f84005054ffdbf17bc2437",
         )),
         public_key: CspPublicKey::MultiBls12_381(PublicKeyBytes(hex_to_96_bytes(
-            "b5077d187db1ff824d246bc7c311f909047e20375dc836087da1d7e5c3add0e8fc838af6aaa7373b41824c9bd080f47c0a50e3cdf06bf1cb4061a6cc6ab1802acce096906cece92e7487a29e89a187b618e6af1292515202640795f3359161c2",
+            "8b3c2d8d76cd5bc5a8b0ddfaff949f350d696c456805f9fd64f2ce827b002eecd3d95d47afcb9137f355b8c87713149205531d7457d9a9f9addaf9b625c7435dd24cce498cf997fd9dfc77a79dbbe8dc68c63d1612cceac61ee091ec14ed699c",
         ))),
         proof_of_possession: CspPop::MultiBls12_381(PopBytes(hex_to_48_bytes(
-            "8c3a46485252433f478d733275ae3d259f6ced963cf496974ea1dc95e6ca3aee588c4a2e12de34f46e7ef0adffe664d7",
+            "884d40b5b2781d4489d340705627e3f1a9097f67103654be4858a02771ee98f26e2a09830d7bb434aa9b381f9ef99e3e",
         ))),
     }
 }

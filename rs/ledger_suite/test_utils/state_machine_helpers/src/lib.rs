@@ -10,8 +10,8 @@ use ic_ledger_core::tokens::TokensType;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
-use ic_state_machine_tests::{StateMachine, WasmResult};
-use ic_types::Cycles;
+use ic_state_machine_tests::{StateMachine, UserError, WasmResult};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
@@ -34,9 +34,9 @@ use icrc_ledger_types::icrc21::errors::Icrc21Error;
 use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
 use icrc_ledger_types::icrc21::responses::ConsentInfo;
 use num_traits::ToPrimitive;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::time::{Instant, UNIX_EPOCH};
-use std::{collections::BTreeMap, time::Duration};
 
 pub trait AllowanceProvider: Sized {
     fn get_allowance(
@@ -214,7 +214,7 @@ pub fn generate_transactions(
         });
     }
     // Mint
-    let mut minted = 0usize;
+    let mut minted = 0_usize;
     println!("minting");
     for to in &accounts {
         send_transfer(
@@ -401,7 +401,7 @@ pub fn get_all_ledger_and_archive_blocks<Tokens: TokensType>(
     for archived in res.archived_blocks {
         let mut remaining = archived.length.clone();
         let mut next_archived_txid = archived.start.clone();
-        while remaining > 0u32 {
+        while remaining > 0_u32 {
             let req = GetTransactionsRequest {
                 start: next_archived_txid.clone(),
                 length: remaining.clone(),
@@ -719,6 +719,24 @@ pub fn send_transfer_from(
     .map(|n| n.0.to_u64().unwrap())
 }
 
+/// Upgrade a canister as its controller. The canister is stopped before the upgrade and restarted
+/// after the upgrade to ensure that all in-flight inter-canister calls complete.
+pub fn stop_and_upgrade_canister_as_controller(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    wasm: Vec<u8>,
+    payload: Vec<u8>,
+) -> Result<(), UserError> {
+    let controller = env
+        .get_controllers(canister_id)
+        .and_then(|cs| cs.into_iter().next())
+        .expect("should have at least one controller");
+    env.stop_canister_as(controller, canister_id)?;
+    env.upgrade_canister(canister_id, wasm, payload)?;
+    env.start_canister_as(controller, canister_id)?;
+    Ok(())
+}
+
 pub fn supported_block_types(env: &StateMachine, ledger: CanisterId) -> Vec<SupportedBlockType> {
     Decode!(
         &env.query(ledger, "icrc3_supported_block_types", Encode!().unwrap())
@@ -773,29 +791,6 @@ pub fn transfer(
             memo: None,
         },
     )
-}
-
-pub fn wait_ledger_ready(env: &StateMachine, ledger: CanisterId, num_waits: u16) {
-    let is_ledger_ready = || {
-        Decode!(
-            &env.query(ledger, "is_ledger_ready", Encode!().unwrap())
-                .expect("failed to call is_ledger_ready")
-                .bytes(),
-            bool
-        )
-        .expect("failed to decode is_ledger_ready response")
-    };
-    for i in 0..num_waits {
-        if is_ledger_ready() {
-            println!("ready after {i} waits");
-            return;
-        }
-        env.advance_time(Duration::from_secs(10));
-        env.tick();
-    }
-    if !is_ledger_ready() {
-        panic!("canister not ready!");
-    }
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {

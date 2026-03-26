@@ -33,6 +33,7 @@ DEPENDENCIES = [
     "//rs/registry/canister/chunkify",
     "//rs/registry/keys",
     "//rs/registry/node_provider_rewards",
+    "//rs/registry/resource_limits",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
@@ -71,6 +72,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
+    "//rs/ic_os/sev/attestation/testing",
     "//rs/interfaces/registry",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/test_utils",
@@ -89,6 +91,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:pretty_assertions",
     "@crate_index//:rand",
     "@crate_index//:rand_distr",
+    "@crate_index//:rstest",
     "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -312,7 +315,6 @@ generated_files_check(
 rust_canbench(
     name = "registry-canbench",
     srcs = ["canbench/main.rs"],
-    add_test = True,
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.

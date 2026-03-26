@@ -47,7 +47,7 @@ mod database_access {
         con: &mut Connection,
         hb: &HashedBlock,
     ) -> Result<(), BlockStoreError> {
-        let mut stmt = con.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
+        let mut stmt = con.prepare_cached("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
             :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
             )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
         execute_insert_block_statement(&mut stmt, hb)
@@ -139,7 +139,7 @@ mod database_access {
         connection: &mut Connection,
     ) -> Result<Vec<u64>, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT block_idx from blocks")
+            .prepare_cached("SELECT block_idx from blocks")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let indices = stmt
             .query_map(params![], |row| row.get(0))
@@ -152,7 +152,7 @@ mod database_access {
         connection: &mut Connection,
     ) -> Result<Vec<u64>, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT block_idx FROM account_balances")
+            .prepare_cached("SELECT block_idx FROM account_balances")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let indices = stmt
             .query_map(params![], |row| row.get(0))
@@ -166,7 +166,7 @@ mod database_access {
         block_idx: &u64,
     ) -> Result<bool, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT Null FROM blocks WHERE block_idx = ?")
+            .prepare_cached("SELECT Null FROM blocks WHERE block_idx = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut rows = stmt
             .query(params![block_idx])
@@ -182,7 +182,7 @@ mod database_access {
     ) -> Result<icp_ledger::Transaction, BlockStoreError> {
         let command = "SELECT encoded_block from blocks where block_idx = ?";
         let mut stmt = connection
-            .prepare(command)
+            .prepare_cached(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
         let mut transactions = stmt
@@ -239,7 +239,7 @@ mod database_access {
     ) -> Result<Option<HashOf<icp_ledger::Transaction>>, BlockStoreError> {
         let command = "SELECT tx_hash from blocks where block_idx = ?";
         let mut stmt = connection
-            .prepare(command)
+            .prepare_cached(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
         let mut transactions = stmt
@@ -262,7 +262,7 @@ mod database_access {
         hash: &HashOf<icp_ledger::Transaction>,
     ) -> Result<Vec<u64>, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT block_idx from blocks where tx_hash = ?")
+            .prepare_cached("SELECT block_idx from blocks where tx_hash = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
         let mut rows = stmt
@@ -284,7 +284,7 @@ mod database_access {
         hash: &HashOf<EncodedBlock>,
     ) -> Result<u64, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT block_idx from blocks where block_hash = ?")
+            .prepare_cached("SELECT block_idx from blocks where block_hash = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
         let block_idx = stmt
@@ -344,7 +344,7 @@ mod database_access {
     ) -> Result<Option<u64>, BlockStoreError> {
         let command = "SELECT tokens FROM account_balances WHERE block_idx<=?1 AND account=?2 ORDER BY block_idx DESC LIMIT 1";
         let mut stmt = connection
-            .prepare(command)
+            .prepare_cached(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
         let amount = stmt
@@ -508,11 +508,13 @@ mod database_access {
         hb: &HashedBlock,
     ) -> Result<(), BlockStoreError> {
         let mut stmt_select =  con
-        .prepare("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
+        .prepare_cached("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_insert = con
-            .prepare("INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)")
-            .expect("Couldn't prepare statement");
+            .prepare_cached(
+                "INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)",
+            )
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         update_balance_book_execution(hb, &mut stmt_select, &mut stmt_insert)
     }
 
@@ -521,7 +523,7 @@ mod database_access {
     ) -> Result<Vec<AccountIdentifier>, BlockStoreError> {
         let mut accounts = vec![];
         let mut stmt = connection
-            .prepare("SELECT DISTINCT account FROM account_balances")
+            .prepare_cached("SELECT DISTINCT account FROM account_balances")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut rows = stmt
             .query(params![])
@@ -540,7 +542,7 @@ mod database_access {
         block_idx: &u64,
     ) -> Result<(), BlockStoreError> {
         let mut stmt = con
-            .prepare(
+            .prepare_cached(
                 "SELECT DISTINCT account FROM account_balances WHERE block_idx <= ?1 AND account IN (SELECT account FROM account_balances WHERE block_idx <= ?1 GROUP BY account HAVING COUNT(block_idx) > 1)",
             )
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -550,7 +552,7 @@ mod database_access {
         let get_last_involved_block_idx = |acc: &str| -> Result<u64, BlockStoreError> {
             let command = "SELECT block_idx FROM account_balances WHERE block_idx <= ?1 AND account = ?2 ORDER BY block_idx DESC LIMIT 1";
             let mut stmt = con
-                .prepare(command)
+                .prepare_cached(command)
                 .map_err(|e| BlockStoreError::Other(e.to_string()))
                 .unwrap();
             let mut block_idx = stmt
@@ -581,56 +583,44 @@ mod database_access {
     ) -> Result<Vec<(u64, Tokens)>, BlockStoreError> {
         let first_idx = get_first_hashed_block(connection, Some(true))?.index;
 
-        let command = match max_block {
-            Some(limit) => match first_idx {
-                0 => {
-                    format!(
-                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {limit} ORDER BY block_idx DESC"
-                    )
-                }
-                _ => {
-                    format!(
-                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {limit} AND block_idx > {first_idx} ORDER BY block_idx DESC"
-                    )
-                }
-            },
-            None => match first_idx {
-                0 => String::from(
-                    "SELECT block_idx,tokens from account_balances where account = ? ORDER BY block_idx DESC",
-                ),
-
-                _ => {
-                    format!(
-                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx > {first_idx} ORDER BY block_idx DESC"
-                    )
-                }
-            },
-        };
         let account = acc.to_hex();
-        let mut result = Vec::new();
+
+        let (sql, params): (&str, _) = match (max_block, first_idx) {
+            (Some(_), 0) => (
+                "SELECT block_idx,tokens FROM account_balances WHERE account = ?1 AND block_idx <= ?2 ORDER BY block_idx DESC",
+                params![account, max_block.unwrap()],
+            ),
+            (Some(_), _) => (
+                "SELECT block_idx,tokens FROM account_balances WHERE account = ?1 AND block_idx <= ?2 AND block_idx > ?3 ORDER BY block_idx DESC",
+                params![account, max_block.unwrap(), first_idx],
+            ),
+            (None, 0) => (
+                "SELECT block_idx,tokens FROM account_balances WHERE account = ? ORDER BY block_idx DESC",
+                params![account],
+            ),
+            (None, _) => (
+                "SELECT block_idx,tokens FROM account_balances WHERE account = ?1 AND block_idx > ?2 ORDER BY block_idx DESC",
+                params![account, first_idx],
+            ),
+        };
+
         let mut stmt = connection
-            .prepare(command.as_str())
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
-        let account_history = stmt
-            .query_map(params![account], |row| {
-                let block_idx: u64 = row.get(0)?;
-                // Read as i64 and reinterpret as u64 to handle the full u64 range
-                let tokens_i64: i64 = row.get(1)?;
-                let tokens_u64 = tokens_i64 as u64;
-                Ok((block_idx, Tokens::from_e8s(tokens_u64)))
-            })
+            .prepare_cached(sql)
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        for tuple in account_history {
-            result.push(tuple.unwrap());
-        }
-        Ok(result)
+        stmt.query_map(params, |row| {
+            let block_idx: u64 = row.get(0)?;
+            let tokens_i64: i64 = row.get(1)?;
+            Ok((block_idx, Tokens::from_e8s(tokens_i64 as u64)))
+        })
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| BlockStoreError::Other(e.to_string()))
     }
 
     pub fn is_verified(con: &mut Connection, block_idx: &u64) -> Result<bool, BlockStoreError> {
         let command = "SELECT null from blocks WHERE verified=TRUE AND block_idx=?";
         let mut stmt = con
-            .prepare(command)
+            .prepare_cached(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
         let mut blocks = stmt
@@ -1327,14 +1317,16 @@ impl Blocks {
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
-        let mut stmt_hb = connection.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
+        let mut stmt_hb = connection.prepare_cached("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
             :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
             )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_select =  connection
-        .prepare("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
+        .prepare_cached("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_insert = connection
-            .prepare("INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)")
+            .prepare_cached(
+                "INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)",
+            )
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
 
         for hb in &batch {
@@ -1415,7 +1407,7 @@ impl Blocks {
                     *block_height
                 };
                 let mut stmt = connection
-                    .prepare("UPDATE blocks SET verified = TRUE WHERE block_idx >= ?1 AND block_idx <= ?2")
+                    .prepare_cached("UPDATE blocks SET verified = TRUE WHERE block_idx >= ?1 AND block_idx <= ?2")
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
                 stmt.execute(params![verified.index, height])
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1428,7 +1420,7 @@ impl Blocks {
                     *block_height
                 };
                 let mut stmt = connection
-                    .prepare("UPDATE blocks SET verified = TRUE WHERE block_idx <= ?")
+                    .prepare_cached("UPDATE blocks SET verified = TRUE WHERE block_idx <= ?")
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
                 stmt.execute(params![height])
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1701,16 +1693,18 @@ impl Blocks {
             .lock()
             .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
         let block_idx = match connection
-            .prepare_cached(
-                "SELECT rosetta_block_idx FROM rosetta_blocks ORDER BY rosetta_block_idx DESC LIMIT 1",
-            )
-            .map_err(|e| format!("Unable to prepare query: {e:?}"))?.query_map(params![], |row| 
-                row.get(0)
-            ).map_err(|e| BlockStoreError::Other(format!("Unable to select from rosetta_blocks: {e:?}")))?.next(){
-                Some(Ok(block_idx)) => Some(block_idx),
-                Some(Err(e)) => return Err(BlockStoreError::Other(e.to_string())),
-                None =>  None,
-            };
+            .prepare_cached("SELECT MAX(rosetta_block_idx) FROM rosetta_blocks")
+            .map_err(|e| format!("Unable to prepare query: {e:?}"))?
+            .query_map(params![], |row| row.get(0))
+            .map_err(|e| {
+                BlockStoreError::Other(format!("Unable to select from rosetta_blocks: {e:?}"))
+            })?
+            .next()
+        {
+            Some(Ok(block_idx)) => block_idx,
+            Some(Err(e)) => return Err(BlockStoreError::Other(e.to_string())),
+            None => None,
+        };
         Ok(block_idx)
     }
 
@@ -1913,7 +1907,7 @@ VALUES (:idx, :block_idx)"#,
         let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
 
         // Create a mint transaction with a large amount
-        let large_amount = 10000000000000000000u64; // Exceeds i64::MAX
+        let large_amount = 10000000000000000000_u64; // Exceeds i64::MAX
         let transaction = Transaction {
             operation: Operation::Mint {
                 to: account,
@@ -1946,7 +1940,7 @@ VALUES (:idx, :block_idx)"#,
         // Verify the balance history
         let history = blocks.get_account_balance_history(&account, None).unwrap();
         assert_eq!(history.len(), 1);
-        assert_eq!(history[0], (0u64, Tokens::from_e8s(large_amount)));
+        assert_eq!(history[0], (0_u64, Tokens::from_e8s(large_amount)));
     }
 
     #[test]
@@ -1959,51 +1953,51 @@ VALUES (:idx, :block_idx)"#,
 
         let account1 = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
         let account2 = AccountIdentifier::new(
-            ic_types::PrincipalId(Principal::from_slice(&[1u8; 29])),
+            ic_types::PrincipalId(Principal::from_slice(&[1_u8; 29])),
             None,
         );
 
         // Scenario 1: Existing database with small INTEGER values (backwards compatible)
-        let small_value1 = 1000000u64; // 0.01 ICP
-        let small_value2 = 5000000000u64; // 50 ICP
+        let small_value1 = 1000000_u64; // 0.01 ICP
+        let small_value2 = 5000000000_u64; // 50 ICP
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![1u64, account1.to_hex(), small_value1 as i64],
+                params![1_u64, account1.to_hex(), small_value1 as i64],
             )
             .unwrap();
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![2u64, account2.to_hex(), small_value2 as i64],
+                params![2_u64, account2.to_hex(), small_value2 as i64],
             )
             .unwrap();
 
         // Scenario 2: New large values using bit-reinterpretation
-        let large_value1 = 10000000000000000000u64; // The problematic value from the original error
-        let large_value2 = 18446744073709551615u64; // u64::MAX
+        let large_value1 = 10000000000000000000_u64; // The problematic value from the original error
+        let large_value2 = 18446744073709551615_u64; // u64::MAX
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![3u64, account1.to_hex(), large_value1 as i64], // Stored as negative i64
+                params![3_u64, account1.to_hex(), large_value1 as i64], // Stored as negative i64
             )
             .unwrap();
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![4u64, account2.to_hex(), large_value2 as i64], // Stored as -1
+                params![4_u64, account2.to_hex(), large_value2 as i64], // Stored as -1
             )
             .unwrap();
 
         // Test reading all values - should work seamlessly with bit-reinterpretation
         let balance1 =
-            database_access::get_account_balance(&mut connection, &1u64, &account1).unwrap();
+            database_access::get_account_balance(&mut connection, &1_u64, &account1).unwrap();
         let balance2 =
-            database_access::get_account_balance(&mut connection, &2u64, &account2).unwrap();
+            database_access::get_account_balance(&mut connection, &2_u64, &account2).unwrap();
         let balance3 =
-            database_access::get_account_balance(&mut connection, &3u64, &account1).unwrap();
+            database_access::get_account_balance(&mut connection, &3_u64, &account1).unwrap();
         let balance4 =
-            database_access::get_account_balance(&mut connection, &4u64, &account2).unwrap();
+            database_access::get_account_balance(&mut connection, &4_u64, &account2).unwrap();
 
         // All values should be read correctly regardless of magnitude
         assert_eq!(balance1, Some(small_value1));
@@ -2013,9 +2007,9 @@ VALUES (:idx, :block_idx)"#,
 
         // Test that the latest balance query works correctly (should return the large values)
         let latest_balance1 =
-            database_access::get_account_balance(&mut connection, &10u64, &account1).unwrap();
+            database_access::get_account_balance(&mut connection, &10_u64, &account1).unwrap();
         let latest_balance2 =
-            database_access::get_account_balance(&mut connection, &10u64, &account2).unwrap();
+            database_access::get_account_balance(&mut connection, &10_u64, &account2).unwrap();
 
         assert_eq!(latest_balance1, Some(large_value1));
         assert_eq!(latest_balance2, Some(large_value2));
@@ -2032,30 +2026,30 @@ VALUES (:idx, :block_idx)"#,
         let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
 
         // Test 1: Small value (fits in i64) - stored as positive
-        let small_value = 1000000u64; // 0.01 ICP in e8s
+        let small_value = 1000000_u64; // 0.01 ICP in e8s
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![1u64, account.to_hex(), small_value as i64],
+                params![1_u64, account.to_hex(), small_value as i64],
             )
             .unwrap();
 
         let balance =
-            database_access::get_account_balance(&mut connection, &1u64, &account).unwrap();
+            database_access::get_account_balance(&mut connection, &1_u64, &account).unwrap();
         assert_eq!(balance, Some(small_value));
 
         // Test 2: Large value (exceeds i64::MAX) - stored as negative i64, reinterpreted as u64
-        let large_value = 10000000000000000000u64; // Exceeds i64::MAX
+        let large_value = 10000000000000000000_u64; // Exceeds i64::MAX
         let large_value_as_i64 = large_value as i64; // This becomes negative
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![2u64, account.to_hex(), large_value_as_i64],
+                params![2_u64, account.to_hex(), large_value_as_i64],
             )
             .unwrap();
 
         let balance =
-            database_access::get_account_balance(&mut connection, &2u64, &account).unwrap();
+            database_access::get_account_balance(&mut connection, &2_u64, &account).unwrap();
         assert_eq!(balance, Some(large_value)); // Should recover the original value
 
         // Test 3: u64::MAX value
@@ -2064,19 +2058,19 @@ VALUES (:idx, :block_idx)"#,
         connection
             .execute(
                 "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
-                params![3u64, account.to_hex(), max_value_as_i64],
+                params![3_u64, account.to_hex(), max_value_as_i64],
             )
             .unwrap();
 
         let balance =
-            database_access::get_account_balance(&mut connection, &3u64, &account).unwrap();
+            database_access::get_account_balance(&mut connection, &3_u64, &account).unwrap();
         assert_eq!(balance, Some(max_value)); // Should recover u64::MAX
 
         // Verify that bit reinterpretation works correctly
-        assert_eq!(large_value_as_i64, -8446744073709551616i64);
-        assert_eq!(max_value_as_i64, -1i64);
-        assert_eq!((-8446744073709551616i64) as u64, 10000000000000000000u64);
-        assert_eq!((-1i64) as u64, u64::MAX);
+        assert_eq!(large_value_as_i64, -8446744073709551616_i64);
+        assert_eq!(max_value_as_i64, -1_i64);
+        assert_eq!((-8446744073709551616_i64) as u64, 10000000000000000000_u64);
+        assert_eq!((-1_i64) as u64, u64::MAX);
     }
 
     #[test]

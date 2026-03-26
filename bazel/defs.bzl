@@ -85,12 +85,24 @@ def _mcopy(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
 
     command = "cp -p {fs} {output} && chmod +w {output} ".format(fs = ctx.file.fs.path, output = out.path)
-    for src in ctx.files.srcs:
-        command += "&& mcopy -mi {output} -sQ {src_path} ::/{filename} ".format(output = out.path, src_path = src.path, filename = ctx.attr.remap_paths.get(src.basename, src.basename))
+    inputs = []
+    for srcs, dest in ctx.attr.srcmap.items():
+        src_files = srcs[DefaultInfo].files.to_list()
+        for src_file in src_files:
+            inputs.append(src_file)
+            if dest.endswith("/"):
+                dest_path = dest + src_file.basename
+            else:
+                dest_path = dest
+            command += "&& mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
+                output = out.path,
+                src_path = src_file.path,
+                dest = dest_path.removeprefix("/"),
+            )
 
     ctx.actions.run_shell(
         command = command,
-        inputs = ctx.files.srcs + [ctx.file.fs],
+        inputs = inputs + [ctx.file.fs],
         outputs = [out],
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -98,9 +110,8 @@ def _mcopy(ctx):
 mcopy = rule(
     implementation = _mcopy,
     attrs = {
-        "srcs": attr.label_list(allow_files = True),
+        "srcmap": attr.label_keyed_string_dict(allow_files = True),
         "fs": attr.label(allow_single_file = True),
-        "remap_paths": attr.string_dict(),
     },
 )
 
@@ -336,46 +347,6 @@ def rust_test_with_binary(name, binary_name, **kwargs):
         name = binary_name,
         test_target = name,
     )
-
-def _symlink_dir(ctx):
-    dirname = ctx.attr.name
-    lns = []
-    for target, canister_name in ctx.attr.targets.items():
-        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
-        file = target[DefaultInfo].files.to_list()[0]
-        ctx.actions.symlink(
-            output = ln,
-            target_file = file,
-        )
-        lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns))]
-
-symlink_dir = rule(
-    implementation = _symlink_dir,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
-
-def _symlink_dirs(ctx):
-    dirname = ctx.attr.name
-    lns = []
-    for target, childdirname in ctx.attr.targets.items():
-        for file in target[DefaultInfo].files.to_list():
-            ln = ctx.actions.declare_file(dirname + "/" + childdirname + "/" + file.basename)
-            ctx.actions.symlink(
-                output = ln,
-                target_file = file,
-            )
-            lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns))]
-
-symlink_dirs = rule(
-    implementation = _symlink_dirs,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
 
 def _write_info_file_var_impl(ctx):
     """Helper rule that creates a file with the content of the provided var from the info file."""

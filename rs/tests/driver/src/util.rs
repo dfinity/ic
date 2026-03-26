@@ -1,10 +1,7 @@
 use crate::{
     canister_agent::CanisterAgent,
     canister_api::GenericRequest,
-    driver::{
-        group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS},
-        test_env_api::*,
-    },
+    driver::{group::MAX_RUNTIME_THREADS, test_env_api::*},
     generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics},
     retry_with_msg, retry_with_msg_async,
     types::*,
@@ -24,6 +21,7 @@ use ic_agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
     },
+    agent_error::TransportError,
     export::Principal,
     identity::BasicIdentity,
 };
@@ -51,9 +49,10 @@ use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
 use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
-    CanisterId, Cycles, PrincipalId,
+    CanisterId, PrincipalId,
     messages::{HttpCallContent, HttpQueryContent, HttpReadStateContent},
 };
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{
@@ -63,9 +62,11 @@ use icp_ledger::{
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use on_wire::FromWire;
+use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info};
+use ssh2::Session;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     fmt::Debug,
     future::Future,
@@ -84,8 +85,8 @@ pub mod delegations;
 
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
-pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
-pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
+pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(40);
+pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(40);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 
@@ -95,10 +96,8 @@ pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 pub const MAX_TCP_ERROR_RETRIES: usize = 5;
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
-    ic_agent::identity::BasicIdentity::from_pem(std::io::Cursor::new(
-        TEST_IDENTITY_KEYPAIR.to_pem(),
-    ))
-    .expect("Invalid secret key.")
+    ic_agent::identity::BasicIdentity::from_pem(TEST_IDENTITY_KEYPAIR.to_pem())
+        .expect("Invalid secret key.")
 }
 
 /// Initializes a testing [Runtime] from a node's url. You should really
@@ -689,6 +688,31 @@ impl<'a> MessageCanister<'a> {
             .unwrap()
     }
 
+    pub async fn new_with_cycles_with_retries<C: Into<u128>>(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        cycles: C,
+        log: &slog::Logger,
+    ) -> MessageCanister<'a> {
+        let c = cycles.into();
+        retry_with_msg_async!(
+            format!(
+                "install MessageCanister {}",
+                effective_canister_id.to_string()
+            ),
+            log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                Self::new_with_params(agent, effective_canister_id, None, Some(c))
+                    .await
+                    .map_err(|e| anyhow!(e))
+            }
+        )
+        .await
+        .expect("Could not create message canister with cycles.")
+    }
+
     pub fn canister_id(&self) -> Principal {
         self.canister_id
     }
@@ -933,7 +957,9 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder.build().map_err(AgentError::TransportError)?;
+    let client = builder
+        .build()
+        .map_err(|e| AgentError::TransportError(TransportError::Reqwest(e)))?;
     agent_with_client_identity(url, client, identity).await
 }
 
@@ -1315,10 +1341,8 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
             let rt = {
                 let cpus = num_cpus::get();
                 let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
-                let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
                 Builder::new_multi_thread()
                     .worker_threads(workers)
-                    .max_blocking_threads(blocking_threads)
                     .enable_all()
                     .build()
             }
@@ -1516,7 +1540,6 @@ pub fn escape_for_wat(id: &Principal) -> String {
 
 pub fn get_config() -> ConfigOptional {
     let template = generate_ic_config::IcConfigTemplate {
-        ipv6_address: "::".to_string(),
         ipv6_prefix: "::/64".to_string(),
         ipv4_address: "".to_string(),
         ipv4_gateway: "".to_string(),
@@ -1614,6 +1637,127 @@ impl LogStream {
     }
 }
 
+/// A builder for querying `journalctl` on a remote node over SSH.
+///
+/// Use the builder methods to configure the query (e.g. limit the number of entries, follow new
+/// entries, look at the previous boot), then call [`search`](Self::search) to execute the query
+/// and collect matching journal messages.
+pub struct JournalStreamer {
+    session: Session,
+    journalctl_flags: BTreeSet<String>,
+    grep_flags: BTreeSet<String>,
+    from_cursor: Option<String>,
+}
+
+/// Deserialization target for a single JSON record emitted by
+/// `journalctl -o json --output-fields='MESSAGE,__CURSOR'`.
+#[derive(Deserialize, Serialize)]
+struct JournalOutput {
+    #[serde(alias = "MESSAGE")]
+    message: String,
+    #[serde(alias = "__CURSOR")]
+    cursor: String,
+}
+
+impl JournalStreamer {
+    /// Creates a new `JournalStreamer` that will run `journalctl` commands
+    /// over the given SSH `session`.
+    pub fn new(session: Session) -> Self {
+        Self {
+            session,
+            journalctl_flags: BTreeSet::new(),
+            grep_flags: BTreeSet::new(),
+            from_cursor: None,
+        }
+    }
+
+    /// Limits the number of journal entries returned (maps to `journalctl --lines=`).
+    pub fn max_lines(mut self, max_lines: usize) -> Self {
+        self.journalctl_flags
+            .insert(format!("--lines={}", max_lines));
+        self.grep_flags.insert(format!("--max-count={}", max_lines));
+        self
+    }
+
+    /// Enables follow mode (maps to `journalctl --follow`), causing `journalctl` to block and wait
+    /// for new entries instead of returning immediately.
+    /// Searching for a string after calling this function will return only when the SSH session is
+    /// closed, i.e. when the node shuts down or reboots. Even then, it will probably return an
+    /// error with `transport read`. Thus, it is recommended to also call `max_lines` to return as
+    /// soon as the expected number of lines have been read.
+    pub fn follow(mut self) -> Self {
+        self.journalctl_flags.insert("--follow".to_string());
+        self
+    }
+
+    /// Restricts the search to the previous boot's journal entries (maps to `journalctl
+    /// --boot=-1`).
+    pub fn previous_boot(mut self) -> Self {
+        self.journalctl_flags.insert("--boot=-1".to_string());
+        self
+    }
+
+    /// Anchors subsequent searches to start after the current latest journal entry. This is useful
+    /// for ignoring pre-existing log lines and only matching entries that appear after this call.
+    ///
+    /// Returns an error on transport errors or if the journal is empty and there is no cursor to
+    /// anchor to.
+    pub fn from_now(mut self) -> anyhow::Result<Self> {
+        let cursor = Self::new(self.session.clone())
+            .max_lines(1)
+            .search_and_return_cursors("__CURSOR")?
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No journal entries found"))?
+            .cursor;
+
+        self.from_cursor = Some(cursor);
+        Ok(self)
+    }
+
+    /// Executes the configured `journalctl` query and returns whether there are any entries
+    /// matching `search_regex`.
+    pub fn contains(&self, search_regex: &str) -> anyhow::Result<bool> {
+        self.search_and_return_cursors(search_regex)
+            .map(|matches| !matches.is_empty())
+    }
+
+    /// Executes the configured `journalctl` query, filters the output with `search_regex`, and
+    /// returns the matching journal messages.
+    pub fn search(&self, search_regex: &str) -> anyhow::Result<Vec<String>> {
+        self.search_and_return_cursors(search_regex)
+            .map(|iter| iter.into_iter().map(|output| output.message).collect())
+    }
+
+    /// Builds and executes the `journalctl` command over SSH, parses the JSON output, and returns
+    /// `(message, cursor)` pairs for entries matching `search_regex`.
+    fn search_and_return_cursors(&self, search_regex: &str) -> anyhow::Result<Vec<JournalOutput>> {
+        let mut command = "journalctl --output json --output-fields='MESSAGE,__CURSOR'".to_string();
+
+        if !self.journalctl_flags.is_empty() {
+            command.push(' ');
+            command.push_str(&Vec::from_iter(self.journalctl_flags.iter().cloned()).join(" "));
+        }
+
+        if let Some(from_cursor) = &self.from_cursor {
+            command.push_str(&format!(" --after-cursor='{from_cursor}'"));
+        }
+
+        let mut grep = "grep --extended-regexp".to_string();
+        if !self.grep_flags.is_empty() {
+            grep.push(' ');
+            grep.push_str(&Vec::from_iter(self.grep_flags.iter().cloned()).join(" "));
+        }
+        command.push_str(&format!(" | {grep} '{search_regex}'"));
+
+        let output = execute_bash_script_from_session(&self.session, &command)?;
+        Ok(output
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("Journal output should be valid JSON"))
+            .collect::<Vec<_>>())
+    }
+}
+
 /// Tool to fetch metrics from a set of nodes.
 ///
 /// Can be useful if waiting for a specific condition of a metric to become true.
@@ -1621,12 +1765,13 @@ pub struct MetricsFetcher {
     nodes: Vec<IcNodeSnapshot>,
     metrics: Vec<String>,
     port: u16,
+    client: reqwest::Client,
 }
 
 impl MetricsFetcher {
     /// Create a new [`MetricsFetcher`]
     pub fn new(nodes: impl Iterator<Item = IcNodeSnapshot>, metrics: Vec<String>) -> Self {
-        Self::new_with_port(nodes, metrics, 9090)
+        Self::new_with_port(nodes, metrics, REPLICA_METRICS_PORT)
     }
 
     /// Create a new [`MetricsFetcher`] for a specific port
@@ -1635,10 +1780,15 @@ impl MetricsFetcher {
         metrics: Vec<String>,
         port: u16,
     ) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(AGENT_REQUEST_TIMEOUT)
+            .build()
+            .expect("Failed to build HTTP client for metrics fetching");
         Self {
             nodes: nodes.collect(),
             metrics,
             port,
+            client,
         }
     }
 
@@ -1683,7 +1833,7 @@ impl MetricsFetcher {
 
         let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, self.port, 0, 0));
         let url = format!("http://{socket_addr}");
-        let response = reqwest::get(url).await?.text().await?;
+        let response = self.client.get(url).send().await?.text().await?;
 
         // Filter out only lines that contain metrics we are interested in
         let mut result = BTreeMap::new();

@@ -18,8 +18,8 @@ use ic_crypto_utils_threshold_sig_der::{KeyConversionError, threshold_sig_public
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
-        CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig,
-        InitialNiDkgTranscriptRecord, SubnetRecord,
+        CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig, GenesisArgs,
+        InitialNiDkgTranscriptRecord, SubnetRecord, catch_up_package_contents::CupType,
     },
 };
 use ic_registry_subnet_features::SubnetFeatures;
@@ -63,7 +63,19 @@ pub struct SubnetConfig {
     /// maximum number of ingress message per block
     pub max_ingress_messages_per_block: u64,
 
-    /// maximum size in byte, payload can have in total
+    /// How big an ingress payload can be *when stored in memory*. Setting this value too large could lead to
+    /// large memory usage of replicas.
+    /// Note that with hashes-in-blocks feature enabled, increasing this value doesn't necessarily mean
+    /// that we would send more data to peers when transmitting a block, because ingress messages are
+    /// stripped before disseminating blocks.
+    pub max_ingress_bytes_per_block: u64,
+
+    /// Maximum size, in bytes, a [`BatchPayload`] can have *when sent over wire*.
+    /// Setting this value too high could result in longer delivery times of blocks to peers, which
+    /// could lead to forks as higher rank blocks could be proposed meanwhile.
+    /// Note that with hashes-in-blocks feature enabled, the blocks sent over wire are typically smaller
+    /// than their representation in memory, because we strip some of the data before broadcasting them
+    /// to peers.
     pub max_block_payload_size: u64,
 
     /// Notarization delay parameters.
@@ -81,6 +93,10 @@ pub struct SubnetConfig {
 
     /// The type of the subnet
     pub subnet_type: SubnetType,
+
+    /// Whether this subnet uses Cycles. Not applicable to system subnets,
+    /// which don't use Cycles via a different mechanism.
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
 
     /// The maximum number of instructions a message can execute.
     /// See the comments in `subnet_config.rs` for more details.
@@ -161,6 +177,7 @@ pub struct SubnetConfigParams {
     pub dkg_interval_length: Height,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
+    pub max_ingress_bytes_per_block: u64,
     pub max_block_payload_size: u64,
     pub dkg_dealings_per_block: usize,
 }
@@ -208,6 +225,7 @@ pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> S
         initial_notary_delay: dynamic_config.initial_notary_delay,
         dkg_interval_length: dynamic_config.dkg_interval_length,
         max_ingress_bytes_per_message: dynamic_config.max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block: ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
         max_ingress_messages_per_block: ic_limits::MAX_INGRESS_MESSAGES_PER_BLOCK,
         max_block_payload_size: ic_limits::MAX_BLOCK_PAYLOAD_SIZE,
         dkg_dealings_per_block: ic_limits::DKG_DEALINGS_PER_BLOCK,
@@ -221,6 +239,7 @@ impl SubnetConfig {
         membership: BTreeMap<NodeIndex, NodeConfiguration>,
         replica_version_id: ReplicaVersion,
         max_ingress_bytes_per_message: Option<u64>,
+        max_ingress_bytes_per_block: Option<u64>,
         max_ingress_messages_per_block: Option<u64>,
         max_block_payload_size: Option<u64>,
         unit_delay: Option<Duration>,
@@ -228,6 +247,7 @@ impl SubnetConfig {
         dkg_interval_length: Option<Height>,
         dkg_dealings_per_block: Option<usize>,
         subnet_type: SubnetType,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
         max_instructions_per_message: Option<u64>,
         max_instructions_per_round: Option<u64>,
         max_instructions_per_install_code: Option<u64>,
@@ -252,12 +272,15 @@ impl SubnetConfig {
                 .unwrap_or(config.max_ingress_bytes_per_message),
             max_ingress_messages_per_block: max_ingress_messages_per_block
                 .unwrap_or(config.max_ingress_messages_per_block),
+            max_ingress_bytes_per_block: max_ingress_bytes_per_block
+                .unwrap_or(config.max_ingress_bytes_per_block),
             max_block_payload_size: max_block_payload_size.unwrap_or(config.max_block_payload_size),
             unit_delay: unit_delay.unwrap_or(config.unit_delay),
             initial_notary_delay: initial_notary_delay.unwrap_or(config.initial_notary_delay),
             dkg_interval_length: dkg_interval_length.unwrap_or(config.dkg_interval_length),
             dkg_dealings_per_block: dkg_dealings_per_block.unwrap_or(config.dkg_dealings_per_block),
             subnet_type,
+            canister_cycles_cost_schedule,
             max_instructions_per_message: max_instructions_per_message
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_message.get()),
             max_instructions_per_round: max_instructions_per_round
@@ -303,6 +326,7 @@ impl SubnetConfig {
         let subnet_record = SubnetRecord {
             membership: membership_nodes,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
+            max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
             max_ingress_messages_per_block: self.max_ingress_messages_per_block,
             max_block_payload_size: self.max_block_payload_size,
             unit_delay_millis: self.unit_delay.as_millis() as u64,
@@ -322,7 +346,10 @@ impl SubnetConfig {
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
             chain_key_config: self.chain_key_config,
-            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            canister_cycles_cost_schedule: i32::from(self.canister_cycles_cost_schedule),
+            subnet_admins: vec![],
+            resource_limits: Default::default(),
+            recalled_replica_version_ids: vec![],
         };
 
         let dkg_dealing_encryption_pubkeys: BTreeMap<_, _> = initialized_nodes
@@ -393,7 +420,13 @@ impl SubnetConfig {
             )),
             state_hash,
             height: self.initial_height,
-            ..Default::default()
+            time: 0,
+            registry_store_uri: None,
+            ecdsa_initializations: vec![],
+            chain_key_initializations: vec![],
+            cup_type: Some(CupType::Genesis(GenesisArgs {
+                height: self.initial_height,
+            })),
         };
 
         Ok(InitializedSubnet {

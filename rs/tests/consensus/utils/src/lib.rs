@@ -1,7 +1,5 @@
 use ic_system_test_driver::{
-    driver::test_env_api::{
-        HasPublicApiUrl, IcNodeSnapshot, get_dependency_path_from_env, set_var_to_path,
-    },
+    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
     util::{MetricsFetcher, block_on},
 };
 use ic_types::Height;
@@ -14,23 +12,6 @@ pub mod rw_message;
 pub mod ssh_access;
 pub mod subnet;
 pub mod upgrade;
-
-pub fn set_sandbox_env_vars() {
-    // System tests receive paths relative to the RUNFILES. These need to be translated to absolute
-    // paths for the underlying tools.
-    set_var_to_path(
-        "SANDBOX_BINARY",
-        get_dependency_path_from_env("SANDBOX_BINARY"),
-    );
-    set_var_to_path(
-        "LAUNCHER_BINARY",
-        get_dependency_path_from_env("LAUNCHER_BINARY"),
-    );
-    set_var_to_path(
-        "COMPILER_BINARY",
-        get_dependency_path_from_env("COMPILER_BINARY"),
-    );
-}
 
 pub fn assert_node_is_making_progress(
     node: &IcNodeSnapshot,

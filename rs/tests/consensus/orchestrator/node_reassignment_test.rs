@@ -358,6 +358,12 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config)
         .add_test(systest!(test))
+        // Some nodes change subnets twice in which case the replica process would be started
+        // three times.
+        .update_orchestrator_metrics_to_check(
+            "orchestrator_replica_process_start_attempts_total",
+            3,
+        )
         .execute_from_args()?;
 
     Ok(())

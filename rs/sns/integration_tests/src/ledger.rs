@@ -22,7 +22,7 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_test_utils::{
     icrc1,
-    itest_helpers::{SnsCanisters, SnsTestsInitPayloadBuilder, local_test_on_sns_subnet},
+    itest_helpers::{SnsCanisters, SnsTestsInitPayloadBuilder, state_machine_test_on_sns_subnet},
 };
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
@@ -30,7 +30,7 @@ use ic_sns_test_utils::{
 // can be claimed and ultimately disbursed to the same account.
 #[test]
 fn test_stake_and_disburse_neuron_with_notification() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -63,7 +63,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
 
             // Stake a neuron by transferring to a subaccount of the neurons
             // canister and claiming the neuron on the governance canister..
-            let nonce = 12345u64;
+            let nonce = 12345_u64;
             let to_subaccount = {
                 let mut state = Sha256::new();
                 state.write(&[0x0c]);
