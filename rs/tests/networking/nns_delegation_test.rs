@@ -118,7 +118,9 @@ fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::fast_single_node(SubnetType::Application).with_dkg_interval_length(DKG_LENGTH),
         )
-        .add_subnet(Subnet::new(SubnetType::CloudEngine).with_dkg_interval_length(DKG_LENGTH))
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::CloudEngine).with_dkg_interval_length(DKG_LENGTH),
+        )
         .setup_and_start(&env)
         .expect("Should be able to set up IC under test");
 
