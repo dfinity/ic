@@ -28,7 +28,6 @@ ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 registry-canister = { path = "../../../registry/canister" }
 slog = { workspace = true }
-ssh2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

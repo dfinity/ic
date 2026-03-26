@@ -14,6 +14,7 @@ use ic_types::{
     messages::{CallbackId, NO_DEADLINE, Request, RequestOrResponse},
     time::{CoarseTime, UNIX_EPOCH},
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use std::sync::Arc;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(0);
@@ -84,6 +85,7 @@ impl CanisterFixture {
             msg,
             &mut subnet_available_memory,
             SubnetType::Application,
+            CanisterCyclesCostSchedule::Normal,
             InputQueueType::RemoteSubnet,
         )
     }

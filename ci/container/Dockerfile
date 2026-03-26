@@ -14,7 +14,6 @@ RUN echo "[storage]\nrootless_storage_path=\"/tmp/containers\"" > /etc/container
 # marker for scripts to check if they are running in this container
 RUN touch /home/ubuntu/.ic-build-container
 
-# Todo: split out essential packages from application-level packages
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
@@ -81,19 +80,15 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
 # install cargo with the ubuntu user
 USER ubuntu
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-
-# Add Rust/Cargo support
-RUN mkdir -p /tmp/rust-version/
-COPY rust-toolchain.toml /tmp/rust-version/rust-toolchain.toml
-# Read the channel from the toolchain file
-RUN sed </tmp/rust-version/rust-toolchain.toml -n 's/^channel = "\(.*\)"$/\1/p' > /tmp/rust-version/version
-RUN echo "Rust version:" "$(cat /tmp/rust-version/version)"
-RUN curl --fail https://sh.rustup.rs -sSf \
-    | sh -s -- -y --default-toolchain "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" --no-modify-path && \
-    rustup default "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" && \
+COPY rust-toolchain.toml /tmp/rust-toolchain.toml
+RUN RUST_VERSION=$(sed -n 's/^channel = "\(.*\)"$/\1/p' /tmp/rust-toolchain.toml) && \
+    echo "Rust version: $RUST_VERSION" && \
+    curl --fail https://sh.rustup.rs -sSf \
+    | sh -s -- -y --default-toolchain "${RUST_VERSION}-x86_64-unknown-linux-gnu" --no-modify-path && \
+    rustup default "${RUST_VERSION}-x86_64-unknown-linux-gnu" && \
     rustup target add wasm32-unknown-unknown && \
-    rustup component add clippy
-RUN rm -rf /tmp/rust-version
+    rustup component add clippy && \
+    sudo rm /tmp/rust-toolchain.toml
 
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.22.0
@@ -101,7 +96,6 @@ RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 
 # switch back to root user after cargo install so that we have permissions to install additional packages
 USER root
-
 WORKDIR /
 CMD ["/bin/bash"]
 
@@ -114,22 +108,19 @@ FROM base as dev
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
+# Add GitHub CLI repository to get the latest version
+RUN mkdir -p -m 755 /etc/apt/keyrings \
+	&& out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+	&& cat $out | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+	&& chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+	&& mkdir -p -m 755 /etc/apt/sources.list.d \
+	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+
 # Install additional packages for development but not needed on CI:
 ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
 COPY ${PACKAGE_DEV_FILE} /tmp/
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
-
-# Install GitHub CLI `gh` following: https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian
-RUN (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
-	&& sudo mkdir -p -m 755 /etc/apt/keyrings \
-	&& out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-	&& cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-	&& sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-	&& sudo mkdir -p -m 755 /etc/apt/sources.list.d \
-	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-	&& sudo apt update \
-	&& sudo apt install gh -y
 
 USER ubuntu

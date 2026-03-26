@@ -196,7 +196,7 @@ use slog::{Logger, debug, info, warn};
 use ssh2::Session;
 use std::{
     cmp::max,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     convert::TryFrom,
     fs,
     future::Future,
@@ -1211,7 +1211,7 @@ impl IcNodeSnapshot {
         ))
     }
 
-    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>, port: u16) {
+    pub fn assert_metrics_values(&self, metrics_to_check: &BTreeMap<&str, u64>, port: u16) {
         if metrics_to_check.is_empty() {
             return;
         }
@@ -1219,7 +1219,7 @@ impl IcNodeSnapshot {
         block_on(async {
             let metrics_fetcher = MetricsFetcher::new_with_port(
                 std::iter::once(self.clone()),
-                metrics_to_check,
+                metrics_to_check.keys().map(ToString::to_string).collect(),
                 port,
             );
             let metrics = match metrics_fetcher.fetch::<u64>().await {
@@ -1238,41 +1238,21 @@ impl IcNodeSnapshot {
                 self.node_id
             );
             for (name, value) in metrics {
-                assert_eq!(
-                    value[0], 0,
-                    "The metric `{name}` on node {} has non-zero value. \
-                    If the metric is allowed to be non-zero in the test, \
-                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
+                let max_value = metrics_to_check
+                    .get(name.split('(').next().unwrap())
+                    .copied()
+                    .unwrap_or_default();
+                assert!(
+                    value[0] <= max_value,
+                    "The metric `{name}` on node {} exceeded the maximum allowed value: \
+                    {} > {max_value}. \
+                    If this is expected to happen in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")` or \
+                    with `update_orchestrator_metrics_to_check(\"{name}\", $max_value)`",
                     self.node_id,
+                    value[0],
                 );
             }
-        });
-    }
-
-    pub fn assert_no_replica_restarts(&self) {
-        block_on(async {
-            let orchestrator_metric_name = "orchestrator_replica_process_start_attempts_total";
-            let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
-                std::iter::once(self.clone()),
-                vec![orchestrator_metric_name.to_string()],
-                ORCHESTRATOR_METRICS_PORT,
-            );
-            let orchestrator_metrics_result = orchestrator_metrics_fetcher.fetch::<u64>().await;
-            let orchestrator_metrics = match orchestrator_metrics_result {
-                Ok(orchestrator_metrics) => orchestrator_metrics,
-                Err(e) => {
-                    info!(
-                        self.env.logger(),
-                        "Could not fetch orchestrator metrics for node {}: {e:?}", self.node_id
-                    );
-                    return;
-                }
-            };
-            assert_eq!(
-                orchestrator_metrics[orchestrator_metric_name][0], 1,
-                "The replica process on node {} was restarted during test. Create `SystemTestGroup` using `without_assert_no_replica_restarts` if replica restarts are expected in your test",
-                self.node_id
-            );
         });
     }
 }
@@ -1638,7 +1618,7 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
-fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
+pub fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
     let mut channel = session.channel_session()?;
     channel.exec("bash").map_err(|e| {
         anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)

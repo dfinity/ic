@@ -3,7 +3,7 @@ use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
-    ops::{Add, AddAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, Mul, Sub, SubAssign},
 };
 
 use std::convert::{From, TryFrom};
@@ -14,14 +14,19 @@ use std::convert::{From, TryFrom};
 /// underflow. A similar struct is provided in the protobuf types.
 /// We also provide split into low and high parts as protobuf does not support
 /// u128.
-//
-// EXC-24 will introduce a separation of concepts between Cycles and NominalCycles.
+///
+/// NOTE: This is distinct from `Cycles` which should be used when updating the
+/// canister's cycle balance.
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Deserialize, Serialize,
 )]
 pub struct NominalCycles(u128);
 
 impl NominalCycles {
+    pub(crate) fn new_private(amount: u128) -> Self {
+        Self(amount)
+    }
+
     pub const fn zero() -> Self {
         Self(0)
     }
@@ -45,11 +50,9 @@ impl NominalCycles {
     pub fn low64(&self) -> u64 {
         (self.0 & 0xffff_ffff_ffff_ffff) as u64
     }
-}
 
-impl From<u128> for NominalCycles {
-    fn from(input: u128) -> Self {
-        Self(input)
+    pub fn is_zero(&self) -> bool {
+        self.0 == 0
     }
 }
 
@@ -78,6 +81,22 @@ impl Sub for NominalCycles {
 impl SubAssign for NominalCycles {
     fn sub_assign(&mut self, rhs: Self) {
         self.0 = self.0.saturating_sub(rhs.0)
+    }
+}
+
+impl Mul<u64> for NominalCycles {
+    type Output = Self;
+
+    fn mul(self, rhs: u64) -> Self {
+        Self(self.0.saturating_mul(rhs as u128))
+    }
+}
+
+impl Div<u128> for NominalCycles {
+    type Output = Self;
+
+    fn div(self, rhs: u128) -> Self {
+        Self(self.0.saturating_div(rhs))
     }
 }
 

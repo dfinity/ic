@@ -1783,6 +1783,10 @@ crate.spec(
     version = "^0.2.0",
 )
 crate.spec(
+    package = "tracing-journald",
+    version = "0.3",
+)
+crate.spec(
     package = "tracing-opentelemetry",
     version = "^0.28.0",
 )
@@ -2025,11 +2029,6 @@ crate.annotation(
         "OPENSSL_STATIC": "1",
     },
     crate = "openssl-sys",
-)
-crate.annotation(
-    crate = "askama_derive",
-    patch_args = ["-p2"],
-    patches = ["@@//bazel:askama.patch"],
 )
 crate.annotation(
     crate = "canbench",
