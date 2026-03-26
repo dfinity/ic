@@ -236,7 +236,6 @@ impl Verifier for FakeVerifier {
     }
 }
 
-/// A task to execute in a controlled order.
 #[derive(Clone, Debug)]
 pub enum OrderedMessage {
     Ingress(CanisterId, MessageId),
@@ -252,19 +251,14 @@ pub enum OrderedMessage {
     Timer(CanisterId),
 }
 
-/// Controls how execute_with_ordering handles the scheduler's
-/// next_scheduled_method round-robin (GlobalTimer → Heartbeat → Message).
 pub enum OrderingMode {
-    /// Sets next_scheduled_method before each step so the scheduler
-    /// always executes what the ordering specifies.
+    /// Forces next_scheduled_method before each step.
     Relaxed,
-    /// Verifies the ordering matches the scheduler's natural round-robin.
-    /// Panics on mismatch. The vec sets each canister's initial
-    /// next_scheduled_method for deterministic starting state.
+    /// Asserts the ordering matches the scheduler's natural round-robin.
+    /// The vec sets each canister's initial next_scheduled_method.
     Strict(Vec<(CanisterId, NextScheduledMethod)>),
 }
 
-/// A sequence of messages to execute in order.
 pub struct MessageOrdering {
     pub messages: Vec<OrderedMessage>,
     pub mode: OrderingMode,
@@ -289,17 +283,11 @@ impl MessageOrdering {
     }
 }
 
-/// Scheduler wrapper that boosts one canister's priority per round.
-/// With scheduler_cores=1 and tight instruction budgets, this guarantees
-/// only the boosted canister executes one message (or DTS slice) per round.
+/// Scheduler wrapper for flexible ordering. Boosts one canister's priority
+/// and optionally suppresses subnet_queues to prevent implicit drain.
 struct FlexibleOrderingScheduler {
     inner: Box<dyn Scheduler<State = ReplicatedState>>,
     target: Arc<RwLock<Option<CanisterId>>>,
-    /// When true, subnet_queues are temporarily emptied before the inner
-    /// execute_round so that drain_subnet_queues has nothing to process.
-    /// This prevents implicit subnet message consumption during steps
-    /// that only target normal canisters (Request, Response, Heartbeat,
-    /// Timer, DTS continuation). The queues are restored after the round.
     suppress_subnet_messages: Arc<RwLock<bool>>,
 }
 
@@ -333,19 +321,14 @@ impl Scheduler for FlexibleOrderingScheduler {
                 .accumulated_priority = AccumulatedPriority::new(i64::MAX / 4);
         }
 
-        // When suppressed, swap out subnet_queues so drain_subnet_queues
-        // finds nothing. This prevents implicit subnet message execution
-        // during non-management-canister steps (Request, Heartbeat, DTS).
-        //
-        // Safe to restore after execute_round: no new messages can appear in
-        // subnet_queues during the round. Messages to IC_00 stay in the
-        // canister's output queue until build_streams (which runs after
-        // execute_round) moves them to the loopback stream, and only the
-        // next round's Demux moves them into subnet_queues.
+        // Swap out subnet_queues so drain_subnet_queues has nothing to process.
+        // Safe to restore: no new messages land in subnet_queues during
+        // execute_round. Messages to IC_00 stay in output queues until
+        // build_streams (after execute_round) moves them to loopback, and
+        // only next round's Demux moves them into subnet_queues.
         let suppress = *self.suppress_subnet_messages.read().unwrap();
         let saved_subnet_queues = if suppress {
-            let saved = std::mem::take(state.subnet_queues_mut());
-            Some(saved)
+            Some(std::mem::take(state.subnet_queues_mut()))
         } else {
             None
         };
@@ -361,7 +344,6 @@ impl Scheduler for FlexibleOrderingScheduler {
             registry_settings,
         );
 
-        // Restore subnet_queues after the round.
         if let Some(saved) = saved_subnet_queues {
             result.put_subnet_queues(saved);
         }
@@ -1652,7 +1634,6 @@ impl StateMachineBuilder {
         }
     }
 
-    /// Enable flexible message ordering (scheduler_cores=1, one message per round).
     pub fn with_flexible_ordering(self) -> Self {
         Self {
             flexible_ordering: true,
@@ -2092,10 +2073,7 @@ impl StateMachine {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
-        // When flexible ordering is enabled, configure the scheduler so that
-        // One message per round: scheduler_cores=1 (single thread),
-        // tiny round budget (1 message then budget exhausted),
-        // tiny subnet budget (1 management canister message per round).
+        // scheduler_cores=1 + tight budgets = one message per round.
         if flexible_ordering {
             let sc = &mut subnet_config.scheduler_config;
             sc.scheduler_cores = 1;
@@ -2805,16 +2783,6 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("No buffered ingress with id {}", message_id))
     }
 
-    /// Execute tasks in user-specified order.
-    ///
-    /// For each step: set next_scheduled_method on the target canister,
-    /// boost priority, tick one round, verify, complete DTS.
-    ///
-    /// In relaxed mode (default): sets next_scheduled_method before each
-    /// step so the scheduler always executes what the ordering specifies.
-    ///
-    /// In strict mode: uses predict_next_execution to verify the ordering
-    /// matches the scheduler's natural round-robin. Panics on mismatch.
     pub fn execute_with_ordering(&self, ordering: MessageOrdering) {
         assert!(
             self.flexible_ordering,
@@ -2823,7 +2791,6 @@ impl StateMachine {
         const MAX_TICKS: usize = 100;
         let strict = matches!(ordering.mode, OrderingMode::Strict(_));
 
-        // In strict mode, set initial next_scheduled_method for each canister.
         if let OrderingMode::Strict(initial) = &ordering.mode {
             for (canister_id, method) in initial {
                 self.set_next_scheduled_method(*canister_id, *method);
@@ -2833,13 +2800,12 @@ impl StateMachine {
         for msg in ordering.messages {
             match msg {
                 OrderedMessage::Ingress(target, ref ingress_id) => {
-                    // Do not suppress subnet messages — the canister may call
-                    // the management canister, whose response returns via
-                    // loopback → subnet_queues → drain_subnet_queues.
+                    // Cannot suppress: the canister's code may call IC_00
+                    // (e.g. create_canister), and the response returns via
+                    // loopback → subnet_queues → drain_subnet_queues. If
+                    // suppressed, the response never drains and ingress hangs.
                     self.set_suppress_subnet_messages(false);
-                    // For normal canisters, set Message to prevent system tasks
-                    // from running, and boost priority. Management canister
-                    // ingress needs neither — drain_subnet_queues handles it.
+                    // IC_00 ingress needs no boost — drain_subnet_queues handles it.
                     if target != ic_management_canister_types_private::IC_00 {
                         self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                         self.set_ordering_target(Some(target));
@@ -2874,8 +2840,6 @@ impl StateMachine {
                 }
 
                 OrderedMessage::Heartbeat(canister) | OrderedMessage::Timer(canister) => {
-                    // Suppress subnet messages to prevent implicit consumption
-                    // of management canister responses during system tasks.
                     self.set_suppress_subnet_messages(true);
                     let method = match msg {
                         OrderedMessage::Heartbeat(_) => NextScheduledMethod::Heartbeat,
@@ -2892,11 +2856,8 @@ impl StateMachine {
                 | OrderedMessage::Response { source, target }
                     if target == ic_management_canister_types_private::IC_00 =>
                 {
-                    // Management canister: message goes through loopback
-                    // stream → Demux → subnet_queues. May need one tick
-                    // for induction if the loopback hasn't been processed.
-                    // Do not suppress — drain_subnet_queues must run.
                     self.set_suppress_subnet_messages(false);
+                    // May need a tick for loopback → Demux → subnet_queues.
                     if !self.sender_in_queue(target, source) {
                         self.tick();
                         assert!(
@@ -2905,8 +2866,6 @@ impl StateMachine {
                             source,
                         );
                     }
-                    // No priority boost — drain_subnet_queues runs at
-                    // round start regardless of canister priorities.
                     let count_before = self.message_count(target);
                     self.tick();
                     let count_after = self.message_count(target);
@@ -2918,19 +2877,13 @@ impl StateMachine {
                         count_before,
                         count_after,
                     );
-                    // DTS for install_code lands on the source canister
-                    // (the canister being installed), not IC_00.
-                    // Suppress subnet messages during DTS continuation.
+                    // DTS for install_code targets the source canister, not IC_00.
                     self.set_suppress_subnet_messages(true);
                     self.complete_dts(source, MAX_TICKS);
                 }
 
                 OrderedMessage::Request { source, target }
                 | OrderedMessage::Response { source, target } => {
-                    // Normal canister: message was inducted by the previous
-                    // step's induct_messages_on_same_subnet. Must be in
-                    // target's queue already — no extra tick needed.
-                    // Suppress subnet messages to prevent implicit consumption.
                     self.set_suppress_subnet_messages(true);
                     assert!(
                         self.sender_in_queue(target, source),
@@ -2938,13 +2891,8 @@ impl StateMachine {
                         source,
                         target,
                     );
-                    // Set Message to skip heartbeat/timer. Boost target.
                     self.ensure_next_scheduled(target, NextScheduledMethod::Message, strict);
                     self.set_ordering_target(Some(target));
-                    // One tick: pops the message from input queue (count
-                    // drops immediately). If DTS-sliced, execution continues
-                    // via complete_dts — the message is already out of the
-                    // queue, living as a PausedExecution in the task_queue.
                     let count_before = self.message_count(target);
                     self.tick();
                     let count_after = self.message_count(target);
@@ -2963,10 +2911,6 @@ impl StateMachine {
         }
     }
 
-    /// Predict what the scheduler will execute next for this canister.
-    /// Replicates the round-robin logic in maybe_add_heartbeat_or_global_timer_tasks.
-    /// In strict mode: assert prediction matches expected.
-    /// In relaxed mode: set next_scheduled_method to expected.
     fn ensure_next_scheduled(
         &self,
         canister_id: CanisterId,
@@ -3000,10 +2944,9 @@ impl StateMachine {
             .commit_and_certify(state, CertificationScope::Metadata, None);
     }
 
-    /// Replicates the round-robin logic in scheduler's
-    /// maybe_add_heartbeat_or_global_timer_tasks / is_next_method_chosen.
-    /// WARNING: this depends on scheduler internals and will break if the
-    /// scheduler's task selection logic changes.
+    /// Replicates `SchedulerImpl::is_next_method_chosen` from
+    /// `rs/execution_environment/src/scheduler.rs`. Will break if that
+    /// function's task selection logic changes.
     fn predict_next_execution(&self, canister_id: CanisterId) -> NextScheduledMethod {
         let state = self.get_latest_state();
         let canister = state
@@ -3045,9 +2988,7 @@ impl StateMachine {
         }
     }
 
-    /// Input message count (requests + responses + ingress). Does NOT count
-    /// heartbeats/timers — those live in the separate task_queue, so system
-    /// task execution doesn't change this count.
+    /// Input queue count only (not task_queue), so heartbeat/timer won't affect it.
     fn message_count(&self, target: CanisterId) -> usize {
         let state = self.get_latest_state();
         if target == ic_management_canister_types_private::IC_00 {
@@ -3064,25 +3005,12 @@ impl StateMachine {
         }
     }
 
-    /// Check if `source` is in `target`'s sender schedule.
-    /// For IC_00, checks subnet_queues.
-    /// Returns true if there is any in-flight work related to `canister`:
-    /// output messages, loopback stream messages, subnet queue messages,
-    /// pending input, or DTS executions. Used to distinguish "Processing
-    /// because the system is still working" from "Processing because the
-    /// user needs to drive the next step."
     fn has_in_flight_work(&self, canister: CanisterId) -> bool {
         use ic_replicated_state::canister_state::NextExecution;
-
         let state = self.get_latest_state();
 
-        // Canister has output messages waiting for induction.
         if let Some(c) = state.canister_state(&canister) {
-            if c.system_state.queues().has_output() {
-                return true;
-            }
-            // Self-calls land directly in the canister's own input queue.
-            if c.system_state.queues().has_input() {
+            if c.system_state.queues().has_output() || c.system_state.queues().has_input() {
                 return true;
             }
             match c.next_execution() {
@@ -3091,7 +3019,6 @@ impl StateMachine {
             }
         }
 
-        // Loopback stream has messages (output routed, waiting for Demux).
         let subnet_id = self.get_subnet_id();
         if let Some(stream) = state.streams().get(&subnet_id)
             && !stream.messages().is_empty()
@@ -3099,12 +3026,7 @@ impl StateMachine {
             return true;
         }
 
-        // Subnet queues have pending messages.
-        if state.subnet_queues().has_input() {
-            return true;
-        }
-
-        false
+        state.subnet_queues().has_input()
     }
 
     fn sender_in_queue(&self, target: CanisterId, source: CanisterId) -> bool {

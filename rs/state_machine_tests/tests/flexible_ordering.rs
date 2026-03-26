@@ -23,7 +23,6 @@ fn install_uc(sm: &StateMachine) -> ic_base_types::CanisterId {
     .unwrap()
 }
 
-/// Helper: check that an ingress message completed successfully and return the reply bytes.
 fn get_reply(sm: &StateMachine, msg_id: &ic_types::messages::MessageId) -> Vec<u8> {
     match sm.ingress_status(msg_id) {
         IngressStatus::Known {
@@ -34,11 +33,6 @@ fn get_reply(sm: &StateMachine, msg_id: &ic_types::messages::MessageId) -> Vec<u
     }
 }
 
-// ============================================================================
-// Test 1: Basic ordering — A calls B, B replies.
-//
-// Ordering: Ingress(A) → Request(A→B) → Response(B→A)
-// ============================================================================
 #[test]
 fn test_basic_inter_canister_ordering() {
     let sm = setup();
@@ -74,9 +68,6 @@ fn test_basic_inter_canister_ordering() {
     assert_eq!(get_reply(&sm, &ingress_id), b"hello from B");
 }
 
-// ============================================================================
-// Test 2: Two ingress messages to the same canister — verify ordering.
-// ============================================================================
 #[test]
 fn test_ingress_ordering_on_same_canister() {
     let sm = setup();
@@ -100,7 +91,6 @@ fn test_ingress_ordering_on_same_canister() {
     assert_eq!(get_reply(&sm, &id1), b"ok1");
     assert_eq!(get_reply(&sm, &id2), b"ok2");
 
-    // The last writer wins: global data should be "second".
     let read_payload = wasm().get_global_data().append_and_reply().build();
     let result = sm
         .execute_ingress(canister, "update", read_payload)
@@ -111,9 +101,7 @@ fn test_ingress_ordering_on_same_canister() {
     }
 }
 
-// ============================================================================
-// Test 3: Reversed ingress ordering — verify last-writer-wins.
-// ============================================================================
+/// Reversed ordering — last writer wins.
 #[test]
 fn test_reversed_ingress_ordering() {
     let sm = setup();
@@ -129,7 +117,6 @@ fn test_reversed_ingress_ordering() {
         .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "update", payload_2)
         .unwrap();
 
-    // Execute ingress 2 FIRST, then ingress 1.
     sm.execute_with_ordering(MessageOrdering::new(vec![
         OrderedMessage::Ingress(canister, id2.clone()),
         OrderedMessage::Ingress(canister, id1.clone()),
@@ -138,7 +125,6 @@ fn test_reversed_ingress_ordering() {
     assert_eq!(get_reply(&sm, &id1), b"ok1");
     assert_eq!(get_reply(&sm, &id2), b"ok2");
 
-    // The last writer wins: global data should be "first" (since id1 ran second).
     let read_payload = wasm().get_global_data().append_and_reply().build();
     let result = sm
         .execute_ingress(canister, "update", read_payload)
@@ -149,9 +135,7 @@ fn test_reversed_ingress_ordering() {
     }
 }
 
-// ============================================================================
-// Test 4: Three-canister chain — A → B → C → B → A
-// ============================================================================
+/// A → B → C → B → A chain.
 #[test]
 fn test_three_canister_chain_ordering() {
     let sm = setup();
@@ -203,9 +187,6 @@ fn test_three_canister_chain_ordering() {
     assert_eq!(get_reply(&sm, &ingress_id), b"hello from C via B");
 }
 
-// ============================================================================
-// Test 5: Normal tick() still works (regression test).
-// ============================================================================
 #[test]
 fn test_normal_tick_regression() {
     let sm = setup();
@@ -217,7 +198,6 @@ fn test_normal_tick_regression() {
         .inter_update(canister_b, CallArgs::default().other_side(b_reply))
         .build();
 
-    // Use the normal execute_ingress flow (no ordering).
     let result = sm.execute_ingress(canister_a, "update", a_payload).unwrap();
     match result {
         WasmResult::Reply(data) => assert_eq!(data, b"normal reply"),
@@ -225,22 +205,7 @@ fn test_normal_tick_regression() {
     }
 }
 
-// ============================================================================
-// Test 6: Interleaved independent call chains.
-//
-// Two independent inter-canister call chains (A→B and C→D) are executed
-// in an alternating order. This tests that the ordering mechanism can
-// interleave execution across independent call chains, where each
-// canister has at most one message at any point.
-//
-// Ordering:
-//   Ingress(A)       → chain 1: A calls B
-//   Ingress(C)       → chain 2: C calls D
-//   Request(A → B)   → chain 1: B processes A's request
-//   Request(C → D)   → chain 2: D processes C's request
-//   Response(B → A)  → chain 1: A gets B's response, completes
-//   Response(D → C)  → chain 2: C gets D's response, completes
-// ============================================================================
+/// Two independent chains (A→B, C→D) interleaved.
 #[test]
 fn test_interleaved_inter_canister_calls() {
     let sm = setup();
@@ -249,13 +214,11 @@ fn test_interleaved_inter_canister_calls() {
     let canister_c = install_uc(&sm);
     let canister_d = install_uc(&sm);
 
-    // Chain 1: A calls B.
     let b_reply = wasm().reply_data(b"reply from B").build();
     let a_calls_b = wasm()
         .inter_update(canister_b, CallArgs::default().other_side(b_reply))
         .build();
 
-    // Chain 2: C calls D.
     let d_reply = wasm().reply_data(b"reply from D").build();
     let c_calls_d = wasm()
         .inter_update(canister_d, CallArgs::default().other_side(d_reply))
@@ -278,28 +241,21 @@ fn test_interleaved_inter_canister_calls() {
         )
         .unwrap();
 
-    // Interleave the two chains.
     sm.execute_with_ordering(MessageOrdering::new(vec![
-        // Chain 1: A sends request to B.
         OrderedMessage::Ingress(canister_a, ingress_a.clone()),
-        // Chain 2: C sends request to D.
         OrderedMessage::Ingress(canister_c, ingress_c.clone()),
-        // Chain 1: B processes A's request, sends response.
         OrderedMessage::Request {
             source: canister_a,
             target: canister_b,
         },
-        // Chain 2: D processes C's request, sends response.
         OrderedMessage::Request {
             source: canister_c,
             target: canister_d,
         },
-        // Chain 1: A processes B's response, completes.
         OrderedMessage::Response {
             source: canister_b,
             target: canister_a,
         },
-        // Chain 2: C processes D's response, completes.
         OrderedMessage::Response {
             source: canister_d,
             target: canister_c,
@@ -310,16 +266,7 @@ fn test_interleaved_inter_canister_calls() {
     assert_eq!(get_reply(&sm, &ingress_c), b"reply from D");
 }
 
-// ============================================================================
-// Test 7: Subnet messages (management canister) in the ordering.
-//
-// Demonstrates that management canister operations (install_code) can be
-// interleaved with canister-to-canister messages. Subnet messages are
-// processed in `drain_subnet_queues` at the start of each round, so they
-// execute implicitly when ticked — the Ingress variant handles them
-// correctly because the Demux routes management canister messages to the
-// consensus queue automatically.
-// ============================================================================
+/// install_code interleaved with inter-canister calls.
 #[test]
 fn test_subnet_message_ordering() {
     use ic_management_canister_types_private::{CanisterInstallMode, InstallCodeArgs, Payload};
@@ -328,7 +275,6 @@ fn test_subnet_message_ordering() {
     let canister_a = install_uc(&sm);
     let canister_b = install_uc(&sm);
 
-    // Step 1: A calls B (inter-canister).
     let b_reply = wasm().reply_data(b"before upgrade").build();
     let a_calls_b = wasm()
         .inter_update(canister_b, CallArgs::default().other_side(b_reply))
@@ -343,7 +289,6 @@ fn test_subnet_message_ordering() {
         )
         .unwrap();
 
-    // Step 2: Upgrade canister B with new code that replies differently.
     let new_b_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
     let install_args =
         InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister_b, new_b_wasm, vec![]);
@@ -356,7 +301,6 @@ fn test_subnet_message_ordering() {
         )
         .unwrap();
 
-    // Step 3: A calls B again after upgrade.
     let b_reply_after = wasm().reply_data(b"after upgrade").build();
     let a_calls_b_again = wasm()
         .inter_update(canister_b, CallArgs::default().other_side(b_reply_after))
@@ -372,40 +316,31 @@ fn test_subnet_message_ordering() {
         .unwrap();
 
     sm.execute_with_ordering(MessageOrdering::new(vec![
-        // A calls B (before upgrade).
         OrderedMessage::Ingress(canister_a, ingress_a.clone()),
-        // B processes A's request.
         OrderedMessage::Request {
             source: canister_a,
             target: canister_b,
         },
-        // A processes B's response.
         OrderedMessage::Response {
             source: canister_b,
             target: canister_a,
         },
-        // Upgrade B via management canister.
         OrderedMessage::Ingress(
             ic_management_canister_types_private::IC_00,
             install_ingress.clone(),
         ),
-        // A calls B again (after upgrade).
         OrderedMessage::Ingress(canister_a, ingress_a2.clone()),
-        // B processes A's second request.
         OrderedMessage::Request {
             source: canister_a,
             target: canister_b,
         },
-        // A processes B's second response.
         OrderedMessage::Response {
             source: canister_b,
             target: canister_a,
         },
     ]));
 
-    // First call completed before upgrade.
     assert_eq!(get_reply(&sm, &ingress_a), b"before upgrade");
-    // install_code completed.
     match sm.ingress_status(&install_ingress) {
         IngressStatus::Known {
             state: IngressState::Completed(_),
@@ -413,19 +348,10 @@ fn test_subnet_message_ordering() {
         } => {}
         other => panic!("Expected install_code to complete, got: {:?}", other),
     }
-    // Second call completed after upgrade.
     assert_eq!(get_reply(&sm, &ingress_a2), b"after upgrade");
 }
 
-// ============================================================================
-// Test 8: Canister makes an inter-canister call to the management canister.
-//
-// Canister A uses the UC to call `create_canister` on IC_00. The request
-// goes through the subnet queue, and the response comes back to A.
-// This tests that the ordering mechanism correctly handles:
-// - Request { source: A, target: IC_00 } — checked via subnet_queues
-// - Response { source: IC_00, target: A } — checked via A's input queue
-// ============================================================================
+/// Canister calls create_canister on IC_00 via inter-canister call.
 #[test]
 fn test_canister_calls_management_canister() {
     use ic_universal_canister::{CallInterface, management};
@@ -433,17 +359,11 @@ fn test_canister_calls_management_canister() {
     let sm = setup();
     let canister_a = install_uc(&sm);
 
-    // A calls create_canister on the management canister.
-    // On reply, A forwards the raw reply bytes.
     let on_reply = wasm().message_payload().reply_data_append().reply().build();
     let a_payload = wasm()
         .call(management::create_canister(INITIAL_CYCLES_BALANCE.get() / 2).on_reply(on_reply))
         .build();
 
-    // Management canister calls from a canister go through a multi-round
-    // pipeline: output queue → loopback stream → subnet queue → execution →
-    // response → canister callback. The Ingress variant with extra ticks
-    // handles this automatically — keep ticking until the ingress completes.
     let ingress_a = sm
         .buffer_ingress_as(
             PrincipalId::new_anonymous(),
@@ -453,14 +373,11 @@ fn test_canister_calls_management_canister() {
         )
         .unwrap();
 
-    sm.execute_with_ordering(MessageOrdering::new(vec![
-        // A executes ingress, which triggers the full create_canister
-        // round-trip via the management canister. The extra-tick loop in
-        // execute_ordered_ingress handles the multi-round pipeline.
-        OrderedMessage::Ingress(canister_a, ingress_a.clone()),
-    ]));
+    sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
+        canister_a,
+        ingress_a.clone(),
+    )]));
 
-    // A should have completed with a reply containing the new canister ID.
     let reply = get_reply(&sm, &ingress_a);
     assert!(
         !reply.is_empty(),
@@ -468,15 +385,7 @@ fn test_canister_calls_management_canister() {
     );
 }
 
-// ============================================================================
-// Test 9: Verify that subnet messages are processed one at a time via
-// the ordering mechanism.
-//
-// Two ProvisionalCreateCanisterWithCycles ingress messages are submitted
-// to the management canister via separate ordering steps. Each one
-// should complete in its own set of ticks due to the limited subnet
-// instruction budget.
-// ============================================================================
+/// Two mgmt canister ingress in separate steps — only one completes per step.
 #[test]
 fn test_one_subnet_message_per_round() {
     use ic_management_canister_types_private::{
@@ -510,13 +419,11 @@ fn test_one_subnet_message_per_round() {
         )
         .unwrap();
 
-    // Execute first subnet message.
     sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
         ic_management_canister_types_private::IC_00,
         id1.clone(),
     )]));
 
-    // First should be done, second should not have been touched.
     let is_done = |id: &ic_types::messages::MessageId| {
         matches!(
             sm.ingress_status(id),
@@ -537,7 +444,6 @@ fn test_one_subnet_message_per_round() {
         sm.ingress_status(&id2)
     );
 
-    // Execute second subnet message.
     sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
         ic_management_canister_types_private::IC_00,
         id2.clone(),
@@ -550,11 +456,7 @@ fn test_one_subnet_message_per_round() {
     );
 }
 
-// ============================================================================
-// Test 10: DTS — a slow canister message gets sliced across multiple rounds.
-// The loop does ~3B instructions, exceeding max_instructions_per_slice (2B)
-// but staying under max_instructions_per_message (5B).
-// ============================================================================
+/// DTS: message sliced across multiple rounds.
 #[test]
 fn test_dts_execution_completes() {
     fn slow_wasm() -> Vec<u8> {
@@ -589,8 +491,6 @@ fn test_dts_execution_completes() {
         .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "run", vec![])
         .unwrap();
 
-    // This message will be DTS-sliced. execute_with_ordering should tick
-    // until all slices complete.
     sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
         canister,
         ingress_id.clone(),
@@ -605,9 +505,6 @@ fn test_dts_execution_completes() {
     }
 }
 
-// ============================================================================
-// Test 11: execute_with_ordering panics without with_flexible_ordering.
-// ============================================================================
 #[test]
 fn test_panics_without_flexible_ordering() {
     let sm = StateMachineBuilder::new().build();
@@ -617,12 +514,7 @@ fn test_panics_without_flexible_ordering() {
     assert!(result.is_err(), "Should panic without flexible ordering");
 }
 
-// ============================================================================
-// Test 12: Two calls from A to B, each Request/Response handled separately.
-//
-// Ingress(A,a) → Ingress(A,b) → Request(A→B) → Request(A→B) →
-// Response(B→A) → Response(B→A)
-// ============================================================================
+/// Two calls A→B, each request/response handled separately.
 #[test]
 fn test_two_calls_same_source_separate_steps() {
     let sm = setup();
@@ -680,11 +572,6 @@ fn test_two_calls_same_source_separate_steps() {
     assert_eq!(get_reply(&sm, &ingress_b), b"reply2");
 }
 
-// ============================================================================
-// Test 13: Alternating call-response pattern.
-//
-// Ingress(A) → Request(B) → Response(A) → Ingress(A) → Request(B) → Response(A)
-// ============================================================================
 #[test]
 fn test_alternating_call_response() {
     let sm = setup();
@@ -742,9 +629,6 @@ fn test_alternating_call_response() {
     assert_eq!(get_reply(&sm, &ingress_b), b"second");
 }
 
-// ============================================================================
-// Test 14: Response from uninvolved canister — impossible ordering panics.
-// ============================================================================
 #[test]
 fn test_impossible_ordering_response_from_uninvolved() {
     let sm = setup();
@@ -752,7 +636,6 @@ fn test_impossible_ordering_response_from_uninvolved() {
     let canister_b = install_uc(&sm);
     let canister_c = install_uc(&sm);
 
-    // A calls B, but we claim C sent a response to A (C was never called).
     let b_reply = wasm().reply_data(b"hi").build();
     let a_payload = wasm()
         .inter_update(canister_b, CallArgs::default().other_side(b_reply))
@@ -781,9 +664,6 @@ fn test_impossible_ordering_response_from_uninvolved() {
     );
 }
 
-// ============================================================================
-// Test 15: Request from wrong source — impossible ordering panics.
-// ============================================================================
 #[test]
 fn test_impossible_ordering_wrong_source() {
     let sm = setup();
@@ -804,7 +684,6 @@ fn test_impossible_ordering_wrong_source() {
         )
         .unwrap();
 
-    // A called B, but we claim C sent a request to B.
     let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         sm.execute_with_ordering(MessageOrdering::new(vec![
             OrderedMessage::Ingress(canister_a, ingress_id.clone()),
@@ -817,16 +696,12 @@ fn test_impossible_ordering_wrong_source() {
     assert!(result.is_err(), "Should panic: wrong source canister");
 }
 
-// ============================================================================
-// Test 16: Request to canister with no messages — impossible ordering panics.
-// ============================================================================
 #[test]
 fn test_impossible_ordering_no_messages() {
     let sm = setup();
     let canister_a = install_uc(&sm);
     let canister_b = install_uc(&sm);
 
-    // No ingress submitted — B has no messages from A.
     let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Request {
             source: canister_a,
@@ -836,18 +711,8 @@ fn test_impossible_ordering_no_messages() {
     assert!(result.is_err(), "Should panic: no messages in queue");
 }
 
-// ============================================================================
-// Test 17: Canister with a heartbeat executes request after heartbeat.
-//
-// B has a heartbeat handler. When the ordering says Request(A→B), B's
-// heartbeat task runs first (task queue before input queue), then B
-// processes A's request on the next tick. The loop handles this
-// transparently — it keeps ticking while the message is still in B's queue.
-// ============================================================================
 #[test]
 fn test_request_with_heartbeat() {
-    // WAT canister with a heartbeat that increments memory[0] and an
-    // update method that replies with memory[0..4].
     fn heartbeat_wasm() -> Vec<u8> {
         wat::parse_str(
             r#"(module
@@ -878,7 +743,6 @@ fn test_request_with_heartbeat() {
     )
     .unwrap();
 
-    // A calls B's "read" method via UC's call_simple.
     let a_payload = wasm()
         .call_simple(canister_b, "read", CallArgs::default())
         .build();
@@ -913,17 +777,8 @@ fn test_request_with_heartbeat() {
     );
 }
 
-// ============================================================================
-// Test 18: Canister with a global timer executes timer before request.
-//
-// B arms a timer in canister_init. When the ordering says Request(A→B),
-// B's timer task runs first (task queue before input queue), then B
-// processes A's request on a subsequent tick.
-// ============================================================================
 #[test]
 fn test_request_with_timer() {
-    // WAT canister: init arms a timer at time 0 (fires immediately),
-    // timer handler increments memory[0], update "read" replies with memory[0..4].
     fn timer_wasm() -> Vec<u8> {
         wat::parse_str(
             r#"(module
@@ -989,17 +844,11 @@ fn test_request_with_timer() {
     assert!(counter >= 1, "Timer should have fired, counter={}", counter);
 }
 
-// ============================================================================
-// Test 19: Canister calls itself. The self-call goes through the output
-// queue → induction → input queue pipeline within the same canister.
-// The ingress loop handles this automatically via has_in_flight_work.
-// ============================================================================
 #[test]
 fn test_self_call() {
     let sm = setup();
     let canister = install_uc(&sm);
 
-    // A calls itself: the "other_side" runs on A and replies.
     let self_reply = wasm().reply_data(b"self-reply").build();
     let payload = wasm()
         .inter_update(canister, CallArgs::default().other_side(self_reply))
@@ -1009,7 +858,6 @@ fn test_self_call() {
         .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "update", payload)
         .unwrap();
 
-    // The entire self-call round-trip completes within the Ingress step.
     sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
         canister,
         ingress_id.clone(),
@@ -1018,13 +866,6 @@ fn test_self_call() {
     assert_eq!(get_reply(&sm, &ingress_id), b"self-reply");
 }
 
-// ============================================================================
-// Strict mode tests
-// ============================================================================
-
-// Test 20: Strict mode — basic A calls B, no system tasks.
-// Both canisters start at Message. The scheduler tries Message first,
-// finds input, executes it.
 #[test]
 fn test_strict_basic_ordering() {
     use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
@@ -1067,9 +908,8 @@ fn test_strict_basic_ordering() {
     assert_eq!(get_reply(&sm, &ingress_id), b"strict reply");
 }
 
-// Test 21: Strict mode — heartbeat before request.
-// B starts at Heartbeat. After heartbeat runs, B advances to Message.
-// Then the request executes.
+/// Heartbeat before request (relaxed — strict is impractical because
+/// initialize_inner_round advances round-robin for ALL canisters every round).
 #[test]
 fn test_strict_heartbeat_then_request() {
     fn heartbeat_wasm() -> Vec<u8> {
@@ -1114,64 +954,6 @@ fn test_strict_heartbeat_then_request() {
         )
         .unwrap();
 
-    // A at Message (ingress goes directly), B at Heartbeat.
-    // Round 1: Ingress(A) — A executes ingress, sends request to B.
-    //   A: Message → has_input → execute. After: inc → GlobalTimer.
-    //   B: Heartbeat → has_heartbeat → add heartbeat. After: inc → Message.
-    //     But B not boosted, heartbeat cleaned up at end of round.
-    //     B's next_scheduled_method = Message (it was inc'd).
-    // Round 2: Heartbeat(B) — but B is at Message now, not Heartbeat!
-    //
-    // The round-robin advances for ALL canisters every round, even if
-    // they don't execute. So we need B to start at a position where
-    // after the Ingress round it lands on Heartbeat.
-    //
-    // During Ingress round: initialize_inner_round processes B.
-    // B starts at Heartbeat → has_heartbeat → add (inc → Message).
-    // Heartbeat not executed (A is boosted), cleaned up.
-    // After round: B at Message.
-    //
-    // For Heartbeat(B) to work, B needs to be at Heartbeat.
-    // Set B to GlobalTimer. During Ingress round: B tries GlobalTimer
-    // (no timer → skip, inc → Heartbeat). Heartbeat → has_heartbeat →
-    // add (inc → Message). Cleaned up. After round: B at Message.
-    //
-    // Still ends at Message. The problem: initialize_inner_round always
-    // advances through the round-robin to find an applicable method.
-    // For a canister with only heartbeat, it always lands at Message
-    // after processing (GlobalTimer skip → Heartbeat add → inc to Message).
-    //
-    // The only way to have B at Heartbeat for the Heartbeat step:
-    // set B to Message BEFORE the Ingress round. During the Ingress round:
-    // B tries Message (has input? B has no input yet — ingress is for A,
-    // B's request arrives via induction at end of round). So Message →
-    // no input → skip → inc → GlobalTimer → no timer → skip → inc →
-    // Heartbeat → has_heartbeat → add → inc → Message.
-    // Heartbeat added but not executed. Cleaned up. B at Message again.
-    //
-    // This is circular. Let's just set B to Heartbeat and use relaxed
-    // for the Ingress step (it doesn't affect B), then strict kicks in
-    // for the Heartbeat step... but that's mixing modes.
-    //
-    // Actually: we can set B to Heartbeat. During Ingress round,
-    // B starts at Heartbeat. initialize_inner_round adds heartbeat
-    // (inc → Message). Heartbeat not executed, cleaned up.
-    // But B's next_scheduled_method was already inc'd to Message
-    // by initialize_inner_round. After the round, B is at Message.
-    //
-    // The Heartbeat step prediction: B at Message → skip to Heartbeat?
-    // No: Message (B has input from induction) → applicable → returns Message.
-    // Mismatch with Heartbeat → panic.
-    //
-    // Conclusion: strict mode with heartbeats requires understanding
-    // that initialize_inner_round advances the round-robin for ALL
-    // canisters every round. For this test, just use relaxed mode
-    // for the heartbeat step.
-    //
-    // Let's test something simpler: verify the predict_next_execution
-    // function correctly predicts what will happen.
-
-    // Use relaxed mode — this test already works in relaxed.
     sm.execute_with_ordering(MessageOrdering::new(vec![
         OrderedMessage::Ingress(canister_a, ingress_id.clone()),
         OrderedMessage::Heartbeat(canister_b),
@@ -1194,8 +976,6 @@ fn test_strict_heartbeat_then_request() {
     );
 }
 
-// Test 22: Strict mode — wrong ordering panics.
-// B is set to Message but ordering says Heartbeat.
 #[test]
 fn test_strict_wrong_ordering_panics() {
     use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
@@ -1203,8 +983,6 @@ fn test_strict_wrong_ordering_panics() {
     let sm = setup();
     let canister = install_uc(&sm);
 
-    // UC exports heartbeat but not a global timer. Set to Heartbeat.
-    // Timer(canister) should panic because predict returns Heartbeat.
     let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         sm.execute_with_ordering(MessageOrdering::strict(
             vec![(canister, NextScheduledMethod::Heartbeat)],
