@@ -615,7 +615,12 @@ impl Subnet {
         })
     }
 
-    pub fn add_node(mut self, node: Node) -> Self {
+    pub fn add_node(mut self, mut node: Node) -> Self {
+        // If the subnet is a cloud engine, ensure that all nodes have reward type 4
+        if self.subnet_type == SubnetType::CloudEngine {
+            node = node.with_node_reward_type(NodeRewardType::Type4)
+        }
+
         self.nodes.push(node);
         self
     }

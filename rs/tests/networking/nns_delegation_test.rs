@@ -119,13 +119,7 @@ fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::fast_single_node(SubnetType::Application).with_dkg_interval_length(DKG_LENGTH),
         )
-        .add_subnet(
-            Subnet::new(SubnetType::CloudEngine)
-                .with_unit_delay(Duration::from_millis(200))
-                .with_initial_notary_delay(Duration::from_millis(200))
-                .add_node(Node::new().with_node_reward_type(NodeRewardType::Type4))
-                .with_dkg_interval_length(DKG_LENGTH),
-        )
+        .add_subnet(Subnet::new(SubnetType::CloudEngine).with_dkg_interval_length(DKG_LENGTH))
         .setup_and_start(&env)
         .expect("Should be able to set up IC under test");
 
