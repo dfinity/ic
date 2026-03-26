@@ -133,7 +133,7 @@ impl FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             environment_variables: FlagStatus::Enabled,
-            deterministic_memory_tracker: FlagStatus::Disabled,
+            deterministic_memory_tracker: FlagStatus::Enabled,
         }
     }
 }

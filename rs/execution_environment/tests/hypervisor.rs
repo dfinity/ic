@@ -4304,7 +4304,9 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
 
 #[test]
 fn install_code_calls_canister_init_and_start() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     let wat = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
@@ -4725,7 +4727,9 @@ fn cannot_execute_query_on_stopped_canister() {
 
 #[test]
 fn ic0_trap_preserves_some_cycles() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     let wat = r#"
         (module
             (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
@@ -8195,6 +8199,7 @@ fn yield_triggers_dts_slice_with_many_dirty_pages() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_manual_execution()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_max_dirty_pages_optimization_embedder_config(pages_to_touch - 1)
         .build();
 
