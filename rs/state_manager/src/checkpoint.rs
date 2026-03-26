@@ -348,15 +348,9 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
     let mut pagemaps = Vec::new();
 
     let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
-        // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
-        // created one. In these cases, we also need to wipe the data from the file on disk.
-        // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
-        // when loading a PageMap from a checkpoint. Furthermore, we only want to wipe data from the file on
-        // disk before applying any unflushed deltas of that PageMap. We detect this case by looking at
-        // has_stripped_unflushed_deltas, which will be false at the beginning, but true as soon as we strip unflushed
-        // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
-        // we have not persisted unflushed deltas before, then there are no relevant pages beyond the ones in the
-        // unlushed delta, and we truncate the file on disk to size 0.
+        // If the `PageMap` was created without any backing files and no flushing has
+        // happened since, any on-disk data must be wiped, whether or not there are
+        // unflushed deltas to be applied.
         let truncate = !page_map.is_backed_by_storage();
         let page_map_clone = if !page_map.unflushed_delta_is_empty() {
             Some(page_map.clone())
@@ -366,11 +360,11 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
         if truncate || page_map_clone.is_some() {
             pagemaps.push(PageMapToFlush {
                 page_map_type: entry,
-                truncate: !page_map.is_backed_by_storage(),
+                truncate,
                 page_map: page_map_clone,
             });
         }
-        // We strip empty unflushed deltas to keep has_stripped_unflushed_deltas() correct
+        // Strip empty unflushed deltas. The page map is now backed by storage.
         page_map.strip_unflushed_delta();
     };
 
