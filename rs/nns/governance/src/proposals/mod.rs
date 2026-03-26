@@ -1,10 +1,10 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
     pb::v1::{
-        ApproveGenesisKyc, BlessAlternativeGuestOsVersion, CreateServiceNervousSystem,
-        DeregisterKnownNeuron, GovernanceError, InstallCode, KnownNeuron, LoadCanisterSnapshot,
-        ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
-        RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister,
+        ApproveGenesisKyc, BlessAlternativeGuestOsVersion, CreateCanisterAndInstallCode,
+        CreateServiceNervousSystem, DeregisterKnownNeuron, GovernanceError, InstallCode,
+        KnownNeuron, LoadCanisterSnapshot, ManageNeuron, Motion, NetworkEconomics, ProposalData,
+        RewardNodeProvider, RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister,
         TakeCanisterSnapshot, Topic, UpdateCanisterSettings, Vote, governance_error::ErrorType,
         proposal::Action,
     },
@@ -23,6 +23,7 @@ use std::{collections::HashMap, sync::Arc};
 pub mod add_or_remove_node_provider;
 pub mod bless_alternative_guest_os_version;
 pub mod call_canister;
+pub mod create_canister_and_install_code;
 pub mod create_service_nervous_system;
 pub mod deregister_known_neuron;
 pub mod execute_nns_function;
@@ -35,6 +36,7 @@ pub mod self_describing;
 pub mod stop_or_start_canister;
 pub mod take_canister_snapshot;
 pub mod update_canister_settings;
+pub mod wasm_module;
 
 mod decode_candid_args_to_self_describing_value;
 
@@ -61,6 +63,7 @@ pub(crate) enum ValidProposalAction {
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
     TakeCanisterSnapshot(TakeCanisterSnapshot),
     LoadCanisterSnapshot(LoadCanisterSnapshot),
+    CreateCanisterAndInstallCode(CreateCanisterAndInstallCode),
 }
 
 impl TryFrom<Option<Action>> for ValidProposalAction {
@@ -127,6 +130,9 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::LoadCanisterSnapshot(load_canister_snapshot) => Ok(
                 ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot),
             ),
+            Action::CreateCanisterAndInstallCode(create_canister_and_install_code) => Ok(
+                ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code),
+            ),
 
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
@@ -176,6 +182,9 @@ impl ValidProposalAction {
             }
             ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
                 load_canister_snapshot.valid_topic()?
+            }
+            ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
+                create_canister_and_install_code.valid_topic()?
             }
         };
         Ok(topic)
@@ -237,7 +246,7 @@ impl ValidProposalAction {
                 Ok(SelfDescribingProposalAction::from(*deregister_known_neuron))
             }
             ValidProposalAction::InstallCode(install_code) => {
-                Ok(SelfDescribingProposalAction::from(install_code.clone()))
+                Ok(SelfDescribingProposalAction::from(install_code.abridge()))
             }
             ValidProposalAction::StopOrStartCanister(stop_or_start_canister) => Ok(
                 SelfDescribingProposalAction::from(stop_or_start_canister.clone()),
@@ -268,6 +277,11 @@ impl ValidProposalAction {
             ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => Ok(
                 SelfDescribingProposalAction::from(load_canister_snapshot.clone()),
             ),
+            ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
+                Ok(SelfDescribingProposalAction::from(
+                    create_canister_and_install_code.abridge(),
+                ))
+            }
             ValidProposalAction::RewardNodeProvider(reward_node_provider) => Ok(
                 SelfDescribingProposalAction::from(reward_node_provider.clone()),
             ),
