@@ -29,6 +29,8 @@ pub struct MergeNeuronsEffect {
     transfer_maturity_e8s: u64,
     /// The staked maturity to transfer from source to target.
     transfer_staked_maturity_e8s: u64,
+    /// The bonus base to transfer from source to target.
+    transfer_eight_year_gang_bonus_base_e8s: u64,
     /// The new dissolve state and age of the source neuron.
     source_neuron_dissolve_state_and_age: DissolveStateAndAge,
     /// The new dissolve state and age of the target neuron.
@@ -69,6 +71,7 @@ impl MergeNeuronsEffect {
             dissolve_state_and_age: self.source_neuron_dissolve_state_and_age,
             subtract_maturity: self.transfer_maturity_e8s,
             subtract_staked_maturity: self.transfer_staked_maturity_e8s,
+            subtract_eight_year_gang_bonus_base_e8s: self.transfer_eight_year_gang_bonus_base_e8s,
         }
     }
 
@@ -77,6 +80,7 @@ impl MergeNeuronsEffect {
             dissolve_state_and_age: self.target_neuron_dissolve_state_and_age,
             add_maturity: self.transfer_maturity_e8s,
             add_staked_maturity: self.transfer_staked_maturity_e8s,
+            add_eight_year_gang_bonus_base_e8s: self.transfer_eight_year_gang_bonus_base_e8s,
         }
     }
 }
@@ -87,6 +91,7 @@ pub struct MergeNeuronsSourceEffect {
     dissolve_state_and_age: DissolveStateAndAge,
     subtract_maturity: u64,
     subtract_staked_maturity: u64,
+    subtract_eight_year_gang_bonus_base_e8s: u64,
 }
 
 impl MergeNeuronsSourceEffect {
@@ -96,6 +101,9 @@ impl MergeNeuronsSourceEffect {
             .maturity_e8s_equivalent
             .saturating_sub(self.subtract_maturity);
         source_neuron.subtract_staked_maturity(self.subtract_staked_maturity);
+        source_neuron.eight_year_gang_bonus_base_e8s = source_neuron
+            .eight_year_gang_bonus_base_e8s
+            .saturating_sub(self.subtract_eight_year_gang_bonus_base_e8s);
     }
 }
 
@@ -105,6 +113,7 @@ pub struct MergeNeuronsTargetEffect {
     dissolve_state_and_age: DissolveStateAndAge,
     add_maturity: u64,
     add_staked_maturity: u64,
+    add_eight_year_gang_bonus_base_e8s: u64,
 }
 
 impl MergeNeuronsTargetEffect {
@@ -114,6 +123,9 @@ impl MergeNeuronsTargetEffect {
             .maturity_e8s_equivalent
             .saturating_add(self.add_maturity);
         target_neuron.add_staked_maturity(self.add_staked_maturity);
+        target_neuron.eight_year_gang_bonus_base_e8s = target_neuron
+            .eight_year_gang_bonus_base_e8s
+            .saturating_add(self.add_eight_year_gang_bonus_base_e8s);
     }
 }
 
@@ -254,6 +266,7 @@ pub fn calculate_merge_neurons_effect(
     } else {
         None
     };
+    let transfer_eight_year_gang_bonus_base_e8s = source.eight_year_gang_bonus_base_e8s;
 
     let (_, new_target_age_seconds) = combine_aged_stakes(
         target.cached_stake_e8s,
@@ -296,6 +309,7 @@ pub fn calculate_merge_neurons_effect(
         target_neuron_dissolve_state_and_age,
         transfer_maturity_e8s: source.maturity_e8s_equivalent,
         transfer_staked_maturity_e8s: source.staked_maturity_e8s_equivalent,
+        transfer_eight_year_gang_bonus_base_e8s,
         transaction_fees_e8s,
     })
 }
@@ -391,6 +405,8 @@ struct ValidSourceNeuron {
     maturity_e8s_equivalent: u64,
     /// The staked maturity of the neuron
     staked_maturity_e8s_equivalent: u64,
+    /// The grandfathered dissolve delay bonus base of the neuron
+    eight_year_gang_bonus_base_e8s: u64,
 }
 
 impl ValidSourceNeuron {
@@ -414,6 +430,7 @@ impl ValidSourceNeuron {
             .as_ref()
             .cloned()
             .unwrap_or(0);
+        let eight_year_gang_bonus_base_e8s = neuron.eight_year_gang_bonus_base_e8s;
 
         Ok(Self {
             id: neuron.id(),
@@ -423,6 +440,7 @@ impl ValidSourceNeuron {
             fees_e8s,
             maturity_e8s_equivalent,
             staked_maturity_e8s_equivalent,
+            eight_year_gang_bonus_base_e8s,
         })
     }
 }
@@ -1064,6 +1082,7 @@ mod tests {
             })
             .with_maturity_e8s_equivalent(50 * E8)
             .with_staked_maturity_e8s_equivalent(40 * E8)
+            .with_eight_year_gang_bonus_base_e8s(350 * E8)
             .with_followees(hashmap! {
                 Topic::NeuronManagement as i32 => Followees {
                     followees: vec![NeuronId { id: 101 }],
@@ -1080,6 +1099,7 @@ mod tests {
                 dissolve_delay_seconds: 100 * ONE_DAY_SECONDS,
                 aging_since_timestamp_seconds: NOW_SECONDS - 300 * ONE_DAY_SECONDS,
             })
+            .with_eight_year_gang_bonus_base_e8s(120 * E8)
             .with_followees(hashmap! {
                 Topic::NeuronManagement as i32 => Followees {
                     followees: vec![NeuronId { id: 101 }],
@@ -1117,6 +1137,7 @@ mod tests {
                 },
                 transfer_maturity_e8s: 50 * E8,
                 transfer_staked_maturity_e8s: 40 * E8,
+                transfer_eight_year_gang_bonus_base_e8s: 350 * E8,
                 transaction_fees_e8s: TRANSACTION_FEES_E8S,
             }
         );
@@ -1173,6 +1194,7 @@ mod tests {
                 },
                 transfer_maturity_e8s: 0,
                 transfer_staked_maturity_e8s: 0,
+                transfer_eight_year_gang_bonus_base_e8s: 0,
                 transaction_fees_e8s: TRANSACTION_FEES_E8S,
             }
         );
@@ -1229,6 +1251,7 @@ mod tests {
                 },
                 transfer_maturity_e8s: 0,
                 transfer_staked_maturity_e8s: 0,
+                transfer_eight_year_gang_bonus_base_e8s: 0,
                 transaction_fees_e8s: TRANSACTION_FEES_E8S,
             }
         );
@@ -1293,6 +1316,7 @@ mod tests {
                 },
                 transfer_maturity_e8s: 50 * E8,
                 transfer_staked_maturity_e8s: 40 * E8,
+                transfer_eight_year_gang_bonus_base_e8s: 0,
                 transaction_fees_e8s: TRANSACTION_FEES_E8S,
             }
         );

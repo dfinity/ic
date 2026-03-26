@@ -151,6 +151,9 @@ pub struct Neuron {
     /// `recent_ballots` circular buffer. This is used to optimize insertions
     /// into stable memory, to avoid rewriting all the data.
     pub recent_ballots_next_entry_index: Option<usize>,
+    /// Base stake used for a grandfathered dissolve delay bonus - neurons which had the maximum
+    /// dissolve delay of 8 years before the maximum dissolve delay was reduced to 2 years.
+    pub eight_year_gang_bonus_base_e8s: u64,
     /// The maturity disbursements that are in progress for this neuron.
     pub maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
 }
@@ -557,6 +560,7 @@ impl Neuron {
             let new_disolved_dissolve_state_and_age =
                 dissolve_state_and_age.start_dissolving(now_seconds);
             self.set_dissolve_state_and_age(new_disolved_dissolve_state_and_age);
+            self.eight_year_gang_bonus_base_e8s = 0;
             Ok(())
         } else {
             Err(GovernanceError::new(ErrorType::RequiresNotDissolving))
@@ -1237,6 +1241,7 @@ impl TryFrom<api::Neuron> for Neuron {
         // Step 6: some fields that are not set by the API type.
         let recent_ballots_next_entry_index = None;
         let maturity_disbursements_in_progress = vec![];
+        let eight_year_gang_bonus_base_e8s = 0;
 
         // Step 7: build the neuron.
         Ok(Neuron {
@@ -1255,6 +1260,7 @@ impl TryFrom<api::Neuron> for Neuron {
             transfer,
             maturity_e8s_equivalent,
             staked_maturity_e8s_equivalent,
+            eight_year_gang_bonus_base_e8s,
             auto_stake_maturity,
             not_for_profit,
             joined_community_fund_timestamp_seconds,
@@ -1308,6 +1314,7 @@ impl Neuron {
             // Not used.
             visibility: _,
             recent_ballots_next_entry_index: _,
+            eight_year_gang_bonus_base_e8s: _,
         } = self;
 
         let id = Some(id);
@@ -1430,6 +1437,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             transfer,
             maturity_e8s_equivalent,
             staked_maturity_e8s_equivalent,
+            eight_year_gang_bonus_base_e8s,
             auto_stake_maturity,
             not_for_profit,
             joined_community_fund_timestamp_seconds,
@@ -1462,6 +1470,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             kyc_verified,
             maturity_e8s_equivalent,
             staked_maturity_e8s_equivalent,
+            eight_year_gang_bonus_base_e8s,
             auto_stake_maturity,
             not_for_profit,
             joined_community_fund_timestamp_seconds,
@@ -1523,6 +1532,7 @@ impl From<DecomposedNeuron> for Neuron {
             kyc_verified,
             maturity_e8s_equivalent,
             staked_maturity_e8s_equivalent,
+            eight_year_gang_bonus_base_e8s,
             auto_stake_maturity,
             not_for_profit,
             joined_community_fund_timestamp_seconds,
@@ -1586,6 +1596,7 @@ impl From<DecomposedNeuron> for Neuron {
             transfer,
             maturity_e8s_equivalent,
             staked_maturity_e8s_equivalent,
+            eight_year_gang_bonus_base_e8s,
             auto_stake_maturity,
             not_for_profit,
             joined_community_fund_timestamp_seconds,
@@ -1641,6 +1652,8 @@ pub struct NeuronBuilder {
     known_neuron_data: Option<KnownNeuronData>,
     #[cfg(test)]
     maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
+    #[cfg(test)]
+    eight_year_gang_bonus_base_e8s: u64,
 }
 
 impl NeuronBuilder {
@@ -1685,6 +1698,8 @@ impl NeuronBuilder {
             known_neuron_data: None,
             #[cfg(test)]
             maturity_disbursements_in_progress: Vec::new(),
+            #[cfg(test)]
+            eight_year_gang_bonus_base_e8s: 0,
         }
     }
 
@@ -1849,6 +1864,15 @@ impl NeuronBuilder {
         self
     }
 
+    #[cfg(test)]
+    pub fn with_eight_year_gang_bonus_base_e8s(
+        mut self,
+        eight_year_gang_bonus_base_e8s: u64,
+    ) -> Self {
+        self.eight_year_gang_bonus_base_e8s = eight_year_gang_bonus_base_e8s;
+        self
+    }
+
     pub fn build(self) -> Neuron {
         let NeuronBuilder {
             id,
@@ -1882,6 +1906,8 @@ impl NeuronBuilder {
             voting_power_refreshed_timestamp_seconds,
             #[cfg(test)]
             maturity_disbursements_in_progress,
+            #[cfg(test)]
+            eight_year_gang_bonus_base_e8s,
         } = self;
 
         let auto_stake_maturity = if auto_stake_maturity {
@@ -1913,6 +1939,8 @@ impl NeuronBuilder {
         let known_neuron_data = None;
         #[cfg(not(test))]
         let maturity_disbursements_in_progress = Vec::new();
+        #[cfg(not(test))]
+        let eight_year_gang_bonus_base_e8s = 0;
 
         Neuron {
             id,
@@ -1931,6 +1959,7 @@ impl NeuronBuilder {
             transfer,
             maturity_e8s_equivalent,
             staked_maturity_e8s_equivalent,
+            eight_year_gang_bonus_base_e8s,
             auto_stake_maturity,
             not_for_profit,
             joined_community_fund_timestamp_seconds,

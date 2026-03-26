@@ -154,6 +154,8 @@ pub struct AbridgedNeuron {
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(uint32, optional, tag = "25")]
     pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
+    #[prost(uint64, tag = "26")]
+    pub eight_year_gang_bonus_base_e8s: u64,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
@@ -3072,6 +3074,10 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
+    /// Whether the grandfathered dissolve delay bonus base migration has run for all neurons.
+    /// This prevents the migration from running more than once.
+    #[prost(bool, tag = "31")]
+    pub eight_year_gang_bonus_migration_done: bool,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {

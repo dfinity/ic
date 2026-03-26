@@ -1312,7 +1312,7 @@ impl Governance {
             randomness.seed_rng(rng_seed);
         }
 
-        Self {
+        let mut governance = Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored(),
             env,
@@ -1324,7 +1324,23 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             rate_limiter: new_rate_limiter(),
+        };
+
+        // A one-time data migration.
+        governance.maybe_set_eight_year_gang_bonus_base();
+
+        governance
+    }
+
+    fn maybe_set_eight_year_gang_bonus_base(&mut self) {
+        if self.heap_data.eight_year_gang_bonus_migration_done {
+            return;
         }
+
+        self.neuron_store
+            .set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
+
+        self.heap_data.eight_year_gang_bonus_migration_done = true;
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -2275,12 +2291,17 @@ impl Governance {
         }
 
         // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
-        let (parent_maturity_e8s, parent_staked_maturity_e8s) = self
+        let (
+            parent_maturity_e8s,
+            parent_staked_maturity_e8s,
+            parent_eight_year_gang_bonus_base_e8s,
+        ) = self
             .neuron_store
             .with_neuron(id, |neuron| {
                 (
                     neuron.maturity_e8s_equivalent,
                     neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
+                    neuron.eight_year_gang_bonus_base_e8s,
                 )
             })
             .expect("Expected the parent neuron to exist");
@@ -2291,11 +2312,13 @@ impl Governance {
         let SplitNeuronEffect {
             transfer_maturity_e8s,
             transfer_staked_maturity_e8s,
+            transfer_eight_year_gang_bonus_base_e8s,
         } = calculate_split_neuron_effect(
             split_amount_e8s,
             minted_stake_e8s,
             parent_maturity_e8s,
             parent_staked_maturity_e8s,
+            parent_eight_year_gang_bonus_base_e8s,
         );
 
         // Decrease maturity and staked maturity of the parent neuron.
@@ -2314,6 +2337,9 @@ impl Governance {
             } else {
                 None
             };
+            parent_neuron.eight_year_gang_bonus_base_e8s = parent_neuron
+                .eight_year_gang_bonus_base_e8s
+                .saturating_sub(transfer_eight_year_gang_bonus_base_e8s);
         })
         .expect("Expected the parent neuron to exist");
 
@@ -2337,6 +2363,10 @@ impl Governance {
             } else {
                 None
             };
+            child_neuron.eight_year_gang_bonus_base_e8s = child_neuron
+                .eight_year_gang_bonus_base_e8s
+                .checked_add(transfer_eight_year_gang_bonus_base_e8s)
+                .expect("Grandfathered dissolve delay bonus base overflows");
         })
         .expect("Expected the child neuron to exist");
 
