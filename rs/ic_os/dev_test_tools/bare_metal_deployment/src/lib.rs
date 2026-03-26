@@ -185,11 +185,12 @@ impl Drop for BareMetalIpmiSession {
 
 /// Login info for a baremetal host
 pub struct LoginInfo {
-    host: String,
-    username: String,
-    password: String,
-    mgmt_mac: MacAddr6,
-    addr_prefix: String,
+    pub host: String,
+    pub username: String,
+    pub password: String,
+    pub mgmt_mac: MacAddr6,
+    pub addr_prefix: String,
+    pub chip_id_hex: String,
 }
 
 impl LoginInfo {
@@ -226,6 +227,9 @@ pub fn parse_login_info_from_ini(data: &str) -> Result<LoginInfo> {
     let addr_prefix = host_section
         .get("addr_prefix")
         .context("No addr_prefix in [host] section")?;
+    let chip_id_hex = host_section
+        .get("chip_id_hex")
+        .context("No chip_id_hex in [host] section")?;
 
     Ok(LoginInfo {
         host: host.to_string(),
@@ -233,5 +237,6 @@ pub fn parse_login_info_from_ini(data: &str) -> Result<LoginInfo> {
         password: password.to_string(),
         mgmt_mac,
         addr_prefix: addr_prefix.to_string(),
+        chip_id_hex: chip_id_hex.to_string(),
     })
 }
