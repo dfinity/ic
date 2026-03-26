@@ -132,6 +132,10 @@ impl IcGatewayVm {
         // Emit log events for A and AAAA records
         emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &playnet);
 
+        // If a Prometheus VM exists, create public playnet DNS records for it
+        // so Prometheus/Grafana are reachable from the internet.
+        self.create_prometheus_playnet_dns(env, &playnet, &ic_gateway_fqdn)?;
+
         // Save playnet configuration and start the gateway
         let playnet_url = Url::parse(&format!("https://{ic_gateway_fqdn}"))?;
         env.write_deployed_ic_gateway(&self.universal_vm.name, &playnet_url, &allocated_vm)?;
@@ -298,6 +302,60 @@ docker run --name=ic-gateway -d \
         );
 
         deployed_universal_vm.block_on_bash_script(&bash_script)?;
+        Ok(())
+    }
+
+    /// Creates public playnet DNS records for the Prometheus/Grafana VM,
+    /// so they are reachable from the internet alongside the testnet.
+    fn create_prometheus_playnet_dns(
+        &self,
+        env: &TestEnv,
+        playnet: &Playnet,
+        playnet_domain: &str,
+    ) -> Result<()> {
+        use crate::driver::prometheus_vm::PROMETHEUS_VM_NAME;
+
+        let deployed_prometheus_vm = match env.get_deployed_universal_vm(PROMETHEUS_VM_NAME) {
+            Ok(vm) => vm,
+            Err(_) => return Ok(()), // No Prometheus VM, nothing to do
+        };
+        let prometheus_vm = deployed_prometheus_vm.get_vm()?;
+        let logger = env.logger();
+
+        let mut records = vec![
+            DnsRecord {
+                name: "prometheus".to_string(),
+                record_type: DnsRecordType::AAAA,
+                records: vec![prometheus_vm.ipv6.to_string()],
+            },
+            DnsRecord {
+                name: "grafana".to_string(),
+                record_type: DnsRecordType::AAAA,
+                records: vec![prometheus_vm.ipv6.to_string()],
+            },
+        ];
+        if let Ok(ipv4) = deployed_prometheus_vm.block_on_ipv4() {
+            records.push(DnsRecord {
+                name: "prometheus".to_string(),
+                record_type: DnsRecordType::A,
+                records: vec![ipv4.to_string()],
+            });
+            records.push(DnsRecord {
+                name: "grafana".to_string(),
+                record_type: DnsRecordType::A,
+                records: vec![ipv4.to_string()],
+            });
+        }
+
+        env.create_playnet_dns_records(records);
+        info!(
+            logger,
+            "Prometheus (public) at http://prometheus.{playnet_domain}"
+        );
+        info!(
+            logger,
+            "Grafana (public) at http://grafana.{playnet_domain}"
+        );
         Ok(())
     }
 }

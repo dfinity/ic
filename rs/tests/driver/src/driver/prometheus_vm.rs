@@ -26,15 +26,15 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
-        CreateDnsRecords, CreatePlaynetDnsRecords, HasTopologySnapshot, IcNodeContainer,
-        IcNodeSnapshot, RetrieveIpv4Addr, SshSession, TopologySnapshot, scp_recv_from, scp_send_to,
+        CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
+        SshSession, TopologySnapshot, scp_recv_from, scp_send_to,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
 };
 use crate::util::block_on;
 
-const PROMETHEUS_VM_NAME: &str = "prometheus";
+pub const PROMETHEUS_VM_NAME: &str = "prometheus";
 
 /// The SHA-256 hash of the Prometheus VM disk image.
 /// The latest hash can be retrieved by checking the latest successful test of the farm repo on the master branch:
@@ -349,44 +349,6 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
                         },
                     ]);
                 }
-                // If a playnet exists, also create public DNS records so
-                // Prometheus/Grafana are reachable from the internet.
-                if Playnet::attribute_exists(env) {
-                    let playnet = Playnet::read_attribute(env);
-                    let playnet_domain = &playnet.playnet_cert.playnet;
-                    let mut playnet_records = vec![
-                        DnsRecord {
-                            name: PROMETHEUS_DOMAIN_NAME.to_string(),
-                            record_type: DnsRecordType::AAAA,
-                            records: vec![prometheus_vm.ipv6.to_string()],
-                        },
-                        DnsRecord {
-                            name: GRAFANA_DOMAIN_NAME.to_string(),
-                            record_type: DnsRecordType::AAAA,
-                            records: vec![prometheus_vm.ipv6.to_string()],
-                        },
-                    ];
-                    if self.universal_vm.has_ipv4 {
-                        if let Ok(ipv4) = deployed_prometheus_vm.block_on_ipv4() {
-                            playnet_records.push(DnsRecord {
-                                name: PROMETHEUS_DOMAIN_NAME.to_string(),
-                                record_type: DnsRecordType::A,
-                                records: vec![ipv4.to_string()],
-                            });
-                            playnet_records.push(DnsRecord {
-                                name: GRAFANA_DOMAIN_NAME.to_string(),
-                                record_type: DnsRecordType::A,
-                                records: vec![ipv4.to_string()],
-                            });
-                        }
-                    }
-                    env.create_playnet_dns_records(playnet_records);
-                    info!(
-                        log,
-                        "Created public playnet DNS records for Prometheus/Grafana under {playnet_domain}"
-                    );
-                }
-
                 let prometheus_url = format!("http://{PROMETHEUS_DOMAIN_NAME}.{suffix}");
                 let grafana_url = format!("http://{GRAFANA_DOMAIN_NAME}.{suffix}");
                 let p8s_urls = PrometheusUrls {
@@ -410,18 +372,6 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             &ic_progress_clock_message,
             IC_PROGRESS_CLOCK_CREATED_EVENT_NAME,
         );
-        if Playnet::attribute_exists(env) {
-            let playnet = Playnet::read_attribute(env);
-            let playnet_domain = &playnet.playnet_cert.playnet;
-            info!(
-                log,
-                "Prometheus (public) at http://{PROMETHEUS_DOMAIN_NAME}.{playnet_domain}"
-            );
-            info!(
-                log,
-                "Grafana (public) at http://{GRAFANA_DOMAIN_NAME}.{playnet_domain}"
-            );
-        }
         Ok(())
     }
 }
