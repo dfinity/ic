@@ -893,6 +893,7 @@ fn test_request_with_heartbeat() {
 
     sm.execute_with_ordering(MessageOrdering(vec![
         OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+        OrderedMessage::Heartbeat(canister_b),
         OrderedMessage::Request {
             source: canister_a,
             target: canister_b,
@@ -903,13 +904,11 @@ fn test_request_with_heartbeat() {
         },
     ]));
 
-    // B's heartbeat ran before processing A's request. The reply
-    // contains memory[0..4] which is the heartbeat counter.
     let reply = get_reply(&sm, &ingress_a);
     let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
     assert!(
         counter >= 1,
-        "Heartbeat should have run at least once, counter={}",
+        "Heartbeat should have run, counter={}",
         counter
     );
 }
@@ -974,6 +973,7 @@ fn test_request_with_timer() {
 
     sm.execute_with_ordering(MessageOrdering(vec![
         OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+        OrderedMessage::Timer(canister_b),
         OrderedMessage::Request {
             source: canister_a,
             target: canister_b,
@@ -986,11 +986,7 @@ fn test_request_with_timer() {
 
     let reply = get_reply(&sm, &ingress_a);
     let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
-    assert!(
-        counter >= 1,
-        "Timer should have fired at least once, counter={}",
-        counter
-    );
+    assert!(counter >= 1, "Timer should have fired, counter={}", counter);
 }
 
 // ============================================================================
