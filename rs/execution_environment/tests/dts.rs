@@ -1068,12 +1068,10 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         }
 
         // Make sure the aborted message is completed.
-        if aborted_complete {
-            assert_eq!(
-                ingress_state(env.ingress_status(&long_execution_id)),
-                Some(IngressState::Completed(WasmResult::Reply(vec![42])))
-            );
-        }
+        assert_eq!(
+            ingress_state(env.ingress_status(&long_execution_id)),
+            Some(IngressState::Completed(WasmResult::Reply(vec![42])))
+        );
     }
     fn test_supported<F: Fn(CanisterId) -> (Method, CallArgs)>(f: F) {
         test(true, f);
