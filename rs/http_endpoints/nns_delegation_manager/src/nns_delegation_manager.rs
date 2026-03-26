@@ -196,7 +196,7 @@ async fn load_root_delegation(
         fetching_root_delagation_attempts += 1;
         info!(
             log,
-            "Fetching delegation from the nns subnet. Attempts: {}.",
+            "Fetching delegation from the NNS subnet. Attempts: {}.",
             fetching_root_delagation_attempts
         );
 
@@ -221,7 +221,7 @@ async fn load_root_delegation(
             Err(err) => {
                 warn!(
                     log,
-                    "Fetching delegation from nns subnet failed. Retrying again in {} seconds...\
+                    "Fetching delegation from NNS subnet failed. Retrying again in {} seconds...\
                     Error received: {}",
                     backoff.as_secs(),
                     err
@@ -442,21 +442,25 @@ async fn connect(
         | NodeRewardType::Type3
         | NodeRewardType::Type3dot1
         | NodeRewardType::Type1dot1 => {
-            let (peer_id, node) = get_random_node_from_nns_subnet(registry_client, nns_subnet_id)
-                .map_err(|err| {
-                format!("Could not find a node from the root subnet to talk to: {err}")
-            })?;
+            let (peer_id, endpoint) =
+                get_random_node_from_nns_subnet(registry_client, nns_subnet_id).map_err(|err| {
+                    format!("Could not find a node from the NNS to talk to. Error: {err}")
+                })?;
 
-            connect_to_nns_node(log, peer_id, node, registry_client, tls_config).await
+            connect_to_nns_node(log, peer_id, endpoint, registry_client, tls_config).await
         }
         NodeRewardType::Type4 => {
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
-                .map_err(|err| format!("Could not find an API boundary node to talk to: {err}"))?;
+                .map_err(|err| format!("Could not find an API BN to talk to. Error: {err}"))?;
 
             connect_to_api_bn(log, api_bn_id, domain).await
         }
     }?;
 
+    info!(
+        log,
+        "Establishing HTTP connection. Tls stream: {tls_stream:?}"
+    );
     let (request_sender, connection) =
         hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
 
@@ -474,18 +478,18 @@ async fn connect(
 async fn connect_to_nns_node(
     log: &ReplicaLogger,
     peer_id: NodeId,
-    node: ConnectionEndpoint,
+    endpoint: ConnectionEndpoint,
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Result<TlsStream<TcpStream>, BoxError> {
     let registry_version = registry_client.get_latest_version();
 
-    let ip_addr = node
+    let ip_addr = endpoint
         .ip_addr
         .parse()
         .map_err(|err| format!("Failed to parse the ip addr: {err}"))?;
 
-    let addr = SocketAddr::new(ip_addr, node.port as u16);
+    let addr = SocketAddr::new(ip_addr, endpoint.port as u16);
 
     let tls_client_config = tls_config
         .client_config(peer_id, registry_version)
@@ -494,7 +498,7 @@ async fn connect_to_nns_node(
     info!(log, "Establishing TCP connection to {peer_id} @ {addr}");
     let tcp_stream: TcpStream = TcpStream::connect(addr)
         .await
-        .map_err(|err| format!("Could not connect to node {addr}. {err:?}."))?;
+        .map_err(|err| format!("Could not connect to node {peer_id}. {err:?}."))?;
 
     let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
     let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
@@ -512,7 +516,7 @@ async fn connect_to_nns_node(
             tcp_stream,
         )
         .await
-        .map_err(|err| format!("Could not establish TLS stream to node {addr}. {err:?}."))?;
+        .map_err(|err| format!("Could not establish TLS stream to node {peer_id}. {err:?}."))?;
 
     Ok(tls_stream)
 }
@@ -562,7 +566,7 @@ fn get_node_reward_type(
         // node_reward_type() defaults to `Unspecified` if the field is unset or set to an
         // invalid enum value
         Ok(Some(record)) => Ok(record.node_reward_type()),
-        Ok(None) => Err(format!("Node record for node id {node_id} not found",)),
+        Ok(None) => Err(format!("No node record found for node id {node_id}",)),
         Err(err) => Err(format!(
             "Failed to get node record for node id {node_id}: {err}",
         )),
@@ -579,20 +583,23 @@ fn get_random_node_from_nns_subnet(
         .get_node_ids_on_subnet(nns_subnet_id, registry_client.get_latest_version())
     {
         Ok(Some(nns_nodes)) => Ok(nns_nodes),
-        Ok(None) => Err("No nns nodes found.".to_string()),
-        Err(err) => Err(format!("Failed to get nns nodes from registry: {err}")),
+        Ok(None) => Err("No NNS nodes found.".to_string()),
+        Err(err) => Err(format!("Failed to get NNS nodes from registry: {err}")),
     }?;
 
     // Randomly choose a node from the nns subnet.
     let mut rng = rand::thread_rng();
     let nns_node = nns_nodes.choose(&mut rng).ok_or(format!(
-        "Failed to choose random nns node. NNS node list: {nns_nodes:?}"
+        "Failed to choose a random NNS node. NNS node list: {nns_nodes:?}"
     ))?;
     match registry_client.get_node_record(*nns_node, registry_client.get_latest_version()) {
-        Ok(Some(node)) => Ok((*nns_node, node.http.ok_or("No http endpoint for node")?)),
-        Ok(None) => Err(format!("No node record found for nns node. {nns_node}")),
+        Ok(Some(node)) => Ok((
+            *nns_node,
+            node.http.ok_or("No HTTP endpoint for node {nns_node}")?,
+        )),
+        Ok(None) => Err(format!("No node record found for NNS node {nns_node}")),
         Err(err) => Err(format!(
-            "failed to get node record for nns node {nns_node}. Err: {err}"
+            "Failed to get node record for NNS node {nns_node}. Err: {err}"
         )),
     }
 }
@@ -611,13 +618,13 @@ fn get_random_api_boundary_node(
     // Randomly choose a node from the API boundary nodes.
     let mut rng = rand::thread_rng();
     let api_bn = api_bns.choose(&mut rng).ok_or(format!(
-        "Failed to choose random API boundary node. API BN list: {api_bns:?}"
+        "Failed to choose a random API boundary node. API BN list: {api_bns:?}"
     ))?;
     match registry_client.get_node_record(*api_bn, registry_client.get_latest_version()) {
-        Ok(Some(node)) => Ok((*api_bn, node.domain.ok_or("No domain for node")?)),
-        Ok(None) => Err(format!("No node record found for API BN. {api_bn}")),
+        Ok(Some(node)) => Ok((*api_bn, node.domain.ok_or("No domain for node {api_bn}")?)),
+        Ok(None) => Err(format!("No node record found for API BN {api_bn}")),
         Err(err) => Err(format!(
-            "failed to get node record for nns node {api_bn}. Err: {err}"
+            "Failed to get node record for API BN {api_bn}. Err: {err}"
         )),
     }
 }
