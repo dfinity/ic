@@ -332,20 +332,7 @@ nice if you updated this line in your BUILD.bazel files.
 
 ### How do I lint (i.e. run rustfmt, and clippy)?
 
-Add `--config=lint` to your bazel command.
-
-By default, clippy violations are just warnings, but formatting issues do not
-generate warnings (just like what you’re probably used to from cargo).
-
-Alternatively, if you only want one or the other, do `--config=fmt` or
-`--config=clippy` instead (the latter maybe isn’t so useful, since you get
-warnings by default anyway).
-
-E.g.
-
-```jsx
-bazel build --config=lint //rs/sns/swap:all
-```
+Run `./ci/scripts/rust-lint.sh`.
 
 ### Crate contains data files
 

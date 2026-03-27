@@ -139,7 +139,7 @@ fn persisted_map_is_equivalent_to_the_original() {
             overlay_suffix: "vmemory_0.overlay".into(),
         };
         pagemap
-            .persist_delta(
+            .persist_unflushed_delta(
                 &storage_layout,
                 height,
                 &LsmtConfig {
@@ -150,7 +150,6 @@ fn persisted_map_is_equivalent_to_the_original() {
             .unwrap();
         let persisted_map = PageMap::open(
             Box::new(storage_layout),
-            height,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
         .unwrap();
@@ -233,7 +232,7 @@ fn can_persist_and_load_an_empty_page_map() {
         overlay_suffix: "vmemory_0.overlay".into(),
     };
     original_map
-        .persist_delta(
+        .persist_unflushed_delta(
             &storage_layout,
             Height::new(0),
             &LsmtConfig {
@@ -244,7 +243,6 @@ fn can_persist_and_load_an_empty_page_map() {
         .unwrap();
     let persisted_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .expect("opening an empty page map must succeed");
@@ -263,7 +261,6 @@ fn can_load_a_page_map_without_files() {
 
     let loaded_map = PageMap::open(
         Box::new(base_only_storage_layout(heap_file.to_path_buf())),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .expect("opening an empty page map must succeed");
@@ -465,7 +462,7 @@ fn get_memory_instructions_returns_deltas() {
         overlay_suffix: "vmemory_0.overlay".into(),
     };
     page_map
-        .persist_delta(
+        .persist_unflushed_delta(
             &storage_layout,
             Height::new(0),
             &LsmtConfig {
@@ -477,7 +474,6 @@ fn get_memory_instructions_returns_deltas() {
 
     let mut page_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();
@@ -624,7 +620,6 @@ fn get_memory_instructions_ignores_base_file() {
 
     let page_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();
@@ -690,7 +685,6 @@ fn get_memory_instructions_stops_at_instructions_outside_min_range() {
 
     let page_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(1),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();
@@ -764,7 +758,6 @@ fn get_memory_instructions_extends_mmap_past_min_range() {
 
     let page_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(1),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();

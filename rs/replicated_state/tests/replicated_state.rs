@@ -40,7 +40,7 @@ use ic_types::messages::{
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
 use ic_types::{CountBytes, MemoryAllocation, SnapshotId, Time};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
@@ -1495,9 +1495,10 @@ fn credit_refund() {
     let initial_balance = fixture.canister_balance(&CANISTER_ID).unwrap();
 
     // Refund 10 cycles to `CANISTER_ID`.
-    let credited = fixture
-        .state
-        .credit_refund(&Refund::anonymous(CANISTER_ID, Cycles::new(10)));
+    let credited = fixture.state.credit_refund(
+        &Refund::anonymous(CANISTER_ID, Cycles::new(10)),
+        CanisterCyclesCostSchedule::Normal,
+    );
     assert!(credited);
     assert_eq!(
         Some(initial_balance + Cycles::new(10)),
@@ -1505,9 +1506,10 @@ fn credit_refund() {
     );
 
     // Refunding to a non-existent canister is a no-op.
-    let credited = fixture
-        .state
-        .credit_refund(&Refund::anonymous(OTHER_CANISTER_ID, Cycles::new(11)));
+    let credited = fixture.state.credit_refund(
+        &Refund::anonymous(OTHER_CANISTER_ID, Cycles::new(11)),
+        CanisterCyclesCostSchedule::Normal,
+    );
     assert!(!credited);
     assert_eq!(
         Some(initial_balance + Cycles::new(10)),
