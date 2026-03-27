@@ -737,6 +737,7 @@ fn make_test_snapshot(
 /// Calls `flush_checkpoint_ops_and_page_maps()` and returns the
 /// `PageMapToFlush` operations that were enqueued.
 fn call_flush_checkpoint_ops_and_page_maps(state: &mut ReplicatedState) -> Vec<PageMapToFlush> {
+    #[allow(clippy::disallowed_methods)]
     let (tip_sender, tip_receiver) = crossbeam_channel::unbounded();
 
     flush_checkpoint_ops_and_page_maps(state, Height::new(0), &tip_sender);
@@ -766,16 +767,7 @@ fn test_flush_checkpoint_ops_and_page_maps(
     // causes the underlying `CanisterState` to be cloned (and changes the pointer).
     let canister_before = state.canister_state_arc(&canister_id).unwrap();
 
-    let (tip_sender, tip_receiver) = crossbeam_channel::unbounded();
-    flush_checkpoint_ops_and_page_maps(&mut state, Height::new(0), &tip_sender);
-    let TipRequest::FlushPageMapDelta {
-        height: _,
-        pagemaps,
-        unflushed_checkpoint_ops: _,
-    } = tip_receiver.recv().unwrap()
-    else {
-        panic!("Expected TipRequest::FlushPageMapDelta");
-    };
+    let pagemaps = call_flush_checkpoint_ops_and_page_maps(&mut state);
 
     let canister_after = state.canister_state_arc(&canister_id).unwrap();
     (canister_before, canister_after, pagemaps)
