@@ -3277,9 +3277,9 @@ impl StateManager for StateManagerImpl {
         let prev_height = height.decrement();
         let states = self.states.read();
         let maybe_hash = states
-            .certifications_metadata
+            .certifications
             .get(&prev_height)
-            .map(|x| x.certified_state_hash.clone());
+            .map(|x| x.signed.content.hash.clone().get());
         drop(states);
         let prev_state_hash = if let Some(hash) = maybe_hash {
             hash
@@ -3313,7 +3313,7 @@ impl StateManager for StateManagerImpl {
                 states
                     .certifications_metadata
                     .get(&prev_height)
-                    .expect("The previous state hash should be available after awaiting the hash thread.")
+                    .expect("The previous state hash should be available after awaiting the hash thread.") /* TODO: log critical error and return instead*/
                     .certified_state_hash
                     .clone()
             }
@@ -3597,10 +3597,10 @@ fn spawn_hash_thread(
                             // It's possible that we already computed this state before. We
                             // validate that hashes agree to spot bugs causing non-determinism as
                             // early as possible. 
+                            let hash = &certification_metadata.certified_state_hash;
                             let mut states = states.write();
                             if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
                                 let prev_hash = &prev_metadata.certified_state_hash;
-                                let hash = &certification_metadata.certified_state_hash;
                                 if prev_hash != hash {
                                     if let Err(err) = state_layout.create_diverged_state_marker(height) {
                                         error!(
