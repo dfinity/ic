@@ -10,7 +10,7 @@ use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChu
 use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
     CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
-    canister_state::execution_state::{SandboxMemory, WasmBinary, WasmExecutionMode},
+    canister_state::execution_state::{WasmBinary, WasmExecutionMode},
     page_map::PageMap,
 };
 use ic_replicated_state::{CanisterPriority, CheckpointLoadingMetrics, Memory, SubnetSchedule};
@@ -65,13 +65,6 @@ pub(crate) fn make_unvalidated_checkpoint(
             .with_label_values(&["flush_page_map_deltas_preprocessing"])
             .start_timer();
         flush_checkpoint_ops_and_page_maps(&mut state, height, tip_channel);
-    }
-    {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["strip_page_map_deltas"])
-            .start_timer();
-        strip_page_map_deltas(&mut state, Arc::clone(&fd_factory));
     }
 
     tip_channel
@@ -276,68 +269,6 @@ impl PageMapType {
     }
 }
 
-/// Strips away the deltas from all page maps of the replicated state.
-/// We execute this procedure before making a checkpoint because we
-/// don't want those deltas to be persisted to TIP as we apply deltas
-/// incrementally.
-fn strip_page_map_deltas(
-    state: &mut ReplicatedState,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) {
-    for canister in state.canisters_iter_mut() {
-        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
-        let canister = Arc::make_mut(canister);
-        canister
-            .system_state
-            .wasm_chunk_store
-            .page_map_mut()
-            .strip_all_deltas(Arc::clone(&fd_factory));
-        if let Some(page_map) = canister.system_state.log_memory_store.maybe_page_map_mut() {
-            page_map.strip_all_deltas(Arc::clone(&fd_factory));
-        }
-        if let Some(execution_state) = canister.execution_state.as_mut() {
-            execution_state
-                .wasm_memory
-                .page_map
-                .strip_all_deltas(Arc::clone(&fd_factory));
-            execution_state
-                .stable_memory
-                .page_map
-                .strip_all_deltas(Arc::clone(&fd_factory));
-        }
-        for (_id, canister_snapshot) in canister.canister_snapshots.iter_mut() {
-            let new_snapshot = Arc::make_mut(canister_snapshot);
-            new_snapshot
-                .chunk_store_mut()
-                .page_map_mut()
-                .strip_all_deltas(Arc::clone(&fd_factory));
-            new_snapshot
-                .execution_snapshot_mut()
-                .wasm_memory
-                .page_map
-                .strip_all_deltas(Arc::clone(&fd_factory));
-            new_snapshot
-                .execution_snapshot_mut()
-                .stable_memory
-                .page_map
-                .strip_all_deltas(Arc::clone(&fd_factory));
-        }
-    }
-
-    // Reset the sandbox state to force full synchronization on the next execution
-    // since the page deltas are out of sync now.
-    for canister in state.canisters_iter_mut() {
-        if canister.execution_state.is_none() {
-            continue;
-        }
-        let canister = Arc::make_mut(canister);
-        if let Some(execution_state) = &mut canister.execution_state {
-            execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
-            execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
-        }
-    }
-}
-
 /// Flushes to disk all the canister heap deltas accumulated in memory
 /// during execution from the last flush.
 pub(crate) fn flush_checkpoint_ops_and_page_maps(
@@ -356,7 +287,7 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
     let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
         // If the `PageMap` was created without any backing files and has not been
         // flushed since, any on-disk data must be wiped, whether or not there are
-        // unflushed deltas to be applied.
+        // any unflushed pages to be applied.
         let truncate = !page_map.has_files_in_tip();
         let page_map_clone = if !page_map.unflushed_delta_is_empty() {
             Some(page_map.clone())
@@ -370,7 +301,8 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
                 page_map: page_map_clone,
             });
         }
-        // Strip empty unflushed deltas. The page map is now backed by storage.
+        // Clear the unflushed delta, as it is being flushed to disk. The page map is
+        // now backed by storage.
         page_map.strip_unflushed_delta();
     };
 
