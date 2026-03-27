@@ -248,6 +248,9 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     mthd,
                 });
             }
+            Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
+                panic!("AuthorizedMint/AuthorizedBurn endpoint conversion not yet implemented")
+            }
         }
 
         tx

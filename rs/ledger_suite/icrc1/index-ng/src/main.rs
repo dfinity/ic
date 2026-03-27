@@ -1113,6 +1113,9 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
             } => {
                 // Does not affect the balance
             }
+            Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
+                panic!("AuthorizedMint/AuthorizedBurn not yet supported in index-ng")
+            }
         },
     );
 }
@@ -1156,6 +1159,9 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
         }
         Operation::Approve { from, .. } => vec![from],
         Operation::FeeCollector { .. } => vec![],
+        Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
+            panic!("AuthorizedMint/AuthorizedBurn not yet supported in index-ng")
+        }
     }
 }
 
