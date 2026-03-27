@@ -5008,6 +5008,11 @@ pub enum NnsFunction {
     SetSubnetOperationalLevel = 55,
     /// The proposal requests to split a subnet.
     SplitSubnet = 56,
+    /// Delete a subnet. The subnet record, catch-up package, threshold signing key
+    /// and routing table entries are removed from the registry, and the subnet's
+    /// nodes become unassigned.
+    /// Currently limited to CloudEngine subnets.
+    DeleteSubnet = 57,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5082,6 +5087,7 @@ impl NnsFunction {
             Self::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
+            Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5163,6 +5169,7 @@ impl NnsFunction {
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
+            "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             _ => None,
         }
     }

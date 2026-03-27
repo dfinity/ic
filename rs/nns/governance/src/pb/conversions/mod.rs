@@ -3737,6 +3737,7 @@ impl From<pb::NnsFunction> for api::NnsFunction {
                 api::NnsFunction::SetSubnetOperationalLevel
             }
             pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
+            pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
         }
     }
 }
@@ -3833,6 +3834,7 @@ impl From<api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
             api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
+            api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
         }
     }
 }
