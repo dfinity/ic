@@ -150,18 +150,16 @@ pub(crate) fn check_subnet_invariants(
                     source: None,
                 });
             }
-        } else {
-            if node_records
-                .iter()
-                .any(|node| node.node_reward_type == Some(i32::from(NodeRewardType::Type4)))
-            {
-                return Err(InvariantCheckError {
-                    msg: format!(
-                        "Subnet {subnet_id:} is not a cloud engine subnet but some nodes have reward type 4"
-                    ),
-                    source: None,
-                });
-            }
+        } else if node_records
+            .iter()
+            .any(|node| node.node_reward_type == Some(i32::from(NodeRewardType::Type4)))
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Subnet {subnet_id:} is not a cloud engine subnet but some nodes have reward type 4"
+                ),
+                source: None,
+            });
         }
 
         // SEV-enabled subnets invariants
