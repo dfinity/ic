@@ -258,7 +258,7 @@ impl SchedulerImpl {
         replica_version: &ReplicaVersion,
         chain_key_data: &ChainKeyData,
     ) -> ReplicatedState {
-        let ongoing_long_install_code =
+        let mut ongoing_long_install_code =
             state
                 .canisters_iter()
                 .any(|canister| match canister.next_execution() {
@@ -306,11 +306,10 @@ impl SchedulerImpl {
                 if let ExecuteSubnetMessageResultType::Paused = execute_subnet_message_result_type {
                     // This may happen only if the message execution was paused,
                     // which means that there should not be any instructions
-                    // remaining in the round. Since we do not update
-                    // `ongoing_long_install_code`, we need to break the loop
+                    // remaining in the round. But we still update `ongoing_long_install_code`
                     // here to ensure correctness in the unlikely case of
                     // some instructions still remaining in the round.
-                    break;
+                    ongoing_long_install_code = true;
                 }
             }
         }
