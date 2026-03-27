@@ -2832,16 +2832,25 @@ impl StateMachine {
                 // Request to IC_00: Demux inducts from loopback and
                 // drain_subnet_queues executes in the same tick.
                 OrderedMessage::Request { source, target } if target == IC_00 => {
+                    assert!(
+                        self.next_sender_in_queue(target, source) || self.has_loopback_messages(),
+                        "No message from {} to IC_00 in subnet_queues or loopback",
+                        source,
+                    );
                     self.set_suppress_subnet_messages(false);
                     self.tick();
                     self.set_suppress_subnet_messages(true);
                     self.complete_dts(source, MAX_TICKS);
                 }
 
-                // IC_00 response: in loopback, Demux inducts and canister
-                // executes callback in one tick. No count check — message
-                // is inducted and consumed in the same tick.
+                // IC_00 response: Demux inducts from loopback and canister
+                // executes callback in the same tick.
                 OrderedMessage::Response { source, target } if source == IC_00 => {
+                    assert!(
+                        self.next_sender_in_queue(target, source) || self.has_loopback_messages(),
+                        "No response from IC_00 to {} in queue or loopback",
+                        target,
+                    );
                     self.set_suppress_subnet_messages(true);
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_ordering_target(Some(target));
@@ -2853,8 +2862,8 @@ impl StateMachine {
                 | OrderedMessage::Response { source, target } => {
                     self.set_suppress_subnet_messages(true);
                     assert!(
-                        self.sender_in_queue(target, source),
-                        "Message from {} not in {}'s queue",
+                        self.next_sender_in_queue(target, source),
+                        "Message from {} not next in {}'s queue",
                         source,
                         target,
                     );
@@ -2956,7 +2965,17 @@ impl StateMachine {
         state.subnet_queues().has_input()
     }
 
-    fn sender_in_queue(&self, target: CanisterId, source: CanisterId) -> bool {
+    fn has_loopback_messages(&self) -> bool {
+        let state = self.get_latest_state();
+        let subnet_id = self.get_subnet_id();
+        state
+            .streams()
+            .get(&subnet_id)
+            .is_some_and(|s| !s.messages().is_empty())
+    }
+
+    /// Checks that `source` is the next sender in `target`'s input schedule.
+    fn next_sender_in_queue(&self, target: CanisterId, source: CanisterId) -> bool {
         let state = self.get_latest_state();
         let queues = if target == IC_00 {
             state.subnet_queues()
@@ -2966,11 +2985,8 @@ impl StateMachine {
                 None => return false,
             }
         };
-        queues
-            .local_sender_schedule()
-            .iter()
-            .chain(queues.remote_sender_schedule().iter())
-            .any(|id| *id == source)
+        queues.local_sender_schedule().front() == Some(&source)
+            || queues.remote_sender_schedule().front() == Some(&source)
     }
 
     pub fn mock_canister_http_response(
