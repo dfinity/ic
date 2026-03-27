@@ -7,9 +7,6 @@ use proptest::prelude::{Strategy, any};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 
-// This path is not used in practice. The code should panic if it is.
-pub const FIREWALL_FILE_DEFAULT_PATH: &str = "/This/must/not/be/a/real/path";
-
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(Arbitrary))]
@@ -35,10 +32,11 @@ pub struct ReplicaConfig {
     pub max_simultaneous_connections_per_ip_address: u32,
 }
 
-impl Default for ReplicaConfig {
-    fn default() -> Self {
+impl ReplicaConfig {
+    /// Create a ReplicaConfig from a given path to the config file.
+    pub fn new(config_file: PathBuf) -> Self {
         Self {
-            config_file: PathBuf::from(FIREWALL_FILE_DEFAULT_PATH),
+            config_file,
             file_template: "".to_string(),
             ipv4_tcp_rule_template: "".to_string(),
             ipv6_tcp_rule_template: "".to_string(),
@@ -74,10 +72,11 @@ pub struct BoundaryNodeConfig {
     pub max_simultaneous_connections_per_ip_address: u32,
 }
 
-impl Default for BoundaryNodeConfig {
-    fn default() -> Self {
+impl BoundaryNodeConfig {
+    /// Create a BoundaryNodeConfig from a given path to the config file.
+    pub fn new(config_file: PathBuf) -> Self {
         Self {
-            config_file: PathBuf::from(FIREWALL_FILE_DEFAULT_PATH),
+            config_file,
             file_template: String::default(),
             ipv4_tcp_rule_template: String::default(),
             ipv6_tcp_rule_template: String::default(),
