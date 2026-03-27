@@ -2057,7 +2057,12 @@ impl StateMachine {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
-        // scheduler_cores=1 + tight budgets = one message per round.
+        // One message per round: scheduler_cores=1 gives a single execution
+        // thread. Round budget = max_slice + overhead ensures one full DTS
+        // slice completes. For cheap messages, budget may allow a second —
+        // one-message-per-step is guaranteed by the ordering (each step has
+        // exactly one message in the queue) and verified by count assertions.
+        // Subnet budget is minimal so drain_subnet_queues processes one message.
         if flexible_ordering {
             let sc = &mut subnet_config.scheduler_config;
             sc.scheduler_cores = 1;
@@ -2065,8 +2070,7 @@ impl StateMachine {
                 sc.max_instructions_per_slice,
                 sc.max_instructions_per_install_code_slice,
             );
-            sc.max_instructions_per_round = max_slice + ic_types::NumInstructions::from(1_000)
-                - ic_types::NumInstructions::from(1);
+            sc.max_instructions_per_round = max_slice + sc.instruction_overhead_per_execution;
             sc.subnet_messages_per_round_instruction_limit = ic_types::NumInstructions::from(1_000);
         }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
@@ -2908,6 +2912,18 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
         if let Some(es) = canister.execution_state.as_mut() {
             es.next_scheduled_method = method;
+        }
+        // Drain stale heartbeat/timer tasks from the task_queue. These may
+        // have been added by initialize_inner_round during rounds where this
+        // canister didn't execute.
+        while matches!(
+            canister.system_state.task_queue.front(),
+            Some(
+                ic_replicated_state::ExecutionTask::Heartbeat
+                    | ic_replicated_state::ExecutionTask::GlobalTimer
+            )
+        ) {
+            canister.system_state.task_queue.pop_front();
         }
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);

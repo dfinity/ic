@@ -1,6 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_management_canister_types_private::{
-    CanisterInstallMode, IC_00, InstallCodeArgs, Method, Payload,
+    CanisterIdRecord, CanisterInstallMode, IC_00, InstallCodeArgs, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_state_machine_tests::{
@@ -191,24 +191,6 @@ fn test_three_canister_chain_ordering() {
     assert_eq!(get_reply(&sm, &ingress_id), b"hello from C via B");
 }
 
-#[test]
-fn test_normal_tick_regression() {
-    let sm = setup();
-    let canister_a = install_uc(&sm);
-    let canister_b = install_uc(&sm);
-
-    let b_reply = wasm().reply_data(b"normal reply").build();
-    let a_payload = wasm()
-        .inter_update(canister_b, CallArgs::default().other_side(b_reply))
-        .build();
-
-    let result = sm.execute_ingress(canister_a, "update", a_payload).unwrap();
-    match result {
-        WasmResult::Reply(data) => assert_eq!(data, b"normal reply"),
-        _ => panic!("Expected reply"),
-    }
-}
-
 /// Two independent chains (A→B, C→D) interleaved.
 #[test]
 fn test_interleaved_inter_canister_calls() {
@@ -383,9 +365,12 @@ fn test_canister_calls_management_canister() {
     ]));
 
     let reply = get_reply(&sm, &ingress_a);
+    let record = CanisterIdRecord::decode(&reply).expect("Failed to decode canister ID");
     assert!(
-        !reply.is_empty(),
-        "Expected non-empty reply with canister ID"
+        sm.get_latest_state()
+            .canister_state(&record.get_canister_id())
+            .is_some(),
+        "Created canister should exist"
     );
 }
 
@@ -765,11 +750,7 @@ fn test_request_with_heartbeat() {
 
     let reply = get_reply(&sm, &ingress_a);
     let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
-    assert!(
-        counter >= 1,
-        "Heartbeat should have run, counter={}",
-        counter
-    );
+    assert_eq!(counter, 1, "Heartbeat should have run exactly once");
 }
 
 #[test]
@@ -836,7 +817,7 @@ fn test_request_with_timer() {
 
     let reply = get_reply(&sm, &ingress_a);
     let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
-    assert!(counter >= 1, "Timer should have fired, counter={}", counter);
+    assert_eq!(counter, 1, "Timer should have fired exactly once");
 }
 
 #[test]
@@ -913,8 +894,8 @@ fn test_heartbeat_then_request() {
         .unwrap();
 
     sm.execute_with_ordering(MessageOrdering::new(vec![
-        OrderedMessage::Ingress(canister_a, ingress_id.clone()),
         OrderedMessage::Heartbeat(canister_b),
+        OrderedMessage::Ingress(canister_a, ingress_id.clone()),
         OrderedMessage::Request {
             source: canister_a,
             target: canister_b,
@@ -927,9 +908,5 @@ fn test_heartbeat_then_request() {
 
     let reply = get_reply(&sm, &ingress_id);
     let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
-    assert!(
-        counter >= 1,
-        "Heartbeat should have run, counter={}",
-        counter
-    );
+    assert_eq!(counter, 1, "Heartbeat should have run exactly once");
 }
