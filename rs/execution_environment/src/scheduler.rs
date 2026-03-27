@@ -303,12 +303,12 @@ impl SchedulerImpl {
                 );
                 state = new_state;
 
+                // The following condition is satisfied if the message execution is a paused install code
+                // which is an ongoing long install code.
+                // Conceptually, we want to check if `canister.has_paused_install_code()` (see `SchedulerImpl::advance_long_running_install_code`),
+                // but here we cannot easily access `CanisterState` so we derive if the canister
+                // has a paused install code from the result of the message execution.
                 if let ExecuteSubnetMessageResultType::Paused = execute_subnet_message_result_type {
-                    // This may happen only if the message execution was paused,
-                    // which means that there should not be any instructions
-                    // remaining in the round. But we still update `ongoing_long_install_code`
-                    // here to ensure correctness in the unlikely case of
-                    // some instructions still remaining in the round.
                     ongoing_long_install_code = true;
                 }
             }
