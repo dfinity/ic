@@ -412,24 +412,22 @@ pub struct PageMap {
 
     /// The map containing pages overriding pages from `storage`.
     /// We need these pages to be able to reconstruct the full heap.
-    /// It is reset when `strip_all_deltas()` method is called.
     #[validate_eq(Ignore)]
     page_delta: PageDelta,
 
     /// The map containing deltas accumulated since the last flush to disk.
-    /// It is reset when `strip_unflushed_delta()` or `strip_all_deltas()` methods are called.
+    /// Cleared every time `strip_unflushed_delta()` is called.
     ///
     /// Invariant: unflushed_delta ⊆ page_delta
     #[validate_eq(Ignore)]
     unflushed_delta: PageDelta,
 
     /// The allocator for PageDelta pages.
-    /// It is reset when `strip_all_deltas()` method is called.
     #[validate_eq(Ignore)]
     page_allocator: PageAllocator,
 
     /// Whether this page map is backed by a checkpoint (e.g. via `PageMap::open()`)
-    /// or if any of its pages have already been flushed to disk.
+    /// or any of its pages have already been flushed to disk.
     ///
     /// If `false` (e.g. created with `PageMap::new()` and never flushed), then any
     /// pre-existing checkpoint files must be deleted / truncated before its next
@@ -546,24 +544,6 @@ impl PageMap {
         let page_delta = self.page_allocator.allocate(pages);
         self.apply(page_delta);
         pages.iter().map(|(index, _)| *index).collect()
-    }
-
-    /// Persists the heap delta contained in this page map to the specified
-    /// destination.
-    pub fn persist_delta(
-        &self,
-        storage_layout: &dyn StorageLayout,
-        height: Height,
-        lsmt_config: &LsmtConfig,
-        metrics: &StorageMetrics,
-    ) -> Result<(), PersistenceError> {
-        self.persist_to_overlay(
-            &self.page_delta,
-            storage_layout,
-            height,
-            lsmt_config,
-            metrics,
-        )
     }
 
     /// Persists the unflushed delta contained in this page map to the specified
@@ -785,20 +765,7 @@ impl PageMap {
         self.storage.get_base_memory_instructions()
     }
 
-    /// Removes the page delta from this page map.
-    pub fn strip_all_deltas(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
-        // Ensure that all pages are dropped before we drop the page allocator.
-        // This is not necessary for correctness in the current implementation,
-        // because page destructors are currently trivial. Nevertheless, it is
-        // a good property to maintain.
-        {
-            std::mem::take(&mut self.page_delta);
-            std::mem::take(&mut self.unflushed_delta);
-        }
-        self.page_allocator = PageAllocator::new(Arc::clone(&fd_factory));
-    }
-
-    /// Removes the unflushed delta, after it was flushed to disk.
+    /// Resets the unflushed delta, as it is being flushed to disk.
     pub fn strip_unflushed_delta(&mut self) {
         // Pages have been flushed to disk, so the page map is now consistent with tip.
         self.has_files_in_tip = true;
@@ -839,17 +806,19 @@ impl PageMap {
             .max(self.page_delta.max_page_index().map_or(0, |i| i.get() + 1) as usize)
     }
 
-    /// Switches the checkpoint file of the current page map to the one provided
-    /// by the given page map. Page deltas of both page maps must be empty.
-    pub fn switch_to_checkpoint(&mut self, checkpointed_page_map: &PageMap) {
-        self.storage = checkpointed_page_map.storage.clone();
-        self.has_files_in_tip = checkpointed_page_map.has_files_in_tip;
-        assert!(self.page_delta.is_empty());
+    /// Resets this page map to a clean one backed by `storage_layout`.
+    ///
+    /// Precondition: page deltas must have been flushed to disk.
+    pub fn switch_to_checkpoint(
+        &mut self,
+        storage_layout: Box<dyn StorageLayout + Send + Sync>,
+        fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Result<(), PersistenceError> {
+        // All deltas must have been flushed to disk.
         assert!(self.unflushed_delta.is_empty());
-        assert!(checkpointed_page_map.page_delta.is_empty());
-        assert!(checkpointed_page_map.unflushed_delta.is_empty());
-        assert!(!checkpointed_page_map.is_loaded());
-        // Keep the page allocators of the states disjoint.
+
+        *self = PageMap::open(storage_layout, Arc::clone(fd_factory))?;
+        Ok(())
     }
 
     // Modifies this page map by applying the given page delta to it.
