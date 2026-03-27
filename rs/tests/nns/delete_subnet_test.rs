@@ -41,7 +41,7 @@ fn main() -> Result<()> {
 
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
-        .with_api_boundary_nodes(1)
+        .with_api_boundary_nodes_playnet(1)
         .add_subnet(
             Subnet::fast(SubnetType::System, NUM_NODES)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
