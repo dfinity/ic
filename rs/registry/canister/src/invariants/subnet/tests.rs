@@ -61,7 +61,7 @@ fn only_application_subnets_and_engines_can_be_free_cycles_cost_schedule() {
     );
 
     // Another happy case: CloudEngine
-    make_cloud_engine(&mut snapshot, &mut test_subnet_record);
+    turn_to_compliant_cloud_engine(&mut snapshot, &mut test_subnet_record);
     snapshot.insert(
         make_subnet_record_key(test_subnet_id).into_bytes(),
         test_subnet_record.encode_to_vec(),
@@ -225,7 +225,7 @@ fn cloud_engine_subnets_can_have_subnet_admins() {
         );
 
     // CloudEngine subnets can have subnet admins with free cost schedule.
-    make_cloud_engine(&mut snapshot, &mut test_subnet_record);
+    turn_to_compliant_cloud_engine(&mut snapshot, &mut test_subnet_record);
     test_subnet_record.subnet_admins = vec![PrincipalIdPb::from(user_test_id(1).get())];
     snapshot.insert(
         make_subnet_record_key(test_subnet_id).into_bytes(),
@@ -282,7 +282,7 @@ fn cloud_engine_subnets_must_have_type4_nodes() {
         );
 
     // Happy case: CloudEngine subnet with Type4 nodes.
-    make_cloud_engine(&mut snapshot, &mut test_subnet_record);
+    turn_to_compliant_cloud_engine(&mut snapshot, &mut test_subnet_record);
     snapshot.insert(
         make_subnet_record_key(test_subnet_id).into_bytes(),
         test_subnet_record.encode_to_vec(),
@@ -427,7 +427,10 @@ fn setup_minimal_registry_snapshot_for_check_subnet_invariants(
     (snapshot, test_subnet_record)
 }
 
-fn make_cloud_engine(snapshot: &mut RegistrySnapshot, subnet_record: &mut SubnetRecord) {
+fn turn_to_compliant_cloud_engine(
+    snapshot: &mut RegistrySnapshot,
+    subnet_record: &mut SubnetRecord,
+) {
     subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
     // An invariant ensures the cost schedule is free
     subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
