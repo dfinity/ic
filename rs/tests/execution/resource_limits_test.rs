@@ -51,20 +51,32 @@ pub fn memory_grow_fails_beyond_maximum_state_size(env: TestEnv) {
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
 
+            let stable_grow = |pages: u64| {
+                let canister = canister.clone(); // ensure owned inside async block
+                async move {
+                    canister
+                        .update(
+                            wasm()
+                                .stable64_grow(pages)
+                                .int64_to_blob()
+                                .append_and_reply()
+                                .build(),
+                        )
+                        .await
+                        .unwrap()
+                }
+            };
+
+            // sanity check: `ic0.stable64_grow` works for a small amount of pages
+            // and returns the previous stable memory size in pages (1)
+            let res = stable_grow(42).await;
+            assert_eq!(res, 1_u64.to_le_bytes());
+
             // growing stable memory to `MAXIMUM_CANISTER_STATE_SIZE` should fail
             // because other pieces of the canister state already take some memory usage
             // and thus the total state size after the stable memory growth exceeds `MAXIMUM_CANISTER_STATE_SIZE`
             let maximum_canister_state_size_in_wasm_pages = MAXIMUM_CANISTER_STATE_SIZE >> 16;
-            let res = canister
-                .update(
-                    wasm()
-                        .stable64_grow(maximum_canister_state_size_in_wasm_pages)
-                        .int64_to_blob()
-                        .append_and_reply()
-                        .build(),
-                )
-                .await
-                .unwrap();
+            let res = stable_grow(maximum_canister_state_size_in_wasm_pages).await;
             // `ic0.stable64_grow` should return -1 upon failure
             assert_eq!(res, u64::MAX.to_le_bytes());
         }
