@@ -65,7 +65,8 @@ fn has_operation_timeout(res: &ConstructionSubmitResponse) -> bool {
         return false;
     };
     operations.iter().any(|op| {
-        op.get("status") == Some(&Value::String("FAILED".to_string()))
+        let status = op.get("status").and_then(Value::as_str);
+        status == Some("FAILED")
             && op
                 .get("metadata")
                 .and_then(|m| m.get("response"))
@@ -318,19 +319,23 @@ where
         // Retry if the Rosetta server returned a timeout error for any operation.
         // This can happen when the IC takes longer than the server's internal
         // polling timeout (20s) to process a neuron management request.
-        // The operation may still complete on the IC, so resubmitting the same
-        // signed transaction will eventually return the final result.
-        for _ in 0..12 {
+        // Each construction_submit already blocks up to 20s internally, so no
+        // additional sleep is needed between retries.
+        for _ in 0..3 {
             if !has_operation_timeout(&res) {
                 break;
             }
-            tokio::time::sleep(Duration::from_secs(5)).await;
             res = ros
                 .construction_submit(
                     SignedTransaction::from_str(&signed.signed_transaction).unwrap(),
                 )
                 .await
                 .unwrap()?;
+        }
+        if has_operation_timeout(&res) {
+            panic!(
+                "construction_submit retries exhausted: operation timeout persisted after retries"
+            );
         }
         res
     };
