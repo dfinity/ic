@@ -110,21 +110,20 @@ impl HasCanisterId for SignedIngressContent {
 
 impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
-        //TODO(CON-1687): Avoid cloning fields when hashing
         MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
-            self.canister_id.get().into_vec(),
+            self.canister_id.as_ref(),
             &self.method_name,
-            self.arg.clone(),
+            &self.arg,
             self.ingress_expiry,
-            self.sender.get().into_vec(),
+            self.sender.get_ref().as_slice(),
             self.nonce.as_deref(),
             self.sender_info
                 .as_ref()
                 .map(|sender_info| RawSignedSenderInfoSlices {
-                    info: sender_info.info.clone(),
-                    signer: sender_info.signer.get().into_vec(),
-                    sig: sender_info.sig.clone(),
+                    info: &sender_info.info,
+                    signer: sender_info.signer.as_ref(),
+                    sig: &sender_info.sig,
                 }),
         ))
     }
