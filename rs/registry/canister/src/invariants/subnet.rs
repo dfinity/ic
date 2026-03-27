@@ -73,13 +73,11 @@ pub(crate) fn check_subnet_invariants(
         let node_records = subnet_members
             .iter()
             .map(|&node_id| {
-                get_node_record_from_snapshot(node_id, snapshot)
-                    .unwrap()
-                    .unwrap_or_else(|| {
-                        panic!("Node {node_id} does not exist in Subnet {subnet_id}")
-                    })
+                get_node_record_from_snapshot(node_id, snapshot).map(|opt| {
+                    opt.unwrap_or_else(|| panic!("Node {node_id} does not exist in the registry"))
+                })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
         // Each node appears at most once in a subnet membership
         let num_nodes = subnet_record.membership.len();
