@@ -2395,6 +2395,8 @@ fn update_call_via_call_request(pic: &PocketIc) -> Response {
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
 
     let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
+    // because `call_request` does not include any signature
+    // the sender `Principal::from_slice(&[42; 29])` is being impersonated
     let (resp, _msg_id) = call_request(
         pic,
         Principal::from_slice(&[42; 29]),
