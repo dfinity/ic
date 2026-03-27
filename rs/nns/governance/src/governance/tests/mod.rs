@@ -1792,10 +1792,10 @@ fn test_maybe_set_eight_year_gang_bonus_base() {
     // The flag should still be true.
     assert!(governance.heap_data.eight_year_gang_bonus_migration_done);
 
-    // The bonus should remain unchanged (150 * E8), not updated to 550 * E8.
+    // The bonus should remain unchanged (140 * E8), not updated to 540 * E8.
     let bonus = governance
         .neuron_store
         .with_neuron(&NeuronId { id: 1 }, |n| n.eight_year_gang_bonus_base_e8s)
         .unwrap();
-    assert_eq!(bonus, 150 * E8);
+    assert_eq!(bonus, 140 * E8);
 }
