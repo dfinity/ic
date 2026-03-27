@@ -3,7 +3,6 @@ use ic_management_canister_types_private::{
     CanisterInstallMode, IC_00, InstallCodeArgs, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs,
 };
-use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_state_machine_tests::{
     MessageOrdering, OrderedMessage, StateMachine, StateMachineBuilder, WasmResult,
 };
@@ -480,13 +479,8 @@ fn test_dts_execution_completes() {
 
     let sm = setup();
     let canister = sm.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
-    sm.install_wasm_in_mode(
-        canister,
-        ic_management_canister_types_private::CanisterInstallMode::Install,
-        slow_wasm(),
-        vec![],
-    )
-    .unwrap();
+    sm.install_wasm_in_mode(canister, CanisterInstallMode::Install, slow_wasm(), vec![])
+        .unwrap();
 
     let ingress_id = sm
         .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "run", vec![])
@@ -738,7 +732,7 @@ fn test_request_with_heartbeat() {
     let canister_b = sm.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
     sm.install_wasm_in_mode(
         canister_b,
-        ic_management_canister_types_private::CanisterInstallMode::Install,
+        CanisterInstallMode::Install,
         heartbeat_wasm(),
         vec![],
     )
@@ -809,7 +803,7 @@ fn test_request_with_timer() {
     let canister_b = sm.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
     sm.install_wasm_in_mode(
         canister_b,
-        ic_management_canister_types_private::CanisterInstallMode::Install,
+        CanisterInstallMode::Install,
         timer_wasm(),
         vec![],
     )
@@ -875,49 +869,7 @@ fn test_self_call() {
 }
 
 #[test]
-fn test_strict_basic_ordering() {
-    let sm = setup();
-    let canister_a = install_uc(&sm);
-    let canister_b = install_uc(&sm);
-
-    let b_reply = wasm().reply_data(b"strict reply").build();
-    let a_payload = wasm()
-        .inter_update(canister_b, CallArgs::default().other_side(b_reply))
-        .build();
-    let ingress_id = sm
-        .buffer_ingress_as(
-            PrincipalId::new_anonymous(),
-            canister_a,
-            "update",
-            a_payload,
-        )
-        .unwrap();
-
-    sm.execute_with_ordering(MessageOrdering::strict(
-        vec![
-            (canister_a, NextScheduledMethod::Message),
-            (canister_b, NextScheduledMethod::Message),
-        ],
-        vec![
-            OrderedMessage::Ingress(canister_a, ingress_id.clone()),
-            OrderedMessage::Request {
-                source: canister_a,
-                target: canister_b,
-            },
-            OrderedMessage::Response {
-                source: canister_b,
-                target: canister_a,
-            },
-        ],
-    ));
-
-    assert_eq!(get_reply(&sm, &ingress_id), b"strict reply");
-}
-
-/// Heartbeat before request (relaxed — strict is impractical because
-/// initialize_inner_round advances round-robin for ALL canisters every round).
-#[test]
-fn test_strict_heartbeat_then_request() {
+fn test_heartbeat_then_request() {
     fn heartbeat_wasm() -> Vec<u8> {
         wat::parse_str(
             r#"(module
@@ -942,7 +894,7 @@ fn test_strict_heartbeat_then_request() {
     let canister_b = sm.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
     sm.install_wasm_in_mode(
         canister_b,
-        ic_management_canister_types_private::CanisterInstallMode::Install,
+        CanisterInstallMode::Install,
         heartbeat_wasm(),
         vec![],
     )
@@ -979,22 +931,5 @@ fn test_strict_heartbeat_then_request() {
         counter >= 1,
         "Heartbeat should have run, counter={}",
         counter
-    );
-}
-
-#[test]
-fn test_strict_wrong_ordering_panics() {
-    let sm = setup();
-    let canister = install_uc(&sm);
-
-    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        sm.execute_with_ordering(MessageOrdering::strict(
-            vec![(canister, NextScheduledMethod::Heartbeat)],
-            vec![OrderedMessage::Timer(canister)],
-        ));
-    }));
-    assert!(
-        result.is_err(),
-        "Should panic: prediction is Heartbeat, not GlobalTimer"
     );
 }

@@ -254,35 +254,13 @@ pub enum OrderedMessage {
     Timer(CanisterId),
 }
 
-pub enum OrderingMode {
-    /// Forces next_scheduled_method before each step.
-    Relaxed,
-    /// Asserts the ordering matches the scheduler's natural round-robin.
-    /// The vec sets each canister's initial next_scheduled_method.
-    Strict(Vec<(CanisterId, NextScheduledMethod)>),
-}
-
 pub struct MessageOrdering {
     pub messages: Vec<OrderedMessage>,
-    pub mode: OrderingMode,
 }
 
 impl MessageOrdering {
     pub fn new(messages: Vec<OrderedMessage>) -> Self {
-        Self {
-            messages,
-            mode: OrderingMode::Relaxed,
-        }
-    }
-
-    pub fn strict(
-        initial: Vec<(CanisterId, NextScheduledMethod)>,
-        messages: Vec<OrderedMessage>,
-    ) -> Self {
-        Self {
-            messages,
-            mode: OrderingMode::Strict(initial),
-        }
+        Self { messages }
     }
 }
 
@@ -2790,13 +2768,6 @@ impl StateMachine {
             "call with_flexible_ordering() first"
         );
         const MAX_TICKS: usize = 100;
-        let strict = matches!(ordering.mode, OrderingMode::Strict(_));
-
-        if let OrderingMode::Strict(initial) = &ordering.mode {
-            for (canister_id, method) in initial {
-                self.set_next_scheduled_method(*canister_id, *method);
-            }
-        }
 
         for msg in ordering.messages {
             match msg {
@@ -2852,7 +2823,7 @@ impl StateMachine {
                         OrderedMessage::Timer(_) => NextScheduledMethod::GlobalTimer,
                         _ => unreachable!(),
                     };
-                    self.ensure_next_scheduled(canister, method, strict);
+                    self.set_next_scheduled_method(canister, method);
                     self.set_ordering_target(Some(canister));
                     self.tick();
                     self.complete_dts(canister, MAX_TICKS);
@@ -2872,7 +2843,7 @@ impl StateMachine {
                 // is inducted and consumed in the same tick.
                 OrderedMessage::Response { source, target } if source == IC_00 => {
                     self.set_suppress_subnet_messages(true);
-                    self.ensure_next_scheduled(target, NextScheduledMethod::Message, strict);
+                    self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_ordering_target(Some(target));
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
@@ -2887,7 +2858,7 @@ impl StateMachine {
                         source,
                         target,
                     );
-                    self.ensure_next_scheduled(target, NextScheduledMethod::Message, strict);
+                    self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_ordering_target(Some(target));
                     let count_before = self.message_count(target);
                     self.tick();
@@ -2916,27 +2887,6 @@ impl StateMachine {
         }
     }
 
-    fn ensure_next_scheduled(
-        &self,
-        canister_id: CanisterId,
-        expected: NextScheduledMethod,
-        strict: bool,
-    ) {
-        if strict {
-            let predicted = self.predict_next_execution(canister_id);
-            assert!(
-                predicted == expected,
-                "Canister {} will execute {:?}, not {:?}. \
-                 Reorder steps to match the round-robin.",
-                canister_id,
-                predicted,
-                expected,
-            );
-        } else {
-            self.set_next_scheduled_method(canister_id, expected);
-        }
-    }
-
     fn set_next_scheduled_method(&self, canister_id: CanisterId, method: NextScheduledMethod) {
         let (_, mut state) = self.state_manager.take_tip();
         let canister = state
@@ -2947,32 +2897,6 @@ impl StateMachine {
         }
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
-    }
-
-    /// Replicates `SchedulerImpl::is_next_method_chosen` from
-    /// `rs/execution_environment/src/scheduler.rs`. Will break if that
-    /// function's task selection logic changes.
-    fn predict_next_execution(&self, canister_id: CanisterId) -> NextScheduledMethod {
-        let state = self.get_latest_state();
-        let canister = state
-            .canister_state(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
-        let has_heartbeat = canister.exports_heartbeat_method();
-        let has_timer = canister.exports_global_timer_method()
-            && canister
-                .system_state
-                .global_timer
-                .has_reached_deadline(state.time());
-        let mut method = canister.get_next_scheduled_method();
-        for _ in 0..3 {
-            match method {
-                NextScheduledMethod::Heartbeat if has_heartbeat => return method,
-                NextScheduledMethod::GlobalTimer if has_timer => return method,
-                NextScheduledMethod::Message if canister.has_input() => return method,
-                _ => method.inc(),
-            }
-        }
-        NextScheduledMethod::Message
     }
 
     fn complete_dts(&self, canister_id: CanisterId, max_ticks: usize) {
