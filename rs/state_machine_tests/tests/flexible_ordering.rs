@@ -707,6 +707,7 @@ fn test_request_with_heartbeat() {
                 (memory 1)
                 (export "canister_heartbeat" (func $heartbeat))
                 (export "canister_update read" (func $read))
+                (export "canister_query read_query" (func $read))
             )"#,
         )
         .unwrap()
@@ -722,6 +723,9 @@ fn test_request_with_heartbeat() {
         vec![],
     )
     .unwrap();
+
+    let baseline = sm.query(canister_b, "read_query", vec![]).unwrap();
+    let baseline = u32::from_le_bytes(baseline.bytes()[..4].try_into().unwrap());
 
     let a_payload = wasm()
         .call_simple(canister_b, "read", CallArgs::default())
@@ -750,7 +754,13 @@ fn test_request_with_heartbeat() {
 
     let reply = get_reply(&sm, &ingress_a);
     let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
-    assert_eq!(counter, 1, "Heartbeat should have run exactly once");
+    assert_eq!(
+        counter - baseline,
+        1,
+        "Heartbeat should have run exactly once during ordering (baseline={}, after={})",
+        baseline,
+        counter
+    );
 }
 
 #[test]
@@ -774,6 +784,7 @@ fn test_request_with_timer() {
                 (export "canister_init" (func $init))
                 (export "canister_global_timer" (func $timer))
                 (export "canister_update read" (func $read))
+                (export "canister_query read_query" (func $read))
             )"#,
         )
         .unwrap()
@@ -789,6 +800,22 @@ fn test_request_with_timer() {
         vec![],
     )
     .unwrap();
+
+    // Read baseline counter from wasm memory (heartbeat may fire during install).
+    let baseline = {
+        let state = sm.get_latest_state();
+        let es = state
+            .canister_state(&canister_b)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap();
+        let page = es
+            .wasm_memory
+            .page_map
+            .get_page(ic_replicated_state::PageIndex::new(0));
+        u32::from_le_bytes(page[..4].try_into().unwrap())
+    };
 
     let a_payload = wasm()
         .call_simple(canister_b, "read", CallArgs::default())
@@ -817,7 +844,13 @@ fn test_request_with_timer() {
 
     let reply = get_reply(&sm, &ingress_a);
     let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
-    assert_eq!(counter, 1, "Timer should have fired exactly once");
+    assert_eq!(
+        counter - baseline,
+        1,
+        "Timer should have fired exactly once during ordering (baseline={}, after={})",
+        baseline,
+        counter
+    );
 }
 
 #[test]
@@ -865,6 +898,7 @@ fn test_heartbeat_then_request() {
                 (memory 1)
                 (export "canister_heartbeat" (func $heartbeat))
                 (export "canister_update read" (func $read))
+                (export "canister_query read_query" (func $read))
             )"#,
         )
         .unwrap()
@@ -880,6 +914,9 @@ fn test_heartbeat_then_request() {
         vec![],
     )
     .unwrap();
+
+    let baseline = sm.query(canister_b, "read_query", vec![]).unwrap();
+    let baseline = u32::from_le_bytes(baseline.bytes()[..4].try_into().unwrap());
 
     let a_payload = wasm()
         .call_simple(canister_b, "read", CallArgs::default())
@@ -908,5 +945,11 @@ fn test_heartbeat_then_request() {
 
     let reply = get_reply(&sm, &ingress_id);
     let counter = u32::from_le_bytes(reply[..4].try_into().unwrap());
-    assert_eq!(counter, 1, "Heartbeat should have run exactly once");
+    assert_eq!(
+        counter - baseline,
+        1,
+        "Heartbeat should have run exactly once during ordering (baseline={}, after={})",
+        baseline,
+        counter
+    );
 }

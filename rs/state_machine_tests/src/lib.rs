@@ -2057,11 +2057,15 @@ impl StateMachine {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
-        // One message per round: scheduler_cores=1 gives a single execution
-        // thread. Round budget = max_slice + overhead ensures one full DTS
-        // slice completes. For cheap messages, budget may allow a second —
-        // one-message-per-step is guaranteed by the ordering (each step has
-        // exactly one message in the queue) and verified by count assertions.
+        // One canister, one message per round: scheduler_cores=1 puts all
+        // canisters on a single execution core. The scheduler computes the
+        // canister budget as max_instructions_per_round - max_slice + 1
+        // (scheduler.rs line 1308). Setting max_instructions_per_round =
+        // max_slice + overhead gives a canister budget of overhead + 1.
+        // After one message + overhead charge, the budget is exhausted:
+        // both the per-canister loop (line 1796) and the per-canister
+        // check (line 1774) stop, preventing a second message or canister.
+        // DTS still works: per-slice limit (InstructionLimits) is independent.
         // Subnet budget is minimal so drain_subnet_queues processes one message.
         if flexible_ordering {
             let sc = &mut subnet_config.scheduler_config;
