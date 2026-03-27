@@ -2898,16 +2898,6 @@ impl StateMachine {
         if let Some(es) = canister.execution_state.as_mut() {
             es.next_scheduled_method = method;
         }
-        // Drain stale heartbeat/timer tasks added by initialize_inner_round.
-        while matches!(
-            canister.system_state.task_queue.front(),
-            Some(
-                ic_replicated_state::ExecutionTask::Heartbeat
-                    | ic_replicated_state::ExecutionTask::GlobalTimer
-            )
-        ) {
-            canister.system_state.task_queue.pop_front();
-        }
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
     }
