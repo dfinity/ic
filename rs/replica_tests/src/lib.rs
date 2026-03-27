@@ -594,6 +594,7 @@ impl LocalTestRuntime {
                 user_id: user_anonymous_id(),
                 ingress_expiry: 0,
                 nonce: None,
+                sender_info: None,
             },
             receiver: canister_id,
             method_name: method_name.into(),
