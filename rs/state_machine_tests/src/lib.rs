@@ -2053,18 +2053,18 @@ impl StateMachine {
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
         // One canister, one message per round. Canister budget =
-        // max_instructions_per_round - max_slice + 1 = overhead + 1.
+        // max_instructions_per_round - max_slice + 1 = 1.
         // Exhausted after one message + overhead, blocking a second.
         // DTS per-slice limit is independent of round budget.
         if flexible_ordering {
             let sc = &mut subnet_config.scheduler_config;
             sc.scheduler_cores = 1;
-            let max_slice = std::cmp::max(
-                sc.max_instructions_per_slice,
-                sc.max_instructions_per_install_code_slice,
-            );
-            sc.max_instructions_per_round = max_slice + sc.instruction_overhead_per_execution;
-            sc.subnet_messages_per_round_instruction_limit = ic_types::NumInstructions::from(1_000);
+            // Scheduler computes canister budget as:
+            //   max_instructions_per_round - max(slice, install_code_slice) + 1
+            // Cap install_code_slice so it doesn't inflate the subtraction.
+            sc.max_instructions_per_install_code_slice = sc.max_instructions_per_slice;
+            sc.max_instructions_per_round = sc.max_instructions_per_slice;
+            sc.subnet_messages_per_round_instruction_limit = ic_types::NumInstructions::from(1);
         }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
