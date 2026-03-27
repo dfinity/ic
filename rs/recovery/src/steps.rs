@@ -927,7 +927,7 @@ impl Step for UploadCUPAndTarStep {
             self.key_file.clone(),
         );
 
-        if !ssh_helper.can_connect() {
+        if ssh_helper.wait_for_access().is_err() {
             info!(
                 self.logger,
                 "No admin access to: {}, skipping upload...", self.node_ip
