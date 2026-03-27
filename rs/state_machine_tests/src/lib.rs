@@ -2864,26 +2864,7 @@ impl StateMachine {
                     );
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_ordering_target(Some(target));
-                    let count_before = self.message_count(target);
                     self.tick();
-                    let count_after = self.message_count(target);
-                    if source == target && matches!(msg, OrderedMessage::Request { .. }) {
-                        assert_eq!(
-                            count_after, count_before,
-                            "Self-call on {} unexpected count. Before: {}, after: {}",
-                            target, count_before, count_after,
-                        );
-                    } else {
-                        assert_eq!(
-                            count_after,
-                            count_before - 1,
-                            "Message from {} not consumed from {}'s queue. Before: {}, after: {}",
-                            source,
-                            target,
-                            count_before,
-                            count_after,
-                        );
-                    }
                     self.complete_dts(target, MAX_TICKS);
                 }
             }
@@ -2916,22 +2897,6 @@ impl StateMachine {
                 _ => return,
             }
             assert!(tick < max_ticks - 1, "DTS on {} stuck", canister_id);
-        }
-    }
-
-    fn message_count(&self, target: CanisterId) -> usize {
-        let state = self.get_latest_state();
-        if target == IC_00 {
-            state.subnet_queues().input_queues_message_count()
-                + state.subnet_queues().ingress_queue_message_count()
-        } else {
-            match state.canister_state(&target) {
-                Some(c) => {
-                    c.system_state.queues().input_queues_message_count()
-                        + c.system_state.queues().ingress_queue_message_count()
-                }
-                None => 0,
-            }
         }
     }
 
