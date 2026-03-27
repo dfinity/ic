@@ -224,7 +224,7 @@ impl From<MessageIdError> for ProxyDecodeError {
 mod tests {
     use super::super::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawHttpRequestVal,
-        SenderInfo, SignedIngress,
+        RawSignedSenderInfo, SignedIngress,
     };
     use super::*;
     use crate::messages::{Delegation, SignedDelegation};
@@ -436,7 +436,7 @@ mod tests {
         expiry_time: Time,
         sender_sig: Vec<u8>,
         sender_pubkey: Vec<u8>,
-        sender_info: Option<SenderInfo>,
+        sender_info: Option<RawSignedSenderInfo>,
     ) -> SignedIngress {
         let update = HttpCanisterUpdate {
             canister_id: Blob(receiver.get().into_vec()),
@@ -538,7 +538,7 @@ mod tests {
             expiry_time,
             sender_sig,
             sender_pubkey,
-            Some(SenderInfo {
+            Some(RawSignedSenderInfo {
                 info: Blob(vec![1, 2, 3]),
                 signer: Blob(vec![42; 8]),
                 sig: Blob(vec![4, 5, 6]),
@@ -584,7 +584,7 @@ mod tests {
             Time::from_nanos_since_unix_epoch(123_456_789),
             vec![3; 32],
             vec![6; 32],
-            Some(SenderInfo {
+            Some(RawSignedSenderInfo {
                 info: Blob(vec![1, 2, 3]),
                 signer: Blob(vec![42; 8]),
                 sig: Blob(vec![4, 5, 6]),
