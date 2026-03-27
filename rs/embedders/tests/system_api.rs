@@ -32,7 +32,7 @@ use ic_types::{
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use maplit::btreemap;
 use more_asserts::assert_le;
 use std::{
@@ -1720,8 +1720,8 @@ fn push_output_request_respects_memory_limits() {
             call_context_test_id(0),
             canister_test_id(0),
             Cycles::zero(),
-            Cycles::zero(),
-            Cycles::zero(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1751,8 +1751,12 @@ fn push_output_request_respects_memory_limits() {
     // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
     assert_eq!(
         0,
-        api.push_output_request(req.clone(), Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req.clone(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
 
     // Nothing is consumed for execution memory.
@@ -1770,8 +1774,12 @@ fn push_output_request_respects_memory_limits() {
     // And the second push fails.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req,
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
     // Without altering memory usage.
     assert_eq!(api.get_allocated_bytes().get(), 0,);
@@ -1831,8 +1839,8 @@ fn push_output_request_oversized_request_memory_limits() {
             call_context_test_id(0),
             canister_test_id(0),
             Cycles::zero(),
-            Cycles::zero(),
-            Cycles::zero(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1863,8 +1871,12 @@ fn push_output_request_oversized_request_memory_limits() {
     // Not enough memory to push the request.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req,
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
 
     // Memory usage unchanged.
@@ -1885,8 +1897,12 @@ fn push_output_request_oversized_request_memory_limits() {
     // Pushing succeeds.
     assert_eq!(
         0,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req,
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
 
     // `req_size_bytes` are consumed.
