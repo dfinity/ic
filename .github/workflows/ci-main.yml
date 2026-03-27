@@ -541,7 +541,7 @@ jobs:
       - name: Download execution logs (cache)
         uses: actions/download-artifact@v4
         with:
-          name: execlogs-bazel-test-all
+          name: execlogs-bazel-build
           path: execlogs-cache
       - name: Download execution logs (nocache)
         uses: actions/download-artifact@v4
