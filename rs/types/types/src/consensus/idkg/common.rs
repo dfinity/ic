@@ -8,9 +8,8 @@ use crate::{
     crypto::{
         AlgorithmId,
         canister_threshold_sig::{
-            EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
-            ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-            ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+            EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript, ThresholdEcdsaSigInputs,
+            ThresholdSchnorrSigInputs,
             error::{
                 IDkgParamsValidationError, ThresholdEcdsaSigInputsCreationError,
                 ThresholdSchnorrSigInputsCreationError,
@@ -20,7 +19,7 @@ use crate::{
                 IDkgTranscriptType,
             },
         },
-        vetkd::{VetKdArgs, VetKdEncryptedKey},
+        vetkd::VetKdArgs,
     },
     messages::CallbackId,
 };
@@ -1183,13 +1182,6 @@ impl ThresholdSigInputs<'_> {
             ThresholdSigInputs::VetKd(_) => SignatureScheme::VetKd,
         }
     }
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub enum CombinedSignature {
-    Ecdsa(ThresholdEcdsaCombinedSignature),
-    Schnorr(ThresholdSchnorrCombinedSignature),
-    VetKd(VetKdEncryptedKey),
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]

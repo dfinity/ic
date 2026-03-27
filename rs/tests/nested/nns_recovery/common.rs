@@ -44,7 +44,7 @@ use slog::{Logger, info};
 use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
-    vcpus: Some(NrOfVCPUs::new(20)), // 16 GuestOS CPU + 4 HostOS
+    vcpus: Some(NrOfVCPUs::new(40)), // 36 GuestOS CPU + 4 HostOS
     memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
     ..VmResourceOverrides::const_default()
 };
