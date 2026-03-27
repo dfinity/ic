@@ -506,7 +506,7 @@ pub struct Subnet {
 
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
-        // Invariants in the registry ensures that
+        // Invariants in the registry ensure that
         //   - Cloud engines have a free cost schedule
         //   - Cloud engines only have nodes with reward type 4
         let (canister_cycles_cost_schedule, default_node_reward_type) = match subnet_type {
