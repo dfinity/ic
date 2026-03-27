@@ -310,6 +310,13 @@ impl NetworkTopology {
             .map(|subnet_topology| subnet_topology.nodes.len())
     }
 
+    /// Returns the cycles cost schedule of the given subnet.
+    pub fn get_cost_schedule(&self, subnet_id: &SubnetId) -> Option<CanisterCyclesCostSchedule> {
+        self.subnets
+            .get(subnet_id)
+            .map(|subnet_topology| subnet_topology.cost_schedule)
+    }
+
     /// Returns the subnets map used for the certified state tree.
     ///
     /// On the NNS subnet this returns the full, unfiltered map (including cloud
