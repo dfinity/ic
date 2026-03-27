@@ -197,6 +197,8 @@ pub struct HttpUserQuery {
     // Do not include omitted fields in MessageId calculation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nonce: Option<Blob>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_info: Option<SenderInfo>,
 }
 
 /// Describes the contents of a /api/v2/canister/_/query request.
@@ -267,7 +269,11 @@ impl HttpUserQuery {
             self.ingress_expiry,
             self.sender.0.clone(),
             self.nonce.as_ref().map(|x| x.0.as_slice()),
-            None,
+            self.sender_info.as_ref().map(|sender_info| RawSenderInfo {
+                info: sender_info.info.0.clone(),
+                signer: sender_info.signer.0.clone(),
+                sig: sender_info.sig.0.clone(),
+            }),
         )
     }
 }
@@ -401,7 +407,10 @@ impl HttpRequestContent for Query {
     }
 
     fn sender_info(&self) -> Option<&SenderInfoInternal> {
-        None
+        match &self.source {
+            QuerySource::User { sender_info, .. } => sender_info.as_ref(),
+            QuerySource::System => None,
+        }
     }
 }
 

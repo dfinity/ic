@@ -153,6 +153,7 @@ impl AgentWithDelegation<'_> {
                 sender: self.sender(),
                 ingress_expiry: expiry_time().as_nanos() as u64,
                 nonce: None,
+                sender_info: None,
             },
         };
         let signature = sign_query(&content, self.delegation_identity);

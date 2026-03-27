@@ -196,6 +196,7 @@ impl Query {
                 sender: Blob(SENDER.into_vec()),
                 ingress_expiry,
                 nonce: None,
+                sender_info: None,
             },
         };
 
