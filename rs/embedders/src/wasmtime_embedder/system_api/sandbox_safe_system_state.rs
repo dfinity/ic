@@ -843,6 +843,15 @@ impl SandboxSafeSystemState {
             .get_subnet_size(&cycles_account_manager.get_subnet_id())
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
 
+        let (next_canister_log_record_idx, canister_log_memory_limit) =
+            if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                let lms = &system_state.log_memory_store;
+                (lms.next_idx(), lms.byte_capacity())
+            } else {
+                let cl = &system_state.canister_log;
+                (cl.next_idx(), cl.byte_capacity())
+            };
+
         Self::new_internal(
             system_state.canister_id(),
             CanisterStatusView::from_canister_status_type(system_state.status()),
@@ -873,8 +882,8 @@ impl SandboxSafeSystemState {
             system_state.controllers.clone(),
             request_metadata,
             caller,
-            system_state.canister_log.next_idx(),
-            system_state.canister_log.byte_capacity(),
+            next_canister_log_record_idx,
+            canister_log_memory_limit,
             is_wasm64_execution,
             network_topology.clone(),
         )
