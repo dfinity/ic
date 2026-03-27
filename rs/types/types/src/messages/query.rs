@@ -316,6 +316,9 @@ mod test {
             method_payload: vec![4, 5, 6],
         };
 
-        assert_eq!(hex::encode(query.id().as_bytes()), "<hash>");
+        assert_eq!(
+            hex::encode(query.id().as_bytes()),
+            "17eef00dbc528a593b4f89f8b9d7a8275a04bc8aa3727cd960de2071675cddbe"
+        );
     }
 }

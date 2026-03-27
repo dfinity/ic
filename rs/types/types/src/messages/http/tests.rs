@@ -650,7 +650,6 @@ mod hashing {
         Time,
         messages::{Blob, HttpQueryResponse, HttpQueryResponseReply, QueryResponseHash},
     };
-    use hex_literal::hex;
 
     #[test]
     fn hashing_query_response_reply() {
