@@ -1068,7 +1068,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
 
     test_unsupported(|aborted_canister_id| {
         let args = CanisterIdRecord::from(aborted_canister_id).encode();
-        (Method::StopCanister, call_args().other_side(args))
+        (Method::StartCanister, call_args().other_side(args))
     });
 }
 
