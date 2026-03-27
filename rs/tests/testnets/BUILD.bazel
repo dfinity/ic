@@ -212,7 +212,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SNS_CANISTER_RUNTIME_DEPS | IC_GATEWAY_RUNTIME_DEPS | {
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
         "II_FRONTEND_WASM_PATH": "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
         "NNS_DAPP_WASM_PATH": "@mainnet_canisters//:nns_dapp_test.wasm.gz",
