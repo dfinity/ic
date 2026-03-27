@@ -1,6 +1,6 @@
 // Set up a testnet containing:
-//   one 4-node System/NNS subnet and one 12-node CloudEngine subnet (3 nodes in each of 4 datacenters),
-//   one unassigned node, one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
+//   one 4-node System/NNS subnet, one 4-node CloudEngine subnet (1 node per DC in 4 datacenters),
+//   4 unassigned nodes (1 per DC), one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
 // You can setup this testnet by executing the following commands:
@@ -53,8 +53,6 @@ use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
 
-const NODES_PER_DC: usize = 3;
-
 struct DcConfig {
     id: &'static str,
     region: &'static str,
@@ -104,9 +102,8 @@ fn main() -> Result<()> {
 pub fn setup(env: TestEnv) {
     let mut ic = InternetComputer::new().add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
 
-    // Build CloudEngine subnet with nodes distributed across datacenters.
-    // Each datacenter gets its own node operator, and nodes in that DC
-    // are assigned to that operator in the registry.
+    // Build CloudEngine subnet and unassigned nodes distributed across 4 datacenters.
+    // Each datacenter gets its own node operator with 1 CloudEngine node + 1 unassigned node.
     let mut cloud_engine_subnet =
         Subnet::new(SubnetType::CloudEngine).with_cost_schedule(CanisterCyclesCostSchedule::Free);
     for (i, dc) in DATA_CENTERS.iter().enumerate() {
@@ -127,19 +124,21 @@ pub fn setup(env: TestEnv) {
                 name: format!("operator_{}", dc.id),
                 principal_id: operator_principal,
                 node_provider_principal_id: Some(provider_principal),
-                node_allowance: NODES_PER_DC as u64,
+                node_allowance: 2,
                 dc_id: dc.id.to_string(),
             });
 
-        for _ in 0..NODES_PER_DC {
-            cloud_engine_subnet = cloud_engine_subnet
-                .add_node(Node::new().with_node_operator_principal_id(operator_principal));
-        }
+        // 1 CloudEngine node per DC
+        cloud_engine_subnet = cloud_engine_subnet
+            .add_node(Node::new().with_node_operator_principal_id(operator_principal));
+
+        // 1 unassigned node per DC
+        ic = ic
+            .with_unassigned_node(Node::new().with_node_operator_principal_id(operator_principal));
     }
 
     ic = ic
         .add_subnet(cloud_engine_subnet)
-        .with_unassigned_nodes(1)
         .with_api_boundary_nodes(1);
 
     ic.setup_and_start(&env)
