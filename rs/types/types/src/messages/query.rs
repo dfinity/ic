@@ -70,7 +70,6 @@ impl Query {
                 IC_00.get_ref().as_slice(),
                 None,
                 None,
-                None,
             )),
         }
     }
