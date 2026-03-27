@@ -28,11 +28,6 @@ use ic_types::{
     time::expiry_time_from_now,
 };
 use rand::Rng;
-use rustls::{
-    DigitallySignedStruct, SignatureScheme,
-    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    pki_types::{CertificateDer, ServerName, UnixTime},
-};
 use tokio::{
     net::TcpStream,
     sync::watch,
@@ -526,54 +521,15 @@ async fn connect_to_nns_node(
     Ok(tls_stream)
 }
 
-#[derive(Debug)]
-struct NoVerify;
-impl ServerCertVerifier for NoVerify {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &CertificateDer,
-        _intermediates: &[CertificateDer],
-        _server_name: &ServerName,
-        _ocsp_response: &[u8],
-        _now: UnixTime,
-    ) -> Result<ServerCertVerified, rustls::Error> {
-        Ok(ServerCertVerified::assertion())
-    }
-    fn verify_tls12_signature(
-        &self,
-        _: &[u8],
-        _: &CertificateDer<'_>,
-        _: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
-    }
-    fn verify_tls13_signature(
-        &self,
-        _: &[u8],
-        _: &CertificateDer<'_>,
-        _: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
-    }
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        rustls::crypto::ring::default_provider()
-            .signature_verification_algorithms
-            .supported_schemes()
-    }
-}
-
 async fn connect_to_api_bn(
     log: &ReplicaLogger,
     api_bn_id: NodeId,
     domain: String,
 ) -> Result<TlsStream<TcpStream>, BoxError> {
-    // TODO: Uncomment me
-    // let mut root_store = rustls::RootCertStore::empty();
-    // root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let mut root_store = rustls::RootCertStore::empty();
+    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let tls_client_config = rustls::ClientConfig::builder()
-        // .with_root_certificates(root_store)
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(NoVerify))
+        .with_root_certificates(root_store)
         .with_no_client_auth();
 
     let addr = (domain.as_str(), 443_u16);

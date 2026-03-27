@@ -54,13 +54,13 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
-            SubnetSnapshot, get_guestos_img_version, get_guestos_update_img_sha256,
-            get_guestos_update_img_url, get_guestos_update_img_version,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
+            get_guestos_img_version, get_guestos_update_img_sha256, get_guestos_update_img_url,
+            get_guestos_update_img_version,
         },
     },
-    retry_with_msg, systest,
-    util::{EndpointsStatus, assert_nodes_health_statuses, block_on, get_identity, get_nns_node},
+    systest,
+    util::{block_on, get_identity, get_nns_node},
 };
 use ic_types::{
     CanisterId, Height, PrincipalId, SubnetId,
@@ -136,8 +136,6 @@ fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("Should be able to set up IC under test");
-
-    hack(&env);
 
     install_nns_and_check_progress(env.topology_snapshot());
 
@@ -799,14 +797,6 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
         cloud_engine.subnet_id,
     ));
 
-    std::thread::sleep(Duration::from_secs(90));
-    assert_nodes_health_statuses(
-        env.logger(),
-        &cloud_engine.nodes().collect::<Vec<_>>(),
-        EndpointsStatus::AllUnhealthy,
-    );
-    hack(env);
-
     assert_assigned_replica_version(&app_node, &target_version, env.logger());
     assert_assigned_replica_version(&cloud_engine_node, &target_version, env.logger());
 }
@@ -853,53 +843,4 @@ fn main() -> Result<()> {
     systest_all_subnet_types!(test_group, interlaced_v2_and_v3_query_requests);
 
     test_group.execute_from_args()
-}
-
-// HACK: Overwrite the DNS of all nodes to point the API BNs' domains to their IPs
-fn hack(env: &TestEnv) {
-    for node in env
-        .topology_snapshot()
-        .subnets()
-        .flat_map(|subnet| subnet.nodes())
-    {
-        let mappings = env
-            .topology_snapshot()
-            .api_boundary_nodes()
-            .map(|api_bn| (api_bn.get_domain().unwrap(), api_bn.get_ip_addr()))
-            .collect::<Vec<_>>();
-
-        // File-system is read-only, so we modify /etc/hosts in a temporary file and replace the
-        // original with a bind mount.
-        let mut command = String::from(
-            r#"
-            set -euo pipefail
-            sudo cp /etc/hosts /tmp/hosts
-        "#,
-        );
-        for (domain, ip) in mappings {
-            command.push_str(&format!(
-                r#"
-                echo "{ip} {domain}" | sudo tee -a /tmp/hosts > /dev/null
-            "#
-            ));
-        }
-        // Match the original /etc/hosts file permissions.
-        command.push_str(
-            r#"
-            sudo chown --reference=/etc/hosts /tmp/hosts
-            sudo chmod --reference=/etc/hosts /tmp/hosts
-
-            sudo mount --bind /tmp/hosts /etc/hosts
-        "#,
-        );
-
-        retry_with_msg!(
-            format!("Overwrite /etc/hosts on node {}", node.node_id),
-            env.logger(),
-            Duration::from_secs(60),
-            Duration::from_secs(5),
-            || node.block_on_bash_script(&command)
-        )
-        .expect("Should be able to overwrite /etc/hosts on the node");
-    }
 }
