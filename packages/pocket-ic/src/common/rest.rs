@@ -656,6 +656,7 @@ pub struct InstanceConfig {
     pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
     pub mainnet_nns_subnet_id: Option<bool>,
+    pub disable_ingress_validation: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
