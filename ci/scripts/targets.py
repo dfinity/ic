@@ -52,6 +52,7 @@ ALL_TARGETS_BLOBS = [
     "*.bazel",
     "*.bzl",
     "bazel/*",
+    "ci/container/TAG",
     "mainnet-*-revisions.json",
 ]
 
