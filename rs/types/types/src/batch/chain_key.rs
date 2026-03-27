@@ -130,9 +130,9 @@ pub fn bytes_to_chain_key_payload(data: &[u8]) -> Result<ChainKeyPayload, ProxyD
         let callback_id = CallbackId::from(message.callback_id);
         let response = try_from_option_field(message.agreement, "ChainKeyAgreement::agreement")?;
         if payload.agreements.insert(callback_id, response).is_some() {
-            return Err(ProxyDecodeError::Other(
-                "Duplicate callback id {callback_id} found in ChainKeyPayload".to_string(),
-            ));
+            return Err(ProxyDecodeError::Other(format!(
+                "Duplicate callback id {callback_id} found in ChainKeyPayload"
+            )));
         };
     }
 
@@ -141,6 +141,7 @@ pub fn bytes_to_chain_key_payload(data: &[u8]) -> Result<ChainKeyPayload, ProxyD
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use rand::RngCore;
 
@@ -244,11 +245,10 @@ mod tests {
         let bytes = iterator_to_bytes(messages.into_iter(), max_size);
         let err = bytes_to_chain_key_payload(&bytes).unwrap_err();
 
-        assert_eq!(
+        assert_matches!(
             err,
-            ProxyDecodeError::Other(
-                "Duplicate callback id {callback_id} found in ChainKeyPayload".to_string()
-            )
+            ProxyDecodeError::Other(ref message)
+            if message.contains(format!("Duplicate callback id {callback_id}").as_str())
         );
     }
 }
