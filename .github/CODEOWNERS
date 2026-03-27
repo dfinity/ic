@@ -242,6 +242,7 @@ go.sum                    @dfinity/idx
 /rs/tests/                                              @dfinity/idx
 /rs/tests/idx/                                          @dfinity/idx
 /rs/tests/testnets/                                     @dfinity/idx
+/rs/tests/testnets/cloud_engine.rs                      @dfinity/dre
 /rs/tests/testnets/mainnet_nns/                         @dfinity/consensus
 /rs/tests/testnets/mainnet_nns.rs                       @dfinity/consensus
 /rs/tests/testnets/nns_recovery.rs                      @dfinity/consensus

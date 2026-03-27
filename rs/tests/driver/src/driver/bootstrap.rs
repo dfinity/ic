@@ -219,6 +219,20 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
+    for dc_record in &ic.data_centers {
+        ic_config.add_data_center_record(dc_record.clone());
+    }
+    for no in &ic.node_operators {
+        ic_config.add_node_operator_record(
+            no.name.clone(),
+            no.principal_id,
+            no.node_provider_principal_id,
+            no.node_allowance,
+            no.dc_id.clone(),
+            no.rewardable_nodes.clone(),
+        );
+    }
+
     if let Some(UnassignedRecordConfig::Skip) = ic.unassigned_record_config {
         ic_config.skip_unassigned_record();
     }
@@ -611,8 +625,8 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     NodeConfiguration {
         xnet_api,
         public_api,
-        // this value will be overridden by IcConfig::with_node_operator()
-        node_operator_principal_id: None,
+        // If not set per-node, this will be overridden by IcConfig's initial_node_operator
+        node_operator_principal_id: node.node_operator_principal_id,
         secret_key_store: node.secret_key_store.clone(),
         domain: node.domain.clone(),
         node_reward_type: None,
