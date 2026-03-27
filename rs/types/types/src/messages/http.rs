@@ -138,16 +138,16 @@ impl HttpCanisterUpdate {
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         representation_independent_hash_call_or_query(
             CallOrQuery::Call,
-            self.canister_id.0.as_slice(),
+            &self.canister_id.0,
             &self.method_name,
-            self.arg.0.as_slice(),
+            &self.arg.0,
             self.ingress_expiry,
-            self.sender.0.as_slice(),
+            &self.sender.0,
             self.nonce.as_ref().map(|x| x.0.as_slice()),
             self.sender_info.as_ref().map(|sender_info| RawSenderInfo {
-                info: sender_info.info.0.as_slice(),
-                signer: sender_info.signer.0.as_slice(),
-                sig: sender_info.sig.0.as_slice(),
+                info: &sender_info.info.0,
+                signer: &sender_info.signer.0,
+                sig: &sender_info.sig.0,
             }),
         )
     }
@@ -261,12 +261,12 @@ impl HttpUserQuery {
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         representation_independent_hash_call_or_query(
             CallOrQuery::Query,
-            self.canister_id.0.as_slice(),
+            &self.canister_id.0,
             &self.method_name,
-            self.arg.0.as_slice(),
+            &self.arg.0,
             self.ingress_expiry,
-            self.sender.0.as_slice(),
-            self.nonce.as_ref().map(|x| x.0.as_slice()),
+            &self.sender.0,
+            self.nonce.as_ref().map(|x| x.0.as_ref()),
             None,
         )
     }
@@ -277,9 +277,9 @@ impl HttpReadState {
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         representation_independent_hash_read_state(
             self.ingress_expiry,
-            self.paths.as_slice(),
-            self.sender.0.as_slice(),
-            self.nonce.as_ref().map(|x| x.0.as_slice()),
+            &self.paths,
+            &self.sender.0,
+            self.nonce.as_ref().map(|x| x.0.as_ref()),
         )
     }
 }

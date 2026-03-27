@@ -112,16 +112,16 @@ impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
         MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
-            self.canister_id.get_ref().as_slice(),
+            self.canister_id.as_ref(),
             &self.method_name,
-            self.arg.as_slice(),
+            &self.arg,
             self.ingress_expiry,
             self.sender.get_ref().as_slice(),
             self.nonce.as_deref(),
             self.sender_info.as_ref().map(|sender_info| RawSenderInfo {
-                info: sender_info.info.as_slice(),
-                signer: sender_info.signer.get_ref().as_slice(),
-                sig: sender_info.sig.as_slice(),
+                info: &sender_info.info,
+                signer: sender_info.signer.as_ref(),
+                sig: &sender_info.sig,
             }),
         ))
     }

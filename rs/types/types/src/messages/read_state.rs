@@ -21,7 +21,7 @@ impl ReadState {
     pub fn id(&self) -> MessageId {
         MessageId::from(representation_independent_hash_read_state(
             self.ingress_expiry,
-            self.paths.as_slice(),
+            &self.paths,
             self.source.get_ref().as_slice(),
             self.nonce.as_deref(),
         ))
