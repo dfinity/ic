@@ -2960,14 +2960,7 @@ impl StateMachine {
             }
         }
 
-        let subnet_id = self.get_subnet_id();
-        if let Some(stream) = state.streams().get(&subnet_id)
-            && !stream.messages().is_empty()
-        {
-            return true;
-        }
-
-        state.subnet_queues().has_input()
+        self.has_loopback_messages() || state.subnet_queues().has_input()
     }
 
     /// Checks that `source` is the next sender in `target`'s local input schedule.
@@ -3001,11 +2994,16 @@ impl StateMachine {
                 panic!("Management canister is not involved; use next_sender_in_queue");
             }
         };
-        in_schedule
-            || state
-                .streams()
-                .get(&self.get_subnet_id())
-                .is_some_and(|s| !s.messages().is_empty())
+        in_schedule || self.has_loopback_messages()
+    }
+
+    fn has_loopback_messages(&self) -> bool {
+        let state = self.get_latest_state();
+        let subnet_id = self.get_subnet_id();
+        state
+            .streams()
+            .get(&subnet_id)
+            .is_some_and(|s| !s.messages().is_empty())
     }
 
     pub fn mock_canister_http_response(
