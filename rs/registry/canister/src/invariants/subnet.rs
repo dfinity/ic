@@ -14,7 +14,7 @@ use ic_protobuf::registry::{
     node::v1::NodeRewardType,
     subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType},
 };
-use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_node_record_key, make_subnet_record_key};
+use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_subnet_record_key};
 use prost::Message;
 
 /// Subnet invariants hold iff:
@@ -73,9 +73,11 @@ pub(crate) fn check_subnet_invariants(
         let node_records = subnet_members
             .iter()
             .map(|&node_id| {
-                get_node_record_from_snapshot(node_id, snapshot)?.unwrap_or_else(|| {
-                    panic!("Node {node_id} does not exist in Subnet {subnet_id}")
-                })
+                get_node_record_from_snapshot(node_id, snapshot)
+                    .unwrap()
+                    .unwrap_or_else(|| {
+                        panic!("Node {node_id} does not exist in Subnet {subnet_id}")
+                    })
             })
             .collect::<Vec<_>>();
 
