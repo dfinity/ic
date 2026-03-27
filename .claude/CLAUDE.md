@@ -15,12 +15,7 @@ After changing Rust code (`*.rs`) follow these steps in order:
 2. **Lint** by running the following from the root of the repository:
    ```
    cd "$(git rev-parse --show-toplevel)"
-   cargo clippy --all-features <CRATES> -- \
-       -D warnings \
-       -D clippy::all \
-       -D clippy::mem_forget \
-       -D clippy::unseparated_literal_suffix \
-       -A clippy::uninlined_format_args
+   ci/scripts/cargo-clippy.sh --fix --allow-dirty <CRATES>
    ```
    where `<CRATES>` is a space separated list of
    `-p <CRATE>` options for all modified crates.

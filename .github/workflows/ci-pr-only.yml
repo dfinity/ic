@@ -113,6 +113,8 @@ jobs:
             bazel run :rustfmt
             bazel run :gazelle
 
+            ci/scripts/cargo-clippy.sh --fix --allow-dirty
+
             git add --all
             git status
             if ! git diff --cached --quiet; then
