@@ -3089,7 +3089,7 @@ fn no_subnet_message_reordering() {
     // so that the call to `canister_status` via the proxy could finish
     // if it was executed on an aborted canister.
     for _ in 0..4 {
-      sm.tick();
+        sm.tick();
     }
     assert_install_processing();
 
