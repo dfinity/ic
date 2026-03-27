@@ -2227,12 +2227,14 @@ impl PocketIcSubnets {
 
         // Install the Internet Identity frontend canister.
         let backend_origin = format!("http://{IDENTITY_CANISTER_ID}.localhost:{gateway_port}");
-        let frontend_origin =
-            format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}");
+        let frontend_origins = vec![
+            format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}"),
+            format!("http://id.ai.localhost:{gateway_port}"),
+        ];
         let ii_frontend_init_payload = InternetIdentityFrontendInit {
             backend_canister_id: IDENTITY_CANISTER_ID.get().0,
             backend_origin,
-            related_origins: Some(vec![frontend_origin]),
+            related_origins: Some(frontend_origins),
             fetch_root_key: Some(true),
             analytics_config: None,
             dummy_auth: Some(None),
