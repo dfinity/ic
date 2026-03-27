@@ -437,10 +437,7 @@ fn turn_to_compliant_cloud_engine(
     // An invariant ensures that all nodes have reward type 4
     for node_bytes in &subnet_record.membership {
         let node_id = NodeId::from(PrincipalId::try_from(node_bytes.as_slice()).unwrap());
-        let key = make_node_record_key(node_id).into_bytes();
-        let mut node_record = NodeRecord::decode(snapshot.get(&key).unwrap().as_slice()).unwrap();
-        node_record.node_reward_type = Some(i32::from(NodeRewardType::Type4));
-        snapshot.insert(key, node_record.encode_to_vec());
+        set_node_reward_type(snapshot, node_id, Some(NodeRewardType::Type4));
     }
 }
 
