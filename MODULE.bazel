@@ -532,13 +532,13 @@ http_file(
 http_file(
     name = "ckbtc_mainnet_events.gz",
     sha256 = "bbfdc95352645fbf7439c3b6d69df2698d37bbd4a3dfc36c1ef8846653176999",
-    url = "https://download.dfinity.systems/testdata/ckbtc/mainnet_events.gz",
+    url = "https://download.dfinity.systems/testdata/ckbtc/mainnet_events_v1.gz",
 )
 
 http_file(
     name = "ckbtc_testnet_events.gz",
     sha256 = "2a0a6da625a9149e3411d519e0866c13b3a48e36d12f0d3bf42bdef2f93575b0",
-    url = "https://download.dfinity.systems/testdata/ckbtc/testnet_events.gz",
+    url = "https://download.dfinity.systems/testdata/ckbtc/testnet_events_v1.gz",
 )
 
 # ckDOGE
