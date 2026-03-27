@@ -181,6 +181,9 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
         &mut self,
         request: ClaimSwapNeuronsRequest,
     ) -> Result<ClaimSwapNeuronsResponse, CanisterCallError> {
+        let payload = Encode!(&request).unwrap();
+        assert!(payload.len() < 1000 * 1000 * 10, "Payload over 10 MiB: {}", payload.len());
+
         self.calls
             .push(SnsGovernanceClientCall::ClaimSwapNeurons(request));
         match self
