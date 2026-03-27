@@ -143,7 +143,6 @@ pub struct InternetIdentityInit {
     pub new_flow_origins: Option<Vec<String>>,
     pub openid_configs: Option<Vec<OpenIdConfig>>,
     pub analytics_config: Option<Option<AnalyticsConfig>>,
-    pub fetch_root_key: Option<bool>,
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,

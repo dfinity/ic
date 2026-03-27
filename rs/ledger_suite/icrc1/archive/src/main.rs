@@ -402,7 +402,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        ic_cdk::stable::stable_size() as f64 * 65536f64,
+        ic_cdk::stable::stable_size() as f64 * 65536_f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(

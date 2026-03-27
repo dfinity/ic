@@ -9,12 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
-## Changed
+- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
 
-- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
-  where the sum of developer-allocated tokens exceeds
-  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
-  validation is no longer needed.
+## Changed
 
 ## Deprecated
 

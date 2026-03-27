@@ -44,6 +44,7 @@ tokio = { workspace = true }
 cycles_minting = { path = "./cycles_minting" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 wat = { workspace = true }
+serde = {workspace = true}
 serde_cbor = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 num-traits = { workspace = true }
@@ -58,7 +59,10 @@ registry-canister = { path = "../../registry/canister" }
 axum = { workspace = true }
 ic-registry-transport = { path = "../../registry/transport" }
 prost = { workspace = true }
+ic-protobuf = { path = "../../protobuf" }
 url = { workspace = true }
+ic-registry-keys = { path = "../../registry/keys" }
+
 
 [[bin]]
 name = "certified_registry_test"
@@ -67,6 +71,10 @@ path = "certified_registry_test.rs"
 [[bin]]
 name = "create_subnet_test"
 path = "create_subnet_test.rs"
+
+[[bin]]
+name = "delete_subnet_test"
+path = "delete_subnet_test.rs"
 
 # [[bin]]
 # name = "nns_canister_uninstall_test"
@@ -103,3 +111,4 @@ path = "rent_subnet_test.rs"
 [[bin]]
 name = "node_swap_test"
 path = "node_swap_test.rs"
+

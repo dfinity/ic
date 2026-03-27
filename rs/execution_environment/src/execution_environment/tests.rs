@@ -830,6 +830,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * test
                 .cycles_account_manager()
                 .gib_storage_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .real()
                 .get())
             / one_gib
     );
@@ -4626,13 +4627,13 @@ fn cannot_accept_cycles_after_replying() {
     // The remaining was refunded as part of the reply delivered to A.
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
-        initial_cycles - (transferred_cycles / 2u64)
+        initial_cycles - (transferred_cycles / 2_u64)
     );
 
     // Canister B gets half of transferred_cycles that it accepted before replying.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles + (transferred_cycles / 2u64)
+        initial_cycles + (transferred_cycles / 2_u64)
     );
 }
 

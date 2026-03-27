@@ -107,6 +107,7 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, RoutingTable, routing_table_insert_subnet,
 };
@@ -177,7 +178,9 @@ use ic_types::{
     time::{GENESIS, Time},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles, NonConsumed,
+};
 use ic_xnet_payload_builder::{
     RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
@@ -379,6 +382,7 @@ fn add_subnet_local_registry_records(
     registry_version: RegistryVersion,
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
+    resource_limits: ResourceLimits,
 ) {
     for node in nodes {
         let node_record = NodeRecord {
@@ -492,6 +496,7 @@ fn add_subnet_local_registry_records(
         .with_features(features)
         .with_cost_schedule(cost_schedule)
         .with_subnet_admins(subnet_admins)
+        .with_resource_limits(resource_limits)
         .build();
 
     // Insert initial DKG transcripts
@@ -1208,6 +1213,7 @@ pub struct StateMachineBuilder {
     create_at_registry_version: Option<RegistryVersion>,
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
+    resource_limits: ResourceLimits,
 }
 
 impl StateMachineBuilder {
@@ -1249,6 +1255,7 @@ impl StateMachineBuilder {
             create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: vec![],
+            resource_limits: Default::default(),
         }
     }
 
@@ -1488,6 +1495,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_resource_limits(self, resource_limits: ResourceLimits) -> Self {
+        Self {
+            resource_limits,
+            ..self
+        }
+    }
+
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
     /// Otherwise, no new registry records are created.
@@ -1533,6 +1547,7 @@ impl StateMachineBuilder {
             self.create_at_registry_version,
             self.cost_schedule,
             self.subnet_admins,
+            self.resource_limits,
         )
     }
 
@@ -1901,6 +1916,7 @@ impl StateMachine {
         create_at_registry_version: Option<RegistryVersion>,
         cost_schedule: CanisterCyclesCostSchedule,
         subnet_admins: Vec<PrincipalId>,
+        resource_limits: ResourceLimits,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
@@ -1980,6 +1996,7 @@ impl StateMachine {
                 create_registry_version,
                 cost_schedule,
                 subnet_admins,
+                resource_limits,
             );
         }
 
@@ -3459,6 +3476,7 @@ impl StateMachine {
         let chain_keys_enabled_status = Default::default();
         let cost_schedule = CanisterCyclesCostSchedule::Normal;
         let subnet_admins = vec![];
+        let resource_limits = Default::default();
 
         add_subnet_local_registry_records(
             subnet_id,
@@ -3472,6 +3490,7 @@ impl StateMachine {
             next_version,
             cost_schedule,
             subnet_admins,
+            resource_limits,
         );
     }
 
@@ -4436,6 +4455,7 @@ impl StateMachine {
                     sender: sender.into(),
                     ingress_expiry,
                     nonce: nonce_blob,
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,
@@ -4784,7 +4804,7 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory;
 
-        let mut dst = vec![0u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
+        let mut dst = vec![0_u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
         let buffer = Buffer::new(memory.page_map.clone());
         buffer.read(&mut dst, 0);
         dst
@@ -4891,7 +4911,10 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
         canister_state
             .system_state
-            .add_cycles(Cycles::from(amount), CyclesUseCase::NonConsumed);
+            .add_cycles(CompoundCycles::<NonConsumed>::new(
+                Cycles::from(amount),
+                self.cost_schedule,
+            ));
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
@@ -5283,6 +5306,7 @@ impl PayloadBuilder {
                     sender: Blob(sender.into_vec()),
                     ingress_expiry: self.expiry_time.as_nanos_since_unix_epoch(),
                     nonce: self.nonce.map(|n| Blob(n.to_be_bytes().to_vec())),
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,

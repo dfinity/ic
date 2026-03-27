@@ -150,7 +150,6 @@ fn persisted_map_is_equivalent_to_the_original() {
             .unwrap();
         let persisted_map = PageMap::open(
             Box::new(storage_layout),
-            height,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
         .unwrap();
@@ -244,7 +243,6 @@ fn can_persist_and_load_an_empty_page_map() {
         .unwrap();
     let persisted_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .expect("opening an empty page map must succeed");
@@ -263,7 +261,6 @@ fn can_load_a_page_map_without_files() {
 
     let loaded_map = PageMap::open(
         Box::new(base_only_storage_layout(heap_file.to_path_buf())),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .expect("opening an empty page map must succeed");
@@ -281,13 +278,13 @@ fn can_use_buffer_to_modify_page_map() {
     page_map.update(pages);
 
     let n = 4 * PAGE_SIZE;
-    let mut vec_buf = vec![0u8; n];
+    let mut vec_buf = vec![0_u8; n];
     vec_buf[PAGE_SIZE..2 * PAGE_SIZE].copy_from_slice(&page_1);
     vec_buf[3 * PAGE_SIZE..4 * PAGE_SIZE].copy_from_slice(&page_3);
 
     let mut buf = Buffer::new(page_map);
 
-    let mut read_buf = vec![0u8; n];
+    let mut read_buf = vec![0_u8; n];
 
     buf.read(&mut read_buf[..], 0);
     assert_eq!(read_buf, vec_buf);
@@ -453,7 +450,7 @@ fn get_memory_instructions_returns_deltas() {
             range: range.clone(),
             instructions: vec![(
                 PageIndex::new(1)..PageIndex::new(2),
-                MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
+                MemoryMapOrData::Data(&[1_u8; PAGE_SIZE])
             )]
         },
         page_map.get_memory_instructions(range.clone(), range.clone())
@@ -477,7 +474,6 @@ fn get_memory_instructions_returns_deltas() {
 
     let mut page_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();
@@ -511,11 +507,11 @@ fn get_memory_instructions_returns_deltas() {
             instructions: vec![
                 (
                     PageIndex::new(3)..PageIndex::new(4),
-                    MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
+                    MemoryMapOrData::Data(&[1_u8; PAGE_SIZE])
                 ),
                 (
                     PageIndex::new(5)..PageIndex::new(6),
-                    MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
+                    MemoryMapOrData::Data(&[1_u8; PAGE_SIZE])
                 )
             ]
         },
@@ -624,7 +620,6 @@ fn get_memory_instructions_ignores_base_file() {
 
     let page_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();
@@ -668,8 +663,8 @@ fn get_memory_instructions_stops_at_instructions_outside_min_range() {
     page_map.strip_unflushed_delta();
 
     let pages = vec![
-        (PageIndex::new(5), &[1u8; PAGE_SIZE]),
-        (PageIndex::new(35), &[1u8; PAGE_SIZE]),
+        (PageIndex::new(5), &[1_u8; PAGE_SIZE]),
+        (PageIndex::new(35), &[1_u8; PAGE_SIZE]),
     ];
     page_map.update(&pages);
     page_map
@@ -690,7 +685,6 @@ fn get_memory_instructions_stops_at_instructions_outside_min_range() {
 
     let page_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(1),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();
@@ -764,7 +758,6 @@ fn get_memory_instructions_extends_mmap_past_min_range() {
 
     let page_map = PageMap::open(
         Box::new(storage_layout),
-        Height::new(1),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();

@@ -817,7 +817,7 @@ fn api_availability_test(
             );
         }
         SystemApiCallId::EnvVarNameExists => {
-            let mut heap = vec![0u8; 64];
+            let mut heap = vec![0_u8; 64];
             let var_name = b"TEST_VAR_1";
             copy_to_heap(&mut heap, var_name);
             assert_api_availability(
@@ -830,7 +830,7 @@ fn api_availability_test(
             );
         }
         SystemApiCallId::EnvVarValueSize => {
-            let mut heap = vec![0u8; 64];
+            let mut heap = vec![0_u8; 64];
             let var_name = b"TEST_VAR_1";
             copy_to_heap(&mut heap, var_name);
             assert_api_availability(
@@ -843,7 +843,7 @@ fn api_availability_test(
             );
         }
         SystemApiCallId::EnvVarValueCopy => {
-            let mut heap = vec![0u8; 64];
+            let mut heap = vec![0_u8; 64];
             let var_name = b"TEST_VAR_1";
             copy_to_heap(&mut heap, var_name);
             assert_api_availability(
@@ -1374,10 +1374,13 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         .build();
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
-    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    ) - Cycles::from(10_u128);
+    let initial_cycles = cycles_account_manager
+        .xnet_call_performed_fee(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real()
+        - Cycles::from(10_u128);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(initial_cycles)
         .build();
@@ -2358,7 +2361,7 @@ fn test_env_var_name_operations() {
     ));
 
     // Test ic0_env_var_name_copy
-    let mut heap = vec![0u8; 16];
+    let mut heap = vec![0_u8; 16];
 
     // Copy first variable name
     api.ic0_env_var_name_copy(0, 0, 0, var_name_1.len(), &mut heap)
@@ -2426,7 +2429,7 @@ fn test_env_var_value_operations() {
             .build(),
         cycles_account_manager,
     );
-    let mut heap = vec![0u8; 256];
+    let mut heap = vec![0_u8; 256];
 
     // Test ic0_env_var_count.
     assert_eq!(api.ic0_env_var_count().unwrap(), 3);
@@ -2525,7 +2528,7 @@ fn test_env_variables_empty() {
     ));
 
     // Test ic0_env_var_name_copy with invalid index on empty variables
-    let mut heap = vec![0u8; 16];
+    let mut heap = vec![0_u8; 16];
     assert!(matches!(
         api.ic0_env_var_name_copy(0, 0, 0, 0, &mut heap),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {

@@ -111,7 +111,9 @@ mod crypto_hash_stability {
         ThresholdSigShare, ThresholdSigShareOf,
     };
     use crate::crypto::{CryptoHash, CryptoHashOf};
-    use crate::messages::{Blob, CallbackId, HttpCanisterUpdate, MessageId, SignedRequestBytes};
+    use crate::messages::{
+        Blob, CallbackId, HttpCanisterUpdate, MessageId, SenderInfo, SignedRequestBytes,
+    };
     use crate::signature::{
         BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
         ThresholdSignatureShare,
@@ -147,7 +149,7 @@ mod crypto_hash_stability {
     /// Test stability of MessageId hash output
     #[test]
     fn message_id_stability() {
-        let data = MessageId::from([0x42u8; 32]);
+        let data = MessageId::from([0x42_u8; 32]);
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
@@ -159,7 +161,7 @@ mod crypto_hash_stability {
     /// Test stability of SignedRequestBytes hash output
     #[test]
     fn signed_request_bytes_stability() {
-        let data = SignedRequestBytes::from(vec![0x42u8; 32]);
+        let data = SignedRequestBytes::from(vec![0x42_u8; 32]);
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
@@ -1032,11 +1034,16 @@ mod crypto_hash_stability {
             sender: Blob(vec![0x42; 29]),
             ingress_expiry: 1234567890,
             nonce: Some(Blob(vec![0x42; 8])),
+            sender_info: Some(SenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(vec![0xAB; 10]),
+                sig: Blob(vec![4, 5, 6]),
+            }),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "1fc89a61eb9215d4c379b3ac99c23ff73140ff1ba89a8fbd531c7fc62fc0c762",
+            "b410d43e850c9f8ae12dc397bbcdbd3e8f4a6b7988924cdc4917dd9ab2a860da",
             "Hash of HttpCanisterUpdate changed"
         );
     }
