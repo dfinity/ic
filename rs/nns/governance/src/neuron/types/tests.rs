@@ -818,7 +818,7 @@ fn test_eight_year_gang_bonus_base_e8s_is_lost_after_dissolving() {
     let dissolve_delay_seconds = 8 * ONE_YEAR_SECONDS;
     let mut neuron = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds,
