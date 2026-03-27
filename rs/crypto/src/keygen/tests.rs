@@ -1348,6 +1348,7 @@ mod rotate_idkg_dealing_encryption_keys {
             node_id(),
             Arc::new(CryptoMetrics::none()),
             Some(Arc::clone(&time_source) as Arc<_>),
+            [0_u8; 32],
         );
         registry_client.reload();
 
@@ -1446,6 +1447,7 @@ mod rotate_idkg_dealing_encryption_keys {
             MockAllCryptoServiceProvider::new(),
             vault,
             registry_client.clone(),
+            [0_u8; 32],
         );
 
         registry_client.reload();
@@ -1968,6 +1970,7 @@ impl SetupBuilder {
             node_id(),
             crypto_metrics,
             Some(Arc::clone(&time_source) as Arc<_>),
+            [0_u8; 32],
         );
 
         Setup {

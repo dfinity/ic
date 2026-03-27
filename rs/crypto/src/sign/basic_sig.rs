@@ -1,10 +1,10 @@
 use super::*;
+use ic_crypto_internal_csp::CspRwLock;
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::types::SigConverter;
-use ic_crypto_internal_csp::vault::api::{
-    BasicSignatureCspVault, CspBasicSignatureError, PublicRandomSeedGeneratorError,
-};
+use ic_crypto_internal_csp::vault::api::{BasicSignatureCspVault, CspBasicSignatureError};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
+use rand::Rng;
 
 #[cfg(test)]
 mod tests;
@@ -48,7 +48,7 @@ impl BasicSigVerifierInternal {
     }
 
     pub fn verify_basic_sig_batch<H: Signable>(
-        vault: &dyn CspVault,
+        csprng: &CspRwLock<Box<ChaCha20Rng>>,
         registry: &dyn RegistryClient,
         signatures: &BasicSignatureBatch<H>,
         message: &H,
@@ -90,14 +90,9 @@ impl BasicSigVerifierInternal {
             keys.push(pk);
         }
 
-        let seed = vault.new_public_seed().map_err(|e| match e {
-            PublicRandomSeedGeneratorError::TransientInternalError { internal_error } => {
-                CryptoError::TransientInternalError { internal_error }
-            }
-        })?;
-        let rng = &mut seed.into_rng();
+        let seed: [u8; 32] = csprng.write().r#gen();
 
-        ic_ed25519::PublicKey::batch_verify(&msgs, &sigs, &keys, rng).map_err(|e| {
+        ic_ed25519::PublicKey::batch_verify_with_seed(&msgs, &sigs, &keys, &seed).map_err(|e| {
             CryptoError::SignatureVerification {
                 algorithm: AlgorithmId::Ed25519,
                 public_key_bytes: vec![],

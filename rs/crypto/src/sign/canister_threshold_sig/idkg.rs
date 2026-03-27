@@ -371,7 +371,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         let start_time = self.metrics.now();
         let result = transcript::create_transcript(
             &self.csp,
-            self.vault.as_ref(),
+            &self.csprng,
             self.registry_client.as_ref(),
             params,
             dealings,
@@ -420,7 +420,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         let start_time = self.metrics.now();
         let result = transcript::verify_transcript(
             &self.csp,
-            self.vault.as_ref(),
+            &self.csprng,
             self.registry_client.as_ref(),
             params,
             transcript,

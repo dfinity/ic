@@ -9522,6 +9522,7 @@ dependencies = [
 name = "ic-ed25519"
 version = "0.6.0"
 dependencies = [
+ "criterion",
  "curve25519-dalek",
  "ed25519-dalek",
  "hex",

@@ -195,6 +195,7 @@ pub fn crypto_component_with_vault(
         NODE_1,
         Arc::new(CryptoMetrics::none()),
         None,
+        [0_u8; 32],
     )
 }
 

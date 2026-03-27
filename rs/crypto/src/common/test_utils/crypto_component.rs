@@ -12,6 +12,7 @@ const NODE_ID: u64 = 42;
 pub fn crypto_component_with_csp(
     csp: MockAllCryptoServiceProvider,
     registry_client: Arc<dyn RegistryClient>,
+    seed: [u8; 32],
 ) -> CryptoComponentImpl<MockAllCryptoServiceProvider> {
     CryptoComponentImpl::new_for_test(
         csp,
@@ -21,6 +22,7 @@ pub fn crypto_component_with_csp(
         node_test_id(NODE_ID),
         Arc::new(CryptoMetrics::none()),
         None,
+        seed,
     )
 }
 
@@ -28,6 +30,7 @@ pub fn crypto_component_with_csp_and_vault(
     csp: MockAllCryptoServiceProvider,
     vault: MockLocalCspVault,
     registry_client: Arc<dyn RegistryClient>,
+    seed: [u8; 32],
 ) -> CryptoComponentImpl<MockAllCryptoServiceProvider> {
     CryptoComponentImpl::new_for_test(
         csp,
@@ -37,5 +40,6 @@ pub fn crypto_component_with_csp_and_vault(
         node_test_id(NODE_ID),
         Arc::new(CryptoMetrics::none()),
         None,
+        seed,
     )
 }
