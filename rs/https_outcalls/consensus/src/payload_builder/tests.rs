@@ -2689,11 +2689,18 @@ fn flexible_ok_responses_into_messages_stats_count_multiple_groups() {
 fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
     let callback_id = CallbackId::from(42);
 
-    let entry = flexible_response(42, 0, b"this is invalid candid");
+    let valid_data = Encode!(&CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: vec![],
+    })
+    .unwrap();
+    let valid_entry = flexible_response(42, 0, &valid_data);
+    let invalid_entry = flexible_response(42, 1, b"this is invalid candid");
 
     let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
         callback_id,
-        responses: vec![entry],
+        responses: vec![valid_entry, invalid_entry],
     }]);
     let bytes = payload_to_bytes_max_4mb(payload);
 
