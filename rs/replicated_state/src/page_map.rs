@@ -773,6 +773,15 @@ impl PageMap {
         std::mem::take(&mut self.unflushed_delta);
     }
 
+    /// Returns `true` if flushing the page map would result in truncating the
+    /// underlying files and/or persisting (non-empty) unflushed delta.
+    ///
+    /// If `true`, calling `strip_unflushed_delta()` will actually mutate the
+    /// `PageMap`; if `false`, the call would be a no-op.
+    pub fn should_flush(&self) -> bool {
+        !self.has_files_in_tip || !self.unflushed_delta.is_empty()
+    }
+
     pub fn get_page_delta_indices(&self) -> Vec<PageIndex> {
         self.page_delta.iter().map(|(index, _)| *index).collect()
     }

@@ -288,20 +288,52 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
         } else {
             None
         };
+
+        // Ensure that we call `strip_unflushed_delta()` iff we need to.
+        debug_assert_eq!(
+            truncate || page_map_clone.is_some(),
+            page_map.should_flush()
+        );
+
         if truncate || page_map_clone.is_some() {
             pagemaps.push(PageMapToFlush {
                 page_map_type: entry,
                 truncate,
                 page_map: page_map_clone,
             });
+            // Clear the unflushed delta, and mark the page map as being backed by storage.
+            page_map.strip_unflushed_delta();
         }
-        // Clear the unflushed delta, as it is being flushed to disk. The page map is
-        // now backed by storage.
-        page_map.strip_unflushed_delta();
     };
 
     for canister in tip_state.canisters_iter_mut() {
-        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
+        // Skip canisters with no page maps to flush.
+        let needs_flush = canister
+            .system_state
+            .wasm_chunk_store
+            .page_map()
+            .should_flush()
+            || canister
+                .system_state
+                .log_memory_store
+                .maybe_page_map()
+                .is_some_and(PageMap::should_flush)
+            || canister
+                .execution_state
+                .as_ref()
+                .is_some_and(|execution_state| {
+                    execution_state.wasm_memory.page_map.should_flush()
+                        || execution_state.stable_memory.page_map.should_flush()
+                })
+            || canister.canister_snapshots.iter().any(|(_, s)| {
+                s.chunk_store().page_map().should_flush()
+                    || s.execution_snapshot().wasm_memory.page_map.should_flush()
+                    || s.execution_snapshot().stable_memory.page_map.should_flush()
+            });
+        if !needs_flush {
+            continue;
+        }
+
         let canister = Arc::make_mut(canister);
         let id = canister.canister_id();
         add_to_pagemaps_and_strip(
