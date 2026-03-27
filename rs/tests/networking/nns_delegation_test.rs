@@ -791,14 +791,16 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
         app_subnet.subnet_id,
     ));
 
-    block_on(deploy_guestos_to_all_subnet_nodes(
-        &nns_node,
-        &target_version,
-        cloud_engine.subnet_id,
-    ));
+    // TODO(CON-1696): Uncomment me when #9613 reaches mainnet NNS
+    // block_on(deploy_guestos_to_all_subnet_nodes(
+    //     &nns_node,
+    //     &target_version,
+    //     cloud_engine.subnet_id,
+    // ));
 
     assert_assigned_replica_version(&app_node, &target_version, env.logger());
-    assert_assigned_replica_version(&cloud_engine_node, &target_version, env.logger());
+    // TODO(CON-1696): Uncomment me when #9613 reaches mainnet NNS
+    // assert_assigned_replica_version(&cloud_engine_node, &target_version, env.logger());
 }
 
 macro_rules! systest_all_subnet_types {
