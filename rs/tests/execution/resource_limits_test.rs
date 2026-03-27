@@ -1,4 +1,5 @@
 use anyhow::Result;
+use ic_config::execution_environment::SUBNET_MEMORY_RESERVATION;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -12,7 +13,11 @@ use ic_system_test_driver::util::*;
 use ic_types::NumBytes;
 use ic_universal_canister::wasm;
 
-const MAXIMUM_STATE_SIZE: u64 = 1 << 30; // 1 GiB
+const MAXIMUM_CANISTER_STATE_SIZE: u64 = 1 << 30; // 1 GiB
+
+fn maximum_state_size() -> NumBytes {
+    SUBNET_MEMORY_RESERVATION + NumBytes::new(MAXIMUM_CANISTER_STATE_SIZE)
+}
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -25,7 +30,7 @@ fn main() -> Result<()> {
 
 pub fn setup(env: TestEnv) {
     let resource_limits = ResourceLimits {
-        maximum_state_size: Some(NumBytes::new(MAXIMUM_STATE_SIZE)),
+        maximum_state_size: Some(maximum_state_size()),
         maximum_state_delta: None,
     };
     InternetComputer::new()
@@ -46,14 +51,14 @@ pub fn memory_grow_fails_beyond_maximum_state_size(env: TestEnv) {
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
 
-            // growing stable memory to `MAXIMUM_STATE_SIZE` should fail
+            // growing stable memory to `MAXIMUM_CANISTER_STATE_SIZE` should fail
             // because other pieces of the canister state already take some memory usage
-            // and thus the total state size after the stable memory growth exceeds `MAXIMUM_STATE_SIZE`
-            let maximum_state_size_in_wasm_pages = MAXIMUM_STATE_SIZE >> 16;
+            // and thus the total state size after the stable memory growth exceeds `MAXIMUM_CANISTER_STATE_SIZE`
+            let maximum_canister_state_size_in_wasm_pages = MAXIMUM_CANISTER_STATE_SIZE >> 16;
             let res = canister
                 .update(
                     wasm()
-                        .stable64_grow(maximum_state_size_in_wasm_pages)
+                        .stable64_grow(maximum_canister_state_size_in_wasm_pages)
                         .int64_to_blob()
                         .append_and_reply()
                         .build(),
