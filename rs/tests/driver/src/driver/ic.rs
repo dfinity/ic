@@ -475,6 +475,7 @@ pub struct Subnet {
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub boot_image: BootImage,
     pub required_host_features: Vec<HostFeature>,
+    pub default_node_reward_type: Option<NodeRewardType>,
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
@@ -505,16 +506,24 @@ pub struct Subnet {
 
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
-        // An invariant in the registry ensures that cloud engines have a free cost schedule
-        let canister_cycles_cost_schedule = match subnet_type {
-            SubnetType::CloudEngine => CanisterCyclesCostSchedule::Free,
-            _ => CanisterCyclesCostSchedule::Normal,
+        // Invariants in the registry ensures that
+        //   - Cloud engines have a free cost schedule
+        //   - Cloud engines only have nodes with reward type 4
+        let (canister_cycles_cost_schedule, default_node_reward_type) = match subnet_type {
+            SubnetType::Application | SubnetType::System | SubnetType::VerifiedApplication => {
+                (CanisterCyclesCostSchedule::Normal, None)
+            }
+            SubnetType::CloudEngine => (
+                CanisterCyclesCostSchedule::Free,
+                Some(NodeRewardType::Type4),
+            ),
         };
         Self {
             vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             boot_image: Default::default(),
             required_host_features: vec![],
+            default_node_reward_type,
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             max_ingress_bytes_per_block: None,
@@ -637,9 +646,8 @@ impl Subnet {
     }
 
     pub fn add_node(mut self, mut node: Node) -> Self {
-        // If the subnet is a cloud engine, ensure that all nodes have reward type 4
-        if self.subnet_type == SubnetType::CloudEngine {
-            node = node.with_node_reward_type(NodeRewardType::Type4);
+        if node.node_reward_type.is_none() {
+            node = node.with_node_reward_type(self.default_node_reward_type);
         }
 
         self.nodes.push(node);
@@ -786,6 +794,7 @@ impl Default for Subnet {
             vm_allocation: Default::default(),
             boot_image: BootImage::GroupDefault,
             required_host_features: vec![],
+            default_node_reward_type: None,
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             max_ingress_bytes_per_block: None,
