@@ -3274,14 +3274,22 @@ impl StateManager for StateManagerImpl {
 
         // Get the previous state hash either from consensus via certification metadata (if we are catching up)
         // or wait for the hashing thread to finish computing it.
-        // TODO: use states.certifications (look up at height-1)
-        let prev_state_hash = {
+        let prev_height = height.decrement();
+        let states = self.states.read();
+        let maybe_hash = states
+            .certifications_metadata
+            .get(&prev_height)
+            .map(|x| x.certified_state_hash.clone());
+        drop(states);
+        let prev_state_hash = if let Some(hash) = maybe_hash {
+            hash
+        } else {
+            // Wait for the hashing thread.
             let (sender, recv) = bounded(1);
             self.hash_channel
                 .send(HashRequest::Wait { sender })
                 .expect("Failed to send `Wait` to hash channel");
             recv.recv().expect("Failed to wait for hash channel");
-            let prev_height = height.decrement();
             // At prev_height 0, we don't have a hash yet, so we have to compute it.
             if prev_height.get() == 0 {
                 let states = self.states.read();
@@ -3352,15 +3360,17 @@ impl StateManager for StateManagerImpl {
         // This optimization is skipped every `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING` heights
         // so that we always have a reasonably "recent" state snapshot and
         // its certification metadata available.
-        // TODO: uncomment when merging with the catch-up optimization.
-
+        // Additional condition: If hash@height is in self.certifications => No early return if we have no hash from consensus layer.
+        let states = self.states.read();
+        let hash_at_height_available = states.certifications.contains_key(&height);
+        drop(states);
         let fast_forward_height = self.fast_forward_height.load(Ordering::Relaxed);
         if matches!(scope, CertificationScope::Metadata)
-        // additional condition: if hash@height is in self.certifications => no early return if we have no hash from CON
             && height.get() < fast_forward_height
             && !height
                 .get()
                 .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING)
+            && hash_at_height_available
         {
             let mut states = self.states.write();
             #[cfg(debug_assertions)]
@@ -3405,25 +3415,9 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        // This step is expensive, so we do it before the write lock for `states`.
-        let next_tip = {
-            let _timer = self
-                .metrics
-                .checkpoint_op_duration
-                .with_label_values(&["copy_state"])
-                .start_timer();
-            (height, state.deref().clone())
-        };
-
-        let mut states = self.states.write();
-        #[cfg(debug_assertions)]
-        check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
-
-        assert_tip_is_none(&states);
-
         // Kick off hashing of the new state if necessary.
-        // TODO: Skip if we got the hash from consensus via self.certifications
-        if true {
+        // Skip if we got the hash from consensus via self.certifications.
+        if !hash_at_height_available {
             let hash_req = HashRequest::HashState {
                 state: Arc::clone(&state),
                 states: Arc::clone(&self.states),
@@ -3435,6 +3429,29 @@ impl StateManager for StateManagerImpl {
             };
             self.hash_channel.send(hash_req).unwrap();
         }
+
+        // This step is expensive, so we do it before the write lock for `states`.
+        let next_tip = {
+            let _timer = self
+                .metrics
+                .checkpoint_op_duration
+                .with_label_values(&["copy_state"])
+                .start_timer();
+            (height, state.deref().clone())
+        };
+
+        // For checkpoint heights, we await the state hash immediately. This may not be necessary,
+        // but it keeps the existing checkpointing behaviour as is.
+        // Note: This must not be called while a write lock to `states` is being held.
+        if scope == CertificationScope::Full {
+            self.flush_hash_channel();
+        }
+
+        let mut states = self.states.write();
+        #[cfg(debug_assertions)]
+        check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
+
+        assert_tip_is_none(&states);
 
         if let Some((state_metadata, compute_manifest_request)) =
             state_metadata_and_compute_manifest_request
@@ -3461,9 +3478,7 @@ impl StateManager for StateManagerImpl {
         // tip if needed.
         states.tip_height = next_tip.0;
         states.tip = Some(next_tip.1);
-
         if scope == CertificationScope::Full {
-            self.flush_hash_channel();
             self.release_lock_and_persist_metadata(states);
         }
         for req in follow_up_tip_requests {
@@ -3557,7 +3572,12 @@ fn spawn_hash_thread(
                             scope,
                             state_layout,
                         } => {
-                            // TODO: check certifications via catch up first.
+                            // If the hash@height is already present via the consensus thread, we can skip calculating it.
+                            let states_read = states.read();
+                            if states_read.certifications.contains_key(&height) {
+                                return;
+                            }
+                            drop(states_read);
                             let certification_metadata =
                                 StateManagerImpl::compute_certification_metadata(
                                     &state, height, &metrics, &log,
@@ -3565,7 +3585,6 @@ fn spawn_hash_thread(
                                 .unwrap_or_else(|err| {
                                     fatal!(log, "Failed to compute hash tree: {:?}", err)
                                 });
-
                             if scope == CertificationScope::Full {
                                 info!(
                                     log,
@@ -3646,7 +3665,9 @@ impl StateManagerImpl {
     /// to the maximum of the value before and the height passed.
     ///
     /// This used to happen synchronously inside `commit_and_certify`, but now happens in the hash thread
-    /// at an unpredictable time.  
+    /// at an unpredictable time.
+    ///
+    /// Note: Do not call this function while the calling scope holds a write lock to `SharedState`.
     pub fn flush_hash_channel(&self) {
         let (sender, recv) = bounded(1);
         self.hash_channel
