@@ -63,6 +63,7 @@ pub struct NodeOperatorConfig {
     pub node_provider_principal_id: Option<PrincipalId>,
     pub node_allowance: u64,
     pub dc_id: String,
+    pub rewardable_nodes: BTreeMap<String, u32>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]

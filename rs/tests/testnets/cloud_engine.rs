@@ -52,6 +52,7 @@ use ic_types_cycles::CanisterCyclesCostSchedule;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
+use std::collections::BTreeMap;
 
 struct DcConfig {
     id: &'static str,
@@ -126,6 +127,7 @@ pub fn setup(env: TestEnv) {
                 node_provider_principal_id: Some(provider_principal),
                 node_allowance: 2,
                 dc_id: dc.id.to_string(),
+                rewardable_nodes: BTreeMap::from([("type4.1".to_string(), 2)]),
             });
 
         // 1 CloudEngine node per DC

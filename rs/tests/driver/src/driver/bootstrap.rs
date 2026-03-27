@@ -223,12 +223,13 @@ pub fn init_ic(
         ic_config.add_data_center_record(dc_record.clone());
     }
     for no in &ic.node_operators {
-        ic_config.add_node_operator_entry(
+        ic_config.add_node_operator_record(
             no.name.clone(),
             no.principal_id,
             no.node_provider_principal_id,
             no.node_allowance,
             no.dc_id.clone(),
+            no.rewardable_nodes.clone(),
         );
     }
 

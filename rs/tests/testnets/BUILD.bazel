@@ -216,7 +216,6 @@ system_test_nns(
         "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
         "II_FRONTEND_WASM_PATH": "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
         "NNS_DAPP_WASM_PATH": "@mainnet_canisters//:nns_dapp_test.wasm.gz",
-        "SNS_AGGREGATOR_WASM_PATH": "@mainnet_canisters//:sns_aggregator_test.wasm.gz",
         "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [

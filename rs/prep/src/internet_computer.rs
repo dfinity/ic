@@ -434,14 +434,15 @@ impl IcConfig {
         self.initial_dc_records.push(dc_record);
     }
 
-    /// Add a node operator entry to the initial registry.
-    pub fn add_node_operator_entry(
+    /// Add a node operator record to the initial registry.
+    pub fn add_node_operator_record(
         &mut self,
         name: String,
         principal_id: PrincipalId,
         node_provider_principal_id: Option<PrincipalId>,
         node_allowance: u64,
         dc_id: String,
+        rewardable_nodes: BTreeMap<String, u32>,
     ) {
         self.initial_registry_node_operator_entries
             .push(NodeOperatorEntry {
@@ -450,9 +451,9 @@ impl IcConfig {
                 node_provider_principal_id,
                 node_allowance,
                 dc_id,
-                rewardable_nodes: BTreeMap::new(),
+                rewardable_nodes: rewardable_nodes.clone(),
                 ipv6: None,
-                max_rewardable_nodes: BTreeMap::new(),
+                max_rewardable_nodes: rewardable_nodes,
             });
     }
 
