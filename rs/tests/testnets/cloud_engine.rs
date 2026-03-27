@@ -48,6 +48,7 @@ use ic_system_test_driver::driver::{
     test_env_api::HasTopologySnapshot,
 };
 use ic_types::PrincipalId;
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
@@ -106,7 +107,8 @@ pub fn setup(env: TestEnv) {
     // Build CloudEngine subnet with nodes distributed across datacenters.
     // Each datacenter gets its own node operator, and nodes in that DC
     // are assigned to that operator in the registry.
-    let mut cloud_engine_subnet = Subnet::new(SubnetType::CloudEngine);
+    let mut cloud_engine_subnet =
+        Subnet::new(SubnetType::CloudEngine).with_cost_schedule(CanisterCyclesCostSchedule::Free);
     for (i, dc) in DATA_CENTERS.iter().enumerate() {
         let operator_principal = PrincipalId::new_user_test_id(1000 + i as u64);
         let provider_principal = PrincipalId::new_user_test_id(2000 + i as u64);
