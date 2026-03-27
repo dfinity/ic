@@ -12,7 +12,6 @@ use crate::driver::{
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
-use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
@@ -492,11 +491,6 @@ pub struct Subnet {
 
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
-        // An invariant in the registry ensures that cloud engines have a free cost schedule
-        let canister_cycles_cost_schedule = match subnet_type {
-            SubnetType::CloudEngine => CanisterCyclesCostSchedule::Free,
-            _ => CanisterCyclesCostSchedule::Normal,
-        };
         Self {
             vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
@@ -517,7 +511,7 @@ impl Subnet {
             features: None,
             max_number_of_canisters: None,
             subnet_type,
-            canister_cycles_cost_schedule,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
@@ -624,11 +618,6 @@ impl Subnet {
     }
 
     pub fn add_node(mut self, mut node: Node) -> Self {
-        // If the subnet is a cloud engine, ensure that all nodes have reward type 4
-        if self.subnet_type == SubnetType::CloudEngine {
-            node = node.with_node_reward_type(NodeRewardType::Type4)
-        }
-
         self.nodes.push(node);
         self
     }
@@ -871,7 +860,6 @@ pub struct Node {
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
-    pub node_reward_type: Option<NodeRewardType>,
     pub recovery_hash: Option<String>,
     pub boot_image: BootImage,
 }
@@ -923,11 +911,6 @@ impl Node {
 
     pub fn with_domain(mut self, domain: String) -> Self {
         self.domain = Some(domain);
-        self
-    }
-
-    pub fn with_node_reward_type(mut self, node_reward_type: NodeRewardType) -> Self {
-        self.node_reward_type = Some(node_reward_type);
         self
     }
 
