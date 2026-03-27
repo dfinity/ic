@@ -646,8 +646,10 @@ impl Subnet {
     }
 
     pub fn add_node(mut self, mut node: Node) -> Self {
-        if node.node_reward_type.is_none() {
-            node = node.with_node_reward_type(self.default_node_reward_type);
+        if node.node_reward_type.is_none()
+            && let Some(reward_type) = self.default_node_reward_type
+        {
+            node = node.with_node_reward_type(reward_type);
         }
 
         self.nodes.push(node);
