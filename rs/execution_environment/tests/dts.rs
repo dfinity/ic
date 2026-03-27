@@ -968,7 +968,7 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
 
 #[test]
 fn dts_aborted_execution_does_not_block_subnet_messages() {
-    fn test<F: Fn(CanisterId) -> (Method, CallArgs)>(subnet_complete: bool, f: F) {
+    fn test<F: Fn(CanisterId) -> (Method, CallArgs)>(runs_on_aborted_canister: bool, f: F) {
         let slice_instruction_limit = 1_000_000;
         let env = dts_env(
             NumInstructions::from(slice_instruction_limit * 10),
@@ -1029,7 +1029,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             Some(IngressState::Processing)
         );
 
-        if subnet_complete {
+        if runs_on_aborted_canister {
             // Make sure the execution of the method completed, despite the effective canister is aborted.
             assert!(matches!(
                 ingress_state(env.ingress_status(&subnet_message_id)),
