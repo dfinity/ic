@@ -2997,7 +2997,7 @@ fn maximum_state_delta() {
     assert!(has_completed(&env, &msg_id));
 }
 
-/// This test ensures that subnet message are not executed out-of-order on an aborted canister.
+/// This test ensures that subnet messages are not executed out-of-order on an aborted canister.
 #[test]
 fn no_subnet_message_reordering() {
     let sm = StateMachine::new();
