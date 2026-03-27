@@ -23,6 +23,7 @@ use pocket_ic::{
     nonblocking::PocketIc as PocketIcAsync,
     query_candid, start_server, update_candid,
 };
+use reqwest::blocking::Response;
 use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
@@ -2272,7 +2273,13 @@ fn call_ingress_expiry() {
     let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
     pic.set_certified_time(time);
     let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
-    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id, "v2");
+    let (resp, msg_id) = call_request(
+        &pic,
+        Principal::anonymous(),
+        ingress_expiry,
+        canister_id,
+        "v2",
+    );
     assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
 
     // execute a round on the PocketIC instance to process that update call
@@ -2293,7 +2300,13 @@ fn call_ingress_expiry() {
         .unwrap()
         .as_nanos() as u64
         + 240_000_000_000;
-    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id, "v2");
+    let (resp, _msg_id) = call_request(
+        &pic,
+        Principal::anonymous(),
+        ingress_expiry,
+        canister_id,
+        "v2",
+    );
     assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
     let err = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert!(
@@ -2303,6 +2316,7 @@ fn call_ingress_expiry() {
 
 fn call_request(
     pic: &PocketIc,
+    sender: Principal,
     ingress_expiry: u64,
     canister_id: Principal,
     version: &str,
@@ -2310,7 +2324,7 @@ fn call_request(
     let content = Call {
         nonce: None,
         ingress_expiry,
-        sender: Principal::anonymous(),
+        sender,
         canister_id,
         method_name: "whoami".to_string(),
         arg: Encode!(&()).unwrap(),
@@ -2357,7 +2371,13 @@ fn call_request_versions() {
     // submit an update call via /api/<version>/canister/.../call
     for version in ["v2", "v3", "v4"] {
         let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
-        let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id, version);
+        let (resp, _msg_id) = call_request(
+            &pic,
+            Principal::anonymous(),
+            ingress_expiry,
+            canister_id,
+            version,
+        );
         let status = resp.status();
         if version == "v2" {
             assert_eq!(status, reqwest::StatusCode::ACCEPTED);
@@ -2365,6 +2385,63 @@ fn call_request_versions() {
             assert_eq!(status, reqwest::StatusCode::OK);
         }
     }
+}
+
+// Sends an update call to a newly created canister using the endpoint `/api/v4/canister/.../call`
+// and impersonating the sender.
+fn update_call_via_call_request(pic: &PocketIc) -> Response {
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
+    let (resp, _msg_id) = call_request(
+        pic,
+        Principal::from_slice(&[42; 29]),
+        ingress_expiry,
+        canister_id,
+        "v4",
+    );
+
+    resp
+}
+
+#[test]
+fn impersonate_sender_in_call_request_fails() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_auto_progress()
+        .build();
+
+    // an update call to /api/v4/canister/.../call impersonating the sender
+    // fails because ingress validation is enabled (by default)
+    let resp = update_call_via_call_request(&pic);
+
+    let status = resp.status();
+    assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+    let response_bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert!(
+        response_bytes.contains("Missing signature"),
+        "Unexpected response {response_bytes}"
+    );
+}
+
+#[test]
+fn impersonate_sender_in_call_request_succeeds() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_auto_progress()
+        .disable_ingress_validation()
+        .build();
+
+    // an update call to /api/v4/canister/.../call impersonating the sender
+    // succeeds with disabled ingress validation
+    let resp = update_call_via_call_request(&pic);
+
+    let status = resp.status();
+    assert_eq!(status, reqwest::StatusCode::OK);
 }
 
 #[test]
@@ -3004,6 +3081,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
         mainnet_nns_subnet_id: None,
+        disable_ingress_validation: None,
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
 
@@ -3071,6 +3149,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
         mainnet_nns_subnet_id: None,
+        disable_ingress_validation: None,
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
 
@@ -3125,6 +3204,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
         mainnet_nns_subnet_id: None,
+        disable_ingress_validation: None,
     };
     assert_create_instance_failure(
         &server_url,

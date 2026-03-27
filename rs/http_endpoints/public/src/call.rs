@@ -76,7 +76,7 @@ impl IngressValidatorBuilder {
         }
     }
 
-    pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
+    pub fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
         self.malicious_flags = Some(malicious_flags);
         self
     }
