@@ -585,7 +585,6 @@ fn switch_to_checkpoint(
             .switch_to_checkpoint(
                 &PageMap::open(
                     Box::new(canister_layout.wasm_chunk_store()),
-                    layout.height(),
                     Arc::clone(fd_factory),
                 )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
@@ -598,7 +597,6 @@ fn switch_to_checkpoint(
             page_map.switch_to_checkpoint(
                 &PageMap::open(
                     Box::new(canister_layout.log_memory_store()),
-                    layout.height(),
                     Arc::clone(fd_factory),
                 )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
@@ -609,7 +607,6 @@ fn switch_to_checkpoint(
             tip_execution.wasm_memory.page_map.switch_to_checkpoint(
                 &PageMap::open(
                     Box::new(canister_layout.vmemory_0()),
-                    layout.height(),
                     Arc::clone(fd_factory),
                 )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
@@ -617,7 +614,6 @@ fn switch_to_checkpoint(
             tip_execution.stable_memory.page_map.switch_to_checkpoint(
                 &PageMap::open(
                     Box::new(canister_layout.stable_memory()),
-                    layout.height(),
                     Arc::clone(fd_factory),
                 )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
@@ -675,7 +671,6 @@ fn switch_to_checkpoint(
                 .switch_to_checkpoint(
                     &PageMap::open(
                         Box::new(snapshot_layout.wasm_chunk_store()),
-                        layout.height(),
                         Arc::clone(fd_factory),
                     )
                     .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
@@ -688,7 +683,6 @@ fn switch_to_checkpoint(
                 .switch_to_checkpoint(
                     &PageMap::open(
                         Box::new(snapshot_layout.vmemory_0()),
-                        layout.height(),
                         Arc::clone(fd_factory),
                     )
                     .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
@@ -700,7 +694,6 @@ fn switch_to_checkpoint(
                 .switch_to_checkpoint(
                     &PageMap::open(
                         Box::new(snapshot_layout.stable_memory()),
-                        layout.height(),
                         Arc::clone(fd_factory),
                     )
                     .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,

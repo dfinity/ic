@@ -51,6 +51,9 @@ pub struct RequestContext {
 
     // Filled in when the inner request is HTTP
     pub http_request: Option<HttpRequest>,
+
+    // Filled in for read_state requests
+    pub read_state_paths: Option<Vec<Vec<Vec<u8>>>>,
 }
 
 impl RequestContext {
@@ -624,6 +627,7 @@ pub(crate) mod test {
                 sender: Blob(sender.as_slice().to_vec()),
                 nonce: None,
                 ingress_expiry: 1234,
+                sender_info: None,
             },
         };
 
@@ -664,6 +668,7 @@ pub(crate) mod test {
                 sender: Blob(sender.as_slice().to_vec()),
                 nonce: None,
                 ingress_expiry: 1234,
+                sender_info: None,
             },
         };
 

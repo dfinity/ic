@@ -490,7 +490,10 @@ http_file(
     name = "kong_backend_canister",
     downloaded_file_path = "kong_backend.wasm.gz",
     sha256 = "bed9a193158348843c8661616c65b152f57f875863f75dad3b75627ad6a2b4fc",
-    url = "https://github.com/KongSwap/kong/raw/4bf8f99df53dbd34bef0e55ab6364d85bb31c71a/wasm/kong_backend.wasm.gz",
+    # The kong repository disappeared so the old URL of
+    # https://github.com/KongSwap/kong/raw/4bf8f99df53dbd34bef0e55ab6364d85bb31c71a/wasm/kong_backend.wasm.gz
+    # no longer works. So we uploaded the wasm.gz to the DFINITY CDN at:
+    url = "https://download.dfinity.systems/testdata/kong_backend-4bf8f99df53dbd34bef0e55ab6364d85bb31c71a.wasm.gz",
 )
 
 # SNS-KongSwap Adaptor canister (an SNS extension of the TreasuryManager kind)
@@ -527,6 +530,39 @@ http_file(
 )
 
 # XC artifacts for testing
+
+# ckBTC
+http_file(
+    name = "ckbtc_mainnet_events.gz",
+    sha256 = "bbfdc95352645fbf7439c3b6d69df2698d37bbd4a3dfc36c1ef8846653176999",
+    url = "https://download.dfinity.systems/testdata/ckbtc/mainnet_events_v1.gz",
+)
+
+http_file(
+    name = "ckbtc_testnet_events.gz",
+    sha256 = "2a0a6da625a9149e3411d519e0866c13b3a48e36d12f0d3bf42bdef2f93575b0",
+    url = "https://download.dfinity.systems/testdata/ckbtc/testnet_events_v1.gz",
+)
+
+# ckDOGE
+http_file(
+    name = "ckdoge_mainnet_events.gz",
+    sha256 = "9f2959621216371fefec3b2f6a4d6876b7d699009e64363adc514d6abff18f09",
+    url = "https://download.dfinity.systems/testdata/ckdoge/mainnet_events_v1.gz",
+)
+
+# ckETH
+http_file(
+    name = "cketh_mainnet_events.gz",
+    sha256 = "e5ffdd0be68b11eacdc623547643dc3c4dc02de4bcb4e1dfb5906fd775c4d8e0",
+    url = "https://download.dfinity.systems/testdata/cketh/mainnet_events_v1.gz",
+)
+
+http_file(
+    name = "cketh_sepolia_events.gz",
+    sha256 = "ad417332a67911cace2ed1f5179b7b1e5f4eb5327a5e872f68a85283dfa838af",
+    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v1.gz",
+)
 
 # EVM RPC canister
 

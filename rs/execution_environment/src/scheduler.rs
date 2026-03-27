@@ -914,7 +914,9 @@ impl SchedulerImpl {
                 canister.system_state.memory_allocation = MemoryAllocation::default();
                 canister.system_state.clear_canister_history();
                 // Burn the remaining balance of the canister.
-                canister.system_state.burn_remaining_balance_for_uninstall();
+                canister
+                    .system_state
+                    .burn_remaining_balance_for_uninstall(cost_schedule);
                 canister.canister_snapshots.delete_snapshots();
 
                 info!(
@@ -1001,12 +1003,14 @@ impl SchedulerImpl {
                 .system_state
                 .output_queues_for_each(|canister_id, msg| {
                     let own_subnet_type = state.metadata.own_subnet_type;
+                    let own_cost_schedule = state.get_own_cost_schedule();
                     match state.canister_state_make_mut(canister_id) {
                         Some(dest_canister) => dest_canister
                             .push_input(
                                 (*msg).clone(),
                                 &mut subnet_available_guaranteed_response_memory,
                                 own_subnet_type,
+                                own_cost_schedule,
                                 InputQueueType::LocalSubnet,
                             )
                             .map(|_| ())
@@ -1076,6 +1080,7 @@ impl SchedulerImpl {
 
     /// Aborts paused execution above `max_paused_executions` based on scheduler priority.
     fn abort_paused_executions_above_limit(&self, state: &mut ReplicatedState) {
+        let cost_schedule = state.get_own_cost_schedule();
         let mut paused_round_states = state
             .canisters_iter()
             .filter_map(|canister| {
@@ -1095,7 +1100,13 @@ impl SchedulerImpl {
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
                 let canister = canister_states.get_mut(&rs.canister_id()).unwrap();
-                abort_canister(canister, subnet_schedule, &self.exec_env, &self.log);
+                abort_canister(
+                    canister,
+                    subnet_schedule,
+                    &self.exec_env,
+                    &self.log,
+                    cost_schedule,
+                );
             });
     }
 
@@ -1110,6 +1121,7 @@ impl SchedulerImpl {
         current_round_type: ExecutionRoundType,
         logger: &ReplicaLogger,
     ) {
+        let cost_schedule = state.get_own_cost_schedule();
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
                 state.metadata.heap_delta_estimate = NumBytes::from(0);
@@ -1119,7 +1131,7 @@ impl SchedulerImpl {
                 state.metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
 
                 // Abort all paused execution before the checkpoint.
-                abort_all_paused_executions(state, &self.exec_env, &self.log);
+                abort_all_paused_executions(state, &self.exec_env, &self.log, cost_schedule);
             }
             ExecutionRoundType::OrdinaryRound => {
                 self.abort_paused_executions_above_limit(state);
@@ -2239,8 +2251,9 @@ fn abort_canister(
     subnet_schedule: &mut SubnetSchedule,
     exec_env: &ExecutionEnvironment,
     log: &ReplicaLogger,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) {
-    if exec_env.abort_canister(canister, log) {
+    if exec_env.abort_canister(canister, log, cost_schedule) {
         // Reset the priority credit to zero.
         subnet_schedule
             .get_mut(canister.canister_id())
@@ -2256,9 +2269,10 @@ pub fn abort_all_paused_executions(
     state: &mut ReplicatedState,
     exec_env: &ExecutionEnvironment,
     log: &ReplicaLogger,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) {
     let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
     for canister in canister_states.values_mut() {
-        abort_canister(canister, subnet_schedule, exec_env, log);
+        abort_canister(canister, subnet_schedule, exec_env, log, cost_schedule);
     }
 }
