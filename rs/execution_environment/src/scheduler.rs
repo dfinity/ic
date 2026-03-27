@@ -1970,21 +1970,31 @@ fn can_execute_subnet_msg(
     };
 
     // Adding a full match here to catch any further task queue changes.
-    let (effective_canister_is_paused, effective_canister_is_aborted) =
-        match effective_canister_state.system_state.task_queue.front() {
-            None
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory) => (false, false),
-            Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::PausedInstallCode(_)) => (true, false),
-            Some(ExecutionTask::AbortedExecution { .. })
-            | Some(ExecutionTask::AbortedInstallCode { .. }) => (false, true),
-        };
+    let (
+        effective_canister_is_paused,
+        effective_canister_is_aborted,
+        effective_canister_is_aborted_in_install_code,
+    ) = match effective_canister_state.system_state.task_queue.front() {
+        None
+        | Some(ExecutionTask::Heartbeat)
+        | Some(ExecutionTask::GlobalTimer)
+        | Some(ExecutionTask::OnLowWasmMemory) => (false, false, false),
+        Some(ExecutionTask::PausedExecution { .. }) | Some(ExecutionTask::PausedInstallCode(_)) => {
+            (true, false, false)
+        }
+        Some(ExecutionTask::AbortedExecution { .. }) => (false, true, false),
+        Some(ExecutionTask::AbortedInstallCode { .. }) => (false, true, true),
+    };
 
     if effective_canister_is_paused {
         // If there is a DTS execution in progress, we can't execute the subnet message.
         // Note, this does NOT include aborted executions.
+        return false;
+    }
+
+    if effective_canister_is_aborted_in_install_code {
+        // If there is an aborted install code in progress, we can't execute the subnet message.
+        // This is to prevent out-of-order subnet message execution.
         return false;
     }
 
