@@ -77,7 +77,7 @@ pub(crate) fn check_subnet_invariants(
                     opt.unwrap_or_else(|| panic!("Node {node_id} does not exist in the registry"))
                 })
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Each node appears at most once in a subnet membership
         let num_nodes = subnet_record.membership.len();
