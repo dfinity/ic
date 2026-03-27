@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use candid::Principal;
 use ic_consensus_system_test_utils::{
     rw_message::{can_read_msg, cannot_store_msg},
@@ -13,14 +12,11 @@ use ic_system_test_driver::{
     driver::{
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         test_env::{SshKeyGen, TestEnv},
-        test_env_api::{
-            IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to, secs,
-        },
+        test_env_api::{IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to},
     },
-    util::block_on,
+    util::{JournalStreamer, block_on},
 };
 use ic_types::SubnetId;
-use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{fmt::Debug, path::PathBuf};
 use url::Url;
@@ -84,14 +80,8 @@ where
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Cursor {
-    #[serde(alias = "__CURSOR")]
-    pub cursor: String,
-}
-
-// Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
-// This function waits until it detects in the subnet node's journal that consensus is halted.
+/// Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
+/// This function waits until it detects in the subnet node's journal that consensus is halted.
 pub fn halt_subnet(
     admin_helper: &AdminHelper,
     subnet_node: &IcNodeSnapshot,
@@ -100,14 +90,9 @@ pub fn halt_subnet(
     logger: &Logger,
 ) {
     info!(logger, "Halting subnet {subnet_id}...");
-    let session = subnet_node.block_on_ssh_session().unwrap();
-    let message_str = subnet_node
-        .block_on_bash_script_from_session(
-            &session,
-            "journalctl -n1 -o json --output-fields='__CURSOR'",
-        )
-        .expect("Failed to get journal cursor");
-    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+    let journal_streamer = JournalStreamer::new(subnet_node.block_on_ssh_session().unwrap())
+        .from_now()
+        .expect("Failed to create journal streamer");
 
     AdminStep {
         logger: logger.clone(),
@@ -116,33 +101,20 @@ pub fn halt_subnet(
     .exec()
     .expect("Failed to halt subnet");
 
-    ic_system_test_driver::retry_with_msg!(
-        "check if consensus is halted",
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || {
-            let res = subnet_node.block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    "journalctl --after-cursor='{}' | grep -c 'is halted'",
-                    message.cursor
-                ),
-            );
-            if res.is_ok_and(|r| r.trim().parse::<i32>().unwrap() > 0) {
-                Ok(())
-            } else {
-                Err(anyhow!("Did not find log entry that consensus is halted"))
-            }
-        }
-    )
-    .expect("Failed to detect halted subnet");
+    assert!(
+        journal_streamer
+            .follow()
+            .max_lines(1)
+            .contains("is halted")
+            .unwrap_or_default(),
+        "Did not find log entry that consensus is halted"
+    );
 
     info!(logger, "Subnet {subnet_id} halted.");
 }
 
-// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
-// URL.
+/// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
+/// URL.
 pub fn unhalt_subnet(
     admin_helper: &AdminHelper,
     subnet_id: SubnetId,

@@ -242,7 +242,7 @@ fn upgrade_fails_on_not_enough_cycles() {
     );
     let canister_id = test
         .canister_from_cycles_and_binary(
-            Cycles::new(balance_cycles.into()) + freezing_threshold_cycles,
+            balance_cycles.real() + freezing_threshold_cycles,
             old_empty_binary(),
         )
         .unwrap();
