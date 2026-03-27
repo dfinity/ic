@@ -82,7 +82,6 @@ use ic_types::{
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
-    NominalCyclesTesting,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
@@ -1628,11 +1627,9 @@ impl ExecutionTest {
         assert!(cycles_used_after >= cycles_used_before);
         let cycles_used = cycles_used_after - cycles_used_before;
         if instructions_used.get() != 0 {
-            let expected_cycles_balance_change =
-                self.expected_cycles_metrics_change(message, instructions_used);
             assert_eq!(
                 cycles_used,
-                NominalCycles::new(expected_cycles_balance_change.get())
+                self.expected_cycles_metrics_change(message, instructions_used),
             );
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
