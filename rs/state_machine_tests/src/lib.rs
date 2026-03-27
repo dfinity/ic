@@ -269,8 +269,6 @@ impl MessageOrdering {
     }
 }
 
-/// Scheduler wrapper for flexible ordering. Boosts one canister's priority
-/// and optionally suppresses subnet_queues to prevent implicit drain.
 struct FlexibleOrderingScheduler {
     inner: Box<dyn Scheduler<State = ReplicatedState>>,
     target: Arc<RwLock<Option<CanisterId>>>,
@@ -305,11 +303,8 @@ impl Scheduler for FlexibleOrderingScheduler {
                 .accumulated_priority = AccumulatedPriority::new(i64::MAX / 4);
         }
 
-        // Swap out subnet_queues so drain_subnet_queues has nothing to process.
         // Safe to restore: no new messages land in subnet_queues during
-        // execute_round. Messages to IC_00 stay in output queues until
-        // build_streams (after execute_round) moves them to loopback, and
-        // only next round's Demux moves them into subnet_queues.
+        // execute_round — they stay in output until build_streams.
         let suppress = *self.suppress_subnet_messages.read().unwrap();
         let saved_subnet_queues = if suppress {
             Some(std::mem::take(state.subnet_queues_mut()))
@@ -2057,16 +2052,10 @@ impl StateMachine {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
-        // One canister, one message per round: scheduler_cores=1 puts all
-        // canisters on a single execution core. The scheduler computes the
-        // canister budget as max_instructions_per_round - max_slice + 1
-        // (scheduler.rs line 1308). Setting max_instructions_per_round =
-        // max_slice + overhead gives a canister budget of overhead + 1.
-        // After one message + overhead charge, the budget is exhausted:
-        // both the per-canister loop (line 1796) and the per-canister
-        // check (line 1774) stop, preventing a second message or canister.
-        // DTS still works: per-slice limit (InstructionLimits) is independent.
-        // Subnet budget is minimal so drain_subnet_queues processes one message.
+        // One canister, one message per round. Canister budget =
+        // max_instructions_per_round - max_slice + 1 = overhead + 1.
+        // Exhausted after one message + overhead, blocking a second.
+        // DTS per-slice limit is independent of round budget.
         if flexible_ordering {
             let sc = &mut subnet_config.scheduler_config;
             sc.scheduler_cores = 1;
@@ -2784,7 +2773,6 @@ impl StateMachine {
 
         for msg in ordering.messages {
             match msg {
-                // IC_00 ingress: loop until completed (install_code may DTS).
                 OrderedMessage::Ingress(target, ref ingress_id) if target == IC_00 => {
                     self.set_suppress_subnet_messages(false);
                     let signed = self.take_buffered_ingress(ingress_id);
@@ -2815,8 +2803,6 @@ impl StateMachine {
                     }
                 }
 
-                // Normal canister ingress: single tick + DTS. Side-effect
-                // calls (to IC_00 or other canisters) need explicit steps.
                 OrderedMessage::Ingress(target, ref ingress_id) => {
                     self.set_suppress_subnet_messages(true);
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
@@ -2842,8 +2828,6 @@ impl StateMachine {
                     self.complete_dts(canister, MAX_TICKS);
                 }
 
-                // Request to IC_00: Demux inducts from loopback and
-                // drain_subnet_queues executes in the same tick.
                 OrderedMessage::Request { source, target } if target == IC_00 => {
                     assert!(
                         self.next_sender_in_subnet_queue(source, target),
@@ -2856,8 +2840,6 @@ impl StateMachine {
                     self.complete_dts(source, MAX_TICKS);
                 }
 
-                // IC_00 response: Demux inducts from loopback and canister
-                // executes callback in the same tick.
                 OrderedMessage::Response { source, target } if source == IC_00 => {
                     assert!(
                         self.next_sender_in_subnet_queue(source, target),
@@ -2886,7 +2868,6 @@ impl StateMachine {
                     self.tick();
                     let count_after = self.message_count(target);
                     if source == target && matches!(msg, OrderedMessage::Request { .. }) {
-                        // Self-call request: response inducted back in same tick.
                         assert_eq!(
                             count_after, count_before,
                             "Self-call on {} unexpected count. Before: {}, after: {}",
@@ -2917,9 +2898,7 @@ impl StateMachine {
         if let Some(es) = canister.execution_state.as_mut() {
             es.next_scheduled_method = method;
         }
-        // Drain stale heartbeat/timer tasks from the task_queue. These may
-        // have been added by initialize_inner_round during rounds where this
-        // canister didn't execute.
+        // Drain stale heartbeat/timer tasks added by initialize_inner_round.
         while matches!(
             canister.system_state.task_queue.front(),
             Some(
@@ -2950,7 +2929,6 @@ impl StateMachine {
         }
     }
 
-    /// Input queue count only (not task_queue), so heartbeat/timer won't affect it.
     fn message_count(&self, target: CanisterId) -> usize {
         let state = self.get_latest_state();
         if target == IC_00 {

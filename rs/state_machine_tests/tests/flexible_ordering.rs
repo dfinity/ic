@@ -105,7 +105,6 @@ fn test_ingress_ordering_on_same_canister() {
     }
 }
 
-/// Reversed ordering — last writer wins.
 #[test]
 fn test_reversed_ingress_ordering() {
     let sm = setup();
