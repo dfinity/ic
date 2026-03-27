@@ -63,32 +63,32 @@ struct DcConfig {
 
 const DATA_CENTERS: &[DcConfig] = &[
     DcConfig {
-        id: "dc1",
-        region: "us-west-1",
-        owner: "owner1",
-        latitude: 37.7749,
-        longitude: -122.4194, // San Francisco
+        id: "Fremont",
+        region: "North America,US,California",
+        owner: "Hurricane Electric",
+        latitude: 37.549,
+        longitude: -121.989,
     },
     DcConfig {
-        id: "dc2",
-        region: "eu-west-1",
-        owner: "owner2",
-        latitude: 53.3498,
-        longitude: -6.2603, // Dublin
+        id: "Brussels",
+        region: "Europe,BE,Brussels Capital",
+        owner: "Digital Realty",
+        latitude: 50.839,
+        longitude: 4.348,
     },
     DcConfig {
-        id: "dc3",
-        region: "ap-east-1",
-        owner: "owner3",
-        latitude: 22.3193,
-        longitude: 114.1694, // Hong Kong
+        id: "HongKong 1",
+        region: "Asia,HK,HongKong",
+        owner: "Unicom",
+        latitude: 22.284,
+        longitude: 114.269,
     },
     DcConfig {
-        id: "dc4",
-        region: "us-east-1",
-        owner: "owner4",
-        latitude: 39.0438,
-        longitude: -77.4874, // Ashburn, Virginia
+        id: "Sterling",
+        region: "North America,US,Virginia",
+        owner: "CyrusOne",
+        latitude: 39.004,
+        longitude: -77.408,
     },
 ];
 
