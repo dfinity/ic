@@ -42,7 +42,9 @@ use ic_consensus_system_test_utils::rw_message::cert_state_makes_progress_with_r
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{
+        AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
+    },
     ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder},
@@ -62,7 +64,7 @@ pub fn setup(env: TestEnv) {
         .use_specified_ids_allocation_range()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(64)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2_000)),

@@ -44,6 +44,7 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     def guestos_local(suffix, env):
         """Configure a GuestOS disk image (the GuestOS that the test starts with) built from the local workspace."""
         env_var_files["ENV_DEPS__GUESTOS" + suffix + "_DISK_IMG_VERSION"] = "//bazel:version.txt"
+        env_var_files["ENV_DEPS__GUESTOS" + suffix + "_ROOTFS_HASH"] = "//ic-os/guestos/envs/" + env + ":partition-root-hash"
         icos_images["ENV_DEPS__GUESTOS" + suffix + "_DISK_IMG"] = "//ic-os/guestos/envs/" + env + ":disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/" + env + ":update-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS" + suffix + "_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/" + env + ":launch-measurements.json"
@@ -61,6 +62,7 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         """Configure a GuestOS update image (the GuestOS that the test updates to) built from the local workspace."""
         suffix = "-test" if test else ""
         env_var_files["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = "//rs/tests:version-test" if test else "//bazel:version.txt"
+        env_var_files["ENV_DEPS__GUESTOS_UPDATE_ROOTFS_HASH"] = "//ic-os/guestos/envs/" + guestos_env + ":partition-root" + suffix + "-hash"
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/" + guestos_env + ":update-img" + suffix + ".tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/" + guestos_env + ":launch-measurements" + suffix + ".json"
 
@@ -128,6 +130,8 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
             guestos_local(suffix, "dev-malicious")
         elif guestos_version == "recovery_dev":
             guestos_local(suffix, "recovery-dev")
+        elif guestos_version == "sev_recovery_dev":
+            guestos_local(suffix, "sev-recovery-dev")
         elif guestos_version == "mainnet_latest":
             guestos_mainnet(suffix, MAINNET_LATEST, "@mainnet_latest_guestos_images")
         elif guestos_version == "mainnet_latest_dev":

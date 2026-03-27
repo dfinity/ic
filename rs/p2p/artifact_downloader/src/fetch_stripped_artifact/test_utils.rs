@@ -29,7 +29,9 @@ use ic_types::{
             IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
         },
     },
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
+    messages::{
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SenderInfo, SignedIngress,
+    },
     signature::BasicSignatureBatch,
     time::UNIX_EPOCH,
 };
@@ -88,6 +90,11 @@ pub(crate) fn fake_ingress_message_with_arg_size_and_sig(
             sender: Blob(vec![0x05]),
             nonce: Some(Blob(vec![1, 2, 3, 4])),
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            sender_info: Some(SenderInfo {
+                info: Blob(vec![1; 32]),
+                signer: Blob(vec![42; 8]),
+                sig: Blob(vec![3; 32]),
+            }),
         },
     };
     let ingress: SignedIngress = HttpRequestEnvelope::<HttpCallContent> {
