@@ -10,7 +10,7 @@ use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChu
 use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
     CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
-    canister_state::execution_state::{SandboxMemory, WasmBinary, WasmExecutionMode},
+    canister_state::execution_state::{WasmBinary, WasmExecutionMode},
     page_map::PageMap,
 };
 use ic_replicated_state::{CanisterPriority, CheckpointLoadingMetrics, Memory, SubnetSchedule};
@@ -66,18 +66,10 @@ pub(crate) fn make_unvalidated_checkpoint(
             .start_timer();
         flush_checkpoint_ops_and_page_maps(&mut state, height, tip_channel);
     }
-    {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["strip_page_map_deltas"])
-            .start_timer();
-        strip_page_map_deltas(&mut state);
-    }
 
     tip_channel
         .send(TipRequest::FilterTipCanisters {
             height,
-            // XXX Wouldn't it be more efficient to pass a clone of `canister_states`?
             canister_ids: state.canister_states().keys().copied().collect(),
             snapshot_ids: state
                 .canister_states()
@@ -273,27 +265,6 @@ impl PageMapType {
                         .map(|snap| snap.chunk_store().page_map())
                 })
             }
-        }
-    }
-}
-
-/// Strips away the deltas from all page maps of the replicated state.
-/// We execute this procedure before making a checkpoint because we
-/// don't want those deltas to be persisted to TIP as we apply deltas
-/// incrementally.
-fn strip_page_map_deltas(state: &mut ReplicatedState) {
-    // Reset the sandbox state to force full synchronization on the next execution
-    // since the page deltas are out of sync now.
-    for canister in state.canisters_iter_mut() {
-        if canister.execution_state.is_none() {
-            continue;
-        }
-        // XXX Could we move this into `switch_to_checkpoint`? Unless there's an issue
-        // with doing this in the tip thread, that would be the more appropriate place.
-        let canister = Arc::make_mut(canister);
-        if let Some(execution_state) = &mut canister.execution_state {
-            execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
-            execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
         }
     }
 }
