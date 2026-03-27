@@ -235,10 +235,8 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          execlogs-artifact-name: execlogs-bazel-test-all
-          invocation-names: |
-            build
-            test
+          execlogs-artifact-name: execlogs-bazel-build
+          invocation-names: build
           run: |
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
@@ -247,11 +245,6 @@ jobs:
 
             build_targets="$HOME/.cache/bazel-targets/build-targets"
             eval "bazel build $bazel_args --target_pattern_file=$build_targets"
-
-            test_targets="$HOME/.cache/bazel-targets/test-targets"
-            if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
-              eval "bazel test $bazel_args --target_pattern_file=$test_targets"
-            fi
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
@@ -273,6 +266,20 @@ jobs:
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
+
+      - name: Run Tests
+        uses: ./.github/actions/bazel
+        with:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          execlogs-artifact-name: execlogs-bazel-test
+          invocation-names: test
+          run: |
+            bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
+
+            test_targets="$HOME/.cache/bazel-targets/test-targets"
+            if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
+              eval "bazel test $bazel_args --target_pattern_file=$test_targets"
+            fi
 
   # Build & upload the arm64-{linux,darwin} variant of the PocketIC server,
   # build the entire codebase on arm64-darwin,
