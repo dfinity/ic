@@ -1741,6 +1741,7 @@ fn test_maybe_set_eight_year_gang_bonus_base() {
     )
     .with_cached_neuron_stake_e8s(100 * E8)
     .with_staked_maturity_e8s_equivalent(50 * E8)
+    .with_neuron_fees_e8s(10 * E8)
     .build();
     governance.add_neuron(1, neuron).unwrap();
 
@@ -1762,12 +1763,12 @@ fn test_maybe_set_eight_year_gang_bonus_base() {
     // Step 4: Verify the migration flag is now true.
     assert!(governance.heap_data.eight_year_gang_bonus_migration_done);
 
-    // Step 5: Verify the neuron has the bonus set to stake + staked maturity.
+    // Step 5: Verify the neuron has the bonus set to stake - fees + staked maturity.
     let bonus = governance
         .neuron_store
         .with_neuron(&NeuronId { id: 1 }, |n| n.eight_year_gang_bonus_base_e8s)
         .unwrap();
-    assert_eq!(bonus, 150 * E8); // 100 stake + 50 staked maturity
+    assert_eq!(bonus, 140 * E8); // 100 stake - 10 fees + 50 staked maturity
 
     // Step 6: Modify the neuron's stake (this would change the bonus if migration ran again).
     governance

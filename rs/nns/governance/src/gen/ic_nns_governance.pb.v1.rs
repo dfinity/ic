@@ -3074,7 +3074,7 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
-    /// Whether the grandfathered dissolve delay bonus base migration has run for all neurons.
+    /// Whether the eight year gang bonus base migration has run for all neurons.
     /// This prevents the migration from running more than once.
     #[prost(bool, tag = "31")]
     pub eight_year_gang_bonus_migration_done: bool,

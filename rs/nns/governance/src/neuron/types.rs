@@ -151,8 +151,11 @@ pub struct Neuron {
     /// `recent_ballots` circular buffer. This is used to optimize insertions
     /// into stable memory, to avoid rewriting all the data.
     pub recent_ballots_next_entry_index: Option<usize>,
-    /// Base stake used for a grandfathered dissolve delay bonus - neurons which had the maximum
-    /// dissolve delay of 8 years before the maximum dissolve delay was reduced to 2 years.
+    /// Base value (in e8s) used for the "8-year gang" dissolve delay bonus.
+    /// For neurons that had the maximum dissolve delay of 8 years before the maximum dissolve delay
+    /// was reduced to 2 years, this is set by migration to (cached stake - fees) + staked maturity,
+    /// i.e., the total staked value net of fees and including staked maturity, captured at the time
+    /// of migration.
     pub eight_year_gang_bonus_base_e8s: u64,
     /// The maturity disbursements that are in progress for this neuron.
     pub maturity_disbursements_in_progress: Vec<MaturityDisbursement>,

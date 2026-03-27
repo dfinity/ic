@@ -2339,7 +2339,8 @@ impl Governance {
             };
             parent_neuron.eight_year_gang_bonus_base_e8s = parent_neuron
                 .eight_year_gang_bonus_base_e8s
-                .saturating_sub(transfer_eight_year_gang_bonus_base_e8s);
+                .checked_sub(transfer_eight_year_gang_bonus_base_e8s)
+                .expect("Eight year gang bonus base underflows");
         })
         .expect("Expected the parent neuron to exist");
 
@@ -2366,7 +2367,7 @@ impl Governance {
             child_neuron.eight_year_gang_bonus_base_e8s = child_neuron
                 .eight_year_gang_bonus_base_e8s
                 .checked_add(transfer_eight_year_gang_bonus_base_e8s)
-                .expect("Grandfathered dissolve delay bonus base overflows");
+                .expect("Eight year gang bonus base overflows");
         })
         .expect("Expected the child neuron to exist");
 

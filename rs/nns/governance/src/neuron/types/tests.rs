@@ -831,7 +831,7 @@ fn test_eight_year_gang_bonus_base_e8s_is_lost_after_dissolving() {
     .build();
     let controller = neuron.controller();
 
-    // Verify the neuron is not dissolving and has a non-zero grandfathered bonus.
+    // Verify the neuron is not dissolving and has a non-zero eight year gang bonus.
     assert_eq!(neuron.state(now), NeuronState::NotDissolving);
     assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 100 * E8);
 
@@ -846,7 +846,7 @@ fn test_eight_year_gang_bonus_base_e8s_is_lost_after_dissolving() {
         )
         .unwrap();
 
-    // Verify the neuron is dissolving and the grandfathered bonus has been set to 0.
+    // Verify the neuron is dissolving and the eight year gang bonus has been set to 0.
     assert_eq!(neuron.state(now), NeuronState::Dissolving);
     assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 0);
 }

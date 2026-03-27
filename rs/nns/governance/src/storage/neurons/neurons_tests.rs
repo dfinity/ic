@@ -877,6 +877,7 @@ fn test_set_eight_year_gang_bonus_base_e8s_for_all_neurons() {
     )
     .with_cached_neuron_stake_e8s(100_000_000)
     .with_staked_maturity_e8s_equivalent(50_000_000)
+    .with_neuron_fees_e8s(10_000_000)
     .build();
 
     // Create a neuron with less than MAX dissolve delay.
@@ -920,13 +921,13 @@ fn test_set_eight_year_gang_bonus_base_e8s_for_all_neurons() {
     // Run the migration.
     store.set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
 
-    // Verify the neuron with MAX dissolve delay has the bonus set to stake + staked maturity.
+    // Verify the neuron with MAX dissolve delay has the bonus set to stake - fees + staked maturity.
     let retrieved_neuron_1 = store
         .read(neuron_with_max_dissolve_delay.id(), NeuronSections::ALL)
         .unwrap();
     assert_eq!(
         retrieved_neuron_1.eight_year_gang_bonus_base_e8s,
-        150_000_000 // 100_000_000 stake + 50_000_000 staked maturity
+        140_000_000 // 100_000_000 stake - 10_000_000 fees + 50_000_000 staked maturity
     );
 
     // Verify the neuron without MAX dissolve delay has the bonus set to 0.

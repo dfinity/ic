@@ -779,7 +779,7 @@ where
                     0
                 };
             })
-            .expect("Failed to set grandfathered dissolve delay bonus base for neuron");
+            .expect("Failed to set eight year gang bonus base for neuron");
         }
     }
 }

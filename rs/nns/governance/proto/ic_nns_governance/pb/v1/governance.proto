@@ -2209,7 +2209,7 @@ message Governance {
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
 
-  // Whether the grandfathered dissolve delay bonus base migration has run for all neurons.
+  // Whether the eight year gang bonus base migration has run for all neurons.
   // This prevents the migration from running more than once.
   bool eight_year_gang_bonus_migration_done = 31;
 

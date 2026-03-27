@@ -1,5 +1,5 @@
 /// The effect of splitting a neuron. This only includes maturity, staked maturity, and
-/// grandfathered dissolve delay bonus base.
+/// eight year gang bonus base.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SplitNeuronEffect {
     pub transfer_maturity_e8s: u64,
@@ -59,7 +59,7 @@ mod tests {
             1_000_000_000, // 10 ICP for the parent neuron
             500_000_000,   // 5 ICP maturity for the parent neuron
             400_000_000,   // 4 ICP staked maturity for the parent neuron
-            1_400_000_000, // 14 ICP grandfathered dissolve delay bonus base
+            1_400_000_000, // 14 ICP eight year gang bonus base
         );
 
         assert_eq!(

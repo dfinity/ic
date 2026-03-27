@@ -405,7 +405,7 @@ struct ValidSourceNeuron {
     maturity_e8s_equivalent: u64,
     /// The staked maturity of the neuron
     staked_maturity_e8s_equivalent: u64,
-    /// The grandfathered dissolve delay bonus base of the neuron
+    /// The eight year gang bonus base of the neuron
     eight_year_gang_bonus_base_e8s: u64,
 }
 
