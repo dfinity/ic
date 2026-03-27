@@ -1810,6 +1810,54 @@ fn flexible_build_respects_max_responses_per_block() {
 }
 
 #[test]
+fn flexible_build_filters_rejects_in_ok_responses() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, pool| {
+        {
+            use ic_types::canister_http::CanisterHttpReject;
+
+            let mut pool_access = pool.write().unwrap();
+            // Nodes 0 and 1 produce Reject responses
+            for node_idx in 0..2_u64 {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysTransient,
+                        message: format!("error_{node_idx}"),
+                    }),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+            // Nodes 2 and 3 produce Success responses
+            for node_idx in 2..4_u64 {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Success(format!("resp_{node_idx}").into_bytes()),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        assert_eq!(parsed.flexible_responses.len(), 1);
+        let group = &parsed.flexible_responses[0];
+        assert_eq!(group.responses.len(), 2);
+        for entry in &group.responses {
+            assert!(matches!(
+                entry.response.content,
+                CanisterHttpResponseContent::Success(_)
+            ));
+        }
+    });
+}
+
+#[test]
 fn flexible_build_and_validate_round_trip() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
@@ -2362,6 +2410,40 @@ fn flexible_invalid_unknown_callback_id() {
 }
 
 #[test]
+fn flexible_invalid_rejects_in_ok_responses() {
+    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
+        let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            callback_id,
+            responses: vec![
+                flexible_response(42, 0, b"good_response"),
+                flexible_reject_response(42, 1),
+                flexible_response(42, 2, b"another_good"),
+            ],
+        }]);
+
+        let result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleRejectNotAllowedInOkResponses {
+                        callback_id: id,
+                    },
+                ),
+            )) if id == CallbackId::from(42)
+        );
+    });
+}
+
+#[test]
 fn flexible_invalid_callback_id_mismatch_in_response() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -2676,6 +2758,25 @@ fn flexible_response(
     let (response, metadata) = test_response_and_metadata_with_content(
         callback_id,
         CanisterHttpResponseContent::Success(content.to_vec()),
+    );
+    FlexibleCanisterHttpResponseWithProof {
+        response,
+        proof: metadata_to_share(signer_node, &metadata),
+    }
+}
+
+fn flexible_reject_response(
+    callback_id: u64,
+    signer_node: u64,
+) -> FlexibleCanisterHttpResponseWithProof {
+    use ic_types::canister_http::CanisterHttpReject;
+
+    let (response, metadata) = test_response_and_metadata_with_content(
+        callback_id,
+        CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "could not connect".to_string(),
+        }),
     );
     FlexibleCanisterHttpResponseWithProof {
         response,
