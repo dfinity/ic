@@ -17,7 +17,7 @@ $(printf '\033[1;32m')To automatically fix many of these, run:
 
     ci/scripts/cargo-clippy.sh --fix --allow-dirty$(printf '\033[0m')
 
-On PRs this will be run automatically by the $(autofix) job.
+On PRs this will be run automatically by the 'autofix' job.
 ========================================
 EOF
     exit 1
