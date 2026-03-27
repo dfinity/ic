@@ -3,92 +3,10 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
-# See rs/nervous_system/feature_test.md
-BASE_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/interfaces/registry",
-    "//rs/ledger_suite/common/ledger_core",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/ledger_suite/icrc1",
-    "//rs/ledger_suite/icrc1/index-ng",
-    "//rs/ledger_suite/icrc1/ledger",
-    "//rs/ledger_suite/icrc1/tokens_u64",
-    "//rs/nervous_system/agent",
-    "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
-    "//rs/nervous_system/proto",
-    "//rs/nervous_system/root",
-    "//rs/nns/cmc",
-    "//rs/nns/common",
-    "//rs/nns/governance/api",
-    "//rs/nns/sns-wasm",
-    "//rs/registry/proto_data_provider",
-    "//rs/sns/cli",
-    "//rs/sns/governance",
-    "//rs/sns/governance/api",
-    "//rs/sns/init",
-    "//rs/sns/root",
-    "//rs/sns/swap",
-    "//rs/test_utilities/load_wasm",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "@crate_index//:assert_matches",
-    "@crate_index//:candid",
-    "@crate_index//:futures",
-    "@crate_index//:hex",
-    "@crate_index//:ic-management-canister-types",
-    "@crate_index//:itertools",
-    "@crate_index//:lazy_static",
-    "@crate_index//:pretty_assertions",
-    "@crate_index//:prost",
-    "@crate_index//:rust_decimal",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-    "//conditions:default": [
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//packages/pocket-ic",
-        "//rs/crypto/sha2",
-        "//rs/nervous_system/common/test_keys",
-        "//rs/nervous_system/common/test_utils",
-        "//rs/nns/constants",
-        "//rs/protobuf",
-        "//rs/registry/canister",
-        "//rs/registry/keys",
-        "//rs/registry/routing_table",
-        "//rs/registry/subnet_type",
-        "//rs/registry/transport",
-        "//rs/rust_canisters/canister_test",
-        "//rs/test_utilities",
-        "@crate_index//:maplit",
-        "@crate_index//:num-traits",
-        "@crate_index//:rustc-hash",
-        "@crate_index//:serde",
-    ],
-})
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
-    "//rs/nns/handlers/root/impl:root--test_feature",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-    "//conditions:default": [
-        "//rs/nns/test_utils:test_utils--test_feature",
-        "//rs/nns/gtc:gtc--test_feature",
-        "//rs/sns/test_utils:test_utils--test_feature",
-    ],
-})
-
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:rust_decimal_macros",
 ]
-
-DEV_DEPENDENCIES = []
-
-ALIASES = {}
 
 DEV_DATA = [
     # Keep sorted
@@ -175,11 +93,52 @@ rust_library(
     name = "nervous_system_integration_tests",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_nervous_system_integration_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES,
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/pocket-ic",
+        "//rs/crypto/sha2",
+        "//rs/interfaces/registry",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/ledger_suite/icrc1/tokens_u64",
+        "//rs/nervous_system/agent",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nervous_system/proto",
+        "//rs/nns/cmc",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/governance",
+        "//rs/nns/governance/api",
+        "//rs/nns/sns-wasm",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/registry/canister",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/transport",
+        "//rs/rust_canisters/canister_test",
+        "//rs/sns/governance/api",
+        "//rs/sns/init",
+        "//rs/sns/root",
+        "//rs/sns/swap",
+        "//rs/sns/test_utils:test_utils--test_feature",
+        "//rs/test_utilities",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:itertools",
+        "@crate_index//:maplit",
+        "@crate_index//:rust_decimal",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_test_suite_with_extra_srcs(
@@ -205,7 +164,6 @@ rust_test_suite_with_extra_srcs(
             "tests/custom_proposal_criticality.rs",
         ],
     ),
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = ["tests/sns_upgrade_test_utils.rs"],
@@ -213,7 +171,37 @@ rust_test_suite_with_extra_srcs(
     tags = [
         "cpu:6",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":nervous_system_integration_tests",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/pocket-ic",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/agent",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nervous_system/proto",
+        "//rs/nns/constants",
+        "//rs/nns/governance",
+        "//rs/nns/governance/api",
+        "//rs/nns/sns-wasm",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/rust_canisters/canister_test",
+        "//rs/sns/governance",
+        "//rs/sns/governance/api",
+        "//rs/sns/init",
+        "//rs/sns/root",
+        "//rs/sns/swap",
+        "//rs/test_utilities",
+        "//rs/types/base_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:maplit",
+        "@crate_index//:rust_decimal",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
@@ -223,7 +211,6 @@ rust_test(
         "tests/sns_upgrade_test_utils.rs",
         "tests/upgrade_everything_test.rs",
     ],
-    aliases = ALIASES,
     crate_root = "tests/upgrade_everything_test.rs",
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
@@ -231,7 +218,18 @@ rust_test(
     tags = [
         "cpu:6",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":nervous_system_integration_tests",
+        "//rs/nervous_system/agent",
+        "//rs/nervous_system/common",
+        "//rs/nns/sns-wasm",
+        "//rs/sns/governance",
+        "//rs/sns/governance/api",
+        "//rs/sns/swap",
+        "//rs/types/base_types",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
@@ -240,14 +238,22 @@ rust_test(
     srcs = [
         "tests/advance_target_version_upgrades_all_canisters_test.rs",
     ],
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":nervous_system_integration_tests",
+        "//packages/pocket-ic",
+        "//rs/nervous_system/agent",
+        "//rs/nns/sns-wasm",
+        "//rs/sns/governance",
+        "//rs/sns/swap",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
@@ -256,14 +262,29 @@ rust_test(
     srcs = [
         "tests/upgrade_existing_sns_test.rs",
     ],
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":nervous_system_integration_tests",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/pocket-ic",
+        "//rs/nervous_system/common",
+        "//rs/nns/constants",
+        "//rs/nns/sns-wasm",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/rust_canisters/canister_test",
+        "//rs/sns/swap",
+        "//rs/test_utilities",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:rust_decimal",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
@@ -272,14 +293,23 @@ rust_test(
     srcs = [
         "tests/deploy_fresh_sns_test.rs",
     ],
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":nervous_system_integration_tests",
+        "//rs/nervous_system/common",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities",
+        "//rs/types/base_types",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
@@ -289,14 +319,22 @@ rust_test(
         "tests/sns_release_qualification_legacy.rs",
         "tests/sns_upgrade_test_utils_legacy.rs",
     ],
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":nervous_system_integration_tests",
+        "//rs/nervous_system/common",
+        "//rs/nns/sns-wasm",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/sns/swap",
+        "//rs/types/base_types",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
@@ -305,14 +343,31 @@ rust_test(
     srcs = [
         "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
     ],
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":nervous_system_integration_tests",
+        "//packages/pocket-ic",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/agent",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/rust_canisters/canister_test",
+        "//rs/sns/cli",
+        "//rs/sns/governance/api",
+        "//rs/sns/swap",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
 )
 
 rust_test(
@@ -321,14 +376,29 @@ rust_test(
     srcs = [
         "tests/custom_upgrade_path.rs",
     ],
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":nervous_system_integration_tests",
+        "//packages/pocket-ic",
+        "//rs/nervous_system/agent",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/sns-wasm",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/sns/governance",
+        "//rs/sns/governance/api",
+        "//rs/sns/swap",
+        "//rs/test_utilities",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
@@ -337,14 +407,29 @@ rust_test(
     srcs = [
         "tests/sns_topics.rs",
     ],
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [
+        ":nervous_system_integration_tests",
+        "//packages/pocket-ic",
+        "//rs/nervous_system/agent",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/proto",
+        "//rs/rust_canisters/canister_test",
+        "//rs/sns/governance/api",
+        "//rs/sns/swap",
+        "//rs/test_utilities",
+        "//rs/types/base_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:maplit",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
@@ -369,7 +454,6 @@ rust_test(
     srcs = [
         "tests/sns_extension_test.rs",
     ],
-    aliases = ALIASES,
     data = DEV_DATA + [
         "@kong_backend_canister//file",
         "@kongswap-adaptor-canister//file",
@@ -383,7 +467,36 @@ rust_test(
     tags = [
         "cpu:4",
     ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
+    deps = [
+        ":nervous_system_integration_tests",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/pocket-ic",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/agent",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_utils",
+        "//rs/nervous_system/proto",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/nns/gtc:gtc--test_feature",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/rust_canisters/canister_test",
+        "//rs/sns/cli",
+        "//rs/sns/governance",
+        "//rs/sns/governance/api",
+        "//rs/sns/root",
+        "//rs/sns/swap",
+        "//rs/sns/test_utils:test_utils--test_feature",
         "//rs/sns/treasury_manager",
+        "//rs/test_utilities",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:maplit",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
     ],
 )
