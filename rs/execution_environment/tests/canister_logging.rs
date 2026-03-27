@@ -2003,8 +2003,8 @@ fn test_large_delta_log_in_single_execution() {
     // (e.g., ~1.5 MiB) that exceeds the default 4 KiB capacity but is still
     // within the configured canister log memory limit.
     let log_memory_limit = 2 * MIB;
-    let message_len = 1_000;
     let message_count = 1_500;
+    let message = [b'a'; 1_000];
 
     let env = setup_env();
     let controller = PrincipalId::new_anonymous();
@@ -2017,7 +2017,7 @@ fn test_large_delta_log_in_single_execution() {
         wat_canister()
             .update(
                 "generate_logs",
-                wat_fn().repeat(message_count, wat_fn().debug_print(&[b'a'; message_len])),
+                wat_fn().repeat(message_count, wat_fn().debug_print(&message)),
             )
             .build_wasm(),
     );
