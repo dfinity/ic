@@ -310,7 +310,7 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
     let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
         // If the `PageMap` was created without any backing files and has not been
         // flushed since, any on-disk data must be wiped, whether or not there are
-        // unflushed deltas to be applied.
+        // any unflushed pages to be applied.
         let truncate = !page_map.has_files_in_tip();
         let page_map_clone = if !page_map.unflushed_delta_is_empty() {
             Some(page_map.clone())
@@ -324,7 +324,8 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
                 page_map: page_map_clone,
             });
         }
-        // Strip empty unflushed deltas. The page map is now backed by storage.
+        // Clear the unflushed delta, as it is being flushed to disk. The page map is
+        // now backed by storage.
         page_map.strip_unflushed_delta();
     };
 

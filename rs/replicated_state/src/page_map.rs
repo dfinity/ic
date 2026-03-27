@@ -412,24 +412,22 @@ pub struct PageMap {
 
     /// The map containing pages overriding pages from `storage`.
     /// We need these pages to be able to reconstruct the full heap.
-    /// It is reset when `strip_all_deltas()` method is called.
     #[validate_eq(Ignore)]
     page_delta: PageDelta,
 
     /// The map containing deltas accumulated since the last flush to disk.
-    /// It is reset when `strip_unflushed_delta()` or `strip_all_deltas()` methods are called.
+    /// Cleared every time `strip_unflushed_delta()` is called.
     ///
     /// Invariant: unflushed_delta ⊆ page_delta
     #[validate_eq(Ignore)]
     unflushed_delta: PageDelta,
 
     /// The allocator for PageDelta pages.
-    /// It is reset when `strip_all_deltas()` method is called.
     #[validate_eq(Ignore)]
     page_allocator: PageAllocator,
 
     /// Whether this page map is backed by a checkpoint (e.g. via `PageMap::open()`)
-    /// or if any of its pages have already been flushed to disk.
+    /// or any of its pages have already been flushed to disk.
     ///
     /// If `false` (e.g. created with `PageMap::new()` and never flushed), then any
     /// pre-existing checkpoint files must be deleted / truncated before its next
@@ -767,7 +765,7 @@ impl PageMap {
         self.storage.get_base_memory_instructions()
     }
 
-    /// Removes the unflushed delta, after it was flushed to disk.
+    /// Resets the unflushed delta, as it is being flushed to disk.
     pub fn strip_unflushed_delta(&mut self) {
         // Pages have been flushed to disk, so the page map is now consistent with tip.
         self.has_files_in_tip = true;

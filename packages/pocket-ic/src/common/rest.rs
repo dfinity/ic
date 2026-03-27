@@ -667,6 +667,7 @@ pub struct ExtendedSubnetConfigSet {
     pub bitcoin: Option<SubnetSpec>,
     pub system: Vec<SubnetSpec>,
     pub application: Vec<SubnetSpec>,
+    #[serde(default)]
     pub cloud_engine: Vec<SubnetSpec>,
     pub verified_application: Vec<SubnetSpec>,
 }
