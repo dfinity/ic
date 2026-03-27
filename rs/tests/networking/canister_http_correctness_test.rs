@@ -2658,5 +2658,5 @@ fn expected_cycle_cost(
         subnet_size,
         CanisterCyclesCostSchedule::Normal,
     );
-    cycle_fee.get().try_into().unwrap()
+    cycle_fee.real().get().try_into().unwrap()
 }
