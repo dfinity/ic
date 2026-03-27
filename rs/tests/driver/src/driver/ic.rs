@@ -14,6 +14,7 @@ use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
@@ -480,6 +481,7 @@ pub struct Subnet {
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeatures>,
+    pub resource_limits: Option<ResourceLimits>,
     pub max_number_of_canisters: Option<u64>,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
@@ -509,6 +511,7 @@ impl Subnet {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             subnet_type,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
@@ -676,6 +679,11 @@ impl Subnet {
         self
     }
 
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = Some(resource_limits);
+        self
+    }
+
     pub fn with_max_number_of_canisters(mut self, max_number_of_canisters: u64) -> Self {
         self.max_number_of_canisters = Some(max_number_of_canisters);
         self
@@ -777,6 +785,7 @@ impl Default for Subnet {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],

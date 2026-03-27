@@ -169,6 +169,7 @@ pub fn init_ic(
                 subnet.max_instructions_per_round,
                 subnet.max_instructions_per_install_code,
                 subnet.features,
+                subnet.resource_limits,
                 subnet.chain_key_config.clone().map(|c| c.into()),
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),
