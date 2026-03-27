@@ -124,8 +124,8 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        // Cloud engines invariants
         if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) {
+            // Cloud engines invariants
             if subnet_record.canister_cycles_cost_schedule
                 != i32::from(CanisterCyclesCostSchedule::Free)
             {
