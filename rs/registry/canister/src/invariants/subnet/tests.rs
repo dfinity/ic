@@ -11,7 +11,7 @@ use ic_protobuf::{
     },
     types::v1::PrincipalId as PrincipalIdPb,
 };
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
 
 #[test]
