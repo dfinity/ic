@@ -14,12 +14,12 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
     CanisterMetadataRequest, CanisterSettingsArgsBuilder, CanisterSnapshotDataKind,
     CanisterSnapshotDataOffset, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
-    GlobalTimer, IC_00, InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
-    RenameToArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkArgs,
+    FetchCanisterLogsRequest, GlobalTimer, IC_00, InstallChunkedCodeArgs, InstallCodeArgs,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload,
+    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    RenameCanisterArgs, RenameToArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, execution_state::NextScheduledMethod};
@@ -977,11 +977,7 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
 
 #[test]
 fn dts_aborted_execution_does_not_block_subnet_messages() {
-    fn test<F: Fn(CanisterId) -> (Method, CallArgs)>(
-        subnet_complete: bool,
-        aborted_complete: bool,
-        f: F,
-    ) {
+    fn test<F: Fn(CanisterId) -> (Method, CallArgs)>(subnet_complete: bool, f: F) {
         let slice_instruction_limit = 1_000_000;
         let env = dts_env(
             NumInstructions::from(slice_instruction_limit * 10),
@@ -1010,21 +1006,9 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             )
             .unwrap();
 
-        env.set_checkpoints_enabled(true);
-        // With checkpoints enabled, the update call will be aborted.
-        let long_execution_id = env.send_ingress(
-            user_id,
-            aborted_canister_id,
-            "update",
-            wasm()
-                .instruction_counter_is_at_least(slice_instruction_limit)
-                .reply_data(&[42])
-                .build(),
-        );
-
         let (method, args) = f(aborted_canister_id);
-        if method == Method::DeleteCanisterSnapshot
-            || method == Method::ReadCanisterSnapshotMetadata
+
+        if method == Method::ReadCanisterSnapshotMetadata
             || method == Method::ReadCanisterSnapshotData
         {
             env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
@@ -1036,20 +1020,17 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             .unwrap();
         }
 
-        if method == Method::UploadCanisterSnapshotData {
-            env.upload_canister_snapshot_metadata(&UploadCanisterSnapshotMetadataArgs {
-                canister_id: aborted_canister_id.into(),
-                replace_snapshot: None,
-                wasm_module_size: 1024,
-                globals: vec![],
-                wasm_memory_size: 1 << 16,
-                stable_memory_size: 1 << 16,
-                certified_data: vec![],
-                global_timer: None,
-                on_low_wasm_memory_hook_status: None,
-            })
-            .unwrap();
-        }
+        env.set_checkpoints_enabled(true);
+        // With checkpoints enabled, the update call will be aborted.
+        let long_execution_id = env.send_ingress(
+            user_id,
+            aborted_canister_id,
+            "update",
+            wasm()
+                .instruction_counter_is_at_least(slice_instruction_limit)
+                .reply_data(&[42])
+                .build(),
+        );
 
         let args = args
             .on_reject(wasm().reject_message().reject())
@@ -1068,17 +1049,10 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         }
 
         // Make sure the aborted execution is still processing.
-        if aborted_complete {
-            assert_eq!(
-                ingress_state(env.ingress_status(&long_execution_id)),
-                Some(IngressState::Processing)
-            );
-        } else {
-            assert_matches!(
-                ingress_state(env.ingress_status(&long_execution_id)),
-                Some(IngressState::Failed(_))
-            );
-        }
+        assert_eq!(
+            ingress_state(env.ingress_status(&long_execution_id)),
+            Some(IngressState::Processing)
+        );
 
         // Make sure the method is completed, despite the effective canister is aborted.
         if subnet_complete {
@@ -1094,32 +1068,41 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         }
 
         // Make sure the aborted message is completed.
-        if aborted_complete {
-            assert_eq!(
-                ingress_state(env.ingress_status(&long_execution_id)),
-                Some(IngressState::Completed(WasmResult::Reply(vec![42])))
-            );
-        }
+        assert_eq!(
+            ingress_state(env.ingress_status(&long_execution_id)),
+            Some(IngressState::Completed(WasmResult::Reply(vec![42])))
+        );
     }
     fn test_supported<F: Fn(CanisterId) -> (Method, CallArgs)>(f: F) {
-        test(true, true, f);
+        test(true, f);
     }
     fn test_unsupported<F: Fn(CanisterId) -> (Method, CallArgs)>(f: F) {
-        test(false, true, f);
-    }
-    fn test_supported_uninstall<F: Fn(CanisterId) -> (Method, CallArgs)>(f: F) {
-        test(true, false, f);
+        test(false, f);
     }
 
     for method in Method::iter() {
         match method {
-            // Supported methods accepting just one argument.
-            Method::CanisterStatus | Method::DepositCycles | Method::StartCanister => {
+            // TODO: fix this test: assert `test_supported` once the feature flag for the API is enabled.
+            Method::FetchCanisterLogs => test_unsupported(|aborted_canister_id| {
+                let args = FetchCanisterLogsRequest {
+                    canister_id: aborted_canister_id.get(),
+                    filter: None,
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            // Supported methods: they do not modify the canister state (changes to the cycles balance are allowed).
+            // The only exception is `update_settings` to enable changing an aborted canister's compute allocation.
+            Method::CanisterStatus | Method::DepositCycles => {
                 test_supported(|aborted_canister_id| {
                     let args = CanisterIdRecord::from(aborted_canister_id).encode();
                     (method, call_args().other_side(args))
                 })
             }
+            Method::ProvisionalTopUpCanister => test_supported(|aborted_canister_id| {
+                let args = ProvisionalTopUpCanisterArgs::new(aborted_canister_id, 0).encode();
+                (method, call_args().other_side(args))
+            }),
             Method::CanisterInfo => test_supported(|aborted_canister_id| {
                 let args = CanisterInfoRequest::new(aborted_canister_id, None).encode();
                 (method, call_args().other_side(args))
@@ -1130,6 +1113,155 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                     // wasm (for any canister wasm built in the monorepo).
                     CanisterMetadataRequest::new(aborted_canister_id, "git_commit_id".to_string())
                         .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::StoredChunks => test_supported(|aborted_canister_id| {
+                let args = StoredChunksArgs {
+                    canister_id: aborted_canister_id.get(),
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::ListCanisterSnapshots => test_supported(|aborted_canister_id| {
+                let args = ListCanisterSnapshotArgs::new(aborted_canister_id).encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::ReadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
+                let args = ReadCanisterSnapshotMetadataArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::ReadCanisterSnapshotData => test_supported(|aborted_canister_id| {
+                let args = ReadCanisterSnapshotDataArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                    CanisterSnapshotDataKind::WasmModule { size: 0, offset: 0 },
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UpdateSettings => test_supported(|aborted_canister_id| {
+                let settings = CanisterSettingsArgsBuilder::new().build();
+                let args = UpdateSettingsArgs::new(aborted_canister_id, settings).encode();
+                (method, call_args().other_side(args))
+            }),
+            // Unsupported methods: they modify the canister state.
+            Method::StartCanister | Method::StopCanister | Method::DeleteCanister => {
+                test_unsupported(|aborted_canister_id| {
+                    let args = CanisterIdRecord::from(aborted_canister_id).encode();
+                    (method, call_args().other_side(args))
+                })
+            }
+            Method::InstallCode => test_unsupported(|aborted_canister_id| {
+                let args = InstallCodeArgs {
+                    canister_id: aborted_canister_id.get(),
+                    mode: CanisterInstallMode::Install,
+                    wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+                    arg: vec![],
+                    sender_canister_version: None,
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::InstallChunkedCode => test_unsupported(|aborted_canister_id| {
+                let args = InstallChunkedCodeArgs {
+                    mode: CanisterInstallModeV2::Install,
+                    target_canister: aborted_canister_id.get(),
+                    store_canister: None,
+                    chunk_hashes_list: vec![],
+                    wasm_module_hash: vec![],
+                    arg: vec![],
+                    sender_canister_version: None,
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UninstallCode => test_unsupported(|aborted_canister_id| {
+                let args = UninstallCodeArgs::new(aborted_canister_id, None).encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UploadChunk => test_unsupported(|aborted_canister_id| {
+                let args = UploadChunkArgs {
+                    canister_id: aborted_canister_id.get(),
+                    chunk: vec![],
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::ClearChunkStore => test_unsupported(|aborted_canister_id| {
+                let args = ClearChunkStoreArgs {
+                    canister_id: aborted_canister_id.get(),
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::TakeCanisterSnapshot => test_unsupported(|aborted_canister_id| {
+                let args = TakeCanisterSnapshotArgs {
+                    canister_id: aborted_canister_id.get(),
+                    replace_snapshot: None,
+                    uninstall_code: None,
+                    sender_canister_version: None,
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::LoadCanisterSnapshot => test_unsupported(|aborted_canister_id| {
+                let args = LoadCanisterSnapshotArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                    None,
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::DeleteCanisterSnapshot => test_unsupported(|aborted_canister_id| {
+                let args = DeleteCanisterSnapshotArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UploadCanisterSnapshotMetadata => test_unsupported(|aborted_canister_id| {
+                let args = UploadCanisterSnapshotMetadataArgs::new(
+                    aborted_canister_id,
+                    None,
+                    1024,
+                    vec![],
+                    1 << 16,
+                    1 << 16,
+                    vec![],
+                    Some(GlobalTimer::Inactive),
+                    Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UploadCanisterSnapshotData => test_unsupported(|aborted_canister_id| {
+                let args = UploadCanisterSnapshotDataArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                    CanisterSnapshotDataOffset::WasmModule { offset: 0 },
+                    vec![42; 42],
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::RenameCanister => test_unsupported(|aborted_canister_id| {
+                let args = RenameCanisterArgs {
+                    canister_id: aborted_canister_id.get(),
+                    rename_to: RenameToArgs {
+                        canister_id: canister_test_id(42).get(),
+                        version: 1,
+                        total_num_changes: 5,
+                    },
+                    requested_by: user_test_id(1).get(),
+                    sender_canister_version: 1,
+                }
+                .encode();
                 (method, call_args().other_side(args))
             }),
             // No effective canister id.
@@ -1154,166 +1286,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::BitcoinGetSuccessors
             | Method::NodeMetricsHistory
             | Method::SubnetInfo
-            | Method::ProvisionalCreateCanisterWithCycles
-            | Method::ProvisionalTopUpCanister => {}
-            // Unsupported methods accepting just one argument.
-            // Deleting an aborted canister requires to stop it first.
-            // Stopping an aborted canister does not generate a reply.
-            // Renaming a canister requires to stop it first.
-            Method::DeleteCanister | Method::StopCanister => {
-                test_unsupported(|aborted_canister_id| {
-                    let args = CanisterIdRecord::from(aborted_canister_id).encode();
-                    (method, call_args().other_side(args))
-                })
-            }
-            Method::RenameCanister => test_unsupported(|aborted_canister_id| {
-                let args = RenameCanisterArgs {
-                    canister_id: aborted_canister_id.get(),
-                    rename_to: RenameToArgs {
-                        canister_id: canister_test_id(42).get(),
-                        version: 1,
-                        total_num_changes: 5,
-                    },
-                    requested_by: user_test_id(1).get(),
-                    sender_canister_version: 1,
-                }
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            // Installing code is not supported on aborted canister.
-            Method::InstallCode => test_unsupported(|aborted_canister_id| {
-                let args = InstallCodeArgs {
-                    canister_id: aborted_canister_id.get(),
-                    mode: CanisterInstallMode::Install,
-                    wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
-                    arg: vec![],
-                    sender_canister_version: None,
-                }
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            // Installing code is not supported on aborted canister.
-            Method::InstallChunkedCode => test_unsupported(|aborted_canister_id| {
-                let args = InstallChunkedCodeArgs {
-                    mode: CanisterInstallModeV2::Install,
-                    target_canister: aborted_canister_id.get(),
-                    store_canister: None,
-                    chunk_hashes_list: vec![],
-                    wasm_module_hash: vec![],
-                    arg: vec![],
-                    sender_canister_version: None,
-                }
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::UninstallCode => test_supported_uninstall(|aborted_canister_id| {
-                let args = UninstallCodeArgs::new(aborted_canister_id, None).encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::UpdateSettings => test_supported(|aborted_canister_id| {
-                let settings = CanisterSettingsArgsBuilder::new().build();
-                let args = UpdateSettingsArgs::new(aborted_canister_id, settings).encode();
-                (method, call_args().other_side(args))
-            }),
-            // TODO(EXC-2112): fix this test.
-            // API is accessible both in replicated (only for canisters) and non-replicated (only for non-canisters) mode.
-            Method::FetchCanisterLogs => {}
-            Method::UploadChunk => test_supported(|aborted_canister_id| {
-                let args = UploadChunkArgs {
-                    canister_id: aborted_canister_id.get(),
-                    chunk: vec![],
-                }
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::StoredChunks => test_supported(|aborted_canister_id| {
-                let args = StoredChunksArgs {
-                    canister_id: aborted_canister_id.get(),
-                }
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::ClearChunkStore => test_supported(|aborted_canister_id| {
-                let args = ClearChunkStoreArgs {
-                    canister_id: aborted_canister_id.get(),
-                }
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::TakeCanisterSnapshot => test_supported(|aborted_canister_id| {
-                let args = TakeCanisterSnapshotArgs {
-                    canister_id: aborted_canister_id.get(),
-                    replace_snapshot: None,
-                    uninstall_code: None,
-                    sender_canister_version: None,
-                }
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            // Loading a snapshot is similar to the install code.
-            Method::LoadCanisterSnapshot => test_unsupported(|aborted_canister_id| {
-                let args = LoadCanisterSnapshotArgs::new(
-                    aborted_canister_id,
-                    (aborted_canister_id, 0).into(),
-                    None,
-                )
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::ListCanisterSnapshots => test_supported(|aborted_canister_id| {
-                let args = ListCanisterSnapshotArgs::new(aborted_canister_id).encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::DeleteCanisterSnapshot => test_supported(|aborted_canister_id| {
-                let args = DeleteCanisterSnapshotArgs::new(
-                    aborted_canister_id,
-                    (aborted_canister_id, 0).into(),
-                )
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::ReadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
-                let args = ReadCanisterSnapshotMetadataArgs::new(
-                    aborted_canister_id,
-                    (aborted_canister_id, 0).into(),
-                )
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::ReadCanisterSnapshotData => test_supported(|aborted_canister_id| {
-                let args = ReadCanisterSnapshotDataArgs::new(
-                    aborted_canister_id,
-                    (aborted_canister_id, 0).into(),
-                    CanisterSnapshotDataKind::WasmModule { size: 0, offset: 0 },
-                )
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::UploadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
-                let args = UploadCanisterSnapshotMetadataArgs::new(
-                    aborted_canister_id,
-                    None,
-                    1024,
-                    vec![],
-                    1 << 16,
-                    1 << 16,
-                    vec![],
-                    Some(GlobalTimer::Inactive),
-                    Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
-                )
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::UploadCanisterSnapshotData => test_supported(|aborted_canister_id| {
-                let args = UploadCanisterSnapshotDataArgs::new(
-                    aborted_canister_id,
-                    (aborted_canister_id, 0).into(),
-                    CanisterSnapshotDataOffset::WasmModule { offset: 0 },
-                    vec![42; 42],
-                )
-                .encode();
-                (method, call_args().other_side(args))
-            }),
+            | Method::ProvisionalCreateCanisterWithCycles => {}
         }
     }
 }
