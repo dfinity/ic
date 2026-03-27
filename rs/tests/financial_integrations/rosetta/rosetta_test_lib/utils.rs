@@ -55,6 +55,27 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+/// Returns `true` if the `ConstructionSubmitResponse` contains any operation
+/// that failed due to the Rosetta server's internal polling timeout.
+fn has_operation_timeout(res: &ConstructionSubmitResponse) -> bool {
+    let Some(metadata) = &res.metadata else {
+        return false;
+    };
+    let Some(Value::Array(operations)) = metadata.get("operations") else {
+        return false;
+    };
+    operations.iter().any(|op| {
+        op.get("status") == Some(&Value::String("FAILED".to_string()))
+            && op
+                .get("metadata")
+                .and_then(|m| m.get("response"))
+                .and_then(|r| r.get("details"))
+                .and_then(|d| d.get("error_message"))
+                .and_then(Value::as_str)
+                .is_some_and(|msg| msg.contains("Operation took longer than"))
+    })
+}
+
 pub fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
     make_user_ed25519(seed)
 }
@@ -289,10 +310,30 @@ where
         .await
         .unwrap()?;
 
-    let submit_res = ros
-        .construction_submit(SignedTransaction::from_str(&signed.signed_transaction).unwrap())
-        .await
-        .unwrap()?;
+    let submit_res = {
+        let mut res = ros
+            .construction_submit(SignedTransaction::from_str(&signed.signed_transaction).unwrap())
+            .await
+            .unwrap()?;
+        // Retry if the Rosetta server returned a timeout error for any operation.
+        // This can happen when the IC takes longer than the server's internal
+        // polling timeout (20s) to process a neuron management request.
+        // The operation may still complete on the IC, so resubmitting the same
+        // signed transaction will eventually return the final result.
+        for _ in 0..12 {
+            if !has_operation_timeout(&res) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            res = ros
+                .construction_submit(
+                    SignedTransaction::from_str(&signed.signed_transaction).unwrap(),
+                )
+                .await
+                .unwrap()?;
+        }
+        res
+    };
 
     assert_eq!(
         hash_res.transaction_identifier,
