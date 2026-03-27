@@ -12,6 +12,9 @@ use std::time::Duration;
 
 use crate::guestos::network::{get_best_interface_name, get_interface_addresses};
 
+const TLS_KEY_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.key";
+const TLS_CERT_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.crt";
+
 #[derive(Template)]
 #[template(path = "ic.json5.template", escape = "none")]
 pub struct IcConfigTemplate {
@@ -234,9 +237,6 @@ pub fn get_best_interface_ipv6_address() -> Result<Ipv6Addr> {
 
     bail!("Cannot determine an IPv6 address, aborting");
 }
-
-const TLS_KEY_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.key";
-const TLS_CERT_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.crt";
 
 fn write_tls_certificate(cert_pem: &str, key_pem: &str) -> Result<()> {
     write(TLS_CERT_PATH, cert_pem).context("Failed to write TLS certificate")?;
