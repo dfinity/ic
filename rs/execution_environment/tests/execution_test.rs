@@ -3093,7 +3093,8 @@ fn no_subnet_message_reordering() {
     }
     assert_install_processing();
 
-    // The other subnet message should not be completed yet.
+    // The call to `canister_status` via the proxy should not be completed yet
+    // because it should not run on an aborted canister.
     match sm.ingress_status(&status_msg_id) {
         IngressStatus::Known {
             state: IngressState::Processing,
