@@ -133,6 +133,16 @@ impl InternetComputer {
     }
 
     pub fn add_data_center(mut self, dc_record: DataCenterRecord) -> Self {
+        if self
+            .data_centers
+            .iter()
+            .any(|existing| existing.id.eq_ignore_ascii_case(&dc_record.id))
+        {
+            panic!(
+                "Duplicate data center id (case-insensitive) in IC config: {}",
+                dc_record.id
+            );
+        }
         self.data_centers.push(dc_record);
         self
     }

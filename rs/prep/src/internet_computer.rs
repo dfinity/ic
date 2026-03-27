@@ -429,7 +429,8 @@ impl IcConfig {
     }
 
     /// Add a data center record to the initial registry.
-    pub fn add_data_center_record(&mut self, dc_record: DataCenterRecord) {
+    pub fn add_data_center_record(&mut self, mut dc_record: DataCenterRecord) {
+        dc_record.id = dc_record.id.to_lowercase();
         self.initial_dc_records.push(dc_record);
     }
 
