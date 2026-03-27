@@ -80,7 +80,7 @@ benches:
     total:
       calls: 1
       instructions: 32708281
-      heap_increase: 1
+      heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   list_proposals:
