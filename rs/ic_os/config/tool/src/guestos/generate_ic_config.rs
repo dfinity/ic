@@ -12,6 +12,9 @@ use std::time::Duration;
 
 use crate::guestos::network::{get_best_interface_name, get_interface_addresses};
 
+const TLS_KEY_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.key";
+const TLS_CERT_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.crt";
+
 #[derive(Template)]
 #[template(path = "ic.json5.template", escape = "none")]
 pub struct IcConfigTemplate {
@@ -44,12 +47,12 @@ pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) ->
     perms.set_mode(0o644);
     std::fs::set_permissions(output_path, perms)?;
 
-    // Generate and inject a self-signed TLS certificate and key for ic-boundary
-    // for the given domain name. To be used in system tests only.
-    if let Some(domain_name) = &guestos_config
-        .guestos_settings
-        .guestos_dev_settings
-        .generate_ic_boundary_tls_cert
+    // Set up TLS certificate and key for ic-boundary (system test use only).
+    // A pre-generated cert (e.g. from a playnet) takes priority over self-signed generation.
+    let dev_settings = &guestos_config.guestos_settings.guestos_dev_settings;
+    if let Some(tls_cert) = &dev_settings.ic_boundary_tls_cert {
+        write_tls_certificate(&tls_cert.cert_pem, &tls_cert.key_pem)?;
+    } else if let Some(domain_name) = &dev_settings.generate_ic_boundary_tls_cert
         && !domain_name.is_empty()
     {
         generate_tls_certificate(domain_name)?;
@@ -235,10 +238,13 @@ pub fn get_best_interface_ipv6_address() -> Result<Ipv6Addr> {
     bail!("Cannot determine an IPv6 address, aborting");
 }
 
-fn generate_tls_certificate(domain_name: &str) -> Result<()> {
-    let tls_key_path = "/var/lib/ic/data/ic-boundary-tls.key";
-    let tls_cert_path = "/var/lib/ic/data/ic-boundary-tls.crt";
+fn write_tls_certificate(cert_pem: &str, key_pem: &str) -> Result<()> {
+    write(TLS_CERT_PATH, cert_pem).context("Failed to write TLS certificate")?;
+    write(TLS_KEY_PATH, key_pem).context("Failed to write TLS key")?;
+    set_tls_file_ownership_and_permissions()
+}
 
+fn generate_tls_certificate(domain_name: &str) -> Result<()> {
     let status = Command::new("openssl")
         .args([
             "req",
@@ -246,9 +252,9 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
             "-newkey",
             "rsa:2048",
             "-keyout",
-            tls_key_path,
+            TLS_KEY_PATH,
             "-out",
-            tls_cert_path,
+            TLS_CERT_PATH,
             "-sha256",
             "-days",
             "3650",
@@ -265,8 +271,12 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
         bail!("openssl command failed with status: {}", status);
     }
 
+    set_tls_file_ownership_and_permissions()
+}
+
+fn set_tls_file_ownership_and_permissions() -> Result<()> {
     let status = Command::new("chown")
-        .args(["ic-replica:nogroup", tls_key_path, tls_cert_path])
+        .args(["ic-replica:nogroup", TLS_KEY_PATH, TLS_CERT_PATH])
         .status()
         .context("Failed to set ownership of TLS files")?;
 
@@ -275,7 +285,7 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
     }
 
     let status = Command::new("chmod")
-        .args(["644", tls_key_path, tls_cert_path])
+        .args(["644", TLS_KEY_PATH, TLS_CERT_PATH])
         .status()
         .context("Failed to set permissions of TLS files")?;
 
