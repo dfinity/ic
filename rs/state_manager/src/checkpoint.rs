@@ -278,12 +278,6 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
 ) {
     let mut pagemaps = Vec::new();
 
-    // Returns `true` if a call to `add_to_pagemaps_and_strip()` would either add a
-    // `PageMapToFlush`; or the subsequent `PageMap::strip_unflushed_delta()` call would
-    // actually mutate the `PageMap`.
-    let needs_add_or_strip =
-        |page_map: &PageMap| -> bool { page_map.should_strip_unflushed_delta() };
-
     let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
         // If the `PageMap` was created without any backing files and has not been
         // flushed since, any on-disk data must be wiped, whether or not there are
@@ -294,40 +288,49 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
         } else {
             None
         };
+
+        // Ensure that we call `strip_unflushed_delta()` iff we need to.
+        debug_assert_eq!(
+            truncate || page_map_clone.is_some(),
+            page_map.should_flush()
+        );
+
         if truncate || page_map_clone.is_some() {
             pagemaps.push(PageMapToFlush {
                 page_map_type: entry,
                 truncate,
                 page_map: page_map_clone,
             });
+            // Clear the unflushed delta, and mark the page map as being backed by storage.
+            page_map.strip_unflushed_delta();
         }
-        // Clear the unflushed delta, as it is being flushed to disk. The page map is
-        // now backed by storage.
-        page_map.strip_unflushed_delta();
     };
 
     for canister in tip_state.canisters_iter_mut() {
-        // Skip canisters that don't have any page maps to flush.
-        let needs_add_to_pagemaps_and_strip =
-            needs_add_or_strip(canister.system_state.wasm_chunk_store.page_map())
-                || canister
-                    .system_state
-                    .log_memory_store
-                    .maybe_page_map()
-                    .is_some_and(needs_add_or_strip)
-                || canister
-                    .execution_state
-                    .as_ref()
-                    .is_some_and(|execution_state| {
-                        needs_add_or_strip(&execution_state.wasm_memory.page_map)
-                            || needs_add_or_strip(&execution_state.stable_memory.page_map)
-                    })
-                || canister.canister_snapshots.iter().any(|(_, snapshot)| {
-                    needs_add_or_strip(snapshot.chunk_store().page_map())
-                        || needs_add_or_strip(&snapshot.execution_snapshot().wasm_memory.page_map)
-                        || needs_add_or_strip(&snapshot.execution_snapshot().stable_memory.page_map)
-                });
-        if !needs_add_to_pagemaps_and_strip {
+        // Skip canisters with no page maps to flush.
+        let needs_flush = canister
+            .system_state
+            .wasm_chunk_store
+            .page_map()
+            .should_flush()
+            || canister
+                .system_state
+                .log_memory_store
+                .maybe_page_map()
+                .is_some_and(PageMap::should_flush)
+            || canister
+                .execution_state
+                .as_ref()
+                .is_some_and(|execution_state| {
+                    execution_state.wasm_memory.page_map.should_flush()
+                        || execution_state.stable_memory.page_map.should_flush()
+                })
+            || canister.canister_snapshots.iter().any(|(_, s)| {
+                s.chunk_store().page_map().should_flush()
+                    || s.execution_snapshot().wasm_memory.page_map.should_flush()
+                    || s.execution_snapshot().stable_memory.page_map.should_flush()
+            });
+        if !needs_flush {
             continue;
         }
 
