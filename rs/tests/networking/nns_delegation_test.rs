@@ -756,7 +756,7 @@ where
 
 fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
     let (app_subnet, app_node) = get_subnet_and_node(env, SubnetType::Application);
-    let (cloud_engine, cloud_engine_node) = get_subnet_and_node(env, SubnetType::CloudEngine);
+    let (_cloud_engine, _cloud_engine_node) = get_subnet_and_node(env, SubnetType::CloudEngine);
     let nns_node = get_nns_node(&env.topology_snapshot());
 
     let initial_version = get_guestos_img_version();
