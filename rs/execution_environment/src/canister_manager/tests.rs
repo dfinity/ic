@@ -1,6 +1,6 @@
 use super::InstallCodeResult;
 use crate::{
-    IngressHistoryWriterImpl, RoundLimits, as_num_instructions,
+    RoundLimits, as_num_instructions,
     canister_manager::{
         CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
         InstallCodeContext, MAX_SLICE_SIZE_BYTES, StopCanisterResult, WasmSource,
@@ -258,15 +258,6 @@ impl CanisterManagerBuilder {
     fn build(self) -> CanisterManager {
         let subnet_type = SubnetType::Application;
         let metrics_registry = MetricsRegistry::new();
-        let state_reader = Arc::new(FakeStateManager::new());
-        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
-        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
-            Config::default(),
-            no_op_logger(),
-            &metrics_registry,
-            completed_execution_messages_tx,
-            state_reader,
-        ));
         let cycles_account_manager = Arc::new(self.cycles_account_manager);
         let hypervisor = Hypervisor::new(
             Config::default(),
@@ -289,7 +280,6 @@ impl CanisterManagerBuilder {
                 self.rate_limiting_of_instructions,
             ),
             cycles_account_manager,
-            ingress_history_writer,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
             FlagStatus::Disabled,
         )
@@ -2248,6 +2238,7 @@ fn add_cycles_sender_in_whitelist() {
             Some(123),
             canister,
             &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
+            CanisterCyclesCostSchedule::Normal,
         )
         .unwrap();
 
@@ -2277,6 +2268,7 @@ fn add_cycles_sender_not_in_whitelist() {
                 Some(123),
                 canister,
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
+                CanisterCyclesCostSchedule::Normal,
             ),
             Err(CanisterManagerError::SenderNotInWhitelist(sender))
         );
@@ -3064,7 +3056,6 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         NumBytes::from(MIB)
     );
 
-    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
@@ -3072,14 +3063,15 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         compute_allocation_used: state.total_compute_allocation(),
         subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
+    let time = state.time();
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
             canister_test_id(0),
             &mut state,
             &mut round_limits,
-            &no_op_counter,
             None,
+            time,
         )
         .unwrap();
 
@@ -3671,6 +3663,7 @@ fn unfreezing_of_frozen_canister() {
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
             )
+            .real()
     );
     // Now the canister works again.
     let result = test.ingress(canister_id, "update", wasm().reply().build());
@@ -3917,12 +3910,15 @@ fn cycles_correct_if_upgrade_succeeds() {
 
     assert_delta!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        ),
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST)
+                    + wasm_compilation_cost(&wasm),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real(),
         Cycles::new(10)
     );
 
@@ -3938,12 +3934,15 @@ fn cycles_correct_if_upgrade_succeeds() {
     );
     assert_delta!(
         execution_cost,
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        ),
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST)
+                    + wasm_compilation_cost(&wasm),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real(),
         Cycles::new(10)
     );
 }
@@ -3979,12 +3978,14 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
     );
     assert_eq!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager().execution_cost(
-            wasm_compilation_cost(&wasm),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        )
+        test.cycles_account_manager()
+            .execution_cost(
+                wasm_compilation_cost(&wasm),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real()
     );
 
     // Set a large value for `install_code_debit` so the installation fails due
@@ -4003,12 +4004,14 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
     );
     assert_eq!(
         execution_cost,
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(0),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        )
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(0),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real()
     );
 }
 
@@ -4061,13 +4064,15 @@ fn cycles_correct_if_upgrade_fails_at_start() {
     );
     assert_delta!(
         execution_cost,
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
-                + wasm_compilation_cost(&wasm2),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        ),
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                    + wasm_compilation_cost(&wasm2),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real(),
         Cycles::new(10)
     );
 }
@@ -4104,12 +4109,14 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
     );
     assert_eq!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager().execution_cost(
-            wasm_compilation_cost(&wasm),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        )
+        test.cycles_account_manager()
+            .execution_cost(
+                wasm_compilation_cost(&wasm),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real()
     );
 
     let cycles_before = test.canister_state(id).system_state.balance();
@@ -4122,12 +4129,14 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
     );
     assert_delta!(
         execution_cost,
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        ),
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real(),
         Cycles::new(10)
     );
 }
@@ -4177,13 +4186,15 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
     );
     assert_delta!(
         execution_cost,
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
-                + wasm_compilation_cost(&wasm2),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        ),
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                    + wasm_compilation_cost(&wasm2),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real(),
         Cycles::new(10)
     );
 }
@@ -4219,12 +4230,15 @@ fn cycles_correct_if_install_succeeds() {
     );
     assert_delta!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        ),
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST)
+                    + wasm_compilation_cost(&wasm),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real(),
         Cycles::new(4)
     );
 }
@@ -4267,12 +4281,14 @@ fn cycles_correct_if_install_fails_at_validation() {
     );
     assert_eq!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(0),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        )
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(0),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real()
     );
 }
 
@@ -4310,12 +4326,15 @@ fn cycles_correct_if_install_fails_at_start() {
 
     assert_delta!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        ),
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST)
+                    + wasm_compilation_cost(&wasm),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real(),
         Cycles::new(10)
     );
 }
@@ -4349,13 +4368,15 @@ fn cycles_correct_if_install_fails_at_init() {
     );
     assert_delta!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
-                + wasm_compilation_cost(&wasm),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(id),
-        ),
+        test.cycles_account_manager()
+            .execution_cost(
+                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                    + wasm_compilation_cost(&wasm),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(id),
+            )
+            .real(),
         Cycles::new(10)
     );
 }
@@ -4612,12 +4633,14 @@ fn resource_saturation_scaling_works_in_create_canister() {
     assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            NumBytes::new(USAGE),
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        )
+        test.cycles_account_manager()
+            .storage_reservation_cycles(
+                NumBytes::new(USAGE),
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            )
+            .real()
     );
 
     assert_ge!(
@@ -4682,6 +4705,7 @@ fn canister_status_contains_reserved_cycles() {
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
             )
+            .real()
             .get()
     );
     assert_eq!(
@@ -5402,11 +5426,14 @@ fn upload_chunk_charges_canister_cycles() {
         chunk: vec![42; 10],
     }
     .encode();
-    let expected_charge = test.cycles_account_manager().management_canister_cost(
-        instructions,
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(
+            instructions,
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
     let _hash = test
         .subnet_message("upload_chunk", payload.clone())
         .unwrap();
@@ -5446,11 +5473,14 @@ fn upload_chunk_charges_if_failing() {
     let canister_id = test.create_canister(CYCLES);
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
-    let expected_charge = test.cycles_account_manager().management_canister_cost(
-        instructions,
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(
+            instructions,
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
     // Verify we are in the expected restricted state (1022 KiB available).
     assert_eq!(
         test.subnet_available_memory().get_execution_memory(),
@@ -7167,10 +7197,12 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
     test.ingress(canister_id, "update", payload).unwrap();
 
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let creation_fee = cycles_account_manager.canister_creation_fee(
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let creation_fee = cycles_account_manager
+        .canister_creation_fee(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
     // There's only 2 canisters on the subnet, so the one created from the first one
     // with have the test id corresponding to `1`.
     let canister = test.canister_state(canister_test_id(1));
@@ -7189,6 +7221,14 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::CanisterCreation)
             .unwrap()
+            .get(),
+        creation_fee.get()
+    );
+    assert_eq!(
+        canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles()
             .get(),
         creation_fee.get()
     );
@@ -7228,8 +7268,9 @@ fn create_canister_free() {
     test.ingress(canister_id, "update", payload).unwrap();
 
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let creation_fee =
-        cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
+    let creation_fee = cycles_account_manager
+        .canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+        .real();
     assert_eq!(creation_fee, Cycles::new(0));
     // There's only 2 canisters on the subnet, so the one created from the first one
     // with have the test id corresponding to `1`.
@@ -7857,12 +7898,14 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
         assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles,
-            test.cycles_account_manager().storage_reservation_cycles(
-                NumBytes::new(USAGE),
-                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
-            )
+            test.cycles_account_manager()
+                .storage_reservation_cycles(
+                    NumBytes::new(USAGE),
+                    &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                    test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
+                )
+                .real()
         );
 
         assert_ge!(

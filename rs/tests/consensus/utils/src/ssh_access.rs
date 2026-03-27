@@ -201,6 +201,7 @@ pub fn get_updatesubnetpayload_with_keys(
         is_halted: None,
         halt_at_cup_height: None,
         features: None,
+        resource_limits: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,

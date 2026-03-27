@@ -4,6 +4,7 @@ use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
+    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
@@ -2870,10 +2871,11 @@ fn canister_status_via_query_call_by_neither_controller_nor_subnet_admin_fails()
 }
 
 #[test]
-fn resource_limits() {
+fn maximum_state_size() {
     let maximum_state_size = NumBytes::new(1 << 30);
     let resource_limits = ResourceLimits {
         maximum_state_size: Some(maximum_state_size),
+        maximum_state_delta: None,
     };
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let hypervisor_config = HypervisorConfig {
@@ -2899,4 +2901,96 @@ fn resource_limits() {
         .build();
     let err = env.update_settings(&canister_id, settings).unwrap_err();
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+}
+
+#[test]
+fn maximum_state_delta() {
+    let maximum_state_delta = NumBytes::new(1 << 30);
+    let resource_limits = ResourceLimits {
+        maximum_state_size: None,
+        maximum_state_delta: Some(maximum_state_delta),
+    };
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    // We disable per-canister rate-limiting of heap delta to simplify the test.
+    let hypervisor_config = HypervisorConfig {
+        rate_limiting_of_heap_delta: FlagStatus::Disabled,
+        ..HypervisorConfig::default()
+    };
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            hypervisor_config,
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_resource_limits(resource_limits)
+        .build();
+
+    let has_completed = |env: &StateMachine, msg_id: &MessageId| -> bool {
+        match env.ingress_status(msg_id) {
+            IngressStatus::Known {
+                state: IngressState::Completed(WasmResult::Reply(_)),
+                ..
+            } => true,
+            IngressStatus::Known {
+                state: IngressState::Received,
+                ..
+            } => false,
+            status => panic!("Unexpected status: {:?}", status),
+        }
+    };
+
+    let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+
+    // We make an update call that writes more heap bytes than `maximum_state_delta`.
+    let heap_delta = (maximum_state_delta.get() + 1).try_into().unwrap();
+    let msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm().push_equal_bytes(42, heap_delta).reply().build(),
+    );
+    env.tick();
+    // The update call completed within a single round because there's no significant heap delta yet.
+    assert!(has_completed(&env, &msg_id));
+
+    // We make another update call that writes heap bytes amounting to ~90% of `maximum_state_delta`.
+    let heap_delta = (maximum_state_delta.get() * 9 / 10).try_into().unwrap();
+    let msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm().push_equal_bytes(43, heap_delta).reply().build(),
+    );
+    for _ in 0..450 {
+        env.tick();
+    }
+    // The update call has not completed yet because rounds are skipped due to heap delta
+    // from the previous (completed) update call.
+    assert!(!has_completed(&env, &msg_id));
+    // After a checkpoint, the update call completes within a single round.
+    for _ in 0..50 {
+        env.tick();
+    }
+    assert!(has_completed(&env, &msg_id));
+
+    // Now it takes ~80% of the checkpoint interval, i.e., 500 * 8 / 10 = 400 rounds,
+    // until rounds are not skipped due to heap delta and messages are executed again.
+    // This is because 50% of the heap delta capacity are reserved (always available)
+    // and only the remaining 50% of the heap delta capacity are made gradually available
+    // throughout the checkpoint interval (we need to get 40% out of those 50% which takes
+    // 80% of the checkpoint interval).
+    let msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm().reply().build(),
+    );
+    for _ in 0..350 {
+        env.tick();
+    }
+    assert!(!has_completed(&env, &msg_id));
+    for _ in 0..100 {
+        env.tick();
+    }
+    assert!(has_completed(&env, &msg_id));
 }

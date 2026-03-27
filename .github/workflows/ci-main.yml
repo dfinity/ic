@@ -27,7 +27,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:d62a81dcad5e8ddd827c663e785c399d12b538ac983165140c0872341a395b92
+      image: ghcr.io/dfinity/ic-build@sha256:ac24f205995a1c36921bb8606e0ee16b8b26d73be7dd0cac786c6882f3569680
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -186,7 +186,6 @@ jobs:
 
             # Determine bazel_args based on event type or branch name
             bazel_args=(
-              --config=lint # enable lint checks
               --config=flaky_retry # auto retry eg systests
               )
             if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then

@@ -18,7 +18,8 @@ use ic_registry_keys::{
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_types::{
     Height, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion,
-    SubnetId, registry::RegistryClientError::DecodeError,
+    SubnetId,
+    registry::RegistryClientError::{self, DecodeError},
 };
 use std::{convert::TryFrom, time::Duration};
 
@@ -57,6 +58,17 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<SubnetRecord>;
+
+    /// Returns `true` if the `subnet_id` is deleted at `version`.
+    /// I.e., there used to be a `subnet_record` for this ID, but
+    /// it was explicitly deleted.
+    ///
+    /// Returns `false` if the subnet still exists or has never existed.
+    fn is_subnet_deleted(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> Result<bool, RegistryClientError>;
 
     fn get_root_subnet_id(&self, version: RegistryVersion) -> RegistryClientResult<SubnetId>;
 
@@ -205,6 +217,21 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
     ) -> RegistryClientResult<SubnetRecord> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         deserialize_registry_value::<SubnetRecord>(bytes)
+    }
+
+    fn is_subnet_deleted(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> Result<bool, RegistryClientError> {
+        // The subnet record is deleted (rather than nonexistent), if...
+        self.get_versioned_value(&make_subnet_record_key(subnet_id), version)
+            .map(|registry_versioned_record| {
+                // ...the value is not present...
+                registry_versioned_record.value.is_none()
+                // ...and the registry version is NOT the initial registry version.
+                    && registry_versioned_record.version.get() > 0
+            })
     }
 
     /// Return the root subnet id if it is available and can be parsed

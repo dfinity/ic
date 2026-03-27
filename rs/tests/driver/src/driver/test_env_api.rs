@@ -196,7 +196,7 @@ use slog::{Logger, debug, info, warn};
 use ssh2::Session;
 use std::{
     cmp::max,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     convert::TryFrom,
     fs,
     future::Future,
@@ -207,7 +207,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
+use tokio::sync::Mutex as TokioMutex;
 use url::Url;
 
 pub use super::ic_images::*;
@@ -1046,6 +1046,17 @@ impl IcNodeSnapshot {
         }
     }
 
+    pub fn canister_installer<'a>(&'a self, wasm_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(self, wasm_name)
+    }
+
+    pub fn canister_installer_from_env<'a>(&'a self, env_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(
+            self,
+            std::env::var(env_name).unwrap_or_else(|err| panic!("{env_name} not set: {err}")),
+        )
+    }
+
     /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
     /// install it on the target node.
     ///
@@ -1058,80 +1069,10 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
-        self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
-    }
-
-    pub fn install_canister_with_arg(
-        &self,
-        canister_id: Principal,
-        name: &str,
-        arg: Option<Vec<u8>>,
-    ) {
-        let canister_bytes = load_wasm(name);
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister");
-    }
-
-    pub fn create_and_install_canister_with_effetive_id_with_arg_and_cycles(
-        &self,
-        name: &str,
-        arg: Option<Vec<u8>>,
-        cycles_amount: Option<u128>,
-        effective_canister_id: Principal,
-    ) -> Principal {
-        let canister_bytes = load_wasm(name);
-
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(cycles_amount)
-                .with_effective_canister_id(effective_canister_id)
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
-                .0;
-
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister")
-    }
-
-    pub fn create_and_install_canister_with_arg_and_cycles(
-        &self,
-        name: &str,
-        arg: Option<Vec<u8>>,
-        cycles_amount: Option<u128>,
-    ) -> Principal {
-        let effective_canister_id = self.effective_canister_id();
-        self.create_and_install_canister_with_effetive_id_with_arg_and_cycles(
-            name,
-            arg,
-            cycles_amount,
-            effective_canister_id.0,
-        )
+        self.canister_installer(name)
+            .with_optional_arg(arg)
+            .block_on_install()
+            .expect("Could not install install the canister")
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
@@ -1211,7 +1152,7 @@ impl IcNodeSnapshot {
         ))
     }
 
-    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>, port: u16) {
+    pub fn assert_metrics_values(&self, metrics_to_check: &BTreeMap<&str, u64>, port: u16) {
         if metrics_to_check.is_empty() {
             return;
         }
@@ -1219,7 +1160,7 @@ impl IcNodeSnapshot {
         block_on(async {
             let metrics_fetcher = MetricsFetcher::new_with_port(
                 std::iter::once(self.clone()),
-                metrics_to_check,
+                metrics_to_check.keys().map(ToString::to_string).collect(),
                 port,
             );
             let metrics = match metrics_fetcher.fetch::<u64>().await {
@@ -1238,42 +1179,90 @@ impl IcNodeSnapshot {
                 self.node_id
             );
             for (name, value) in metrics {
-                assert_eq!(
-                    value[0], 0,
-                    "The metric `{name}` on node {} has non-zero value. \
-                    If the metric is allowed to be non-zero in the test, \
-                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
+                let max_value = metrics_to_check
+                    .get(name.split('(').next().unwrap())
+                    .copied()
+                    .unwrap_or_default();
+                assert!(
+                    value[0] <= max_value,
+                    "The metric `{name}` on node {} exceeded the maximum allowed value: \
+                    {} > {max_value}. \
+                    If this is expected to happen in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")` or \
+                    with `update_orchestrator_metrics_to_check(\"{name}\", $max_value)`",
                     self.node_id,
+                    value[0],
                 );
             }
         });
     }
+}
 
-    pub fn assert_no_replica_restarts(&self) {
-        block_on(async {
-            let orchestrator_metric_name = "orchestrator_replica_process_start_attempts_total";
-            let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
-                std::iter::once(self.clone()),
-                vec![orchestrator_metric_name.to_string()],
-                ORCHESTRATOR_METRICS_PORT,
-            );
-            let orchestrator_metrics_result = orchestrator_metrics_fetcher.fetch::<u64>().await;
-            let orchestrator_metrics = match orchestrator_metrics_result {
-                Ok(orchestrator_metrics) => orchestrator_metrics,
-                Err(e) => {
-                    info!(
-                        self.env.logger(),
-                        "Could not fetch orchestrator metrics for node {}: {e:?}", self.node_id
-                    );
-                    return;
-                }
-            };
-            assert_eq!(
-                orchestrator_metrics[orchestrator_metric_name][0], 1,
-                "The replica process on node {} was restarted during test. Create `SystemTestGroup` using `without_assert_no_replica_restarts` if replica restarts are expected in your test",
-                self.node_id
-            );
-        });
+pub struct CanisterInstaller<'a> {
+    node: &'a IcNodeSnapshot,
+    wasm_name: String,
+    arg: Option<Vec<u8>>,
+    cycles_amount: Option<u128>,
+    effective_canister_id: PrincipalId,
+}
+
+impl<'a> CanisterInstaller<'a> {
+    pub fn new(node: &'a IcNodeSnapshot, wasm_name: impl ToString) -> Self {
+        Self {
+            wasm_name: wasm_name.to_string(),
+            arg: None,
+            cycles_amount: None,
+            effective_canister_id: node.effective_canister_id(),
+            node,
+        }
+    }
+
+    pub fn with_optional_arg(mut self, arg: Option<Vec<u8>>) -> Self {
+        self.arg = arg;
+
+        self
+    }
+
+    pub fn with_cycles_amount(mut self, cycles_amount: u128) -> Self {
+        self.cycles_amount = Some(cycles_amount);
+
+        self
+    }
+
+    pub fn with_effective_canister_id(mut self, effective_canister_id: PrincipalId) -> Self {
+        self.effective_canister_id = effective_canister_id;
+
+        self
+    }
+
+    pub fn block_on_install(self) -> Result<Principal> {
+        block_on(self.install())
+    }
+
+    pub async fn install(self) -> Result<Principal> {
+        let canister_bytes = load_wasm(self.wasm_name);
+        let agent = self.node.build_default_agent_async().await;
+        // Create a canister.
+        let mgr = ManagementCanister::create(&agent);
+        let canister_id = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(self.cycles_amount)
+            .with_effective_canister_id(self.effective_canister_id)
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't create canister with provisional API: {err}"))?
+            .0;
+
+        let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+        if let Some(arg) = self.arg {
+            install_code = install_code.with_raw_arg(arg)
+        }
+        install_code
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't install canister: {err}"))?;
+
+        Ok(canister_id)
     }
 }
 
@@ -1638,7 +1627,7 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
-fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
+pub fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
     let mut channel = session.channel_session()?;
     channel.exec("bash").map_err(|e| {
         anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
@@ -1972,8 +1961,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn build_default_agent(&self) -> Agent {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move { self.build_default_agent_async().await })
+        block_on(self.build_default_agent_async())
     }
 
     fn with_default_agent<F, Fut, R>(&self, op: F) -> R
@@ -1981,8 +1969,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         F: FnOnce(Agent) -> Fut + 'static,
         Fut: Future<Output = R>,
     {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move {
+        block_on(async move {
             let agent = self.build_default_agent_async().await;
             op(agent).await
         })
