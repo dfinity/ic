@@ -180,7 +180,14 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
                 (guard.buf.split(), std::mem::take(&mut guard.fds))
             };
             while !buf.is_empty() {
-                send_message(&self.socket, &mut buf, &mut fds, 0);
+                if send_message(&self.socket, &mut buf, &mut fds, 0) < 0 {
+                    // The socket is broken (e.g., EPIPE or EBADF because the
+                    // other end closed the connection). There is no point in
+                    // retrying because all subsequent sends will also fail.
+                    // Without this check the loop would spin forever since
+                    // `send_message` does not drain the buffer on error.
+                    return;
+                }
             }
         }
     }
