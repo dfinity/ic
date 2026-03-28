@@ -1,4 +1,4 @@
-use dfn_core::api::PrincipalId;
+use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use icp_ledger::Subaccount as IcpSubaccount;
 /// Computes the bytes of the subaccount to which neuron staking transfers are made. This
