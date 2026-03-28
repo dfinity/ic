@@ -4,9 +4,10 @@ use crate::common::rest::{
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
     InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
-    RawCanisterSnapshotDownload, RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles,
-    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawBufferIngressMessage, RawBufferedIngressId, RawCanisterCall, RawCanisterHttpRequest,
+    RawCanisterId, RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
+    RawCanisterSnapshotUpload, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs,
+    RawMessageId, RawMessageOrdering, RawMockCanisterHttpResponse, RawOrderedMessage,
     RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime,
     RawVerifyCanisterSigArg, SubnetId, Topology,
 };
@@ -148,6 +149,7 @@ impl PocketIc {
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
         mainnet_nns_subnet_id: Option<bool>,
+        flexible_ordering: bool,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
@@ -204,6 +206,7 @@ impl PocketIc {
             incomplete_state: None,
             initial_time,
             mainnet_nns_subnet_id,
+            flexible_ordering: if flexible_ordering { Some(true) } else { None },
         };
 
         let test_driver_pid = std::process::id();
@@ -687,6 +690,43 @@ impl PocketIc {
             effective_principal,
         };
         self.post(endpoint, raw_canister_call).await
+    }
+
+    /// Buffer an ingress message on a specific subnet for later ordered execution.
+    pub async fn buffer_ingress(
+        &self,
+        subnet_id: Principal,
+        sender: Principal,
+        canister_id: CanisterId,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Vec<u8> {
+        let raw = RawBufferIngressMessage {
+            subnet_id: RawSubnetId {
+                subnet_id: subnet_id.as_slice().to_vec(),
+            },
+            sender: sender.as_slice().to_vec(),
+            canister_id: canister_id.as_slice().to_vec(),
+            method: method.to_string(),
+            payload,
+        };
+        let result: RawBufferedIngressId = self.post("update/buffer_ingress_message", raw).await;
+        result.message_id
+    }
+
+    /// Execute messages in a specified order on a given subnet.
+    pub async fn execute_with_ordering(
+        &self,
+        subnet_id: Principal,
+        messages: Vec<RawOrderedMessage>,
+    ) {
+        let raw = RawMessageOrdering {
+            subnet_id: RawSubnetId {
+                subnet_id: subnet_id.as_slice().to_vec(),
+            },
+            messages,
+        };
+        let _: () = self.post("update/execute_with_ordering", raw).await;
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.

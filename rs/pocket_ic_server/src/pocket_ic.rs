@@ -105,9 +105,9 @@ use ic_sns_wasm::init::SnsWasmCanisterInitPayloadBuilder;
 use ic_sns_wasm::pb::v1::add_wasm_response::Result as AddWasmResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsWasm};
 use ic_state_machine_tests::{
-    FakeVerifier, StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
-    SubmitIngressError, Subnets, WasmResult, add_global_registry_records,
-    add_initial_registry_records,
+    FakeVerifier, MessageOrdering, OrderedMessage, StateMachine, StateMachineBuilder,
+    StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets, WasmResult,
+    add_global_registry_records, add_initial_registry_records,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
@@ -139,8 +139,9 @@ use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
     CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
     IcpFeaturesConfig, IncompleteStateFlag, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, Topology,
+    RawBufferIngressMessage, RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId,
+    RawMessageOrdering, RawOrderedMessage, RawSetStableMemory, SubnetInstructionConfig, SubnetKind,
+    Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -622,6 +623,7 @@ struct PocketIcSubnets {
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
     _dogecoin_adapter_parts: Option<BitcoinAdapterParts>,
+    flexible_ordering: bool,
 }
 
 impl PocketIcSubnets {
@@ -640,6 +642,7 @@ impl PocketIcSubnets {
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
         dogecoin_adapter_uds_path: Option<PathBuf>,
+        flexible_ordering: bool,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -720,9 +723,13 @@ impl PocketIcSubnets {
         if let Some(subnet_admins) = subnet_admins {
             builder = builder.with_subnet_admins(subnet_admins);
         }
+        if flexible_ordering {
+            builder = builder.with_flexible_ordering();
+        }
         builder
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new(
         runtime: Arc<Runtime>,
         state_dir: PocketIcStateDir,
@@ -736,6 +743,7 @@ impl PocketIcSubnets {
         gateway_port: Option<u16>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         synced_registry_version: Option<u64>,
+        flexible_ordering: bool,
     ) -> Self {
         let routing_table = RoutingTable::new();
         let chain_keys = BTreeMap::new();
@@ -766,6 +774,7 @@ impl PocketIcSubnets {
             synced_registry_version,
             _bitcoin_adapter_parts: None,
             _dogecoin_adapter_parts: None,
+            flexible_ordering,
         }
     }
 
@@ -884,6 +893,7 @@ impl PocketIcSubnets {
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
             dogecoin_adapter_uds_path.clone(),
+            self.flexible_ordering,
         );
 
         if let Some(subnet_id) = subnet_id {
@@ -2804,6 +2814,7 @@ impl PocketIc {
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
         mainnet_nns_subnet_id: bool,
+        flexible_ordering: bool,
     ) -> Result<Self, String> {
         if let Some(time) = initial_time {
             let systime: SystemTime = time.into();
@@ -3128,6 +3139,7 @@ impl PocketIc {
             gateway_port,
             registry_data_provider,
             synced_registry_version,
+            flexible_ordering,
         );
         let mut subnet_configs = Vec::new();
         for subnet_config_info in subnet_config_info.into_iter() {
@@ -4314,6 +4326,83 @@ impl Operation for SubmitIngressMessage {
 }
 
 #[derive(Clone, Debug)]
+pub struct BufferIngressMessage {
+    pub subnet_id: SubnetId,
+    pub sender: PrincipalId,
+    pub canister_id: CanisterId,
+    pub method: String,
+    pub payload: Vec<u8>,
+}
+
+impl Operation for BufferIngressMessage {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let sm = match pic.subnets.get(self.subnet_id) {
+            Some(sm) => sm,
+            None => {
+                return OpOut::Error(PocketIcError::SubnetNotFound(self.subnet_id.get().0));
+            }
+        };
+        match sm.buffer_ingress_as(
+            self.sender,
+            self.canister_id,
+            self.method.clone(),
+            self.payload.clone(),
+        ) {
+            Ok(msg_id) => OpOut::Bytes(msg_id.as_bytes().to_vec()),
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(format!("{e:?}"))),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "buffer_ingress({},{},{})",
+            self.sender, self.canister_id, self.method
+        ))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ExecuteWithOrdering {
+    pub subnet_id: SubnetId,
+    pub messages: Vec<OrderedMessage>,
+}
+
+impl Operation for ExecuteWithOrdering {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let sm = match pic.subnets.get(self.subnet_id) {
+            Some(sm) => sm,
+            None => {
+                return OpOut::Error(PocketIcError::SubnetNotFound(self.subnet_id.get().0));
+            }
+        };
+        let ordering = MessageOrdering::new(self.messages.clone());
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            sm.execute_with_ordering(ordering);
+        })) {
+            Ok(()) => OpOut::NoOutput,
+            Err(e) => {
+                let msg = if let Some(s) = e.downcast_ref::<String>() {
+                    s.clone()
+                } else if let Some(s) = e.downcast_ref::<&str>() {
+                    s.to_string()
+                } else {
+                    "Unknown panic during execute_with_ordering".to_string()
+                };
+                OpOut::Error(PocketIcError::InvalidOrdering(msg))
+            }
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "execute_with_ordering(subnet={},steps={})",
+            self.subnet_id,
+            self.messages.len()
+        ))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct MessageId {
     effective_principal: EffectivePrincipal,
     msg_id: OtherMessageId,
@@ -5308,6 +5397,112 @@ impl TryFrom<RawAddCycles> for AddCycles {
                 message: "Bad canister id".to_string(),
             }),
         }
+    }
+}
+
+impl TryFrom<RawBufferIngressMessage> for BufferIngressMessage {
+    type Error = ConversionError;
+    fn try_from(raw: RawBufferIngressMessage) -> Result<Self, Self::Error> {
+        let subnet_id =
+            SubnetId::new(PrincipalId::try_from(raw.subnet_id.subnet_id).map_err(|_| {
+                ConversionError {
+                    message: "Bad subnet id".to_string(),
+                }
+            })?);
+        let sender = PrincipalId::try_from(raw.sender).map_err(|_| ConversionError {
+            message: "Bad sender".to_string(),
+        })?;
+        let canister_id = CanisterId::try_from(raw.canister_id).map_err(|_| ConversionError {
+            message: "Bad canister id".to_string(),
+        })?;
+        Ok(BufferIngressMessage {
+            subnet_id,
+            sender,
+            canister_id,
+            method: raw.method,
+            payload: raw.payload,
+        })
+    }
+}
+
+impl TryFrom<RawMessageOrdering> for ExecuteWithOrdering {
+    type Error = ConversionError;
+    fn try_from(raw: RawMessageOrdering) -> Result<Self, Self::Error> {
+        let subnet_id =
+            SubnetId::new(PrincipalId::try_from(raw.subnet_id.subnet_id).map_err(|_| {
+                ConversionError {
+                    message: "Bad subnet id".to_string(),
+                }
+            })?);
+        let messages = raw
+            .messages
+            .into_iter()
+            .map(|m| match m {
+                RawOrderedMessage::Ingress {
+                    canister_id,
+                    message_id,
+                } => {
+                    let cid = CanisterId::try_from(canister_id.canister_id).map_err(|_| {
+                        ConversionError {
+                            message: "Bad canister id".to_string(),
+                        }
+                    })?;
+                    let mid =
+                        OtherMessageId::try_from(&message_id[..]).map_err(|_| ConversionError {
+                            message: "Bad message id".to_string(),
+                        })?;
+                    Ok(OrderedMessage::Ingress(cid, mid))
+                }
+                RawOrderedMessage::Request { source, target } => {
+                    let s =
+                        CanisterId::try_from(source.canister_id).map_err(|_| ConversionError {
+                            message: "Bad source canister id".to_string(),
+                        })?;
+                    let t =
+                        CanisterId::try_from(target.canister_id).map_err(|_| ConversionError {
+                            message: "Bad target canister id".to_string(),
+                        })?;
+                    Ok(OrderedMessage::Request {
+                        source: s,
+                        target: t,
+                    })
+                }
+                RawOrderedMessage::Response { source, target } => {
+                    let s =
+                        CanisterId::try_from(source.canister_id).map_err(|_| ConversionError {
+                            message: "Bad source canister id".to_string(),
+                        })?;
+                    let t =
+                        CanisterId::try_from(target.canister_id).map_err(|_| ConversionError {
+                            message: "Bad target canister id".to_string(),
+                        })?;
+                    Ok(OrderedMessage::Response {
+                        source: s,
+                        target: t,
+                    })
+                }
+                RawOrderedMessage::Heartbeat { canister_id } => {
+                    let cid = CanisterId::try_from(canister_id.canister_id).map_err(|_| {
+                        ConversionError {
+                            message: "Bad canister id".to_string(),
+                        }
+                    })?;
+                    Ok(OrderedMessage::Heartbeat(cid))
+                }
+                RawOrderedMessage::Timer { canister_id } => {
+                    let cid = CanisterId::try_from(canister_id.canister_id).map_err(|_| {
+                        ConversionError {
+                            message: "Bad canister id".to_string(),
+                        }
+                    })?;
+                    Ok(OrderedMessage::Timer(cid))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ExecuteWithOrdering {
+            subnet_id,
+            messages,
+        })
     }
 }
 

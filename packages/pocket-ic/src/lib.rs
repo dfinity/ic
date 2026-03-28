@@ -175,6 +175,7 @@ pub struct PocketIcBuilder {
     icp_features: IcpFeatures,
     initial_time: Option<InitialTime>,
     mainnet_nns_subnet_id: Option<bool>,
+    flexible_ordering: bool,
 }
 
 #[allow(clippy::new_without_default)]
@@ -195,6 +196,7 @@ impl PocketIcBuilder {
             icp_features: IcpFeatures::default(),
             initial_time: None,
             mainnet_nns_subnet_id: None,
+            flexible_ordering: false,
         }
     }
 
@@ -220,6 +222,7 @@ impl PocketIcBuilder {
             self.initial_time,
             self.http_gateway_config,
             self.mainnet_nns_subnet_id,
+            self.flexible_ordering,
         )
     }
 
@@ -239,6 +242,7 @@ impl PocketIcBuilder {
             self.initial_time,
             self.http_gateway_config,
             self.mainnet_nns_subnet_id,
+            self.flexible_ordering,
         )
         .await
     }
@@ -495,6 +499,12 @@ impl PocketIcBuilder {
         self.mainnet_nns_subnet_id = Some(true);
         self
     }
+
+    /// Enable flexible message ordering on all subnets.
+    pub fn with_flexible_ordering(mut self) -> Self {
+        self.flexible_ordering = true;
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -615,6 +625,7 @@ impl PocketIc {
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
         mainnet_nns_subnet_id: Option<bool>,
+        flexible_ordering: bool,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -642,6 +653,7 @@ impl PocketIc {
                 initial_time,
                 http_gateway_config,
                 mainnet_nns_subnet_id,
+                flexible_ordering,
             )
             .await
         });
@@ -934,6 +946,37 @@ impl PocketIc {
                     method,
                     payload,
                 )
+                .await
+        })
+    }
+
+    /// Buffer an ingress message on a specific subnet for later ordered execution.
+    pub fn buffer_ingress(
+        &self,
+        subnet_id: Principal,
+        sender: Principal,
+        canister_id: CanisterId,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Vec<u8> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .buffer_ingress(subnet_id, sender, canister_id, method, payload)
+                .await
+        })
+    }
+
+    /// Execute messages in a specified order on a given subnet.
+    pub fn execute_with_ordering(
+        &self,
+        subnet_id: Principal,
+        messages: Vec<common::rest::RawOrderedMessage>,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .execute_with_ordering(subnet_id, messages)
                 .await
         })
     }

@@ -44,11 +44,11 @@ use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
-    RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTickConfigs, RawTime, Topology,
+    MockCanisterHttpResponse, RawAddCycles, RawBufferIngressMessage, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCanisterSnapshotDownload,
+    RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs,
+    RawMessageId, RawMessageOrdering, RawMockCanisterHttpResponse, RawPrincipalId,
+    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime, Topology,
 };
 use serde::Serialize;
 use slog::Level;
@@ -144,6 +144,14 @@ where
         .directory_route(
             "/canister_snapshot_upload",
             post(handler_canister_snapshot_upload),
+        )
+        .directory_route(
+            "/buffer_ingress_message",
+            post(handler_buffer_ingress_message),
+        )
+        .directory_route(
+            "/execute_with_ordering",
+            post(handler_execute_with_ordering),
         )
 }
 
@@ -542,6 +550,16 @@ impl TryFrom<OpOut> for Vec<u8> {
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
             OpOut::Bytes(bytes) => Ok(bytes),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
+impl TryFrom<OpOut> for rest::RawBufferedIngressId {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::Bytes(bytes) => Ok(rest::RawBufferedIngressId { message_id: bytes }),
             _ => Err(OpConversionError),
         }
     }
@@ -1411,6 +1429,48 @@ pub async fn handler_tick(
     (code, Json(res))
 }
 
+pub async fn handler_buffer_ingress_message(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(raw): extract::Json<RawBufferIngressMessage>,
+) -> (StatusCode, Json<ApiResponse<rest::RawBufferedIngressId>>) {
+    let timeout = timeout_or_default(headers);
+    match crate::pocket_ic::BufferIngressMessage::try_from(raw) {
+        Ok(op) => {
+            let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{e:?}"),
+            }),
+        ),
+    }
+}
+
+pub async fn handler_execute_with_ordering(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(raw): extract::Json<RawMessageOrdering>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    match crate::pocket_ic::ExecuteWithOrdering::try_from(raw) {
+        Ok(op) => {
+            let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{e:?}"),
+            }),
+        ),
+    }
+}
+
 // ----------------------------------------------------------------------------------------------------------------- //
 // Other handlers
 
@@ -1586,6 +1646,7 @@ pub async fn create_instance(
                     auto_progress_enabled,
                     gateway_port,
                     instance_config.mainnet_nns_subnet_id.unwrap_or_default(),
+                    instance_config.flexible_ordering.unwrap_or(false),
                 )
             },
             auto_progress,

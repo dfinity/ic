@@ -656,6 +656,7 @@ pub struct InstanceConfig {
     pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
     pub mainnet_nns_subnet_id: Option<bool>,
+    pub flexible_ordering: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -1237,4 +1238,60 @@ pub struct RawCanisterSnapshotId {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
     pub snapshot_id: Vec<u8>,
+}
+
+// ================================================================================================================= //
+// Flexible message ordering types
+// ================================================================================================================= //
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub enum RawOrderedMessage {
+    Ingress {
+        canister_id: RawCanisterId,
+        #[serde(deserialize_with = "base64::deserialize")]
+        #[serde(serialize_with = "base64::serialize")]
+        message_id: Vec<u8>,
+    },
+    Request {
+        source: RawCanisterId,
+        target: RawCanisterId,
+    },
+    Response {
+        source: RawCanisterId,
+        target: RawCanisterId,
+    },
+    Heartbeat {
+        canister_id: RawCanisterId,
+    },
+    Timer {
+        canister_id: RawCanisterId,
+    },
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawMessageOrdering {
+    pub subnet_id: RawSubnetId,
+    pub messages: Vec<RawOrderedMessage>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawBufferIngressMessage {
+    pub subnet_id: RawSubnetId,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub sender: Vec<u8>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub canister_id: Vec<u8>,
+    pub method: String,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub payload: Vec<u8>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawBufferedIngressId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub message_id: Vec<u8>,
 }

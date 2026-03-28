@@ -3435,3 +3435,66 @@ fn cloud_engine_default_effective_canister_id() {
         topology.default_effective_canister_id.clone().into();
     assert_eq!(effective_canister_id, default_effective_canister_id);
 }
+
+#[test]
+fn test_flexible_ordering_basic() {
+    use pocket_ic::common::rest::{RawCanisterId, RawOrderedMessage};
+
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_flexible_ordering()
+        .build();
+
+    let topology = pic.topology();
+    let subnet_id = topology.get_app_subnets()[0];
+
+    let canister_id = pic.create_canister_on_subnet(None, None, subnet_id);
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, counter_wasm(), vec![], None);
+
+    // Buffer two write calls.
+    let msg_id_1 = pic.buffer_ingress(
+        subnet_id,
+        Principal::anonymous(),
+        canister_id,
+        "write",
+        encode_one(()).unwrap(),
+    );
+    let msg_id_2 = pic.buffer_ingress(
+        subnet_id,
+        Principal::anonymous(),
+        canister_id,
+        "write",
+        encode_one(()).unwrap(),
+    );
+
+    // Execute them in order via flexible ordering.
+    pic.execute_with_ordering(
+        subnet_id,
+        vec![
+            RawOrderedMessage::Ingress {
+                canister_id: RawCanisterId {
+                    canister_id: canister_id.as_slice().to_vec(),
+                },
+                message_id: msg_id_1,
+            },
+            RawOrderedMessage::Ingress {
+                canister_id: RawCanisterId {
+                    canister_id: canister_id.as_slice().to_vec(),
+                },
+                message_id: msg_id_2,
+            },
+        ],
+    );
+
+    // Counter should be 2 (two writes executed).
+    let reply = pic
+        .query_call(
+            canister_id,
+            Principal::anonymous(),
+            "read",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+    assert_eq!(reply, vec![2, 0, 0, 0]);
+}
