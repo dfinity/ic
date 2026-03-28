@@ -44,7 +44,9 @@ fn test_list_neurons_with_paging() {
     );
 
     for neuron in neurons {
-        governance.add_neuron(neuron.id().id, neuron).unwrap();
+        governance
+            .add_neuron_without_reservation(neuron.id().id, neuron)
+            .unwrap();
     }
 
     let mut request = ListNeurons {
@@ -141,7 +143,9 @@ fn test_list_neurons_by_subaccounts_and_ids() {
     );
 
     for neuron in neurons {
-        governance.add_neuron(neuron.id().id, neuron).unwrap();
+        governance
+            .add_neuron_without_reservation(neuron.id().id, neuron)
+            .unwrap();
     }
 
     let first_page_request = ListNeurons {

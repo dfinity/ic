@@ -452,7 +452,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 
     for id in 1..=num_neurons {
         governance
-            .add_neuron(
+            .add_neuron_without_reservation(
                 id,
                 make_neuron(
                     id,
@@ -546,7 +546,9 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
     );
 
     for neuron in neurons {
-        governance.add_neuron(neuron.id().id, neuron).unwrap();
+        governance
+            .add_neuron_without_reservation(neuron.id().id, neuron)
+            .unwrap();
     }
 
     bench_fn(|| {
@@ -572,7 +574,9 @@ fn list_neurons() -> BenchResult {
             hashmap! {}, // get the default followees
         );
         neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
-        governance.add_neuron(id, neuron).unwrap();
+        governance
+            .add_neuron_without_reservation(id, neuron)
+            .unwrap();
     }
 
     let request = api::ListNeurons {
@@ -622,7 +626,9 @@ fn list_neurons_by_subaccount() -> BenchResult {
     );
 
     for neuron in neurons {
-        governance.add_neuron(neuron.id().id, neuron).unwrap();
+        governance
+            .add_neuron_without_reservation(neuron.id().id, neuron)
+            .unwrap();
     }
 
     let request = api::ListNeurons {
@@ -667,7 +673,7 @@ fn list_proposals_benchmark() -> BenchResult {
 
     for id in 1..=100 {
         governance
-            .add_neuron(
+            .add_neuron_without_reservation(
                 id,
                 make_neuron(
                     id,

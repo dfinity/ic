@@ -18,8 +18,8 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        MAX_NEURON_PAGE_SIZE, NeuronMetrics, NeuronStore, approve_genesis_kyc,
-        metrics::NeuronSubsetMetrics, prune_some_following,
+        MAX_NEURON_PAGE_SIZE, NeuronMetrics, NeuronSlotReservation, NeuronStore,
+        approve_genesis_kyc, metrics::NeuronSubsetMetrics, prune_some_following,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -223,8 +223,8 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 /// this desired period by a few seconds.
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
-/// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 500_000;
+// Re-export for backwards compatibility.
+pub use crate::neuron_store::MAX_NUMBER_OF_NEURONS;
 
 // Spawning is exempted from rate limiting, so we don't need large of a limit here.
 pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;
@@ -1484,16 +1484,33 @@ impl Governance {
         })?
     }
 
-    /// Add a neuron to the list of neurons.
-    ///
-    /// Fails under the following conditions:
-    /// - the maximum number of neurons has been reached, or
-    /// - the given `neuron_id` already exists in `self.neuron_store.neurons`, or
-    /// - the neuron's controller `PrincipalId` is not self-authenticating.
-    pub(crate) fn add_neuron(
+    /// Add a neuron to the store without a pre-acquired slot reservation. Checks the neuron
+    /// limit before adding.
+    pub(crate) fn add_neuron_without_reservation(
         &mut self,
         neuron_id: u64,
         neuron: Neuron,
+    ) -> Result<(), GovernanceError> {
+        self.add_neuron(neuron_id, neuron, None)
+    }
+
+    /// Add a neuron to the store using a pre-acquired slot reservation. The reservation
+    /// guarantees that the neuron limit was already checked, so the limit check is skipped.
+    /// The reservation is consumed (dropped) by this call.
+    pub(crate) fn add_neuron_with_reservation(
+        &mut self,
+        neuron_id: u64,
+        neuron: Neuron,
+        reservation: NeuronSlotReservation,
+    ) -> Result<(), GovernanceError> {
+        self.add_neuron(neuron_id, neuron, Some(reservation))
+    }
+
+    fn add_neuron(
+        &mut self,
+        neuron_id: u64,
+        neuron: Neuron,
+        _reservation: Option<NeuronSlotReservation>,
     ) -> Result<(), GovernanceError> {
         if neuron_id == 0 {
             return Err(GovernanceError::new_with_message(
@@ -1501,27 +1518,32 @@ impl Governance {
                 "Cannot add neuron with ID zero".to_string(),
             ));
         }
-        {
-            let neuron_real_id = neuron.id().id;
-            if neuron_real_id != neuron_id {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    format!(
-                        "The neuron's ID {neuron_real_id} does not match the provided ID {neuron_id}"
-                    ),
-                ));
-            }
+        let neuron_real_id = neuron.id().id;
+        if neuron_real_id != neuron_id {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "The neuron's ID {neuron_real_id} does not match the provided ID {neuron_id}"
+                ),
+            ));
         }
 
         // New neurons are not allowed when the heap is too large.
         self.check_heap_can_grow()?;
 
-        if self.neuron_store.len() + 1 > MAX_NUMBER_OF_NEURONS {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot add neuron. Max number of neurons reached.",
-            ));
+        // Skip the neuron limit check if a reservation was provided — the limit was already
+        // checked at reservation time.
+        if _reservation.is_none() {
+            let effective_count =
+                self.neuron_store.len() + self.neuron_store.neuron_slot_reservation_count();
+            if effective_count + 1 > self.neuron_store.max_neurons() {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot add neuron. Max number of neurons reached.",
+                ));
+            }
         }
+
         if self.neuron_store.contains(NeuronId { id: neuron_id }) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
@@ -2231,7 +2253,7 @@ impl Governance {
         // acquiring the lock. Indeed, in case there is already a pending
         // command, we return without state rollback. If we had already created
         // the embryo, it would not be garbage collected.
-        self.add_neuron(child_nid.id, child_neuron.clone())?;
+        self.add_neuron_without_reservation(child_nid.id, child_neuron.clone())?;
 
         // Do the transfer for the parent first, to avoid double spending.
         self.neuron_store.with_neuron_mut(id, |parent_neuron| {
@@ -2688,8 +2710,7 @@ impl Governance {
         .with_maturity_e8s_equivalent(maturity_to_spawn)
         .build();
 
-        // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
-        self.add_neuron(child_nid.id, child_neuron)?;
+        self.add_neuron_without_reservation(child_nid.id, child_neuron)?;
 
         // Get the parent neuron again, but this time mutable references.
         self.with_neuron_mut(id, |parent_neuron| {
@@ -2997,7 +3018,7 @@ impl Governance {
         .with_kyc_verified(parent_neuron.kyc_verified)
         .build();
 
-        self.add_neuron(child_nid.id, child_neuron.clone())?;
+        self.add_neuron_without_reservation(child_nid.id, child_neuron.clone())?;
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
         let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
@@ -3835,7 +3856,7 @@ impl Governance {
                 .with_kyc_verified(true)
                 .build();
 
-                self.add_neuron(nid.id, neuron)
+                self.add_neuron_without_reservation(nid.id, neuron)
             }
             Some(RewardMode::RewardToAccount(reward_to_account)) => {
                 // We are not creating a neuron, just transferring funds.
@@ -5887,27 +5908,13 @@ impl Governance {
         Ok(nid)
     }
 
-    /// Claim a new neuron, unless the account doesn't have enough to stake a
-    /// neuron or we've reached the maximum number of neurons, in which case
-    /// we return an error.
-    ///
-    /// We can't return the funds without more information about the
-    /// source account, so as a workaround for insufficient stake we can ask the
-    /// user to transfer however much is missing to stake a neuron and they can
-    /// then disburse if they so choose. We need to do something more involved
-    /// if we've reached the max, TODO.
+    /// Claim a neuron by verifying that sufficient ICP has been transferred to the neuron's
+    /// subaccount, then creating the neuron with the correct stake.
     ///
     /// Preconditions:
     /// - The new neuron won't take us above the `MAX_NUMBER_OF_NEURONS`.
     /// - The amount transferred was greater than or equal to
     ///   `self.economics.neuron_minimum_stake_e8s`.
-    ///
-    /// Note that we need to create the neuron before checking the balance
-    /// so that we record the neuron and avoid a race where a user calls
-    /// this method a second time before the first time responds. If we store
-    /// the neuron and lock it before we make the call, we know that any
-    /// concurrent call to mutate the same neuron will need to wait for this
-    /// one to finish before proceeding.
     #[cfg_attr(feature = "tla", tla_update_method(CLAIM_NEURON_DESC.clone(), tla_snapshotter!()))]
     async fn claim_neuron(
         &mut self,
@@ -5915,14 +5922,67 @@ impl Governance {
         controller: PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
+        self.check_heap_can_grow()?;
+
         let neuron_limit_reservation = self.rate_limiter.try_reserve(
             self.env.now_system_time(),
             NEURON_RATE_LIMITER_KEY.to_string(),
             1,
         )?;
 
+        // Reserve a neuron slot to hold a spot under the neuron limit across the async ledger
+        // call. The reservation is released automatically on failure.
+        let neuron_slot_reservation = self.neuron_store.try_reserve_neuron_slot()?;
+
+        // Check that no neuron already exists with this subaccount before the async call. A
+        // concurrent call could still race past this check (both calls pass before either
+        // creates the neuron), but the post-await `has_neuron_with_subaccount` check below
+        // catches that.
+        if self.neuron_store.has_neuron_with_subaccount(subaccount) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "There is already a neuron with the same subaccount.",
+            ));
+        }
+
         let nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
         let now = self.env.now();
+
+        let _neuron_lock = self.lock_neuron_for_command(
+            nid.id,
+            NeuronInFlightCommand {
+                timestamp: now,
+                command: Some(InFlightCommand::ClaimOrRefreshNeuron(
+                    claim_or_refresh.clone(),
+                )),
+            },
+        )?;
+
+        // Get the balance of the neuron's subaccount from the ledger canister.
+        let account = neuron_subaccount(subaccount);
+        tla_log_locals! { account: tla::account_to_tla(account), neuron_id: nid.id };
+        let balance = self.ledger.account_balance(account).await?;
+        let min_stake = self.economics().neuron_minimum_stake_e8s;
+        if balance.get_e8s() < min_stake {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InsufficientFunds,
+                format!(
+                    "Account does not have enough funds to stake a neuron. \
+                     Please make sure that account has at least {:?} e8s (was {:?} e8s)",
+                    min_stake,
+                    balance.get_e8s()
+                ),
+            ));
+        }
+
+        // After the async call, verify no concurrent call claimed this subaccount.
+        if self.neuron_store.has_neuron_with_subaccount(subaccount) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "There is already a neuron with the same subaccount.",
+            ));
+        }
+
         let neuron = NeuronBuilder::new(
             nid,
             subaccount,
@@ -5935,73 +5995,23 @@ impl Governance {
         )
         .with_followees(self.heap_data.default_followees.clone())
         .with_kyc_verified(true)
+        .with_cached_neuron_stake_e8s(balance.get_e8s())
         .build();
 
-        // This also verifies that there are not too many neurons already.
-        self.add_neuron(nid.id, neuron.clone())?;
+        self.add_neuron_with_reservation(nid.id, neuron, neuron_slot_reservation)?;
 
-        let _neuron_lock = self.lock_neuron_for_command(
-            nid.id,
-            NeuronInFlightCommand {
-                timestamp: now,
-                command: Some(InFlightCommand::ClaimOrRefreshNeuron(
-                    claim_or_refresh.clone(),
-                )),
-            },
-        )?;
-
-        // Get the balance of the neuron's subaccount from ledger canister.
-        let account = neuron_subaccount(subaccount);
-        tla_log_locals! { account: tla::account_to_tla(account), neuron_id: nid.id };
-        let balance = self.ledger.account_balance(account).await?;
-        let min_stake = self.economics().neuron_minimum_stake_e8s;
-        if balance.get_e8s() < min_stake {
-            // To prevent this method from creating non-staked
-            // neurons, we must also remove the neuron that was
-            // previously created.
-            self.remove_neuron(neuron)?;
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InsufficientFunds,
-                format!(
-                    "Account does not have enough funds to stake a neuron. \
-                     Please make sure that account has at least {:?} e8s (was {:?} e8s)",
-                    min_stake,
-                    balance.get_e8s()
-                ),
-            ));
-        }
-
-        // Commit the reservation now that the neuron can no longer be deleted.
         if self
             .rate_limiter
             .commit(self.env.now_system_time(), neuron_limit_reservation)
             .is_err()
         {
             println!(
-                "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. This may indicate a bug in the reservation system."
+                "{LOG_PREFIX}Warning: Failed to commit rate limiter reservation. \
+                 This may indicate a bug in the reservation system."
             );
         }
 
-        let result = self.with_neuron_mut(&nid, |neuron| {
-            // Adjust the stake.
-            neuron.update_stake_adjust_age(balance.get_e8s(), now);
-        });
-        match result {
-            Ok(_) => Ok(nid),
-            Err(err) => {
-                // This should not be possible, but let's be defensive and provide a
-                // reasonable error message, but still panic so that the lock remains
-                // acquired and we can investigate.
-                panic!(
-                    "When attempting to stake a neuron with ID {:?} and stake {:?},\
-                    the neuron disappeared while the operation was in flight.\
-                    Please try again: {:?}",
-                    nid,
-                    balance.get_e8s(),
-                    err
-                )
-            }
-        }
+        Ok(nid)
     }
 
     pub async fn manage_neuron(

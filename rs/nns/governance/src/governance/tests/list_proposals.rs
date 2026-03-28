@@ -60,7 +60,9 @@ fn prepare_voting_eligible_neurons(governance: &mut Governance) {
     .with_cached_neuron_stake_e8s(10_000 * E8)
     .build();
 
-    governance.add_neuron(PROPOSER.id, proposer).unwrap();
+    governance
+        .add_neuron_without_reservation(PROPOSER.id, proposer)
+        .unwrap();
 
     // Another neuron with a greater stake is added so that proposals don't get executed
     // immediately.
@@ -76,7 +78,7 @@ fn prepare_voting_eligible_neurons(governance: &mut Governance) {
     .with_cached_neuron_stake_e8s(20_000 * E8)
     .build();
     governance
-        .add_neuron(another_neuron_id, another_neuron)
+        .add_neuron_without_reservation(another_neuron_id, another_neuron)
         .unwrap();
 }
 
@@ -258,7 +260,9 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
     .with_hot_keys(vec![hot_key_of_manager])
     .with_cached_neuron_stake_e8s(10_000 * E8)
     .build();
-    governance.add_neuron(1, neuron_manager.clone()).unwrap();
+    governance
+        .add_neuron_without_reservation(1, neuron_manager.clone())
+        .unwrap();
     let managed_neuron = NeuronBuilder::new_for_test(
         2,
         DissolveStateAndAge::DissolvingOrDissolved {
@@ -272,7 +276,9 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
         }
     })
     .build();
-    governance.add_neuron(2, managed_neuron.clone()).unwrap();
+    governance
+        .add_neuron_without_reservation(2, managed_neuron.clone())
+        .unwrap();
     let some_other_neuron = NeuronBuilder::new_for_test(
         3,
         DissolveStateAndAge::DissolvingOrDissolved {
@@ -280,7 +286,9 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
         },
     )
     .build();
-    governance.add_neuron(3, some_other_neuron.clone()).unwrap();
+    governance
+        .add_neuron_without_reservation(3, some_other_neuron.clone())
+        .unwrap();
 
     make_proposal(
         &mut governance,
@@ -557,7 +565,7 @@ fn test_filter_proposal_ballots() {
     .with_cached_neuron_stake_e8s(10_000 * E8)
     .build();
     governance
-        .add_neuron(PROPOSER.id, neuron_1.clone())
+        .add_neuron_without_reservation(PROPOSER.id, neuron_1.clone())
         .unwrap();
     let neuron_2 = NeuronBuilder::new_for_test(
         2,
@@ -570,7 +578,9 @@ fn test_filter_proposal_ballots() {
     .with_hot_keys(vec![neuron_2_hot_key])
     .with_cached_neuron_stake_e8s(10_000 * E8)
     .build();
-    governance.add_neuron(2, neuron_2.clone()).unwrap();
+    governance
+        .add_neuron_without_reservation(2, neuron_2.clone())
+        .unwrap();
 
     // Create a proposal with votes from both neurons.
     make_proposal(

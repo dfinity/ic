@@ -1053,3 +1053,47 @@ fn test_record_neuron_vote() {
     });
     assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
 }
+
+fn neuron_store_with_max(neurons: BTreeMap<u64, Neuron>, max_neurons: usize) -> NeuronStore {
+    NeuronStore::new(neurons).with_max_neurons(max_neurons)
+}
+
+#[test]
+fn test_try_reserve_neuron_slot_respects_limit() {
+    let neuron = simple_neuron_builder(1)
+        .with_cached_neuron_stake_e8s(1)
+        .build();
+    let neuron_store = neuron_store_with_max(btreemap! { 1 => neuron }, 3);
+
+    // 1 neuron + 1 reservation = 2 < 3, succeeds.
+    let _reservation1 = neuron_store.try_reserve_neuron_slot().unwrap();
+    assert_eq!(neuron_store.neuron_slot_reservation_count(), 1);
+
+    // 1 neuron + 2 reservations = 3 = max, succeeds.
+    let _reservation2 = neuron_store.try_reserve_neuron_slot().unwrap();
+    assert_eq!(neuron_store.neuron_slot_reservation_count(), 2);
+
+    // 1 neuron + 2 reservations already at max, fails.
+    assert_eq!(
+        neuron_store.try_reserve_neuron_slot().unwrap_err(),
+        NeuronStoreError::NeuronLimitReached { max_neurons: 3 }
+    );
+    assert_eq!(neuron_store.neuron_slot_reservation_count(), 2);
+}
+
+#[test]
+fn test_neuron_slot_reservation_released_on_drop() {
+    let neuron_store = neuron_store_with_max(BTreeMap::new(), 2);
+
+    let reservation1 = neuron_store.try_reserve_neuron_slot().unwrap();
+    let _reservation2 = neuron_store.try_reserve_neuron_slot().unwrap();
+    assert_eq!(neuron_store.neuron_slot_reservation_count(), 2);
+
+    // Drop one reservation — frees a slot.
+    drop(reservation1);
+    assert_eq!(neuron_store.neuron_slot_reservation_count(), 1);
+
+    // The freed slot allows a new reservation.
+    let _reservation3 = neuron_store.try_reserve_neuron_slot().unwrap();
+    assert_eq!(neuron_store.neuron_slot_reservation_count(), 2);
+}
