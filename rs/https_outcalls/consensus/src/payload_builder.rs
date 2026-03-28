@@ -75,6 +75,7 @@ pub struct CanisterHttpBatchStats {
     pub divergence_responses: usize,
     pub single_signature_responses: usize,
     pub flexible_ok_responses: usize,
+    pub flexible_ok_responses_candid_failures: usize,
     pub payload_bytes: usize,
 }
 
@@ -877,8 +878,12 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
         let flexible_ok_responses = messages
             .flexible_responses
             .into_iter()
-            .filter_map(flexible_ok_responses_into_consensus_response)
-            .inspect(|_| stats.flexible_ok_responses += 1);
+            .map(flexible_ok_responses_into_consensus_response)
+            .inspect(|result| match result {
+                Some(_) => stats.flexible_ok_responses += 1,
+                None => stats.flexible_ok_responses_candid_failures += 1,
+            })
+            .flatten();
 
         let responses = responses
             .chain(timeouts)
