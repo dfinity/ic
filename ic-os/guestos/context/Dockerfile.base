@@ -35,6 +35,44 @@ RUN cd /tmp/ && \
     echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     sha256sum -c node_exporter.sha256
 
+# Kernel build stage: build patched kernel 6.19.3 from source (NODE-1852)
+FROM ubuntu:24.04 AS kernel-builder
+
+USER root:root
+
+ENV TZ=UTC
+ENV DEBIAN_FRONTEND=noninteractive
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+RUN apt-get -y update && apt-get -y --no-install-recommends install \
+    build-essential bc flex bison libelf-dev libssl-dev dwarves \
+    dpkg-dev ca-certificates curl xz-utils kmod cpio rsync python3 \
+    debhelper libdw-dev gawk zstd \
+    linux-image-6.14.0-37-generic
+
+RUN mkdir -p /build && cd /build && \
+    curl -L -O https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.19.3.tar.xz && \
+    tar xf linux-6.19.3.tar.xz && \
+    rm linux-6.19.3.tar.xz
+
+COPY thp-fix.patch /build/
+RUN cd /build/linux-6.19.3 && patch -p1 < /build/thp-fix.patch
+
+RUN cd /build/linux-6.19.3 && \
+    cp /boot/config-6.14.0-37-generic .config && \
+    scripts/config --disable CONFIG_DEBUG_INFO_BTF \
+                   --set-str CONFIG_SYSTEM_TRUSTED_KEYS "" \
+                   --set-str CONFIG_SYSTEM_REVOCATION_KEYS "" \
+                   --disable CONFIG_MODULE_SIG_ALL \
+                   --disable CONFIG_DEBUG_INFO_DWARF5 \
+                   --disable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT && \
+    make olddefconfig
+
+RUN cd /build/linux-6.19.3 && \
+    make -j$(nproc) bindeb-pkg LOCALVERSION=-thp-fix
+
+RUN mkdir /build/output && cp /build/linux-image-*.deb /build/output/
+
 #
 # Second build stage:
 # - Download and cache minimal Ubuntu Server 24.04 LTS Docker image
@@ -61,12 +99,12 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
 RUN apt-get -y update && \
     apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) \
-        # TODO(NODE-1852): Temporarily pin the kernel here.
-        # ${_KERNEL_PACKAGE} \
-        # linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
-        linux-image-6.14.0-37-generic linux-modules-extra-6.14.0-37-generic && \
+    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
+
+# Install patched kernel 6.19.3-thp-fix (NODE-1852)
+COPY --from=kernel-builder /build/output/ /tmp/kernel/
+RUN dpkg -i /tmp/kernel/linux-image-*.deb && rm -rf /tmp/kernel
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz

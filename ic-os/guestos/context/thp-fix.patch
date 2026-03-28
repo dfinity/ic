@@ -1,0 +1,27 @@
+diff --git a/mm/huge_memory.c b/mm/huge_memory.c
+index d4ca8cfd7f9d..3d5bf3bb8a3e 100644
+--- a/mm/huge_memory.c
++++ b/mm/huge_memory.c
+@@ -3628,6 +3628,7 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
+ 	const bool is_anon = folio_test_anon(folio);
+ 	int old_order = folio_order(folio);
+ 	int start_order = split_type == SPLIT_TYPE_UNIFORM ? new_order : old_order - 1;
++	struct folio *origin_folio = folio;
+ 	int split_order;
+ 
+ 	/*
+@@ -3653,7 +3654,13 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
+ 				xas_split(xas, folio, old_order);
+ 			else {
+ 				xas_set_order(xas, folio->index, split_order);
+-				xas_try_split(xas, folio, old_order);
++				/*
++				 * use the original folio, so that a parallel
++				 * folio_try_get() waits on it until xarray is
++				 * updated with after-split folios and
++				 * the original one is unfreezed
++				 */
++				xas_try_split(xas, origin_folio, old_order);
+ 				if (xas_error(xas))
+ 					return xas_error(xas);
+ 			}
