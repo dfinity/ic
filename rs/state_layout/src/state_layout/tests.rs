@@ -1304,26 +1304,13 @@ mod mainnet_compatibility_tests {
                 .expect("Failed to convert the protobuf to CanisterStateBits");
 
             let CanisterStateBits {
-                task_queue,
-                mut status,
-                ..
+                task_queue, status, ..
             } = canister_state_bits;
             let CanisterStateBits {
                 task_queue: expected_task_queue,
                 status: expected_status,
                 ..
             } = make_task_queue_and_status();
-
-            // Forward compatibility hack: the old version did not use `with_callback()`,
-            // so it was not bumping `next_callback_id`. Explicitly set it to 3.
-            //
-            // TODO(DSM-95): Drop in the release after the next.
-            if let CanisterStatus::Running {
-                call_context_manager,
-            } = &mut status
-            {
-                call_context_manager.set_next_callback_id(3);
-            }
 
             assert_eq!(expected_task_queue, task_queue);
             assert_eq!(expected_status, status);
