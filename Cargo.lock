@@ -12016,10 +12016,12 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-nns-delegation-manager-test-utils",
+ "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
  "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
@@ -12035,6 +12037,7 @@ dependencies = [
  "tokio-rustls 0.26.4",
  "tokio-util",
  "tower 0.5.3",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]

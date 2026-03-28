@@ -1,5 +1,5 @@
 {
-  "checksum": "0ba87757d4da3c2ebfe6fd44de769bfadb974303e7929c18ba45e6002d5f1b62",
+  "checksum": "3f6c81bd04390c383882ee308438154df78f422604e379ecf42b8922059eb1bc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22741,6 +22741,10 @@
               "target": "wat"
             },
             {
+              "id": "webpki-roots 1.0.6",
+              "target": "webpki_roots"
+            },
+            {
               "id": "which 4.4.0",
               "target": "which"
             },
@@ -34025,7 +34029,7 @@
               "target": "tower_service"
             },
             {
-              "id": "webpki-roots 1.0.2",
+              "id": "webpki-roots 1.0.6",
               "target": "webpki_roots"
             }
           ],
@@ -66433,7 +66437,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ],
@@ -66483,7 +66487,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ],
@@ -66603,7 +66607,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ],
@@ -66653,7 +66657,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ]
@@ -69606,7 +69610,7 @@
               "target": "thiserror"
             },
             {
-              "id": "webpki-roots 1.0.2",
+              "id": "webpki-roots 1.0.6",
               "target": "webpki_roots"
             },
             {
@@ -91896,14 +91900,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "webpki-roots 1.0.2": {
+    "webpki-roots 1.0.6": {
       "name": "webpki-roots",
-      "version": "1.0.2",
+      "version": "1.0.6",
       "package_url": "https://github.com/rustls/webpki-roots",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/webpki-roots/1.0.2/download",
-          "sha256": "7e8983c3ab33d6fb807cfcdad2491c4ea8cbc8ed839181c7dfd9c67c83e261b2"
+          "url": "https://static.crates.io/crates/webpki-roots/1.0.6/download",
+          "sha256": "22cfaf3c063993ff62e73cb4311efde4db1efb31ab78a3e5c457939ad5cc0bed"
         }
       },
       "targets": [
@@ -91936,7 +91940,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.2"
+        "version": "1.0.6"
       },
       "license": "CDLA-Permissive-2.0",
       "license_ids": [
@@ -99019,6 +99023,7 @@
     "wasmtime 42.0.1",
     "wast 244.0.0",
     "wat 1.244.0",
+    "webpki-roots 1.0.6",
     "which 4.4.0",
     "wirm 2.1.0",
     "wsl 0.1.0",

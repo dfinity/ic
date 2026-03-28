@@ -1,17 +1,22 @@
 use crate::driver::resource::BootImage;
 use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
-    farm::{Farm, HostFeature},
+    farm::{DnsRecord, DnsRecordType, Farm, HostFeature},
+    ic_gateway_vm::Playnet,
     nested::UnassignedRecordConfig,
     node_software_version::NodeSoftwareVersion,
     resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
     test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
+    test_env_api::{
+        AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasRegistryLocalStore,
+        HasTopologySnapshot,
+    },
     test_setup::GroupSetup,
 };
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
@@ -50,6 +55,7 @@ pub struct InternetComputer {
     use_specified_ids_allocation_range: bool,
     pub unassigned_record_config: Option<UnassignedRecordConfig>,
     pub api_boundary_nodes: Vec<Node>,
+    pub api_bn_use_playnet: bool,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -153,6 +159,23 @@ impl InternetComputer {
         self
     }
 
+    /// Add the given number of API boundary nodes with playnet support.
+    /// Unlike `with_api_boundary_nodes`, nodes are created without domains here —
+    /// real domains (e.g. `apibn-0.ic50.farm.dfinity.systems`) are assigned during
+    /// `setup_and_start` after a playnet certificate is acquired from Farm.
+    pub fn with_api_boundary_nodes_playnet(mut self, no_of_nodes: usize) -> Self {
+        self.api_bn_use_playnet = true;
+        for _ in 0..no_of_nodes {
+            self.api_boundary_nodes.push(
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone()),
+            );
+        }
+        self
+    }
+
     /// Add an API boundary node with custom settings (domain name)
     pub fn with_api_boundary_node(mut self, node: Node) -> Self {
         self.api_boundary_nodes.push(node);
@@ -225,6 +248,19 @@ impl InternetComputer {
         &mut self,
         env: &TestEnv,
     ) -> Result<BTreeMap<String, AllocatedVm>> {
+        if self
+            .subnets
+            .iter()
+            .any(|s| s.subnet_type == SubnetType::CloudEngine)
+        {
+            // Cloud engines use API boundary nodes to replicate their registry and to fetch
+            // delegations since the firewall on the NNS blocks them.
+            assert!(
+                !self.api_boundary_nodes.is_empty(),
+                "At least one API boundary node is required when using a cloud engine subnet"
+            );
+        }
+
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for node in self
@@ -254,6 +290,11 @@ impl InternetComputer {
 
         let res_group = allocate_resources(&farm, &res_request, env)?;
         self.propagate_ip_addrs(&res_group);
+
+        if self.api_bn_use_playnet {
+            self.setup_api_bn_playnet(env);
+        }
+
         let init_ic = init_ic(
             self,
             env,
@@ -318,6 +359,42 @@ impl InternetComputer {
                     .ipv6,
             );
         }
+    }
+
+    /// Acquires a playnet certificate from Farm, assigns real domains to API BN
+    /// nodes, creates DNS records, and writes the Playnet attribute for reuse
+    /// by the IC gateway.
+    fn setup_api_bn_playnet(&mut self, env: &TestEnv) {
+        let playnet_cert = env.acquire_playnet_certificate();
+        let fqdn = &playnet_cert.playnet;
+        info!(env.logger(), "Acquired playnet for API BNs: {}", fqdn);
+
+        for (idx, node) in self.api_boundary_nodes.iter_mut().enumerate() {
+            node.domain = Some(format!("apibn-{idx}.{fqdn}"));
+        }
+
+        let dns_records: Vec<DnsRecord> = self
+            .api_boundary_nodes
+            .iter()
+            .enumerate()
+            .map(|(idx, node)| DnsRecord {
+                name: format!("apibn-{idx}"),
+                record_type: DnsRecordType::AAAA,
+                records: vec![node.ipv6.expect("API BN missing IPv6").to_string()],
+            })
+            .collect();
+        let suffix = env.create_playnet_dns_records(dns_records);
+        info!(
+            env.logger(),
+            "Created playnet DNS records for API BNs under {}", suffix
+        );
+
+        let playnet = Playnet {
+            playnet_cert,
+            aaaa_records: vec![],
+            a_records: vec![],
+        };
+        playnet.write_attribute(env);
     }
 
     pub fn has_malicious_behaviors(&self) -> bool {
@@ -461,6 +538,7 @@ pub struct Subnet {
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub boot_image: BootImage,
     pub required_host_features: Vec<HostFeature>,
+    pub default_node_reward_type: Option<NodeRewardType>,
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
@@ -491,11 +569,24 @@ pub struct Subnet {
 
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
+        // Invariants in the registry ensure that
+        //   - Cloud engines have a free cost schedule
+        //   - Cloud engines only have nodes with reward type 4
+        let (canister_cycles_cost_schedule, default_node_reward_type) = match subnet_type {
+            SubnetType::Application | SubnetType::System | SubnetType::VerifiedApplication => {
+                (CanisterCyclesCostSchedule::Normal, None)
+            }
+            SubnetType::CloudEngine => (
+                CanisterCyclesCostSchedule::Free,
+                Some(NodeRewardType::Type4),
+            ),
+        };
         Self {
             vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             boot_image: Default::default(),
             required_host_features: vec![],
+            default_node_reward_type,
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             max_ingress_bytes_per_block: None,
@@ -511,7 +602,7 @@ impl Subnet {
             features: None,
             max_number_of_canisters: None,
             subnet_type,
-            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
+            canister_cycles_cost_schedule,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
@@ -617,7 +708,13 @@ impl Subnet {
         })
     }
 
-    pub fn add_node(mut self, node: Node) -> Self {
+    pub fn add_node(mut self, mut node: Node) -> Self {
+        if node.node_reward_type.is_none()
+            && let Some(reward_type) = self.default_node_reward_type
+        {
+            node = node.with_node_reward_type(reward_type);
+        }
+
         self.nodes.push(node);
         self
     }
@@ -762,6 +859,7 @@ impl Default for Subnet {
             vm_allocation: Default::default(),
             boot_image: BootImage::GroupDefault,
             required_host_features: vec![],
+            default_node_reward_type: None,
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             max_ingress_bytes_per_block: None,
@@ -860,6 +958,7 @@ pub struct Node {
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
+    pub node_reward_type: Option<NodeRewardType>,
     pub recovery_hash: Option<String>,
     pub boot_image: BootImage,
 }
@@ -911,6 +1010,11 @@ impl Node {
 
     pub fn with_domain(mut self, domain: String) -> Self {
         self.domain = Some(domain);
+        self
+    }
+
+    pub fn with_node_reward_type(mut self, node_reward_type: NodeRewardType) -> Self {
+        self.node_reward_type = Some(node_reward_type);
         self
     }
 
