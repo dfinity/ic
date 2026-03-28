@@ -199,7 +199,7 @@ mod tests {
     use crate::{
         messages::{
             Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope,
-            SignedDelegation, SignedIngress,
+            RawSignedSenderInfo, SignedDelegation, SignedIngress,
         },
         time::expiry_time_from_now,
     };
@@ -214,6 +214,11 @@ mod tests {
                 sender: Blob(vec![0x05]),
                 nonce: Some(Blob(vec![1, 2, 3, 4])),
                 ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
+                sender_info: Some(RawSignedSenderInfo {
+                    info: Blob(vec![1, 2, 3]),
+                    signer: Blob(vec![42; 8]),
+                    sig: Blob(vec![4, 5, 6]),
+                }),
             },
         }
     }

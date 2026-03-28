@@ -13,6 +13,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
@@ -71,6 +72,7 @@ pub(crate) struct SubnetRecord {
     pub start_as_nns: bool,
     pub subnet_type: SubnetType,
     pub features: SubnetFeatures,
+    pub resource_limits: ResourceLimits,
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
@@ -120,6 +122,7 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             start_as_nns: value.start_as_nns,
             subnet_type: SubnetType::try_from(value.subnet_type).unwrap(),
             features: value.features.unwrap_or_default().into(),
+            resource_limits: value.resource_limits.unwrap_or_default().into(),
             max_number_of_canisters: value.max_number_of_canisters,
             ssh_readonly_access: value.ssh_readonly_access.clone(),
             ssh_backup_access: value.ssh_backup_access.clone(),
@@ -244,6 +247,14 @@ impl SubnetDescriptor {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumString, Serialize)]
 pub enum LogVisibility {
+    #[strum(serialize = "controllers")]
+    Controllers,
+    #[strum(serialize = "public")]
+    Public,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumString, Serialize)]
+pub enum SnapshotVisibility {
     #[strum(serialize = "controllers")]
     Controllers,
     #[strum(serialize = "public")]

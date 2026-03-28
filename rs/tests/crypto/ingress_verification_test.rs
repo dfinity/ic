@@ -18,7 +18,8 @@ use ic_system_test_driver::util::{
 };
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedDelegation,
+    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, RawSignedSenderInfo,
+    SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
@@ -39,6 +40,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_with_delegations_with_targets))
                 .add_test(systest!(requests_with_delegation_loop))
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations))
+                .add_test(systest!(requests_with_sender_info))
                 .add_test(systest!(requests_with_invalid_expiry))
                 .add_test(systest!(requests_with_canister_signature)),
         )
@@ -835,6 +837,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                             sender: Blob(sender.principal().as_slice().to_vec()),
                             ingress_expiry: expiry_time().as_nanos() as u64,
                             nonce: None,
+                            sender_info: None,
                         },
                     };
 
@@ -880,6 +883,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                                 sender: Blob(sender.principal().as_slice().to_vec()),
                                 ingress_expiry: expiry_time().as_nanos() as u64,
                                 nonce: None,
+                                sender_info: None,
                             },
                         };
 
@@ -1048,6 +1052,63 @@ pub fn requests_with_invalid_expiry(env: TestEnv) {
                         "read_state should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
                 }
+            }
+        }
+    });
+}
+
+pub fn requests_with_sender_info(env: TestEnv) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
+        async move {
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let test_info = TestInformation {
+                url: node_url,
+                canister_id: canister_id_from_principal(&canister.canister_id()),
+            };
+
+            let mut rng = reproducible_rng();
+            let id_type = GenericIdentityType::random(&mut rng);
+            let id = GenericIdentity::new(id_type, &mut rng);
+            let sender_info_error_text = "Sender info is not supported yet.";
+
+            for &api_ver in ALL_UPDATE_API_VERSIONS {
+                let content = HttpCallContent::Call {
+                    update: HttpCanisterUpdate {
+                        canister_id: Blob(test_info.canister_id.get().as_slice().to_vec()),
+                        method_name: "update".to_string(),
+                        arg: Blob(wasm().reply_data(b"update_reply").build()),
+                        sender: Blob(id.principal().as_slice().to_vec()),
+                        ingress_expiry: expiry_time().as_nanos() as u64,
+                        nonce: None,
+                        sender_info: Some(RawSignedSenderInfo {
+                            info: Blob(vec![1, 2, 3]),
+                            signer: Blob(CanisterId::ic_00().get().as_slice().to_vec()),
+                            sig: Blob(vec![4, 5, 6]),
+                        }),
+                    },
+                };
+                let signature = id.sign_update(&content);
+                let response = send_request(
+                    api_ver,
+                    &test_info,
+                    "call",
+                    content,
+                    id.public_key_der(),
+                    None,
+                    signature,
+                )
+                .await;
+
+                assert_eq!(response.status(), 400);
+                response.expect_text_error(sender_info_error_text);
             }
         }
     });
@@ -1528,6 +1589,7 @@ async fn perform_update_call_with_delegations(
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -1565,6 +1627,7 @@ async fn perform_read_state_call_with_delegations(
                 sender: Blob(sender.principal().as_slice().to_vec()),
                 ingress_expiry: expiry_time().as_nanos() as u64,
                 nonce: None,
+                sender_info: None,
             },
         };
 
@@ -1661,6 +1724,7 @@ async fn perform_update_with_expiry(
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry,
             nonce: None,
+            sender_info: None,
         },
     };
 

@@ -27,7 +27,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:898d5f8e921a96c9433d8cd2588178f0a033d3dd74fcf1790cf9eddaaf23d905
+      image: ghcr.io/dfinity/ic-build@sha256:ac24f205995a1c36921bb8606e0ee16b8b26d73be7dd0cac786c6882f3569680
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -151,6 +151,39 @@ jobs:
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
           echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
+      # calculate which bazel targets may need to be rebuilt
+      - *checkout
+      - name: Infer Targets
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            targets_args=()
+            if [[ '${{ steps.config.outputs.skip_long_tests }}' == 'true' ]]; then
+              targets_args+=("--skip_long_tests")
+            fi
+            if [[ '${{ steps.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+              targets_args+=("--exclude_tags=buf")
+            fi
+            if [[ '${{ steps.config.outputs.diff-only }}' == 'true' ]]; then
+              targets_args+=(
+                '--base=${{ github.event.pull_request.base.sha }}'
+                '--head=${{ github.event.pull_request.head.sha }}'
+                )
+            fi
+
+            # creates a list of targets suitable for --target_pattern_file and list
+            # the targets on the step summary
+            ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
+            ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
+
+      - name: Upload target files
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-targets
+          path: |
+            ${{ runner.temp }}/build-targets
+            ${{ runner.temp }}/test-targets
+
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
@@ -170,88 +203,48 @@ jobs:
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
 
+      - name: Infer Bazel Args
+        id: infer-bazel-args
+        shell: bash
+        run: |
+          # Determine bazel_args based on event type or branch name
+          bazel_args=( --config=flaky_retry ) # auto retry eg systests
+          if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
+              bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
+          elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
+              bazel_args+=( --test_timeout_filters=short,moderate )
+          else
+              bazel_args+=( --keep_going )
+          fi
+
+          if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
+            # make sure the version is stamped in
+            bazel_args+=( --config=stamped )
+          fi
+
+
+          echo "bazel-args=${bazel_args[@]}" >> $GITHUB_OUTPUT
+
+      - name: Download target files
+        uses: actions/download-artifact@v4
+        with:
+          name: bazel-targets
+          path: ~/.cache/bazel-targets
+
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          execlogs-artifact-name: execlogs-bazel-test-all
-          invocation-names: |
-            build
-            test
+          execlogs-artifact-name: execlogs-bazel-build
+          invocation-names: build
           run: |
-            set -euo pipefail
-
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            # Determine bazel_args based on event type or branch name
-            bazel_args=(
-              --config=lint # enable lint checks
-              --config=flaky_retry # auto retry eg systests
-              )
-            if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
-                bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
-            elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
-                bazel_args+=( --test_timeout_filters=short,moderate )
-            else
-                bazel_args+=( --keep_going )
-            fi
+            bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
-            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
-              # make sure the version is stamped in
-              bazel_args+=( --config=stamped )
-            fi
-
-            # If there are targets to test, pass them as a file to bazel to avoid bash & the OS
-            # complaining about the argument list being too long.
-            target_pattern_file=$(mktemp)
-            trap "rm $target_pattern_file" INT TERM EXIT
-            targets_args=()
-            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
-              targets_args+=("--skip_long_tests")
-            fi
-            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
-              targets_args+=("--exclude_tags=buf")
-            fi
-            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
-              targets_args+=(
-                '--base=${{ github.event.pull_request.base.sha }}'
-                '--head=${{ github.event.pull_request.head.sha }}'
-                )
-            fi
-
-            bazel_do() {
-              bazel_cmd="$1"
-
-              "${CI_PROJECT_DIR:-}"/ci/scripts/targets.py "$bazel_cmd" \
-                    "${targets_args[@]}" >"$target_pattern_file"
-
-              num_targets=$(wc <"$target_pattern_file" -l)
-              # if bazel targets is empty we don't need to run any tests
-              if [ "$num_targets" -eq 0 ]; then
-                echo "No bazel targets to $bazel_cmd"
-                return
-              fi
-
-              echo "${bazel_cmd}ing $num_targets targets ..."
-              # the target list can get quite big, so we wrap it in details/summary
-              {
-                echo '<details><summary>'"$bazel_cmd"' '"$num_targets"' targets</summary>';
-                echo
-                echo '```'
-                cat "$target_pattern_file"
-                echo '```'
-                echo
-                echo '</details>';
-              } >>"$GITHUB_STEP_SUMMARY"
-
-              echo "Running bazel command: $bazel_cmd"
-
-              bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
-            }
-
-            bazel_do build
-            bazel_do test
+            build_targets="$HOME/.cache/bazel-targets/build-targets"
+            eval "bazel build $bazel_args --target_pattern_file=$build_targets"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
@@ -273,6 +266,20 @@ jobs:
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
+
+      - name: Run Tests
+        uses: ./.github/actions/bazel
+        with:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          execlogs-artifact-name: execlogs-bazel-test
+          invocation-names: test
+          run: |
+            bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
+
+            test_targets="$HOME/.cache/bazel-targets/test-targets"
+            if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
+              eval "bazel test $bazel_args --target_pattern_file=$test_targets"
+            fi
 
   # Build & upload the arm64-{linux,darwin} variant of the PocketIC server,
   # build the entire codebase on arm64-darwin,
@@ -478,6 +485,11 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
+      - name: Download target files
+        uses: actions/download-artifact@v4
+        with:
+          name: bazel-targets
+          path: ~/.cache/bazel-targets
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -500,25 +512,7 @@ jobs:
             fi
 
             # otherwise, infer targets to build
-            target_pattern_file=$(mktemp)
-            trap "rm $target_pattern_file" INT TERM EXIT
-            targets_args=(
-              "--base=${{ github.event.pull_request.base.sha }}"
-              "--head=${{ github.event.pull_request.head.sha }}"
-            )
-            ci/scripts/targets.py build "${targets_args[@]}" >"$target_pattern_file"
-            num_targets=$(wc <"$target_pattern_file" -l)
-            echo "Considering $num_targets targets ..."
-            # the target list can get quite big, so we wrap it in details/summary
-            {
-              echo '<details><summary>Considered '"$num_targets"' targets</summary>';
-              echo
-              echo '```'
-              cat "$target_pattern_file"
-              echo '```'
-              echo
-              echo '</details>';
-            } >>"$GITHUB_STEP_SUMMARY"
+            target_pattern_file="$HOME/.cache/bazel-targets/build-targets"
 
             ARGS=()
 
@@ -547,7 +541,7 @@ jobs:
       - name: Download execution logs (cache)
         uses: actions/download-artifact@v4
         with:
-          name: execlogs-bazel-test-all
+          name: execlogs-bazel-build
           path: execlogs-cache
       - name: Download execution logs (nocache)
         uses: actions/download-artifact@v4

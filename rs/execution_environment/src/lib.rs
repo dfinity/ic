@@ -16,6 +16,7 @@ mod types;
 pub mod units;
 pub mod util;
 
+pub use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use canister_manager::types::WasmSource;
 pub use canister_manager::wasm_execution_mode;
@@ -372,7 +373,6 @@ fn setup_execution_helper(
         logger.clone(),
         canister_manager_config,
         Arc::clone(&cycles_account_manager),
-        Arc::clone(&ingress_history_writer) as Arc<_>,
         Arc::clone(&fd_factory),
         config.environment_variables,
     ));

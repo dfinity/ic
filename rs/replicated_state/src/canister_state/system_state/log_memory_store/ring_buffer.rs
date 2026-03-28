@@ -96,6 +96,12 @@ impl RingBuffer {
         self.io.load_header().data_size.get() as usize
     }
 
+    /// Returns next_idx of the ring buffer.
+    #[cfg(test)]
+    pub fn next_idx(&self) -> u64 {
+        self.io.load_header().next_idx
+    }
+
     /// Clears the ring buffer.
     pub fn clear(&mut self) {
         let mut h = self.io.load_header();
@@ -120,11 +126,19 @@ impl RingBuffer {
         for record in iter.map(LogRecord::from) {
             // Check that records are added in order, otherwise it breaks the index.
             if record.idx < h.next_idx {
-                debug_assert!(false, "Log record idx must be >= than next idx");
+                debug_assert!(
+                    false,
+                    "Log record idx {} must be >= than next idx {}",
+                    record.idx, h.next_idx
+                );
                 continue;
             }
             if record.timestamp < h.max_timestamp {
-                debug_assert!(false, "Log record timestamp must be >= than max timestamp");
+                debug_assert!(
+                    false,
+                    "Log record timestamp {} must be >= than max timestamp {}",
+                    record.timestamp, h.max_timestamp
+                );
                 continue;
             }
 
@@ -357,6 +371,7 @@ mod tests {
 
         assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
         assert_eq!(rb.bytes_used(), 0);
+        assert_eq!(rb.next_idx(), 0);
     }
 
     #[test]
@@ -374,6 +389,7 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r0);
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
+        assert_eq!(rb.next_idx(), 2);
     }
 
     #[test]
@@ -397,6 +413,7 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert_eq!(rb.pop_front().unwrap(), r2);
         assert_eq!(rb.pop_front().unwrap(), r3);
+        assert_eq!(rb.next_idx(), 4);
     }
 
     #[test]
@@ -420,6 +437,7 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r2);
         assert_eq!(rb.pop_front().unwrap(), r3);
         assert!(rb.pop_front().is_none());
+        assert_eq!(rb.next_idx(), 4);
     }
 
     #[test]

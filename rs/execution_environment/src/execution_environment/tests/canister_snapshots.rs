@@ -1801,11 +1801,14 @@ fn take_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Take a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().management_canister_cost(
-        instructions,
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(
+            instructions,
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
 
     // Take a snapshot for the canister.
     let args: TakeCanisterSnapshotArgs =
@@ -1878,11 +1881,14 @@ fn load_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Load a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().management_canister_cost(
-        instructions,
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(
+            instructions,
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
 
     // Load an existing snapshot will decrease the balance.
     let args: LoadCanisterSnapshotArgs =

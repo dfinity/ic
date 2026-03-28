@@ -52,9 +52,7 @@ impl MockCanister {
         canister
     }
 
-    /// Updates the maximum capacity of the log memory store.
-    ///
-    /// Resizes the underlying storage to match the provided byte limit.
+    /// Updates canister settings.
     fn update_settings(&mut self, settings: CanisterSettings) {
         if let Some(limit) = settings.log_memory_limit {
             self.log_memory_store
@@ -82,6 +80,11 @@ impl MockCanister {
         NumBytes::from(self.log_memory_store.memory_usage() as u64)
     }
 
+    /// Returns the next expected log record index.
+    fn next_idx(&self) -> u64 {
+        self.log_memory_store.next_idx()
+    }
+
     /// Logs a message.
     fn log(&mut self, message: &str) {
         let next_idx = self.log_memory_store.next_idx();
@@ -107,6 +110,7 @@ fn total_allocated_bytes(data_capacity: NumBytes) -> NumBytes {
 fn test_canister_creation_initially_default_size() {
     let canister = MockCanister::create_canister();
 
+    assert_eq!(canister.next_idx(), 0);
     assert_eq!(canister.fetch_canister_logs().len(), 0);
     assert_eq!(
         canister.log_memory_usage(),
@@ -131,6 +135,7 @@ fn test_canister_minimal_log_memory_limit() {
         canister.log_memory_usage(),
         total_allocated_bytes(TEST_MINIMAL_LOG_MEMORY_LIMIT)
     );
+    assert_eq!(canister.next_idx(), 0);
 }
 
 #[test]
@@ -148,6 +153,7 @@ fn test_canister_resize_to_zero_deallocates() {
     });
 
     assert_eq!(canister.log_memory_usage(), NumBytes::new(0));
+    assert_eq!(canister.next_idx(), 0);
 }
 
 #[test]
@@ -166,6 +172,7 @@ fn test_canister_update_log_memory_limit() {
         canister.log_memory_usage(),
         total_allocated_bytes(new_log_memory_limit)
     );
+    assert_eq!(canister.next_idx(), 0);
 }
 
 #[test]
@@ -179,10 +186,11 @@ fn test_canister_logging_appends_records() {
     assert_eq!(records.len(), 2);
     assert_eq!(records[0].content, b"Hello");
     assert_eq!(records[1].content, b"World");
+    assert_eq!(canister.next_idx(), 2);
 }
 
 #[test]
-fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
+fn test_canister_reinstall_clears_logs_but_preserves_next_idx_and_limit() {
     let new_log_memory_limit = NumBytes::new(100 * KIB);
     assert_gt!(new_log_memory_limit, TEST_DEFAULT_LOG_MEMORY_LIMIT);
     let mut canister = MockCanister::create_canister();
@@ -196,6 +204,7 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
         canister.log_memory_usage(),
         total_allocated_bytes(new_log_memory_limit)
     );
+    assert_eq!(canister.next_idx(), 1);
 
     // Install or reinstall.
     canister.install_code();
@@ -206,37 +215,68 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
         canister.log_memory_usage(),
         total_allocated_bytes(new_log_memory_limit)
     );
+    assert_eq!(canister.next_idx(), 1);
 }
 
 #[test]
 fn test_canister_uninstall_deallocates() {
     let mut canister = MockCanister::create_canister();
     canister.log("Data");
+    assert_eq!(canister.fetch_canister_logs().len(), 1);
     assert_gt!(canister.log_memory_usage().get(), 0);
+    assert_eq!(canister.next_idx(), 1);
 
     canister.uninstall_code();
 
-    // Assert logs are cleared and log memory is deallocated.
+    // Assert logs are cleared, log memory is deallocated, next_idx is preserved.
     assert_eq!(canister.fetch_canister_logs().len(), 0);
     assert_eq!(canister.log_memory_usage().get(), 0);
+    assert_eq!(canister.next_idx(), 1);
 }
 
 #[test]
-fn test_canister_uninstall_and_install_clears_log_memory() {
+fn test_canister_uninstall_and_install_drops_logs_until_resized() {
     let mut canister = MockCanister::create_canister();
     canister.update_settings(CanisterSettings {
         log_memory_limit: Some(NumBytes::new(100 * KIB)),
         ..Default::default()
     });
-    canister.log("Message 1");
+    canister.log("Message 1 recorded");
+    assert_eq!(canister.next_idx(), 1);
 
     canister.uninstall_code();
     canister.install_code();
-    canister.log("Message 2");
 
-    // Assert logs memory allocation is cleared.
+    // Test that without settings update, log memory remains cleared and drops msg
+    canister.log("Message 2 ignored");
     assert_eq!(canister.fetch_canister_logs().len(), 0);
     assert_eq!(canister.log_memory_usage().get(), 0);
+    assert_eq!(canister.next_idx(), 1);
+}
+
+#[test]
+fn test_canister_uninstall_and_install_preserves_next_idx_after_recovery() {
+    let mut canister = MockCanister::create_canister();
+    canister.update_settings(CanisterSettings {
+        log_memory_limit: Some(NumBytes::new(100 * KIB)),
+        ..Default::default()
+    });
+    canister.log("Message 1 recorded");
+    assert_eq!(canister.next_idx(), 1);
+
+    canister.uninstall_code();
+    canister.install_code();
+
+    // Now verify allocating memory allows logging while retaining next_idx
+    canister.update_settings(CanisterSettings {
+        log_memory_limit: Some(NumBytes::new(100 * KIB)),
+        ..Default::default()
+    });
+    canister.log("Message 2 recorded");
+    let records = canister.fetch_canister_logs();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].idx, 1);
+    assert_eq!(canister.next_idx(), 2);
 }
 
 #[test]
@@ -249,9 +289,11 @@ fn test_canister_resize_up_preserves_logs() {
         log_memory_limit: Some(log_memory_limit_before),
         ..Default::default()
     });
+
     canister.log("Data");
 
     let logs_before = canister.fetch_canister_logs();
+    assert_eq!(canister.next_idx(), 1);
     assert_eq!(
         canister.log_memory_usage(),
         total_allocated_bytes(log_memory_limit_before)
@@ -263,6 +305,7 @@ fn test_canister_resize_up_preserves_logs() {
 
     // Assert logs are preserved.
     assert_eq!(canister.fetch_canister_logs(), logs_before);
+    assert_eq!(canister.next_idx(), 1);
     assert_eq!(
         canister.log_memory_usage(),
         total_allocated_bytes(log_memory_limit_after)
@@ -282,6 +325,7 @@ fn test_canister_resize_down_preserves_logs() {
     canister.log("Data");
 
     let logs_before = canister.fetch_canister_logs();
+    assert_eq!(canister.next_idx(), 1);
     assert_eq!(
         canister.log_memory_usage(),
         total_allocated_bytes(log_memory_limit_before)
@@ -297,4 +341,5 @@ fn test_canister_resize_down_preserves_logs() {
         canister.log_memory_usage(),
         total_allocated_bytes(log_memory_limit_after)
     );
+    assert_eq!(canister.next_idx(), 1);
 }
