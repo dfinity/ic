@@ -27,6 +27,9 @@ use tokio::{
 };
 use tracing::instrument;
 
+/// How long to wait between consecutive `on_state_change` calls.
+const ARTIFACT_MANAGER_TIMER_DURATION: Duration = Duration::from_millis(200);
+
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
     /// The processing time histogram.
@@ -40,6 +43,16 @@ struct ArtifactProcessorMetrics {
 impl ArtifactProcessorMetrics {
     /// The constructor creates a `ArtifactProcessorMetrics` instance.
     fn new(metrics_registry: MetricsRegistry, client: String) -> Self {
+        const PROCESSING_INTERVAL_BUCKETS: [f64; 10] =
+            [0.0, 0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 1.0];
+
+        // This is a bit hacky but we have this static assertion to make sure that there is a bucket
+        // of size `ARTIFACT_MANAGER_TIMER_DURATION` in `PROCESSING_INTERVAL_BUCKETS`.
+        static_assertions::const_assert_eq!(
+            PROCESSING_INTERVAL_BUCKETS[6],
+            ARTIFACT_MANAGER_TIMER_DURATION.as_secs_f64(),
+        );
+
         let const_labels = labels! {"client".to_string() => client.to_string()};
         let processing_time = metrics_registry.register(
             Histogram::with_opts(histogram_opts!(
@@ -57,10 +70,7 @@ impl ArtifactProcessorMetrics {
             Histogram::with_opts(histogram_opts!(
                 "artifact_manager_client_processing_interval_seconds",
                 "Duration between Artifact manager client processing, in seconds",
-                vec![
-                    0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
-                    10.0, 15.0, 20.0, 50.0,
-                ],
+                PROCESSING_INTERVAL_BUCKETS.to_vec(),
                 const_labels.clone()
             ))
             .unwrap(),
@@ -201,7 +211,7 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
         let recv_timeout = if last_on_state_change_result {
             Duration::from_millis(0)
         } else {
-            Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
+            ARTIFACT_MANAGER_TIMER_DURATION
         };
 
         let batched_artifact_events =
@@ -222,9 +232,6 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
         last_on_state_change_result = poll_immediately;
     }
 }
-
-/// Periodic duration of `PollEvent` in milliseconds.
-const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
 pub fn create_ingress_handlers<
     PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
