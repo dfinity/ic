@@ -10,8 +10,11 @@ use crate::invariants::common::{
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
-use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType};
-use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_node_record_key, make_subnet_record_key};
+use ic_protobuf::registry::{
+    node::v1::NodeRewardType,
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType},
+};
+use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_subnet_record_key};
 use prost::Message;
 
 /// Subnet invariants hold iff:
@@ -21,9 +24,13 @@ use prost::Message;
 ///    * Each subnet contains at least one node
 ///    * There is at least one system subnet
 ///    * Each subnet in the registry occurs in the subnet list and vice versa
-///    * Only application subnets can be rented and therefore have a "free" cycles cost schedule
+///    * Only application subnets (when rented) and cloud engines can have a "free" cycles cost schedule
+///    * Cloud engines must:
+///         * have a "free" cycles cost schedule
+///         * consist of nodes with reward type 4
+///    * Conversely, only cloud engines can have nodes with reward type 4
 ///    * SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
-/// * Only rented subnets can have subnet admins set to a non-empty list
+///    * Only rented subnets can have subnet admins set to a non-empty list
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -63,12 +70,14 @@ pub(crate) fn check_subnet_invariants(
             .collect();
 
         // Subnet membership must contain registered nodes only
-        for &node_id in &subnet_members {
-            let node_key = make_node_record_key(node_id);
-            if !snapshot.contains_key(node_key.as_bytes()) {
-                panic!("Node {node_id} does not exist in Subnet {subnet_id}");
-            }
-        }
+        let node_records = subnet_members
+            .iter()
+            .map(|&node_id| {
+                get_node_record_from_snapshot(node_id, snapshot).map(|opt| {
+                    opt.unwrap_or_else(|| panic!("Node {node_id} does not exist in the registry"))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Each node appears at most once in a subnet membership
         let num_nodes = subnet_record.membership.len();
@@ -115,14 +124,37 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine)
-            && subnet_record.canister_cycles_cost_schedule
+        if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) {
+            // Cloud engines invariants
+            if subnet_record.canister_cycles_cost_schedule
                 != i32::from(CanisterCyclesCostSchedule::Free)
+            {
+                return Err(InvariantCheckError {
+                    msg: format!(
+                        "Subnet {subnet_id:} is a cloud engine subnet but its cycles cost schedule is not free"
+                    ),
+                    source: None,
+                });
+            }
+
+            if node_records
+                .iter()
+                .any(|node| node.node_reward_type != Some(i32::from(NodeRewardType::Type4)))
+            {
+                return Err(InvariantCheckError {
+                    msg: format!(
+                        "Subnet {subnet_id:} is a cloud engine subnet but some nodes do not have reward type 4"
+                    ),
+                    source: None,
+                });
+            }
+        } else if node_records
+            .iter()
+            .any(|node| node.node_reward_type == Some(i32::from(NodeRewardType::Type4)))
         {
             return Err(InvariantCheckError {
                 msg: format!(
-                    "Subnet {subnet_id:} is a cloud engine subnet but its cycles cost schedule \
-                    is not free"
+                    "Subnet {subnet_id:} is not a cloud engine subnet but some nodes have reward type 4"
                 ),
                 source: None,
             });
