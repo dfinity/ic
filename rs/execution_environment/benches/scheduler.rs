@@ -13,7 +13,7 @@ use ic_replicated_state::{
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::{ExecutionRound, NumBytes, NumInstructions};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -52,6 +52,7 @@ fn main() {
                         RequestBuilder::new().receiver(canister_id).build().into(),
                         &mut available_memory,
                         SubnetType::Application,
+                        CanisterCyclesCostSchedule::Normal,
                         InputQueueType::RemoteSubnet,
                     )
                     .unwrap();
