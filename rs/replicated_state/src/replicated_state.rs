@@ -567,11 +567,15 @@ impl ReplicatedState {
     /// cleaned up.
     pub fn put_canister_state<CS: Into<Arc<CanisterState>>>(&mut self, canister_state: CS) {
         let canister_state = canister_state.into();
-        // Also insert a scheduling priority for the canister. This is a temporary
-        // measure to ensure that every canister has an explicit priority.
-        self.metadata
-            .subnet_schedule
-            .get_mut(canister_state.canister_id());
+
+        // Add the canister to the subnet schedule if it has install code or heap delta
+        // debits or is in a long-running execution.
+        if canister_state.must_be_in_schedule() {
+            self.metadata
+                .subnet_schedule
+                .get_mut(canister_state.canister_id());
+        }
+
         self.canister_states
             .insert(canister_state.canister_id(), canister_state);
     }
@@ -697,12 +701,19 @@ impl ReplicatedState {
             .collect()
     }
 
-    /// Prunes all canister priorities for which a corresponding canister state no
-    /// longer exists.
+    /// Prunes the canister priorities of deleted canisters; and those that have
+    /// all-zero accumulated priority, priority credit, heap delta and install code
+    /// debits, and do not have a long-running execution.
     pub fn garbage_collect_subnet_schedule(&mut self) {
         self.metadata
             .subnet_schedule
-            .retain(|canister_id, _| self.canister_states.contains_key(canister_id));
+            .retain(|canister_id, priority| {
+                self.canister_states
+                    .get(canister_id)
+                    .is_some_and(|canister| {
+                        priority.is_non_zero() || canister.must_be_in_schedule()
+                    })
+            });
     }
 
     pub fn system_metadata(&self) -> &SystemMetadata {

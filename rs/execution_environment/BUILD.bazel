@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "execution_environment",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     compile_data = glob(["tests/test-data/**"]),
     crate_name = "ic_execution_environment",
     version = "0.9.0",
@@ -45,7 +45,6 @@ rust_library(
         "@crate_index//:ic-vetkeys",
         "@crate_index//:lazy_static",
         "@crate_index//:more-asserts",
-        "@crate_index//:num-rational",
         "@crate_index//:num-traits",
         "@crate_index//:prometheus",
         "@crate_index//:rand",
@@ -385,7 +384,11 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//rs/config",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/registry/subnet_type",
         "//rs/replicated_state",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/types",

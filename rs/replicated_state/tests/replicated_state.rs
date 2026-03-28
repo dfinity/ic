@@ -1345,6 +1345,8 @@ fn online_split() {
                 call_id: InstallCodeCallId::new(3_u64),
                 prepaid_execution_cycles: Cycles::new(3),
             });
+        // Canister must be in the subnet schedule.
+        fixture.state.canister_priority_mut(canister_id);
     };
     add_aborted_install_code_task(CANISTER_1);
     add_aborted_install_code_task(CANISTER_2);

@@ -197,10 +197,15 @@ impl SchedulerTest {
     }
 
     pub fn was_fully_executed(&self, canister_id: CanisterId) -> bool {
+        #[cfg(not(debug_assertions))]
+        panic!("was_fully_executed() is not supported in release mode");
+
+        #[cfg(debug_assertions)]
         self.state()
-            .canister_priority(&canister_id)
-            .last_full_execution_round
-            == self.last_round()
+            .metadata
+            .subnet_schedule
+            .fully_executed_canisters
+            .contains(&canister_id)
     }
 
     pub fn xnet_canister_id(&self) -> CanisterId {

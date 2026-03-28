@@ -271,7 +271,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 1);
         assert!(!test.was_fully_executed(canister_state.canister_id()));
-        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
+        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 0);
         assert_eq!(system_state.canister_metrics().executed(), 0);
         assert_eq!(
             system_state
