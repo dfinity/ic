@@ -40,11 +40,13 @@ ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
+ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 rand = { workspace = true }

@@ -160,7 +160,7 @@ fn dkg_payload_builder_fn(
             &*state_manager,
             validation_context,
             no_op_logger(),
-            10, // at most dealings per block
+            20, // at most dealings per block
         )
         .unwrap_or_else(|err| panic!("Couldn't create the payload: {err:?}"))
     })
