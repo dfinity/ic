@@ -61,8 +61,8 @@ mod try_from {
         use crate::UserId;
         use crate::messages::http::{Authentication, HttpCallContent, HttpRequestError};
         use crate::messages::{
-            Blob, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope, SenderInfo,
-            SenderInfoInternal, SignedIngressContent, UserSignature,
+            Blob, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope, RawSignedSenderInfo,
+            SignedIngressContent, SignedSenderInfo, UserSignature,
         };
         use assert_matches::assert_matches;
 
@@ -74,7 +74,7 @@ mod try_from {
                 sender: Blob(fixed::principal_id().to_vec()),
                 ingress_expiry: fixed::ingress_expiry(),
                 nonce: Some(Blob(fixed::nonce())),
-                sender_info: Some(SenderInfo {
+                sender_info: Some(RawSignedSenderInfo {
                     info: Blob(fixed::sender_info_info()),
                     signer: to_blob(fixed::canister_id()),
                     sig: Blob(fixed::sender_info_sig()),
@@ -90,7 +90,7 @@ mod try_from {
                 fixed::arg().0,
                 fixed::ingress_expiry(),
                 Some(fixed::nonce()),
-                Some(SenderInfoInternal {
+                Some(SignedSenderInfo {
                     info: fixed::sender_info_info(),
                     signer: fixed::canister_id(),
                     sig: fixed::sender_info_sig(),
@@ -125,7 +125,7 @@ mod try_from {
             let envelope = HttpRequestEnvelope {
                 content: HttpCallContent::Call {
                     update: HttpCanisterUpdate {
-                        sender_info: Some(SenderInfo {
+                        sender_info: Some(RawSignedSenderInfo {
                             info: Blob(fixed::sender_info_info()),
                             signer: fixed::invalid_serialized_printipal_id(),
                             sig: Blob(fixed::sender_info_sig()),

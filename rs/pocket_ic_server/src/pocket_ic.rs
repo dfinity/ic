@@ -2227,12 +2227,14 @@ impl PocketIcSubnets {
 
         // Install the Internet Identity frontend canister.
         let backend_origin = format!("http://{IDENTITY_CANISTER_ID}.localhost:{gateway_port}");
-        let frontend_origin =
-            format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}");
+        let frontend_origins = vec![
+            format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}"),
+            format!("http://id.ai.localhost:{gateway_port}"),
+        ];
         let ii_frontend_init_payload = InternetIdentityFrontendInit {
             backend_canister_id: IDENTITY_CANISTER_ID.get().0,
             backend_origin,
-            related_origins: Some(vec![frontend_origin]),
+            related_origins: Some(frontend_origins),
             fetch_root_key: Some(true),
             analytics_config: None,
             dummy_auth: Some(None),
@@ -2698,6 +2700,7 @@ pub struct PocketIc {
     mainnet_routing_table: RoutingTable,
     state_label: StateLabel,
     subnets: PocketIcSubnets,
+    malicious_flags: MaliciousFlags,
     default_effective_canister_id: Principal,
 }
 
@@ -2804,6 +2807,7 @@ impl PocketIc {
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
         mainnet_nns_subnet_id: bool,
+        malicious_flags: MaliciousFlags,
     ) -> Result<Self, String> {
         if let Some(time) = initial_time {
             let systime: SystemTime = time.into();
@@ -3161,6 +3165,7 @@ impl PocketIc {
             mainnet_routing_table,
             state_label,
             subnets,
+            malicious_flags,
             default_effective_canister_id,
         })
     }
@@ -4646,6 +4651,7 @@ impl Operation for CallRequest {
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
                 .build();
 
@@ -4797,6 +4803,7 @@ impl Operation for QueryRequest {
                     query_handler,
                     self.version,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
 
@@ -4879,6 +4886,7 @@ impl Operation for CanisterReadStateRequest {
                     nns_subnet_id,
                     self.version,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
 
@@ -5545,6 +5553,7 @@ mod tests {
                 false,
                 None,
                 false,
+                MaliciousFlags::default(),
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -5566,6 +5575,7 @@ mod tests {
                 false,
                 None,
                 false,
+                MaliciousFlags::default(),
             )
             .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());

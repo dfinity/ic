@@ -44,8 +44,8 @@ use ic_system_test_driver::util::{
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
 use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SenderInfo,
-    SignedDelegation,
+    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope,
+    RawSignedSenderInfo, SignedDelegation,
 };
 use ic_types::{CanisterId, Time};
 use ic_universal_canister::wasm;
@@ -255,7 +255,7 @@ async fn test_request_with_sender_info<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
-            sender_info: Some(SenderInfo {
+            sender_info: Some(RawSignedSenderInfo {
                 info: Blob(vec![1, 2, 3]),
                 signer: Blob(canister_id.as_slice().to_vec()),
                 sig: Blob(vec![4, 5, 6]),

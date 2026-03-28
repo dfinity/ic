@@ -112,7 +112,7 @@ mod crypto_hash_stability {
     };
     use crate::crypto::{CryptoHash, CryptoHashOf};
     use crate::messages::{
-        Blob, CallbackId, HttpCanisterUpdate, MessageId, SenderInfo, SignedRequestBytes,
+        Blob, CallbackId, HttpCanisterUpdate, MessageId, RawSignedSenderInfo, SignedRequestBytes,
     };
     use crate::signature::{
         BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
@@ -1034,7 +1034,7 @@ mod crypto_hash_stability {
             sender: Blob(vec![0x42; 29]),
             ingress_expiry: 1234567890,
             nonce: Some(Blob(vec![0x42; 8])),
-            sender_info: Some(SenderInfo {
+            sender_info: Some(RawSignedSenderInfo {
                 info: Blob(vec![1, 2, 3]),
                 signer: Blob(vec![0xAB; 10]),
                 sig: Blob(vec![4, 5, 6]),

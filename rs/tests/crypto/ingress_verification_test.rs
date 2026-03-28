@@ -18,7 +18,7 @@ use ic_system_test_driver::util::{
 };
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SenderInfo,
+    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, RawSignedSenderInfo,
     SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
@@ -1088,7 +1088,7 @@ pub fn requests_with_sender_info(env: TestEnv) {
                         sender: Blob(id.principal().as_slice().to_vec()),
                         ingress_expiry: expiry_time().as_nanos() as u64,
                         nonce: None,
-                        sender_info: Some(SenderInfo {
+                        sender_info: Some(RawSignedSenderInfo {
                             info: Blob(vec![1, 2, 3]),
                             signer: Blob(CanisterId::ic_00().get().as_slice().to_vec()),
                             sig: Blob(vec![4, 5, 6]),

@@ -2,7 +2,9 @@ use super::test_utilities::{SchedulerTestBuilder, ingress, on_response, other_si
 use super::*;
 use candid::Encode;
 use ic_base_types::PrincipalId;
-use ic_config::execution_environment::STOP_CANISTER_TIMEOUT_DURATION;
+use ic_config::execution_environment::{
+    LOG_MEMORY_STORE_FEATURE_ENABLED, STOP_CANISTER_TIMEOUT_DURATION,
+};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{

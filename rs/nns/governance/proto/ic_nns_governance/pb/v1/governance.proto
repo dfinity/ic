@@ -261,6 +261,7 @@ message AbridgedNeuron {
   optional Visibility visibility = 23;
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
   optional uint32 recent_ballots_next_entry_index = 25;
+  uint64 eight_year_gang_bonus_base_e8s = 26;
 
   reserved 1;
   reserved "id";
@@ -2207,6 +2208,10 @@ message Governance {
 
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
+
+  // Whether the eight year gang bonus base migration has run for all neurons.
+  // This prevents the migration from running more than once.
+  bool eight_year_gang_bonus_migration_done = 31;
 
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";

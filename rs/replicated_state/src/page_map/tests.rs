@@ -139,7 +139,7 @@ fn persisted_map_is_equivalent_to_the_original() {
             overlay_suffix: "vmemory_0.overlay".into(),
         };
         pagemap
-            .persist_delta(
+            .persist_unflushed_delta(
                 &storage_layout,
                 height,
                 &LsmtConfig {
@@ -232,7 +232,7 @@ fn can_persist_and_load_an_empty_page_map() {
         overlay_suffix: "vmemory_0.overlay".into(),
     };
     original_map
-        .persist_delta(
+        .persist_unflushed_delta(
             &storage_layout,
             Height::new(0),
             &LsmtConfig {
@@ -462,7 +462,7 @@ fn get_memory_instructions_returns_deltas() {
         overlay_suffix: "vmemory_0.overlay".into(),
     };
     page_map
-        .persist_delta(
+        .persist_unflushed_delta(
             &storage_layout,
             Height::new(0),
             &LsmtConfig {

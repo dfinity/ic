@@ -658,6 +658,18 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
+                // Rejects are not allowed in flexible ok-responses
+                if matches!(
+                    entry.response.content,
+                    CanisterHttpResponseContent::Reject(_)
+                ) {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::FlexibleRejectNotAllowedInOkResponses {
+                            callback_id,
+                        },
+                    );
+                }
+
                 // No duplicate signers
                 let signer = entry.proof.signature.signer;
                 if !seen_signers.insert(signer) {
