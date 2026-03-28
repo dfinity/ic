@@ -2608,6 +2608,7 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
     assert_eq!(payloads[0], payload_a);
     assert_eq!(payloads[1], payload_b);
     assert_eq!(stats.flexible_ok_responses, 1);
+    assert_eq!(stats.flexible_ok_responses_candid_failures, 0);
 }
 
 #[test]
@@ -2652,6 +2653,7 @@ fn flexible_ok_responses_into_messages_skips_reject_entries() {
     assert_eq!(payloads.len(), 1, "Reject entry should be filtered out");
     assert_eq!(payloads[0], good_payload);
     assert_eq!(stats.flexible_ok_responses, 1);
+    assert_eq!(stats.flexible_ok_responses_candid_failures, 0);
 }
 
 #[test]
@@ -2683,6 +2685,7 @@ fn flexible_ok_responses_into_messages_stats_count_multiple_groups() {
 
     assert_eq!(responses.len(), 3);
     assert_eq!(stats.flexible_ok_responses, 3);
+    assert_eq!(stats.flexible_ok_responses_candid_failures, 0);
 }
 
 #[test]
@@ -2708,6 +2711,7 @@ fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
 
     assert_eq!(responses.len(), 0);
     assert_eq!(stats.flexible_ok_responses, 0);
+    assert_eq!(stats.flexible_ok_responses_candid_failures, 1);
 }
 
 fn setup_test_with_contexts(
