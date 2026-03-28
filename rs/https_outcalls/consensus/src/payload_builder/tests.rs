@@ -784,7 +784,7 @@ fn divergence_error_message() {
         shares: response_shares,
     };
 
-    let divergence_reject = divergence_response_into_reject(&divergence_response).unwrap();
+    let divergence_reject = divergence_response_into_reject(divergence_response).unwrap();
 
     assert_eq!(
         divergence_reject.payload,

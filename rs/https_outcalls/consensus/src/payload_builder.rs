@@ -864,7 +864,7 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
 
         let divergece_responses = messages
             .divergence_responses
-            .iter()
+            .into_iter()
             .filter_map(divergence_response_into_reject)
             .inspect(|_| stats.divergence_responses += 1);
 
@@ -888,7 +888,7 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
 ///
 /// The function includes request id and timeout, which are also part of the hashed value.
 fn divergence_response_into_reject(
-    response: &CanisterHttpResponseDivergence,
+    response: CanisterHttpResponseDivergence,
 ) -> Option<ConsensusResponse> {
     // Get the id and timeout, which need to be reported in the error message as well
     let Some((id, timeout)) = response
@@ -907,11 +907,11 @@ fn divergence_response_into_reject(
     let mut hash_counts = BTreeMap::new();
     response
         .shares
-        .iter()
-        .map(|share| share.content.content_hash.clone().get().0)
-        .for_each(|share| {
+        .into_iter()
+        .map(|share| share.content.content_hash.get().0)
+        .for_each(|hash| {
             hash_counts
-                .entry(share)
+                .entry(hash)
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
         });
