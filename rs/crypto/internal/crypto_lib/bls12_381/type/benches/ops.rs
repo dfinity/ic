@@ -1088,6 +1088,212 @@ macro_rules! crypto_bls12_381_mul2_precomputation_init {
 crypto_bls12_381_mul2_precomputation_init!(g1, G1Projective);
 crypto_bls12_381_mul2_precomputation_init!(g2, G2Projective);
 
+/// Benchmarks for operations that are parallelized when the `rayon` feature is
+/// enabled. Run with and without `--features rayon` and compare results.
+fn bls12_381_parallel_batch_ops(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crypto_bls12_381_parallel_batch_ops");
+    group.warm_up_time(WARMUP_TIME);
+
+    let rng = &mut reproducible_rng();
+
+    for n in [2, 5, 10, 25, 50, 100] {
+        // --- G1 batch_mul ---
+        group.bench_with_input(BenchmarkId::new("g1_batch_mul", n), &n, |b, &size| {
+            b.iter_batched_ref(
+                || (random_g1(rng).to_affine(), n_random_scalar(size, rng)),
+                |(pt, scalars)| pt.batch_mul(scalars),
+                BatchSize::SmallInput,
+            )
+        });
+
+        // --- G1 batch_mul_vartime ---
+        group.bench_with_input(
+            BenchmarkId::new("g1_batch_mul_vartime", n),
+            &n,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || (random_g1(rng).to_affine(), n_random_scalar(size, rng)),
+                    |(pt, scalars)| pt.batch_mul_vartime(scalars),
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+
+        // --- G2 batch_mul ---
+        group.bench_with_input(BenchmarkId::new("g2_batch_mul", n), &n, |b, &size| {
+            b.iter_batched_ref(
+                || (random_g2(rng).to_affine(), n_random_scalar(size, rng)),
+                |(pt, scalars)| pt.batch_mul(scalars),
+                BatchSize::SmallInput,
+            )
+        });
+
+        // --- G2 batch_mul_vartime ---
+        group.bench_with_input(
+            BenchmarkId::new("g2_batch_mul_vartime", n),
+            &n,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || (random_g2(rng).to_affine(), n_random_scalar(size, rng)),
+                    |(pt, scalars)| pt.batch_mul_vartime(scalars),
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+
+        // --- G1 batch_deserialize ---
+        group.bench_with_input(
+            BenchmarkId::new("g1_batch_deserialize", n),
+            &n,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || {
+                        (0..size)
+                            .map(|_| random_g1(rng).to_affine().serialize())
+                            .collect::<Vec<_>>()
+                    },
+                    |bytes| G1Affine::batch_deserialize(bytes),
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+
+        // --- G2 batch_deserialize ---
+        group.bench_with_input(
+            BenchmarkId::new("g2_batch_deserialize", n),
+            &n,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || {
+                        (0..size)
+                            .map(|_| random_g2(rng).to_affine().serialize())
+                            .collect::<Vec<_>>()
+                    },
+                    |bytes| G2Affine::batch_deserialize(bytes),
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+
+        // --- G1 mul2 from precomputed table (N iterations) ---
+        group.bench_with_input(BenchmarkId::new("g1_mul2_from_tbl", n), &n, |b, &size| {
+            b.iter_batched_ref(
+                || {
+                    let tbl = G1Projective::compute_mul2_tbl(&random_g1(rng), &random_g1(rng));
+                    let a = n_random_scalar(size, rng);
+                    let b_vec = n_random_scalar(size, rng);
+                    (tbl, a, b_vec)
+                },
+                |(tbl, a, b_vec)| {
+                    a.iter()
+                        .zip(b_vec.iter())
+                        .map(|(ai, bi)| tbl.mul2(ai, bi))
+                        .collect::<Vec<_>>()
+                },
+                BatchSize::SmallInput,
+            )
+        });
+
+        // --- G2 mul2 from precomputed table (N iterations) ---
+        group.bench_with_input(BenchmarkId::new("g2_mul2_from_tbl", n), &n, |b, &size| {
+            b.iter_batched_ref(
+                || {
+                    let tbl = G2Projective::compute_mul2_tbl(&random_g2(rng), &random_g2(rng));
+                    let a = n_random_scalar(size, rng);
+                    let b_vec = n_random_scalar(size, rng);
+                    (tbl, a, b_vec)
+                },
+                |(tbl, a, b_vec)| {
+                    a.iter()
+                        .zip(b_vec.iter())
+                        .map(|(ai, bi)| tbl.mul2(ai, bi))
+                        .collect::<Vec<_>>()
+                },
+                BatchSize::SmallInput,
+            )
+        });
+
+        // --- batch signature verification (distinct) ---
+        group.bench_with_input(
+            BenchmarkId::new("verify_batch_distinct", n),
+            &n,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || (n_batch_sig_verification_instances(size, rng), rng.fork()),
+                    |(sigs_pks_msgs, rng_fork)| {
+                        let refs: Vec<_> = sigs_pks_msgs
+                            .iter()
+                            .map(|(sig, pk, msg)| (sig, pk, msg))
+                            .collect();
+                        black_box(verify_bls_signature_batch_distinct(&refs, rng_fork));
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmarks for `mul2_array` which requires compile-time-known sizes.
+/// Run with and without `--features rayon` and compare results.
+macro_rules! bench_mul2_array {
+    ($fn_name:ident, $group_name:expr, $projective:ty, $random_pt:expr, $( $n:expr ),+) => {
+        fn $fn_name(c: &mut Criterion) {
+            let mut group = c.benchmark_group($group_name);
+            group.warm_up_time(WARMUP_TIME);
+            let rng = &mut reproducible_rng();
+
+            $(
+                group.bench_function(stringify!($n), |b| {
+                    b.iter_batched_ref(
+                        || {
+                            let tbl = <$projective>::compute_mul2_tbl(
+                                &$random_pt(rng),
+                                &$random_pt(rng),
+                            );
+                            let a: [Scalar; $n] = std::array::from_fn(|_| random_scalar(rng));
+                            let b_arr: [Scalar; $n] = std::array::from_fn(|_| random_scalar(rng));
+                            (tbl, a, b_arr)
+                        },
+                        |(tbl, a, b_arr)| black_box(tbl.mul2_array(a, b_arr)),
+                        BatchSize::SmallInput,
+                    )
+                });
+            )+
+
+            group.finish();
+        }
+    };
+}
+
+bench_mul2_array!(
+    bls12_381_g1_mul2_array,
+    "crypto_bls12_381_parallel_g1_mul2_array",
+    G1Projective,
+    random_g1,
+    2,
+    5,
+    10,
+    25,
+    50,
+    100
+);
+
+bench_mul2_array!(
+    bls12_381_g2_mul2_array,
+    "crypto_bls12_381_parallel_g2_mul2_array",
+    G2Projective,
+    random_g2,
+    2,
+    5,
+    10,
+    25,
+    50,
+    100
+);
+
 criterion_group!(
     benches,
     bls12_381_scalar_ops,
@@ -1099,5 +1305,8 @@ criterion_group!(
     bls12_381_batch_sig_verification_multithreaded,
     mul2_precomputation_g1,
     mul2_precomputation_g2,
+    bls12_381_parallel_batch_ops,
+    bls12_381_g1_mul2_array,
+    bls12_381_g2_mul2_array,
 );
 criterion_main!(benches);

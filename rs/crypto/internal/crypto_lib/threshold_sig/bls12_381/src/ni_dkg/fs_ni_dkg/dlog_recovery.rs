@@ -1,6 +1,7 @@
 use crate::ni_dkg::fs_ni_dkg::forward_secure::{CHUNK_MAX, CHUNK_MIN, CHUNK_SIZE};
 use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{CHALLENGE_BITS, NUM_ZK_REPETITIONS};
 use ic_crypto_internal_bls12_381_type::{Gt, Scalar};
+use rayon::prelude::*;
 use std::sync::LazyLock;
 pub struct HonestDealerDlogLookupTable {
     table: Vec<u32>,
@@ -218,22 +219,61 @@ impl BabyStepGiantStepTable {
 
     /// Returns the table plus the giant step
     fn new(base: &Gt, table_size: usize) -> (Self, Gt) {
+        let num_threads = rayon::current_num_threads();
+        let chunk_size = table_size.div_ceil(num_threads.max(1));
+
+        /*
+         * We have to compute the entire table of [base*1, base*2, ..., base*t]
+         * but would prefer to do so in parallel.
+         *
+         * All `t` elements _can_ be computed perfectly in parallel, but at the cost
+         * of requiring a Gt multiplication per table element, which is rather costly.
+         *
+         * Instead split the table computation into chunks such that there is ~1 thread
+         * per chunk, compute the starting index for that chunk using a Gt mul, then
+         * use plain additions in Gt from there.
+         */
+        let chunks: Vec<Vec<_>> = (0..num_threads)
+            .into_par_iter()
+            .map(|t| {
+                let start = t * chunk_size;
+                let end = (start + chunk_size).min(table_size);
+                if start >= table_size {
+                    return vec![];
+                }
+                // TODO: Gt::mul_vartime_usize could use the 16-bit mul tables
+                // and be significantly faster than this
+                let mut accum = base.mul_vartime(&Scalar::from_usize(start));
+                let mut result = Vec::with_capacity(end - start);
+                for i in start..end {
+                    let (prefix, hash) = Self::hash_gt(&accum);
+                    result.push((hash, i, prefix));
+                    accum += base;
+                }
+                result
+            })
+            .collect();
+
         let mut table = Vec::with_capacity(table_size);
         let mut prefix_set =
             std::collections::HashSet::with_capacity_and_hasher(table_size, BuildShiftXorHasher);
-        let mut accum = Gt::identity();
 
-        for i in 0..table_size {
-            let (prefix, hash) = Self::hash_gt(&accum);
-            table.push((hash, i));
-            // we are not checking the return value of `insert` because
-            // duplicate prefixes do not affect the correctness
-            prefix_set.insert(prefix);
-            accum += base;
+        for chunk in chunks {
+            for (hash, i, prefix) in chunk {
+                table.push((hash, i));
+                // we are not checking the return value of `insert` because
+                // duplicate prefixes do not affect the correctness
+                prefix_set.insert(prefix);
+            }
         }
-        table.sort_unstable();
 
-        (Self { table, prefix_set }, accum.neg())
+        table.sort_unstable();
+        println!("Table generation complete");
+
+        // Giant step is -(base * table_size)
+        let giant_step = base.mul_vartime(&Scalar::from_usize(table_size)).neg();
+
+        (Self { table, prefix_set }, giant_step)
     }
 
     /// Return the value if gt exists in this table
@@ -316,17 +356,35 @@ impl BabyStepGiantStep {
     ///
     /// Returns `None` if the discrete logarithm is not in the searched range.
     pub fn solve(&self, tgt: &Gt) -> Option<Scalar> {
-        let mut step = tgt + &self.offset;
+        let start = tgt + &self.offset;
 
-        for giant_step in 0..self.giant_steps {
-            if let Some(i) = self.table.get(&step) {
-                let x = self.lo + (i + self.n * giant_step) as isize;
-                return Some(Scalar::from_isize(x));
+        let num_threads = rayon::current_num_threads();
+        let steps_per_thread = self.giant_steps.div_ceil(num_threads.max(1));
+
+        (0..num_threads).into_par_iter().find_map_any(|t| {
+            let first_step = t * steps_per_thread;
+            let last_step = (first_step + steps_per_thread).min(self.giant_steps);
+            if first_step >= self.giant_steps {
+                return None;
             }
-            step += &self.giant_step;
-        }
 
-        None
+            // Compute starting point for this thread's range of giant steps
+            let mut step = if first_step == 0 {
+                start.clone()
+            } else {
+                &start + &self.giant_step.mul_vartime(&Scalar::from_usize(first_step))
+            };
+
+            for giant_step in first_step..last_step {
+                if let Some(i) = self.table.get(&step) {
+                    let x = self.lo + (i + self.n * giant_step) as isize;
+                    return Some(Scalar::from_isize(x));
+                }
+                step += &self.giant_step;
+            }
+
+            None
+        })
     }
 }
 
