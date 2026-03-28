@@ -15,6 +15,7 @@ filegroup(
         "docker-base.prod",
         "packages.common",
         "packages.dev",
+        "thp-madv-remove-test-main.rs",
     ],
     tags = ["manual"],
 )
