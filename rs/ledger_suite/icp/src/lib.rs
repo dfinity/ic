@@ -10,7 +10,7 @@ use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_core::{
     approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
-    block::{BlockType, EncodedBlock, FeeCollector},
+    block::{BlockType, EncodedBlock},
     tokens::CheckedAdd,
 };
 use ic_ledger_hash_of::HASH_LENGTH;
@@ -383,7 +383,6 @@ impl Block {
             transaction,
             timestamp,
             effective_fee,
-            None,
         ))
     }
 
@@ -394,7 +393,7 @@ impl Block {
         timestamp: TimeStamp,
         effective_fee: Tokens,
     ) -> Self {
-        Self::from_transaction(parent_hash, transaction, timestamp, effective_fee, None)
+        Self::from_transaction(parent_hash, transaction, timestamp, effective_fee)
     }
 
     pub fn transaction(&self) -> Cow<'_, Transaction> {
@@ -438,7 +437,6 @@ impl BlockType for Block {
         transaction: Self::Transaction,
         timestamp: TimeStamp,
         _effective_fee: Tokens,
-        _fee_collector: Option<FeeCollector<AccountIdentifier>>,
     ) -> Self {
         Self {
             parent_hash,

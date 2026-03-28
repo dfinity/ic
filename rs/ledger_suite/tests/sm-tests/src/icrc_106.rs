@@ -149,16 +149,19 @@ pub fn test_upgrade_downgrade_with_mainnet_ledger<T, U>(
     .expect("should successfully self-upgrade ledger canister");
     assert_index_set(&env, canister_id, index_principal);
 
-    // Downgrade the ledger to the mainnet version that does not support ICRC-106
-    env.upgrade_canister(canister_id, mainnet_ledger_wasm, encoded_empty_upgrade_args)
-        .expect("should successfully downgrade ledger canister");
-    assert_index_not_set(&env, canister_id, false);
+    // Downgrade to mainnet is currently not possible. The rest of the test can
+    // be uncommented again, once the PR that introduced this line is on mainnet.
 
-    // Upgrade to a ledger version that supports ICRC-106, but do not set the index principal
-    let encoded_empty_upgrade_args = Encode!(&encode_empty_upgrade_args()).unwrap();
-    env.upgrade_canister(canister_id, ledger_wasm, encoded_empty_upgrade_args)
-        .expect("should successfully upgrade ledger canister");
-    assert_index_not_set(&env, canister_id, true);
+    // // Downgrade the ledger to the mainnet version that does not support ICRC-106
+    // env.upgrade_canister(canister_id, mainnet_ledger_wasm, encoded_empty_upgrade_args)
+    //     .expect("should successfully downgrade ledger canister");
+    // assert_index_not_set(&env, canister_id, false);
+
+    // // Upgrade to a ledger version that supports ICRC-106, but do not set the index principal
+    // let encoded_empty_upgrade_args = Encode!(&encode_empty_upgrade_args()).unwrap();
+    // env.upgrade_canister(canister_id, ledger_wasm, encoded_empty_upgrade_args)
+    //     .expect("should successfully upgrade ledger canister");
+    // assert_index_not_set(&env, canister_id, true);
 }
 
 fn assert_index_not_set(

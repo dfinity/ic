@@ -1,21 +1,22 @@
 use crate::common::{
-    ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
-    index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
-    ledger_get_all_blocks, ledger_wasm, parse_index_logs, wait_until_sync_is_completed,
-    wait_until_sync_is_completed_or_error,
+    ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, approve,
+    default_archive_options, get_fee_collectors_ranges, icrc1_balance_of, icrc1_transfer,
+    icrc2_approve, icrc2_transfer_from, index_init_arg_without_interval, index_ng_wasm,
+    install_icrc3_test_ledger, install_index_ng, install_ledger, ledger_get_all_blocks,
+    parse_index_logs, transfer, wait_until_sync_is_completed,
 };
-use candid::{Decode, Encode, Nat, Principal};
+#[cfg(not(feature = "icrc3_disabled"))]
+use candid::Principal;
+use candid::{Decode, Encode, Nat};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::blocks::generic_block_to_encoded_block;
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
-    DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
-    GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
-    InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
+    GetAccountTransactionsResult, GetBlocksResponse, IndexArg, ListSubaccountsArgs,
+    TransactionWithId,
 };
-use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
-use ic_icrc1_test_utils::icrc3::account_to_icrc3_value;
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
     valid_transactions_strategy,
@@ -28,18 +29,14 @@ use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
-use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
 use std::collections::HashSet;
-use std::fmt::Debug;
-use std::hash::Hash;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -57,50 +54,6 @@ fn index_wasm() -> Vec<u8> {
         "ic-icrc1-index-ng",
         &[],
     )
-}
-
-fn upgrade_ledger(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    fee_collector_account: Option<Account>,
-) {
-    let change_fee_collector =
-        Some(fee_collector_account.map_or(ChangeFeeCollector::Unset, ChangeFeeCollector::SetTo));
-    let args = LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
-        metadata: None,
-        token_name: None,
-        token_symbol: None,
-        transfer_fee: None,
-        change_fee_collector,
-        max_memo_length: None,
-        feature_flags: None,
-        change_archive_options: None,
-        index_principal: None,
-    }));
-    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
-        .unwrap()
-}
-
-fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
-    IndexInitArg {
-        ledger_id: Principal::from(ledger_id),
-        #[allow(deprecated)]
-        retrieve_blocks_from_ledger_interval_seconds: None,
-        min_retrieve_blocks_from_ledger_interval_seconds: None,
-        max_retrieve_blocks_from_ledger_interval_seconds: None,
-    }
-}
-
-fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
-    let res = env
-        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
-        .expect("Failed to send icrc1_balance_of")
-        .bytes();
-    Decode!(&res, Nat)
-        .expect("Failed to decode icrc1_balance_of response")
-        .0
-        .to_u64()
-        .expect("Balance must be a u64!")
 }
 
 fn index_get_blocks(
@@ -145,58 +98,6 @@ fn index_get_all_blocks(
     res
 }
 
-fn icrc1_transfer(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    caller: PrincipalId,
-    arg: TransferArg,
-) -> BlockIndex {
-    let req = Encode!(&arg).expect("Failed to encode TransferArg");
-    let res = env
-        .execute_ingress_as(caller, ledger_id, "icrc1_transfer", req)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-        .bytes();
-    Decode!(&res, Result<BlockIndex, TransferError>)
-        .expect("Failed to decode Result<BlockIndex, TransferError>")
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-}
-
-fn icrc2_transfer_from(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    caller: PrincipalId,
-    arg: TransferFromArgs,
-) -> BlockIndex {
-    let req = Encode!(&arg).expect("Failed to encode TransferFromArgs");
-    let res = env
-        .execute_ingress_as(caller, ledger_id, "icrc2_transfer_from", req)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-        .bytes();
-    Decode!(&res, Result<BlockIndex, TransferFromError>)
-        .expect("Failed to decode Result<BlockIndex, TransferFromError>")
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-}
-
 fn apply_arg_with_caller(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -222,74 +123,6 @@ fn apply_arg_with_caller(
             transfer_from_arg,
         ),
     }
-}
-
-fn transfer(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    from: Account,
-    to: Account,
-    amount: u64,
-) -> BlockIndex {
-    let Account { owner, subaccount } = from;
-    let req = TransferArg {
-        from_subaccount: subaccount,
-        to,
-        amount: amount.into(),
-        created_at_time: None,
-        fee: None,
-        memo: None,
-    };
-    icrc1_transfer(env, ledger_id, owner.into(), req)
-}
-
-fn icrc2_approve(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    caller: PrincipalId,
-    arg: ApproveArgs,
-) -> BlockIndex {
-    let req = Encode!(&arg).expect("Failed to encode ApproveArgs");
-    let res = env
-        .execute_ingress_as(caller, ledger_id, "icrc2_approve", req)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to approve tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-        .bytes();
-    Decode!(&res, Result<BlockIndex, ApproveError>)
-        .expect("Failed to decode Result<BlockIndex, ApproveError>")
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to approve. caller:{} arg:{:?} error:{:?}",
-                caller, arg, e
-            )
-        })
-}
-
-fn approve(
-    env: &StateMachine,
-    ledger: CanisterId,
-    from: Account,
-    spender: Account,
-    amount: u64,
-) -> u64 {
-    let req = ApproveArgs {
-        from_subaccount: from.subaccount,
-        spender,
-        amount: Nat::from(amount),
-        expected_allowance: None,
-        expires_at: None,
-        fee: None,
-        memo: None,
-        created_at_time: None,
-    };
-    icrc2_approve(env, ledger, PrincipalId(from.owner), req)
-        .0
-        .to_u64()
-        .unwrap()
 }
 
 fn get_account_transactions(
@@ -336,16 +169,6 @@ fn list_subaccounts(
         Vec<Subaccount>
     )
     .expect("failed to decode list_subaccounts response")
-}
-
-fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollectorRanges {
-    Decode!(
-        &env.execute_ingress(index, "get_fee_collectors_ranges", Encode!(&()).unwrap())
-            .expect("failed to get_fee_collectors_ranges")
-            .bytes(),
-        FeeCollectorRanges
-    )
-    .expect("failed to decode get_fee_collectors_ranges response")
 }
 
 // Assert that the index canister contains the same blocks as the ledger.
