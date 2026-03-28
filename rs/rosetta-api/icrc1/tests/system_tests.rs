@@ -1538,6 +1538,10 @@ fn test_construction_submit() {
                             ic_icrc1::Operation::Mint { .. } => None,
                             ic_icrc1::Operation::Burn { .. } => None,
                             ic_icrc1::Operation::FeeCollector { .. } => None,
+                            ic_icrc1::Operation::AuthorizedMint { .. }
+                            | ic_icrc1::Operation::AuthorizedBurn { .. } => {
+                                panic!("AuthorizedMint/AuthorizedBurn not yet supported in Rosetta")
+                            }
                         };
 
                         // Rosetta does not support mint and burn operations
