@@ -6,7 +6,7 @@ use super::super::test_utilities::{
 use super::super::*;
 use super::zero_instruction_overhead_config;
 use candid::Encode;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::subnet_config::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerConfig};
 use ic_management_canister_types_private::{
     CanisterIdRecord, EmptyBlob, FetchCanisterLogsRequest, Method, Payload as _,
 };

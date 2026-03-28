@@ -38,7 +38,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusTime,
     execution_environment::{
         IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
-        TransformExecutionService,
+        Scheduler, TransformExecutionService,
     },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
@@ -59,7 +59,7 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::test_logger;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset, IC_00,
     InstallCodeArgs, ListCanisterSnapshotArgs, ListCanisterSnapshotResponse, MasterPublicKeyId,
     Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
     ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
@@ -119,11 +119,13 @@ use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
     canister_state::{
         NextExecution, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
-        canister_snapshots::CanisterSnapshots, system_state::CanisterHistory,
+        canister_snapshots::CanisterSnapshots, execution_state::NextScheduledMethod,
+        system_state::CanisterHistory,
     },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
     replicated_state::ReplicatedStateMessageRouting,
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
@@ -138,9 +140,9 @@ use ic_test_utilities_registry::{
 use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
-    CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height,
-    NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
-    SubnetId, UserId,
+    AccumulatedPriority, CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState,
+    CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion,
+    ReplicaVersion, SnapshotId, SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
@@ -234,6 +236,109 @@ impl Verifier for FakeVerifier {
         _: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
+    }
+}
+
+/// Tasks not listed here may execute implicitly during any step:
+/// - DTS continuation (PausedExecution) runs with highest priority
+/// - OnLowWasmMemory hook runs before heartbeat/timer/messages if triggered
+/// - induct_messages_on_same_subnet moves output → input queues each round
+/// - build_streams routes output to loopback each round
+#[derive(Clone, Debug)]
+pub enum OrderedMessage {
+    Ingress(CanisterId, MessageId),
+    Request {
+        source: CanisterId,
+        target: CanisterId,
+    },
+    Response {
+        source: CanisterId,
+        target: CanisterId,
+    },
+    Heartbeat(CanisterId),
+    Timer(CanisterId),
+}
+
+pub struct MessageOrdering {
+    pub messages: Vec<OrderedMessage>,
+}
+
+impl MessageOrdering {
+    pub fn new(messages: Vec<OrderedMessage>) -> Self {
+        Self { messages }
+    }
+}
+
+struct FlexibleOrderingScheduler {
+    inner: Box<dyn Scheduler<State = ReplicatedState>>,
+    target: Arc<RwLock<Option<CanisterId>>>,
+    suppress_subnet_messages: Arc<RwLock<bool>>,
+}
+
+impl Scheduler for FlexibleOrderingScheduler {
+    type State = ReplicatedState;
+
+    fn execute_round(
+        &self,
+        mut state: ReplicatedState,
+        randomness: Randomness,
+        chain_key_data: ic_types::batch::ChainKeyData,
+        replica_version: &ReplicaVersion,
+        current_round: ic_types::ExecutionRound,
+        round_summary: Option<ic_interfaces::execution_environment::ExecutionRoundSummary>,
+        current_round_type: ic_interfaces::execution_environment::ExecutionRoundType,
+        registry_settings: &ic_interfaces::execution_environment::RegistryExecutionSettings,
+    ) -> ReplicatedState {
+        let target = self.target.write().unwrap().take();
+        if let Some(canister_id) = target {
+            let zero = AccumulatedPriority::new(0);
+            for (_, p) in state.metadata.subnet_schedule.iter_mut() {
+                p.accumulated_priority = zero;
+                p.priority_credit = zero;
+            }
+            state
+                .metadata
+                .subnet_schedule
+                .get_mut(canister_id)
+                .accumulated_priority = AccumulatedPriority::new(i64::MAX / 4);
+        }
+
+        // Safe to restore: no new messages land in subnet_queues during
+        // execute_round — they stay in output until build_streams.
+        let suppress = *self.suppress_subnet_messages.read().unwrap();
+        let saved_subnet_queues = if suppress {
+            Some(std::mem::take(state.subnet_queues_mut()))
+        } else {
+            None
+        };
+
+        let mut result = self.inner.execute_round(
+            state,
+            randomness,
+            chain_key_data,
+            replica_version,
+            current_round,
+            round_summary,
+            current_round_type,
+            registry_settings,
+        );
+
+        if let Some(saved) = saved_subnet_queues {
+            result.put_subnet_queues(saved);
+        }
+
+        if target.is_some() {
+            let zero = AccumulatedPriority::new(0);
+            for (_, p) in result.metadata.subnet_schedule.iter_mut() {
+                p.accumulated_priority = zero;
+                p.priority_credit = zero;
+            }
+        }
+        result
+    }
+
+    fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
+        self.inner.checkpoint_round_with_no_execution(state)
     }
 }
 
@@ -1132,6 +1237,10 @@ pub struct StateMachine {
     cycles_account_manager: Arc<CyclesAccountManager>,
     cost_schedule: CanisterCyclesCostSchedule,
     hypervisor_config: HypervisorConfig,
+    flexible_ordering: bool,
+    ordering_target: Arc<RwLock<Option<CanisterId>>>,
+    suppress_subnet_messages: Arc<RwLock<bool>>,
+    ingress_buffer: RwLock<BTreeMap<MessageId, SignedIngress>>,
 }
 
 impl Default for StateMachine {
@@ -1214,6 +1323,7 @@ pub struct StateMachineBuilder {
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: Vec<PrincipalId>,
     resource_limits: ResourceLimits,
+    flexible_ordering: bool,
 }
 
 impl StateMachineBuilder {
@@ -1256,6 +1366,7 @@ impl StateMachineBuilder {
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: vec![],
             resource_limits: Default::default(),
+            flexible_ordering: false,
         }
     }
 
@@ -1502,6 +1613,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_flexible_ordering(self) -> Self {
+        Self {
+            flexible_ordering: true,
+            ..self
+        }
+    }
+
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
     /// Otherwise, no new registry records are created.
@@ -1548,6 +1666,7 @@ impl StateMachineBuilder {
             self.cost_schedule,
             self.subnet_admins,
             self.resource_limits,
+            self.flexible_ordering,
         )
     }
 
@@ -1917,6 +2036,7 @@ impl StateMachine {
         cost_schedule: CanisterCyclesCostSchedule,
         subnet_admins: Vec<PrincipalId>,
         resource_limits: ResourceLimits,
+        flexible_ordering: bool,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
@@ -1932,6 +2052,20 @@ impl StateMachine {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
+        // One canister, one message per round. Canister budget =
+        // max_instructions_per_round - max_slice + 1 = 1.
+        // Exhausted after one message + overhead, blocking a second.
+        // DTS per-slice limit is independent of round budget.
+        if flexible_ordering {
+            let sc = &mut subnet_config.scheduler_config;
+            sc.scheduler_cores = 1;
+            // Scheduler computes canister budget as:
+            //   max_instructions_per_round - max(slice, install_code_slice) + 1
+            // Cap install_code_slice so it doesn't inflate the subtraction.
+            sc.max_instructions_per_install_code_slice = sc.max_instructions_per_slice;
+            sc.max_instructions_per_round = sc.max_instructions_per_slice;
+            sc.subnet_messages_per_round_instruction_limit = ic_types::NumInstructions::from(1);
+        }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
                 .cycles_account_manager_config
@@ -2064,11 +2198,23 @@ impl StateMachine {
             )
         });
 
+        let ordering_target: Arc<RwLock<Option<CanisterId>>> = Arc::new(RwLock::new(None));
+        let suppress_subnet_messages: Arc<RwLock<bool>> = Arc::new(RwLock::new(false));
+        let scheduler: Box<dyn Scheduler<State = ReplicatedState>> = if flexible_ordering {
+            Box::new(FlexibleOrderingScheduler {
+                inner: execution_services.scheduler,
+                target: Arc::clone(&ordering_target),
+                suppress_subnet_messages: Arc::clone(&suppress_subnet_messages),
+            })
+        } else {
+            execution_services.scheduler
+        };
+
         let message_routing = SyncMessageRouting::new(
             Arc::clone(&state_manager) as _,
             Arc::clone(&state_manager) as _,
             Arc::clone(&execution_services.ingress_history_writer) as _,
-            execution_services.scheduler,
+            scheduler,
             hypervisor_config.clone(),
             Arc::clone(&execution_services.cycles_account_manager),
             subnet_id,
@@ -2298,6 +2444,10 @@ impl StateMachine {
             cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
             hypervisor_config,
+            flexible_ordering,
+            ordering_target,
+            suppress_subnet_messages,
+            ingress_buffer: RwLock::new(BTreeMap::new()),
         }
     }
 
@@ -2580,6 +2730,240 @@ impl StateMachine {
             .write()
             .unwrap()
             .push(msg, self.get_time(), self.nodes[0].node_id);
+    }
+
+    pub fn set_ordering_target(&self, target: Option<CanisterId>) {
+        *self.ordering_target.write().unwrap() = target;
+    }
+
+    fn set_suppress_subnet_messages(&self, suppress: bool) {
+        *self.suppress_subnet_messages.write().unwrap() = suppress;
+    }
+
+    /// Reset flexible ordering state so subsequent tick()/execute_ingress()
+    /// calls pass through the scheduler without priority boost or suppression.
+    pub fn clear_flexible_ordering(&self) {
+        self.set_ordering_target(None);
+        self.set_suppress_subnet_messages(false);
+    }
+
+    pub fn buffer_ingress_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Result<MessageId, SubmitIngressError> {
+        let msg = self.ingress_message(sender, canister_id, method, payload);
+        let message_id = msg.id();
+        self.ingress_buffer
+            .write()
+            .unwrap()
+            .insert(message_id.clone(), msg);
+        Ok(message_id)
+    }
+
+    pub fn take_buffered_ingress(&self, message_id: &MessageId) -> SignedIngress {
+        self.ingress_buffer
+            .write()
+            .unwrap()
+            .remove(message_id)
+            .unwrap_or_else(|| panic!("No buffered ingress with id {}", message_id))
+    }
+
+    pub fn execute_with_ordering(&self, ordering: MessageOrdering) {
+        assert!(
+            self.flexible_ordering,
+            "call with_flexible_ordering() first"
+        );
+        const MAX_TICKS: usize = 100;
+
+        for msg in ordering.messages {
+            match msg {
+                OrderedMessage::Ingress(target, ref ingress_id) if target == IC_00 => {
+                    self.set_suppress_subnet_messages(false);
+                    let signed = self.take_buffered_ingress(ingress_id);
+                    let payload = PayloadBuilder::new()
+                        .with_max_expiry_time_from_now(self.get_time().into())
+                        .signed_ingress(signed);
+                    self.tick_with_config(payload);
+
+                    for tick in 0..MAX_TICKS {
+                        match self.ingress_status(ingress_id) {
+                            IngressStatus::Known {
+                                state: IngressState::Completed(_) | IngressState::Failed(_),
+                                ..
+                            } => break,
+                            IngressStatus::Known {
+                                state: IngressState::Processing,
+                                ..
+                            } if !self.has_in_flight_work(target) => break,
+                            _ => {}
+                        }
+                        assert!(
+                            tick < MAX_TICKS - 1,
+                            "Ingress {} stuck: {:?}",
+                            ingress_id,
+                            self.ingress_status(ingress_id),
+                        );
+                        self.tick();
+                    }
+                }
+
+                OrderedMessage::Ingress(target, ref ingress_id) => {
+                    self.set_suppress_subnet_messages(true);
+                    self.set_next_scheduled_method(target, NextScheduledMethod::Message);
+                    self.set_ordering_target(Some(target));
+                    let signed = self.take_buffered_ingress(ingress_id);
+                    let payload = PayloadBuilder::new()
+                        .with_max_expiry_time_from_now(self.get_time().into())
+                        .signed_ingress(signed);
+                    self.tick_with_config(payload);
+                    self.complete_dts(target, MAX_TICKS);
+                }
+
+                OrderedMessage::Heartbeat(canister) | OrderedMessage::Timer(canister) => {
+                    self.set_suppress_subnet_messages(true);
+                    let method = match msg {
+                        OrderedMessage::Heartbeat(_) => NextScheduledMethod::Heartbeat,
+                        OrderedMessage::Timer(_) => NextScheduledMethod::GlobalTimer,
+                        _ => unreachable!(),
+                    };
+                    self.set_next_scheduled_method(canister, method);
+                    self.set_ordering_target(Some(canister));
+                    self.tick();
+                    self.complete_dts(canister, MAX_TICKS);
+                }
+
+                OrderedMessage::Request { source, target } if target == IC_00 => {
+                    assert!(
+                        self.next_sender_in_subnet_queue(source, target),
+                        "No message from {} to IC_00 in subnet_queues or loopback",
+                        source,
+                    );
+                    self.set_suppress_subnet_messages(false);
+                    self.tick();
+                    self.set_suppress_subnet_messages(true);
+                    self.complete_dts(source, MAX_TICKS);
+                }
+
+                OrderedMessage::Response { source, target } if source == IC_00 => {
+                    assert!(
+                        self.next_sender_in_subnet_queue(source, target),
+                        "No response from IC_00 to {} in queue or loopback",
+                        target,
+                    );
+                    self.set_suppress_subnet_messages(true);
+                    self.set_next_scheduled_method(target, NextScheduledMethod::Message);
+                    self.set_ordering_target(Some(target));
+                    self.tick();
+                    self.complete_dts(target, MAX_TICKS);
+                }
+
+                OrderedMessage::Request { source, target }
+                | OrderedMessage::Response { source, target } => {
+                    self.set_suppress_subnet_messages(true);
+                    assert!(
+                        self.next_sender_in_queue(source, target),
+                        "Message from {} not next in {}'s queue",
+                        source,
+                        target,
+                    );
+                    self.set_next_scheduled_method(target, NextScheduledMethod::Message);
+                    self.set_ordering_target(Some(target));
+                    self.tick();
+                    self.complete_dts(target, MAX_TICKS);
+                }
+            }
+        }
+    }
+
+    fn set_next_scheduled_method(&self, canister_id: CanisterId, method: NextScheduledMethod) {
+        let (_, mut state) = self.state_manager.take_tip();
+        let canister = state
+            .canister_state_make_mut(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
+        if let Some(es) = canister.execution_state.as_mut() {
+            es.next_scheduled_method = method;
+        }
+        self.state_manager
+            .commit_and_certify(state, CertificationScope::Metadata, None);
+    }
+
+    fn complete_dts(&self, canister_id: CanisterId, max_ticks: usize) {
+        for tick in 0..max_ticks {
+            match self
+                .get_latest_state()
+                .canister_state(&canister_id)
+                .map(|c| c.next_execution())
+            {
+                Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode) => {
+                    self.set_ordering_target(Some(canister_id));
+                    self.tick();
+                }
+                _ => return,
+            }
+            assert!(tick < max_ticks - 1, "DTS on {} stuck", canister_id);
+        }
+    }
+
+    fn has_in_flight_work(&self, canister: CanisterId) -> bool {
+        let state = self.get_latest_state();
+
+        if let Some(c) = state.canister_state(&canister) {
+            if c.system_state.queues().has_output() || c.system_state.queues().has_input() {
+                return true;
+            }
+            match c.next_execution() {
+                NextExecution::ContinueLong | NextExecution::ContinueInstallCode => return true,
+                _ => {}
+            }
+        }
+
+        self.has_loopback_messages() || state.subnet_queues().has_input()
+    }
+
+    /// Checks that `source` is the next sender in `target`'s local input schedule.
+    fn next_sender_in_queue(&self, source: CanisterId, target: CanisterId) -> bool {
+        let state = self.get_latest_state();
+        let queues = match state.canister_state(&target) {
+            Some(c) => c.system_state.queues(),
+            None => return false,
+        };
+        queues.local_sender_schedule().front() == Some(&source)
+    }
+
+    /// Checks that a message involving IC_00 is available: either in
+    /// subnet_queues (local schedule for requests to IC_00, remote schedule
+    /// for responses from IC_00) or in the loopback stream (not yet
+    /// inducted by Demux).
+    fn next_sender_in_subnet_queue(&self, source: CanisterId, target: CanisterId) -> bool {
+        let state = self.get_latest_state();
+
+        let in_schedule = match (source, target) {
+            (IC_00, _) => {
+                // IC_00 response: lands in remote schedule because IC_00's
+                // principal doesn't match own_subnet_id or any canister.
+                state.subnet_queues().remote_sender_schedule().front() == Some(&IC_00)
+            }
+            (source, IC_00) => {
+                // Request to IC_00 from a canister
+                state.subnet_queues().local_sender_schedule().front() == Some(&source)
+            }
+            (_, _) => {
+                panic!("Management canister is not involved; use next_sender_in_queue");
+            }
+        };
+        in_schedule || self.has_loopback_messages()
+    }
+
+    fn has_loopback_messages(&self) -> bool {
+        let state = self.get_latest_state();
+        let subnet_id = self.get_subnet_id();
+        state
+            .streams()
+            .get(&subnet_id)
+            .is_some_and(|s| !s.messages().is_empty())
     }
 
     pub fn mock_canister_http_response(

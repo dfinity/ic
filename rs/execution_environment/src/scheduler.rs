@@ -64,16 +64,6 @@ pub(crate) mod test_utilities;
 #[cfg(test)]
 pub(crate) mod tests;
 
-/// Ideally we would split the per-round limit between subnet messages and
-/// canister messages, so that their sum cannot exceed the limit. That would
-/// make the limit for canister messages variable, which would break assumptions
-/// of the scheduling algorithm. The next best thing we can do is to limit
-/// subnet messages on top of the fixed limit for canister messages.
-/// The value of the limit for subnet messages is chosen quite arbitrarily
-/// as 1/16 of the fixed limit. Any other value in the same ballpark would
-/// work here.
-const SUBNET_MESSAGES_LIMIT_FRACTION: u64 = 16;
-
 /// Contains limits (or budget) for various resources that affect duration of
 /// an execution round.
 #[derive(Clone, Debug, Default)]
@@ -1321,7 +1311,7 @@ impl Scheduler for SchedulerImpl {
             SchedulerRoundLimits {
                 instructions: round_instructions,
                 subnet_instructions: as_round_instructions(
-                    self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
+                    self.config.subnet_messages_per_round_instruction_limit,
                 ),
                 subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
                 subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),

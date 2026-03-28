@@ -64,6 +64,16 @@ const INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION: NumInstructions =
 // would cause the longest possible round of 4B instructions or 2 seconds.
 const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(4 * B);
 
+/// Ideally we would split the per-round limit between subnet messages and
+/// canister messages, so that their sum cannot exceed the limit. That would
+/// make the limit for canister messages variable, which would break assumptions
+/// of the scheduling algorithm. The next best thing we can do is to limit
+/// subnet messages on top of the fixed limit for canister messages.
+/// The value of the limit for subnet messages is chosen quite arbitrarily
+/// as 1/16 of the fixed limit. Any other value in the same ballpark would
+/// work here.
+pub const SUBNET_MESSAGES_LIMIT_FRACTION: u64 = 16;
+
 // Limit per `install_code` message. It's bigger than the limit for a regular
 // update call to allow for canisters with bigger state to be upgraded.
 const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(300 * B);
@@ -274,6 +284,10 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading or downloading binary snapshot data.
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
+
+    /// Per-round subnet message instruction budget.
+    /// Defaults to `max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION`.
+    pub subnet_messages_per_round_instruction_limit: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -305,6 +319,8 @@ impl SchedulerConfig {
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
             canister_snapshot_data_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
+            subnet_messages_per_round_instruction_limit: MAX_INSTRUCTIONS_PER_ROUND
+                / SUBNET_MESSAGES_LIMIT_FRACTION,
         }
     }
 
@@ -314,6 +330,11 @@ impl SchedulerConfig {
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         let max_instructions_per_slice = NumInstructions::from(2 * B);
         let max_instructions_per_install_code_slice = NumInstructions::from(5 * B);
+        // Round limit is set to allow on average 2B instructions.
+        // See also comment about `MAX_INSTRUCTIONS_PER_ROUND`.
+        let max_instructions_per_round = max_instructions_per_slice
+            .max(max_instructions_per_install_code_slice)
+            + NumInstructions::from(2 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
@@ -321,11 +342,7 @@ impl SchedulerConfig {
             // TODO(RUN-993): Enable heap delta rate limiting for system subnets.
             // Setting initial reserve to capacity effectively disables the rate limiting.
             heap_delta_initial_reserve: SUBNET_HEAP_DELTA_CAPACITY,
-            // Round limit is set to allow on average 2B instructions.
-            // See also comment about `MAX_INSTRUCTIONS_PER_ROUND`.
-            max_instructions_per_round: max_instructions_per_slice
-                .max(max_instructions_per_install_code_slice)
-                + NumInstructions::from(2 * B),
+            max_instructions_per_round,
             max_instructions_per_message,
             max_instructions_per_query_message,
             max_instructions_per_slice,
@@ -349,6 +366,8 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
+            subnet_messages_per_round_instruction_limit: max_instructions_per_round
+                / SUBNET_MESSAGES_LIMIT_FRACTION,
         }
     }
 

@@ -129,6 +129,7 @@ rust_ic_test(
     name = "state_machine_integration_tests",
     srcs = [
         "tests/dts.rs",
+        "tests/flexible_ordering.rs",
         "tests/mod.rs",
         "tests/multi_subnet.rs",
         "tests/reject_remote_callbacks.rs",
