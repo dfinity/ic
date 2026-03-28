@@ -814,7 +814,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         }
 
         if !updates.is_empty() {
-            self.cache.update(self, updates);
+            self.cache.update(self, &updates);
         }
 
         ArtifactTransmits {

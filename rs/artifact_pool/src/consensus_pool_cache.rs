@@ -242,7 +242,7 @@ impl ConsensusCacheImpl {
             .collect()
     }
 
-    pub(crate) fn update(&self, pool: &dyn ConsensusPool, updates: Vec<CacheUpdateAction>) {
+    pub(crate) fn update(&self, pool: &dyn ConsensusPool, updates: &[CacheUpdateAction]) {
         let cache = &mut *self.cache.write().unwrap();
         updates.iter().for_each(|update| {
             if let CacheUpdateAction::CatchUpPackage = update {
@@ -590,7 +590,7 @@ mod test {
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::Finalization]);
             pool.insert_validated(finalization);
-            consensus_cache.update(&pool, updates);
+            consensus_cache.update(&pool, &updates);
             assert_eq!(consensus_cache.finalized_block().height(), Height::from(3));
             assert_eq!(consensus_cache.consensus_time(), Some(time));
             pool.insert_validated(pool.make_next_beacon());
@@ -619,7 +619,7 @@ mod test {
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::CatchUpPackage]);
             pool.insert_validated(catch_up_package.clone());
-            consensus_cache.update(&pool, updates);
+            consensus_cache.update(&pool, &updates);
             assert_eq!(consensus_cache.catch_up_package(), catch_up_package);
             assert_eq!(consensus_cache.finalized_block().height(), Height::from(4));
             check_finalized_chain(&consensus_cache, &[Height::from(4)]);
@@ -658,7 +658,7 @@ mod test {
             Round::new(&mut pool)
                 .with_certified_height(HEIGHT_CONSIDERED_BEHIND)
                 .advance();
-            consensus_cache.update(&pool, vec![CacheUpdateAction::Finalization]);
+            consensus_cache.update(&pool, &[CacheUpdateAction::Finalization]);
 
             // Check that the replica is still not considered behind
             assert!(!consensus_cache.is_replica_behind(Height::new(0)));
@@ -667,7 +667,7 @@ mod test {
             Round::new(&mut pool)
                 .with_certified_height(HEIGHT_CONSIDERED_BEHIND + Height::new(1))
                 .advance();
-            consensus_cache.update(&pool, vec![CacheUpdateAction::Finalization]);
+            consensus_cache.update(&pool, &[CacheUpdateAction::Finalization]);
 
             // At this height, the replica should be considered behind
             assert!(consensus_cache.is_replica_behind(Height::new(0)))

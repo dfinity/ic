@@ -176,7 +176,7 @@ impl<
         let id = new_artifact.artifact.id();
         let wire_artifact = self.assembler.disassemble_message(new_artifact.artifact);
         let wire_artifact_id = wire_artifact.id();
-        let entry = self.active_slots.entry(id.clone());
+        let entry = self.active_slots.entry(id);
 
         if let Entry::Vacant(entry) = entry {
             self.metrics.send_view_consensus_new_adverts_total.inc();
