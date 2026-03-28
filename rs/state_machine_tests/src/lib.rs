@@ -2740,6 +2740,13 @@ impl StateMachine {
         *self.suppress_subnet_messages.write().unwrap() = suppress;
     }
 
+    /// Reset flexible ordering state so subsequent tick()/execute_ingress()
+    /// calls pass through the scheduler without priority boost or suppression.
+    pub fn clear_flexible_ordering(&self) {
+        self.set_ordering_target(None);
+        self.set_suppress_subnet_messages(false);
+    }
+
     pub fn buffer_ingress_as(
         &self,
         sender: PrincipalId,
