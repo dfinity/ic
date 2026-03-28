@@ -9,11 +9,12 @@ use crate::payload_builder::{
     parse::{bytes_to_payload, payload_to_bytes},
 };
 use assert_matches::assert_matches;
+use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
+    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadValidationFailure,
         InvalidCanisterHttpPayloadReason,
@@ -24,6 +25,9 @@ use ic_interfaces::{
 };
 use ic_interfaces_mocks::crypto::MockCrypto;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::{
+    CanisterHttpResponsePayload, FlexibleHttpRequestResult, HttpHeader,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::state_manager::RefMockStateManager;
@@ -2642,6 +2646,150 @@ fn flexible_invalid_signature_error() {
             );
         },
     );
+}
+
+#[test]
+fn flexible_ok_responses_into_messages_success_round_trip() {
+    let callback_id = CallbackId::from(42);
+
+    let payload_a = CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![HttpHeader {
+            name: "content-type".to_string(),
+            value: "text/plain".to_string(),
+        }],
+        body: b"hello from node A".to_vec(),
+    };
+    let payload_b = CanisterHttpResponsePayload {
+        status: 201,
+        headers: vec![],
+        body: b"hello from node B".to_vec(),
+    };
+
+    let entry_a = flexible_response(42, 0, &Encode!(&payload_a).unwrap());
+    let entry_b = flexible_response(42, 1, &Encode!(&payload_b).unwrap());
+
+    let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+        callback_id,
+        responses: vec![entry_a, entry_b],
+    }]);
+    let bytes = payload_to_bytes_max_4mb(payload);
+
+    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+
+    assert_eq!(responses.len(), 1);
+    assert_eq!(responses[0].callback, callback_id);
+    let Payload::Data(ref data) = responses[0].payload else {
+        panic!("Expected Payload::Data, got {:?}", responses[0].payload);
+    };
+    let result = Decode!(data, FlexibleHttpRequestResult).unwrap();
+    let FlexibleHttpRequestResult::Ok(payloads) = result else {
+        panic!("Expected Ok variant, got {result:?}");
+    };
+    assert_eq!(payloads.len(), 2);
+    assert_eq!(payloads[0], payload_a);
+    assert_eq!(payloads[1], payload_b);
+    assert_eq!(stats.flexible_ok_responses, 1);
+}
+
+#[test]
+fn flexible_ok_responses_into_messages_skips_reject_entries() {
+    let callback_id = CallbackId::from(99);
+
+    let good_payload = CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: b"ok".to_vec(),
+    };
+    let success_entry = flexible_response(99, 0, &Encode!(&good_payload).unwrap());
+
+    let (reject_response, reject_metadata) = test_response_and_metadata_with_content(
+        99,
+        CanisterHttpResponseContent::Reject(ic_types::canister_http::CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "adapter error".to_string(),
+        }),
+    );
+    let reject_entry = FlexibleCanisterHttpResponseWithProof {
+        response: reject_response,
+        proof: metadata_to_share(1, &reject_metadata),
+    };
+
+    let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+        callback_id,
+        responses: vec![success_entry, reject_entry],
+    }]);
+    let bytes = payload_to_bytes_max_4mb(payload);
+
+    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+
+    assert_eq!(responses.len(), 1);
+    let Payload::Data(ref data) = responses[0].payload else {
+        panic!("Expected Payload::Data");
+    };
+    let result = Decode!(data, FlexibleHttpRequestResult).unwrap();
+    let FlexibleHttpRequestResult::Ok(payloads) = result else {
+        panic!("Expected Ok variant, got {result:?}");
+    };
+    assert_eq!(payloads.len(), 1, "Reject entry should be filtered out");
+    assert_eq!(payloads[0], good_payload);
+    assert_eq!(stats.flexible_ok_responses, 1);
+}
+
+#[test]
+fn flexible_ok_responses_into_messages_stats_count_multiple_groups() {
+    let payload_data = Encode!(&CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: vec![],
+    })
+    .unwrap();
+
+    let group_a = FlexibleCanisterHttpResponses {
+        callback_id: CallbackId::from(1),
+        responses: vec![flexible_response(1, 0, &payload_data)],
+    };
+    let group_b = FlexibleCanisterHttpResponses {
+        callback_id: CallbackId::from(2),
+        responses: vec![flexible_response(2, 1, &payload_data)],
+    };
+    let group_c = FlexibleCanisterHttpResponses {
+        callback_id: CallbackId::from(3),
+        responses: vec![flexible_response(3, 2, &payload_data)],
+    };
+
+    let payload = flexible_payload(vec![group_a, group_b, group_c]);
+    let bytes = payload_to_bytes_max_4mb(payload);
+
+    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+
+    assert_eq!(responses.len(), 3);
+    assert_eq!(stats.flexible_ok_responses, 3);
+}
+
+#[test]
+fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
+    let callback_id = CallbackId::from(42);
+
+    let valid_data = Encode!(&CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: vec![],
+    })
+    .unwrap();
+    let valid_entry = flexible_response(42, 0, &valid_data);
+    let invalid_entry = flexible_response(42, 1, b"this is invalid candid");
+
+    let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+        callback_id,
+        responses: vec![valid_entry, invalid_entry],
+    }]);
+    let bytes = payload_to_bytes_max_4mb(payload);
+
+    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+
+    assert_eq!(responses.len(), 0);
+    assert_eq!(stats.flexible_ok_responses, 0);
 }
 
 fn setup_test_with_contexts(
