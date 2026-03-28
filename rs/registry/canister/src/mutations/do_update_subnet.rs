@@ -209,6 +209,11 @@ impl Registry {
 ///
 /// Setting a field to `None` means that its value should not be changed. The
 /// rest of the fields will be overwritten in the SubnetRecord.
+/// In particular, this means that nested optional fields are unconditionally
+/// assigned in the subnet record instead of treating a nested `None` as a no-op.
+/// This is inconsistent to top-level optional fields and could be confusing.
+/// Tooling like `ic-admin` deals with that by filling unset nested fields with
+/// values from the current subnet record.
 ///
 /// Note that `replica_version_id` and `membership`
 /// are intentionally left out as they are updated via other proposals and/or
