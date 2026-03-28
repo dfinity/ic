@@ -507,14 +507,14 @@ impl SchedulerImpl {
 
             let execution_timer = self.metrics.round_inner_iteration_exe.start_timer();
             let instructions_before = round_limits.instructions;
-            let (
-                active_canisters,
+            let IterationResult {
+                canisters: active_canisters,
                 executed_canisters,
                 canisters_with_completed_messages,
                 low_cycle_balance_canisters,
-                mut loop_ingress_execution_results,
+                ingress_results: mut loop_ingress_execution_results,
                 heap_delta,
-            ) = self.execute_canisters_in_inner_round(
+            } = self.execute_canisters_in_inner_round(
                 active_canisters_partitioned_by_cores,
                 current_round,
                 state.time(),
@@ -596,11 +596,11 @@ impl SchedulerImpl {
             // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canisters {
+                // It's OK to indiscriminately `make_mut()` here because we've already mutated
+                // this canister state this round.
                 let Some(canister) = state.canister_state_make_mut(canister_id) else {
                     continue;
                 };
-                // It's OK to indiscriminately `make_mut()` here because we've already mutated
-                // this canister state this round.
                 canister
                     .system_state
                     .task_queue
@@ -623,13 +623,8 @@ impl SchedulerImpl {
     /// Invoked in each iteration of `inner_round`. `canisters_by_thread` are the
     /// prioritized canisters to be executed by each thread.
     ///
-    /// Returns:
-    /// - the updated canister states,
-    /// - actually executed canisters,
-    /// - canisters that completed at least one message execution,
-    /// - canisters that could not be executed due to low cycle balances,
-    /// - the ingress results,
-    /// - the total heap delta.
+    /// Returns the updated canister states, executed / completed message / low
+    /// cycle balance canisters, ingress results and produced heap delta.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn execute_canisters_in_inner_round(
         &self,
@@ -642,28 +637,21 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         resource_limits: ResourceLimits,
         measurement_scope: &MeasurementScope,
-    ) -> (
-        Vec<Arc<CanisterState>>,
-        BTreeSet<CanisterId>,
-        BTreeSet<CanisterId>,
-        BTreeSet<CanisterId>,
-        Vec<(MessageId, IngressStatus)>,
-        NumBytes,
-    ) {
+    ) -> IterationResult {
         let thread_pool = &mut self.thread_pool.borrow_mut();
         let exec_env = self.exec_env.as_ref();
 
         // If there are no more instructions left, then skip execution and
         // return unchanged canisters.
         if round_limits.instructions_reached() {
-            return (
-                canisters_by_thread.into_iter().flatten().collect(),
-                BTreeSet::new(),
-                BTreeSet::new(),
-                BTreeSet::new(),
-                vec![],
-                NumBytes::new(0),
-            );
+            return IterationResult {
+                canisters: canisters_by_thread.into_iter().flatten().collect(),
+                executed_canisters: BTreeSet::new(),
+                canisters_with_completed_messages: BTreeSet::new(),
+                low_cycle_balance_canisters: BTreeSet::new(),
+                ingress_results: vec![],
+                heap_delta: NumBytes::new(0),
+            };
         }
 
         // Reserve the space for holding the result of each execution thread.
@@ -767,14 +755,14 @@ impl SchedulerImpl {
         // `subnet_available_memory` will be recomputed at the beginning of the next
         // iteration.
 
-        (
+        IterationResult {
             canisters,
             executed_canisters,
             canisters_with_completed_messages,
             low_cycle_balance_canisters,
             ingress_results,
             heap_delta,
-        )
+        }
     }
 
     fn purge_expired_ingress_messages(
@@ -1644,6 +1632,22 @@ struct ExecutionThreadResult {
     messages_executed: NumMessages,
     heap_delta: NumBytes,
     round_limits: RoundLimits,
+}
+
+/// Holds the results of one scheduler iteration.
+struct IterationResult {
+    /// Updated canister states.
+    canisters: Vec<Arc<CanisterState>>,
+    /// Actually executed canisters.
+    executed_canisters: BTreeSet<CanisterId>,
+    /// Canisters that completed at least one message execution.
+    canisters_with_completed_messages: BTreeSet<CanisterId>,
+    /// Canisters that could not be executed due to low cycle balances.
+    low_cycle_balance_canisters: BTreeSet<CanisterId>,
+    /// Ingress results.
+    ingress_results: Vec<(MessageId, IngressStatus)>,
+    /// Total heap delta produced by execution.
+    heap_delta: NumBytes,
 }
 
 /// Executes the given canisters one by one. For each canister it

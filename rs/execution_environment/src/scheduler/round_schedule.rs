@@ -421,7 +421,7 @@ impl RoundSchedule {
 
     /// Updates canister priorities at the end of the round.
     ///
-    /// * Grants canisters their compute allocations; charges for fullexecutions;
+    /// * Grants canisters their compute allocations; charges for full executions;
     ///   then calculates the subnet-wide free allocation and distributes it.
     /// * Applies the priority credit where possible (no long execution).
     /// * Observes round-level metrics.
@@ -561,7 +561,6 @@ impl RoundSchedule {
             }
             remaining_canisters -= 1;
         }
-        println!("round {current_round}: subnet_schedule: {subnet_schedule:?}");
 
         metrics
             .scheduler_accumulated_priority_deviation
