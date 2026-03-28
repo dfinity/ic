@@ -1,5 +1,6 @@
 use super::*;
 use crate::{
+    governance::{RandomnessGenerator, RngError},
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{BallotInfo, Followees, KnownNeuronData, MaturityDisbursement},
     storage::{with_stable_neuron_indexes, with_voting_history_store},
@@ -1052,4 +1053,78 @@ fn test_record_neuron_vote() {
         voting_history.list_neuron_votes(neuron_id, None, Some(10))
     });
     assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
+}
+
+/// A mock RNG that returns predefined byte arrays in sequence.
+struct SequentialMockRng {
+    byte_arrays: Vec<[u8; 32]>,
+    index: usize,
+}
+
+impl SequentialMockRng {
+    fn new(byte_arrays: Vec<[u8; 32]>) -> Self {
+        Self {
+            byte_arrays,
+            index: 0,
+        }
+    }
+}
+
+impl RandomnessGenerator for SequentialMockRng {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        unimplemented!("not needed for subaccount tests")
+    }
+
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        let result = self.byte_arrays[self.index];
+        self.index += 1;
+        Ok(result)
+    }
+
+    fn seed_rng(&mut self, _seed: [u8; 32]) {}
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        None
+    }
+}
+
+#[test]
+fn test_new_neuron_subaccount_succeeds_without_collision() {
+    let neuron_store = NeuronStore::new(BTreeMap::new());
+
+    let expected_bytes = [42u8; 32];
+    let mut rng = SequentialMockRng::new(vec![expected_bytes]);
+
+    let observed = neuron_store.new_neuron_subaccount(&mut rng);
+
+    assert_eq!(observed, Ok(Subaccount(expected_bytes)));
+}
+
+#[test]
+fn test_new_neuron_subaccount_retries_on_collision() {
+    let colliding_bytes = [1u8; 32];
+    let unique_bytes = [2u8; 32];
+
+    // Create a neuron store with a neuron whose subaccount matches colliding_bytes.
+    let neuron = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount(colliding_bytes),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 1,
+            aging_since_timestamp_seconds: 0,
+        },
+        CREATED_TIMESTAMP_SECONDS,
+    )
+    .build();
+    let neuron_store = NeuronStore::new(btreemap! { 1 => neuron });
+
+    // The first call returns the colliding subaccount; the second returns a unique one.
+    let mut rng = SequentialMockRng::new(vec![colliding_bytes, unique_bytes]);
+
+    let observed = neuron_store.new_neuron_subaccount(&mut rng);
+
+    assert_eq!(observed, Ok(Subaccount(unique_bytes)));
+    // Verify that both byte arrays were consumed (i.e., a retry happened).
+    assert_eq!(rng.index, 2);
 }
