@@ -65,6 +65,7 @@ rust_library(
         "//rs/registry/nns_data_provider",
         "//rs/registry/provisional_whitelist",
         "//rs/registry/regedit",
+        "//rs/registry/resource_limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",

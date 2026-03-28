@@ -126,6 +126,20 @@ system_test(
     ],
 )
 
+system_test(
+    name = "resource_limits_test",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/config",
+        "//rs/registry/resource_limits",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+    ],
+)
+
 system_test_nns(
     name = "canister_migration_test",
     enable_mainnet_nns_variant = False,
