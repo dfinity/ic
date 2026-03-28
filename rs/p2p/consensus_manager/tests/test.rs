@@ -330,7 +330,7 @@ fn load_test(
         id_range,
     }: LoadParameters,
 ) {
-    const TEST_DURATION: Duration = Duration::from_secs(20);
+    const TEST_DURATION: Duration = Duration::from_secs(10);
     const MAX_PURGE_DELAY: Duration = Duration::from_secs(4);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -383,11 +383,16 @@ fn load_test(
 
         while load_set.join_next().await.is_some() {}
 
+        let convergence_deadline = tokio::time::Instant::now() + Duration::from_secs(60);
         loop {
             if check_pools_equal(&node_advert_map) {
                 break;
             }
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            assert!(
+                tokio::time::Instant::now() < convergence_deadline,
+                "Pools did not converge within 60 seconds after event generation"
+            );
+            tokio::time::sleep(Duration::from_millis(200)).await;
         }
     });
 }
