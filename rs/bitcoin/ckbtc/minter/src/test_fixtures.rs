@@ -42,7 +42,7 @@ pub fn init_args() -> InitArgs {
         check_fee: None,
         kyt_principal: None,
         kyt_fee: None,
-        get_utxos_cache_expiration_seconds: None,
+        get_utxos_cache_expiration_seconds: Some(60),
         utxo_consolidation_threshold: None,
         max_num_inputs_in_transaction: None,
     }

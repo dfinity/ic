@@ -13,6 +13,7 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::ToPrimitive;
 use serde::Serialize;
+use std::collections::BTreeSet;
 
 // Max number of times of calling check_transaction with cycle payment, to avoid spending too
 // many cycles.
@@ -184,6 +185,29 @@ pub async fn update_balance<R: CanisterRuntime>(
     let now = Timestamp::from(runtime.time());
     let (processable_utxos, suspended_utxos) =
         state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account, &now));
+
+    let (processable_utxos, deduplicated_utxos): (BTreeSet<_>, BTreeSet<_>) = read_state(|s| {
+        processable_utxos
+            .into_iter()
+            .partition(|utxo| !s.minted_outpoints.contains(&utxo.outpoint))
+    });
+    if !deduplicated_utxos.is_empty() {
+        log!(
+            Priority::Info,
+            "Found {} deduplicated UTXOs: {}",
+            deduplicated_utxos.len(),
+            deduplicated_utxos
+                .iter()
+                .map(|utxo| format!("{}", DisplayOutpoint(&utxo.outpoint),))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        state::mutate_state(|s| {
+            for utxo in &deduplicated_utxos {
+                s.deduplicated_outpoints.insert(utxo.outpoint.clone());
+            }
+        });
+    }
 
     // Remove pending finalized transactions for the affected account.
     state::mutate_state(|s| s.finalized_utxos.remove(&caller_account));
