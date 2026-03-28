@@ -33,7 +33,7 @@ lazy_static = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 
-ic-xrc-types = "1.0.0"
+ic-xrc-types = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
