@@ -10,6 +10,7 @@ use crate::{
         },
     },
 };
+use candid::{Decode, Encode};
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
@@ -27,13 +28,17 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, warn};
+use ic_management_canister_types_private::{
+    CanisterHttpResponsePayload, FlexibleHttpRequestResult,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
-        CanisterHttpPayload, ConsensusResponse, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpResponses,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
@@ -69,6 +74,7 @@ pub struct CanisterHttpBatchStats {
     pub timeouts: usize,
     pub divergence_responses: usize,
     pub single_signature_responses: usize,
+    pub flexible_ok_responses: usize,
     pub payload_bytes: usize,
 }
 
@@ -862,19 +868,58 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             )
         });
 
-        let divergece_responses = messages
+        let divergence_responses = messages
             .divergence_responses
             .iter()
             .filter_map(divergence_response_into_reject)
             .inspect(|_| stats.divergence_responses += 1);
 
+        let flexible_ok_responses = messages
+            .flexible_responses
+            .into_iter()
+            .filter_map(flexible_ok_responses_into_consensus_response)
+            .inspect(|_| stats.flexible_ok_responses += 1);
+
         let responses = responses
             .chain(timeouts)
-            .chain(divergece_responses)
+            .chain(divergence_responses)
+            .chain(flexible_ok_responses)
             .collect();
 
         (responses, stats)
     }
+}
+
+/// Converts a [`FlexibleCanisterHttpResponses`] into a [`ConsensusResponse`].
+///
+/// Returns `None` if Candid decoding/encoding fails, which leads to skipping
+/// the delivery of this response. This should never occur, but if it does,
+/// eventually a timeout will gracefully end the outstanding callback.
+fn flexible_ok_responses_into_consensus_response(
+    response_group: FlexibleCanisterHttpResponses,
+) -> Option<ConsensusResponse> {
+    let payloads: Vec<_> = response_group
+        .responses
+        .into_iter()
+        .filter_map(|entry| match entry.response.content {
+            CanisterHttpResponseContent::Success(data) => {
+                Some(Decode!(&data, CanisterHttpResponsePayload).ok())
+            }
+            CanisterHttpResponseContent::Reject(_) => {
+                // Unreachable: payload building/validation ensure
+                // that there are no rejects in the ok-responses.
+                None
+            }
+        })
+        // Decoding errors short-circuit the collection and None is returned.
+        .collect::<Option<_>>()?;
+
+    let bytes = Encode!(&FlexibleHttpRequestResult::Ok(payloads)).ok()?;
+
+    Some(ConsensusResponse::new(
+        response_group.callback_id,
+        Payload::Data(bytes),
+    ))
 }
 
 /// Turns a [`CanisterHttpResponseDivergence`] into a [`ConsensusResponse`] containing a rejection.
