@@ -4,7 +4,7 @@ use crate::{
         CanisterManager,
         types::{
             CanisterManagerError, CanisterManagerResponse, DtsInstallCodeResult,
-            InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
+            InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult,
         },
     },
     canister_settings::CanisterSettings,
@@ -2560,26 +2560,23 @@ impl ExecutionEnvironment {
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
         let canister = canister_make_mut(args.get_canister_id(), state)?;
-        self.canister_manager
-            .upload_chunk(
-                sender,
-                canister,
-                args.chunk,
-                round_limits,
-                subnet_size,
-                cost_schedule,
-                resource_saturation,
-            )
-            .map(
-                |UploadChunkResult {
-                     reply,
-                     heap_delta_increase,
-                 }| {
-                    state.metadata.heap_delta_estimate += heap_delta_increase;
-                    reply.encode()
-                },
-            )
-            .map_err(|err| err.into())
+        let result = self.canister_manager.upload_chunk(
+            sender,
+            canister,
+            args.chunk,
+            round_limits,
+            subnet_size,
+            cost_schedule,
+            resource_saturation,
+        );
+
+        match result {
+            Ok(response) => {
+                let bytes = self.process_canister_manager_response(response, state);
+                Ok(bytes)
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn clear_chunk_store(
