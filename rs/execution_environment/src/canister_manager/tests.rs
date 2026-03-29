@@ -967,7 +967,7 @@ fn stop_a_stopped_canister() {
             .unwrap();
         assert!(response.reply.is_some());
         assert_eq!(
-            response.stop_context_to_refund.unwrap().take_cycles(),
+            response.stop_context_to_close.unwrap().take_cycles(),
             Cycles::zero()
         );
 
@@ -1006,7 +1006,7 @@ fn stop_a_stopped_canister_from_another_canister() {
             .unwrap();
         assert!(response.reply.is_some());
         assert_eq!(
-            response.stop_context_to_refund.unwrap().take_cycles(),
+            response.stop_context_to_close.unwrap().take_cycles(),
             Cycles::from(cycles)
         );
 

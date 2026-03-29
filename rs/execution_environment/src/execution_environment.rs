@@ -1939,14 +1939,20 @@ impl ExecutionEnvironment {
             response.stop_contexts_to_reject,
             state,
         );
-        let stop_context_cycles_to_refund = match response.stop_context_to_refund {
+        let stop_context_cycles_to_refund = match response.stop_context_to_close {
             Some(mut stop_context) => {
                 // There must be a reply in which we can refund the cycles.
                 assert!(
                     response.reply.is_some(),
                     "Trying to refund cycles from a stop canister context without producing a reply."
                 );
-                stop_context.take_cycles()
+                let cycles_to_refund = stop_context.take_cycles();
+                self.remove_stop_canister_call(
+                    state,
+                    response.canister_id,
+                    *stop_context.call_id(),
+                );
+                cycles_to_refund
             }
             None => Cycles::zero(),
         };
