@@ -2590,17 +2590,22 @@ impl ExecutionEnvironment {
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
         let canister = canister_make_mut(args.get_canister_id(), state)?;
-        self.canister_manager
-            .clear_chunk_store(
-                sender,
-                canister,
-                round_limits,
-                subnet_size,
-                cost_schedule,
-                resource_saturation,
-            )
-            .map(|()| EmptyBlob.encode())
-            .map_err(|err| err.into())
+        let result = self.canister_manager.clear_chunk_store(
+            sender,
+            canister,
+            round_limits,
+            subnet_size,
+            cost_schedule,
+            resource_saturation,
+        );
+
+        match result {
+            Ok(response) => {
+                let bytes = self.process_canister_manager_response(response, state);
+                Ok(bytes)
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn stored_chunks(
