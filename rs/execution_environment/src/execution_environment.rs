@@ -1056,7 +1056,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::DepositCycles) => {
                 let res = CanisterIdRecord::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
-                    self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state)
+                    self.deposit_cycles(canister_id, &mut msg, &mut state)
                         .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
