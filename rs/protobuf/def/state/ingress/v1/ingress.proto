@@ -147,6 +147,11 @@ message IngressHistoryState {
   uint64 next_terminal_time = 3;
 }
 
+message SenderInfo {
+  bytes info = 1;
+  types.v1.CanisterId signer = 2;
+}
+
 message Ingress {
   types.v1.UserId source = 1;
   types.v1.CanisterId receiver = 2;
@@ -157,4 +162,5 @@ message Ingress {
   // It may be present for a subnet message.
   // Represents the id of the canister that the message is targeting.
   types.v1.CanisterId effective_canister_id = 7;
+  SenderInfo sender_info = 8;
 }

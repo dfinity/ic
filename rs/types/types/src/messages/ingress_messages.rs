@@ -381,6 +381,33 @@ impl CountBytes for SignedIngress {
     }
 }
 
+/// Sender info after decoding and signature validation.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct SenderInfo {
+    pub info: Vec<u8>,
+    pub signer: CanisterId,
+}
+
+impl From<&SenderInfo> for pb_ingress::SenderInfo {
+    fn from(item: &SenderInfo) -> Self {
+        Self {
+            info: item.info.clone(),
+            signer: Some(item.signer.into()),
+        }
+    }
+}
+
+impl TryFrom<pb_ingress::SenderInfo> for SenderInfo {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_ingress::SenderInfo) -> Result<Self, Self::Error> {
+        let signer = try_from_option_field(item.signer, "SenderInfo::signer")?;
+        Ok(Self {
+            info: item.info,
+            signer,
+        })
+    }
+}
+
 /// A message sent from an end user to a canister.
 ///
 /// Used internally by the InternetComputer. See related [`SignedIngress`] for
@@ -396,6 +423,7 @@ pub struct Ingress {
     pub method_payload: Vec<u8>,
     pub message_id: MessageId,
     pub expiry_time: Time,
+    pub sender_info: Option<SenderInfo>,
 }
 
 impl Ingress {
@@ -408,15 +436,7 @@ impl Ingress {
 impl From<(SignedIngress, Option<CanisterId>)> for Ingress {
     fn from(item: (SignedIngress, Option<CanisterId>)) -> Self {
         let (signed_ingress, effective_canister_id) = item;
-        Self {
-            source: signed_ingress.sender(),
-            receiver: signed_ingress.canister_id(),
-            effective_canister_id,
-            method_name: signed_ingress.method_name(),
-            method_payload: signed_ingress.method_arg().to_vec(),
-            message_id: signed_ingress.id(),
-            expiry_time: signed_ingress.expiry_time(),
-        }
+        (signed_ingress.take_content(), effective_canister_id).into()
     }
 }
 
@@ -424,6 +444,11 @@ impl From<(SignedIngressContent, Option<CanisterId>)> for Ingress {
     fn from(item: (SignedIngressContent, Option<CanisterId>)) -> Self {
         let (ingress, effective_canister_id) = item;
         let message_id = ingress.id();
+        let signed_sender_info = ingress.sender_info;
+        let sender_info = signed_sender_info.map(|signed_sender_info| SenderInfo {
+            info: signed_sender_info.info,
+            signer: signed_sender_info.signer,
+        });
         Self {
             source: ingress.sender,
             receiver: ingress.canister_id,
@@ -432,6 +457,7 @@ impl From<(SignedIngressContent, Option<CanisterId>)> for Ingress {
             method_payload: ingress.arg,
             message_id,
             expiry_time: Time::from_nanos_since_unix_epoch(ingress.ingress_expiry),
+            sender_info,
         }
     }
 }
@@ -439,6 +465,7 @@ impl From<(SignedIngressContent, Option<CanisterId>)> for Ingress {
 impl From<&Ingress> for pb_ingress::Ingress {
     fn from(item: &Ingress) -> Self {
         let effective_canister_id = item.effective_canister_id.map(pb_types::CanisterId::from);
+        let sender_info = item.sender_info.as_ref().map(pb_ingress::SenderInfo::from);
         Self {
             source: Some(crate::user_id_into_protobuf(item.source)),
             receiver: Some(pb_types::CanisterId::from(item.receiver)),
@@ -447,6 +474,7 @@ impl From<&Ingress> for pb_ingress::Ingress {
             message_id: item.message_id.as_bytes().to_vec(),
             expiry_time_nanos: item.expiry_time.as_nanos_since_unix_epoch(),
             effective_canister_id,
+            sender_info,
         }
     }
 }
@@ -457,6 +485,7 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
         let effective_canister_id =
             try_from_option_field(item.effective_canister_id, "Ingress::effective_canister_id")
                 .ok();
+        let sender_info = item.sender_info.map(SenderInfo::try_from).transpose()?;
         Ok(Self {
             source: crate::user_id_try_from_option(item.source, "Ingress::source")?,
             receiver: try_from_option_field(item.receiver, "Ingress::receiver")?,
@@ -465,6 +494,7 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
             method_payload: item.method_payload,
             message_id: item.message_id.as_slice().try_into()?,
             expiry_time: Time::from_nanos_since_unix_epoch(item.expiry_time_nanos),
+            sender_info,
         })
     }
 }
