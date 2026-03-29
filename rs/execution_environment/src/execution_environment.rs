@@ -2508,10 +2508,13 @@ impl ExecutionEnvironment {
                 .stop_canister(canister_id, msg, call_id, state, subnet_admins);
         match result {
             Ok(response) => self.process_canister_manager_response(response, state, msg),
-            Err(err) => ExecuteSubnetMessageResult::Finished {
-                response: Err(err.into()),
-                refund: msg.take_cycles(),
-            },
+            Err(err) => {
+                self.remove_stop_canister_call(state, canister_id, Some(call_id));
+                ExecuteSubnetMessageResult::Finished {
+                    response: Err(err.into()),
+                    refund: msg.take_cycles(),
+                }
+            }
         }
     }
 
