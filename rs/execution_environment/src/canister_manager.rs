@@ -1092,20 +1092,27 @@ impl CanisterManager {
     ///
     /// If the canister is in the process of being stopped (i.e stopping), then
     /// the canister is transitioned back into a running state and the
-    /// `stop_contexts` that were used for stopping the canister are
+    /// `stop_contexts_to_reject` that were used for stopping the canister are
     /// returned.
     pub(crate) fn start_canister(
         &self,
         sender: PrincipalId,
         canister: &mut CanisterState,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
-    ) -> Result<Vec<StopCanisterContext>, CanisterManagerError> {
+    ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
 
-        let stop_contexts = canister.system_state.start_canister();
+        let stop_contexts_to_reject = canister.system_state.start_canister();
         canister.system_state.bump_canister_version();
 
-        Ok(stop_contexts)
+        Ok(CanisterManagerResponse {
+            canister_id: canister.canister_id(),
+            reply: EmptyBlob.encode(),
+            heap_delta_increase: NumBytes::new(0),
+            unflushed_checkpoint_op: None,
+            deleted_call_context_responses: vec![],
+            stop_contexts_to_reject,
+        })
     }
 
     /// Fetches the current status of the canister.

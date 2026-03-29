@@ -2369,10 +2369,9 @@ impl ExecutionEnvironment {
             .start_canister(sender, canister, subnet_admins);
 
         match result {
-            Ok(stop_contexts) => {
-                // Reject outstanding stop messages (if any).
-                self.reject_stop_requests(canister_id, stop_contexts, state);
-                Ok(EmptyBlob.encode())
+            Ok(response) => {
+                let bytes = self.process_canister_manager_response(response, state);
+                Ok(bytes)
             }
             Err(err) => Err(err.into()),
         }
