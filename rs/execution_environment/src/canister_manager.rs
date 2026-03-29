@@ -1065,6 +1065,7 @@ impl CanisterManager {
         validate_controller_or_subnet_admin(canister, subnet_admins, msg.sender())?;
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
+
         // If the canister did not begin stopping, i.e., if the canister is already stopped,
         // then we produce a reply immediately and return the `call_id` to be closed.
         let (reply, stop_call_id_to_remove) = if !canister.system_state.begin_stopping(msg, call_id)
