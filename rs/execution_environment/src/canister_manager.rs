@@ -640,7 +640,7 @@ impl CanisterManager {
         subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
 
         validate_controller(canister, &sender)?;
@@ -742,7 +742,14 @@ impl CanisterManager {
         }
         */
 
-        Ok(())
+        Ok(CanisterManagerResponse {
+            canister_id: canister.canister_id(),
+            reply: EmptyBlob.encode(),
+            heap_delta_increase: NumBytes::new(0),
+            unflushed_checkpoint_op: None,
+            deleted_call_context_responses: vec![],
+            stop_contexts_to_reject: vec![],
+        })
     }
 
     /// Check if the sender is on NNS or on the same subnet.

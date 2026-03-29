@@ -2340,19 +2340,24 @@ impl ExecutionEnvironment {
             state.resource_limits(),
         );
         let canister = canister_make_mut(canister_id, state)?;
-        self.canister_manager
-            .update_settings(
-                timestamp_nanos,
-                origin,
-                settings,
-                canister,
-                round_limits,
-                saturation,
-                subnet_size,
-                cost_schedule,
-            )
-            .map(|()| EmptyBlob.encode())
-            .map_err(|err| err.into())
+        let result = self.canister_manager.update_settings(
+            timestamp_nanos,
+            origin,
+            settings,
+            canister,
+            round_limits,
+            saturation,
+            subnet_size,
+            cost_schedule,
+        );
+
+        match result {
+            Ok(response) => {
+                let bytes = self.process_canister_manager_response(response, state);
+                Ok(bytes)
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn start_canister(
