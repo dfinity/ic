@@ -1067,11 +1067,11 @@ impl CanisterManager {
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         // If the canister did not begin stopping, i.e., if the canister is already stopped,
         // then we produce a reply immediately and return the `call_id` to be closed.
-        let (reply, stop_call_id_to_remove) = if canister.system_state.begin_stopping(msg, call_id)
+        let (reply, stop_call_id_to_remove) = if !canister.system_state.begin_stopping(msg, call_id)
         {
-            (None, None)
-        } else {
             (Some(EmptyBlob.encode()), Some(call_id))
+        } else {
+            (None, None)
         };
         canister.system_state.bump_canister_version();
 
