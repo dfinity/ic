@@ -283,7 +283,7 @@ rust_ic_test(
         "RUST_TEST_THREADS": "2",
     },
     tags = [
-        "cpu:2",
+        "cpu:4",
         "test_all_platforms_slow",
     ],
     deps = [
