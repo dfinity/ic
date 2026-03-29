@@ -946,6 +946,7 @@ fn stop_a_running_canister() {
 #[test]
 fn stop_a_stopped_canister() {
     with_setup(|canister_manager, mut state, _, subnet_admins| {
+        let sender = user_test_id(1);
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
         state.put_canister_state(canister);
@@ -956,7 +957,7 @@ fn stop_a_stopped_canister() {
             CanisterStatusType::Stopped
         );
 
-        let mut msg = CanisterCall::Request(Arc::new(RequestBuilder::new().build()));
+        let mut msg = CanisterCall::Ingress(Arc::new(IngressBuilder::new().source(sender).build()));
         let call_id = StopCanisterCallId::new(0);
         let response = canister_manager
             .stop_canister(canister_id, &mut msg, call_id, &mut state, subnet_admins)
