@@ -2998,17 +2998,27 @@ fn maximum_state_delta() {
 }
 
 /// This test ensures that subnet messages are not executed out-of-order on an aborted canister.
+/// The runbook:
+/// - create a universal canister used as a proxy canister;
+/// - create a canister (to be aborted later) via the proxy canister;
+/// - start installing (universal canister) code to the canister (to be aborted later)
+///   performing a lot of instructions in the init hook;
+/// - send a `canister_status` call for the canister (to be aborted later) via the proxy canister;
+/// - abort installing code by creating a checkpoint;
+/// - ensure that the `canister_status` call was not executed on the aborted canister;
+/// - ensure that installing code and the `canister_status` call eventually complete.
 #[test]
 fn no_subnet_message_reordering() {
     let sm = StateMachine::new();
 
-    // We create a proxy canister that controls the aborted canister
-    // and sends subnet messages with that canister as the effective canister.
+    // We create a proxy canister that controls the canister to be aborted later
+    // and sends subnet messages with that canister (to be aborter later)
+    // as the effective canister.
     let proxy = sm
         .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
         .unwrap();
 
-    // We create the canister (to be aborted later) via the proxy.
+    // We create the canister (to be aborted later) via the proxy canister.
     let create_canister_args = CreateCanisterArgs {
         settings: None,
         sender_canister_version: None,
@@ -3028,8 +3038,8 @@ fn no_subnet_message_reordering() {
         .unwrap()
         .get_canister_id();
 
-    // We start installing code to the canister (to be aborted later) via the proxy.
-    // We make the canister init arg take a lot of instructions so that install code is paused after one round and can be aborted later.
+    // We start installing code to the canister (to be aborted later) via the proxy canister.
+    // We make the canister init hook perform a lot of instructions so that installing code gets paused and can be aborted later.
     let install_code_args = InstallCodeArgsV2 {
         mode: CanisterInstallModeV2::Install,
         canister_id: canister_id.get(),
@@ -3061,12 +3071,14 @@ fn no_subnet_message_reordering() {
         };
     };
 
-    // We execute a round: install code starts executing and becomes paused after this round.
-    sm.tick();
+    // We execute a few rounds: install code starts executing and gets paused.
+    for _ in 0..5 {
+        sm.tick();
+    }
     assert_install_processing();
 
-    // We send another subnet message targetting the aborted canister via the proxy.
-    // This subnet message should not be executed on aborted canister
+    // We send a `canister_status` call for the canister (to be aborted later) via the proxy canister.
+    // This subnet message must not be executed on the paused/aborted canister
     // since that would be an out-of-order subnet message execution.
     let canister_id_record: CanisterIdRecord = canister_id.into();
     let status_msg_id = sm.send_ingress(
@@ -3082,19 +3094,19 @@ fn no_subnet_message_reordering() {
             .build(),
     );
 
-    // We trigger a checkpoint to abort install code.
+    // We trigger a checkpoint to abort installing code.
     sm.checkpointed_tick();
 
     // Execute a few arounds after the checkpoint
-    // so that the call to `canister_status` via the proxy could finish
+    // so that the call to `canister_status` via the proxy canister could complete
     // if it was executed on an aborted canister.
-    for _ in 0..4 {
+    for _ in 0..5 {
         sm.tick();
     }
     assert_install_processing();
 
-    // The call to `canister_status` via the proxy should not be completed yet
-    // because it should not run on an aborted canister.
+    // The call to `canister_status` via the proxy canister must not be completed yet
+    // because it must not run on an aborted canister.
     match sm.ingress_status(&status_msg_id) {
         IngressStatus::Known {
             state: IngressState::Processing,
@@ -3103,7 +3115,7 @@ fn no_subnet_message_reordering() {
         status => panic!("Unexpected status: {:?}", status),
     };
 
-    // Eventually both subnet messages should succeed.
+    // Eventually both subnet messages should complete (and succeed).
     let res = sm.await_ingress(install_msg_id, 100);
     let _ = get_reply(res);
     let res = sm.await_ingress(status_msg_id, 100);
