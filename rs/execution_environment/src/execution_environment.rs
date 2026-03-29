@@ -2532,16 +2532,21 @@ impl ExecutionEnvironment {
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
         let canister = canister_make_mut(canister_id, state)?;
-        self.canister_manager
-            .add_cycles(
-                sender,
-                cycles,
-                canister,
-                provisional_whitelist,
-                cost_schedule,
-            )
-            .map(|()| EmptyBlob.encode())
-            .map_err(|err| err.into())
+        let result = self.canister_manager.add_cycles(
+            sender,
+            cycles,
+            canister,
+            provisional_whitelist,
+            cost_schedule,
+        );
+
+        match result {
+            Ok(response) => {
+                let bytes = self.process_canister_manager_response(response, state);
+                Ok(bytes)
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn upload_chunk(

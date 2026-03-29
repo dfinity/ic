@@ -325,6 +325,7 @@ pub(crate) struct UploadChunkResult {
 /// with changes to `ReplicatedState` that must be applied separately.
 /// This is because `CanisterManager` only mutates a single `CanisterState` (but no other parts of `ReplicatedState`)
 /// in cases when it returns `CanisterManagerResponse`.
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct CanisterManagerResponse {
     /// The target canister of the current request.
     /// Only `CanisterState` of that canister could have been mutated

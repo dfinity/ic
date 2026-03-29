@@ -1578,7 +1578,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         provisional_whitelist: &ProvisionalWhitelist,
         cost_schedule: CanisterCyclesCostSchedule,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         if !provisional_whitelist.contains(&sender) {
             return Err(CanisterManagerError::SenderNotInWhitelist(sender));
         }
@@ -1595,7 +1595,14 @@ impl CanisterManager {
                 cost_schedule,
             ));
 
-        Ok(())
+        Ok(CanisterManagerResponse {
+            canister_id: canister.canister_id(),
+            reply: EmptyBlob.encode(),
+            heap_delta_increase: NumBytes::new(0),
+            unflushed_checkpoint_op: None,
+            deleted_call_context_responses: vec![],
+            stop_contexts_to_reject: vec![],
+        })
     }
 
     fn validate_canister_is_stopped(
