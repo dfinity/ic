@@ -4722,6 +4722,7 @@ fn get_dynamic_signature_queue_size_idkg_stash_below_floor_returns_floor() {
 /// Runbook:
 /// - The proxy canister makes a `stop_canister` call to stop `canister_id` attaching 1T cycles to the call.
 /// - The total cycles balance of the proxy canister and `canister_id` must not increase and can only decrease by at most 1B cycles.
+///
 /// Returns the result of the `stop_canister` call as reported by the proxy canister (universal canister forwarding the call to the mgmt canister).
 fn stop_canister_refunds_cycles(
     test: &mut ExecutionTest,

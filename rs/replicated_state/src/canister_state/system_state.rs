@@ -1355,7 +1355,7 @@ impl SystemState {
                 // Constructing a stop context moves the cycles from the message
                 // to the stop context and thus we must only do so if we store the call context
                 // in `SystemState` to not lose those cycles.
-                let stop_context = StopCanisterContext::from((msg.clone(), call_id));
+                let stop_context = StopCanisterContext::from((msg, call_id));
                 // Add the message so we can respond to it once the canister has fully stopped.
                 stop_contexts.push(stop_context);
                 true
@@ -1367,7 +1367,7 @@ impl SystemState {
                 // Constructing a stop context moves the cycles from the message
                 // to the stop context and thus we must only do so if we store the call context
                 // in `SystemState` to not lose those cycles.
-                let stop_context = StopCanisterContext::from((msg.clone(), call_id));
+                let stop_context = StopCanisterContext::from((msg, call_id));
                 // Transition the canister into the stopping state.
                 self.status = CanisterStatus::Stopping {
                     call_context_manager: std::mem::take(call_context_manager),
