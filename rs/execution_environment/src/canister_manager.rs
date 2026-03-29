@@ -1028,6 +1028,7 @@ impl CanisterManager {
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: rejects,
+            stop_context_to_refund: None,
             stop_contexts_to_reject: vec![],
         })
     }
@@ -1049,38 +1050,38 @@ impl CanisterManager {
     pub(crate) fn stop_canister(
         &self,
         canister_id: CanisterId,
-        mut stop_context: StopCanisterContext,
+        stop_context: StopCanisterContext,
         state: &mut ReplicatedState,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
-    ) -> StopCanisterResult {
+    ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let canister = match state.canister_state(&canister_id) {
             None => {
-                return StopCanisterResult::Failure {
-                    error: CanisterManagerError::CanisterNotFound(canister_id),
-                    cycles_to_return: stop_context.take_cycles(),
-                };
+                return Err(CanisterManagerError::CanisterNotFound(canister_id));
             }
             Some(canister) => canister,
         };
 
-        if let Err(err) =
-            validate_controller_or_subnet_admin(canister, subnet_admins, stop_context.sender())
-        {
-            return StopCanisterResult::Failure {
-                error: err,
-                cycles_to_return: stop_context.take_cycles(),
-            };
-        }
+        validate_controller_or_subnet_admin(canister, subnet_admins, stop_context.sender())?;
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        let result = match canister.system_state.begin_stopping(stop_context) {
-            Some(mut stop_context) => StopCanisterResult::AlreadyStopped {
-                cycles_to_return: stop_context.take_cycles(),
-            },
-            None => StopCanisterResult::RequestAccepted,
-        };
+        // If the stop context is returned, then the canister is already stopped and
+        // thus we produce a reply immediately and refund cycles from the stop context.
+        let (reply, stop_context_to_refund) =
+            match canister.system_state.begin_stopping(stop_context) {
+                Some(stop_context) => (Some(EmptyBlob.encode()), Some(stop_context)),
+                None => (None, None),
+            };
         canister.system_state.bump_canister_version();
-        result
+
+        Ok(CanisterManagerResponse {
+            canister_id,
+            reply,
+            heap_delta_increase: NumBytes::new(0),
+            unflushed_checkpoint_op: None,
+            deleted_call_context_responses: vec![],
+            stop_context_to_refund,
+            stop_contexts_to_reject: vec![],
+        })
     }
 
     /// Signals a canister to start.

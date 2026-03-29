@@ -61,21 +61,6 @@ pub(crate) enum DtsInstallCodeResult {
     },
 }
 
-/// The different return types from `stop_canister()` function below.
-#[derive(Eq, PartialEq, Debug)]
-pub(crate) enum StopCanisterResult {
-    /// The call failed.  The error and the unconsumed cycles are returned.
-    Failure {
-        error: CanisterManagerError,
-        cycles_to_return: Cycles,
-    },
-    /// The canister is already stopped.  The unconsumed cycles are returned.
-    AlreadyStopped { cycles_to_return: Cycles },
-    /// The request was successfully accepted.  A response will follow
-    /// eventually when the canister does stop.
-    RequestAccepted,
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub(crate) struct CanisterMgrConfig {
     pub(crate) default_provisional_cycles_balance: Cycles,
@@ -342,6 +327,9 @@ pub(crate) struct CanisterManagerResponse {
     /// (Reject) responses from call contexts that were marked as "deleted" while processing the current request.
     /// Note. A call context is marked as "deleted" when a canister is uninstalled.
     pub deleted_call_context_responses: Vec<Response>,
+    /// Stop canister context whose cycles must be refunded
+    /// because the stop canister context was not inserted in `CanisterState`.
+    pub stop_context_to_refund: Option<StopCanisterContext>,
     /// Stop canister request contexts (for requests other than the current request)
     /// that must be rejected (because the canister was restarted by the current request).
     pub stop_contexts_to_reject: Vec<StopCanisterContext>,

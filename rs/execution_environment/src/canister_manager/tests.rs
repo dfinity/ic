@@ -3,8 +3,7 @@ use crate::{
     RoundLimits, as_num_instructions,
     canister_manager::{
         CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
-        InstallCodeContext, MAX_SLICE_SIZE_BYTES, StopCanisterResult, WasmSource,
-        uninstall_canister,
+        InstallCodeContext, MAX_SLICE_SIZE_BYTES, WasmSource, uninstall_canister,
     },
     canister_settings::CanisterSettings,
     execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
@@ -963,11 +962,13 @@ fn stop_a_stopped_canister() {
             message_id: message_test_id(0),
             call_id: Some(StopCanisterCallId::new(0)),
         };
+        let response = canister_manager
+            .stop_canister(canister_id, stop_context, &mut state, subnet_admins)
+            .unwrap();
+        assert!(response.reply.is_some());
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state, subnet_admins),
-            StopCanisterResult::AlreadyStopped {
-                cycles_to_return: Cycles::zero()
-            }
+            response.stop_context_to_refund.unwrap().take_cycles(),
+            Cycles::zero()
         );
 
         // Canister should still be stopped.
@@ -1000,11 +1001,13 @@ fn stop_a_stopped_canister_from_another_canister() {
             cycles: Cycles::from(cycles),
             deadline: NO_DEADLINE,
         };
+        let response = canister_manager
+            .stop_canister(canister_id, stop_context, &mut state, subnet_admins)
+            .unwrap();
+        assert!(response.reply.is_some());
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state, subnet_admins),
-            StopCanisterResult::AlreadyStopped {
-                cycles_to_return: Cycles::from(cycles)
-            }
+            response.stop_context_to_refund.unwrap().take_cycles(),
+            Cycles::from(cycles)
         );
 
         // Canister should still be stopped.
