@@ -19,7 +19,7 @@ use ic_replicated_state::{
     metadata_state::{
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
-            SubnetCallContext,
+            StopCanisterCall, SubnetCallContext,
         },
         testing::NetworkTopologyTesting,
     },
@@ -216,14 +216,18 @@ impl ReplicatedStateFixture {
     }
 
     fn stop_canister(&mut self) {
-        let canister = self.state.canister_state_make_mut(&CANISTER_ID).unwrap();
-        canister
-            .system_state
-            .begin_stopping(ic_types::messages::StopCanisterContext::Ingress {
-                sender: user_test_id(24),
-                message_id: [0; 32].into(),
-                call_id: None,
+        let mut msg = CanisterCall::Request(Arc::new(RequestBuilder::new().build()));
+        let call_id = self
+            .state
+            .metadata
+            .subnet_call_context_manager
+            .push_stop_canister_call(StopCanisterCall {
+                call: msg.clone(),
+                effective_canister_id: CANISTER_ID,
+                time: self.state.time(),
             });
+        let canister = self.state.canister_state_make_mut(&CANISTER_ID).unwrap();
+        canister.system_state.begin_stopping(&mut msg, call_id);
         assert!(canister.system_state.try_stop_canister(|_| false).0);
     }
 

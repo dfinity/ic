@@ -87,7 +87,7 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     SubnetId, UserId,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
+    messages::{CanisterCall, StopCanisterCallId, StopCanisterContext},
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{
@@ -946,7 +946,6 @@ fn stop_a_running_canister() {
 #[test]
 fn stop_a_stopped_canister() {
     with_setup(|canister_manager, mut state, _, subnet_admins| {
-        let sender = user_test_id(1);
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
         state.put_canister_state(canister);
@@ -957,19 +956,13 @@ fn stop_a_stopped_canister() {
             CanisterStatusType::Stopped
         );
 
-        let stop_context = StopCanisterContext::Ingress {
-            sender,
-            message_id: message_test_id(0),
-            call_id: Some(StopCanisterCallId::new(0)),
-        };
+        let mut msg = CanisterCall::Request(Arc::new(RequestBuilder::new().build()));
+        let call_id = StopCanisterCallId::new(0);
         let response = canister_manager
-            .stop_canister(canister_id, stop_context, &mut state, subnet_admins)
+            .stop_canister(canister_id, &mut msg, call_id, &mut state, subnet_admins)
             .unwrap();
         assert!(response.reply.is_some());
-        assert_eq!(
-            response.stop_context_to_close.unwrap().take_cycles(),
-            Cycles::zero()
-        );
+        assert!(response.stop_call_id_to_remove.is_some());
 
         // Canister should still be stopped.
         assert_eq!(
@@ -993,22 +986,13 @@ fn stop_a_stopped_canister_from_another_canister() {
             CanisterStatusType::Stopped
         );
 
-        let cycles = 20_u128;
-        let stop_context = StopCanisterContext::Canister {
-            sender: controller,
-            reply_callback: CallbackId::from(0),
-            call_id: Some(StopCanisterCallId::new(0)),
-            cycles: Cycles::from(cycles),
-            deadline: NO_DEADLINE,
-        };
+        let mut msg = CanisterCall::Request(Arc::new(RequestBuilder::new().build()));
+        let call_id = StopCanisterCallId::new(0);
         let response = canister_manager
-            .stop_canister(canister_id, stop_context, &mut state, subnet_admins)
+            .stop_canister(canister_id, &mut msg, call_id, &mut state, subnet_admins)
             .unwrap();
         assert!(response.reply.is_some());
-        assert_eq!(
-            response.stop_context_to_close.unwrap().take_cycles(),
-            Cycles::from(cycles)
-        );
+        assert!(response.stop_call_id_to_remove.is_some());
 
         // Canister should still be stopped.
         assert_eq!(

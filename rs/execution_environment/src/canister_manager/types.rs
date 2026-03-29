@@ -21,7 +21,7 @@ use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
     SnapshotId, SubnetId,
     ingress::IngressStatus,
-    messages::{CanisterCall, MessageId, RejectContext, StopCanisterContext},
+    messages::{CanisterCall, MessageId, RejectContext, StopCanisterCallId, StopCanisterContext},
 };
 use ic_types_cycles::Cycles;
 use ic_wasm_types::{AsErrorHelp, CanisterModule, ErrorHelp, WasmHash, doc_ref};
@@ -327,9 +327,9 @@ pub(crate) struct CanisterManagerResponse {
     /// (Reject) responses from call contexts that were marked as "deleted" while processing the current request.
     /// Note. A call context is marked as "deleted" when a canister is uninstalled.
     pub deleted_call_context_responses: Vec<Response>,
-    /// Stop canister context that must be closed and whose cycles must be refunded
-    /// because the stop canister context was not inserted in `CanisterState`.
-    pub stop_context_to_close: Option<StopCanisterContext>,
+    /// Stop canister call ID that must be removed
+    /// because no corresponding stop canister context was inserted in `CanisterState`.
+    pub stop_call_id_to_remove: Option<StopCanisterCallId>,
     /// Stop canister request contexts (for requests other than the current request)
     /// that must be rejected (because the canister was restarted by the current request).
     pub stop_contexts_to_reject: Vec<StopCanisterContext>,

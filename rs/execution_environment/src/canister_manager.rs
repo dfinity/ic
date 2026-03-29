@@ -64,7 +64,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
         CanisterCall, Payload, RejectContext, Response as CanisterResponse, SignedIngressContent,
-        StopCanisterContext,
+        StopCanisterCallId, StopCanisterContext,
     },
 };
 use ic_types_cycles::{
@@ -1028,7 +1028,7 @@ impl CanisterManager {
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: rejects,
-            stop_context_to_close: None,
+            stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
         })
     }
@@ -1050,7 +1050,8 @@ impl CanisterManager {
     pub(crate) fn stop_canister(
         &self,
         canister_id: CanisterId,
-        stop_context: StopCanisterContext,
+        msg: &mut CanisterCall,
+        call_id: StopCanisterCallId,
         state: &mut ReplicatedState,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
@@ -1061,16 +1062,17 @@ impl CanisterManager {
             Some(canister) => canister,
         };
 
-        validate_controller_or_subnet_admin(canister, subnet_admins, stop_context.sender())?;
+        validate_controller_or_subnet_admin(canister, subnet_admins, msg.sender())?;
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        // If the stop context is returned, then the canister is already stopped and
-        // thus we produce a reply immediately and refund cycles from the stop context.
-        let (reply, stop_context_to_close) =
-            match canister.system_state.begin_stopping(stop_context) {
-                Some(stop_context) => (Some(EmptyBlob.encode()), Some(stop_context)),
-                None => (None, None),
-            };
+        // If the canister did not begin stopping, i.e., if the canister is already stopped,
+        // then we produce a reply immediately and return the `call_id` to be closed.
+        let (reply, stop_call_id_to_remove) = if canister.system_state.begin_stopping(msg, call_id)
+        {
+            (None, None)
+        } else {
+            (Some(EmptyBlob.encode()), Some(call_id))
+        };
         canister.system_state.bump_canister_version();
 
         Ok(CanisterManagerResponse {
@@ -1079,7 +1081,7 @@ impl CanisterManager {
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
-            stop_context_to_close,
+            stop_call_id_to_remove,
             stop_contexts_to_reject: vec![],
         })
     }

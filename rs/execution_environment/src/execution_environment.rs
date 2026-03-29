@@ -1939,27 +1939,13 @@ impl ExecutionEnvironment {
             response.stop_contexts_to_reject,
             state,
         );
-        let stop_context_cycles_to_refund = match response.stop_context_to_close {
-            Some(mut stop_context) => {
-                // There must be a reply in which we can refund the cycles.
-                assert!(
-                    response.reply.is_some(),
-                    "Trying to refund cycles from a stop canister context without producing a reply."
-                );
-                let cycles_to_refund = stop_context.take_cycles();
-                self.remove_stop_canister_call(
-                    state,
-                    response.canister_id,
-                    *stop_context.call_id(),
-                );
-                cycles_to_refund
-            }
-            None => Cycles::zero(),
-        };
+        if let Some(call_id) = response.stop_call_id_to_remove {
+            self.remove_stop_canister_call(state, response.canister_id, Some(call_id));
+        }
         match response.reply {
             Some(reply) => ExecuteSubnetMessageResult::Finished {
                 response: Ok((reply, Some(response.canister_id))),
-                refund: msg.take_cycles() + stop_context_cycles_to_refund,
+                refund: msg.take_cycles(),
             },
             None => ExecuteSubnetMessageResult::Processing,
         }
@@ -2517,12 +2503,9 @@ impl ExecutionEnvironment {
                 effective_canister_id: canister_id,
                 time: state.time(),
             });
-        let result = self.canister_manager.stop_canister(
-            canister_id,
-            StopCanisterContext::from((msg.clone(), call_id)),
-            state,
-            subnet_admins,
-        );
+        let result =
+            self.canister_manager
+                .stop_canister(canister_id, msg, call_id, state, subnet_admins);
         match result {
             Ok(response) => self.process_canister_manager_response(response, state, msg),
             Err(err) => ExecuteSubnetMessageResult::Finished {
