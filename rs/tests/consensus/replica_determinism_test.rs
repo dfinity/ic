@@ -160,7 +160,7 @@ fn main() -> Result<()> {
         // One of the nodes has a corrupted state and proposes a CUP share which will be invalidated
         // by the peers (and vice versa), so it's expected that the metric is increased.
         .remove_metrics_to_check("consensus_invalidated_artifacts")
-        // It is expected that malicious node crashes due to state divergence and restarts.
+        // It is expected that the malicious node crashes due to state divergence and restarts.
         // The replica may occasionally be started 3 times (instead of the usual 2) if
         // it crashes again briefly during the catch-up process after the divergence.
         .update_orchestrator_metrics_to_check(
