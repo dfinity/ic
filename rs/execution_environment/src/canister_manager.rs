@@ -1024,7 +1024,7 @@ impl CanisterManager {
 
         Ok(CanisterManagerResponse {
             canister_id,
-            reply: EmptyBlob.encode(),
+            reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: rejects,

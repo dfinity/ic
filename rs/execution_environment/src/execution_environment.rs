@@ -820,30 +820,28 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::UninstallCode) => {
-                let res = UninstallCodeArgs::decode(payload).and_then(|args| {
-                    let subnet_admins = state.get_own_subnet_admins();
-                    let time = state.time();
-                    let result = self.canister_manager.uninstall_code(
-                        msg.canister_change_origin(args.get_sender_canister_version()),
-                        args.get_canister_id(),
-                        &mut state,
-                        round_limits,
-                        subnet_admins,
-                        time,
-                    );
-                    match result {
-                        Ok(response) => {
-                            let bytes =
-                                self.process_canister_manager_response(response, &mut state);
-                            Ok((bytes, Some(args.get_canister_id())))
+                let res =
+                    UninstallCodeArgs::decode(payload).and_then(|args| {
+                        let subnet_admins = state.get_own_subnet_admins();
+                        let time = state.time();
+                        let result = self.canister_manager.uninstall_code(
+                            msg.canister_change_origin(args.get_sender_canister_version()),
+                            args.get_canister_id(),
+                            &mut state,
+                            round_limits,
+                            subnet_admins,
+                            time,
+                        );
+                        match result {
+                            Ok(response) => Ok(self
+                                .process_canister_manager_response(response, &mut state, &mut msg)),
+                            Err(err) => Err(err.into()),
                         }
-                        Err(err) => Err(err.into()),
-                    }
-                });
-                ExecuteSubnetMessageResult::Finished {
-                    response: res,
+                    });
+                res.unwrap_or_else(|err| ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
                     refund: msg.take_cycles(),
-                }
+                })
             }
 
             Ok(Ic00Method::UpdateSettings) => {
@@ -1914,13 +1912,14 @@ impl ExecutionEnvironment {
     }
 
     /// Applies changes to `ReplicatedState` according to `CanisterManagerResponse`
-    /// and returns the reply (success) contained in that `CanisterManagerResponse`
-    /// (that reply is supposed to be handled by the caller).
+    /// and constructs `ExecuteSubnetMessageResult` based on the reply (success)
+    /// contained in that `CanisterManagerResponse`.
     fn process_canister_manager_response(
         &self,
         response: CanisterManagerResponse,
         state: &mut ReplicatedState,
-    ) -> Vec<u8> {
+        msg: &mut CanisterCall,
+    ) -> ExecuteSubnetMessageResult {
         state.metadata.heap_delta_estimate += response.heap_delta_increase;
         if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
             state
@@ -1940,7 +1939,13 @@ impl ExecutionEnvironment {
             response.stop_contexts_to_reject,
             state,
         );
-        response.reply
+        match response.reply {
+            Some(reply) => ExecuteSubnetMessageResult::Finished {
+                response: Ok((reply, Some(response.canister_id))),
+                refund: msg.take_cycles(),
+            },
+            None => ExecuteSubnetMessageResult::Processing,
+        }
     }
 
     fn try_add_http_context_to_replicated_state(

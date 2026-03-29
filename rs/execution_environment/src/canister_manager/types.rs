@@ -331,7 +331,8 @@ pub(crate) struct CanisterManagerResponse {
     /// by `CanisterManager` while processing the current request.
     pub canister_id: CanisterId,
     /// The reply (success) to the current request.
-    pub reply: Vec<u8>,
+    /// If set to `None`, then processing the current request has not completed yet.
+    pub reply: Option<Vec<u8>>,
     /// The heap delta increase produced by processing
     /// the current request.
     pub heap_delta_increase: NumBytes,
