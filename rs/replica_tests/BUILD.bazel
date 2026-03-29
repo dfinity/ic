@@ -66,7 +66,12 @@ rust_ic_test_suite(
     timeout = "long",
     srcs = glob(["tests/**/*.rs"]),
     data = DEV_DATA,
-    env = DEV_ENV,
+    env = DEV_ENV | {
+        # Each test in this suite starts a full in-process IC stack (tokio runtime,
+        # consensus, crypto, etc.). Running all tests in parallel creates too many
+        # threads and causes resource starvation, leading to timeouts.
+        "RUST_TEST_THREADS": "4",
+    },
     deps = [
         # Keep sorted.
         ":replica_tests",
