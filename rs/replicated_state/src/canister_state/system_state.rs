@@ -1343,6 +1343,9 @@ impl SystemState {
     /// If the canister was `Running` or `Stopping`, creates and remembers the stop context, so
     /// that it can be responded to once the canister has fully stopped. If the
     /// canister was already `Stopped`, this function is a no-op.
+    ///
+    /// The function returns `true` if and only if a stop context with the given `call_id`
+    /// was inserted into the canister state.
     pub fn begin_stopping(&mut self, msg: &mut CanisterCall, call_id: StopCanisterCallId) -> bool {
         match &mut self.status {
             // Nothing to do here.
