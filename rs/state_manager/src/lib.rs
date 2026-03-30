@@ -3352,11 +3352,11 @@ impl StateManager for StateManagerImpl {
 
         // If the node is catching up (`height.get() < fast_forward_height`)
         // and this is not a checkpoint height (`matches!(scope, CertificationScope::Metadata)`),
+        // and the state hash @ height is present in states.certifications (via consensus),
         // then we do not clone, do not hash, and do not store the state and certification metadata.
         // This optimization is skipped every `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING` heights
         // so that we always have a reasonably "recent" state snapshot and
         // its certification metadata available.
-        // Additional condition: If hash@height is in self.certifications => No early return if we have no hash from consensus layer.
         let states = self.states.read();
         let hash_at_height_available = states.certifications.contains_key(&height);
         drop(states);
@@ -3380,11 +3380,6 @@ impl StateManager for StateManagerImpl {
             states.tip = Some(state);
             return;
         }
-
-        // alternative (optional to save cloning):
-        // else if behind and hash NOT in self.cert {
-        //     calculate hash sync'ly and write to self.certifications.
-        // }
 
         self.metrics
             .tip_handler_queue_length
@@ -3411,8 +3406,7 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        // Kick off hashing of the new state if necessary.
-        // Skip if we got the hash from consensus via self.certifications.
+        // Kick off hashing of the new state if necessary, i.e., if not available from consensus via states.certifications.
         if !hash_at_height_available {
             let hash_req = HashRequest::HashState {
                 state: Arc::clone(&state),
@@ -3610,7 +3604,7 @@ fn spawn_hash_thread(
                                 }
                             }
 
-                            // add state and hash to snapshots and certification_metadata
+                            // Add state and hash to snapshots and certification_metadata
                             if !states
                                 .snapshots
                                 .iter()
