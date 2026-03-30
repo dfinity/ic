@@ -81,7 +81,7 @@ use ic_protobuf::{
         node::v1::{ConnectionEndpoint, NodeRecord},
         node_rewards::v2::NodeRewardsTable,
         provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
-        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+        replica_version::v1::ReplicaVersionRecord,
         routing_table::v1::{
             CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
         },
@@ -99,11 +99,10 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_keys::{
-    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY, make_blessed_replica_versions_key,
-    make_canister_migrations_record_key, make_canister_ranges_key,
-    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
-    make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key,
+    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY, make_canister_migrations_record_key,
+    make_canister_ranges_key, make_catch_up_package_contents_key,
+    make_chain_key_enabled_subnet_list_key, make_crypto_node_key, make_crypto_tls_cert_key,
+    make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
 };
 use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -316,7 +315,6 @@ pub fn add_global_registry_records(
 
 /// Adds initial registry records to the registry managed by the registry data provider:
 /// - provisional whitelist record;
-/// - blessed replica versions record;
 /// - replica version record.
 pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDataProvider>) {
     let registry_version = INITIAL_REGISTRY_VERSION;
@@ -331,20 +329,8 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         )
         .unwrap();
 
-    // blessed replica versions record
-    let replica_version = ReplicaVersion::default();
-    let blessed_replica_version = BlessedReplicaVersions {
-        blessed_version_ids: vec![replica_version.clone().into()],
-    };
-    registry_data_provider
-        .add(
-            &make_blessed_replica_versions_key(),
-            registry_version,
-            Some(blessed_replica_version),
-        )
-        .unwrap();
-
     // replica version record
+    let replica_version = ReplicaVersion::default();
     let replica_version_record = ReplicaVersionRecord {
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
