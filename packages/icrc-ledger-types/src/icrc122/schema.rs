@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::icrc::generic_value_predicate::{
-    ItemRequirement, ValuePredicateFailures, and, is, is_blob, is_equal_to, is_map,
+    ItemRequirement, ValuePredicate, ValuePredicateFailures, and, is, is_blob, is_equal_to, is_map,
     is_more_or_equal_to, is_nat, is_principal, is_text, item, len, or,
 };
 use crate::icrc::{generic_value::Value, generic_value_predicate::is_account};
@@ -13,6 +13,35 @@ pub const BTYPE_122_BURN: &str = "122burn";
 /// Method discriminators (ICRC-152 endpoint standard)
 pub const MTHD_152_MINT: &str = "152mint";
 pub const MTHD_152_BURN: &str = "152burn";
+
+/// Build a block-level predicate for an ICRC-122 block.
+///
+/// * `btype` – block type identifier (`BTYPE_122_MINT` or `BTYPE_122_BURN`)
+/// * `account_field` – `"to"` for mint, `"from"` for burn
+/// * `strict` – when `true`, `caller` and `mthd` are required (ICRC-152);
+///   when `false` they are optional (ICRC-122).
+fn block_validator(btype: &'static str, account_field: &'static str, strict: bool) -> ValuePredicate {
+    use ItemRequirement::*;
+    let caller_mthd_req = if strict { Required } else { Optional };
+
+    let is_timestamp = is_more_or_equal_to(0);
+    let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
+    let is_transaction = and(vec![
+        is_map(),
+        item("mthd", caller_mthd_req.clone(), is_text()),
+        item(account_field, Required, is_account()),
+        item("amt", Required, is_nat()),
+        item("caller", caller_mthd_req, is_principal()),
+        item("reason", Optional, is_text()),
+    ]);
+    and(vec![
+        is_map(),
+        item("phash", Optional, is_parent_hash),
+        item("btype", Required, is(Value::text(btype))),
+        item("ts", Required, is_timestamp),
+        item("tx", Required, is_transaction),
+    ])
+}
 
 /// Validate if a block is compatible with the ICRC-122 `122mint` block schema.
 ///
@@ -27,27 +56,7 @@ pub const MTHD_152_BURN: &str = "152burn";
 ///   tx: { mthd?: Text, to: Account, amt: Nat, caller?: Principal, reason?: Text } }
 /// ```
 pub fn validate_mint(block: &Value) -> Result<(), ValuePredicateFailures> {
-    use ItemRequirement::*;
-
-    let is_timestamp = is_more_or_equal_to(0);
-    let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
-    let is_mint_transaction = and(vec![
-        is_map(),
-        item("mthd", Optional, is_text()),
-        item("to", Required, is_account()),
-        item("amt", Required, is_nat()),
-        item("caller", Optional, is_principal()),
-        item("reason", Optional, is_text()),
-    ]);
-    let is_122mint_block = and(vec![
-        is_map(),
-        item("phash", Optional, is_parent_hash),
-        item("btype", Required, is(Value::text(BTYPE_122_MINT))),
-        item("ts", Required, is_timestamp),
-        item("tx", Required, is_mint_transaction),
-    ]);
-
-    is_122mint_block(Cow::Borrowed(block))
+    block_validator(BTYPE_122_MINT, "to", false)(Cow::Borrowed(block))
 }
 
 /// Validate if a block was produced by an ICRC-152 mint endpoint.
@@ -61,27 +70,7 @@ pub fn validate_mint(block: &Value) -> Result<(), ValuePredicateFailures> {
 ///   tx: { mthd: Text, to: Account, amt: Nat, caller: Principal, reason?: Text } }
 /// ```
 pub fn validate_152_mint(block: &Value) -> Result<(), ValuePredicateFailures> {
-    use ItemRequirement::*;
-
-    let is_timestamp = is_more_or_equal_to(0);
-    let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
-    let is_mint_transaction = and(vec![
-        is_map(),
-        item("mthd", Required, is_text()),
-        item("to", Required, is_account()),
-        item("amt", Required, is_nat()),
-        item("caller", Required, is_principal()),
-        item("reason", Optional, is_text()),
-    ]);
-    let is_122mint_block = and(vec![
-        is_map(),
-        item("phash", Optional, is_parent_hash),
-        item("btype", Required, is(Value::text(BTYPE_122_MINT))),
-        item("ts", Required, is_timestamp),
-        item("tx", Required, is_mint_transaction),
-    ]);
-
-    is_122mint_block(Cow::Borrowed(block))
+    block_validator(BTYPE_122_MINT, "to", true)(Cow::Borrowed(block))
 }
 
 /// Validate if a block is compatible with the ICRC-122 `122burn` block schema.
@@ -97,27 +86,7 @@ pub fn validate_152_mint(block: &Value) -> Result<(), ValuePredicateFailures> {
 ///   tx: { mthd?: Text, from: Account, amt: Nat, caller?: Principal, reason?: Text } }
 /// ```
 pub fn validate_burn(block: &Value) -> Result<(), ValuePredicateFailures> {
-    use ItemRequirement::*;
-
-    let is_timestamp = is_more_or_equal_to(0);
-    let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
-    let is_burn_transaction = and(vec![
-        is_map(),
-        item("mthd", Optional, is_text()),
-        item("from", Required, is_account()),
-        item("amt", Required, is_nat()),
-        item("caller", Optional, is_principal()),
-        item("reason", Optional, is_text()),
-    ]);
-    let is_122burn_block = and(vec![
-        is_map(),
-        item("phash", Optional, is_parent_hash),
-        item("btype", Required, is(Value::text(BTYPE_122_BURN))),
-        item("ts", Required, is_timestamp),
-        item("tx", Required, is_burn_transaction),
-    ]);
-
-    is_122burn_block(Cow::Borrowed(block))
+    block_validator(BTYPE_122_BURN, "from", false)(Cow::Borrowed(block))
 }
 
 /// Validate if a block was produced by an ICRC-152 burn endpoint.
@@ -131,27 +100,7 @@ pub fn validate_burn(block: &Value) -> Result<(), ValuePredicateFailures> {
 ///   tx: { mthd: Text, from: Account, amt: Nat, caller: Principal, reason?: Text } }
 /// ```
 pub fn validate_152_burn(block: &Value) -> Result<(), ValuePredicateFailures> {
-    use ItemRequirement::*;
-
-    let is_timestamp = is_more_or_equal_to(0);
-    let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
-    let is_burn_transaction = and(vec![
-        is_map(),
-        item("mthd", Required, is_text()),
-        item("from", Required, is_account()),
-        item("amt", Required, is_nat()),
-        item("caller", Required, is_principal()),
-        item("reason", Optional, is_text()),
-    ]);
-    let is_122burn_block = and(vec![
-        is_map(),
-        item("phash", Optional, is_parent_hash),
-        item("btype", Required, is(Value::text(BTYPE_122_BURN))),
-        item("ts", Required, is_timestamp),
-        item("tx", Required, is_burn_transaction),
-    ]);
-
-    is_122burn_block(Cow::Borrowed(block))
+    block_validator(BTYPE_122_BURN, "from", true)(Cow::Borrowed(block))
 }
 
 /// Validate if a block is compatible with any ICRC-122 schema (mint or burn).
