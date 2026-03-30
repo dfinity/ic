@@ -16,8 +16,8 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
+use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_config::{execution_environment::Config, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE};
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};

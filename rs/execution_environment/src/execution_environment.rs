@@ -30,9 +30,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
-use ic_limits::{
-    LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, MAX_PAIRED_PRE_SIGNATURES, SMALL_APP_SUBNET_MAX_SIZE,
-};
+use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, MAX_PAIRED_PRE_SIGNATURES};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
