@@ -9,6 +9,7 @@ on:
         type: string
 
 permissions:
+  actions: write
   contents: read
   id-token: write
   pull-requests: read

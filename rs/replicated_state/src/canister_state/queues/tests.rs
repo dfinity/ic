@@ -919,6 +919,7 @@ fn test_message_picking_ingress_only() {
             method_payload: vec![i as u8],
             message_id: message_test_id(555),
             expiry_time: expiry_time_from_now(),
+            sender_info: None,
         });
     }
 
@@ -1116,6 +1117,7 @@ fn test_message_picking_round_robin() {
         method_payload: Vec::new(),
         message_id: message_test_id(555),
         expiry_time: expiry_time_from_now(),
+        sender_info: None,
     });
 
     // POPPING
@@ -1297,6 +1299,7 @@ fn test_peek_input_round_robin() {
         effective_canister_id: None,
         message_id: message_test_id(555),
         expiry_time: expiry_time_from_now(),
+        sender_info: None,
     };
     queues.push_ingress(ingress.clone());
 
@@ -1369,6 +1372,7 @@ fn test_skip_input_round_robin() {
         effective_canister_id: None,
         message_id: message_test_id(555),
         expiry_time: expiry_time_from_now(),
+        sender_info: None,
     };
     queues.push_ingress(ingress.clone());
     let ingress_input = CanisterInput::Ingress(Arc::new(ingress));
