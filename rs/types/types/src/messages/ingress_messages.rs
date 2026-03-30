@@ -384,6 +384,7 @@ impl CountBytes for SignedIngress {
 /// Sender info after decoding and signature validation.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct SenderInfo {
+    #[serde(with = "serde_bytes")]
     pub info: Vec<u8>,
     pub signer: CanisterId,
 }
