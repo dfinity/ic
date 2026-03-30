@@ -138,6 +138,7 @@ fn test(env: TestEnv) {
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
             for n in 0..(DKG_INTERVAL + 1) {
+                // TODO(DSM-118): consider removing the retries if the underlying issue has been resolved
                 ic_system_test_driver::retry_agent_on_transport_errors!(
                     "update call after restart",
                     &log,
