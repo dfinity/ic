@@ -13,6 +13,7 @@ Success:: The restarted node reports block finalizations.
 
 end::catalog[] */
 
+use ic_agent::AgentError;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -137,16 +138,27 @@ fn test(env: TestEnv) {
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
             for n in 0..(DKG_INTERVAL + 1) {
-                agent
-                    .update(&canister.canister_id(), "update")
-                    .with_arg(wasm().set_global_data(&[n as u8]).reply())
-                    .call_and_wait()
-                    .await
-                    .expect("failed to update");
-                let response = canister
-                    .query(wasm().get_global_data().append_and_reply())
-                    .await
-                    .expect("failed to query");
+                // TODO(DSM-118): consider removing the retries if the underlying issue has been resolved
+                ic_system_test_driver::retry_agent_on_transport_errors!(
+                    "update call after restart",
+                    &log,
+                    agent
+                        .update(&canister.canister_id(), "update")
+                        .with_arg(wasm().set_global_data(&[n as u8]).reply())
+                        .call_and_wait()
+                )
+                .await
+                .expect("transport error persisted after retries")
+                .expect("failed to update");
+                let response = ic_system_test_driver::retry_agent_on_transport_errors!(
+                    "query call after restart",
+                    &log,
+                    canister
+                        .query(wasm().get_global_data().append_and_reply())
+                )
+                .await
+                .expect("transport error persisted after retries")
+                .expect("failed to query");
                 assert_eq!(response, vec![n as u8]);
             }
         }
