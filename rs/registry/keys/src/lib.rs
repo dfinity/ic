@@ -116,11 +116,6 @@ pub fn make_hostos_version_key<S: AsRef<str>>(hostos_version_id: S) -> String {
     )
 }
 
-/// Returns the only key whose payload is the list of blessed replica versions.
-pub fn make_blessed_replica_versions_key() -> String {
-    "blessed_replica_versions".to_string()
-}
-
 pub fn make_routing_table_record_key() -> String {
     "routing_table".to_string()
 }
