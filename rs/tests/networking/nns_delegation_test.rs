@@ -112,9 +112,9 @@ const RETRY_DELAY: tokio::time::Duration = tokio::time::Duration::from_secs(60);
 
 const DKG_LENGTH: Height = Height::new(9);
 
-fn get_installed_canister_ids(env: &TestEnv) -> BTreeMap<SubnetType, PrincipalId> {
-    env.read_json_object(INSTALLED_CANISTER_IDS)
-        .expect("Could not read installed canister IDs from test environment.")
+fn get_installed_canister_id(env: &TestEnv, subnet_type: SubnetType) -> PrincipalId {
+    env.read_json_object::<BTreeMap<SubnetType, PrincipalId>, _>(INSTALLED_CANISTER_IDS)
+        .expect("Could not read installed canister IDs from test environment.")[&subnet_type]
 }
 
 fn set_installed_canister_ids(env: &TestEnv, canister_ids: BTreeMap<SubnetType, PrincipalId>) {
@@ -325,7 +325,7 @@ fn subnet_read_state_v3_returns_correct_delegation(env: TestEnv, subnet_type: Su
 
 /// Responses to `api/v2/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
 fn canister_read_state_v2_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
-    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
+    let canister_id = get_installed_canister_id(&env, subnet_type);
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: HttpReadStateResponse = block_on(send(
@@ -347,7 +347,7 @@ fn canister_read_state_v2_returns_correct_delegation(env: TestEnv, subnet_type: 
 
 /// Responses to `api/v3/canister/{canister_id}/read_state` have valid delegations with canister ranges in the flat format.
 fn canister_read_state_v3_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
-    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
+    let canister_id = get_installed_canister_id(&env, subnet_type);
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: HttpReadStateResponse = block_on(send(
@@ -399,7 +399,7 @@ struct SyncCallResponse {
 
 /// Responses to `api/v3/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
 fn call_v3_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
-    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
+    let canister_id = get_installed_canister_id(&env, subnet_type);
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: SyncCallResponse = block_on(send(
@@ -421,7 +421,7 @@ fn call_v3_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
 
 /// Responses to `api/v4/canister/{canister_id}/call` have valid delegations with canister ranges in the flat format.
 fn call_v4_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
-    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
+    let canister_id = get_installed_canister_id(&env, subnet_type);
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
     let response: SyncCallResponse = block_on(send(
@@ -444,7 +444,7 @@ fn call_v4_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
 /// Responses to `api/v4/canister/{canister_id}/call` targeting the management canister
 /// have valid delegations without canister ranges.
 fn call_v4_management_canister_returns_correct_delegation(env: TestEnv, subnet_type: SubnetType) {
-    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
+    let canister_id = get_installed_canister_id(&env, subnet_type);
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let expiration = OffsetDateTime::now_utc() + Duration::from_secs(3 * 60);
 
@@ -490,7 +490,7 @@ struct QueryResponse {
 /// For `api/v2/canister/{canister_id}/query` we pass valid delegations with
 /// canister ranges in the flat format to the canister.
 fn query_v2_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: SubnetType) {
-    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
+    let canister_id = get_installed_canister_id(&env, subnet_type);
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let arg = vec![];
 
@@ -514,7 +514,7 @@ fn query_v2_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: Sub
 /// For `api/v3/canister/{canister_id}/query` we pass valid delegations with
 /// canister ranges in the tree format to the canister.
 fn query_v3_passes_correct_delegation_to_canister(env: TestEnv, subnet_type: SubnetType) {
-    let canister_id = get_installed_canister_ids(&env)[&subnet_type];
+    let canister_id = get_installed_canister_id(&env, subnet_type);
     let (subnet, node) = get_subnet_and_node(&env, subnet_type);
     let arg = vec![];
 
