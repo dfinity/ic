@@ -607,7 +607,7 @@ fn validate_delegation(
     let Some(delegation) = maybe_delegation else {
         assert!(
             subnet_type == SubnetType::System,
-            "Every non-NNS subnet should have a delegation attached to the response"
+            "Non-NNS subnet should return an NNS delegation with the response"
         );
 
         // We can return, there is nothing more to be checked.
@@ -615,7 +615,7 @@ fn validate_delegation(
     };
     assert!(
         subnet_type != SubnetType::System,
-        "NNS subnet should not have a delegation attached to the response"
+        "NNS subnet should not return an NNS delegation with the response"
     );
 
     let nns_public_key = env.prep_dir("").unwrap().root_public_key().unwrap();
