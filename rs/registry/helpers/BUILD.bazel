@@ -25,8 +25,8 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
-    "@crate_index//:assert_matches",
     "//rs/registry/transport",
+    "@crate_index//:assert_matches",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
