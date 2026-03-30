@@ -68,7 +68,7 @@ pub enum CallbackUpdate {
 }
 
 /// Cycles consumed via System API calls during message execution.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Copy, PartialEq, Debug, Deserialize, Serialize, Default)]
 pub(crate) struct ConsumedCyclesDuringExecution {
     burned: Option<CompoundCycles<BurnedCycles>>,
     instructions: Option<CompoundCycles<Instructions>>,
@@ -79,14 +79,22 @@ impl ConsumedCyclesDuringExecution {
     // Returns a list of the real amounts that the canister's balance should be
     // updated with.
     fn iter_over_real(&self) -> Vec<Cycles> {
+        // Decompose self to force the compiler to complain in case new fields
+        // are added.
+        let ConsumedCyclesDuringExecution {
+            burned,
+            instructions,
+            request_and_response_transmission,
+        } = self;
+
         let mut res = vec![];
-        if let Some(x) = self.burned {
+        if let Some(x) = burned {
             res.push(x.real());
         }
-        if let Some(x) = self.instructions {
+        if let Some(x) = instructions {
             res.push(x.real());
         }
-        if let Some(x) = self.request_and_response_transmission {
+        if let Some(x) = request_and_response_transmission {
             res.push(x.real());
         }
         res
@@ -1907,24 +1915,14 @@ mod tests {
                     burned: Some(CompoundCycles::new(first, cost_schedule)),
                     ..Default::default()
                 };
-
-                let expected = ConsumedCyclesDuringExecution {
-                    burned: Some(CompoundCycles::new(first, cost_schedule)),
-                    ..Default::default()
-                };
-                (consumed_cycles, other_consumed_cycles, expected)
+                (consumed_cycles, other_consumed_cycles, consumed_cycles)
             }
             CyclesUseCase::Instructions => {
                 let consumed_cycles = ConsumedCyclesDuringExecution {
                     instructions: Some(CompoundCycles::new(first, cost_schedule)),
                     ..Default::default()
                 };
-
-                let expected = ConsumedCyclesDuringExecution {
-                    instructions: Some(CompoundCycles::new(first, cost_schedule)),
-                    ..Default::default()
-                };
-                (consumed_cycles, other_consumed_cycles, expected)
+                (consumed_cycles, other_consumed_cycles, consumed_cycles)
             }
             CyclesUseCase::RequestAndResponseTransmission => {
                 let consumed_cycles = ConsumedCyclesDuringExecution {
@@ -1934,15 +1932,7 @@ mod tests {
                     )),
                     ..Default::default()
                 };
-
-                let expected = ConsumedCyclesDuringExecution {
-                    request_and_response_transmission: Some(CompoundCycles::new(
-                        first,
-                        cost_schedule,
-                    )),
-                    ..Default::default()
-                };
-                (consumed_cycles, other_consumed_cycles, expected)
+                (consumed_cycles, other_consumed_cycles, consumed_cycles)
             }
             _ => panic!(
                 "Expected one of BurnedCycles|Instructions|RequestAndResponseTransmission, got {use_case:?}"
@@ -1967,11 +1957,11 @@ mod tests {
                     ..Default::default()
                 };
 
-                let expected = ConsumedCyclesDuringExecution {
-                    burned: Some(CompoundCycles::new(second, cost_schedule)),
-                    ..Default::default()
-                };
-                (consumed_cycles, other_consumed_cycles, expected)
+                (
+                    consumed_cycles,
+                    other_consumed_cycles,
+                    other_consumed_cycles,
+                )
             }
             CyclesUseCase::Instructions => {
                 let other_consumed_cycles = ConsumedCyclesDuringExecution {
@@ -1979,11 +1969,11 @@ mod tests {
                     ..Default::default()
                 };
 
-                let expected = ConsumedCyclesDuringExecution {
-                    instructions: Some(CompoundCycles::new(second, cost_schedule)),
-                    ..Default::default()
-                };
-                (consumed_cycles, other_consumed_cycles, expected)
+                (
+                    consumed_cycles,
+                    other_consumed_cycles,
+                    other_consumed_cycles,
+                )
             }
             CyclesUseCase::RequestAndResponseTransmission => {
                 let other_consumed_cycles = ConsumedCyclesDuringExecution {
@@ -1994,14 +1984,11 @@ mod tests {
                     ..Default::default()
                 };
 
-                let expected = ConsumedCyclesDuringExecution {
-                    request_and_response_transmission: Some(CompoundCycles::new(
-                        second,
-                        cost_schedule,
-                    )),
-                    ..Default::default()
-                };
-                (consumed_cycles, other_consumed_cycles, expected)
+                (
+                    consumed_cycles,
+                    other_consumed_cycles,
+                    other_consumed_cycles,
+                )
             }
             _ => panic!(
                 "Expected one of BurnedCycles|Instructions|RequestAndResponseTransmission, got {use_case:?}"
