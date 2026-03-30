@@ -114,7 +114,9 @@ const DKG_LENGTH: Height = Height::new(9);
 
 fn get_installed_canister_id(env: &TestEnv, subnet_type: SubnetType) -> PrincipalId {
     env.read_json_object::<BTreeMap<SubnetType, PrincipalId>, _>(INSTALLED_CANISTER_IDS)
-        .expect("Could not read installed canister IDs from test environment.")[&subnet_type]
+        .expect("Could not read installed canister IDs from test environment.")
+        .get(&subnet_type)
+        .expect("All subnets should have an installed canister")
 }
 
 fn set_installed_canister_ids(env: &TestEnv, canister_ids: BTreeMap<SubnetType, PrincipalId>) {
