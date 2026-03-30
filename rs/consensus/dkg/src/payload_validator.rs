@@ -30,6 +30,7 @@ pub fn validate_payload(
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
     parent: Block,
+    last_summary_block: &Block,
     payload: &BlockPayload,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
@@ -40,12 +41,6 @@ pub fn validate_payload(
     let registry_version = pool_reader
         .registry_version(current_height)
         .ok_or(DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
-
-    let last_summary_block = pool_reader
-        .dkg_summary_block(&parent)
-        // We expect the parent to be valid, so there will be _always_ a DKG start block on the
-        // chain.
-        .expect("No DKG start block found for the parent block.");
     let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
 
     let is_dkg_start_height = last_dkg_summary.get_next_start_height() == current_height;
@@ -279,7 +274,9 @@ mod tests {
             // This will be a regular block, since we are not at dkg_interval_length height
             let block = Block::from(pool.make_next_block());
             let block_payload = block.payload.as_ref();
-
+            let last_summary_block = PoolReader::new(&pool)
+                .dkg_summary_block(&parent_block)
+                .unwrap();
             assert!(
                 validate_payload(
                     subnet_test_id(0),
@@ -288,6 +285,7 @@ mod tests {
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
                     parent_block,
+                    &last_summary_block,
                     block_payload,
                     state_manager.as_ref(),
                     &context,
@@ -303,6 +301,9 @@ mod tests {
             // This will be a summary block, since we are at dkg_interval_length height
             let block = Block::from(pool.make_next_block());
             let summary = block.payload.as_ref();
+            let last_summary_block = PoolReader::new(&pool)
+                .dkg_summary_block(&parent_block)
+                .unwrap();
 
             assert!(
                 validate_payload(
@@ -312,6 +313,7 @@ mod tests {
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
                     parent_block,
+                    &last_summary_block,
                     summary,
                     state_manager.as_ref(),
                     &context,
@@ -524,6 +526,8 @@ mod tests {
                 idkg: idkg::Payload::default(),
             });
 
+            let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
+
             assert_eq!(
                 validate_payload(
                     SUBNET_1,
@@ -532,6 +536,7 @@ mod tests {
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
                     parent,
+                    &last_summary_block,
                     &block_payload,
                     state_manager.as_ref(),
                     &context,
@@ -598,13 +603,15 @@ mod tests {
                 idkg: idkg::Payload::default(),
             });
 
+            let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
             validate_payload(
                 subnet_id,
                 registry.as_ref(),
                 crypto.as_ref(),
                 &PoolReader::new(&pool),
                 dkg_pool.read().unwrap().deref(),
-                parent.clone(),
+                parent,
+                &last_summary_block,
                 &block_payload,
                 state_manager.as_ref(),
                 &context,
@@ -771,6 +778,8 @@ mod tests {
                 idkg: idkg::Payload::default(),
             });
 
+            let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
+
             let result = validate_payload(
                 subnet_id,
                 registry.as_ref(),
@@ -778,6 +787,7 @@ mod tests {
                 &PoolReader::new(&pool),
                 &dkg_pool,
                 parent.clone(),
+                &last_summary_block,
                 &block_payload,
                 state_manager.as_ref(),
                 &context,
@@ -798,6 +808,7 @@ mod tests {
                 &PoolReader::new(&pool),
                 &dkg_pool,
                 parent,
+                &last_summary_block,
                 &block_payload,
                 state_manager.as_ref(),
                 &context,

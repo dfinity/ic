@@ -10,7 +10,11 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
-    Scheduled { destination_subnet_id: SubnetId },
+    Scheduled {
+        destination_subnet_id: SubnetId,
+        /// The registry version at which the subnet was scheduled to be split
+        scheduled_at: RegistryVersion,
+    },
     AlreadyDone,
     NotScheduled,
 }
@@ -25,9 +29,10 @@ pub enum StatusError {
     CatchUpContentsDeserializationError(ProxyDecodeError),
 }
 
+#[derive(Debug)]
 pub struct Context {
-    last_summary_block_registry_version: RegistryVersion,
-    current_registry_version: RegistryVersion,
+    pub last_summary_block_registry_version: RegistryVersion,
+    pub current_registry_version: RegistryVersion,
 }
 
 pub fn get_status(
@@ -62,6 +67,7 @@ pub fn get_status(
 
     Ok(Status::Scheduled {
         destination_subnet_id: subnet_splitting_args.destination_subnet_id,
+        scheduled_at: versioned_record.version,
     })
 }
 
@@ -79,6 +85,7 @@ mod tests {
 
     const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
     const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
+    const REGISTRY_CUP_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
 
     use super::*;
 
@@ -95,14 +102,14 @@ mod tests {
         )]
         cup_type: Option<CupType>,
     ) {
-        let registry = set_up_registry(RegistryVersion::new(1), cup_type);
+        let registry = set_up_registry(cup_type);
 
         let status = get_status(
             registry.as_ref(),
             SUBNET_1,
             Context {
-                last_summary_block_registry_version: RegistryVersion::new(1),
-                current_registry_version: RegistryVersion::new(2),
+                last_summary_block_registry_version: REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+                current_registry_version: REGISTRY_CUP_REGISTRY_VERSION,
             },
         )
         .expect("Should succeed given correct inputs");
@@ -112,21 +119,18 @@ mod tests {
 
     #[test]
     fn should_return_scheduled_test() {
-        let registry = set_up_registry(
-            RegistryVersion::new(1),
-            Some(CupType::SubnetSplitting(
-                ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
-                    destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
-                },
-            )),
-        );
+        let registry = set_up_registry(Some(CupType::SubnetSplitting(
+            ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
+                destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
+            },
+        )));
 
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
             Context {
-                last_summary_block_registry_version: RegistryVersion::new(1),
-                current_registry_version: RegistryVersion::new(2),
+                last_summary_block_registry_version: REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+                current_registry_version: REGISTRY_CUP_REGISTRY_VERSION,
             },
         )
         .expect("Should succeed given correct inputs");
@@ -134,28 +138,26 @@ mod tests {
         assert_eq!(
             status,
             Status::Scheduled {
-                destination_subnet_id: DESTINATION_SUBNET_ID
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+                scheduled_at: REGISTRY_CUP_REGISTRY_VERSION,
             }
         );
     }
 
     #[test]
     fn should_return_already_done_test() {
-        let registry = set_up_registry(
-            RegistryVersion::new(1),
-            Some(CupType::SubnetSplitting(
-                ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
-                    destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
-                },
-            )),
-        );
+        let registry = set_up_registry(Some(CupType::SubnetSplitting(
+            ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
+                destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
+            },
+        )));
 
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
             Context {
-                last_summary_block_registry_version: RegistryVersion::new(2),
-                current_registry_version: RegistryVersion::new(2),
+                last_summary_block_registry_version: REGISTRY_CUP_REGISTRY_VERSION,
+                current_registry_version: REGISTRY_CUP_REGISTRY_VERSION,
             },
         )
         .expect("Should succeed given correct inputs");
@@ -163,10 +165,7 @@ mod tests {
         assert_eq!(status, Status::AlreadyDone);
     }
 
-    fn set_up_registry(
-        cup_registry_version: RegistryVersion,
-        cup_type: Option<CupType>,
-    ) -> Arc<dyn RegistryClient> {
+    fn set_up_registry(cup_type: Option<CupType>) -> Arc<dyn RegistryClient> {
         let (registry_data_provider, registry) = setup_registry_non_final(
             SOURCE_SUBNET_ID,
             vec![(
@@ -177,7 +176,7 @@ mod tests {
         registry_data_provider
             .add(
                 &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
-                cup_registry_version,
+                REGISTRY_CUP_REGISTRY_VERSION,
                 Some(CatchUpPackageContents {
                     cup_type,
                     ..Default::default()

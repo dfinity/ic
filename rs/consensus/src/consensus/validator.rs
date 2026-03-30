@@ -15,6 +15,7 @@ use ic_consensus_utils::{
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
     pool_reader::{PoolReader, UnexpectedChainLength},
+    subnet_splitting,
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
@@ -86,9 +87,11 @@ enum ValidationFailure {
     BlockNotFound(CryptoHashOf<Block>, Height),
     FinalizedBlockNotFound(Height),
     FailedToGetRegistryVersion,
+    FailedToGetConsensusStatus,
     ValidationContextNotReached(ValidationContext, ValidationContext),
     CatchUpHeightNegligible,
     MissingPastPayloads,
+    SubnetSplittingStatusError(subnet_splitting::StatusError),
 }
 
 /// Possible reasons for invalid artifacts.
@@ -118,6 +121,9 @@ enum InvalidArtifactReason {
     RepeatedSigner,
     ReplicaVersionMismatch,
     NotABlockmaker,
+    RegistryVersionNotFrozenDuringSubnetSplitting {
+        context_registry_version: RegistryVersion,
+    },
 }
 
 impl From<CryptoError> for ValidationFailure {
@@ -1200,6 +1206,11 @@ impl Validator {
             return Err(InvalidArtifactReason::CannotVerifyBlockHeightZero.into());
         }
 
+        let parent = get_notarized_parent(pool_reader, proposal)?;
+        let last_summary_block = pool_reader
+            .dkg_summary_block(&parent)
+            .ok_or(ValidationFailure::DkgSummaryNotFound(parent.height))?;
+
         let Some(status) = status::get_status(
             proposal.height(),
             self.registry_client.as_ref(),
@@ -1207,7 +1218,7 @@ impl Validator {
             pool_reader,
             &self.log,
         ) else {
-            return Err(ValidationFailure::FailedToGetRegistryVersion.into());
+            return Err(ValidationFailure::FailedToGetConsensusStatus.into());
         };
 
         // If the replica is halted, block payload should be empty.
@@ -1219,7 +1230,6 @@ impl Validator {
         }
 
         let proposer = proposal.signature.signer;
-        let parent = get_notarized_parent(pool_reader, proposal)?;
 
         // Ensure registry_version, certified_height increase monotonically and that
         // time increases *strictly* monotonically.
@@ -1272,6 +1282,34 @@ impl Validator {
                 local_context,
             )
             .into());
+        }
+
+        // if it's not a summary block sure, make sure that the registry version is 'frozen' during
+        // subnet splitting
+        if !proposal.payload.is_summary() {
+            match subnet_splitting::get_status(
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                subnet_splitting::Context {
+                    last_summary_block_registry_version: last_summary_block
+                        .context
+                        .registry_version,
+                    current_registry_version: proposal.context.registry_version,
+                },
+            )
+            .map_err(ValidationFailure::SubnetSplittingStatusError)?
+            {
+                subnet_splitting::Status::Scheduled { .. } => {
+                    return Err(
+                        InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
+                            context_registry_version: proposal.context.registry_version,
+                        }
+                        .into(),
+                    );
+                }
+                subnet_splitting::Status::AlreadyDone => {}
+                subnet_splitting::Status::NotScheduled => {}
+            }
         }
 
         // If the replica is halted, the block payload is empty so we can skip the rest of the
@@ -1328,6 +1366,7 @@ impl Validator {
             self.state_manager.as_ref(),
             &proposal.context,
             &parent,
+            &last_summary_block,
             proposal.payload.as_ref(),
             self.metrics.idkg_validation_duration.clone(),
         )
@@ -1351,6 +1390,7 @@ impl Validator {
             pool_reader,
             dkg_pool,
             parent,
+            &last_summary_block,
             proposal.payload.as_ref(),
             self.state_manager.as_ref(),
             &proposal.context,
