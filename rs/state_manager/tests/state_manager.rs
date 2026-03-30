@@ -9055,7 +9055,6 @@ fn commit_and_certify_optimization_conditions() {
     });
 }
 
-#[ignore = "TODO: This works only when the optimization in commit_and_certify:L3257 is active."]
 #[test]
 fn commit_and_certify_optimization_semantics() {
     state_manager_test(|metrics, sm| {
@@ -9070,14 +9069,15 @@ fn commit_and_certify_optimization_semantics() {
         let only_initial_state = || {
             assert_eq!(sm.state_snapshot_heights(), vec![INITIAL_STATE_HEIGHT]);
             assert!(sm.certifications_metadata_heights().is_empty());
-            assert!(sm.certifications().is_empty());
         };
         only_initial_state();
+        assert!(sm.certifications().is_empty());
 
         // optimization triggers => no state snapshot and certifications metadata are stored => still just the initial state in `states`
         let mut batch_time_opt = None;
         let mut expected_no_state_clone_count = 0;
         for opt_height in 1..10 {
+            sm.deliver_state_certification(fake_certification_for_height(Height::new(opt_height)));
             let (height, mut state) = sm.take_tip();
             assert_eq!(height, Height::new(opt_height - 1)); // tip height is set correctly if optimization triggers
             if let Some(batch_time) = batch_time_opt {
@@ -9102,6 +9102,7 @@ fn commit_and_certify_optimization_semantics() {
         let batch_time_no_opt = state.metadata.batch_time;
         let no_opt_height = Height::new(10);
         sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
+        sm.flush_hash_channel();
         assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
 
         assert_eq!(
@@ -9120,7 +9121,6 @@ fn commit_and_certify_optimization_semantics() {
             sm.certifications_metadata_certification(no_opt_height)
                 .is_none()
         );
-        assert!(sm.certifications().is_empty());
     });
 }
 
@@ -9141,7 +9141,6 @@ fn fast_forward_height() {
     });
 }
 
-#[ignore = "TODO: This works only when the optimization in commit_and_certify:L3257 is active."]
 #[test]
 #[should_panic(
     expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
@@ -9313,7 +9312,6 @@ fn get_state_hash_at() {
     });
 }
 
-#[ignore = "TODO: This works only when the optimization in commit_and_certify:L3257 is active."]
 #[test]
 fn flush_with_optimization() {
     state_manager_test(|metrics, sm| {
@@ -9328,6 +9326,7 @@ fn flush_with_optimization() {
         assert_eq!(flush_unflushed_delta_count(metrics), 0);
 
         // optimization triggers
+        sm.deliver_state_certification(fake_certification_for_height(Height::new(1)));
         let state = sm.take_tip().1;
         let opt_height = Height::new(1);
         let batch_summary = BatchSummary {
@@ -9341,6 +9340,7 @@ fn flush_with_optimization() {
             CertificationScope::Metadata,
             Some(batch_summary),
         );
+        sm.flush_hash_channel();
         assert_eq!(no_state_clone_count(metrics), 1);
 
         // delta has been flushed
