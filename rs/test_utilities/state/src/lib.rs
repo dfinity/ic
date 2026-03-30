@@ -355,6 +355,7 @@ impl CanisterStateBuilder {
         system_state.compute_allocation = self.compute_allocation;
         system_state.certified_data = self.certified_data;
         system_state.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
+        system_state.log_visibility = self.log_visibility;
         // Allocate log memory store according to log_memory_limit.
         system_state
             .log_memory_store
@@ -524,6 +525,11 @@ impl SystemStateBuilder {
         self
     }
 
+    pub fn log_memory_limit(mut self, limit: usize) -> Self {
+        self.system_state.log_memory_store.resize_for_testing(limit);
+        self
+    }
+
     pub fn build(self) -> SystemState {
         self.system_state
     }
@@ -641,6 +647,7 @@ pub fn canister_from_exec_state(
             .memory_allocation(NumBytes::new(8 * 1024 * 1024 * 1024)) // 8GiB
             .canister_id(canister_id)
             .initial_cycles(INITIAL_CYCLES)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build(),
         execution_state: Some(execution_state),
         scheduler_state: Default::default(),

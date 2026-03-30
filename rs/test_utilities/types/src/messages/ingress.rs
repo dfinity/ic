@@ -5,7 +5,7 @@ use ic_types::{
     crypto::DOMAIN_IC_REQUEST,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Ingress, MessageId,
-        SenderInfo, SignedIngress,
+        RawSignedSenderInfo, SignedIngress,
     },
     time::expiry_time_from_now,
 };
@@ -155,7 +155,7 @@ impl SignedIngressBuilder {
     }
 
     /// Sets the `sender_info` field.
-    pub fn sender_info(mut self, sender_info: SenderInfo) -> Self {
+    pub fn sender_info(mut self, sender_info: RawSignedSenderInfo) -> Self {
         self.update.sender_info = Some(sender_info);
         self
     }

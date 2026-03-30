@@ -59,7 +59,7 @@ impl Header {
         self.data_head = MemoryPosition::new(0);
         self.data_tail = MemoryPosition::new(0);
         self.data_size = MemorySize::new(0);
-        self.next_idx = 0;
+        // Do not clear next_idx, it must be always growing.
         self.max_timestamp = 0;
     }
 

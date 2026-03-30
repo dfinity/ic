@@ -16,7 +16,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{
         CanisterTask, CertificateDelegationFormat, CertificateDelegationMetadata, Query,
-        QuerySource, SenderInfoInternal,
+        QuerySource, SignedSenderInfo,
     },
     time,
 };
@@ -412,7 +412,7 @@ fn query_cache_returns_same_results_for_different_sender_info() {
                     user_id: user_test_id(1),
                     ingress_expiry: 0,
                     nonce: None,
-                    sender_info: Some(SenderInfoInternal {
+                    sender_info: Some(SignedSenderInfo {
                         info: vec![1, 2, 3],
                         signer: CanisterId::from_u64(123),
                         sig: vec![4, 5, 6],

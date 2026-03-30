@@ -1057,6 +1057,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         incomplete_state: None,
         initial_time: None,
         mainnet_nns_subnet_id: None,
+        disable_ingress_validation: None,
     };
     let response = client
         .post(url.join("instances").unwrap())

@@ -14,8 +14,8 @@ pub use self::http::{
     HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
     HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
-    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
-    SenderInfo, SenderInfoInternal, SignedDelegation,
+    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, RawSignedSenderInfo,
+    ReplicaHealthStatus, SignedDelegation, SignedSenderInfo,
 };
 use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
@@ -717,7 +717,7 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: Some(Blob(vec![1, 2, 3, 4, 5])),
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
-                        sender_info: Some(SenderInfo {
+                        sender_info: Some(RawSignedSenderInfo {
                             info: Blob(vec![1, 2, 3]),
                             signer: Blob(vec![42; 8]),
                             sig: Blob(vec![4, 5, 6]),
@@ -761,7 +761,7 @@ mod tests {
                     sender: Blob(vec![0x04]),
                     nonce: None,
                     ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
-                    sender_info: Some(SenderInfo {
+                    sender_info: Some(RawSignedSenderInfo {
                         info: Blob(vec![1, 2, 3]),
                         signer: Blob(vec![42; 8]),
                         sig: Blob(vec![4, 5, 6]),
