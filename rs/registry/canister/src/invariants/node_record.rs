@@ -1,17 +1,15 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use ic_base_types::NodeId;
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::node::v1::NodeRecord;
 
-use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
-};
+use crate::invariants::common::{InvariantCheckError, RegistrySnapshot, get_all_node_records};
 
 pub(crate) fn check_node_record_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let node_records = get_node_records_from_snapshot(snapshot);
+    let node_records = get_all_node_records(snapshot);
 
     check_ssh_key_limits(&node_records)?;
     check_chip_ids_are_unique(&node_records)?;
@@ -19,10 +17,8 @@ pub(crate) fn check_node_record_invariants(
     Ok(())
 }
 
-fn check_ssh_key_limits(
-    node_records: &BTreeMap<NodeId, NodeRecord>,
-) -> Result<(), InvariantCheckError> {
-    for node_record in node_records.values() {
+fn check_ssh_key_limits(node_records: &[(NodeId, NodeRecord)]) -> Result<(), InvariantCheckError> {
+    for node_record in node_records.into_iter().map(|(_, v)| v) {
         // Enforce that the ssh_node_state_write_access field does not have too many elements.
         if node_record.ssh_node_state_write_access.len() > MAX_NUM_SSH_KEYS {
             return Err(InvariantCheckError {
@@ -47,7 +43,7 @@ fn check_ssh_key_limits(
 }
 
 fn check_chip_ids_are_unique(
-    node_records: &BTreeMap<NodeId, NodeRecord>,
+    node_records: &[(NodeId, NodeRecord)],
 ) -> Result<(), InvariantCheckError> {
     let mut chip_id_to_node: HashMap<Vec<u8>, NodeId> = HashMap::new();
 

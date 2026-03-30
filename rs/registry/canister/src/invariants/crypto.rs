@@ -1,8 +1,8 @@
 use crate::common::LOG_PREFIX;
 use crate::invariants::{
     common::{
-        InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
-        get_subnet_ids_from_snapshot, get_value_from_snapshot,
+        InvariantCheckError, RegistrySnapshot, get_all_node_records, get_subnet_ids_from_snapshot,
+        get_value_from_snapshot,
     },
     subnet::get_subnet_records_map,
 };
@@ -75,13 +75,13 @@ fn check_node_crypto_keys_exist_and_are_unique(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
     println!("{LOG_PREFIX}node_crypto_keys_invariants_check_start");
-    let nodes = get_node_records_from_snapshot(snapshot);
+    let nodes = get_all_node_records(snapshot);
     let (pks, certs) = get_all_nodes_public_keys_and_certs(snapshot)?;
 
     let mut ok_node_count = 0;
     let mut bad_node_count = 0;
     let mut maybe_error: Option<Result<(), InvariantCheckError>> = None;
-    for node_id in nodes.keys() {
+    for node_id in nodes.iter().map(|(k, _)| k) {
         // Check that all the nodes' keys and certs are present, and node_id is consistent
         match node_has_all_keys_and_cert_and_valid_node_id(node_id, &pks, &certs) {
             Ok(()) => ok_node_count += 1,
