@@ -1,5 +1,3 @@
-// Set up a testnet from json files, mostly useful for scripting and automating outside of system tests
-//
 // Example file:
 // {
 //   "subnets": [
@@ -63,18 +61,20 @@
 // Happy testing!
 
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use os_qualification_utils::{IC_CONFIG, IcConfig};
+use os_qualification_utils::IcConfig;
 
 fn main() -> anyhow::Result<()> {
-    let mut config = std::env::var(IC_CONFIG)
-        .unwrap_or_else(|_| panic!("Failed to fetch `{IC_CONFIG}` from env"));
+    let config_path = std::env::var("IC_CONFIG_PATH")
+        .unwrap_or_else(|_| panic!("Failed to fetch `IC_CONFIG_PATH` from env"));
 
-    if config.starts_with('\'') {
-        config = config[1..config.len() - 1].to_string();
-    }
+    let config = std::fs::read_to_string(&config_path).unwrap();
 
-    let parsed: IcConfig = serde_json::from_str(&config)
-        .unwrap_or_else(|_| panic!("Failed to parse json from envrionment: \n{config}"));
+    let parsed: IcConfig = serde_json::from_str(&config).unwrap_or_else(|_| {
+        panic!(
+            "Failed to parse json from path `{}`: \n{config}",
+            config_path
+        )
+    });
 
     SystemTestGroup::new()
         .with_setup(|env| os_qualification_utils::setup(env, parsed))

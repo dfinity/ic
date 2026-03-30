@@ -122,6 +122,7 @@ system_test_nns(
 
 system_test(
     name = "from_config",
+    enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",

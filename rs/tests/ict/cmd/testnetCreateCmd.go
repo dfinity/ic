@@ -127,7 +127,6 @@ func ValidateTestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []
 
 func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		config := ""
 		if cfg.icConfigPath != "" {
 			if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
 				return fmt.Errorf("Cannot provide both `--from-ic-config-path` and a name for testnet configuration: %s", args[0])
@@ -144,7 +143,6 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 			if err := json.Compact(dst, json_bytes); err != nil {
 				return fmt.Errorf("Cannot minify json: %s", err)
 			}
-			config = dst.String()
 		}
 
 		// If the target name is not fully qualified, we make it to be such.
@@ -196,8 +194,14 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 			command = append(command, "--keepalive")
 		}
 		// If the user provided a special config path we add it as an environment variable
-		if config != "" {
-			env = append(env, fmt.Sprintf("IC_CONFIG='%s'", config))
+		if cfg.icConfigPath != "" {
+			expandedPath, err := expandPath(cfg.icConfigPath)
+			cmd.Println(GREEN + "Will use " + expandedPath + " for the topology path")
+			if err != nil {
+				return err
+			}
+			// command = append(command, fmt.Sprintf("--sandbox_add_mount_pair=%s", topologyDir))
+			env = append(env, fmt.Sprintf("IC_CONFIG_PATH=%s", expandedPath))
 		}
 
 		// Print Bazel command for debugging puroposes.
@@ -234,6 +238,32 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		}
 		return nil
 	}
+}
+
+func expandPath(p string) (string, error) {
+	var err error
+
+	p = os.ExpandEnv(p)
+	if strings.HasPrefix(p, "~") {
+		var home string
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		p = filepath.Join(home, p[1:])
+	}
+
+	p, err = filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+
+	p, err = filepath.EvalSymlinks(p)
+	if err != nil {
+		return "", err
+	}
+
+	return p, nil
 }
 
 func NewTestnetCreateCmd() *cobra.Command {
