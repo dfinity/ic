@@ -10,7 +10,7 @@ use ic_interfaces::{
         LABEL_VALUE_INGRESS_HISTORY_FULL, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
     },
 };
-use ic_limits::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_limits::INGRESS_HISTORY_MAX_MESSAGES;
 use ic_logger::{ReplicaLogger, debug, error, trace};
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets, buckets::linear_buckets};
