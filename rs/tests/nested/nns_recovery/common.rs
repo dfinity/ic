@@ -80,7 +80,7 @@ pub struct TestConfig {
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
     pub num_broken_nodes: usize,
-    pub add_and_bless_upgrade_version: bool,
+    pub add_upgrade_version: bool,
     pub fix_dfinity_owned_node_like_np: bool,
     pub sequential_np_actions: bool,
 }
@@ -249,8 +249,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         serde_json::to_string(&guest_launch_measurements).unwrap(),
     )
     .expect("Could not write guest launch measurements to file");
-    if !cfg.add_and_bless_upgrade_version {
-        // If ic-recovery does not add/bless the new version to the registry, then we must bless it now.
+    if !cfg.add_upgrade_version {
+        // If ic-recovery does not add the new version to the registry, then we must elect it now.
         block_on(bless_replica_version(
             &nns_node,
             &upgrade_version,
@@ -433,7 +433,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_image_url: Some(upgrade_image_url),
         upgrade_image_hash: Some(upgrade_image_hash),
         upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
-        add_and_bless_upgrade_version: Some(cfg.add_and_bless_upgrade_version),
+        add_and_bless_upgrade_version: Some(cfg.add_upgrade_version),
         replay_until_height: Some(highest_cert_share),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
