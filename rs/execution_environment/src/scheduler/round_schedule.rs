@@ -543,16 +543,6 @@ impl RoundSchedule {
             if last_full_execution_round.get() != 0 {
                 let canister_age = current_round.get() - last_full_execution_round.get();
                 metrics.canister_age.observe(canister_age as f64);
-
-                // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
-                // scheduled.
-                let compute_allocation = state
-                    .canister_state(canister_id)
-                    .map(|canister| canister.compute_allocation().as_percent())
-                    .unwrap_or_default();
-                if canister_age * compute_allocation > 100 {
-                    metrics.canister_compute_allocation_violation.inc();
-                }
             }
         }
 

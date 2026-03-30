@@ -560,21 +560,22 @@ mod validate_ingress_expiry {
 
 mod validate_sender_info {
     use ic_types::messages::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawSignedSenderInfo,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope,
+        HttpUserQuery, Query, RawSignedSenderInfo,
     };
 
     use super::*;
 
     #[test]
-    fn should_accept_none_sender_info() {
-        let request = http_request_with_sender_info(None);
+    fn should_accept_none_sender_info_for_call() {
+        let request = http_call_request_with_sender_info(None);
         let result = validate_sender_info(&request);
         assert_matches!(result, Ok(()));
     }
 
     #[test]
-    fn should_reject_some_sender_info() {
-        let request = http_request_with_sender_info(Some(RawSignedSenderInfo {
+    fn should_reject_some_sender_info_for_call() {
+        let request = http_call_request_with_sender_info(Some(RawSignedSenderInfo {
             info: Blob(vec![1, 2, 3]),
             signer: Blob(canister_test_id(42).get().into_vec()),
             sig: Blob(vec![4, 5, 6]),
@@ -584,8 +585,8 @@ mod validate_sender_info {
     }
 
     #[test]
-    fn should_reject_some_sender_info_in_full_request_validation() {
-        let request = http_request_with_sender_info(Some(RawSignedSenderInfo {
+    fn should_reject_some_sender_info_in_full_call_request_validation() {
+        let request = http_call_request_with_sender_info(Some(RawSignedSenderInfo {
             info: Blob(vec![1, 2, 3]),
             signer: Blob(canister_test_id(42).get().into_vec()),
             sig: Blob(vec![4, 5, 6]),
@@ -602,12 +603,71 @@ mod validate_sender_info {
         assert_matches!(result, Err(RequestValidationError::SenderInfoUnsupported));
     }
 
-    fn http_request_with_sender_info(
+    #[test]
+    fn should_accept_none_sender_info_for_query() {
+        let request = http_query_request_with_sender_info(None);
+        let result = validate_sender_info(&request);
+        assert_matches!(result, Ok(()));
+    }
+
+    #[test]
+    fn should_reject_some_sender_info_for_query() {
+        let request = http_query_request_with_sender_info(Some(RawSignedSenderInfo {
+            info: Blob(vec![1, 2, 3]),
+            signer: Blob(canister_test_id(42).get().into_vec()),
+            sig: Blob(vec![4, 5, 6]),
+        }));
+        let result = validate_sender_info(&request);
+        assert_matches!(result, Err(RequestValidationError::SenderInfoUnsupported));
+    }
+
+    #[test]
+    fn should_reject_some_sender_info_in_full_query_request_validation() {
+        let request = http_query_request_with_sender_info(Some(RawSignedSenderInfo {
+            info: Blob(vec![1, 2, 3]),
+            signer: Blob(canister_test_id(42).get().into_vec()),
+            sig: Blob(vec![4, 5, 6]),
+        }));
+        let verifier = HttpRequestVerifierImpl::new(std::sync::Arc::new(
+            temp_crypto_component_with_fake_registry(node_test_id(0)),
+        ));
+
+        let result = verifier.validate_request(
+            &request,
+            Time::from_nanos_since_unix_epoch(0),
+            &MockRootOfTrustProvider::new(),
+        );
+        assert_matches!(result, Err(RequestValidationError::SenderInfoUnsupported));
+    }
+
+    fn http_call_request_with_sender_info(
         sender_info: Option<RawSignedSenderInfo>,
     ) -> HttpRequest<SignedIngressContent> {
         HttpRequest::try_from(HttpRequestEnvelope::<HttpCallContent> {
             content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {
+                    canister_id: Blob(vec![42; 8]),
+                    method_name: "some_method".to_string(),
+                    arg: Default::default(),
+                    sender: Blob(vec![0x04]),
+                    nonce: None,
+                    ingress_expiry: 1_000,
+                    sender_info,
+                },
+            },
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        })
+        .expect("invalid http envelope")
+    }
+
+    fn http_query_request_with_sender_info(
+        sender_info: Option<RawSignedSenderInfo>,
+    ) -> HttpRequest<Query> {
+        HttpRequest::try_from(HttpRequestEnvelope::<HttpQueryContent> {
+            content: HttpQueryContent::Query {
+                query: HttpUserQuery {
                     canister_id: Blob(vec![42; 8]),
                     method_name: "some_method".to_string(),
                     arg: Default::default(),
