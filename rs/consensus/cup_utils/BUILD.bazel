@@ -17,6 +17,7 @@ rust_library(
         "//rs/registry/helpers",
         "//rs/types/types",
         "@crate_index//:slog",
+        "@crate_index//:thiserror",
     ],
 )
 

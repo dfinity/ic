@@ -17,11 +17,13 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:rayon",
     "@crate_index//:slog",
+    "@crate_index//:thiserror",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/consensus/mocks",
+    "//rs/registry/keys",
     "//rs/test_utilities",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/registry",
@@ -30,6 +32,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/types",
     "//rs/types/management_canister_types",
     "@crate_index//:assert_matches",
+    "@crate_index//:rstest",
 ]
 
 rust_library(

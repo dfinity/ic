@@ -464,6 +464,7 @@ impl CatchUpPackageProvider {
         let registry_cup = self
             .registry
             .get_registry_cup(registry_version, subnet_id)
+            .inspect_err(|err| warn!(self.logger, "Failed to create a registry cup: {err}"))
             .map(pb::CatchUpPackage::from)
             .ok();
 
@@ -474,10 +475,7 @@ impl CatchUpPackageProvider {
             .into_iter()
             .flatten()
             .max_by_key(get_cup_proto_height)
-            .ok_or(OrchestratorError::MakeRegistryCupError(
-                subnet_id,
-                registry_version,
-            ))?;
+            .ok_or(OrchestratorError::CupMissing(subnet_id, registry_version))?;
         let latest_cup = CatchUpPackage::try_from(&latest_cup_proto).map_err(|err| {
             OrchestratorError::deserialize_cup_error(get_cup_proto_height(&latest_cup_proto), err)
         })?;

@@ -157,14 +157,15 @@ impl RegistryHelper {
             ))
     }
 
-    /// Return the genesis cup at the given registry version for this node
+    /// Return the registry cup at the given registry version for this node
     pub(crate) fn get_registry_cup(
         &self,
         version: RegistryVersion,
         subnet_id: SubnetId,
     ) -> OrchestratorResult<CatchUpPackage> {
         make_registry_cup(&*self.registry_client, subnet_id, &self.logger)
-            .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
+            .map(|registry_cup| registry_cup.cup)
+            .map_err(|err| OrchestratorError::MakeRegistryCupError(subnet_id, version, err))
     }
 
     pub(crate) fn get_firewall_rules(
