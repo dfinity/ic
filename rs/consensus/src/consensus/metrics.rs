@@ -304,6 +304,9 @@ impl FinalizerMetrics {
         self.canister_http_success_delivered
             .with_label_values(&["non_replicated"])
             .inc_by(batch_stats.canister_http.single_signature_responses as u64);
+        self.canister_http_success_delivered
+            .with_label_values(&["flexible"])
+            .inc_by(batch_stats.canister_http.flexible_ok_responses as u64);
         self.canister_http_timeouts_delivered
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered

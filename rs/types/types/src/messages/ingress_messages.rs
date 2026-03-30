@@ -7,7 +7,10 @@ use crate::{
     messages::{
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
         HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
-        http::{CallOrQuery, representation_independent_hash_call_or_query},
+        http::{
+            CallOrQuery, RawSignedSenderInfoSlices, SignedSenderInfo,
+            representation_independent_hash_call_or_query,
+        },
     },
 };
 use ic_error_types::{ErrorCode, UserError};
@@ -44,6 +47,7 @@ pub struct SignedIngressContent {
     arg: Vec<u8>,
     ingress_expiry: u64,
     nonce: Option<Vec<u8>>,
+    sender_info: Option<SignedSenderInfo>,
 }
 
 impl SignedIngressContent {
@@ -84,6 +88,7 @@ impl SignedIngressContent {
         arg: Vec<u8>,
         ingress_expiry: u64,
         nonce: Option<Vec<u8>>,
+        sender_info: Option<SignedSenderInfo>,
     ) -> Self {
         Self {
             sender,
@@ -92,6 +97,7 @@ impl SignedIngressContent {
             arg,
             ingress_expiry,
             nonce,
+            sender_info,
         }
     }
 }
@@ -106,12 +112,19 @@ impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
         MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
-            self.canister_id.get().into_vec(),
+            self.canister_id.as_ref(),
             &self.method_name,
-            self.arg.clone(),
+            &self.arg,
             self.ingress_expiry,
-            self.sender.get().into_vec(),
+            self.sender.get_ref().as_slice(),
             self.nonce.as_deref(),
+            self.sender_info
+                .as_ref()
+                .map(|sender_info| RawSignedSenderInfoSlices {
+                    info: &sender_info.info,
+                    signer: sender_info.signer.as_ref(),
+                    sig: &sender_info.sig,
+                }),
         ))
     }
 
@@ -125,6 +138,10 @@ impl HttpRequestContent for SignedIngressContent {
 
     fn nonce(&self) -> Option<Vec<u8>> {
         self.nonce.clone()
+    }
+
+    fn sender_info(&self) -> Option<&SignedSenderInfo> {
+        self.sender_info.as_ref()
     }
 }
 
@@ -147,6 +164,18 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
             arg: update.arg.0,
             ingress_expiry: update.ingress_expiry,
             nonce: update.nonce.map(|n| n.0),
+            sender_info: match update.sender_info {
+                Some(sender_info) => Some(SignedSenderInfo {
+                    info: sender_info.info.0,
+                    signer: CanisterId::try_from(sender_info.signer.0).map_err(|err| {
+                        HttpRequestError::InvalidPrincipalId(format!(
+                            "Converting sender_info.signer to PrincipalId failed with {err:?}"
+                        ))
+                    })?,
+                    sig: sender_info.sig.0,
+                }),
+                None => None,
+            },
         })
     }
 }
@@ -624,6 +653,7 @@ mod test {
             arg: vec![],
             ingress_expiry: 0,
             nonce: None,
+            sender_info: None,
         };
         let result = extract_effective_canister_id(&msg);
         assert!(
@@ -641,6 +671,7 @@ mod test {
             arg: vec![],
             ingress_expiry: 0,
             nonce: None,
+            sender_info: None,
         };
         assert_eq!(
             extract_effective_canister_id(&msg),

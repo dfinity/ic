@@ -5,7 +5,7 @@ use ic_types::{
     crypto::DOMAIN_IC_REQUEST,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Ingress, MessageId,
-        SignedIngress,
+        RawSignedSenderInfo, SignedIngress,
     },
     time::expiry_time_from_now,
 };
@@ -103,6 +103,7 @@ impl Default for SignedIngressBuilder {
             sender: Blob(PrincipalId::new_anonymous().into()),
             ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
             nonce: None,
+            sender_info: None,
         };
         Self {
             update,
@@ -150,6 +151,12 @@ impl SignedIngressBuilder {
     /// Sets the `ingress_expiry` field.
     pub fn expiry_time(mut self, expiry_time: Time) -> Self {
         self.update.ingress_expiry = expiry_time.as_nanos_since_unix_epoch();
+        self
+    }
+
+    /// Sets the `sender_info` field.
+    pub fn sender_info(mut self, sender_info: RawSignedSenderInfo) -> Self {
+        self.update.sender_info = Some(sender_info);
         self
     }
 
