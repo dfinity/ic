@@ -6,10 +6,10 @@ pub use ic_types::replica_version::ReplicaVersion;
 pub use ic_types::{NodeId, RegistryVersion, SubnetId};
 
 pub trait ReplicaVersionRegistry {
-    fn get_replica_versions(
+    fn get_all_replica_version_records(
         &self,
         version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<ReplicaVersionRecord>>;
+    ) -> RegistryClientResult<Vec<(String, ReplicaVersionRecord)>>;
 
     fn get_replica_version_record(
         &self,
@@ -29,10 +29,11 @@ pub trait ReplicaVersionRegistry {
 }
 
 impl<T: RegistryClient + ?Sized> ReplicaVersionRegistry for T {
-    fn get_replica_versions(
+    fn get_all_replica_version_records(
         &self,
         version: RegistryVersion,
-    ) -> RegistryClientResult<Vec<ReplicaVersionRecord>> {
+    ) -> RegistryClientResult<Vec<(String, ReplicaVersionRecord)>> {
+        // Note this `get_key_family` impl does not strip the prefix from keys. The impl in the registry canister, does.
         let keys = self.get_key_family(REPLICA_VERSION_KEY_PREFIX, version)?;
 
         let mut records = Vec::new();
@@ -40,7 +41,10 @@ impl<T: RegistryClient + ?Sized> ReplicaVersionRegistry for T {
             let bytes = self.get_value(&key, version);
             let replica_version_proto =
                 deserialize_registry_value::<ReplicaVersionRecord>(bytes)?.unwrap_or_default();
-            records.push(replica_version_proto)
+            records.push((
+                key[REPLICA_VERSION_KEY_PREFIX.len()..].to_string(),
+                replica_version_proto,
+            ))
         }
 
         Ok(Some(records))
@@ -60,13 +64,13 @@ impl<T: RegistryClient + ?Sized> ReplicaVersionRegistry for T {
         version: RegistryVersion,
     ) -> Result<Vec<Vec<u8>>, String> {
         let replica_versions = self
-            .get_replica_versions(version)
+            .get_all_replica_version_records(version)
             .map_err(|err| format!("Failed to get replica versions: {err}"))?
-            .ok_or_else(|| "Blessed replica versions not found in registry".to_string())?;
+            .ok_or_else(|| "Elected replica versions not found in registry".to_string())?;
 
         let measurements = replica_versions
             .into_iter()
-            .flat_map(|record| {
+            .flat_map(|(_, record)| {
                 record
                     .guest_launch_measurements
                     .unwrap_or_default()
