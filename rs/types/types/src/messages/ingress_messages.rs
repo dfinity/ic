@@ -502,13 +502,27 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
 
 impl CountBytes for Ingress {
     fn count_bytes(&self) -> usize {
+        // Decomposing `Ingress` to force a decision here if a new field is added to `Ingress`.
+        let Ingress {
+            method_name,
+            method_payload,
+            sender_info,
+            // The remaining fields are constant-size and thus fully accounted for by `size_of::<Ingress>()`.
+            source: _,
+            receiver: _,
+            effective_canister_id: _,
+            message_id: _,
+            expiry_time: _,
+        } = self;
         size_of::<Ingress>()
-            + self.method_name.len()
-            + self.method_payload.len()
-            + self
-                .sender_info
+            + method_name.len()
+            + method_payload.len()
+            + sender_info
                 .as_ref()
-                .map(|sender_info| sender_info.info.len())
+                .map(|sender_info| {
+                    let SenderInfo { info, signer: _ } = sender_info;
+                    info.len()
+                })
                 .unwrap_or_default()
     }
 }
