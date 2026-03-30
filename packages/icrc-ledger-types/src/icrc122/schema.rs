@@ -20,7 +20,11 @@ pub const MTHD_152_BURN: &str = "152burn";
 /// * `account_field` – `"to"` for mint, `"from"` for burn
 /// * `strict` – when `true`, `caller` and `mthd` are required (ICRC-152);
 ///   when `false` they are optional (ICRC-122).
-fn block_validator(btype: &'static str, account_field: &'static str, strict: bool) -> ValuePredicate {
+fn block_validator(
+    btype: &'static str,
+    account_field: &'static str,
+    strict: bool,
+) -> ValuePredicate {
     use ItemRequirement::*;
     let caller_mthd_req = if strict { Required } else { Optional };
 
