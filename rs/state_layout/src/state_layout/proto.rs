@@ -70,7 +70,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .iter()
                 .map(|record| record.into())
                 .collect(),
-            next_canister_log_record_idx: item.canister_log.next_idx(),
+            next_canister_log_record_idx: item.next_canister_log_record_idx,
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
@@ -215,6 +215,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                     .map(|record| record.into())
                     .collect(),
             ),
+            next_canister_log_record_idx: value.next_canister_log_record_idx,
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),

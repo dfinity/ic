@@ -16,6 +16,7 @@ use crate::driver::{
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
+use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
@@ -55,6 +56,19 @@ pub struct InternetComputer {
     pub unassigned_record_config: Option<UnassignedRecordConfig>,
     pub api_boundary_nodes: Vec<Node>,
     pub api_bn_use_playnet: bool,
+    pub data_centers: Vec<DataCenterRecord>,
+    pub node_operators: Vec<NodeOperatorConfig>,
+}
+
+/// Configuration for a node operator to be added to the initial registry.
+#[derive(Clone, Debug, Default)]
+pub struct NodeOperatorConfig {
+    pub name: String,
+    pub principal_id: PrincipalId,
+    pub node_provider_principal_id: Option<PrincipalId>,
+    pub node_allowance: u64,
+    pub dc_id: String,
+    pub rewardable_nodes: BTreeMap<String, u32>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -121,6 +135,26 @@ impl InternetComputer {
 
     pub fn with_node_provider(mut self, principal_id: PrincipalId) -> Self {
         self.node_provider = Some(principal_id);
+        self
+    }
+
+    pub fn add_data_center(mut self, dc_record: DataCenterRecord) -> Self {
+        if self
+            .data_centers
+            .iter()
+            .any(|existing| existing.id.eq_ignore_ascii_case(&dc_record.id))
+        {
+            panic!(
+                "Duplicate data center id (case-insensitive) in IC config: {}",
+                dc_record.id
+            );
+        }
+        self.data_centers.push(dc_record);
+        self
+    }
+
+    pub fn add_node_operator(mut self, node_operator: NodeOperatorConfig) -> Self {
+        self.node_operators.push(node_operator);
         self
     }
 
@@ -925,6 +959,7 @@ pub struct Node {
     pub domain: Option<String>,
     pub recovery_hash: Option<String>,
     pub boot_image: BootImage,
+    pub node_operator_principal_id: Option<PrincipalId>,
 }
 
 impl Node {
@@ -959,6 +994,11 @@ impl Node {
 
     pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
         self.required_host_features = required_host_features;
+        self
+    }
+
+    pub fn with_node_operator_principal_id(mut self, principal_id: PrincipalId) -> Self {
+        self.node_operator_principal_id = Some(principal_id);
         self
     }
 

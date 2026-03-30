@@ -175,6 +175,7 @@ pub struct PocketIcBuilder {
     icp_features: IcpFeatures,
     initial_time: Option<InitialTime>,
     mainnet_nns_subnet_id: Option<bool>,
+    disable_ingress_validation: Option<bool>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -195,6 +196,7 @@ impl PocketIcBuilder {
             icp_features: IcpFeatures::default(),
             initial_time: None,
             mainnet_nns_subnet_id: None,
+            disable_ingress_validation: None,
         }
     }
 
@@ -220,6 +222,7 @@ impl PocketIcBuilder {
             self.initial_time,
             self.http_gateway_config,
             self.mainnet_nns_subnet_id,
+            self.disable_ingress_validation,
         )
     }
 
@@ -239,6 +242,7 @@ impl PocketIcBuilder {
             self.initial_time,
             self.http_gateway_config,
             self.mainnet_nns_subnet_id,
+            self.disable_ingress_validation,
         )
         .await
     }
@@ -495,6 +499,11 @@ impl PocketIcBuilder {
         self.mainnet_nns_subnet_id = Some(true);
         self
     }
+
+    pub fn disable_ingress_validation(mut self) -> Self {
+        self.disable_ingress_validation = Some(true);
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -615,6 +624,7 @@ impl PocketIc {
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
         mainnet_nns_subnet_id: Option<bool>,
+        disable_ingress_validation: Option<bool>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -642,6 +652,7 @@ impl PocketIc {
                 initial_time,
                 http_gateway_config,
                 mainnet_nns_subnet_id,
+                disable_ingress_validation,
             )
             .await
         });
