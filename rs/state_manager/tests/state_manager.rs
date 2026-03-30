@@ -9223,6 +9223,8 @@ fn remove_inmemory_states_below_prunes_certification() {
         // we commit a strictly larger height 2 without optimization
         let state = sm.take_tip().1;
         sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Metadata, None);
+        // flusing the hash channel guarantees that the `latest_state_height` is incremented, which we rely on below.
+        sm.flush_hash_channel();
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // certification at height 1 is pruned now that `latest_state_height` advanced to 2
