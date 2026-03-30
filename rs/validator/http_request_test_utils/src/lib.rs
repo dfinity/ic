@@ -96,6 +96,7 @@ fn dummy_call_request_content() -> HttpCanisterUpdate {
         sender: Default::default(),
         ingress_expiry: 0,
         nonce: None,
+        sender_info: None,
     }
 }
 

@@ -27,6 +27,7 @@ fn create_and_validate_anonymous_http_with_ingress_expiry_time(
                 sender: Blob(vec![0x04]),
                 nonce: None,
                 ingress_expiry,
+                sender_info: None,
             },
         },
         sender_pubkey: None,

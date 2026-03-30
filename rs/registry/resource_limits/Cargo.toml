@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+clap = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 serde = { workspace = true }

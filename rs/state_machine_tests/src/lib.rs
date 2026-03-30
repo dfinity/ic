@@ -178,7 +178,9 @@ use ic_types::{
     time::{GENESIS, Time},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles, NonConsumed,
+};
 use ic_xnet_payload_builder::{
     RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
@@ -4453,6 +4455,7 @@ impl StateMachine {
                     sender: sender.into(),
                     ingress_expiry,
                     nonce: nonce_blob,
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,
@@ -4908,7 +4911,10 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
         canister_state
             .system_state
-            .add_cycles(Cycles::from(amount), CyclesUseCase::NonConsumed);
+            .add_cycles(CompoundCycles::<NonConsumed>::new(
+                Cycles::from(amount),
+                self.cost_schedule,
+            ));
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
@@ -5300,6 +5306,7 @@ impl PayloadBuilder {
                     sender: Blob(sender.into_vec()),
                     ingress_expiry: self.expiry_time.as_nanos_since_unix_epoch(),
                     nonce: self.nonce.map(|n| Blob(n.to_be_bytes().to_vec())),
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,

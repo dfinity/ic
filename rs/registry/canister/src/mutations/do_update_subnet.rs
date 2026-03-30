@@ -4,7 +4,8 @@ use dfn_core::println;
 use ic_base_types::{SubnetId, subnet_id_into_protobuf};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
-    SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
+    ResourceLimits as ResourceLimitsPb, SubnetFeatures as SubnetFeaturesPb,
+    SubnetRecord as SubnetRecordPb,
 };
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
@@ -234,6 +235,7 @@ pub struct UpdateSubnetPayload {
     pub halt_at_cup_height: Option<bool>,
 
     pub features: Option<SubnetFeaturesPb>,
+    pub resource_limits: Option<ResourceLimitsPb>,
 
     pub chain_key_config: Option<ChainKeyConfig>,
     pub chain_key_signing_enable: Option<Vec<MasterPublicKeyId>>,
@@ -444,6 +446,7 @@ fn merge_subnet_record(
         is_halted,
         halt_at_cup_height,
         features,
+        resource_limits,
         chain_key_config,
         chain_key_signing_enable: _,
         chain_key_signing_disable: _,
@@ -484,6 +487,7 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, halt_at_cup_height);
 
     maybe_set_option!(subnet_record, features);
+    maybe_set_option!(subnet_record, resource_limits);
 
     let chain_key_config = chain_key_config.map(|chain_key_config| {
         ChainKeyConfigInternal::try_from(chain_key_config)
@@ -515,10 +519,11 @@ mod tests {
         SubnetRecord as SubnetRecordPb,
     };
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
+    use ic_registry_resource_limits::ResourceLimits;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
+    use ic_types::{NumBytes, PrincipalId, ReplicaVersion, SubnetId};
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -538,6 +543,7 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -627,6 +633,13 @@ mod tests {
                 }
                 .into(),
             ),
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                }
+                .into(),
+            ),
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -678,7 +691,13 @@ mod tests {
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
-                resource_limits: Default::default(),
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(42)),
+                        maximum_state_delta: Some(NumBytes::new(64)),
+                    }
+                    .into()
+                ),
                 recalled_replica_version_ids: vec![],
             }
         );
@@ -708,7 +727,13 @@ mod tests {
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
-            resource_limits: Default::default(),
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                }
+                .into(),
+            ),
             recalled_replica_version_ids: vec![],
         };
 
@@ -732,6 +757,7 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: Some(true),
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -773,8 +799,58 @@ mod tests {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
-                resource_limits: Default::default(),
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(42)),
+                        maximum_state_delta: Some(NumBytes::new(64)),
+                    }
+                    .into()
+                ),
                 recalled_replica_version_ids: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn resource_limits_resets_all_fields() {
+        let subnet_record = SubnetRecordPb {
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                }
+                .into(),
+            ),
+            ..Default::default()
+        };
+
+        let subnet_id = SubnetId::from(
+            PrincipalId::from_str(
+                "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
+            )
+            .unwrap(),
+        );
+        let payload = UpdateSubnetPayload {
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(128)),
+                    maximum_state_delta: None,
+                }
+                .into(),
+            ),
+            ..make_empty_update_payload(subnet_id)
+        };
+        assert_eq!(
+            merge_subnet_record(subnet_record, payload),
+            SubnetRecordPb {
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(128)),
+                        maximum_state_delta: None,
+                    }
+                    .into()
+                ),
+                ..Default::default()
             }
         );
     }

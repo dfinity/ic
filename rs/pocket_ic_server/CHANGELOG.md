@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The endpoint `/instances/` takes an additional optional field `disable_ingress_validation` specifying that
+  ingress validation is disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
+
 
 
 ## 13.0.0 - 2026-03-23

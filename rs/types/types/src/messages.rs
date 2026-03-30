@@ -14,8 +14,8 @@ pub use self::http::{
     HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
     HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
-    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
-    SignedDelegation,
+    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, RawSignedSenderInfo,
+    ReplicaHealthStatus, SignedDelegation, SignedSenderInfo,
 };
 use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
@@ -647,6 +647,7 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: None,
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                        sender_info: None,
                     },
                 },
                 sender_pubkey: Some(Blob(vec![])),
@@ -681,6 +682,7 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: None,
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                        sender_info: None,
                     },
                 },
                 sender_pubkey: Some(Blob(vec![])),
@@ -703,7 +705,7 @@ mod tests {
     }
 
     #[test]
-    fn decoding_submit_call_with_nonce() {
+    fn decoding_submit_call_with_nonce_and_sender_info() {
         let expiry_time = expiry_time_from_now();
         assert_cbor_de_equal(
             &HttpRequestEnvelope::<HttpCallContent> {
@@ -715,6 +717,11 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: Some(Blob(vec![1, 2, 3, 4, 5])),
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                        sender_info: Some(RawSignedSenderInfo {
+                            info: Blob(vec![1, 2, 3]),
+                            signer: Blob(vec![42; 8]),
+                            sig: Blob(vec![4, 5, 6]),
+                        }),
                     },
                 },
                 sender_pubkey: Some(Blob(vec![])),
@@ -730,6 +737,11 @@ mod tests {
                     text("sender") => bytes(&[0x04][..]),
                     text("ingress_expiry") => integer(expiry_time.as_nanos_since_unix_epoch()),
                     text("nonce") => bytes(&[1, 2, 3, 4, 5][..]),
+                    text("sender_info") => Value::Map(btreemap! {
+                        text("info") => bytes(&[1, 2, 3][..]),
+                        text("signer") => bytes(&[42; 8][..]),
+                        text("sig") => bytes(&[4, 5, 6][..]),
+                    }),
                 }),
                 text("sender_pubkey") => bytes(b""),
                 text("sender_sig") => bytes(b""),
@@ -749,6 +761,11 @@ mod tests {
                     sender: Blob(vec![0x04]),
                     nonce: None,
                     ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                    sender_info: Some(RawSignedSenderInfo {
+                        info: Blob(vec![1, 2, 3]),
+                        signer: Blob(vec![42; 8]),
+                        sig: Blob(vec![4, 5, 6]),
+                    }),
                 },
             },
             sender_pubkey: Some(Blob(vec![2; 32])),
@@ -809,6 +826,7 @@ mod tests {
                     sender: Blob(vec![0x04]),
                     nonce: None,
                     ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,

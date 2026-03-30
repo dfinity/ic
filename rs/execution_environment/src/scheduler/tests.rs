@@ -2,7 +2,9 @@ use super::test_utilities::{SchedulerTestBuilder, ingress, on_response, other_si
 use super::*;
 use candid::Encode;
 use ic_base_types::PrincipalId;
-use ic_config::execution_environment::STOP_CANISTER_TIMEOUT_DURATION;
+use ic_config::execution_environment::{
+    LOG_MEMORY_STORE_FEATURE_ENABLED, STOP_CANISTER_TIMEOUT_DURATION,
+};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
@@ -465,6 +467,7 @@ fn test_maybe_add_heartbeat_or_global_timer_tasks() {
                 method_payload: vec![1_u8],
                 message_id: message_test_id(555),
                 expiry_time: expiry_time_from_now(),
+                sender_info: None,
             });
         }
         while canister.get_next_scheduled_method() != next_scheduled_method {

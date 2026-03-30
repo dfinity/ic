@@ -28,6 +28,7 @@ use ic_types::{
     CanisterId, CanisterLog, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, Time,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
@@ -142,12 +143,14 @@ impl CanisterState {
         msg: RequestOrResponse,
         subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
+        own_cost_schedule: CanisterCyclesCostSchedule,
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.system_state.push_input(
             msg,
             subnet_available_guaranteed_response_memory,
             own_subnet_type,
+            own_cost_schedule,
             input_queue_type,
         )
     }
