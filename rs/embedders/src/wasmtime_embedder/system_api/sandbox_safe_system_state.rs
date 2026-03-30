@@ -33,8 +33,8 @@ use ic_types::{
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    BurnedCycles, CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, NonConsumed,
-    RequestAndResponseTransmission,
+    BurnedCycles, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCaseKind,
+    Instructions, NonConsumed, RequestAndResponseTransmission,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -94,40 +94,27 @@ impl ConsumedCyclesDuringExecution {
 
     // Merges `other` onto `self`. If both contain fields that are
     // not `None` then the result is the sum of the values contained,
-    // otherwise the resulting merge amount is set to the non-None one.
+    // otherwise the resulting merge amount is set to the one that
+    // contains a value.
     fn merge(&mut self, other: ConsumedCyclesDuringExecution) {
-        match (self.burned, other.burned) {
-            (Some(x), Some(y)) => {
-                self.burned = Some(x + y);
+        fn merge_helper<T: CyclesUseCaseKind>(
+            first: Option<CompoundCycles<T>>,
+            second: Option<CompoundCycles<T>>,
+        ) -> Option<CompoundCycles<T>> {
+            match (first, second) {
+                (Some(x), Some(y)) => Some(x + y),
+                (Some(x), None) => Some(x),
+                (None, Some(y)) => Some(y),
+                (None, None) => None,
             }
-            (None, Some(y)) => {
-                self.burned = Some(y);
-            }
-            (Some(_), None) | (None, None) => {}
         }
 
-        match (self.instructions, other.instructions) {
-            (Some(x), Some(y)) => {
-                self.instructions = Some(x + y);
-            }
-            (None, Some(y)) => {
-                self.instructions = Some(y);
-            }
-            (Some(_), None) | (None, None) => {}
-        }
-
-        match (
+        self.burned = merge_helper(self.burned, other.burned);
+        self.instructions = merge_helper(self.instructions, other.instructions);
+        self.request_and_response_transmission = merge_helper(
             self.request_and_response_transmission,
             other.request_and_response_transmission,
-        ) {
-            (Some(x), Some(y)) => {
-                self.request_and_response_transmission = Some(x + y);
-            }
-            (None, Some(y)) => {
-                self.request_and_response_transmission = Some(y);
-            }
-            (Some(_), None) | (None, None) => {}
-        }
+        );
     }
 }
 
@@ -1590,7 +1577,10 @@ mod tests {
         messages::{NO_DEADLINE, RequestMetadata},
         time::CoarseTime,
     };
-    use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
+    use ic_types_cycles::{
+        BurnedCycles, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
+        CyclesUseCaseKind, Instructions, RequestAndResponseTransmission,
+    };
 
     use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};
     use crate::wasmtime_embedder::system_api::{
@@ -1825,5 +1815,238 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn generate_inputs_expectations_for_use_case_both_some(
+        first: Cycles,
+        second: Cycles,
+        use_case: CyclesUseCase,
+    ) -> (
+        ConsumedCyclesDuringExecution,
+        ConsumedCyclesDuringExecution,
+        ConsumedCyclesDuringExecution,
+    ) {
+        let cost_schedule = CanisterCyclesCostSchedule::Normal;
+        match use_case {
+            CyclesUseCase::BurnedCycles => {
+                let consumed_cycles = ConsumedCyclesDuringExecution {
+                    burned: Some(CompoundCycles::new(first, cost_schedule)),
+                    ..Default::default()
+                };
+                let other_consumed_cycles = ConsumedCyclesDuringExecution {
+                    burned: Some(CompoundCycles::new(second, cost_schedule)),
+                    ..Default::default()
+                };
+
+                let expected = ConsumedCyclesDuringExecution {
+                    burned: Some(CompoundCycles::new(first + second, cost_schedule)),
+                    ..Default::default()
+                };
+                (consumed_cycles, other_consumed_cycles, expected)
+            }
+            CyclesUseCase::Instructions => {
+                let consumed_cycles = ConsumedCyclesDuringExecution {
+                    instructions: Some(CompoundCycles::new(first, cost_schedule)),
+                    ..Default::default()
+                };
+                let other_consumed_cycles = ConsumedCyclesDuringExecution {
+                    instructions: Some(CompoundCycles::new(second, cost_schedule)),
+                    ..Default::default()
+                };
+
+                let expected = ConsumedCyclesDuringExecution {
+                    instructions: Some(CompoundCycles::new(first + second, cost_schedule)),
+                    ..Default::default()
+                };
+                (consumed_cycles, other_consumed_cycles, expected)
+            }
+            CyclesUseCase::RequestAndResponseTransmission => {
+                let consumed_cycles = ConsumedCyclesDuringExecution {
+                    request_and_response_transmission: Some(CompoundCycles::new(
+                        first,
+                        cost_schedule,
+                    )),
+                    ..Default::default()
+                };
+                let other_consumed_cycles = ConsumedCyclesDuringExecution {
+                    request_and_response_transmission: Some(CompoundCycles::new(
+                        second,
+                        cost_schedule,
+                    )),
+                    ..Default::default()
+                };
+
+                let expected = ConsumedCyclesDuringExecution {
+                    request_and_response_transmission: Some(CompoundCycles::new(
+                        first + second,
+                        cost_schedule,
+                    )),
+                    ..Default::default()
+                };
+                (consumed_cycles, other_consumed_cycles, expected)
+            }
+            _ => panic!(
+                "Expected one of BurnedCycles|Instructions|RequestAndResponseTransmission, got {use_case:?}"
+            ),
+        }
+    }
+
+    fn generate_inputs_expectations_for_use_case_first_some(
+        first: Cycles,
+        use_case: CyclesUseCase,
+    ) -> (
+        ConsumedCyclesDuringExecution,
+        ConsumedCyclesDuringExecution,
+        ConsumedCyclesDuringExecution,
+    ) {
+        let cost_schedule = CanisterCyclesCostSchedule::Normal;
+        let other_consumed_cycles = ConsumedCyclesDuringExecution::default();
+        match use_case {
+            CyclesUseCase::BurnedCycles => {
+                let consumed_cycles = ConsumedCyclesDuringExecution {
+                    burned: Some(CompoundCycles::new(first, cost_schedule)),
+                    ..Default::default()
+                };
+
+                let expected = ConsumedCyclesDuringExecution {
+                    burned: Some(CompoundCycles::new(first, cost_schedule)),
+                    ..Default::default()
+                };
+                (consumed_cycles, other_consumed_cycles, expected)
+            }
+            CyclesUseCase::Instructions => {
+                let consumed_cycles = ConsumedCyclesDuringExecution {
+                    instructions: Some(CompoundCycles::new(first, cost_schedule)),
+                    ..Default::default()
+                };
+
+                let expected = ConsumedCyclesDuringExecution {
+                    instructions: Some(CompoundCycles::new(first, cost_schedule)),
+                    ..Default::default()
+                };
+                (consumed_cycles, other_consumed_cycles, expected)
+            }
+            CyclesUseCase::RequestAndResponseTransmission => {
+                let consumed_cycles = ConsumedCyclesDuringExecution {
+                    request_and_response_transmission: Some(CompoundCycles::new(
+                        first,
+                        cost_schedule,
+                    )),
+                    ..Default::default()
+                };
+
+                let expected = ConsumedCyclesDuringExecution {
+                    request_and_response_transmission: Some(CompoundCycles::new(
+                        first,
+                        cost_schedule,
+                    )),
+                    ..Default::default()
+                };
+                (consumed_cycles, other_consumed_cycles, expected)
+            }
+            _ => panic!(
+                "Expected one of BurnedCycles|Instructions|RequestAndResponseTransmission, got {use_case:?}"
+            ),
+        }
+    }
+
+    fn generate_inputs_expectations_for_use_case_second_some(
+        second: Cycles,
+        use_case: CyclesUseCase,
+    ) -> (
+        ConsumedCyclesDuringExecution,
+        ConsumedCyclesDuringExecution,
+        ConsumedCyclesDuringExecution,
+    ) {
+        let cost_schedule = CanisterCyclesCostSchedule::Normal;
+        let consumed_cycles = ConsumedCyclesDuringExecution::default();
+        match use_case {
+            CyclesUseCase::BurnedCycles => {
+                let other_consumed_cycles = ConsumedCyclesDuringExecution {
+                    burned: Some(CompoundCycles::new(second, cost_schedule)),
+                    ..Default::default()
+                };
+
+                let expected = ConsumedCyclesDuringExecution {
+                    burned: Some(CompoundCycles::new(second, cost_schedule)),
+                    ..Default::default()
+                };
+                (consumed_cycles, other_consumed_cycles, expected)
+            }
+            CyclesUseCase::Instructions => {
+                let other_consumed_cycles = ConsumedCyclesDuringExecution {
+                    instructions: Some(CompoundCycles::new(second, cost_schedule)),
+                    ..Default::default()
+                };
+
+                let expected = ConsumedCyclesDuringExecution {
+                    instructions: Some(CompoundCycles::new(second, cost_schedule)),
+                    ..Default::default()
+                };
+                (consumed_cycles, other_consumed_cycles, expected)
+            }
+            CyclesUseCase::RequestAndResponseTransmission => {
+                let other_consumed_cycles = ConsumedCyclesDuringExecution {
+                    request_and_response_transmission: Some(CompoundCycles::new(
+                        second,
+                        cost_schedule,
+                    )),
+                    ..Default::default()
+                };
+
+                let expected = ConsumedCyclesDuringExecution {
+                    request_and_response_transmission: Some(CompoundCycles::new(
+                        second,
+                        cost_schedule,
+                    )),
+                    ..Default::default()
+                };
+                (consumed_cycles, other_consumed_cycles, expected)
+            }
+            _ => panic!(
+                "Expected one of BurnedCycles|Instructions|RequestAndResponseTransmission, got {use_case:?}"
+            ),
+        }
+    }
+
+    fn assert_consumed_cycles_during_execution<T: CyclesUseCaseKind>(
+        first: Cycles,
+        second: Cycles,
+    ) {
+        let use_case = T::cycles_use_case();
+
+        let (mut consumed_cycles, other_consumed_cycles, expected_consumed_cycles) =
+            generate_inputs_expectations_for_use_case_both_some(first, second, use_case);
+
+        consumed_cycles.merge(other_consumed_cycles);
+        assert_eq!(consumed_cycles, expected_consumed_cycles);
+
+        let (mut consumed_cycles, other_consumed_cycles, expected_consumed_cycles) =
+            generate_inputs_expectations_for_use_case_first_some(first, use_case);
+
+        consumed_cycles.merge(other_consumed_cycles);
+        assert_eq!(consumed_cycles, expected_consumed_cycles);
+
+        let (mut consumed_cycles, other_consumed_cycles, expected_consumed_cycles) =
+            generate_inputs_expectations_for_use_case_second_some(second, use_case);
+
+        consumed_cycles.merge(other_consumed_cycles);
+        assert_eq!(consumed_cycles, expected_consumed_cycles);
+
+        let mut consumed_cycles = ConsumedCyclesDuringExecution::default();
+        let other_consumed_cycles = ConsumedCyclesDuringExecution::default();
+
+        consumed_cycles.merge(other_consumed_cycles);
+        assert_eq!(consumed_cycles, ConsumedCyclesDuringExecution::default());
+    }
+
+    #[test]
+    fn can_merge_consumed_cycles_during_execution() {
+        assert_consumed_cycles_during_execution::<BurnedCycles>(Cycles::new(10), Cycles::new(20));
+        assert_consumed_cycles_during_execution::<Instructions>(Cycles::new(11), Cycles::new(21));
+        assert_consumed_cycles_during_execution::<RequestAndResponseTransmission>(
+            Cycles::new(12),
+            Cycles::new(22),
+        );
     }
 }
