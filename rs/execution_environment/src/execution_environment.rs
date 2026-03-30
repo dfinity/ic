@@ -3127,11 +3127,7 @@ impl ExecutionEnvironment {
         // if the canister's balance is too low. A more rigorous check happens later
         // in the ingress selector.
         {
-            let subnet_size = state
-                .metadata
-                .network_topology
-                .get_subnet_size(&state.metadata.own_subnet_id)
-                .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
+            let subnet_size = state.get_own_subnet_size();
             let induction_cost = self.cycles_account_manager.ingress_induction_cost(
                 ingress,
                 effective_canister_id,

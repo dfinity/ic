@@ -14,7 +14,7 @@ use ic_interfaces::{
     ingress_pool::ValidatedIngressArtifact,
     validation::{ValidationError, ValidationResult},
 };
-use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::warn;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
@@ -552,11 +552,7 @@ impl IngressManager {
         let effective_canister_id = extract_effective_canister_id(msg).map_err(|_| {
             ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InvalidManagementMessage)
         })?;
-        let subnet_size = state
-            .metadata
-            .network_topology
-            .get_subnet_size(&state.metadata.own_subnet_id)
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
+        let subnet_size = state.get_own_subnet_size();
         match self.cycles_account_manager.ingress_induction_cost(
             signed_ingress,
             effective_canister_id,

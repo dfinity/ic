@@ -332,11 +332,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>> Valid
     for ValidSetRuleImpl<IngressHistoryWriter_>
 {
     fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngress>) {
-        let subnet_size = state
-            .metadata
-            .network_topology
-            .get_subnet_size(&state.metadata.own_subnet_id)
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
+        let subnet_size = state.get_own_subnet_size();
         for msg in msgs {
             let message_id = msg.content().id();
             if !self.is_duplicate(state, &msg) {
