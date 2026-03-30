@@ -3575,7 +3575,7 @@ fn spawn_hash_thread(
                             // If the hash@height is already present via the consensus thread, we can skip calculating it.
                             let states_read = states.read();
                             if states_read.certifications.contains_key(&height) {
-                                return;
+                                continue;
                             }
                             drop(states_read);
                             let certification_metadata =
