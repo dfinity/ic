@@ -501,7 +501,14 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
 
 impl CountBytes for Ingress {
     fn count_bytes(&self) -> usize {
-        size_of::<Ingress>() + self.method_name.len() + self.method_payload.len()
+        size_of::<Ingress>()
+            + self.method_name.len()
+            + self.method_payload.len()
+            + self
+                .sender_info
+                .as_ref()
+                .map(|sender_info| sender_info.info.len())
+                .unwrap_or_default()
     }
 }
 
