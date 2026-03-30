@@ -3307,6 +3307,7 @@ impl StateManager for StateManagerImpl {
                     cert_md.certified_state_hash.clone()
                 } else {
                     error!(
+                        self.log,
                         "Previous state hash was not available after awaiting the hash thread. This is a bug."
                     );
                     // Continue nevertheless, this (impossible situation) should self-heal.
