@@ -161,8 +161,9 @@ fn main() -> Result<()> {
         // by the peers (and vice versa), so it's expected that the metric is increased.
         .remove_metrics_to_check("consensus_invalidated_artifacts")
         // It is expected that the malicious node crashes due to state divergence and restarts.
-        // The replica may occasionally be started 3 times (instead of the usual 2) if
-        // it crashes again briefly during the catch-up process after the divergence.
+        //  TODO(DSM-118): The replica may occasionally be started 3 times (instead of the usual 2) if
+        // it crashes again briefly during the catch-up process after the divergence. Consider reducing
+        // this number if the underlying issue has been resolved.
         .update_orchestrator_metrics_to_check(
             "orchestrator_replica_process_start_attempts_total",
             3,
