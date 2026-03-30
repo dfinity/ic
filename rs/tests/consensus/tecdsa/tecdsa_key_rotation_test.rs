@@ -56,13 +56,15 @@ fn test(test_env: TestEnv) {
         .await;
         // Stash size should be 5 before the roation
         await_pre_signature_stash_size(&app_subnet, 5, key_ids.as_slice(), &log);
-        // Turn off pre-signature creation to verify that the stash is purged correctly
+        // Reduce stash size to test that pre-signatures are re-created after rotation.
+        // We keep max_parallel positive so that new pre-signatures with the rotated key
+        // transcript get created and delivered, which triggers the purge of stale ones.
         set_pre_signature_stash_size(
             &governance,
             app_subnet.subnet_id,
             key_ids.as_slice(),
-            /* max_parallel_pre_signatures */ 0,
-            /* max_stash_size */ 5,
+            /* max_parallel_pre_signatures */ 1,
+            /* pre_signatures_to_create_in_advance */ 1,
             key_rotation_period,
             &log,
         )
@@ -114,8 +116,9 @@ fn test(test_env: TestEnv) {
             }
         }
 
-        // Stash size should be 0 after the roation
-        await_pre_signature_stash_size(&app_subnet, 0, key_ids.as_slice(), &log);
+        // Stash size should be 1 after the rotation, matching the new
+        // pre_signatures_to_create_in_advance setting
+        await_pre_signature_stash_size(&app_subnet, 1, key_ids.as_slice(), &log);
 
         // Ensure that public keys are the same after the rotation
         for key_id in &key_ids {
