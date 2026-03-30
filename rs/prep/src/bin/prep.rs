@@ -144,7 +144,7 @@ struct CliArgs {
     pub max_block_payload_size: Option<u64>,
 
     /// if release-package-download-url is not specified and this option is
-    /// specified, the corresponding update image field in the blessed replica
+    /// specified, the corresponding update image field in the elected replica
     /// version record is left empty.
     #[clap(long)]
     pub allow_empty_update_image: bool,
