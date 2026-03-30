@@ -34,9 +34,9 @@ const SECONDS_IN_DAY: u64 = 24 * 60 * 60;
 const COLD_STORAGE_PERIOD: u64 = 60 * 60; // each hour
 const PERIODIC_METRICS_PUSH_PERIOD: u64 = 5 * 60; // each 5 min
 
-macro_rules! eprintln_or_debug_panic {
+macro_rules! eprintln_or_panic_in_test {
     ($($arg:tt)*) => (
-        if cfg!(debug_assertions) {
+        if cfg!(test) {
             panic!($($arg)*);
         } else {
             eprintln!($($arg)*);
@@ -326,16 +326,16 @@ impl BackupManager {
                     let _ = reader.read_line(&mut state_dir_str);
                     let mut old_state_dir = PathBuf::from(&state_dir_str.trim());
                     if !old_state_dir.exists() {
-                        eprintln_or_debug_panic!("Directory {old_state_dir:?} doesn't exist!");
+                        eprintln_or_panic_in_test!("Directory {old_state_dir:?} doesn't exist!");
                         continue;
                     }
                     old_state_dir = old_state_dir.join("ic_state");
                     if !old_state_dir.exists() {
-                        eprintln_or_debug_panic!("Directory {old_state_dir:?} doesn't exist!");
+                        eprintln_or_panic_in_test!("Directory {old_state_dir:?} doesn't exist!");
                         continue;
                     }
                     if !old_state_dir.join("checkpoints").exists() {
-                        eprintln_or_debug_panic!(
+                        eprintln_or_panic_in_test!(
                             "Directory {old_state_dir:?} doesn't have checkpoints!"
                         );
                         continue;
@@ -344,7 +344,7 @@ impl BackupManager {
                     cmd.arg("-a").arg(old_state_dir).arg(data_dir);
                     info!(log, "Will execute: {:?}", cmd);
                     if let Err(err) = exec_cmd(&mut cmd) {
-                        eprintln_or_debug_panic!("Error copying the state: {err}");
+                        eprintln_or_panic_in_test!("Error copying the state: {err}");
                     } else {
                         break;
                     }
