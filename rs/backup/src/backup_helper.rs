@@ -933,6 +933,7 @@ impl BackupHelper {
                 error!(
                     self.log,
                     "Failed to read the timestamp of the newest state in the cold storage. \
+                    This is expected if we haven't cold stored anything yet. \
                     Force cold storing the state: {:?}",
                     err
                 );
@@ -946,6 +947,7 @@ impl BackupHelper {
                 error!(
                     self.log,
                     "Failed to read the timestamp of the state in the hot storage. \
+                    This is expected if we haven't cold stored anything yet. \
                     Force cold storing the state: {:?}",
                     err
                 );
