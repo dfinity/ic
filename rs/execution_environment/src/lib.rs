@@ -51,7 +51,7 @@ pub use metrics::IngressFilterMetrics;
 pub use query_handler::{DataCertificateWithDelegationMetadata, InternalHttpQueryHandler};
 use query_handler::{HttpQueryHandler, QueryScheduler};
 use scheduler::SchedulerImpl;
-pub use scheduler::{RoundSchedule, abort_all_paused_executions};
+pub use scheduler::{RoundSchedule, SchedulerMetrics, abort_all_paused_executions};
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 

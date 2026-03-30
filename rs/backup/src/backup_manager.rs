@@ -34,6 +34,16 @@ const SECONDS_IN_DAY: u64 = 24 * 60 * 60;
 const COLD_STORAGE_PERIOD: u64 = 60 * 60; // each hour
 const PERIODIC_METRICS_PUSH_PERIOD: u64 = 5 * 60; // each 5 min
 
+macro_rules! eprintln_or_panic_in_test {
+    ($($arg:tt)*) => (
+        if cfg!(test) {
+            panic!($($arg)*);
+        } else {
+            eprintln!($($arg)*);
+        }
+    )
+}
+
 struct SubnetBackup {
     nodes_syncing: usize,
     sync_period: Duration,
@@ -298,35 +308,43 @@ impl BackupManager {
     }
 
     fn init_copy_states(reader: &mut impl BufRead, log: Logger, config: Config) {
-        for b in &config.subnets {
-            let data_dir = &config.root_dir.join("data").join(b.subnet_id.to_string());
+        for subnet_config in &config.subnets {
+            let data_dir = &config
+                .root_dir
+                .join("data")
+                .join(subnet_config.subnet_id.to_string());
             if !data_dir.exists() {
                 fs::create_dir_all(data_dir).expect("Failure creating a directory");
             }
             if !data_dir.join("ic_state/checkpoints").exists() {
                 loop {
                     let mut state_dir_str = String::new();
-                    println!("Enter ic_state directory for subnet {}:", b.subnet_id);
+                    println!(
+                        "Enter ic_state directory for subnet {}:",
+                        subnet_config.subnet_id
+                    );
                     let _ = reader.read_line(&mut state_dir_str);
                     let mut old_state_dir = PathBuf::from(&state_dir_str.trim());
                     if !old_state_dir.exists() {
-                        println!("Error: directory {old_state_dir:?} doesn't exist!");
+                        eprintln_or_panic_in_test!("Directory {old_state_dir:?} doesn't exist!");
                         continue;
                     }
                     old_state_dir = old_state_dir.join("ic_state");
                     if !old_state_dir.exists() {
-                        println!("Error: directory {old_state_dir:?} doesn't exist!");
+                        eprintln_or_panic_in_test!("Directory {old_state_dir:?} doesn't exist!");
                         continue;
                     }
                     if !old_state_dir.join("checkpoints").exists() {
-                        println!("Error: directory {old_state_dir:?} doesn't have checkpoints!");
+                        eprintln_or_panic_in_test!(
+                            "Directory {old_state_dir:?} doesn't have checkpoints!"
+                        );
                         continue;
                     }
                     let mut cmd = Command::new("rsync");
                     cmd.arg("-a").arg(old_state_dir).arg(data_dir);
                     info!(log, "Will execute: {:?}", cmd);
-                    if let Err(e) = exec_cmd(&mut cmd) {
-                        println!("Error: {}", e);
+                    if let Err(err) = exec_cmd(&mut cmd) {
+                        eprintln_or_panic_in_test!("Error copying the state: {err}");
                     } else {
                         break;
                     }
