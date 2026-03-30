@@ -85,10 +85,10 @@ dfx canister call neurons forward_vote --type=idl '( 4368585614685248742, 1, var
 
 Change deadline, execute proposal.
 
-Check blessed versions:
+Check elected versions:
 [code,shell]
 ----
-cargo run --bin ic-admin -- --nns-url=http://localhost:8080 get-blessed-replica-versions
+cargo run --bin ic-admin -- --nns-url=http://localhost:8080 get-elected-replica-versions
 ----
 
 ## An example of a demo scenario for subnet creation

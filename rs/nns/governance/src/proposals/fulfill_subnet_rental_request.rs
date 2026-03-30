@@ -34,7 +34,7 @@ const ABSURDLY_LARGE_NUMBER_OF_NODES_IN_A_SUBNET: usize = 1000;
 /// * replica_version_id - Must be a potential full git commit ID (hexidecimal string of length 40).
 ///
 /// Note that `ValidFulfillSubnetRentalRequest::execute()` is not guaranteed to succeed. E.g. if
-/// replica_version_id is not a blessed replica version, then the proposal will fail at execution.
+/// replica_version_id is not an elected replica version, then the proposal will fail at execution.
 /// In principle, these things could be checked at proposal creation time, but they are not because
 /// that would require calling other canisters, which makes validation code fraught with peril.
 #[derive(Debug, Clone, PartialEq, SelfDescribing)]
