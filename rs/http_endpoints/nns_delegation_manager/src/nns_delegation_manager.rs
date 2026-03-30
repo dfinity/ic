@@ -699,6 +699,7 @@ mod tests {
     const UNKNOWN_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_3;
     const CLOUD_ENGINE_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_4;
     const API_BN_ID: NodeId = ic_test_utilities_types::ids::NODE_5;
+    const API_BN_DOMAIN: &str = "domain.invalid";
 
     // Get a free port on this host to which we can connect transport to.
     fn get_free_localhost_socket_addr() -> SocketAddr {
@@ -872,7 +873,7 @@ mod tests {
                 &make_node_record_key(API_BN_ID),
                 registry_version.into(),
                 Some(NodeRecord {
-                    domain: Some("domain.invalid".to_string()),
+                    domain: Some(API_BN_DOMAIN.to_string()),
                     ..Default::default()
                 }),
             )
