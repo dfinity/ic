@@ -26,12 +26,12 @@ jobs:
   publish-crates:
     name: Publish Crate ${{ github.event.inputs.crate-name }} ${{ github.event.inputs.crate-version }}
     runs-on: ubuntu-latest
-    environment: publish-crates
+ #   environment: publish-crates
     steps:
       - uses: actions/checkout@v6
 
-      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec
-        id: auth
+      # - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec
+      #   id: auth
 
       - name: Check crate version
         run: |
