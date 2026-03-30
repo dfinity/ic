@@ -217,6 +217,23 @@ pub(crate) fn find_non_replicated_response(
     })
 }
 
+/// Estimates the byte size of a [`CanisterHttpResponseWithConsensus`] before
+/// the proof has been aggregated.
+///
+/// This function mirrors the implementation of
+/// `CanisterHttpResponseWithConsensus::count_bytes()`:
+///   proof.count_bytes()  → metadata.count_bytes() + Σ share.count_bytes()
+///   content.count_bytes() → content.count_bytes()
+pub(crate) fn estimate_response_with_consensus_size(
+    metadata: &CanisterHttpResponseMetadata,
+    shares: &BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
+    content: &CanisterHttpResponse,
+) -> usize {
+    metadata.count_bytes()
+        + shares.iter().map(|s| s.count_bytes()).sum::<usize>()
+        + content.count_bytes()
+}
+
 /// Collects distinct HTTP outcall OK-responses from flexible committee members.
 ///
 /// Gathers up to `max_responses` individually-signed `(ok-response, share)` pairs

@@ -33,6 +33,15 @@ pub struct BasicSignatureBatch<T> {
     pub signatures_map: BTreeMap<NodeId, BasicSigOf<T>>,
 }
 
+impl<T> CountBytes for BasicSignatureBatch<T> {
+    fn count_bytes(&self) -> usize {
+        self.signatures_map
+            .values()
+            .map(|sig| std::mem::size_of::<NodeId>() + sig.get_ref().count_bytes())
+            .sum()
+    }
+}
+
 /// ThresholdSignature captures a threshold signature on a value and the
 /// DKG id of the threshold key material used to sign
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]

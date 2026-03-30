@@ -1,8 +1,10 @@
 use crate::{
     CanisterId, PrincipalId, UserId,
     messages::{
-        HasCanisterId, HttpRequestError, HttpUserQuery, MessageId,
-        http::{CallOrQuery, representation_independent_hash_call_or_query},
+        HasCanisterId, HttpRequestError, HttpUserQuery, MessageId, SignedSenderInfo,
+        http::{
+            CallOrQuery, RawSignedSenderInfoSlices, representation_independent_hash_call_or_query,
+        },
     },
 };
 use ic_management_canister_types_private::IC_00;
@@ -18,6 +20,7 @@ pub enum QuerySource {
         user_id: UserId,
         ingress_expiry: u64,
         nonce: Option<Vec<u8>>,
+        sender_info: Option<SignedSenderInfo>,
     },
 }
 
@@ -51,6 +54,7 @@ impl Query {
                 user_id,
                 ingress_expiry,
                 nonce,
+                sender_info,
             } => MessageId::from(representation_independent_hash_call_or_query(
                 CallOrQuery::Query,
                 self.receiver.as_ref(),
@@ -59,7 +63,13 @@ impl Query {
                 *ingress_expiry,
                 user_id.get_ref().as_slice(),
                 nonce.as_deref(),
-                None,
+                sender_info
+                    .as_ref()
+                    .map(|sender_info| RawSignedSenderInfoSlices {
+                        info: &sender_info.info,
+                        signer: sender_info.signer.as_ref(),
+                        sig: &sender_info.sig,
+                    }),
             )),
             QuerySource::System => MessageId::from(representation_independent_hash_call_or_query(
                 CallOrQuery::Query,
@@ -88,6 +98,18 @@ impl TryFrom<HttpUserQuery> for Query {
                 })?),
                 ingress_expiry: query.ingress_expiry,
                 nonce: query.nonce.map(|n| n.0),
+                sender_info: match query.sender_info {
+                    Some(sender_info) => Some(SignedSenderInfo {
+                        info: sender_info.info.0,
+                        signer: CanisterId::try_from(sender_info.signer.0).map_err(|err| {
+                            HttpRequestError::InvalidPrincipalId(format!(
+                                "Converting sender_info.signer to PrincipalId failed with {err:?}"
+                            ))
+                        })?,
+                        sig: sender_info.sig.0,
+                    }),
+                    None => None,
+                },
             },
             receiver: CanisterId::try_from(query.canister_id.0).map_err(|err| {
                 HttpRequestError::InvalidPrincipalId(format!(
@@ -108,7 +130,9 @@ impl HasCanisterId for Query {
 
 #[cfg(test)]
 mod test {
-    use super::super::{Blob, HttpUserQuery};
+    use super::super::{Blob, HttpUserQuery, Query, QuerySource, RawSignedSenderInfo};
+    use crate::{CanisterId, UserId, messages::SignedSenderInfo};
+    use ic_base_types::PrincipalId;
     use maplit::btreemap;
     use serde::Deserialize;
     use serde_cbor::Value;
@@ -146,6 +170,7 @@ mod test {
                 sender: Blob(vec![0x04]),
                 nonce: None,
                 ingress_expiry: 0,
+                sender_info: None,
             },
             Value::Map(btreemap! {
                 text("arg") => bytes(&[][..]),
@@ -167,6 +192,7 @@ mod test {
                 sender: Blob(vec![0; 33]),
                 nonce: None,
                 ingress_expiry: 0,
+                sender_info: None,
             },
             Value::Map(btreemap! {
                 text("arg") => bytes(b"Hello, World!"),
@@ -175,6 +201,147 @@ mod test {
                 text("sender") => bytes(&[0; 33]),
                 text("ingress_expiry") => number(0),
             }),
+        );
+    }
+
+    #[test]
+    fn decoding_read_query_with_sender_info() {
+        assert_cbor_de_equal(
+            &HttpUserQuery {
+                arg: Blob(vec![]),
+                canister_id: Blob(vec![42; 8]),
+                method_name: "some_method_name".to_string(),
+                sender: Blob(vec![0x04]),
+                nonce: Some(Blob(vec![1, 2, 3])),
+                ingress_expiry: 0,
+                sender_info: Some(RawSignedSenderInfo {
+                    info: Blob(vec![1, 2, 3]),
+                    signer: Blob(vec![42; 8]),
+                    sig: Blob(vec![4, 5, 6]),
+                }),
+            },
+            Value::Map(btreemap! {
+                text("arg") => bytes(&[][..]),
+                text("canister_id") => bytes(&[42; 8][..]),
+                text("method_name") => text("some_method_name"),
+                text("sender") => bytes(&[0x04][..]),
+                text("nonce") => bytes(&[1, 2, 3][..]),
+                text("ingress_expiry") => number(0),
+                text("sender_info") => Value::Map(btreemap! {
+                    text("info") => bytes(&[1, 2, 3][..]),
+                    text("signer") => bytes(&[42; 8][..]),
+                    text("sig") => bytes(&[4, 5, 6][..]),
+                }),
+            }),
+        );
+    }
+
+    #[test]
+    fn decoding_read_query_without_sender_info() {
+        assert_cbor_de_equal(
+            &HttpUserQuery {
+                arg: Blob(vec![]),
+                canister_id: Blob(vec![42; 8]),
+                method_name: "some_method_name".to_string(),
+                sender: Blob(vec![0x04]),
+                nonce: None,
+                ingress_expiry: 0,
+                sender_info: None,
+            },
+            Value::Map(btreemap! {
+                text("arg") => bytes(&[][..]),
+                text("canister_id") => bytes(&[42; 8][..]),
+                text("method_name") => text("some_method_name"),
+                text("sender") => bytes(&[0x04][..]),
+                text("ingress_expiry") => number(0),
+            }),
+        );
+    }
+
+    #[test]
+    fn query_message_id_changes_when_sender_info_is_present() {
+        let user_id = UserId::from(PrincipalId::new_user_test_id(1));
+        let ingress_expiry = 1_000;
+        let nonce = Some(vec![1, 2, 3]);
+        let receiver = CanisterId::from_u64(1);
+        let method_name = "query".to_string();
+        let method_payload = vec![4, 5, 6];
+
+        let base_query = Query {
+            source: QuerySource::User {
+                user_id,
+                ingress_expiry,
+                nonce: nonce.clone(),
+                sender_info: None,
+            },
+            receiver,
+            method_name: method_name.clone(),
+            method_payload: method_payload.clone(),
+        };
+
+        let query_with_sender_info = Query {
+            source: QuerySource::User {
+                user_id,
+                ingress_expiry,
+                nonce,
+                sender_info: Some(SignedSenderInfo {
+                    info: vec![7, 8, 9],
+                    signer: CanisterId::from_u64(2),
+                    sig: vec![10, 11, 12],
+                }),
+            },
+            receiver,
+            method_name,
+            method_payload,
+        };
+
+        let id_without_sender_info = base_query.id();
+        let id_with_sender_info = query_with_sender_info.id();
+
+        assert_ne!(id_without_sender_info, id_with_sender_info);
+    }
+
+    #[test]
+    fn query_message_id_is_stable_with_sender_info() {
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_user_test_id(1)),
+                ingress_expiry: 1_000,
+                nonce: Some(vec![1, 2, 3]),
+                sender_info: Some(SignedSenderInfo {
+                    info: vec![7, 8, 9],
+                    signer: CanisterId::from_u64(2),
+                    sig: vec![10, 11, 12],
+                }),
+            },
+            receiver: CanisterId::from_u64(1),
+            method_name: "query".to_string(),
+            method_payload: vec![4, 5, 6],
+        };
+
+        assert_eq!(
+            hex::encode(query.id().as_bytes()),
+            "d72dc05686e601cc5115c5c39fe02ebf8817dff06aedb28046aeb5bbfc444bb2"
+        );
+    }
+
+    #[test]
+    fn query_message_id_is_stable_without_sender_info() {
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_user_test_id(1)),
+                ingress_expiry: 1_000,
+                nonce: Some(vec![1, 2, 3]),
+                sender_info: None,
+            },
+            receiver: CanisterId::from_u64(1),
+            method_name: "query".to_string(),
+            method_payload: vec![4, 5, 6],
+        };
+
+        assert_eq!(
+            hex::encode(query.id().as_bytes()),
+            "17eef00dbc528a593b4f89f8b9d7a8275a04bc8aa3727cd960de2071675cddbe"
         );
     }
 }
