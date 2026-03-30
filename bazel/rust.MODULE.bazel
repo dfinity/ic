@@ -1008,10 +1008,6 @@ crate.spec(
     version = "^0.9",
 )
 crate.spec(
-    package = "num-rational",
-    version = "^0.2.2",
-)
-crate.spec(
     default_features = False,
     features = [
         "libm",

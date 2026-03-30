@@ -1,5 +1,5 @@
 {
-  "checksum": "0ba87757d4da3c2ebfe6fd44de769bfadb974303e7929c18ba45e6002d5f1b62",
+  "checksum": "1fefbde32ed3b3779e766927393403bb1c21b915c373908eacc9793962c43fa7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22065,10 +22065,6 @@
             {
               "id": "num-bigint-dig 0.9.1",
               "target": "num_bigint_dig"
-            },
-            {
-              "id": "num-rational 0.2.4",
-              "target": "num_rational"
             },
             {
               "id": "num-traits 0.2.19",
@@ -51775,108 +51771,6 @@
         "version": "0.1.45"
       },
       "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "num-rational 0.2.4": {
-      "name": "num-rational",
-      "version": "0.2.4",
-      "package_url": "https://github.com/rust-num/num-rational",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num-rational/0.2.4/download",
-          "sha256": "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num_rational",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num_rational",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "bigint",
-            "bigint-std",
-            "default",
-            "num-bigint",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-bigint 0.2.6",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-integer 0.1.46",
-              "target": "num_integer"
-            },
-            {
-              "id": "num-rational 0.2.4",
-              "target": "build_script_build"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.2.4"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.5.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -98844,7 +98738,6 @@
     "nix 0.24.3",
     "num-bigint 0.4.6",
     "num-bigint-dig 0.9.1",
-    "num-rational 0.2.4",
     "num-traits 0.2.19",
     "num_cpus 1.16.0",
     "object 0.37.3",

@@ -1,6 +1,7 @@
 use super::*;
 
 use crate::{
+    governance::MAX_DISSOLVE_DELAY_SECONDS,
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{MaturityDisbursement, Vote},
 };
@@ -856,4 +857,88 @@ fn test_total_maturity_disbursements_in_progress_e8s_equivalent() {
         store.total_maturity_disbursements_in_progress_e8s_equivalent(),
         12 * E8
     );
+}
+
+#[test]
+fn test_set_eight_year_gang_bonus_base_e8s_for_all_neurons() {
+    let mut store = new_heap_based();
+    let controller = PrincipalId::new_user_test_id(1);
+
+    // Create a neuron with MAX dissolve delay (8 years).
+    let neuron_with_max_dissolve_delay = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::from(&controller),
+        controller,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS,
+            aging_since_timestamp_seconds: 123_456_789,
+        },
+        123_456_789,
+    )
+    .with_cached_neuron_stake_e8s(100_000_000)
+    .with_staked_maturity_e8s_equivalent(50_000_000)
+    .with_neuron_fees_e8s(10_000_000)
+    .build();
+
+    // Create a neuron with less than MAX dissolve delay.
+    let neuron_without_max_dissolve_delay = NeuronBuilder::new(
+        NeuronId { id: 2 },
+        Subaccount::from(&PrincipalId::new_user_test_id(2)),
+        PrincipalId::new_user_test_id(2),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS - 1,
+            aging_since_timestamp_seconds: 123_456_789,
+        },
+        123_456_789,
+    )
+    .with_cached_neuron_stake_e8s(200_000_000)
+    .with_staked_maturity_e8s_equivalent(100_000_000)
+    .build();
+
+    // Create a dissolving neuron (which should not get the bonus).
+    let dissolving_neuron = NeuronBuilder::new(
+        NeuronId { id: 3 },
+        Subaccount::from(&PrincipalId::new_user_test_id(3)),
+        PrincipalId::new_user_test_id(3),
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: 999_999_999_999,
+        },
+        123_456_789,
+    )
+    .with_cached_neuron_stake_e8s(300_000_000)
+    .with_staked_maturity_e8s_equivalent(150_000_000)
+    .build();
+
+    // Add all neurons to the store.
+    store
+        .create(neuron_with_max_dissolve_delay.clone())
+        .unwrap();
+    store
+        .create(neuron_without_max_dissolve_delay.clone())
+        .unwrap();
+    store.create(dissolving_neuron.clone()).unwrap();
+
+    // Run the migration.
+    store.set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
+
+    // Verify the neuron with MAX dissolve delay has the bonus set to stake - fees + staked maturity.
+    let retrieved_neuron_1 = store
+        .read(neuron_with_max_dissolve_delay.id(), NeuronSections::ALL)
+        .unwrap();
+    assert_eq!(
+        retrieved_neuron_1.eight_year_gang_bonus_base_e8s,
+        140_000_000 // 100_000_000 stake - 10_000_000 fees + 50_000_000 staked maturity
+    );
+
+    // Verify the neuron without MAX dissolve delay has the bonus set to 0.
+    let retrieved_neuron_2 = store
+        .read(neuron_without_max_dissolve_delay.id(), NeuronSections::ALL)
+        .unwrap();
+    assert_eq!(retrieved_neuron_2.eight_year_gang_bonus_base_e8s, 0);
+
+    // Verify the dissolving neuron has the bonus set to 0.
+    let retrieved_neuron_3 = store
+        .read(dissolving_neuron.id(), NeuronSections::ALL)
+        .unwrap();
+    assert_eq!(retrieved_neuron_3.eight_year_gang_bonus_base_e8s, 0);
 }

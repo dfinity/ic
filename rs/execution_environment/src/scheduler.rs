@@ -48,7 +48,6 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_utils::iter::left_outer_join;
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
-use num_rational::Ratio;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
@@ -258,7 +257,7 @@ impl SchedulerImpl {
         replica_version: &ReplicaVersion,
         chain_key_data: &ChainKeyData,
     ) -> ReplicatedState {
-        let ongoing_long_install_code =
+        let mut ongoing_long_install_code =
             state
                 .canisters_iter()
                 .any(|canister| match canister.next_execution() {
@@ -303,14 +302,13 @@ impl SchedulerImpl {
                 );
                 state = new_state;
 
+                // The following condition is satisfied if the message execution is a paused install code
+                // which is an ongoing long install code.
+                // Conceptually, we want to check if `canister.has_paused_install_code()` (see `SchedulerImpl::advance_long_running_install_code`),
+                // but here we cannot easily access `CanisterState` so we derive if the canister
+                // has a paused install code from the result of the message execution.
                 if let ExecuteSubnetMessageResultType::Paused = execute_subnet_message_result_type {
-                    // This may happen only if the message execution was paused,
-                    // which means that there should not be any instructions
-                    // remaining in the round. Since we do not update
-                    // `ongoing_long_install_code`, we need to break the loop
-                    // here to ensure correctness in the unlikely case of
-                    // some instructions still remaining in the round.
-                    break;
+                    ongoing_long_install_code = true;
                 }
             }
         }
@@ -633,14 +631,6 @@ impl SchedulerImpl {
             if last_full_execution_round.get() != 0 {
                 let canister_age = current_round.get() - last_full_execution_round.get();
                 self.metrics.canister_age.observe(canister_age as f64);
-                // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
-                // scheduled.
-                let canister_state = state.canister_state(canister_id).unwrap();
-                let allocation = Ratio::new(canister_state.compute_allocation().as_percent(), 100);
-                if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
-                {
-                    self.metrics.canister_compute_allocation_violation.inc();
-                }
             };
         }
 
