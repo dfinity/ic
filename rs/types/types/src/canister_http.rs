@@ -1036,12 +1036,6 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 pub type CanisterHttpResponseProof =
     Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
 
-impl CountBytes for CanisterHttpResponseProof {
-    fn count_bytes(&self) -> usize {
-        size_of::<CanisterHttpResponseProof>()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{messages::NO_DEADLINE, time::UNIX_EPOCH};

@@ -16,7 +16,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{
         CanisterTask, CertificateDelegationFormat, CertificateDelegationMetadata, Query,
-        QuerySource,
+        QuerySource, SignedSenderInfo,
     },
     time,
 };
@@ -336,6 +336,7 @@ fn query_cache_returns_different_results_for_different_sources() {
                     user_id: user_test_id(1),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: a_id,
                 method_name: method.into(),
@@ -361,6 +362,7 @@ fn query_cache_returns_different_results_for_different_sources() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: a_id,
                 method_name: method.into(),
@@ -379,6 +381,53 @@ fn query_cache_returns_different_results_for_different_sources() {
             a_id.get()
         };
         assert_eq!(Ok(WasmResult::Reply(caller.into())), res_2);
+    });
+}
+
+#[test]
+fn query_cache_returns_same_results_for_different_sender_info() {
+    for_query_and_composite_query(wasm().reply_data(&[42]), |test, a_id, _b_id, method, q| {
+        let res_1 = test.query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                    sender_info: None,
+                },
+                receiver: a_id,
+                method_name: method.into(),
+                method_payload: q.clone(),
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+            /*certificate_delegation_metadata=*/ None,
+        );
+        assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+        assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
+
+        let res_2 = test.query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                    sender_info: Some(SignedSenderInfo {
+                        info: vec![1, 2, 3],
+                        signer: CanisterId::from_u64(123),
+                        sig: vec![4, 5, 6],
+                    }),
+                },
+                receiver: a_id,
+                method_name: method.into(),
+                method_payload: q,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+            /*certificate_delegation_metadata=*/ None,
+        );
+        assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+        assert_eq!(res_2, Ok(WasmResult::Reply(vec![42])));
     });
 }
 
