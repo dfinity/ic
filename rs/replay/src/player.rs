@@ -38,14 +38,11 @@ use ic_logger::{ReplicaLogger, error, info, new_replica_logger_from_config, warn
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::{
-    registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
-    types::v1 as pb,
-};
+use ic_protobuf::{registry::subnet::v1::SubnetRecord, types::v1 as pb};
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
-use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
+use ic_registry_keys::make_subnet_record_key;
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
@@ -896,21 +893,6 @@ impl Player {
                 },
             },
         }
-    }
-
-    /// Return latest BlessedReplicaVersions record by querying the registry
-    /// canister.
-    pub fn get_blessed_replica_versions(
-        &self,
-        ingress_expiry: Time,
-    ) -> Result<BlessedReplicaVersions, String> {
-        self.certify_state_with_dummy_certification();
-        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
-        self.runtime.block_on(registry_get_value(
-            &make_blessed_replica_versions_key(),
-            ingress_expiry,
-            &perform_query,
-        ))
     }
 
     /// Return the latest registry version by querying the registry canister.

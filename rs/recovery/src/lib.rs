@@ -558,7 +558,7 @@ impl Recovery {
         upgrade_url: Url,
         sha256: String,
         guest_launch_measurements: GuestLaunchMeasurements,
-        add_and_bless_replica_version: bool,
+        add_replica_version: bool,
         replay_until_height: Option<u64>,
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
@@ -574,12 +574,12 @@ impl Recovery {
                 cmd: SubCommand::UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd {
                     replica_version_id: upgrade_version.to_string(),
                     replica_version_record: version_record.clone(),
-                    add_and_bless_replica_version,
+                    add_replica_version,
                 }),
                 descr: format!(
                     r#" upgrade-subnet-to-replica-version{} "{}" "{}""#,
-                    if add_and_bless_replica_version {
-                        " --add-and-bless-replica-version"
+                    if add_replica_version {
+                        " --add-replica-version"
                     } else {
                         ""
                     },
