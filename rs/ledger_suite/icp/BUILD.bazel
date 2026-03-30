@@ -100,6 +100,7 @@ rust_ic_test_suite(
         "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:archive.wasm.gz)",
         "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "RUST_TEST_THREADS": "4",
     },
     deps = [
         # Keep sorted.

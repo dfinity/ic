@@ -243,6 +243,7 @@ def icos_build(
                     "//rs/ic_os/build_tools/dflate",
                 ],
                 tags = ["manual", "no-cache"],
+                visibility = ["//rs/tests:__subpackages__", "//ic-os:__subpackages__"],
             )
             native.genrule(
                 name = "generate-" + boot_args,

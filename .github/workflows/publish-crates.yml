@@ -45,6 +45,9 @@ jobs:
             exit 1
           fi
 
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Build and Test Crate
         run: |
           cargo build --package ${{ github.event.inputs.crate-name }}

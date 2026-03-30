@@ -2,6 +2,7 @@ use crate::driver::ic_gateway_vm::HasIcGatewayVm;
 use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
 use crate::driver::ic_images::try_get_setupos_img_version;
 use crate::driver::nested::NestedVm;
+use crate::driver::resource::BootImage;
 use crate::driver::test_env_api::{
     SshSession, get_guestos_img_url, get_guestos_launch_measurements,
     get_hostos_initial_update_img_url,
@@ -163,6 +164,7 @@ pub fn init_ic(
                 subnet.dkg_interval_length,
                 subnet.dkg_dealings_per_block,
                 subnet.subnet_type,
+                subnet.canister_cycles_cost_schedule.into(),
                 subnet.max_instructions_per_message,
                 subnet.max_instructions_per_round,
                 subnet.max_instructions_per_install_code,
@@ -216,6 +218,20 @@ pub fn init_ic(
     );
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
+
+    for dc_record in &ic.data_centers {
+        ic_config.add_data_center_record(dc_record.clone());
+    }
+    for no in &ic.node_operators {
+        ic_config.add_node_operator_record(
+            no.name.clone(),
+            no.principal_id,
+            no.node_provider_principal_id,
+            no.node_allowance,
+            no.dc_id.clone(),
+            no.rewardable_nodes.clone(),
+        );
+    }
 
     if let Some(UnassignedRecordConfig::Skip) = ic.unassigned_record_config {
         ic_config.skip_unassigned_record();
@@ -609,8 +625,8 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     NodeConfiguration {
         xnet_api,
         public_api,
-        // this value will be overridden by IcConfig::with_node_operator()
-        node_operator_principal_id: None,
+        // If not set per-node, this will be overridden by IcConfig's initial_node_operator
+        node_operator_principal_id: node.node_operator_principal_id,
         secret_key_store: node.secret_key_store.clone(),
         domain: node.domain.clone(),
         node_reward_type: None,
@@ -628,11 +644,17 @@ pub fn setup_baremetal_instance(
         .join(SSH_USERNAME);
 
     let hostos_url = get_hostos_initial_update_img_url().as_str().parse()?;
-    let guestos_url = get_guestos_img_url().as_str().parse()?;
+
+    let nested_vm_config = nested_vm.get_nested_vm_config()?;
+    let guestos_image_source = match &nested_vm_config.boot_image {
+        BootImage::GroupDefault => ImageSource::Url(get_guestos_img_url().as_str().parse()?),
+        BootImage::Image(disk_image) => ImageSource::Url(disk_image.url.as_str().parse()?),
+        BootImage::File(_) => bail!("BootImage::File is not supported for bare metal deployment"),
+    };
 
     let config = DeploymentConfig {
         hostos_upgrade_image: Some(ImageSource::Url(hostos_url)),
-        guestos_image: Some(ImageSource::Url(guestos_url)),
+        guestos_image: Some(guestos_image_source),
         setupos_config_image: Some(ImageSource::File(config_image.to_path_buf())),
     };
 

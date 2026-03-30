@@ -140,6 +140,7 @@ async fn resume_killed_instance_impl(
         incomplete_state,
         initial_time: None,
         mainnet_nns_subnet_id: None,
+        disable_ingress_validation: None,
     };
     let response = client
         .post(server_url.join("instances").unwrap())

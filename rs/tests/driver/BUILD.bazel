@@ -49,6 +49,7 @@ rust_library(
         "//rs/nns/common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
+        "//rs/nns/governance/conversions",
         "//rs/nns/gtc",
         "//rs/nns/init",
         "//rs/nns/sns-wasm",

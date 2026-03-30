@@ -12,12 +12,14 @@ use crate::driver::{
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
+use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::{Height, NodeId, PrincipalId};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -49,6 +51,19 @@ pub struct InternetComputer {
     use_specified_ids_allocation_range: bool,
     pub unassigned_record_config: Option<UnassignedRecordConfig>,
     pub api_boundary_nodes: Vec<Node>,
+    pub data_centers: Vec<DataCenterRecord>,
+    pub node_operators: Vec<NodeOperatorConfig>,
+}
+
+/// Configuration for a node operator to be added to the initial registry.
+#[derive(Clone, Debug, Default)]
+pub struct NodeOperatorConfig {
+    pub name: String,
+    pub principal_id: PrincipalId,
+    pub node_provider_principal_id: Option<PrincipalId>,
+    pub node_allowance: u64,
+    pub dc_id: String,
+    pub rewardable_nodes: BTreeMap<String, u32>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -115,6 +130,26 @@ impl InternetComputer {
 
     pub fn with_node_provider(mut self, principal_id: PrincipalId) -> Self {
         self.node_provider = Some(principal_id);
+        self
+    }
+
+    pub fn add_data_center(mut self, dc_record: DataCenterRecord) -> Self {
+        if self
+            .data_centers
+            .iter()
+            .any(|existing| existing.id.eq_ignore_ascii_case(&dc_record.id))
+        {
+            panic!(
+                "Duplicate data center id (case-insensitive) in IC config: {}",
+                dc_record.id
+            );
+        }
+        self.data_centers.push(dc_record);
+        self
+    }
+
+    pub fn add_node_operator(mut self, node_operator: NodeOperatorConfig) -> Self {
+        self.node_operators.push(node_operator);
         self
     }
 
@@ -474,6 +509,7 @@ pub struct Subnet {
     // NOTE: Some values in this config, like the http port,
     // are overwritten in `update_and_write_node_config`.
     pub subnet_type: SubnetType,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
     pub max_instructions_per_message: Option<u64>,
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
@@ -509,6 +545,7 @@ impl Subnet {
             features: None,
             max_number_of_canisters: None,
             subnet_type,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
@@ -688,6 +725,11 @@ impl Subnet {
         self
     }
 
+    pub fn with_cost_schedule(mut self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        self.canister_cycles_cost_schedule = cost_schedule;
+        self
+    }
+
     pub fn halted(mut self) -> Self {
         self.running_state = SubnetRunningState::Halted;
         self
@@ -764,6 +806,7 @@ impl Default for Subnet {
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             subnet_type: SubnetType::System,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
@@ -853,6 +896,7 @@ pub struct Node {
     pub domain: Option<String>,
     pub recovery_hash: Option<String>,
     pub boot_image: BootImage,
+    pub node_operator_principal_id: Option<PrincipalId>,
 }
 
 impl Node {
@@ -887,6 +931,11 @@ impl Node {
 
     pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
         self.required_host_features = required_host_features;
+        self
+    }
+
+    pub fn with_node_operator_principal_id(mut self, principal_id: PrincipalId) -> Self {
+        self.node_operator_principal_id = Some(principal_id);
         self
     }
 

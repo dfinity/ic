@@ -110,7 +110,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
                 }
                 canister_state_changes
                     .system_state_modifications
-                    .apply_balance_changes(&mut system_state);
+                    .apply_balance_changes(&mut system_state, CanisterCyclesCostSchedule::Normal);
             }
             WasmExecutionResult::Paused(_, _) => (), // Only possible via execute_dts
         }
