@@ -508,7 +508,7 @@ async fn connect_to(
     info!(log, "Establishing TCP connection to {peer_id} @ {addr}");
     let tcp_stream: TcpStream = TcpStream::connect(addr)
         .await
-        .map_err(|err| format!("Could not connect to node {peer_id}. {err:?}."))?;
+        .map_err(|err| format!("Could not connect to node {addr}. {err:?}."))?;
 
     let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
 
@@ -516,11 +516,10 @@ async fn connect_to(
         log,
         "Establishing TLS stream to {peer_id}. Tcp stream: {tcp_stream:?}"
     );
-
     let tls_stream = tls_connector
         .connect(domain, tcp_stream)
         .await
-        .map_err(|err| format!("Could not establish TLS stream to node {peer_id}. {err:?}."))?;
+        .map_err(|err| format!("Could not establish TLS stream to node {addr}. {err:?}."))?;
 
     info!(
         log,
