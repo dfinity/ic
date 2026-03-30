@@ -28,13 +28,14 @@ use ic_types::{
     time::expiry_time_from_now,
 };
 use rand::Rng;
+use rustls::{ClientConfig, pki_types::ServerName};
 use tokio::{
-    net::TcpStream,
+    net::{TcpStream, lookup_host},
     sync::watch,
     task::JoinHandle,
     time::{sleep, timeout},
 };
-use tokio_rustls::{TlsConnector, client::TlsStream};
+use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
@@ -434,7 +435,7 @@ async fn connect(
         NodeRewardType::Unspecified
     });
 
-    let tls_stream = match node_reward_type {
+    let (peer_id, addr, domain, tls_client_config) = match node_reward_type {
         NodeRewardType::Unspecified
         | NodeRewardType::Type0
         | NodeRewardType::Type1
@@ -447,19 +448,83 @@ async fn connect(
                     format!("Could not find a node from the NNS to talk to. Error: {err}")
                 })?;
 
-            connect_to_nns_node(log, peer_id, endpoint, registry_client, tls_config).await
+            let registry_version = registry_client.get_latest_version();
+
+            let ip_addr = endpoint
+                .ip_addr
+                .parse()
+                .map_err(|err| format!("Failed to parse the ip addr: {err}"))?;
+
+            let addr = SocketAddr::new(ip_addr, endpoint.port as u16);
+
+            let tls_client_config = tls_config
+                .client_config(peer_id, registry_version)
+                .map_err(|err| format!("Retrieving TLS client config failed: {err:?}."))?;
+
+            let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled"
+                .try_into()
+                // TODO: ideally the expect should run at compile time
+                .expect("failed to create domain");
+
+            (peer_id, addr, irrelevant_domain, tls_client_config)
         }
         NodeRewardType::Type4 => {
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
                 .map_err(|err| format!("Could not find an API BN to talk to. Error: {err}"))?;
 
-            connect_to_api_bn(log, api_bn_id, domain).await
+            let addr = lookup_host((domain.as_str(), 443_u16))
+                .await?
+                .next()
+                .ok_or_else(|| {
+                    format!("API BN domain {domain} does not resolve to any IP address.",)
+                })?;
+
+            let mut root_store = rustls::RootCertStore::empty();
+            root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+            let tls_client_config = rustls::ClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_no_client_auth();
+
+            let domain = domain
+                .clone()
+                .try_into()
+                .map_err(|err| format!("Invalid API BN domain {domain}: {err}"))?;
+
+            (api_bn_id, addr, domain, tls_client_config)
         }
-    }?;
+    };
+
+    connect_to(log, rt_handle, peer_id, addr, domain, tls_client_config).await
+}
+
+async fn connect_to(
+    log: &ReplicaLogger,
+    rt_handle: &tokio::runtime::Handle,
+    peer_id: NodeId,
+    addr: SocketAddr,
+    domain: ServerName<'static>,
+    tls_client_config: ClientConfig,
+) -> Result<SendRequest<Body>, BoxError> {
+    info!(log, "Establishing TCP connection to {peer_id} @ {addr}");
+    let tcp_stream: TcpStream = TcpStream::connect(addr)
+        .await
+        .map_err(|err| format!("Could not connect to node {peer_id}. {err:?}."))?;
+
+    let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
 
     info!(
         log,
-        "Establishing HTTP connection. Tls stream: {tls_stream:?}"
+        "Establishing TLS stream to {peer_id}. Tcp stream: {tcp_stream:?}"
+    );
+
+    let tls_stream = tls_connector
+        .connect(domain, tcp_stream)
+        .await
+        .map_err(|err| format!("Could not establish TLS stream to node {peer_id}. {err:?}."))?;
+
+    info!(
+        log,
+        "Establishing HTTP connection to {peer_id}. Tls stream: {tls_stream:?}"
     );
     let (request_sender, connection) =
         hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
@@ -473,89 +538,6 @@ async fn connect(
     });
 
     Ok(request_sender)
-}
-
-async fn connect_to_nns_node(
-    log: &ReplicaLogger,
-    peer_id: NodeId,
-    endpoint: ConnectionEndpoint,
-    registry_client: &dyn RegistryClient,
-    tls_config: &(dyn TlsConfig + Send + Sync),
-) -> Result<TlsStream<TcpStream>, BoxError> {
-    let registry_version = registry_client.get_latest_version();
-
-    let ip_addr = endpoint
-        .ip_addr
-        .parse()
-        .map_err(|err| format!("Failed to parse the ip addr: {err}"))?;
-
-    let addr = SocketAddr::new(ip_addr, endpoint.port as u16);
-
-    let tls_client_config = tls_config
-        .client_config(peer_id, registry_version)
-        .map_err(|err| format!("Retrieving TLS client config failed: {err:?}."))?;
-
-    info!(log, "Establishing TCP connection to {peer_id} @ {addr}");
-    let tcp_stream: TcpStream = TcpStream::connect(addr)
-        .await
-        .map_err(|err| format!("Could not connect to node {peer_id}. {err:?}."))?;
-
-    let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
-    let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
-
-    info!(
-        log,
-        "Establishing TLS stream to {peer_id}. Tcp stream: {tcp_stream:?}"
-    );
-    let tls_stream = tls_connector
-        .connect(
-            irrelevant_domain
-                .try_into()
-                // TODO: ideally the expect should run at compile time
-                .expect("failed to create domain"),
-            tcp_stream,
-        )
-        .await
-        .map_err(|err| format!("Could not establish TLS stream to node {peer_id}. {err:?}."))?;
-
-    Ok(tls_stream)
-}
-
-async fn connect_to_api_bn(
-    log: &ReplicaLogger,
-    api_bn_id: NodeId,
-    domain: String,
-) -> Result<TlsStream<TcpStream>, BoxError> {
-    let mut root_store = rustls::RootCertStore::empty();
-    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let tls_client_config = rustls::ClientConfig::builder()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-
-    let addr = (domain.as_str(), 443_u16);
-    info!(log, "Establishing TCP connection to {api_bn_id} @ {addr:?}");
-    let tcp_stream: TcpStream = TcpStream::connect(addr)
-        .await
-        .map_err(|err| format!("Could not connect to node {api_bn_id}. {err:?}."))?;
-
-    let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
-
-    info!(
-        log,
-        "Establishing TLS stream to {api_bn_id}. Tcp stream: {tcp_stream:?}"
-    );
-    let tls_stream = tls_connector
-        .connect(
-            domain
-                .clone()
-                .try_into()
-                .map_err(|err| format!("Invalid API BN domain {domain}: {err}"))?,
-            tcp_stream,
-        )
-        .await
-        .map_err(|err| format!("Could not establish TLS stream to node {api_bn_id}. {err:?}."))?;
-
-    Ok(tls_stream)
 }
 
 fn get_node_reward_type(
