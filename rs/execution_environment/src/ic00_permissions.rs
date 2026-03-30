@@ -6,7 +6,7 @@ use ic_types::{CanisterId, SubnetId};
 
 /// Keeps track of when an IC00 method is allowed to be executed.
 #[derive(Eq, PartialEq)]
-pub(crate) struct Ic00MethodPermissions {
+pub struct Ic00MethodPermissions {
     method: Ic00Method,
 
     /// Call initiated by a remote subnet.
@@ -49,9 +49,7 @@ impl Ic00MethodPermissions {
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister
             | Ic00Method::StoredChunks
-            | Ic00Method::ListCanisterSnapshots
-            | Ic00Method::ReadCanisterSnapshotMetadata
-            | Ic00Method::ReadCanisterSnapshotData => Self {
+            | Ic00Method::ListCanisterSnapshots => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
@@ -59,14 +57,34 @@ impl Ic00MethodPermissions {
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
+            Ic00Method::FetchCanisterLogs
+            | Ic00Method::ReadCanisterSnapshotMetadata
+            | Ic00Method::ReadCanisterSnapshotData => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
+            },
+            Ic00Method::UploadChunk
+            | Ic00Method::TakeCanisterSnapshot
+            | Ic00Method::LoadCanisterSnapshot
+            | Ic00Method::UploadCanisterSnapshotMetadata
+            | Ic00Method::UploadCanisterSnapshotData => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: true,
+                installs_code: false,
+            },
             Ic00Method::StartCanister
             | Ic00Method::StopCanister
             | Ic00Method::UninstallCode
             | Ic00Method::ClearChunkStore
             | Ic00Method::DeleteCanisterSnapshot
-            | Ic00Method::UploadCanisterSnapshotMetadata
-            | Ic00Method::DeleteCanister
-            | Ic00Method::UploadCanisterSnapshotData => Self {
+            | Ic00Method::DeleteCanister => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
@@ -108,24 +126,6 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
                 counts_toward_round_limit: false,
-                does_not_run_on_aborted_canister: true,
-                installs_code: false,
-            },
-            Ic00Method::FetchCanisterLogs => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: true,
-                does_not_run_on_aborted_canister: false,
-                installs_code: false,
-            },
-            Ic00Method::UploadChunk
-            | Ic00Method::TakeCanisterSnapshot
-            | Ic00Method::LoadCanisterSnapshot => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
             },
@@ -202,5 +202,9 @@ impl Ic00MethodPermissions {
         !(self.counts_toward_round_limit && instructions_reached
             || self.does_not_run_on_aborted_canister && effective_canister_is_aborted
             || self.installs_code && ongoing_long_install_code)
+    }
+
+    pub fn counts_toward_round_limit(&self) -> bool {
+        self.counts_toward_round_limit
     }
 }

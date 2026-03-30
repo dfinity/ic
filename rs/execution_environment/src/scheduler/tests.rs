@@ -467,6 +467,7 @@ fn test_maybe_add_heartbeat_or_global_timer_tasks() {
                 method_payload: vec![1_u8],
                 message_id: message_test_id(555),
                 expiry_time: expiry_time_from_now(),
+                sender_info: None,
             });
         }
         while canister.get_next_scheduled_method() != next_scheduled_method {

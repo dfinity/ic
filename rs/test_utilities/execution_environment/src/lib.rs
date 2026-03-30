@@ -16,6 +16,7 @@ use ic_embedders::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
+use ic_execution_environment::Ic00MethodPermissions;
 use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
@@ -1608,8 +1609,12 @@ impl ExecutionTest {
         }
     }
 
-    // Asserts that the change in consumed cycles metrics matches with
-    // the expected change based on the number of executed instructions.
+    /// Asserts that the cycles used for instructions while executing the given `message: SubnetMessage`
+    /// as per the canister metrics match the given number of `instructions_used: NumInstructions`.
+    /// The value of `cycles_used_before: NominalCycles` is expected to be
+    /// the cycles used for instructions by the given canister before executing the given `message: SubnetMessage`.
+    /// Additionally, if `instructions_used: NumInstructions` is not zero, asserts that
+    /// `Ic00MethodPermissions::counts_toward_round_limit` is set to true for the corresponding method.
     fn assert_expected_cycles_metrics_change(
         &self,
         canister: &CanisterState,
@@ -1627,10 +1632,21 @@ impl ExecutionTest {
         assert!(cycles_used_after >= cycles_used_before);
         let cycles_used = cycles_used_after - cycles_used_before;
         if instructions_used.get() != 0 {
+            let method_name = match message {
+                SubnetMessage::Response(_) => None,
+                SubnetMessage::Request(ref request) => Some(request.method_name.clone()),
+                SubnetMessage::Ingress(ref ingress) => Some(ingress.method_name.clone()),
+            };
             assert_eq!(
                 cycles_used,
                 self.expected_cycles_metrics_change(message, instructions_used),
             );
+            if let Some(method_name) = method_name {
+                assert!(
+                    Ic00MethodPermissions::new(Method::from_str(&method_name).unwrap())
+                        .counts_toward_round_limit()
+                );
+            }
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
                 NumInstructions::new(0),

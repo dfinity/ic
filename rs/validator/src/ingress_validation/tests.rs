@@ -560,7 +560,7 @@ mod validate_ingress_expiry {
 
 mod validate_sender_info {
     use ic_types::messages::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SenderInfo,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawSignedSenderInfo,
     };
 
     use super::*;
@@ -574,7 +574,7 @@ mod validate_sender_info {
 
     #[test]
     fn should_reject_some_sender_info() {
-        let request = http_request_with_sender_info(Some(SenderInfo {
+        let request = http_request_with_sender_info(Some(RawSignedSenderInfo {
             info: Blob(vec![1, 2, 3]),
             signer: Blob(canister_test_id(42).get().into_vec()),
             sig: Blob(vec![4, 5, 6]),
@@ -585,7 +585,7 @@ mod validate_sender_info {
 
     #[test]
     fn should_reject_some_sender_info_in_full_request_validation() {
-        let request = http_request_with_sender_info(Some(SenderInfo {
+        let request = http_request_with_sender_info(Some(RawSignedSenderInfo {
             info: Blob(vec![1, 2, 3]),
             signer: Blob(canister_test_id(42).get().into_vec()),
             sig: Blob(vec![4, 5, 6]),
@@ -603,7 +603,7 @@ mod validate_sender_info {
     }
 
     fn http_request_with_sender_info(
-        sender_info: Option<SenderInfo>,
+        sender_info: Option<RawSignedSenderInfo>,
     ) -> HttpRequest<SignedIngressContent> {
         HttpRequest::try_from(HttpRequestEnvelope::<HttpCallContent> {
             content: HttpCallContent::Call {
