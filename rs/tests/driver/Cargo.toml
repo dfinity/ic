@@ -45,6 +45,7 @@ ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-nns-governance-conversions = { path = "../../nns/governance/conversions" }
 ic-nns-gtc = { path = "../../nns/gtc" }
 ic-nns-init = { path = "../../nns/init" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
@@ -69,6 +70,7 @@ ic-sns-swap = { path = "../../sns/swap" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sys = { path = "../../sys" }
 ic-test-identity = { path = "../../test_utilities/identity" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }

@@ -774,6 +774,12 @@ impl NeuronStore {
         })
     }
 
+    pub fn set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic(&mut self) {
+        with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store.set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
+        });
+    }
+
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.
 
     // Read methods for indexes.

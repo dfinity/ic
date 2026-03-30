@@ -31,7 +31,7 @@ use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use icp_ledger as ledger;
 use ledger::LedgerCanisterInitPayload;

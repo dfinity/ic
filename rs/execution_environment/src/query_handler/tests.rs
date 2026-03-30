@@ -8,10 +8,11 @@ use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
-    Cycles, NumInstructions,
+    NumInstructions,
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
+use ic_types_cycles::Cycles;
 use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
 
@@ -514,7 +515,7 @@ fn queries_to_frozen_canisters_are_rejected() {
     //          41_070 cycles are needed to cover freeze_threshold_cycles
     //                 of the canister history memory usage (134 bytes)
     let low_cycles = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        Cycles::new(300_008_835_260)
+        Cycles::new(300_012_517_130)
     } else {
         Cycles::new(300_005_633_530)
     };

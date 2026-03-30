@@ -38,7 +38,7 @@ fn generic_block_to_ciborium_value(generic_block: GenericBlock) -> Result<cibori
                     // The spec says:
                     // > For tag number 3, the value of the bignum is -1 - n.
                     // So we add one to the value before obtaining the BE bytes.
-                    let (_sign, bytes) = (int.0 + 1u8).to_bytes_be();
+                    let (_sign, bytes) = (int.0 + 1_u8).to_bytes_be();
                     CiboriumValue::Tag(NEG_BIGNUM, Box::new(CiboriumValue::Bytes(bytes)))
                 }),
             },

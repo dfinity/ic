@@ -47,6 +47,7 @@ rust_test(
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/ic_os/sev/guest/testing",
+        "//rs/types/types",
         "@crate_index//:rand",
         "@crate_index//:tempfile",
     ],

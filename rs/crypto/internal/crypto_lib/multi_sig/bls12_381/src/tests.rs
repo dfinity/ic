@@ -54,7 +54,7 @@ mod stability {
     /// Unit test because: tests internal hash_public_key_to_g1 function not in public API.
     #[test]
     fn public_key_to_g1() {
-        let seed = Seed::from_bytes(&[42u8]);
+        let seed = Seed::from_bytes(&[42_u8]);
         let (_secret_key, public_key) = multi_crypto::keypair_from_rng(&mut seed.into_rng());
         let public_key_bytes = PublicKeyBytes::from(&public_key);
         assert_eq!(
@@ -70,7 +70,7 @@ mod stability {
     /// Unit test because: accesses SecretKeyBytes.0 which is pub(crate).
     #[test]
     fn secret_key_from_fixed_seed() {
-        let seed = Seed::from_bytes(&[42u8]);
+        let seed = Seed::from_bytes(&[42_u8]);
         let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut seed.into_rng());
         let secret_key_bytes = SecretKeyBytes::from(&secret_key);
 
@@ -127,7 +127,7 @@ mod basic_functionality {
                     .serialize();
                 // It suffices to prove that the first 32 bytes are distinct.  More requires a
                 // custom hash implementation.
-                let mut hashable = [0u8; 32];
+                let mut hashable = [0_u8; 32];
                 hashable.copy_from_slice(&bytes[0..32]);
                 hashable
             })
@@ -148,7 +148,7 @@ mod basic_functionality {
                 let bytes = g1.serialize();
                 // It suffices to prove that the first 32 bytes are distinct.  More requires a
                 // custom hash implementation.
-                let mut hashable = [0u8; 32];
+                let mut hashable = [0_u8; 32];
                 hashable.copy_from_slice(&bytes[0..32]);
                 hashable
             })

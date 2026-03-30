@@ -39,6 +39,7 @@ use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_registry_routing_table::RoutingTable;
+use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{CanisterId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
@@ -1567,6 +1568,14 @@ pub async fn create_instance(
         }
     }
 
+    let mut malicious_flags = MaliciousFlags::default();
+    if instance_config
+        .disable_ingress_validation
+        .unwrap_or_default()
+    {
+        malicious_flags.maliciously_disable_ingress_validation = true;
+    }
+
     match api_state
         .add_instance(
             move |seed, gateway_port| {
@@ -1586,6 +1595,7 @@ pub async fn create_instance(
                     auto_progress_enabled,
                     gateway_port,
                     instance_config.mainnet_nns_subnet_id.unwrap_or_default(),
+                    malicious_flags,
                 )
             },
             auto_progress,

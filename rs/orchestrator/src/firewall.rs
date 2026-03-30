@@ -9,7 +9,11 @@ use ic_config::firewall::{
     ReplicaConfig as ReplicaFirewallConfig,
 };
 use ic_logger::{ReplicaLogger, debug, info, warn};
-use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
+use ic_protobuf::registry::{
+    firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection},
+    node::v1::NodeRewardType,
+    subnet::v1::SubnetType,
+};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
@@ -28,7 +32,7 @@ enum DataSource {
     Registry,
 }
 
-/// The role of the node in the IC, i.e., whether it's acting as a replica or a boundary node.
+/// The role of the node in the IC, i.e., whether it is acting as a replica or a boundary node.
 enum Role {
     AssignedReplica(SubnetId),
     UnassignedReplica,
@@ -100,7 +104,7 @@ impl Firewall {
         logger: &ReplicaLogger,
     ) -> Vec<FirewallRule> {
         self.registry
-            .get_firewall_rules(registry_version, scope)
+            .get_firewall_rules(scope, registry_version)
             .inspect_err(|err| {
                 warn!(
                     every_n_seconds => 30,
@@ -172,6 +176,90 @@ impl Firewall {
             .unwrap_or_else(|| vec![registry_version])
     }
 
+    /// Get the node reward type of this node from the registry, and default to
+    /// [`NodeRewardType::Unspecified`] if it is not found or there is an error.
+    fn get_defaulting_node_reward_type(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> NodeRewardType {
+        match self.registry.get_node_record(node_id, version) {
+            // node_reward_type() defaults to `Unspecified` if the field is unset or set to an
+            // invalid enum value
+            Ok(Some(node_record)) => node_record.node_reward_type(),
+            Ok(None) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.logger,
+                    "Node record for node ID {} not found in the registry at version {}",
+                    node_id,
+                    version
+                );
+                NodeRewardType::Unspecified
+            }
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.logger,
+                    "Failed to get the node record for node ID {}: {}",
+                    node_id,
+                    err
+                );
+                NodeRewardType::Unspecified
+            }
+        }
+    }
+
+    /// Determines whether a node with `other_reward_type` should be whitelisted for a node with
+    /// `own_reward_type`.
+    /// Currently, if the node reward type is not `Type4` (cloud engine node), then all nodes except
+    /// cloud engine nodes will be whitelisted. For the latter, all nodes are whitelisted.
+    /// If the node reward type cannot be determined, we will default to a non cloud engine node and
+    /// protect them from cloud engine nodes just in case.
+    fn is_whitelisted(own_reward_type: NodeRewardType, other_reward_type: NodeRewardType) -> bool {
+        // This ugly matching is on purpose to exhaustively list all the combinations of node reward
+        // types such that existing rules are adapted when new node reward types are added.
+        match (own_reward_type, other_reward_type) {
+            (
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1,
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1,
+            ) => true,
+            (
+                NodeRewardType::Type4,
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1
+                | NodeRewardType::Type4,
+            ) => true,
+            (
+                NodeRewardType::Unspecified
+                | NodeRewardType::Type0
+                | NodeRewardType::Type1
+                | NodeRewardType::Type2
+                | NodeRewardType::Type3
+                | NodeRewardType::Type3dot1
+                | NodeRewardType::Type1dot1,
+                NodeRewardType::Type4,
+            ) => false,
+        }
+    }
+
     fn get_node_whitelisting_rules(
         &mut self,
         registry_version: RegistryVersion,
@@ -180,37 +268,67 @@ impl Firewall {
         // in the registry inclusive.
         let registry_versions = self.get_registry_versions(registry_version);
 
-        // Get the union of all the node IP addresses from the registry
-        let node_whitelist_ips: BTreeSet<IpAddr> = registry_versions
-            .into_iter()
-            .flat_map(|registry_version| {
+        // Determine our node reward type, since this will affect the set of nodes that we
+        // whitelist.
+        // We assume that nodes' reward types do not change across registry versions, so we just get
+        // it from the latest registry version.
+        let own_reward_type = self.get_defaulting_node_reward_type(self.node_id, registry_version);
+
+        // Get the union of all the node IP addresses from the registry, as well as whitelisted
+        // ones.
+        let mut all_node_ips = BTreeSet::new();
+        let mut whitelisted_node_ips = BTreeSet::new();
+        for registry_version in registry_versions {
+            // Fetch all node IDs in the registry at this version.
+            let all_node_ids = match self.registry.get_node_ids(registry_version) {
+                Ok(node_ids) => node_ids,
+                Err(err) => {
+                    warn!(
+                        every_n_seconds => 30,
+                        self.logger,
+                        "Failed to get all node IDs in the registry: {}", err
+                    );
+                    continue;
+                }
+            };
+
+            // For each of them, check their node reward type and only include the ones with
+            // whitelisted node reward types.
+            let whitelisted_node_ids = all_node_ids.iter().copied().filter(|other_node_id| {
+                let other_reward_type =
+                    self.get_defaulting_node_reward_type(*other_node_id, registry_version);
+
+                Self::is_whitelisted(own_reward_type, other_reward_type)
+            });
+
+            whitelisted_node_ips.extend(
+                self.registry.get_available_ip_addresses_for_node_ids(
+                    whitelisted_node_ids,
+                    registry_version,
+                ),
+            );
+            all_node_ips.extend(
                 self.registry
-                    .get_all_nodes_ip_addresses(registry_version)
-                    .inspect_err(|err| {
-                        warn!(
-                            every_n_seconds => 30,
-                            self.logger,
-                            "Failed to get the IPs of all nodes in the registry: {}", err
-                        )
-                    })
-                    .unwrap_or_default()
-            })
-            .collect();
+                    .get_available_ip_addresses_for_node_ids(all_node_ids, registry_version),
+            );
+        }
 
         // Then split it to v4 and v6 separately
-        let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(&node_whitelist_ips);
+        let (all_ipv4s, all_ipv6s) = split_ips_by_address_family(&all_node_ips);
+        let (whitelisted_ipv4s, whitelisted_ipv6s) =
+            split_ips_by_address_family(&whitelisted_node_ips);
 
         info!(
             self.logger,
             "Whitelisting node IP addresses ({} v4 and {} v6) on the firewall",
-            node_ipv4s.len(),
-            node_ipv6s.len()
+            whitelisted_ipv4s.len(),
+            whitelisted_ipv6s.len()
         );
 
-        // Build a UDP and TCP rule to whitelist all v4 and v6 IP addresses of nodes.
+        // Build a UDP and TCP rule to whitelist all v4 and v6 IP addresses of whitelisted nodes.
         let tcp_node_whitelisting_rule = FirewallRule {
-            ipv4_prefixes: node_ipv4s.clone(),
-            ipv6_prefixes: node_ipv6s.clone(),
+            ipv4_prefixes: whitelisted_ipv4s.clone(),
+            ipv6_prefixes: whitelisted_ipv6s.clone(),
             ports: self.replica_config.tcp_ports_for_node_whitelist.clone(),
             action: FirewallAction::Allow as i32,
             comment: "Automatic node whitelisting".to_string(),
@@ -219,8 +337,8 @@ impl Firewall {
         };
 
         let udp_node_whitelisting_rule = FirewallRule {
-            ipv4_prefixes: node_ipv4s.clone(),
-            ipv6_prefixes: node_ipv6s.clone(),
+            ipv4_prefixes: whitelisted_ipv4s.clone(),
+            ipv6_prefixes: whitelisted_ipv6s.clone(),
             ports: self.replica_config.udp_ports_for_node_whitelist.clone(),
             action: FirewallAction::Allow as i32,
             comment: "Automatic node whitelisting".to_string(),
@@ -236,9 +354,15 @@ impl Firewall {
 
         // Build a single rule to blacklist v4 and v6 IP addresses
         // that are not supposed to be used by ic-http-adapter.
+        info!(
+            self.logger,
+            "Blacklisting node IP addresses ({} v4 and {} v6) for ic-http-adapter on the firewall",
+            all_ipv4s.len(),
+            all_ipv6s.len()
+        );
         let ic_http_adapter_rule = FirewallRule {
-            ipv4_prefixes: node_ipv4s,
-            ipv6_prefixes: node_ipv6s,
+            ipv4_prefixes: all_ipv4s,
+            ipv6_prefixes: all_ipv6s,
             ports: self.replica_config.ports_for_http_adapter_blacklist.clone(),
             action: FirewallAction::Reject as i32,
             comment: "Automatic blacklisting for ic-http-adapter".to_string(),
@@ -263,61 +387,51 @@ impl Firewall {
 
         // Depending on whether the node is a system or app API boundary node, get the IPs of all
         // system subnet or application subnet nodes
-        let node_ips: BTreeSet<IpAddr> = match self
+        let whitelisted_subnet_types = match self
             .registry
             .is_system_api_boundary_node(self.node_id, registry_version)
         {
-            Ok(true) => registry_versions
-                .into_iter()
-                .flat_map(|registry_version| {
-                    self.registry
-                        .get_system_subnet_nodes_ip_addresses(registry_version)
-                        .inspect_err(|err| {
-                            warn!(
-                                every_n_seconds => 30,
-                                self.logger,
-                                "Failed to get the IPs of system subnet nodes in the registry: {}", err
-                            )
-                        })
-                        .unwrap_or_default()
-                })
-                .collect(),
-            Ok(false) => registry_versions
-                .into_iter()
-                .flat_map(|registry_version| {
-                    self.registry
-                        .get_app_subnet_nodes_ip_addresses(registry_version)
-                        .inspect_err(|err| {
-                            warn!(
-                                every_n_seconds => 30,
-                                self.logger,
-                                "Failed to get the IPs of app subnet nodes in the registry: {}", err
-                            )
-                        })
-                        .unwrap_or_default()
-                })
-                .collect(),
+            Ok(true) => vec![SubnetType::System],
+            Ok(false) => vec![SubnetType::Application, SubnetType::VerifiedApplication],
             Err(err) => {
                 warn!(
                     every_n_seconds => 30,
                     self.logger,
                     "Failed to determine if node is a system or app API boundary node: {}", err);
-                BTreeSet::new()
+                vec![]
             }
         };
+        let whitelisted_socks_ips: BTreeSet<IpAddr> = registry_versions
+            .into_iter()
+            .flat_map(|registry_version| {
+                let subnet_node_ids = self.registry
+                    .get_subnet_node_ids_of_types(&whitelisted_subnet_types, registry_version)
+                    .inspect_err(|err| {
+                        warn!(
+                            every_n_seconds => 30,
+                            self.logger,
+                            "Failed to get the node IDs of {:?} subnet nodes in the registry: {}", whitelisted_subnet_types, err
+                        )
+                    })
+                    .unwrap_or_default();
+
+                self.registry.get_available_ip_addresses_for_node_ids(subnet_node_ids, registry_version)
+            })
+            .collect();
 
         // Then split it to v4 and v6 separately
-        let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(&node_ips);
+        let (whitelisted_ipv4s, whitelisted_ipv6s) =
+            split_ips_by_address_family(&whitelisted_socks_ips);
         info!(
             self.logger,
             "Whitelisting node IP addresses ({} v4 and {} v6) for the SOCKS proxy on the firewall",
-            node_ipv4s.len(),
-            node_ipv6s.len()
+            whitelisted_ipv4s.len(),
+            whitelisted_ipv6s.len()
         );
 
         FirewallRule {
-            ipv4_prefixes: node_ipv4s,
-            ipv6_prefixes: node_ipv6s,
+            ipv4_prefixes: whitelisted_ipv4s,
+            ipv6_prefixes: whitelisted_ipv6s,
             ports: vec![SOCKS_PROXY_PORT.into()],
             action: FirewallAction::Allow as i32,
             comment: "nodes for SOCKS proxy".to_string(),
@@ -726,16 +840,24 @@ mod tests {
     use ic_test_utilities_registry::{
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
     };
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{SUBNET_1, node_test_id, subnet_test_id};
+    use rstest::rstest;
 
     use super::*;
 
-    const NFTABLES_GOLDEN_BYTES: &[u8] =
+    const NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES: &[u8] =
+        include_bytes!("../testdata/nftables_assigned_cloud_engine.conf.golden");
+    const NFTABLES_ASSIGNED_REPLICA_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_boundary_node_app_subnet.conf.golden");
     const NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_boundary_node_system_subnet.conf.golden");
+    const NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES: &[u8] =
+        include_bytes!("../testdata/nftables_unassigned_cloud_engine.conf.golden");
+    const NFTABLES_UNASSIGNED_REPLICA_GOLDEN_BYTES: &[u8] =
+        include_bytes!("../testdata/nftables_unassigned_replica.conf.golden");
+    const SUBNET_ID: SubnetId = SUBNET_1;
     const API_BOUNDARY_NODE_ID: u64 = 3003;
 
     #[test]
@@ -861,18 +983,92 @@ mod tests {
         );
     }
 
-    #[test]
-    fn nftables_golden_test() {
+    #[rstest]
+    fn nftables_golden_assigned_replica_test(
+        // For assigned replicas, only Type4 (cloud engine) nodes have a different firewall
+        #[values(
+            None,
+            Some(NodeRewardType::Unspecified),
+            Some(NodeRewardType::Type0),
+            Some(NodeRewardType::Type1),
+            Some(NodeRewardType::Type2),
+            Some(NodeRewardType::Type3),
+            Some(NodeRewardType::Type3dot1),
+            Some(NodeRewardType::Type1dot1)
+        )]
+        reward_type: Option<NodeRewardType>,
+    ) {
         golden_test(
-            Role::AssignedReplica(subnet_test_id(1)),
+            Role::AssignedReplica(SUBNET_ID),
             node_test_id(0),
-            NFTABLES_GOLDEN_BYTES,
+            reward_type,
+            NFTABLES_ASSIGNED_REPLICA_GOLDEN_BYTES,
             "assigned_replica",
         );
     }
 
     #[test]
-    fn nftables_golden_boundary_node_system_subnet_test() {
+    fn nftables_golden_assigned_cloud_engine_test() {
+        golden_test(
+            Role::AssignedReplica(SUBNET_ID),
+            node_test_id(0),
+            Some(NodeRewardType::Type4),
+            NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
+            "assigned_cloud_engine",
+        );
+    }
+
+    #[rstest]
+    fn nftables_unassigned_replica_golden_test(
+        // For unassigned replicas, only Type4 (cloud engine) nodes have a different firewall
+        #[values(
+            None,
+            Some(NodeRewardType::Unspecified),
+            Some(NodeRewardType::Type0),
+            Some(NodeRewardType::Type1),
+            Some(NodeRewardType::Type2),
+            Some(NodeRewardType::Type3),
+            Some(NodeRewardType::Type3dot1),
+            Some(NodeRewardType::Type1dot1)
+        )]
+        reward_type: Option<NodeRewardType>,
+    ) {
+        golden_test(
+            Role::UnassignedReplica,
+            node_test_id(0),
+            reward_type,
+            NFTABLES_UNASSIGNED_REPLICA_GOLDEN_BYTES,
+            "unassigned_replica",
+        );
+    }
+
+    #[test]
+    fn nftables_golden_unassigned_cloud_engine_test() {
+        golden_test(
+            Role::UnassignedReplica,
+            node_test_id(0),
+            Some(NodeRewardType::Type4),
+            NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
+            "unassigned_cloud_engine",
+        );
+    }
+
+    #[rstest]
+    fn nftables_golden_boundary_node_system_subnet_test(
+        // For boundary nodes, the node reward type has no effect on the firewall
+        #[values(
+            None,
+            Some(NodeRewardType::Unspecified),
+            Some(NodeRewardType::Type0),
+            Some(NodeRewardType::Type1),
+            Some(NodeRewardType::Type2),
+            Some(NodeRewardType::Type3),
+            Some(NodeRewardType::Type3dot1),
+            Some(NodeRewardType::Type1dot1),
+            Some(NodeRewardType::Type4)
+        )]
+        reward_type: Option<NodeRewardType>,
+    ) {
         // pick the node id such that the API BN's SOCKS proxy serves system subnet nodes
         // the assert checks that
         let api_bn_id_for_system_subnet = node_test_id(0);
@@ -881,13 +1077,28 @@ mod tests {
         golden_test(
             Role::BoundaryNode,
             api_bn_id_for_system_subnet,
+            reward_type,
             NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES,
-            "boundary_node",
+            "boundary_node_system_subnet",
         );
     }
 
-    #[test]
-    fn nftables_golden_boundary_node_app_subnet_test() {
+    #[rstest]
+    fn nftables_golden_boundary_node_app_subnet_test(
+        // For boundary nodes, the node reward type has no effect on the firewall
+        #[values(
+            None,
+            Some(NodeRewardType::Unspecified),
+            Some(NodeRewardType::Type0),
+            Some(NodeRewardType::Type1),
+            Some(NodeRewardType::Type2),
+            Some(NodeRewardType::Type3),
+            Some(NodeRewardType::Type3dot1),
+            Some(NodeRewardType::Type1dot1),
+            Some(NodeRewardType::Type4)
+        )]
+        reward_type: Option<NodeRewardType>,
+    ) {
         // pick the node id such that the API BN's SOCKS proxy serves app subnet nodes
         // the assert checks that
         let api_bn_id_for_app_subnet = node_test_id(1234);
@@ -896,14 +1107,21 @@ mod tests {
         golden_test(
             Role::BoundaryNode,
             api_bn_id_for_app_subnet,
+            reward_type,
             NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
-            "boundary_node",
+            "boundary_node_app_subnet",
         );
     }
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
     /// golden output.
-    fn golden_test(role: Role, node_id: NodeId, golden_bytes: &[u8], label: &str) {
+    fn golden_test(
+        role: Role,
+        node_id: NodeId,
+        reward_type: Option<NodeRewardType>,
+        golden_bytes: &[u8],
+        label: &str,
+    ) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
@@ -921,6 +1139,7 @@ mod tests {
             tmp_dir.path(),
             role,
             node_id,
+            reward_type,
         );
 
         firewall
@@ -943,7 +1162,6 @@ mod tests {
     /// Returns the `ic.json5` config filled with some dummy values.
     fn get_config() -> ConfigOptional {
         let template = generate_ic_config::IcConfigTemplate {
-            ipv6_address: "::".to_string(),
             ipv6_prefix: "::/64".to_string(),
             ipv4_address: "".to_string(),
             ipv4_gateway: "".to_string(),
@@ -991,8 +1209,9 @@ mod tests {
         tmp_dir: &Path,
         role: Role,
         node_id: NodeId,
+        reward_type: Option<NodeRewardType>,
     ) -> Firewall {
-        let registry = set_up_registry(role, node_id);
+        let registry = set_up_registry(role, node_id, reward_type);
 
         let registry_helper = Arc::new(RegistryHelper::new(
             node_id,
@@ -1014,11 +1233,16 @@ mod tests {
     }
 
     /// Sets up the registry with:
-    /// 1) two node records - one for the specified node + another one,
-    /// 2) a bunch of firewall rules,
-    /// 3) a Subnet record,
+    /// 1) a few node records - one for the specified node + ones with different reward types,
+    /// 2) a few subnet records - one system subnet, one application subnet, one cloud engine,
+    ///    optionally one for the specified node if it is an assigned replica,
+    /// 3) a bunch of firewall rules,
     ///    and returns a registry client.
-    fn set_up_registry(role: Role, node: NodeId) -> Arc<FakeRegistryClient> {
+    fn set_up_registry(
+        role: Role,
+        node: NodeId,
+        reward_type: Option<NodeRewardType>,
+    ) -> Arc<FakeRegistryClient> {
         let registry_version = RegistryVersion::new(1);
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
@@ -1028,6 +1252,7 @@ mod tests {
             registry_version,
             node,
             /*ip=*/ "1.1.1.1",
+            reward_type,
         );
 
         // create a system subnet with one node
@@ -1037,6 +1262,7 @@ mod tests {
             registry_version,
             system_subnet_node_id,
             /*ip=*/ "a4c2:7f91:3db6:1e8c:5a4f:cc92:0b37:6e41",
+            Some(NodeRewardType::Type0),
         );
         let system_subnet_record = SubnetRecordBuilder::from(&[system_subnet_node_id])
             .with_subnet_type(SubnetType::System)
@@ -1049,17 +1275,41 @@ mod tests {
             system_subnet_record,
         );
 
-        // create an application subnet
-        let app_subnet_node_id = node_test_id(2002);
-        add_node_record(
-            &registry_data_provider,
-            registry_version,
-            app_subnet_node_id,
-            /*ip=*/ "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5",
-        );
-        let app_subnet_record = SubnetRecordBuilder::from(&[app_subnet_node_id])
-            .with_subnet_type(SubnetType::Application)
-            .build();
+        // create an application subnet with different node reward types
+        let app_subnet_nodes = [
+            (
+                node_test_id(2002),
+                "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5",
+                Some(NodeRewardType::Type1),
+            ),
+            (
+                node_test_id(2003),
+                "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e6",
+                Some(NodeRewardType::Unspecified),
+            ),
+            (
+                node_test_id(2004),
+                "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e7",
+                None,
+            ),
+        ];
+        for (node_id, ip, node_reward_type) in app_subnet_nodes {
+            add_node_record(
+                &registry_data_provider,
+                registry_version,
+                node_id,
+                ip,
+                node_reward_type,
+            );
+        }
+        let app_subnet_record = SubnetRecordBuilder::from(
+            &app_subnet_nodes
+                .into_iter()
+                .map(|(node_id, _, _)| node_id)
+                .collect::<Vec<NodeId>>(),
+        )
+        .with_subnet_type(SubnetType::Application)
+        .build();
         let app_subnet_id = subnet_test_id(200);
         add_single_subnet_record(
             &registry_data_provider,
@@ -1068,34 +1318,89 @@ mod tests {
             app_subnet_record,
         );
 
-        // Add an API boundary node
-        let api_boundary_node_id = node_test_id(API_BOUNDARY_NODE_ID);
+        // create a cloud engine with one node
+        let cloud_engine_node_id = node_test_id(5005);
         add_node_record(
             &registry_data_provider,
             registry_version,
-            api_boundary_node_id,
-            /*ip=*/ "3.0.0.3",
+            cloud_engine_node_id,
+            /*ip=*/ "2001:0db8:85a3:0000:0000:8a2e:1370:7334",
+            Some(NodeRewardType::Type4),
         );
-        add_api_boundary_node_record(
+        let cloud_engine_record = SubnetRecordBuilder::from(&[cloud_engine_node_id])
+            .with_subnet_type(SubnetType::CloudEngine)
+            .build();
+        let cloud_engine_id = subnet_test_id(300);
+        add_single_subnet_record(
             &registry_data_provider,
-            registry_version,
-            api_boundary_node_id,
+            registry_version.get(),
+            cloud_engine_id,
+            cloud_engine_record,
         );
 
-        // Add an unassigned node
-        let unassigned_node_id = node_test_id(4004);
-        add_node_record(
-            &registry_data_provider,
-            registry_version,
-            unassigned_node_id,
-            /*ip=*/ "4.0.0.4",
-        );
+        // Add system and app API boundary nodes with different reward types
+        for (node_id, ip, node_reward_type) in [
+            (
+                node_test_id(1 << 63), // very small in little-endian -> system API BN
+                "3.0.0.3",
+                Some(NodeRewardType::Type2),
+            ),
+            (
+                node_test_id(1 << 62), // slightly bigger but still small -> system API BN
+                "3.0.0.4",
+                Some(NodeRewardType::Type4),
+            ),
+            (node_test_id(API_BOUNDARY_NODE_ID), "3.0.0.5", None), // middle point
+            (
+                node_test_id((1 << 62) - 1), // very big in little-endian -> app API BN
+                "3.0.0.6",
+                Some(NodeRewardType::Type3),
+            ),
+            (
+                node_test_id((1 << 63) - 1), // even bigger in little-endian -> app API BN
+                "3.0.0.7",
+                Some(NodeRewardType::Type4),
+            ),
+        ] {
+            add_node_record(
+                &registry_data_provider,
+                registry_version,
+                node_id,
+                ip,
+                node_reward_type,
+            );
+            add_api_boundary_node_record(&registry_data_provider, registry_version, node_id);
+        }
+
+        // Add unassigned nodes with different reward types
+        for (node_id, ip, node_reward_type) in [
+            (
+                node_test_id(4004),
+                "4.0.0.4",
+                Some(NodeRewardType::Type3dot1),
+            ),
+            (node_test_id(4005), "4.0.0.5", Some(NodeRewardType::Type4)), // cloud engine
+            (
+                node_test_id(4006),
+                "4.0.0.6",
+                Some(NodeRewardType::Unspecified),
+            ),
+            (node_test_id(4007), "4.0.0.7", None),
+        ] {
+            add_node_record(
+                &registry_data_provider,
+                registry_version,
+                node_id,
+                ip,
+                node_reward_type,
+            );
+        }
 
         // Add a bunch of firewall rules for different scopes.
         add_firewall_rules_record(
             &registry_data_provider,
             registry_version,
-            &FirewallRulesScope::Subnet(subnet_test_id(1)),
+            &FirewallRulesScope::Subnet(SUBNET_ID),
             /*ip=*/ "3.3.3.3",
             /*port=*/ 1003,
         );
@@ -1128,7 +1433,7 @@ mod tests {
             /*port=*/ 1007,
         );
 
-        let mut subnet_ids = vec![system_subnet_id, app_subnet_id];
+        let mut subnet_ids = vec![system_subnet_id, app_subnet_id, cloud_engine_id];
 
         match role {
             Role::AssignedReplica(subnet_id) => {
@@ -1142,15 +1447,7 @@ mod tests {
                 subnet_ids.push(subnet_id);
             }
             Role::BoundaryNode => {
-                registry_data_provider
-                    .add(
-                        &make_api_boundary_node_record_key(node),
-                        RegistryVersion::from(registry_version),
-                        Some(ApiBoundaryNodeRecord {
-                            version: String::from("11"),
-                        }),
-                    )
-                    .expect("Failed to add API BN record.");
+                add_api_boundary_node_record(&registry_data_provider, registry_version, node);
             }
             Role::UnassignedReplica => {}
         }
@@ -1172,6 +1469,7 @@ mod tests {
         registry_version: RegistryVersion,
         node: NodeId,
         ip: &str,
+        node_reward_type: Option<NodeRewardType>,
     ) {
         registry_data_provider
             .add(
@@ -1188,7 +1486,7 @@ mod tests {
                     hostos_version_id: None,
                     public_ipv4_config: None,
                     domain: None,
-                    node_reward_type: None,
+                    node_reward_type: node_reward_type.map(|reward_type| reward_type as i32),
                     ssh_node_state_write_access: vec![],
                 }),
             )

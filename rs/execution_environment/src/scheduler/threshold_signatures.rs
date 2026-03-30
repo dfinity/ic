@@ -45,7 +45,7 @@ pub(crate) fn update_signature_request_contexts(
                 .height()
                 .is_some_and(|height| height.get() + 1 == current_round.get())
         {
-            let mut nonce = [0u8; 32];
+            let mut nonce = [0_u8; 32];
             csprng.fill_bytes(&mut nonce);
             let _ = context.nonce.insert(nonce);
             metrics
@@ -275,7 +275,6 @@ mod tests {
             pseudo_random_id: [id as u8; 32],
             derivation_path: Arc::new(vec![]),
             batch_time: UNIX_EPOCH,
-            matched_pre_signature: None,
             nonce: None,
         };
 
@@ -313,7 +312,6 @@ mod tests {
         expected_id: u64,
         expected_height: Height,
     ) {
-        assert!(context.matched_pre_signature.is_none());
         match &context.args {
             ThresholdArguments::Ecdsa(args) => {
                 let pre_sig = args.pre_signature.clone().unwrap();

@@ -19,7 +19,6 @@
 /BUILD.bazel                       @dfinity/idx
 /third_party/                      @dfinity/idx
 /MODULE.bazel                      @dfinity/idx
-/WORKSPACE.bazel                   @dfinity/idx
 /PULL_REQUEST_BAZEL_TARGETS        @dfinity/idx
 
 # [Rust Lang]
@@ -243,6 +242,7 @@ go.sum                    @dfinity/idx
 /rs/tests/                                              @dfinity/idx
 /rs/tests/idx/                                          @dfinity/idx
 /rs/tests/testnets/                                     @dfinity/idx
+/rs/tests/testnets/cloud_engine.rs                      @dfinity/dre
 /rs/tests/testnets/mainnet_nns/                         @dfinity/consensus
 /rs/tests/testnets/mainnet_nns.rs                       @dfinity/consensus
 /rs/tests/testnets/nns_recovery.rs                      @dfinity/consensus

@@ -838,13 +838,13 @@ mod test_wait_for_quiet {
         /// `evaluate_wait_for_quiet` fire, and that the wait-for-quiet
         /// deadline is only ever increased, if at all.
         #[test]
-        fn test_evaluate_wait_for_quiet(voting_period_seconds in 3600u64..604_800,
-                                        now_seconds in 0u64..1_000_000,
-                                        old_yes in 0u64..1_000_000,
-                                        old_no in 0u64..1_000_000,
-                                        old_total in 10_000_000u64..100_000_000,
-                                        yes_votes in 0u64..1_000_000,
-                                        no_votes in 0u64..1_000_000,
+        fn test_evaluate_wait_for_quiet(voting_period_seconds in 3600_u64..604_800,
+                                        now_seconds in 0_u64..1_000_000,
+                                        old_yes in 0_u64..1_000_000,
+                                        old_no in 0_u64..1_000_000,
+                                        old_total in 10_000_000_u64..100_000_000,
+                                        yes_votes in 0_u64..1_000_000,
+                                        no_votes in 0_u64..1_000_000,
     ) {
             let current_deadline_timestamp_seconds = voting_period_seconds;
             let proposal_timestamp_seconds = 0; // initial timestamp is always 0
@@ -1312,7 +1312,7 @@ impl Governance {
             randomness.seed_rng(rng_seed);
         }
 
-        Self {
+        let mut governance = Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored(),
             env,
@@ -1324,7 +1324,23 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             rate_limiter: new_rate_limiter(),
+        };
+
+        // A one-time data migration.
+        governance.maybe_set_eight_year_gang_bonus_base();
+
+        governance
+    }
+
+    fn maybe_set_eight_year_gang_bonus_base(&mut self) {
+        if self.heap_data.eight_year_gang_bonus_migration_done {
+            return;
         }
+
+        self.neuron_store
+            .set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
+
+        self.heap_data.eight_year_gang_bonus_migration_done = true;
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -2275,12 +2291,17 @@ impl Governance {
         }
 
         // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
-        let (parent_maturity_e8s, parent_staked_maturity_e8s) = self
+        let (
+            parent_maturity_e8s,
+            parent_staked_maturity_e8s,
+            parent_eight_year_gang_bonus_base_e8s,
+        ) = self
             .neuron_store
             .with_neuron(id, |neuron| {
                 (
                     neuron.maturity_e8s_equivalent,
                     neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
+                    neuron.eight_year_gang_bonus_base_e8s,
                 )
             })
             .expect("Expected the parent neuron to exist");
@@ -2291,11 +2312,13 @@ impl Governance {
         let SplitNeuronEffect {
             transfer_maturity_e8s,
             transfer_staked_maturity_e8s,
+            transfer_eight_year_gang_bonus_base_e8s,
         } = calculate_split_neuron_effect(
             split_amount_e8s,
             minted_stake_e8s,
             parent_maturity_e8s,
             parent_staked_maturity_e8s,
+            parent_eight_year_gang_bonus_base_e8s,
         );
 
         // Decrease maturity and staked maturity of the parent neuron.
@@ -2314,6 +2337,10 @@ impl Governance {
             } else {
                 None
             };
+            parent_neuron.eight_year_gang_bonus_base_e8s = parent_neuron
+                .eight_year_gang_bonus_base_e8s
+                .checked_sub(transfer_eight_year_gang_bonus_base_e8s)
+                .expect("Eight year gang bonus base underflows");
         })
         .expect("Expected the parent neuron to exist");
 
@@ -2337,6 +2364,10 @@ impl Governance {
             } else {
                 None
             };
+            child_neuron.eight_year_gang_bonus_base_e8s = child_neuron
+                .eight_year_gang_bonus_base_e8s
+                .checked_add(transfer_eight_year_gang_bonus_base_e8s)
+                .expect("Eight year gang bonus base overflows");
         })
         .expect("Expected the child neuron to exist");
 
@@ -2600,7 +2631,7 @@ impl Governance {
 
         // Check if the least possible stake this neuron would be spawned with
         // is more than the minimum neuron stake.
-        let least_possible_stake = (maturity_to_spawn as f64 * (1f64 - 0.05)) as u64;
+        let least_possible_stake = (maturity_to_spawn as f64 * (1_f64 - 0.05)) as u64;
 
         if least_possible_stake < economics.neuron_minimum_stake_e8s {
             return Err(GovernanceError::new_with_message(

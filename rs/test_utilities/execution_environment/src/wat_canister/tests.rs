@@ -123,7 +123,7 @@ fn test_wat_func_unique_init() {
 fn test_memory_allocation_limit_overflow() {
     // WAIT_SCRATCHPAD_START is 65000.
     // Try to allocate a large message that overlaps with it.
-    let message = vec![0u8; 64100];
+    let message = vec![0_u8; 64100];
     wat_canister()
         .update("test", wat_fn().debug_print(&message))
         .build();
@@ -197,7 +197,7 @@ fn test_wat_func_unique_composite_query() {
 #[test]
 #[should_panic(expected = "Memory limit exceeded")]
 fn test_memory_limit_exceeded() {
-    let large_message = vec![0u8; 65_536];
+    let large_message = vec![0_u8; 65_536];
     wat_canister()
         .update("trigger_panic", wat_fn().debug_print(&large_message))
         .build();
@@ -373,7 +373,7 @@ fn test_memory_limit_exact_bound() {
     // MEMORY_OFFSET_START is 1000.
     // WAIT_SCRATCHPAD_START is 65000.
     // Total available payload space is precisely 64,000 bytes.
-    let exactly_fitting = vec![0u8; 64_000];
+    let exactly_fitting = vec![0_u8; 64_000];
     let wat = wat_canister()
         .update("fits", wat_fn().debug_print(&exactly_fitting))
         .build();
@@ -384,7 +384,7 @@ fn test_memory_limit_exact_bound() {
 #[test]
 fn test_memory_limit_off_by_one() {
     // 64,001 bytes crosses the 65,000 reserved threshold by 1 byte.
-    let overflowing = vec![0u8; 64_001];
+    let overflowing = vec![0_u8; 64_001];
 
     let result = std::panic::catch_unwind(|| {
         wat_canister()

@@ -96,7 +96,7 @@ pub fn install_ledger(
         ledger_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -118,7 +118,7 @@ pub fn install_icrc3_test_ledger(env: &StateMachine) -> CanisterId {
         icrc3_test_ledger(),
         Encode!(&()).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -129,7 +129,7 @@ pub fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterI
         index_ng_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }

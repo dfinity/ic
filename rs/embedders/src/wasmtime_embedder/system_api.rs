@@ -20,14 +20,14 @@ use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
     Memory, NumWasmPages, canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request,
 };
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
     ingress::WasmResult,
     messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request},
     methods::{SystemMethod, WasmClosure},
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_request};
@@ -4194,7 +4194,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .canister_creation_fee(subnet_size, self.get_cost_schedule());
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
     }
@@ -4216,7 +4216,7 @@ impl SystemApi for SystemApiImpl {
                 subnet_size,
                 self.get_cost_schedule(),
             );
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
         Ok(())
     }
@@ -4269,7 +4269,7 @@ impl SystemApi for SystemApiImpl {
                 subnet_size,
                 self.get_cost_schedule(),
             );
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request_v2")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request_v2")?;
         trace_syscall!(self, CostHttpRequestV2, cost);
         Ok(())
     }
@@ -4309,7 +4309,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .ecdsa_signature_fee(subnet_size, cost_schedule);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
         Ok(CostReturnCode::Success as u32)
     }
@@ -4349,7 +4349,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .schnorr_signature_fee(subnet_size, cost_schedule);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
         Ok(CostReturnCode::Success as u32)
     }
@@ -4389,7 +4389,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .vetkd_fee(subnet_size, cost_schedule);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_key")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)
     }

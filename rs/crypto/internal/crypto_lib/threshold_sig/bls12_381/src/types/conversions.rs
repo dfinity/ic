@@ -132,7 +132,7 @@ impl TryFrom<&Vec<u8>> for CombinedSignatureBytes {
                 internal_error: "Signature length is incorrect".to_string(),
             });
         }
-        let mut buffer = [0u8; CombinedSignatureBytes::SIZE];
+        let mut buffer = [0_u8; CombinedSignatureBytes::SIZE];
         buffer.copy_from_slice(sig_bytes);
         Ok(CombinedSignatureBytes(buffer))
     }

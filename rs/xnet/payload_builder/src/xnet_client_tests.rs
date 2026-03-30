@@ -45,7 +45,7 @@ where
 }
 
 fn make_xnet_client(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetClientImpl {
-    let registry = get_empty_registry_for_test();
+    let registry = get_simple_registry_for_test();
     XNetClientImpl::new(
         metrics,
         Arc::new(MockTlsConfig::new()) as Arc<_>,

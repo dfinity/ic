@@ -5,8 +5,10 @@ use nix::{
 };
 use std::{
     collections::HashMap,
+    ffi::OsString,
     fmt::Debug,
     io::Result,
+    path::Path,
     sync::{Arc, Mutex},
 };
 
@@ -30,24 +32,40 @@ pub(crate) trait Process {
     fn get_version(&self) -> &Self::Version;
 
     /// Return the path to the binary of the [`Process`]
-    fn get_binary(&self) -> &str;
+    fn get_binary(&self) -> &Path;
 
     /// Return the arguments passed to the [`Process`]
-    fn get_args(&self) -> &[String];
+    fn get_args(&self) -> &[OsString];
 
     /// Return the env vars passed to the [`Process`]
-    fn get_env(&self) -> HashMap<String, String>;
+    fn get_env(&self) -> HashMap<OsString, OsString>;
 }
 
-/// A [`ProcessManager`] manages running a single versioned [`Process`]
-pub(crate) struct ProcessManager<P: Process> {
+/// Trait for managing a single versioned [`Process`]
+pub(crate) trait ProcessManager<P: Process>: Send {
+    /// Start the given process.
+    fn start(&mut self, process: P) -> Result<()>;
+
+    /// Stop the currently running process.
+    fn stop(&mut self) -> Result<()>;
+
+    /// Returns true only if the process is running.
+    fn is_running(&self) -> bool;
+
+    /// Returns the `Pid` of the currently running process; or `None` if no
+    /// process is running.
+    fn get_pid(&self) -> Option<Pid>;
+}
+
+/// A [`ProcessManagerImpl`] manages running a single versioned [`Process`]
+pub(crate) struct ProcessManagerImpl<P: Process> {
     process: Option<P>,
     pid_cell: PIDCell,
     log: ReplicaLogger,
     join_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-impl<P: Process> ProcessManager<P> {
+impl<P: Process> ProcessManagerImpl<P> {
     pub(crate) fn new(logger: ReplicaLogger) -> Self {
         Self {
             process: None,
@@ -55,17 +73,6 @@ impl<P: Process> ProcessManager<P> {
             log: logger,
             join_handle: None,
         }
-    }
-
-    /// Returns true only if the process is running.
-    pub fn is_running(&self) -> bool {
-        self.get_pid().is_some()
-    }
-
-    /// Returns the `Pid` if the currently running process; or `None` if no
-    /// process is running.
-    pub fn get_pid(&self) -> Option<Pid> {
-        *self.pid_cell.lock().unwrap()
     }
 
     /// Sets the pid for the running process.
@@ -96,10 +103,6 @@ impl<P: Process> ProcessManager<P> {
     /// We still depend on init to handle reaping of adopted children,
     /// as the orchestrator has no way of adopting or even knowing the
     /// processes in question, cf. https://linux.die.net/man/2/waitpid.
-    pub(crate) fn stop(&mut self) -> Result<()> {
-        self.kill()
-    }
-
     fn kill(&mut self) -> Result<()> {
         let pid = self.pid_cell.lock().unwrap();
         if let Some(pid) = *pid {
@@ -120,8 +123,10 @@ impl<P: Process> ProcessManager<P> {
         info!(self.log, "no {} process running", P::NAME);
         Ok(())
     }
+}
 
-    pub(crate) fn start(&mut self, process: P) -> Result<()> {
+impl<P: Process + Send> ProcessManager<P> for ProcessManagerImpl<P> {
+    fn start(&mut self, process: P) -> Result<()> {
         // Do nothing if we're already running a process with the requested version
         if let Some(current_version) = self.process.as_ref().map(|p| p.get_version())
             && self.get_pid().is_some()
@@ -175,6 +180,18 @@ impl<P: Process> ProcessManager<P> {
 
         self.process = Some(process);
         Ok(())
+    }
+
+    fn stop(&mut self) -> Result<()> {
+        self.kill()
+    }
+
+    fn is_running(&self) -> bool {
+        self.get_pid().is_some()
+    }
+
+    fn get_pid(&self) -> Option<Pid> {
+        *self.pid_cell.lock().unwrap()
     }
 }
 

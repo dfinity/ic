@@ -54,7 +54,7 @@ fn proptest_payload_size_validation() {
                 ..ProptestConfig::default()
             },
             |(
-                height in 0..10u64,
+                height in 0..10_u64,
                 ingress in prop_ingress_vec(MAX_MESSAGES, MAX_SIZE),
                 xnet in prop_xnet_slice(MAX_MESSAGES, MAX_SIZE),
             )| {
@@ -126,7 +126,7 @@ fn prop_xnet_slice(
     max_size: usize,
 ) -> impl Strategy<Value = BTreeMap<SubnetId, CertifiedStreamSlice>> {
     prop::collection::btree_map(
-        (0..3u64).prop_map(subnet_test_id),
+        (0..3_u64).prop_map(subnet_test_id),
         (0..max_size).prop_map(make_xnet_slice),
         1..max_messages,
     )

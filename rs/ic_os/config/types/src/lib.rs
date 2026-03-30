@@ -40,12 +40,13 @@ use std::str::FromStr;
 use strum::{Display, EnumString};
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.13.0";
+pub const CONFIG_VERSION: &str = "1.14.0";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
     "icos_settings.logging",
     "icos_settings.use_nns_public_key",
+    "icos_settings.use_node_operator_private_key",
     "hostos_settings.vm_cpu",
     "hostos_settings.vm_memory",
     "hostos_settings.vm_nr_of_vcpus",
@@ -143,9 +144,6 @@ pub struct ICOSSettings {
     pub deployment_environment: DeploymentEnvironment,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    /// TODO(NODE-1838): Remove after HostOS is upgraded and `node_operator_private_key` is used
-    #[serde(default)]
-    pub use_node_operator_private_key: bool,
     /// PEM-encoded Node Operator private key
     #[sensitive]
     pub node_operator_private_key: Option<String>,

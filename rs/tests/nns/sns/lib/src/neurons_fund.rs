@@ -60,7 +60,7 @@ fn nns_neuron_info(rng: &mut ChaChaRng) -> (EdKeypair, PrincipalId, NeuronId, Su
 
     let id = NeuronId { id: rng.next_u64() };
     let account = {
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         rng.fill_bytes(&mut bytes);
         Subaccount(bytes)
     };

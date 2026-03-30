@@ -29,7 +29,7 @@ fn test_anonymous_http_request_validation() {
 
     // Verify that an HTTP request with its ingress expiry set to the UNIX epoch is invalid at the
     // current time of the canister (genesis).
-    let args = encode_args((time_nanos_at_genesis, 0u64)).unwrap();
+    let args = encode_args((time_nanos_at_genesis, 0_u64)).unwrap();
     let result = env
         .query(
             canister_id,

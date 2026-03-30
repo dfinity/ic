@@ -11,6 +11,18 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-20: Proposal 140959
+
+http://dashboard.internetcomputer.org/proposal/140959
+
+## Removed
+
+- Removed validation check that enforced the sum of developer-allocated tokens
+  to be less than or equal to `swap_distribution.total_e8s`. With the Neurons'
+  Fund discontinued, direct participants can assess token distributions
+  themselves.
+
+
 # 2026-03-13: Proposal 140860
 
 http://dashboard.internetcomputer.org/proposal/140860

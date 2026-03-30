@@ -43,7 +43,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
     pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
-    pub(super) round_subnet_queue: ScopedMetrics,
+    pub(super) round_inner_subnet_queue: ScopedMetrics,
     pub(super) round_advance_long_install_code: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_update_signature_request_contexts_duration: Histogram,
@@ -59,6 +59,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_finalization_stop_canisters: Histogram,
     pub(super) round_finalization_ingress: Histogram,
     pub(super) round_finalization_charge: Histogram,
+    pub(super) round_finalization_scheduling: Histogram,
     pub(super) canister_heap_delta_debits: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
     pub(super) canister_install_code_debits: Histogram,
@@ -217,7 +218,7 @@ impl SchedulerMetrics {
             },
             // Subnet queue processing happens in `inner_round()`, so in terms of
             // instrumentation it is an inner round phase.
-            round_subnet_queue: ScopedMetrics {
+            round_inner_subnet_queue: ScopedMetrics {
                 duration: round_inner_phase_duration_histogram("subnet", metrics_registry),
                 instructions: round_inner_phase_instructions_histogram("subnet", metrics_registry),
                 slices: round_inner_phase_slices_histogram("subnet", metrics_registry),
@@ -302,6 +303,7 @@ impl SchedulerMetrics {
             // Pruning of expired messages from the ingress history.
             round_finalization_ingress: round_finalization_phase_duration_histogram("prune ingress", metrics_registry),
             round_finalization_charge: round_finalization_phase_duration_histogram("charge canisters", metrics_registry),
+            round_finalization_scheduling: round_finalization_phase_duration_histogram("scheduling", metrics_registry),
             canister_heap_delta_debits: metrics_registry.histogram(
                 "scheduler_canister_heap_delta_debits",
                 "The heap delta debit of a canister at the end of the round, before \

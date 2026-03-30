@@ -3,9 +3,8 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     BoundedAllowedViewers, CanisterSettingsArgs, LogVisibilityV2, SnapshotVisibility,
 };
-use ic_types::{
-    ComputeAllocation, Cycles, InvalidComputeAllocationError, MemoryAllocation, PrincipalId,
-};
+use ic_types::{ComputeAllocation, InvalidComputeAllocationError, MemoryAllocation, PrincipalId};
+use ic_types_cycles::Cycles;
 use num_traits::cast::ToPrimitive;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;

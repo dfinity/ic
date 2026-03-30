@@ -91,7 +91,6 @@ fn should_fail_but_write_metrics_if_target_not_a_directory() {
             "/not/a/directory",
         ])
         .assert()
-        .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains("not a directory"))
         .failure();
 
@@ -139,7 +138,6 @@ fn should_fail_but_writes_metrics_when_discard_not_supported() {
                 .expect("tmp_dir path should be valid"),
         ])
         .assert()
-        .stdout(predicate::str::is_empty())
         .stderr(
             predicate::str::contains("the discard operation is not supported")
                 .or(predicate::str::contains("Operation not permitted")),

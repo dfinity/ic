@@ -69,6 +69,7 @@ rust_ic_test(
         "//rs/test_utilities/metrics",
         "//rs/test_utilities/types",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/wasm_types",
         "@crate_index//:mockall",
         "@crate_index//:rand",

@@ -5,6 +5,7 @@ use super::super::test_utilities::{
     other_side,
 };
 use super::super::*;
+use super::zero_instruction_overhead_config;
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, EmptyBlob, Method, Payload as _};
@@ -22,10 +23,7 @@ const B: usize = 1_000 * M;
 fn stops_executing_messages_when_heap_delta_capacity_reached() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
             subnet_heap_delta_capacity: NumBytes::from(10),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -68,10 +66,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
 
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
             subnet_heap_delta_capacity: NumBytes::from(10),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -119,10 +114,7 @@ fn smooth_heap_delta_rate_limiting() {
     // Create scheduler test allowing one dirty page per round.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
             subnet_heap_delta_capacity: PAGE_SIZE * 10,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             heap_delta_initial_reserve: NumBytes::from(1),
             ..SchedulerConfig::application_subnet()
         })
@@ -179,10 +171,7 @@ fn smooth_heap_delta_rate_limiting_with_initial_burst() {
     // Create scheduler test allowing one dirty page per round with 2 pages burst.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
             subnet_heap_delta_capacity: PAGE_SIZE * 10,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             heap_delta_initial_reserve: PAGE_SIZE * 2,
             ..SchedulerConfig::application_subnet()
         })
@@ -235,10 +224,7 @@ fn smooth_heap_delta_rate_limiting_reaches_the_limit() {
     // Create scheduler test allowing two dirty page per round.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
             subnet_heap_delta_capacity: PAGE_SIZE * rounds * 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             max_heap_delta_per_iteration: PAGE_SIZE,
             heap_delta_initial_reserve: 1.into(),
             ..SchedulerConfig::application_subnet()
@@ -274,10 +260,7 @@ fn smooth_heap_delta_rate_limiting_for_two_canisters() {
     // Create scheduler test allowing one dirty page per round.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
             subnet_heap_delta_capacity: PAGE_SIZE * 10,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
             heap_delta_initial_reserve: 1.into(),
             ..SchedulerConfig::application_subnet()
         })
@@ -385,12 +368,6 @@ fn no_heap_delta_rate_limiting_for_system_subnet() {
 #[test]
 fn canister_gets_heap_delta_rate_limited() {
     let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
         .with_rate_limiting_of_heap_delta()
         .build();
     let heap_delta_rate_limit = SchedulerConfig::application_subnet().heap_delta_rate_limit;
@@ -432,17 +409,12 @@ fn canister_can_run_for_multiple_iterations() {
     // Create a canister which sends a message to itself on each iteration.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
             // The number of instructions will limit the canister to running at most 6 times.
             max_instructions_per_round: NumInstructions::new(300),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
             max_instructions_per_install_code_slice: NumInstructions::new(50),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
 
@@ -480,12 +452,7 @@ fn canister_can_run_for_multiple_iterations() {
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn heap_delta_rate_limiting_metrics_recorded() {
-    let scheduler_config = SchedulerConfig {
-        scheduler_cores: 2,
-        instruction_overhead_per_execution: NumInstructions::from(0),
-        instruction_overhead_per_canister: NumInstructions::from(0),
-        ..SchedulerConfig::application_subnet()
-    };
+    let scheduler_config = SchedulerConfig::application_subnet();
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(scheduler_config.clone())
         .with_rate_limiting_of_heap_delta()
@@ -559,15 +526,12 @@ fn heap_delta_rate_limiting_disabled() {
 fn rate_limiting_of_install_code() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(5 * B as u64),
             max_instructions_per_slice: NumInstructions::from(5 * B as u64),
             max_instructions_per_install_code: NumInstructions::from(20 * B as u64),
             max_instructions_per_install_code_slice: NumInstructions::from(5 * B as u64),
             install_code_rate_limit: NumInstructions::from(2 * B as u64),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
+            ..zero_instruction_overhead_config()
         })
         .with_rate_limiting_of_instructions()
         .build();

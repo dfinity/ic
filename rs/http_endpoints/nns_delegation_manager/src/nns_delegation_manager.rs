@@ -252,7 +252,6 @@ async fn try_fetch_delegation_from_nns(
         }
     };
 
-    // TODO(CON-1487): request the /canister_ranges/{subnet_id} subtree as well
     let envelope = HttpRequestEnvelope {
         content: HttpReadStateContent::ReadState {
             read_state: HttpReadState {
@@ -271,6 +270,11 @@ async fn try_fetch_delegation_from_nns(
                     ]),
                     // New format of the canister ranges
                     Path::new(vec![b"canister_ranges".into(), subnet_id.get().into()]),
+                    Path::new(vec![
+                        b"subnet".into(),
+                        subnet_id.get().into(),
+                        b"type".into(),
+                    ]),
                 ],
                 ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
                 nonce: None,

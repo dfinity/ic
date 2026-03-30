@@ -90,16 +90,15 @@ mod tests {
         canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-    use ic_types::cycles_use_case::CyclesUseCase;
     use ic_types::{
-        CanisterId, CryptoHashOfPartialState, Cycles, Height, Time,
+        CanisterId, CryptoHashOfPartialState, Height, Time,
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
         messages::{NO_DEADLINE, Refund, RequestMetadata},
-        nominal_cycles::NominalCycles,
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
     };
+    use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::{BTreeMap, BTreeSet};
@@ -182,7 +181,7 @@ mod tests {
             let mut wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::from(2));
             wasm_memory
                 .page_map
-                .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::from(1), &[0_u8; PAGE_SIZE])]);
             let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
@@ -335,21 +334,21 @@ mod tests {
 
             let mut subnet_metrics = SubnetMetrics::default();
 
-            subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::from(0));
+            subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
             subnet_metrics
-                .observe_consumed_cycles_http_outcalls(NominalCycles::from(50_000_000_000));
+                .observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
             subnet_metrics
-                .observe_consumed_cycles_ecdsa_outcalls(NominalCycles::from(100_000_000_000));
+                .observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
             subnet_metrics.num_canisters = 5;
             subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
             subnet_metrics.update_transactions_total = 4200;
             subnet_metrics.observe_consumed_cycles_with_use_case(
                 CyclesUseCase::Instructions,
-                NominalCycles::from(80_000_000_000),
+                NominalCycles::new(80_000_000_000),
             );
             subnet_metrics.observe_consumed_cycles_with_use_case(
                 CyclesUseCase::RequestAndResponseTransmission,
-                NominalCycles::from(20_000_000_000),
+                NominalCycles::new(20_000_000_000),
             );
             let schnorr_key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
                 algorithm: SchnorrAlgorithm::Bip340Secp256k1,

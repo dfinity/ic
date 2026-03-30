@@ -6,6 +6,7 @@ use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
+use tracing::info;
 
 pub const DEFAULT_GENERATED_KEY_PATH: &str = "/boot/config/store.keyfile";
 const GENERATED_KEY_SIZE_BYTES: usize = 16;
@@ -54,7 +55,7 @@ impl GeneratedKeyDiskEncryption<'_> {
                 buf.write_all(&rand_key)
             }) {
                 Ok(_) => {
-                    println!(
+                    info!(
                         "Generated disk encryption key and saved it to {}",
                         self.key_path.display()
                     );

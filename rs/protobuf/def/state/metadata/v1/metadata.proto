@@ -55,6 +55,12 @@ message NetworkTopology {
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
+  FullTopology full_topology = 9;
+}
+
+message FullTopology {
+  repeated SubnetsEntry subnets = 1;
+  registry.routing_table.v1.RoutingTable routing_table = 2;
 }
 
 message SetupInitialDkgContext {
@@ -102,13 +108,12 @@ message ThresholdArguments {
 }
 
 message SignWithThresholdContext {
+  reserved 6, 7;
   state.queues.v1.Request request = 1;
   ThresholdArguments args = 2;
   repeated bytes derivation_path_vec = 3;
   bytes pseudo_random_id = 4;
   uint64 batch_time = 5;
-  optional uint64 pre_signature_id = 6;
-  optional uint64 height = 7;
   optional bytes nonce = 8;
 }
 
@@ -401,6 +406,8 @@ message SystemMetadata {
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
+
+  registry.subnet.v1.ResourceLimits own_resource_limits = 24;
 }
 
 message StableMemory {

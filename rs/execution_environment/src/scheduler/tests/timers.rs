@@ -2,6 +2,7 @@
 
 use super::super::test_utilities::{SchedulerTestBuilder, ingress, instructions};
 use super::super::*;
+use super::zero_instruction_overhead_config;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_types::methods::SystemMethod;
 
@@ -148,12 +149,9 @@ fn execute_heartbeat_before_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
             max_instructions_per_install_code_slice: NumInstructions::new(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     let canister = test.create_canister_with(
@@ -181,12 +179,9 @@ fn execute_global_timer_before_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
-            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
             max_instructions_per_install_code_slice: NumInstructions::new(1),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     let canister = test.create_canister_with(
@@ -219,12 +214,9 @@ fn execute_multiple_heartbeats() {
             scheduler_cores: 5,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     let number_of_canisters: usize = 3;
@@ -278,12 +270,9 @@ fn heartbeat_metrics_are_recorded() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
             max_instructions_per_install_code_slice: NumInstructions::from(100),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..zero_instruction_overhead_config()
         })
         .build();
     let canister0 = test.create_canister_with(
@@ -315,4 +304,63 @@ fn heartbeat_metrics_are_recorded() {
         metrics.instructions_consumed_per_message.get_sample_sum() as u64,
     );
     assert_eq!(2, metrics.msg_execution_duration.get_sample_count());
+}
+
+/// The scheduler enqueues `Heartbeat` / `GlobalTimer` tasks at the start of
+/// each round.  When the instruction budget is too small for all of them to
+/// execute, the leftover tasks must be removed from the task queues at the end
+/// of `inner_round`.
+#[test]
+fn unexecuted_heartbeat_and_timer_tasks_are_removed_after_round() {
+    const NOW: Time = Time::from_nanos_since_unix_epoch(13);
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::new(10),
+            max_instructions_per_message: NumInstructions::new(10),
+            max_instructions_per_slice: NumInstructions::new(10),
+            max_instructions_per_install_code_slice: NumInstructions::new(10),
+            ..zero_instruction_overhead_config()
+        })
+        .build();
+    test.set_time(NOW);
+
+    // 4 canisters, 2 with heartbeats and 2 with global timers.
+    // We can execute 1 task per round per core, so only 2 out of 4 tasks per round.
+    for _ in 0..2 {
+        let heartbeat = test.create_canister_with(
+            Cycles::new(1_000_000_000_000),
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            Some(SystemMethod::CanisterHeartbeat),
+            None,
+            None,
+        );
+        test.expect_heartbeat(heartbeat, instructions(10));
+
+        let global_timer = test.create_canister_with(
+            Cycles::new(1_000_000_000_000),
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            Some(SystemMethod::CanisterGlobalTimer),
+            None,
+            None,
+        );
+        test.set_canister_global_timer(global_timer, NOW);
+        test.expect_global_timer(global_timer, instructions(10));
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Two tasks executed.
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 2.0);
+
+    for (i, canister) in test.state().canisters_iter().enumerate() {
+        // All tasks removed from all canisters' task queues.
+        assert!(canister.system_state.task_queue.is_empty());
+        // First two canisters' tasks were executed, the other two not.
+        assert_eq!(test.system_task_count(&canister.canister_id()), i / 2);
+    }
 }

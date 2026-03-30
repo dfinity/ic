@@ -2,10 +2,14 @@
 Enumerate every component file dependency for GuestOS
 """
 
+load(":defs.bzl", "OS_TYPE_DEST")
+
 def component_files(mode):
     return {
         # environment
         Label("guestos/environment/90-sev-status.sh"): "/etc/systemd/system-environment-generators/90-sev-status.sh",
+        # OS-type marker file, this can be used to identify the OS
+        Label("upgrade/systemd-generators/os-type-guestos"): OS_TYPE_DEST,
 
         # early-boot
         Label("early-boot/relabel-machine-id/relabel-machine-id-guestos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
@@ -179,7 +183,7 @@ def component_files(mode):
         Label("upgrade/shared-resources/setup-shared-resources/setup-shared-swap.sh"): "/opt/ic/bin/setup-shared-swap.sh",
         Label("upgrade/shared-resources/setup-shared-resources/setup-shared-swap.service"): "/etc/systemd/system/setup-shared-swap.service",
         Label("upgrade/shared-resources/setup-shared-resources/tmp.mount.d/override.conf"): "/etc/systemd/system/tmp.mount.d/override.conf",
-        Label("upgrade/systemd-generators/guestos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
+        Label("upgrade/systemd-generators/mount-generator"): "/etc/systemd/system-generators/mount-generator",
         Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
         Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
         Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",

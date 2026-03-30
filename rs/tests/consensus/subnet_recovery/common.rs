@@ -29,12 +29,11 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    Cursor, READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes,
+    READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes,
     get_node_certification_share_height, get_ssh_keys_for_user, halt_subnet,
     local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
     remote_recovery, unhalt_subnet,
 };
-use anyhow::bail;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
@@ -919,16 +918,12 @@ fn corrupt_latest_cup(
 
     info!(
         logger,
-        "Setting journal cursor on node {:?}",
+        "Getting journal cursor on node {:?}",
         app_node.get_ip_addr()
     );
-    let message_str = app_node
-        .block_on_bash_script_from_session(
-            &session,
-            "journalctl -n1 -o json --output-fields='__CURSOR'",
-        )
-        .expect("journal message");
-    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+    let journal_streamer = JournalStreamer::new(session.clone())
+        .from_now()
+        .expect("Failed to create journal streamer");
 
     info!(logger, "Reading CUP from node {:?}", app_node.get_ip_addr());
     let (mut channel, _) = session.scp_recv(Path::new(CUP_PATH)).unwrap();
@@ -982,27 +977,14 @@ fn corrupt_latest_cup(
             .expect("restart");
     }
 
-    ic_system_test_driver::retry_with_msg!(
-        "check if cup is corrupted",
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || {
-            let res = app_node.block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    "journalctl --after-cursor='{}' | grep -c 'Failed to deserialize CatchUpPackage'",
-                    message.cursor
-                ),
-            );
-            if res.is_ok_and( |r| r.trim().parse::<i32>().unwrap() > 0) {
-                Ok(())
-            } else {
-                bail!("Did not find log entry that cup is corrupted.")
-            }
-        }
-    )
-    .expect("Failed to detect broken subnet.");
+    assert!(
+        journal_streamer
+            .follow()
+            .max_lines(1)
+            .contains("Failed to deserialize CatchUpPackage")
+            .unwrap_or_default(),
+        "Did not find log entry that CUP is corrupted"
+    );
 
     unhalt_subnet(admin_helper, subnet.subnet_id, &[], logger);
 }

@@ -1152,7 +1152,7 @@ mod tests {
                     )],
                 );
 
-                let target_id = NiDkgTargetId::new([0u8; 32]);
+                let target_id = NiDkgTargetId::new([0_u8; 32]);
                 // The first two times, the context will have a request for the given target and
                 // not afterwards.
                 complement_state_manager_with_setup_initial_dkg_request(
@@ -1208,7 +1208,7 @@ mod tests {
                 );
 
                 // This is the first attempt to run DKG for this remote target.
-                assert_eq!(initial_dkg_attempts.get(&target_id), Some(&1u32));
+                assert_eq!(initial_dkg_attempts.get(&target_id), Some(&1_u32));
 
                 // STEP 2:
                 // Call compute_remote_dkg_data again, but this time with an indicator that we

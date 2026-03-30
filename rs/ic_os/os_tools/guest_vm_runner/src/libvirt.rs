@@ -2,6 +2,7 @@ use anyhow::{Error, Result};
 use arc_swap::ArcSwapOption;
 use std::fmt::Debug;
 use std::sync::Arc;
+use tracing::warn;
 use virt::sys::virDomainState;
 
 /// Facade trait for operations on a libvirt domain.
@@ -104,7 +105,7 @@ impl LibvirtConnection for LibvirtConnectionImpl {
 impl Drop for LibvirtConnectionImpl {
     fn drop(&mut self) {
         if let Err(e) = self.0.close() {
-            eprintln!("Failed to close libvirt connection: {e}");
+            warn!("Failed to close libvirt connection: {e}");
         }
     }
 }
@@ -148,7 +149,7 @@ impl LibvirtConnectionWithReconnect {
         let result = self.call_with_conn(&f);
         match result {
             Err(ref e) if Self::is_connection_error(e) => {
-                eprintln!("Libvirt connection is invalid, recreating and retrying");
+                warn!("Libvirt connection is invalid, recreating and retrying");
                 // Discard the cached connection so the next call will invoke the factory.
                 self.connection.store(None);
                 self.call_with_conn(f)

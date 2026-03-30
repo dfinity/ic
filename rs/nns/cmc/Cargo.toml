@@ -27,6 +27,7 @@ ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 lazy_static = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }

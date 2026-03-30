@@ -186,7 +186,7 @@ impl Default for EnvironmentBuilder {
         EnvironmentBuilder {
             environment_fixture_state: EnvironmentFixtureState {
                 now: 0,
-                rng: Some(ChaCha20Rng::from_seed([1u8; 32])),
+                rng: Some(ChaCha20Rng::from_seed([1_u8; 32])),
                 observed_canister_calls: VecDeque::new(),
                 mocked_canister_replies: VecDeque::new(),
             },

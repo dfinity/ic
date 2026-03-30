@@ -33,12 +33,13 @@ use ic_test_utilities_types::{
 };
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{
-    Cycles, Height,
+    Height,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::MessageId,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use std::{path::Path, sync::Arc, time::Duration};
 use tempfile::TempDir;
 
@@ -360,13 +361,13 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     state.put_canister_state(new_canister_state_with_execution(
         CANISTER_2,
         CANISTER_0.get(),
-        INITIAL_CYCLES * 2usize,
+        INITIAL_CYCLES * 2_usize,
         NumSeconds::from(200_000),
     ));
     state.put_canister_state(new_canister_state_with_execution(
         CANISTER_3,
         CANISTER_0.get(),
-        INITIAL_CYCLES * 3usize,
+        INITIAL_CYCLES * 3_usize,
         NumSeconds::from(300_000),
     ));
     state.metadata.ingress_history.insert(
@@ -381,7 +382,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
             )),
         },
         UNIX_EPOCH,
-        (1u64 << 30).into(),
+        (1_u64 << 30).into(),
         |_| {},
     );
     state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();

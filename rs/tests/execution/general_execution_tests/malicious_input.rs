@@ -76,7 +76,7 @@ fn test_garbage_payload(env: TestEnv) {
     let client = reqwest::blocking::Client::new();
 
     let garbage_payload = {
-        let mut p = [0u8; 100];
+        let mut p = [0_u8; 100];
         // Fill the payload with random bytes.
         rng.fill_bytes(&mut p);
         p.to_vec()
@@ -120,7 +120,7 @@ fn test_valid_query_followed_by_garbage(env: TestEnv) {
 
     // Append some garbage to the valid request.
     let garbage_payload = {
-        let mut p = [0u8; 100];
+        let mut p = [0_u8; 100];
         // Fill the payload with random bytes.
         rng.fill_bytes(&mut p);
         p.to_vec()
@@ -152,6 +152,7 @@ fn test_valid_update_followed_by_garbage(env: TestEnv) {
                 sender: Blob(vec![4]), // the anonymous user.
                 ingress_expiry: expiry_time().as_nanos() as u64,
                 nonce: None,
+                sender_info: None,
             },
         },
         sender_delegation: None,
@@ -162,7 +163,7 @@ fn test_valid_update_followed_by_garbage(env: TestEnv) {
 
     // Append some garbage to the valid request.
     let garbage_payload = {
-        let mut p = [0u8; 100];
+        let mut p = [0_u8; 100];
         // Fill the payload with random bytes.
         rng.fill_bytes(&mut p);
         p.to_vec()

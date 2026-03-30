@@ -23,7 +23,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_state_machine_tests::StateMachine;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use lazy_static::lazy_static;
 use maplit::hashset;
 use std::collections::{HashMap, HashSet};

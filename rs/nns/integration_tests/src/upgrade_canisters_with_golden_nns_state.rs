@@ -613,7 +613,7 @@ mod sanity_check {
             .xdr_permyriad_per_icp
             .as_ref()
             .unwrap();
-        total_rewards * (xdr_permyriad_per_icp as f64) / 10_000f64
+        total_rewards * (xdr_permyriad_per_icp as f64) / 10_000_f64
     }
 
     #[track_caller]

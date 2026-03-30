@@ -162,7 +162,7 @@ impl AuxPowBuilder {
         let mut script_data = Vec::new();
         script_data.extend_from_slice(&MERGED_MINING_HEADER);
         script_data.extend_from_slice(&blockchain_merkle_root_le);
-        script_data.extend_from_slice(&(1u32 << self.merkle_height).to_le_bytes());
+        script_data.extend_from_slice(&(1_u32 << self.merkle_height).to_le_bytes());
         script_data.extend_from_slice(&self.merkle_nonce.to_le_bytes());
 
         let coinbase_tx = TransactionBuilder::new()

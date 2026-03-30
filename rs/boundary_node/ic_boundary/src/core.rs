@@ -78,6 +78,9 @@ use crate::{
             geoip::{self},
             process::{self},
             retry::{RetryParams, retry_request},
+            subnet_read_state_cache::{
+                SubnetReadStateCacheState, subnet_read_state_cache_middleware,
+            },
             validate::{self, UUID_REGEX},
         },
     },
@@ -277,6 +280,20 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         None
     };
 
+    // Subnet read_state caching
+    let subnet_read_state_cache_state =
+        (!cli.subnet_read_state_cache.subnet_read_state_cache_disable).then(|| {
+            Arc::new(SubnetReadStateCacheState::new(
+                cli.subnet_read_state_cache.subnet_read_state_cache_ttl,
+                cli.subnet_read_state_cache.subnet_read_state_cache_size,
+                cli.subnet_read_state_cache
+                    .subnet_read_state_cache_max_item_size,
+                cli.subnet_read_state_cache
+                    .subnet_read_state_cache_body_timeout,
+                &metrics_registry,
+            ))
+        });
+
     // Bouncer
     let bouncer = if cli.bouncer.bouncer_enable {
         Some(bouncer::setup(&cli.bouncer, &metrics_registry).context("unable to setup bouncer")?)
@@ -335,6 +352,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         &cli,
         &metrics_registry,
         cache_state.clone(),
+        subnet_read_state_cache_state,
         anonymization_salt.clone(),
         proxy_router.clone(),
     );
@@ -818,6 +836,7 @@ pub fn setup_router(
     cli: &Cli,
     metrics_registry: &Registry,
     cache_state: Option<Arc<CacheState>>,
+    subnet_read_state_cache_state: Option<Arc<SubnetReadStateCacheState>>,
     anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
     proxy_router: Arc<ProxyRouter>,
 ) -> Router {
@@ -1002,10 +1021,16 @@ pub fn setup_router(
         })))
         .layer(middleware_retry.clone());
 
+    let middleware_subnet_read_state_cache = option_layer(
+        subnet_read_state_cache_state
+            .map(|x| middleware::from_fn_with_state(x, subnet_read_state_cache_middleware)),
+    );
+
     let service_subnet_read = ServiceBuilder::new()
         .layer(middleware::from_fn(validate::validate_request))
         .layer(middleware::from_fn(validate::validate_subnet_request))
         .layer(common_service_layers)
+        .layer(middleware_subnet_read_state_cache)
         .layer(middleware_subnet_lookup)
         .layer(middleware_generic_limiter)
         .layer(middleware_retry);

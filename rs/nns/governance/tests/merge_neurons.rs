@@ -163,16 +163,16 @@ proptest! {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_merge_neurons_small(
-    n1_stake in 0u64..50_000,
-    n1_maturity in 0u64..500_000_000,
-    n1_fees in 0u64..20_000,
-    n1_dissolve in 1u64..MAX_DISSOLVE_DELAY_SECONDS,
-    n1_age in 0u64..315_360_000,
-    n2_stake in 0u64..50_000,
-    n2_maturity in 0u64..500_000_000,
-    n2_fees in 0u64..20_000,
-    n2_dissolve in 1u64..MAX_DISSOLVE_DELAY_SECONDS,
-    n2_age in 0u64..315_360_000
+    n1_stake in 0_u64..50_000,
+    n1_maturity in 0_u64..500_000_000,
+    n1_fees in 0_u64..20_000,
+    n1_dissolve in 1_u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n1_age in 0_u64..315_360_000,
+    n2_stake in 0_u64..50_000,
+    n2_maturity in 0_u64..500_000_000,
+    n2_fees in 0_u64..20_000,
+    n2_dissolve in 1_u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n2_age in 0_u64..315_360_000
 ) {
     do_test_merge_neurons(
         n1_stake,
@@ -190,17 +190,17 @@ fn test_merge_neurons_small(
 
 #[test]
 fn test_merge_neurons_normal(
-    n1_stake in 0u64..500_000_000,
+    n1_stake in 0_u64..500_000_000,
 
-    n1_maturity in 0u64..500_000_000,
-    n1_fees in 0u64..20_000,
-    n1_dissolve in 1u64..MAX_DISSOLVE_DELAY_SECONDS,
-    n1_age in 0u64..315_360_000,
-    n2_stake in 0u64..500_000_000,
-    n2_maturity in 0u64..500_000_000,
-    n2_fees in 0u64..20_000,
-    n2_dissolve in 1u64..MAX_DISSOLVE_DELAY_SECONDS,
-    n2_age in 0u64..315_360_000
+    n1_maturity in 0_u64..500_000_000,
+    n1_fees in 0_u64..20_000,
+    n1_dissolve in 1_u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n1_age in 0_u64..315_360_000,
+    n2_stake in 0_u64..500_000_000,
+    n2_maturity in 0_u64..500_000_000,
+    n2_fees in 0_u64..20_000,
+    n2_dissolve in 1_u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n2_age in 0_u64..315_360_000
 ) {
     do_test_merge_neurons(
         n1_stake,

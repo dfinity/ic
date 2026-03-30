@@ -23,6 +23,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-state-layout = { path = "../../state_layout" }
 ic-state-manager = { path = "../../state_manager" }
 ic-state-tool = { path = "../../state_tool" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }

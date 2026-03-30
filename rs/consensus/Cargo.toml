@@ -12,7 +12,7 @@ ic-consensus-certification = { path = "./certification" }
 ic-consensus-idkg = { path = "./idkg" }
 ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
-ic-consensus-vetkd = { path = "./vetkd" }
+ic-consensus-chain-key = { path = "./chain_key" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-error-types = { path = "../../packages/ic-error-types" }

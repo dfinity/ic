@@ -522,7 +522,7 @@ pub async fn assert_mint_transaction(
         agent,
         GetTransactionsRequest {
             start: BlockIndex::from(block_index),
-            length: Nat::from(1u32),
+            length: Nat::from(1_u32),
         },
     )
     .await
@@ -558,7 +558,7 @@ pub async fn assert_burn_transaction(
         agent,
         GetTransactionsRequest {
             start: BlockIndex::from(block_index),
-            length: Nat::from(1u32),
+            length: Nat::from(1_u32),
         },
     )
     .await
@@ -584,7 +584,7 @@ pub async fn assert_no_transaction(agent: &Icrc1Agent, logger: &Logger) {
         agent,
         GetTransactionsRequest {
             start: BlockIndex::from(0_u8),
-            length: Nat::from(1_000u32),
+            length: Nat::from(1_000_u32),
         },
     )
     .await

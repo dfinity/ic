@@ -6,7 +6,7 @@ use ic_replicated_state::{
     page_map::{TestPageAllocatorFileDescriptorImpl, test_utils::base_only_storage_layout},
 };
 use ic_sys::{PAGE_SIZE, PageBytes};
-use ic_types::{Height, NumBytes, NumOsPages};
+use ic_types::{NumBytes, NumOsPages};
 use libc::c_void;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use rstest::rstest;
@@ -48,7 +48,6 @@ fn setup(
     tmpfile.as_file().sync_all().unwrap();
     let mut page_map = PageMap::open(
         Box::new(base_only_storage_layout(tmpfile.path().to_path_buf())),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();

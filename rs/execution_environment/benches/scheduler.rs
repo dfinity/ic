@@ -6,7 +6,8 @@ use ic_replicated_state::{
     CanisterState, SchedulerState, SystemState,
     canister_state::canister_snapshots::CanisterSnapshots,
 };
-use ic_types::{AccumulatedPriority, Cycles};
+use ic_types::AccumulatedPriority;
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, user_test_id};
 use std::collections::BTreeMap;
 use std::sync::Arc;

@@ -224,7 +224,7 @@ macro_rules! declare_sswu_p_3_mod_4_map_to_curve_impl {
                     ic_crypto_internal_seed::xmd::<XMD_BYTES, ic_crypto_sha2::Sha256>(input, dst);
 
                 fn extended_u(u: &[u8]) -> [u8; 2 * $fe::BYTES] {
-                    let mut ext_u = [0u8; 2 * $fe::BYTES];
+                    let mut ext_u = [0_u8; 2 * $fe::BYTES];
                     ext_u[WIDE_BYTES_OFFSET..].copy_from_slice(&u);
                     ext_u
                 }
