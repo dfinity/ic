@@ -29,6 +29,7 @@ message CanisterHttpResponseMetadata {
   bytes content_hash = 3;
   uint64 registry_version = 4;
   string replica_version = 5;
+  uint32 content_size = 6;
 }
 
 message CanisterHttpResponseContent {
@@ -60,6 +61,7 @@ message CanisterHttpResponseWithConsensus {
   reserved 5;
   reserved 6;
   repeated CanisterHttpResponseSignature signatures = 7;
+  uint32 content_size = 9;
 }
 
 message CanisterHttpShare {
