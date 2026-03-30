@@ -807,7 +807,11 @@ macro_rules! systest_all_subnet_types {
     ($group: expr, $function_name:path) => {
         $group = $group.add_test(systest!($function_name; SubnetType::System));
         $group = $group.add_test(systest!($function_name; SubnetType::Application));
-        $group = $group.add_test(systest!($function_name; SubnetType::CloudEngine));
+        // TODO(CON-1696): Remove this condition (and always run the test for cloud engines) when
+        // #9613 reaches mainnet NNS
+        if get_guestos_img_version() == get_guestos_update_img_version() {
+            $group = $group.add_test(systest!($function_name; SubnetType::CloudEngine));
+        }
     };
 }
 
