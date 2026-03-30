@@ -85,7 +85,7 @@ use ic_types::{
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, ECDSAOutcalls, Instructions,
-    NominalCycles, NonConsumed, SchnorrOutcalls, VetKd,
+    NominalCycles, SchnorrOutcalls, VetKd,
 };
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
@@ -2393,7 +2393,6 @@ impl ExecutionEnvironment {
         msg: &mut CanisterCall,
         state: &mut ReplicatedState,
     ) -> ExecuteSubnetMessageResult {
-        let cost_schedule = state.get_own_cost_schedule();
         match state.canister_state_make_mut(&canister_id) {
             None => ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
@@ -2405,9 +2404,7 @@ impl ExecutionEnvironment {
 
             Some(canister_state) => {
                 let cycles = msg.take_cycles();
-                canister_state
-                    .system_state
-                    .add_cycles(CompoundCycles::<NonConsumed>::new(cycles, cost_schedule));
+                canister_state.system_state.add_cycles(cycles);
                 if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     info!(
                         self.log,
@@ -2527,16 +2524,9 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
     ) -> Result<Vec<u8>, UserError> {
-        let cost_schedule = state.get_own_cost_schedule();
         let canister = canister_make_mut(canister_id, state)?;
         self.canister_manager
-            .add_cycles(
-                sender,
-                cycles,
-                canister,
-                provisional_whitelist,
-                cost_schedule,
-            )
+            .add_cycles(sender, cycles, canister, provisional_whitelist)
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }

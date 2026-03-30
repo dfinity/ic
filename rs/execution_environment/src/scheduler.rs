@@ -956,14 +956,12 @@ impl SchedulerImpl {
                 .system_state
                 .output_queues_for_each(|canister_id, msg| {
                     let own_subnet_type = state.metadata.own_subnet_type;
-                    let own_cost_schedule = state.get_own_cost_schedule();
                     match state.canister_state_make_mut(canister_id) {
                         Some(dest_canister) => dest_canister
                             .push_input(
                                 (*msg).clone(),
                                 &mut subnet_available_guaranteed_response_memory,
                                 own_subnet_type,
-                                own_cost_schedule,
                                 InputQueueType::LocalSubnet,
                             )
                             .map(|_| ())

@@ -178,9 +178,7 @@ use ic_types::{
     time::{GENESIS, Time},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
-use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles, NonConsumed,
-};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
     RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
@@ -4911,12 +4909,7 @@ impl StateMachine {
         let canister_state = state
             .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
-        canister_state
-            .system_state
-            .add_cycles(CompoundCycles::<NonConsumed>::new(
-                Cycles::from(amount),
-                self.cost_schedule,
-            ));
+        canister_state.system_state.add_cycles(Cycles::from(amount));
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);

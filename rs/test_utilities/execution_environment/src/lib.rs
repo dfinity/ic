@@ -1386,7 +1386,6 @@ impl ExecutionTest {
                 RequestOrResponse::Response(response_arc.clone()),
                 &mut subnet_available_guaranteed_response_memory,
                 state.metadata.own_subnet_type,
-                cost_schedule,
                 InputQueueType::LocalSubnet,
             )
             .unwrap();
@@ -2014,7 +2013,6 @@ impl ExecutionTest {
     /// `self.xnet_messages`.
     pub fn induct_messages(&mut self) {
         let mut state = self.state.take().unwrap();
-        let cost_schedule = state.get_own_cost_schedule();
         let mut subnet_available_guaranteed_response_memory = self
             .subnet_available_memory
             .get_guaranteed_response_message_memory();
@@ -2027,7 +2025,6 @@ impl ExecutionTest {
                         message.clone(),
                         &mut subnet_available_guaranteed_response_memory,
                         state.metadata.own_subnet_type,
-                        cost_schedule,
                         InputQueueType::LocalSubnet,
                     );
                     if result.is_err() {
