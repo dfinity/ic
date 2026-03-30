@@ -8973,12 +8973,6 @@ fn no_state_clone_count(metrics: &MetricsRegistry) -> u64 {
         .sum::<u64>()
 }
 
-fn tip_hash_count(metrics: &MetricsRegistry) -> u64 {
-    fetch_int_counter_vec(metrics, "state_manager_tip_hash_count")
-        .values()
-        .sum::<u64>()
-}
-
 fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
     let mut labels = BTreeMap::new();
     labels.insert("request".to_string(), "flush_unflushed_delta".to_string());

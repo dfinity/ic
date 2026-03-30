@@ -188,7 +188,6 @@ pub struct StateManagerMetrics {
     latest_hash_tree_max_index: IntGauge,
     fast_forward_height: IntGauge,
     no_state_clone_count: IntCounter,
-    tip_hash_count: IntCounter,
 }
 
 #[derive(Clone)]
@@ -484,11 +483,6 @@ impl StateManagerMetrics {
             "Number of heights whose states were not cloned and not stored by this node.",
         );
 
-        let tip_hash_count = metrics_registry.int_counter(
-            "state_manager_tip_hash_count",
-            "Number of tip heights whose state snapshot was not stored by this node and whose state hash was computed by this node.",
-        );
-
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -516,7 +510,6 @@ impl StateManagerMetrics {
             latest_hash_tree_max_index,
             fast_forward_height,
             no_state_clone_count,
-            tip_hash_count,
         }
     }
 
