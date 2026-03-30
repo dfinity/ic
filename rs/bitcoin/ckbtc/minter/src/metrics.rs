@@ -327,9 +327,9 @@ pub fn encode_metrics(
     )?;
 
     metrics.encode_gauge(
-        "ckbtc_minter_deduplicated_outpoint_count",
-        state::read_state(|s| s.deduplicated_outpoints.len()) as f64,
-        "Total number of outpoints deduplicated during update_balance.",
+        "ckbtc_minter_duplicated_outpoint_count",
+        state::read_state(|s| s.duplicated_outpoints.len()) as f64,
+        "Total number of outpoints found to be duplicated during update_balance.",
     )?;
 
     metrics.encode_gauge(

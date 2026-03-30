@@ -186,25 +186,25 @@ pub async fn update_balance<R: CanisterRuntime>(
     let (processable_utxos, suspended_utxos) =
         state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account, &now));
 
-    let (processable_utxos, deduplicated_utxos): (BTreeSet<_>, BTreeSet<_>) = read_state(|s| {
+    let (processable_utxos, duplicated_utxos): (BTreeSet<_>, BTreeSet<_>) = read_state(|s| {
         processable_utxos
             .into_iter()
             .partition(|utxo| !s.minted_outpoints.contains(&utxo.outpoint))
     });
-    if !deduplicated_utxos.is_empty() {
+    if !duplicated_utxos.is_empty() {
         log!(
             Priority::Info,
-            "Found {} deduplicated UTXOs: {}",
-            deduplicated_utxos.len(),
-            deduplicated_utxos
+            "Found {} duplicated UTXOs: {}",
+            duplicated_utxos.len(),
+            duplicated_utxos
                 .iter()
                 .map(|utxo| format!("{}", DisplayOutpoint(&utxo.outpoint),))
                 .collect::<Vec<_>>()
                 .join(", ")
         );
         state::mutate_state(|s| {
-            for utxo in &deduplicated_utxos {
-                s.deduplicated_outpoints.insert(utxo.outpoint.clone());
+            for utxo in &duplicated_utxos {
+                s.duplicated_outpoints.insert(utxo.outpoint.clone());
             }
         });
     }

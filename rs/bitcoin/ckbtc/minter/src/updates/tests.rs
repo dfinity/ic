@@ -272,8 +272,8 @@ mod update_balance {
         assert_matches!(result, Err(UpdateBalanceError::NoNewUtxos{pending_utxos, ..}) if pending_utxos == Some(vec![]));
         read_state(|s| {
             assert!(
-                s.deduplicated_outpoints.contains(&utxo.outpoint),
-                "Expected deduplicated_outpoints to contain {:?}",
+                s.duplicated_outpoints.contains(&utxo.outpoint),
+                "Expected duplicated_outpoints to contain {:?}",
                 utxo.outpoint
             );
         });
