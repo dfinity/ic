@@ -24,7 +24,7 @@ use anyhow::Result;
 use anyhow::bail;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::upgrade::{
-    fetch_unassigned_node_version, get_blessed_replica_versions,
+    fetch_unassigned_node_version, get_elected_replica_versions,
 };
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
@@ -99,8 +99,8 @@ fn test(env: TestEnv) {
         // initial parameters
         let reg_ver = registry_canister.get_latest_version().await.unwrap();
         info!(logger, "Registry version: {}", reg_ver);
-        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-        info!(logger, "Initial: {:?}", blessed_versions);
+        let elected_versions = get_elected_replica_versions(&env.topology_snapshot()).await;
+        info!(logger, "Initial: {:?}", elected_versions);
         let sha256 = get_guestos_update_img_sha256();
         info!(logger, "Update image SHA256: {}", sha256);
         let guest_launch_measurements = get_guestos_update_launch_measurements();
@@ -130,9 +130,9 @@ fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver2);
         assert!(reg_ver < reg_ver2);
 
-        // new blessed versions
-        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-        info!(logger, "Updated: {:?}", blessed_versions);
+        // new elected versions
+        let elected_versions = get_elected_replica_versions(&&env.topology_snapshot()).await;
+        info!(logger, "Updated: {:?}", elected_versions);
 
         // proposal to upgrade the unassigned nodes
         let proposal2_id = submit_update_unassigned_node_version_proposal(

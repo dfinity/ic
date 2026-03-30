@@ -555,7 +555,7 @@ pub mod local {
             };
         let upgrade_image_launch_measurements_path_cli =
             opt_cli_arg!(upgrade_image_launch_measurements_path);
-        let add_and_bless_upgrade_version_cli = opt_cli_arg!(add_upgrade_version);
+        let add_upgrade_version_cli = opt_cli_arg!(add_upgrade_version);
         let replay_until_height_cli = opt_cli_arg!(replay_until_height);
         let download_pool_node_cli = opt_cli_arg!(download_pool_node);
         // We are doing a local recovery, so we override the admin access location to "local"
@@ -583,7 +583,7 @@ pub mod local {
             {upgrade_image_url_cli} \
             {upgrade_image_hash_cli} \
             {upgrade_image_launch_measurements_path_cli} \
-            {add_and_bless_upgrade_version_cli} \
+            {add_upgrade_version_cli} \
             {replay_until_height_cli} \
             {download_pool_node_cli} \
             {admin_access_location_cli} \

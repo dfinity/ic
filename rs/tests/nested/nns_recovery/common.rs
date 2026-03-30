@@ -15,7 +15,7 @@ use ic_consensus_system_test_utils::{
         update_subnet_record, wait_until_authentication_is_granted,
     },
     subnet::assert_subnet_is_healthy,
-    upgrade::bless_replica_version,
+    upgrade::elect_replica_version,
 };
 use ic_recovery::{
     IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE, RECOVERY_DIRECTORY_NAME, RecoveryArgs,
@@ -251,8 +251,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     .expect("Could not write guest launch measurements to file");
     if !cfg.add_upgrade_version {
         // If ic-recovery does not add the new version to the registry, then we must elect it now.
-        block_on(bless_replica_version(
+        block_on(elect_replica_version(
             &nns_node,
+            &env.topology_snapshot(),
             &upgrade_version,
             &logger,
             upgrade_image_hash.clone(),
