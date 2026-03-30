@@ -26,7 +26,7 @@ jobs:
   publish-crates:
     name: Publish Crate ${{ github.event.inputs.crate-name }} ${{ github.event.inputs.crate-version }}
     runs-on: ubuntu-latest
- #   environment: publish-crates
+    environment: publish-crates
     steps:
       - uses: actions/checkout@v6
 
