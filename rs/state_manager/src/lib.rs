@@ -3265,7 +3265,7 @@ impl StateManager for StateManagerImpl {
 
         self.populate_extra_metadata(&mut state);
 
-        // Get the previous state hash either from consensus via certification metadata (if we are catching up)
+        // Get the previous state hash either from consensus via certifications (if we are catching up)
         // or wait for the hashing thread to finish computing it.
         let prev_height = height.decrement();
         let states = self.states.read();
@@ -3303,12 +3303,15 @@ impl StateManager for StateManagerImpl {
                 // After awaiting the hashing thread, snapshot and certification_metadata
                 // must have an entry at height-1, so we can unwrap.
                 let states = self.states.read();
-                states
-                    .certifications_metadata
-                    .get(&prev_height)
-                    .expect("The previous state hash should be available after awaiting the hash thread.") /* TODO: log critical error and return instead*/
-                    .certified_state_hash
-                    .clone()
+                if let Some(cert_md) = states.certifications_metadata.get(&prev_height) {
+                    cert_md.certified_state_hash.clone()
+                } else {
+                    error!(
+                        "Previous state hash was not available after awaiting the hash thread. This is a bug."
+                    );
+                    // Continue nevertheless, this (impossible situation) should self-heal.
+                    return;
+                }
             }
         };
         // Write the previous state hash to the state.
