@@ -272,7 +272,7 @@ def icos_build(
             vcpu_configs = "16 64" if "dev" in mode else "64"
 
             # CPU type flags for sev-snp-measure, one per AMD EPYC generation.
-            # TODO: Once sev-snp-measure adds EPYC-Turin as a named --vcpu-type,
+            # TODO(NODE-1924): Once sev-snp-measure adds EPYC-Turin as a named --vcpu-type,
             # bump the version and replace --vcpu-sig=0xB00F00 with
             # --vcpu-type=EPYC-Turin for consistency.
             # Turin CPUID signature 0xB00F00 = family=26, model=0, stepping=0 encoded
