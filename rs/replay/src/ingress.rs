@@ -26,9 +26,7 @@ use ic_protobuf::registry::{
     subnet::v1::{SubnetRecord, SubnetType},
 };
 use ic_registry_client_helpers::subnet::get_node_ids_from_subnet_record;
-use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
-};
+use ic_registry_keys::{make_replica_version_key, make_subnet_record_key};
 use ic_registry_transport::{
     pb::v1::{Precondition, RegistryMutation, registry_mutation},
     serialize_atomic_mutate_request,
@@ -319,7 +317,7 @@ pub fn cmd_add_ledger_account(
     ])
 }
 
-/// Creates signed ingress messages to potentially add a new blessed replica
+/// Creates signed ingress messages to potentially add a new replica
 /// version and updates the subnet record with this replica version.
 pub(crate) fn cmd_upgrade_subnet_to_replica_version(
     agent: &Agent,
@@ -332,17 +330,11 @@ pub(crate) fn cmd_upgrade_subnet_to_replica_version(
 
     let mut msgs = Vec::new();
 
-    if cmd.add_and_bless_replica_version {
+    if cmd.add_replica_version {
         msgs.push(add_replica_version(
             agent,
             replica_version_id.clone(),
             replica_version_record,
-            context_time,
-        )?);
-        msgs.push(bless_replica_version(
-            agent,
-            player,
-            replica_version_id.clone(),
             context_time,
         )?);
     }
@@ -470,35 +462,6 @@ pub fn atomic_mutate(
     let payload = serialize_atomic_mutate_request(mutations, pre_conditions);
 
     make_signed_ingress(agent, canister_id, "atomic_mutate", payload, expiry)
-}
-
-/// Bless a new replica version by mutating the registry canister.
-pub(crate) fn bless_replica_version(
-    agent: &Agent,
-    player: &crate::player::Player,
-    replica_version_id: String,
-    context_time: Time,
-) -> Result<SignedIngress, String> {
-    let mut mutation = RegistryMutation::default();
-    mutation.set_mutation_type(registry_mutation::Type::Upsert);
-    mutation.key = make_blessed_replica_versions_key().into_bytes();
-    let mut blessed_versions = player.get_blessed_replica_versions(context_time)?;
-    blessed_versions
-        .blessed_version_ids
-        .push(replica_version_id);
-
-    let mut buf = Vec::new();
-    match blessed_versions.encode(&mut buf) {
-        Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {error:?}"),
-    }
-    atomic_mutate(
-        agent,
-        REGISTRY_CANISTER_ID,
-        vec![mutation],
-        vec![],
-        context_time,
-    )
 }
 
 /// Add a new replica version by mutating the registry canister.
