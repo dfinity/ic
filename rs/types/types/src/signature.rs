@@ -36,8 +36,8 @@ pub struct BasicSignatureBatch<T> {
 impl<T> CountBytes for BasicSignatureBatch<T> {
     fn count_bytes(&self) -> usize {
         self.signatures_map
-            .iter()
-            .map(|(_, sig)| std::mem::size_of::<NodeId>() + sig.get_ref().count_bytes())
+            .values()
+            .map(|sig| std::mem::size_of::<NodeId>() + sig.get_ref().count_bytes())
             .sum()
     }
 }
