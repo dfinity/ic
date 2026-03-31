@@ -4371,6 +4371,7 @@ impl StateMachine {
                 user_id: UserId::from(sender),
                 ingress_expiry: 0,
                 nonce: None,
+                sender_info: None,
             },
             receiver,
             method_name: method.to_string(),

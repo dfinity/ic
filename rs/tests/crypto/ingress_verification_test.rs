@@ -958,6 +958,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                             sender: Blob(sender.principal().as_slice().to_vec()),
                             ingress_expiry: expiry_time().as_nanos() as u64,
                             nonce: None,
+                            sender_info: None,
                         },
                     };
 
@@ -1100,6 +1101,38 @@ pub fn requests_with_sender_info(env: TestEnv) {
                     api_ver,
                     &test_info,
                     "call",
+                    content,
+                    id.public_key_der(),
+                    None,
+                    signature,
+                )
+                .await;
+
+                assert_eq!(response.status(), 400);
+                response.expect_text_error(sender_info_error_text);
+            }
+
+            for &api_ver in ALL_QUERY_API_VERSIONS {
+                let content = HttpQueryContent::Query {
+                    query: HttpUserQuery {
+                        canister_id: Blob(test_info.canister_id.get().as_slice().to_vec()),
+                        method_name: "query".to_string(),
+                        arg: Blob(wasm().reply_data(b"query_reply").build()),
+                        sender: Blob(id.principal().as_slice().to_vec()),
+                        ingress_expiry: expiry_time().as_nanos() as u64,
+                        nonce: None,
+                        sender_info: Some(RawSignedSenderInfo {
+                            info: Blob(vec![1, 2, 3]),
+                            signer: Blob(CanisterId::ic_00().get().as_slice().to_vec()),
+                            sig: Blob(vec![4, 5, 6]),
+                        }),
+                    },
+                };
+                let signature = id.sign_query(&content);
+                let response = send_request(
+                    api_ver,
+                    &test_info,
+                    "query",
                     content,
                     id.public_key_der(),
                     None,
@@ -1557,6 +1590,7 @@ async fn perform_query_call_with_delegations(
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -1692,6 +1726,7 @@ async fn perform_query_with_expiry(
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry,
             nonce: None,
+            sender_info: None,
         },
     };
 

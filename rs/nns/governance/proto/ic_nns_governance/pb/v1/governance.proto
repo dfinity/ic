@@ -499,6 +499,12 @@ enum NnsFunction {
 
   // The proposal requests to split a subnet.
   NNS_FUNCTION_SPLIT_SUBNET = 56;
+
+  // Delete a subnet. The subnet record, catch-up package, threshold signing key
+  // and routing table entries are removed from the registry, and the subnet's
+  // nodes become unassigned.
+  // Currently limited to CloudEngine subnets.
+  NNS_FUNCTION_DELETE_SUBNET = 57;
 }
 
 // Payload of a proposal that calls a function on another NNS

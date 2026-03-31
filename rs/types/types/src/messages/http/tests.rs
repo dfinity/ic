@@ -374,7 +374,8 @@ mod try_from {
             Authentication, HttpQueryContent, HttpRequestError, HttpUserQuery,
         };
         use crate::messages::{
-            Blob, HttpRequest, HttpRequestEnvelope, Query, QuerySource, UserSignature,
+            Blob, HttpRequest, HttpRequestEnvelope, Query, QuerySource, RawSignedSenderInfo,
+            SignedSenderInfo, UserSignature,
         };
         use assert_matches::assert_matches;
 
@@ -386,6 +387,11 @@ mod try_from {
                 sender: Blob(fixed::principal_id().to_vec()),
                 ingress_expiry: fixed::ingress_expiry(),
                 nonce: Some(Blob(fixed::nonce())),
+                sender_info: Some(RawSignedSenderInfo {
+                    info: Blob(fixed::sender_info_info()),
+                    signer: to_blob(fixed::canister_id()),
+                    sig: Blob(fixed::sender_info_sig()),
+                }),
             }
         }
 
@@ -395,6 +401,25 @@ mod try_from {
                     user_id: UserId::from(fixed::principal_id()),
                     ingress_expiry: fixed::ingress_expiry(),
                     nonce: Some(fixed::nonce()),
+                    sender_info: Some(SignedSenderInfo {
+                        info: fixed::sender_info_info(),
+                        signer: fixed::canister_id(),
+                        sig: fixed::sender_info_sig(),
+                    }),
+                },
+                receiver: fixed::canister_id(),
+                method_name: fixed::method_name(),
+                method_payload: fixed::arg().0,
+            }
+        }
+
+        pub fn default_user_query_content_without_sender_info() -> Query {
+            Query {
+                source: QuerySource::User {
+                    user_id: UserId::from(fixed::principal_id()),
+                    ingress_expiry: fixed::ingress_expiry(),
+                    nonce: Some(fixed::nonce()),
+                    sender_info: None,
                 },
                 receiver: fixed::canister_id(),
                 method_name: fixed::method_name(),
@@ -458,6 +483,29 @@ mod try_from {
                     })
                 );
             }
+        }
+
+        #[test]
+        fn should_fail_creating_http_requests_with_invalid_sender_info_signer() {
+            let envelope = HttpRequestEnvelope {
+                content: HttpQueryContent::Query {
+                    query: HttpUserQuery {
+                        sender_info: Some(RawSignedSenderInfo {
+                            info: Blob(fixed::sender_info_info()),
+                            signer: fixed::invalid_serialized_printipal_id(),
+                            sig: Blob(fixed::sender_info_sig()),
+                        }),
+                        ..default_http_user_query_content()
+                    },
+                },
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let request = HttpRequest::try_from(envelope);
+
+            assert_matches!(request, Err(HttpRequestError::InvalidPrincipalId(_)));
         }
 
         #[test]
@@ -602,7 +650,6 @@ mod hashing {
         Time,
         messages::{Blob, HttpQueryResponse, HttpQueryResponseReply, QueryResponseHash},
     };
-    use hex_literal::hex;
 
     #[test]
     fn hashing_query_response_reply() {
@@ -612,6 +659,17 @@ mod hashing {
                 arg: Blob(b"some_bytes".to_vec()),
             },
         };
+        let user_query = query::default_user_query_content_without_sender_info();
+        let query_response_hash = QueryResponseHash::new(
+            &query_response,
+            &user_query,
+            Time::from_nanos_since_unix_epoch(time),
+        );
+        assert_eq!(
+            hex::encode(query_response_hash.as_bytes()),
+            "7e94e73d1647506682a6300385bc99a63d1ef655222e5a3235f784ca3e80dca4"
+        );
+
         let user_query = query::default_user_query_content();
         let query_response_hash = QueryResponseHash::new(
             &query_response,
@@ -619,8 +677,8 @@ mod hashing {
             Time::from_nanos_since_unix_epoch(time),
         );
         assert_eq!(
-            query_response_hash.as_bytes(),
-            &hex!("7e94e73d1647506682a6300385bc99a63d1ef655222e5a3235f784ca3e80dca4")
+            hex::encode(query_response_hash.as_bytes()),
+            "6759237ceba8b6c5964cf0294d0ed42341f1f2c89cc76c4006cdbee002d37ec0"
         );
     }
 
@@ -632,6 +690,17 @@ mod hashing {
             reject_message: "system error".to_string(),
             error_code: "IC500".to_string(),
         };
+        let user_query = query::default_user_query_content_without_sender_info();
+        let query_response_hash = QueryResponseHash::new(
+            &query_response,
+            &user_query,
+            Time::from_nanos_since_unix_epoch(time),
+        );
+        assert_eq!(
+            hex::encode(query_response_hash.as_bytes()),
+            "bd80f930dfd3eafdf2d5c03031da9b5ec62963701abcb217d31c84005bd8db87"
+        );
+
         let user_query = query::default_user_query_content();
         let query_response_hash = QueryResponseHash::new(
             &query_response,
@@ -639,8 +708,8 @@ mod hashing {
             Time::from_nanos_since_unix_epoch(time),
         );
         assert_eq!(
-            query_response_hash.as_bytes(),
-            &hex!("bd80f930dfd3eafdf2d5c03031da9b5ec62963701abcb217d31c84005bd8db87")
+            hex::encode(query_response_hash.as_bytes()),
+            "481c75f8d7a90cf85685c8126b272566184ffed6374f61efcba9f40f3e69cbc2"
         );
     }
 }
@@ -990,6 +1059,7 @@ mod to_authentication {
                     sender: Blob(vec![4]),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
             },
             sender_delegation,
