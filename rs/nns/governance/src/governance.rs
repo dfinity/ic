@@ -4791,6 +4791,13 @@ impl Governance {
             .neuron_minimum_dissolve_delay_to_vote_seconds
             .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS);
 
+        assert!(
+            current >= two_weeks_seconds,
+            "neuron_minimum_dissolve_delay_to_vote_seconds ({}) is unexpectedly below 2 weeks ({})",
+            current,
+            two_weeks_seconds,
+        );
+
         if current > two_weeks_seconds {
             println!(
                 "{}Migrating neuron_minimum_dissolve_delay_to_vote_seconds from {} to {} \

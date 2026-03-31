@@ -129,7 +129,7 @@ fn test_network_economics_to_self_describing_all_fields() {
                     "clear_following_after_seconds".to_string() =>
                         SelfDescribingValue::from(2_629_800_u64),
                     "neuron_minimum_dissolve_delay_to_vote_seconds".to_string() =>
-                        SelfDescribingValue::from(15_778_800_u64),
+                        SelfDescribingValue::from(1_209_600_u64),
                 }),
         }),
     );

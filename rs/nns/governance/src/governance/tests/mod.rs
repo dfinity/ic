@@ -1832,10 +1832,10 @@ fn test_post_upgrade_migrates_neuron_minimum_dissolve_delay_to_vote_seconds() {
 }
 
 #[test]
-fn test_post_upgrade_does_not_increase_neuron_minimum_dissolve_delay_to_vote_seconds() {
+#[should_panic(expected = "unexpectedly below 2 weeks")]
+fn test_post_upgrade_panics_if_neuron_minimum_dissolve_delay_to_vote_seconds_below_two_weeks() {
     let one_week_seconds = 7 * ONE_DAY_SECONDS;
 
-    // If someone already set it lower than 2 weeks, don't increase it.
     let mut heap_data = HeapGovernanceData {
         economics: Some(NetworkEconomics {
             voting_power_economics: Some(VotingPowerEconomics {
@@ -1847,15 +1847,6 @@ fn test_post_upgrade_does_not_increase_neuron_minimum_dissolve_delay_to_vote_sec
         ..Default::default()
     };
 
+    // Should panic because the value is below 2 weeks.
     Governance::maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(&mut heap_data);
-
-    let actual = heap_data
-        .economics
-        .as_ref()
-        .unwrap()
-        .voting_power_economics
-        .as_ref()
-        .unwrap()
-        .neuron_minimum_dissolve_delay_to_vote_seconds;
-    assert_eq!(actual, Some(one_week_seconds));
 }
