@@ -534,14 +534,14 @@ fn hash_validation() {
         },
         &default_validation_context(),
     );
-    match validation_result {
+    assert_matches!(
+        validation_result,
         Err(ValidationError::InvalidArtifact(
             InvalidPayloadReason::InvalidCanisterHttpPayload(
                 InvalidCanisterHttpPayloadReason::ContentHashMismatch { .. },
             ),
-        )) => (),
-        x => panic!("Expected ContentHashMismatch, got {x:?}"),
-    }
+        ))
+    );
 }
 
 /// Test that payloads with wrong content size don't validate
@@ -554,14 +554,14 @@ fn content_size_validation() {
         },
         &default_validation_context(),
     );
-    match validation_result {
+    assert_matches!(
+        validation_result,
         Err(ValidationError::InvalidArtifact(
             InvalidPayloadReason::InvalidCanisterHttpPayload(
                 InvalidCanisterHttpPayloadReason::ContentSizeMismatch { .. },
             ),
-        )) => (),
-        x => panic!("Expected ContentSizeMismatch, got {x:?}"),
-    }
+        ))
+    );
 }
 
 /// Test that payloads which are timed out don't validate
