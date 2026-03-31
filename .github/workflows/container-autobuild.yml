@@ -91,8 +91,6 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ needs.build-image-prep.outputs.image_tag }}
           target: ${{ matrix.target }}
-          build-args: |
-            CI_USER=1001
       - name: Set output imageid
         id: set-output-imageid
         run: |

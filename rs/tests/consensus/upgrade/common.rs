@@ -16,7 +16,7 @@ use candid::Principal;
 use futures::future::try_join_all;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, cert_state_makes_progress_with_retries, store_message,
+    can_read_msg, cert_state_makes_progress_with_retries, store_message_with_retries,
 };
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
@@ -29,7 +29,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::{LogStream, create_agent};
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::{MessageCanister, block_on},
+    util::{JournalStreamer, MessageCanister, block_on},
 };
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
@@ -155,7 +155,7 @@ pub fn upgrade(
 
     let msg = &format!("hello before upgrade to {upgrade_version}");
     info!(logger, "Storing message: '{}'", msg);
-    let can_id = store_message(
+    let can_id = store_message_with_retries(
         &healthy_node.get_public_url(),
         healthy_node.effective_canister_id(),
         msg,
@@ -238,7 +238,7 @@ pub fn upgrade(
     info!(logger, "After upgrade could read message '{}'", msg);
 
     let msg_2 = &format!("hello after upgrade to {upgrade_version}");
-    let can_id_2 = store_message(
+    let can_id_2 = store_message_with_retries(
         &faulty_node.get_public_url(),
         faulty_node.effective_canister_id(),
         msg_2,
@@ -438,10 +438,14 @@ async fn fetch_latest_computed_root_hashes_from_logs(
 ///
 /// This function will never return if an upgrade is not scheduled.
 fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
-    const MESSAGE: &str = r"Orchestrator shut down gracefully";
-
-    let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
-
-    node.block_on_bash_script(&script)
-        .expect("Orchestrator did not shut down gracefully");
+    let session = node.block_on_ssh_session().unwrap();
+    session.set_timeout(5 * 60 * 1000);
+    assert!(
+        JournalStreamer::new(session)
+            .follow()
+            .max_lines(1)
+            .contains("Orchestrator shut down gracefully")
+            .unwrap_or_default(),
+        "Orchestrator did not shut down gracefully"
+    );
 }

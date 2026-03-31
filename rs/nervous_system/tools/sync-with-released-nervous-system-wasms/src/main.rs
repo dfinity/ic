@@ -6,9 +6,10 @@ use ic_nervous_system_agent::nns::sns_wasm;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, INTERNET_IDENTITY_FRONTEND_CANISTER_ID,
+    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use reqwest::Client;
 use serde::Deserialize;
@@ -41,7 +42,7 @@ struct ExternalCanisterInfo<'a> {
     test_filename: Option<&'a str>,
 }
 
-const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 7] = [
+const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 8] = [
     (
         "cycles_ledger",
         ExternalCanisterInfo {
@@ -53,13 +54,23 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 7] = [
         },
     ),
     (
-        "internet_identity_test",
+        "internet_identity_backend",
         ExternalCanisterInfo {
             repository: "dfinity/internet-identity",
             tag_name_prefix: None,
             filename: "internet_identity_production.wasm.gz",
-            test_filename: Some("internet_identity_dev.wasm.gz"),
+            test_filename: None,
             canister_id: IDENTITY_CANISTER_ID,
+        },
+    ),
+    (
+        "internet_identity_frontend",
+        ExternalCanisterInfo {
+            repository: "dfinity/internet-identity",
+            tag_name_prefix: None,
+            filename: "internet_identity_frontend.wasm.gz",
+            test_filename: None,
+            canister_id: INTERNET_IDENTITY_FRONTEND_CANISTER_ID,
         },
     ),
     (

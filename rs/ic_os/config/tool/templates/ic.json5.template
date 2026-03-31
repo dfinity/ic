@@ -9,7 +9,7 @@
     // Configuration of transport parameters and node identity
     // =======================================================
     transport: {
-        node_ip: "{{ ipv6_address }}",
+        node_ip: "::",
         listening_port: 4100,
     },
 
@@ -118,7 +118,7 @@
     // Configuration of the HTTP endpoint.
     // ====================================
     http_handler: {
-        listen_addr: "[{{ ipv6_address }}]:8080",
+        listen_addr: "[::]:8080",
     },
 
     // ====================================
@@ -159,7 +159,7 @@
         // - "log"  — periodically write prometheus metrics to the application log
         // - { http: <port> } — expose prometheus metrics on the specified port
         // - { file: <path> } — dump prometheus metrics to the specified file on shutdown
-        exporter: { http: "[{{ ipv6_address }}]:9090", },
+        exporter: { http: "[::]:9090", },
     },
 
     // ===================================
@@ -178,7 +178,7 @@
     // Configuration for Message Routing.
     // ==================================
     message_routing: {
-        xnet_ip_addr: "{{ ipv6_address }}",
+        xnet_ip_addr: "::",
         xnet_port: 2497,
     },
 
@@ -291,7 +291,7 @@ table ip6 filter {\n\
 \n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
-    meta skuid ic-http-adapter ip6 daddr { ::1/128 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
+    meta skuid ic-http-adapter fib daddr type local ct state { new } tcp dport { 1-19999 } reject # Block restricted local addresses ic-http-adapter HTTPS access\n\
     meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
     <<IPv6_OUTBOUND_RULES>>\n\
   }\n\

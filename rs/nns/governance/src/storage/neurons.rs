@@ -1,9 +1,10 @@
 use crate::{
+    governance::MAX_DISSOLVE_DELAY_SECONDS,
     neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
         AbridgedNeuron, BallotInfo, Followees, KnownNeuronData, MaturityDisbursement,
-        NeuronStakeTransfer, Topic,
+        NeuronStakeTransfer, Topic, abridged_neuron::DissolveState,
     },
     storage::validate_stable_btree_map,
 };
@@ -582,6 +583,14 @@ where
         }
     }
 
+    /// Returns the total amount of maturity disbursements in progress in e8s equivalent.
+    pub fn total_maturity_disbursements_in_progress_e8s_equivalent(&self) -> u64 {
+        self.maturity_disbursements_map
+            .values()
+            .map(|maturity_disbursement| maturity_disbursement.amount_e8s)
+            .fold(0, |acc, x| acc.saturating_add(x))
+    }
+
     /// Validates that some of the data in stable storage can be read, in order to prevent broken
     /// schema. Should only be called in post_upgrade.
     pub fn validate(&self) {
@@ -747,6 +756,31 @@ where
 
     pub fn is_known_neuron(&self, neuron_id: NeuronId) -> bool {
         self.known_neuron_data_map.contains_key(&neuron_id)
+    }
+
+    pub fn set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic(&mut self) {
+        let neuron_ids = self
+            .main
+            .range(NeuronId::MIN..=NeuronId::MAX)
+            .map(|(neuron_id, _)| neuron_id)
+            .collect::<Vec<_>>();
+        for neuron_id in neuron_ids {
+            self.with_main_part_mut(neuron_id, |abridged_neuron| {
+                let has_maximum_dissolve_delay = abridged_neuron.dissolve_state
+                    == Some(DissolveState::DissolveDelaySeconds(
+                        MAX_DISSOLVE_DELAY_SECONDS,
+                    ));
+                abridged_neuron.eight_year_gang_bonus_base_e8s = if has_maximum_dissolve_delay {
+                    abridged_neuron
+                        .cached_neuron_stake_e8s
+                        .saturating_sub(abridged_neuron.neuron_fees_e8s)
+                        .saturating_add(abridged_neuron.staked_maturity_e8s_equivalent.unwrap_or(0))
+                } else {
+                    0
+                };
+            })
+            .expect("Failed to set eight year gang bonus base for neuron");
+        }
     }
 }
 

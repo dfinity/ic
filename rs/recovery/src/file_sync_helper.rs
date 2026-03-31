@@ -173,6 +173,10 @@ fn exec_rsync(
         wait_for_confirmation(logger);
     }
     info!(logger, "Starting transfer, waiting for output...");
+    warn!(
+        logger,
+        "Remember to touch your Yubikey to confirm the SSH connection."
+    );
     match exec_cmd(&mut rsync_cmd) {
         Err(RecoveryError::CommandError(Some(24), msg)) => {
             warn!(logger, "Masking rsync warning (code 24)");

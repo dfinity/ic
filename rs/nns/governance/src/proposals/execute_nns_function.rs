@@ -456,6 +456,8 @@ pub enum ValidNnsFunction {
     PauseCanisterMigrations,
     UnpauseCanisterMigrations,
     SetSubnetOperationalLevel,
+    SplitSubnet,
+    DeleteSubnet,
 }
 
 impl ValidNnsFunction {
@@ -584,6 +586,8 @@ impl ValidNnsFunction {
             ValidNnsFunction::SetSubnetOperationalLevel => {
                 (REGISTRY_CANISTER_ID, "set_subnet_operational_level")
             }
+            ValidNnsFunction::SplitSubnet => (REGISTRY_CANISTER_ID, "split_subnet"),
+            ValidNnsFunction::DeleteSubnet => (REGISTRY_CANISTER_ID, "delete_subnet"),
         }
     }
 
@@ -612,7 +616,9 @@ impl ValidNnsFunction {
             | ValidNnsFunction::UpdateSubnetType
             | ValidNnsFunction::ChangeSubnetTypeAssignment
             | ValidNnsFunction::UpdateSnsWasmSnsSubnetIds
-            | ValidNnsFunction::SetSubnetOperationalLevel => Topic::SubnetManagement,
+            | ValidNnsFunction::SetSubnetOperationalLevel
+            | ValidNnsFunction::SplitSubnet
+            | ValidNnsFunction::DeleteSubnet => Topic::SubnetManagement,
 
             ValidNnsFunction::ReviseElectedGuestosVersions
             | ValidNnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
@@ -700,6 +706,8 @@ impl ValidNnsFunction {
             ValidNnsFunction::PauseCanisterMigrations => "Pause Canister Migrations",
             ValidNnsFunction::UnpauseCanisterMigrations => "Unpause Canister Migrations",
             ValidNnsFunction::SetSubnetOperationalLevel => "Set Subnet Operational Level",
+            ValidNnsFunction::SplitSubnet => "Split subnet",
+            ValidNnsFunction::DeleteSubnet => "Delete Subnet",
         }
     }
 
@@ -913,6 +921,17 @@ impl ValidNnsFunction {
                 "Set the operational level of a subnet, which can be used to take a subnet offline \
                 or bring it back online as part of subnet recovery."
             }
+            ValidNnsFunction::SplitSubnet => {
+                "Split a subnet (both the replicas forming the subnet and the canisters hosted \
+                on the subnet) into two. A new subnet will be created and \
+                the nodes and canisters specified in the proposal will be moved to the newly \
+                created subnet."
+            }
+            ValidNnsFunction::DeleteSubnet => {
+                "Delete a subnet. The subnet record, catch-up package, threshold signing key \
+                and routing table entries are removed from the registry, and the subnet's \
+                nodes become unassigned. Currently limited to CloudEngine subnets."
+            }
         }
     }
 }
@@ -1001,6 +1020,8 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
             NnsFunction::SetSubnetOperationalLevel => {
                 Ok(ValidNnsFunction::SetSubnetOperationalLevel)
             }
+            NnsFunction::SplitSubnet => Ok(ValidNnsFunction::SplitSubnet),
+            NnsFunction::DeleteSubnet => Ok(ValidNnsFunction::DeleteSubnet),
 
             // Obsolete functions - based on check_obsolete
             NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {

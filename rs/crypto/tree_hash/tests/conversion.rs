@@ -79,7 +79,7 @@ fn convert_too_deep_tree() {
         let mut result = M::Empty;
         assert!(depth > 0);
         for _ in 0..depth - 1 {
-            result = M::Fork(Box::new((result, M::Pruned(Digest([0u8; 32])))));
+            result = M::Fork(Box::new((result, M::Pruned(Digest([0_u8; 32])))));
         }
         result
     }

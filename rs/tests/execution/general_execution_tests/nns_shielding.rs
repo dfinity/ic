@@ -12,7 +12,7 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::IcNodeSnapshot};
 use ic_system_test_driver::{util::CYCLES_LIMIT_PER_CANISTER, util::*};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::node_test_id;
 use ic_universal_canister::wasm;
 use lazy_static::lazy_static;
@@ -46,7 +46,7 @@ fn setup_ucan_and_try_mint128(node: IcNodeSnapshot) -> (AgentError, u128, u128, 
             .update(&canister_id, "update")
             .with_arg(
                 wasm()
-                    .mint_cycles128(Cycles::from(10_000_000_000u128))
+                    .mint_cycles128(Cycles::from(10_000_000_000_u128))
                     .reply_data_append()
                     .reply()
                     .build(),
@@ -87,7 +87,7 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
         let canister_a = UniversalCanister::new_with_cycles_with_retries(
             &agent,
             nns_node.effective_canister_id(),
-            CYCLES_LIMIT_PER_CANISTER * 3u64,
+            CYCLES_LIMIT_PER_CANISTER * 3_u64,
             &logger,
         )
         .await;
@@ -95,10 +95,10 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
         let balance = get_balance(&canister_a.canister_id(), &agent).await;
         assert_eq!(
             Cycles::from(balance),
-            CYCLES_LIMIT_PER_CANISTER * 3u64,
+            CYCLES_LIMIT_PER_CANISTER * 3_u64,
             "expected {} == {}",
             balance,
-            CYCLES_LIMIT_PER_CANISTER * 3u64
+            CYCLES_LIMIT_PER_CANISTER * 3_u64
         );
 
         // Canister A creates canister B with `CYCLES_LIMIT_PER_CANISTER` cycles.
@@ -111,10 +111,10 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
         let balance = get_balance(&canister_a.canister_id(), &agent).await;
         assert_eq!(
             Cycles::from(balance),
-            CYCLES_LIMIT_PER_CANISTER * 2u64,
+            CYCLES_LIMIT_PER_CANISTER * 2_u64,
             "expected {} == {}",
             balance,
-            CYCLES_LIMIT_PER_CANISTER * 2u64
+            CYCLES_LIMIT_PER_CANISTER * 2_u64
         );
 
         // Deposit cycles from canister_a to canister_b to increase b's balance
@@ -132,10 +132,10 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
         let balance = get_balance_via_canister(&canister_b_id, &canister_a).await;
         assert_eq!(
             balance,
-            CYCLES_LIMIT_PER_CANISTER * 2u64,
+            CYCLES_LIMIT_PER_CANISTER * 2_u64,
             "expected {} == {}",
             balance,
-            CYCLES_LIMIT_PER_CANISTER * 2u64
+            CYCLES_LIMIT_PER_CANISTER * 2_u64
         );
     });
 }

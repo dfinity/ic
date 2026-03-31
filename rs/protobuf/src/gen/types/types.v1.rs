@@ -612,10 +612,24 @@ pub struct CanisterHttpResponseDivergence {
     pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpResponseWithProof {
+    #[prost(message, optional, tag = "1")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+    #[prost(message, optional, tag = "2")]
+    pub proof: ::core::option::Option<CanisterHttpShare>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpResponses {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseMessage {
     #[prost(
         oneof = "canister_http_response_message::MessageType",
-        tags = "1, 2, 3"
+        tags = "1, 2, 3, 4"
     )]
     pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
 }
@@ -629,6 +643,8 @@ pub mod canister_http_response_message {
         Timeout(u64),
         #[prost(message, tag = "3")]
         DivergenceResponse(super::CanisterHttpResponseDivergence),
+        #[prost(message, tag = "4")]
+        FlexibleResponses(super::FlexibleCanisterHttpResponses),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1364,7 +1380,7 @@ pub struct Block {
     #[prost(bytes = "vec", tag = "16")]
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "17")]
-    pub vetkd_payload_bytes: ::prost::alloc::vec::Vec<u8>,
+    pub chain_key_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1579,19 +1595,19 @@ pub struct CanisterQueryStats {
     pub egress_payload_size: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct VetKdAgreement {
+pub struct ChainKeyAgreement {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
-    #[prost(oneof = "vet_kd_agreement::Agreement", tags = "2, 3")]
-    pub agreement: ::core::option::Option<vet_kd_agreement::Agreement>,
+    #[prost(oneof = "chain_key_agreement::Agreement", tags = "2, 3")]
+    pub agreement: ::core::option::Option<chain_key_agreement::Agreement>,
 }
-/// Nested message and enum types in `VetKdAgreement`.
-pub mod vet_kd_agreement {
+/// Nested message and enum types in `ChainKeyAgreement`.
+pub mod chain_key_agreement {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Agreement {
         #[prost(bytes, tag = "2")]
         Data(::prost::alloc::vec::Vec<u8>),
-        #[prost(enumeration = "super::VetKdErrorCode", tag = "3")]
+        #[prost(enumeration = "super::ChainKeyErrorCode", tag = "3")]
         Reject(i32),
     }
 }
@@ -1701,29 +1717,29 @@ pub struct StrippedConsensusMessageId {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
-pub enum VetKdErrorCode {
+pub enum ChainKeyErrorCode {
     Unspecified = 0,
     TimedOut = 1,
     InvalidKey = 2,
 }
-impl VetKdErrorCode {
+impl ChainKeyErrorCode {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "VET_KD_ERROR_CODE_UNSPECIFIED",
-            Self::TimedOut => "VET_KD_ERROR_CODE_TIMED_OUT",
-            Self::InvalidKey => "VET_KD_ERROR_CODE_INVALID_KEY",
+            Self::Unspecified => "CHAIN_KEY_ERROR_CODE_UNSPECIFIED",
+            Self::TimedOut => "CHAIN_KEY_ERROR_CODE_TIMED_OUT",
+            Self::InvalidKey => "CHAIN_KEY_ERROR_CODE_INVALID_KEY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "VET_KD_ERROR_CODE_UNSPECIFIED" => Some(Self::Unspecified),
-            "VET_KD_ERROR_CODE_TIMED_OUT" => Some(Self::TimedOut),
-            "VET_KD_ERROR_CODE_INVALID_KEY" => Some(Self::InvalidKey),
+            "CHAIN_KEY_ERROR_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CHAIN_KEY_ERROR_CODE_TIMED_OUT" => Some(Self::TimedOut),
+            "CHAIN_KEY_ERROR_CODE_INVALID_KEY" => Some(Self::InvalidKey),
             _ => None,
         }
     }

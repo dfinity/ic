@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-13: Proposal 140862
+
+http://dashboard.internetcomputer.org/proposal/140862
+
+## Added
+
+- Added the optional `snapshot_visibility` field to `CanisterSettings` in the Candid API. This a non-breaking change impacting the type `CreateCanisterArg` and the endpoint `create_canister`.
+
+
 # 2026-02-20: Proposal 140508
 
 http://dashboard.internetcomputer.org/proposal/140508

@@ -756,6 +756,11 @@ fn test_send_tx<T: RpcClientType + Into<AdapterNetwork>>() {
         network,
     );
 
+    // Wait for the adapter to establish a P2P connection with the bitcoind node.
+    // Without this, the adapter may accept the SendTransaction gRPC request but
+    // have no peer to relay the transaction to.
+    wait_for_connection(&bitcoind.rpc_client, 1);
+
     let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind);
 
     fund(&alice_client);

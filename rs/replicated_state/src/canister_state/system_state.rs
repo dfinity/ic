@@ -28,7 +28,7 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
-    LogVisibilityV2,
+    LogVisibilityV2, SnapshotVisibility,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
@@ -39,23 +39,24 @@ use ic_types::messages::{
     Response, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, Time,
+};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
+    IngressInduction, NominalCycles, NonConsumed, Uninstall,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 use std::sync::Arc;
-use strum_macros::EnumIter;
 
 lazy_static! {
     static ref DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS: PrincipalId =
@@ -66,50 +67,6 @@ lazy_static! {
 
 /// Maximum number of canister changes stored in the canister history.
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
-
-/// Enumerates use cases of consumed cycles.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, EnumIter, Serialize)]
-pub enum CyclesUseCase {
-    Memory = 1,
-    ComputeAllocation = 2,
-    IngressInduction = 3,
-    Instructions = 4,
-    RequestAndResponseTransmission = 5,
-    Uninstall = 6,
-    CanisterCreation = 7,
-    ECDSAOutcalls = 8,
-    HTTPOutcalls = 9,
-    DeletedCanisters = 10,
-    NonConsumed = 11,
-    BurnedCycles = 12,
-    SchnorrOutcalls = 13,
-    VetKd = 14,
-    DroppedMessages = 15,
-}
-
-impl CyclesUseCase {
-    /// Returns a string slice representation of the enum variant name for use
-    /// e.g. as a metric label.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Memory => "Memory",
-            Self::ComputeAllocation => "ComputeAllocation",
-            Self::IngressInduction => "IngressInduction",
-            Self::Instructions => "Instructions",
-            Self::RequestAndResponseTransmission => "RequestAndResponseTransmission",
-            Self::Uninstall => "Uninstall",
-            Self::CanisterCreation => "CanisterCreation",
-            Self::ECDSAOutcalls => "ECDSAOutcalls",
-            Self::HTTPOutcalls => "HTTPOutcalls",
-            Self::DeletedCanisters => "DeletedCanisters",
-            Self::NonConsumed => "NonConsumed",
-            Self::BurnedCycles => "BurnedCycles",
-            Self::SchnorrOutcalls => "SchnorrOutcalls",
-            Self::VetKd => "VetKd",
-            Self::DroppedMessages => "DroppedMessages",
-        }
-    }
-}
 
 enum ConsumingCycles {
     Yes,
@@ -482,6 +439,9 @@ pub struct SystemState {
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
 
+    /// Snapshot visibility of the canister.
+    pub snapshot_visibility: SnapshotVisibility,
+
     /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
@@ -498,12 +458,6 @@ pub struct SystemState {
 
     /// Next local snapshot id.
     next_snapshot_id: u64,
-
-    /// Cumulative memory usage of all snapshots that belong to this canister.
-    ///
-    /// This amount contributes to the total `memory_usage` of the canister as
-    /// reported by `CanisterState::memory_usage`.
-    pub snapshots_memory_usage: NumBytes,
 
     /// Environment variables.
     pub environment_variables: EnvironmentVariables,
@@ -637,7 +591,6 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 
@@ -649,7 +602,6 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
-        log_memory_store: LogMemoryStore,
     ) -> Self {
         Self {
             canister_id,
@@ -675,14 +627,14 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
+            snapshot_visibility: Default::default(),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
-            log_memory_store,
+            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
-            snapshots_memory_usage: NumBytes::new(0),
         }
     }
 
@@ -711,11 +663,12 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
+        snapshot_visibility: SnapshotVisibility,
         canister_log: CanisterLog,
+        next_canister_log_record_idx: u64,
         log_memory_store_data: Option<PageMap>,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
-        snapshots_memory_usage: NumBytes,
         environment_variables: BTreeMap<String, String>,
         metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
@@ -745,14 +698,15 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
+            snapshot_visibility,
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 LOG_MEMORY_STORE_FEATURE,
                 log_memory_store_data,
+                next_canister_log_record_idx,
             ),
             wasm_memory_limit,
             next_snapshot_id,
-            snapshots_memory_usage,
             environment_variables: EnvironmentVariables::new(environment_variables),
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
@@ -824,7 +778,6 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 
@@ -914,6 +867,7 @@ impl SystemState {
     pub fn apply_ingress_induction_cycles_debit(
         &mut self,
         canister_id: CanisterId,
+        cost_schedule: CanisterCyclesCostSchedule,
         log: &ReplicaLogger,
         charging_from_balance_error: &IntCounter,
     ) {
@@ -933,10 +887,10 @@ impl SystemState {
             // Continue the execution by dropping the remaining debit, which makes
             // some of the postponed charges free.
         }
-        self.remove_cycles(
+        self.remove_cycles(CompoundCycles::<IngressInduction>::new(
             self.ingress_induction_cycles_debit,
-            CyclesUseCase::IngressInduction,
-        );
+            cost_schedule,
+        ));
         self.ingress_induction_cycles_debit = Cycles::zero();
     }
 
@@ -1227,6 +1181,7 @@ impl SystemState {
         msg: RequestOrResponse,
         subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
+        own_cost_schedule: CanisterCyclesCostSchedule,
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         #[cfg(debug_assertions)]
@@ -1236,6 +1191,7 @@ impl SystemState {
             msg,
             subnet_available_guaranteed_response_memory,
             own_subnet_type,
+            own_cost_schedule,
             input_queue_type,
         );
 
@@ -1256,6 +1212,7 @@ impl SystemState {
         msg: RequestOrResponse,
         subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
+        own_cost_schedule: CanisterCyclesCostSchedule,
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         assert_eq!(
@@ -1271,7 +1228,7 @@ impl SystemState {
             (RequestOrResponse::Response(response), CanisterStatus::Stopped)
                 if response.is_best_effort() =>
             {
-                self.credit_refund(response);
+                self.credit_refund(response, own_cost_schedule);
                 Ok(false)
             }
 
@@ -1304,7 +1261,7 @@ impl SystemState {
                         .map_err(|err| (err, msg.clone()))?
                 {
                     // Best effort response whose callback is gone. Silently drop it.
-                    self.credit_refund(response);
+                    self.credit_refund(response, own_cost_schedule);
                     return Ok(false);
                 }
                 push_input(
@@ -1317,7 +1274,7 @@ impl SystemState {
                 .map(|dropped| {
                     if let Some(response) = dropped {
                         // Duplicate best-effort response that was silently dropped.
-                        self.credit_refund(&response);
+                        self.credit_refund(&response, own_cost_schedule);
                         false
                     } else {
                         true
@@ -1833,7 +1790,7 @@ impl SystemState {
     }
 
     /// Credits the canister with the refund in the inbound `Response`.
-    fn credit_refund(&mut self, response: &Response) {
+    fn credit_refund(&mut self, response: &Response, cost_schedule: CanisterCyclesCostSchedule) {
         debug_assert_eq!(
             self.canister_id, response.originator,
             "Can only credit refunds from `Responses` originating from self ({}), got {:?}",
@@ -1842,26 +1799,35 @@ impl SystemState {
         debug_assert!(response.is_best_effort());
 
         if !response.refund.is_zero() {
-            self.add_cycles(response.refund, CyclesUseCase::NonConsumed);
+            self.add_cycles(CompoundCycles::<NonConsumed>::new(
+                response.refund,
+                cost_schedule,
+            ));
         }
     }
 
     /// Increments 'cycles_balance' and in case of refund for consumed cycles
     /// decrements the metric `consumed_cycles`.
-    pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
-        self.cycles_balance += amount;
-        self.observe_consumed_cycles_with_use_case(amount, use_case, ConsumingCycles::No);
+    pub fn add_cycles<T: CyclesUseCaseKind>(&mut self, amount: CompoundCycles<T>) {
+        self.cycles_balance += amount.real();
+        self.observe_consumed_cycles_with_use_case(
+            amount.nominal(),
+            T::cycles_use_case(),
+            ConsumingCycles::No,
+        );
     }
 
     /// Decreases 'cycles_balance' for 'requested_amount'.
     /// The resource use cases first drain the `reserved_balance` and only after
     /// that drain the main `cycles_balance`.
-    pub fn remove_cycles(&mut self, requested_amount: Cycles, use_case: CyclesUseCase) {
+    pub fn remove_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
+        let requested_real = requested_amount.real();
+        let use_case = T::cycles_use_case();
         let remaining_amount = match use_case {
             CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
-                let covered_by_reserved_balance = requested_amount.min(self.reserved_balance);
+                let covered_by_reserved_balance = requested_real.min(self.reserved_balance);
                 self.reserved_balance -= covered_by_reserved_balance;
-                requested_amount - covered_by_reserved_balance
+                requested_real - covered_by_reserved_balance
             }
             CyclesUseCase::IngressInduction
             | CyclesUseCase::Instructions
@@ -1874,11 +1840,11 @@ impl SystemState {
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
             | CyclesUseCase::BurnedCycles
-            | CyclesUseCase::DroppedMessages => requested_amount,
+            | CyclesUseCase::DroppedMessages => requested_real,
         };
         self.cycles_balance -= remaining_amount;
         self.observe_consumed_cycles_with_use_case(
-            requested_amount,
+            requested_amount.nominal(),
             use_case,
             ConsumingCycles::Yes,
         );
@@ -1924,14 +1890,17 @@ impl SystemState {
 
     /// Removes all cycles from `cycles_balance` and `reserved_balance` as part
     /// of canister uninstallation due to it running out of cycles.
-    pub fn burn_remaining_balance_for_uninstall(&mut self) {
+    pub fn burn_remaining_balance_for_uninstall(
+        &mut self,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) {
         let balance = self.cycles_balance + self.reserved_balance;
-        self.remove_cycles(balance, CyclesUseCase::Uninstall);
+        self.remove_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
     }
 
     fn observe_consumed_cycles_with_use_case(
         &mut self,
-        amount: Cycles,
+        amount: NominalCycles,
         use_case: CyclesUseCase,
         consuming_cycles: ConsumingCycles,
     ) {
@@ -1949,20 +1918,16 @@ impl SystemState {
         let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
             &mut self.canister_metrics.consumed_cycles_by_use_cases;
 
-        let use_case_consumption = metric
-            .entry(use_case)
-            .or_insert_with(|| NominalCycles::from(0));
-
-        let nominal_amount = amount.into();
+        let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
         match consuming_cycles {
             ConsumingCycles::Yes => {
-                *use_case_consumption += nominal_amount;
-                self.canister_metrics.consumed_cycles += nominal_amount;
+                *use_case_consumption += amount;
+                self.canister_metrics.consumed_cycles += amount;
             }
             ConsumingCycles::No => {
-                *use_case_consumption -= nominal_amount;
-                self.canister_metrics.consumed_cycles -= nominal_amount;
+                *use_case_consumption -= amount;
+                self.canister_metrics.consumed_cycles -= amount;
             }
         }
     }
@@ -2442,6 +2407,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
+            snapshot_visibility: Default::default(),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
@@ -2449,7 +2415,6 @@ pub mod testing {
             log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
-            snapshots_memory_usage: Default::default(),
             environment_variables: Default::default(),
         };
     }

@@ -216,6 +216,9 @@ thread_local! {
     // This covers both taking and loading canister snapshots.
     static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };
+
+    static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
+        = const { Cell::new(false) };
 }
 
 thread_local! {
@@ -317,6 +320,15 @@ pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
     Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_subnet_splitting_proposals() -> Temporary {
+    Temporary::new(&ENABLE_SUBNET_SPLITTING_PROPOSALS, true)
+}
+
+pub fn are_subnet_splitting_proposals_enabled() -> bool {
+    ENABLE_SUBNET_SPLITTING_PROPOSALS.get()
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -747,6 +759,7 @@ pub fn encode_metrics(
             public_neuron_subset_metrics,
             declining_voting_power_neuron_subset_metrics,
             fully_lost_voting_power_neuron_subset_metrics,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
         } = metrics;
 
         // ICP
@@ -1006,6 +1019,12 @@ pub fn encode_metrics(
             "governance_spawning_neurons_count",
             *spawning_neurons_count as f64,
             "The number of neurons that are in the \"spawning\" state.",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_maturity_disbursements_in_progress_e8s_equivalent",
+            *total_maturity_disbursements_in_progress_e8s_equivalent as f64,
+            "Total amount of maturity disbursements in progress in e8s equivalent.",
         )?;
     }
 

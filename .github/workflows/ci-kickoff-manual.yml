@@ -53,7 +53,9 @@ jobs:
     with:
       commit-sha: ${{ inputs.commit-sha }}
     permissions:
+      actions: write
       contents: read
+      id-token: write
       pull-requests: read
 
   ci-pr-only:

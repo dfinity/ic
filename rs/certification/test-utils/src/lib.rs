@@ -5,7 +5,6 @@ use serde::Serialize;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
     combine_signatures, combined_public_key, generate_threshold_key, sign_message,
 };
-use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_tree_hash::{
     Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
@@ -20,6 +19,8 @@ use ic_types::{
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
     crypto::{CryptoHash, threshold_sig::ThresholdSigPublicKey},
 };
+
+pub use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 
 const REPLICA_TIME: u64 = 1234567;
 

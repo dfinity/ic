@@ -64,7 +64,7 @@ mod test {
     use super::*;
     #[test]
     fn test_page_bytes_from_ptr() {
-        let mut page_bytes = [0u8; PAGE_SIZE];
+        let mut page_bytes = [0_u8; PAGE_SIZE];
         for (i, byte) in page_bytes.iter_mut().enumerate() {
             *byte = (i + 1) as u8;
         }

@@ -598,6 +598,15 @@ fn validate_delegation(
         LabeledTree::SubTree(_) => panic!("Not a leaf"),
     };
 
+    match lookup_path(&tree, &[b"subnet", subnet_id.get_ref().as_ref(), b"type"])
+        .expect("Every delegation has a '/subnet/<subnet_id>/type' path")
+    {
+        LabeledTree::Leaf(value) => {
+            assert_eq!(*value, "application".as_bytes().to_vec());
+        }
+        LabeledTree::SubTree(_) => panic!("Not a leaf"),
+    };
+
     let flat_canister_ranges = lookup_path(
         &tree,
         &[b"subnet", subnet_id.get_ref().as_ref(), b"canister_ranges"],

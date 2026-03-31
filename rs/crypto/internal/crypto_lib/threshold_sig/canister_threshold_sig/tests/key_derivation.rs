@@ -443,7 +443,7 @@ fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), Canister
 
     let attrs = bip32::ExtendedKeyAttrs {
         depth: 0,
-        parent_fingerprint: [0u8; 4],
+        parent_fingerprint: [0_u8; 4],
         child_number: bip32::ChildNumber(0),
         chain_code: master_key.chain_key.try_into().expect("Unexpected size"),
     };

@@ -18,8 +18,8 @@ use ic_crypto_utils_threshold_sig_der::{KeyConversionError, threshold_sig_public
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
-        CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig,
-        InitialNiDkgTranscriptRecord, SubnetRecord,
+        CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig, GenesisArgs,
+        InitialNiDkgTranscriptRecord, SubnetRecord, catch_up_package_contents::CupType,
     },
 };
 use ic_registry_subnet_features::SubnetFeatures;
@@ -93,6 +93,10 @@ pub struct SubnetConfig {
 
     /// The type of the subnet
     pub subnet_type: SubnetType,
+
+    /// Whether this subnet uses Cycles. Not applicable to system subnets,
+    /// which don't use Cycles via a different mechanism.
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
 
     /// The maximum number of instructions a message can execute.
     /// See the comments in `subnet_config.rs` for more details.
@@ -243,6 +247,7 @@ impl SubnetConfig {
         dkg_interval_length: Option<Height>,
         dkg_dealings_per_block: Option<usize>,
         subnet_type: SubnetType,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
         max_instructions_per_message: Option<u64>,
         max_instructions_per_round: Option<u64>,
         max_instructions_per_install_code: Option<u64>,
@@ -275,6 +280,7 @@ impl SubnetConfig {
             dkg_interval_length: dkg_interval_length.unwrap_or(config.dkg_interval_length),
             dkg_dealings_per_block: dkg_dealings_per_block.unwrap_or(config.dkg_dealings_per_block),
             subnet_type,
+            canister_cycles_cost_schedule,
             max_instructions_per_message: max_instructions_per_message
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_message.get()),
             max_instructions_per_round: max_instructions_per_round
@@ -340,8 +346,10 @@ impl SubnetConfig {
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
             chain_key_config: self.chain_key_config,
-            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            canister_cycles_cost_schedule: i32::from(self.canister_cycles_cost_schedule),
             subnet_admins: vec![],
+            resource_limits: Default::default(),
+            recalled_replica_version_ids: vec![],
         };
 
         let dkg_dealing_encryption_pubkeys: BTreeMap<_, _> = initialized_nodes
@@ -412,7 +420,13 @@ impl SubnetConfig {
             )),
             state_hash,
             height: self.initial_height,
-            ..Default::default()
+            time: 0,
+            registry_store_uri: None,
+            ecdsa_initializations: vec![],
+            chain_key_initializations: vec![],
+            cup_type: Some(CupType::Genesis(GenesisArgs {
+                height: self.initial_height,
+            })),
         };
 
         Ok(InitializedSubnet {

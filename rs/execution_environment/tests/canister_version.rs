@@ -8,7 +8,8 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::{CanisterId, Cycles, ingress::WasmResult};
+use ic_types::{CanisterId, ingress::WasmResult};
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::user_test_id;
 use ic00::CanisterSettingsArgsBuilder;
 

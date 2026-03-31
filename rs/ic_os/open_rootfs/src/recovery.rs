@@ -11,7 +11,7 @@ use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
 use std::path::Path;
 
-pub const CONFIG_PARTITION_LABEL: &str = "CONFIG";
+pub const CONFIG_DEVICE_LABEL: &str = "CONFIG";
 pub const RECOVERY_PROPOSAL_FILE_NAME: &str = "alternative_guestos_proposal.cbor";
 
 /// Reads and verifies an alternative GuestOS proposal, returning the rootfs hash from it.
@@ -24,9 +24,10 @@ pub fn extract_and_verify_recovery_rootfs_hash(
 ) -> Result<String> {
     let config_mount = partition_provider
         .mount_partition(
-            PartitionSelector::ByLabel(CONFIG_PARTITION_LABEL.to_string()),
+            PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()),
             MountOptions {
                 file_system: FileSystem::Vfat,
+                read_only: true,
             },
         )
         .context("Failed to mount CONFIG partition")?;
@@ -46,6 +47,7 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         PartitionSelector::ByUuid(get_boot_partition_uuid(root_device, command_runner)?),
         MountOptions {
             file_system: FileSystem::Ext4,
+            read_only: false, // Partition may need repair
         },
     )?;
 
@@ -95,21 +97,21 @@ pub fn extract_and_verify_recovery_rootfs_hash(
 
 #[cfg(any(feature = "dev", test))]
 fn get_nns_public_key_override(config_media_path: &Path) -> Result<Option<Vec<u8>>> {
-    let nns_public_key_override_path = config_media_path.join("nns_public_key_override.pem");
-    if !nns_public_key_override_path.exists() {
+    println!("Dev mode: reading NNS public key override from {config_media_path:?}");
+
+    let guestos_config: GuestOSConfig =
+        config_tool::deserialize_config(config_media_path.join("config.json"))?;
+
+    let Some(nns_pub_key_pem) = guestos_config
+        .guestos_settings
+        .guestos_dev_settings
+        .nns_pub_key_override
+    else {
+        println!("No NNS public key override found in GuestOS config");
         return Ok(None);
-    }
+    };
 
-    eprintln!("Dev mode: reading NNS public key override from {nns_public_key_override_path:?}");
-
-    let pem_contents =
-        std::fs::read_to_string(&nns_public_key_override_path).with_context(|| {
-            format!(
-                "Failed to read NNS public key override from {:?}",
-                nns_public_key_override_path
-            )
-        })?;
-    let pem_object = pem::parse(&pem_contents).context("Failed to parse PEM")?;
+    let pem_object = pem::parse(&nns_pub_key_pem).context("Failed to parse PEM")?;
 
     Ok(Some(pem_object.into_contents()))
 }

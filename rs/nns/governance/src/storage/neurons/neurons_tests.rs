@@ -1,10 +1,12 @@
 use super::*;
 
 use crate::{
+    governance::MAX_DISSOLVE_DELAY_SECONDS,
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::Vote,
+    pb::v1::{MaturityDisbursement, Vote},
 };
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::ProposalId;
 use icp_ledger::Subaccount;
 use lazy_static::lazy_static;
@@ -784,4 +786,159 @@ fn test_register_recent_neuron_ballot_migration_notfull() {
     let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
     assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
     assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(22));
+}
+
+#[test]
+fn test_total_maturity_disbursements_in_progress_e8s_equivalent() {
+    let mut store = new_heap_based();
+
+    // Neuron without maturity disbursements should not contribute to total.
+    store.create(create_model_neuron(1)).unwrap();
+    assert_eq!(
+        store.total_maturity_disbursements_in_progress_e8s_equivalent(),
+        0
+    );
+
+    // Neuron with two disbursements: 1 ICP + 2 ICP = 3 ICP
+    let mut neuron_2 = create_model_neuron(2);
+    neuron_2.maturity_disbursements_in_progress = vec![
+        MaturityDisbursement {
+            amount_e8s: E8,
+            finalize_disbursement_timestamp_seconds: 1,
+            ..Default::default()
+        },
+        MaturityDisbursement {
+            amount_e8s: 2 * E8,
+            finalize_disbursement_timestamp_seconds: 2,
+            ..Default::default()
+        },
+    ];
+    store.create(neuron_2.clone()).unwrap();
+    assert_eq!(
+        store.total_maturity_disbursements_in_progress_e8s_equivalent(),
+        3 * E8
+    );
+
+    // Third neuron with one disbursement: 5 ICP. Total = 3 + 5 = 8 ICP
+    let mut neuron_3 = create_model_neuron(3);
+    neuron_3.maturity_disbursements_in_progress = vec![MaturityDisbursement {
+        amount_e8s: 5 * E8,
+        finalize_disbursement_timestamp_seconds: 3,
+        ..Default::default()
+    }];
+    store.create(neuron_3).unwrap();
+    assert_eq!(
+        store.total_maturity_disbursements_in_progress_e8s_equivalent(),
+        8 * E8
+    );
+
+    // Update neuron_2: add a third disbursement of 4 ICP.
+    // New total for neuron_2 = 1 + 2 + 4 = 7 ICP. Grand total = 7 + 5 = 12 ICP
+    let mut updated_neuron_2 = neuron_2.clone();
+    updated_neuron_2.maturity_disbursements_in_progress = vec![
+        MaturityDisbursement {
+            amount_e8s: E8,
+            finalize_disbursement_timestamp_seconds: 1,
+            ..Default::default()
+        },
+        MaturityDisbursement {
+            amount_e8s: 2 * E8,
+            finalize_disbursement_timestamp_seconds: 2,
+            ..Default::default()
+        },
+        MaturityDisbursement {
+            amount_e8s: 4 * E8,
+            finalize_disbursement_timestamp_seconds: 4,
+            ..Default::default()
+        },
+    ];
+    store.update(&neuron_2, updated_neuron_2).unwrap();
+    assert_eq!(
+        store.total_maturity_disbursements_in_progress_e8s_equivalent(),
+        12 * E8
+    );
+}
+
+#[test]
+fn test_set_eight_year_gang_bonus_base_e8s_for_all_neurons() {
+    let mut store = new_heap_based();
+    let controller = PrincipalId::new_user_test_id(1);
+
+    // Create a neuron with MAX dissolve delay (8 years).
+    let neuron_with_max_dissolve_delay = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::from(&controller),
+        controller,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS,
+            aging_since_timestamp_seconds: 123_456_789,
+        },
+        123_456_789,
+    )
+    .with_cached_neuron_stake_e8s(100_000_000)
+    .with_staked_maturity_e8s_equivalent(50_000_000)
+    .with_neuron_fees_e8s(10_000_000)
+    .build();
+
+    // Create a neuron with less than MAX dissolve delay.
+    let neuron_without_max_dissolve_delay = NeuronBuilder::new(
+        NeuronId { id: 2 },
+        Subaccount::from(&PrincipalId::new_user_test_id(2)),
+        PrincipalId::new_user_test_id(2),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS - 1,
+            aging_since_timestamp_seconds: 123_456_789,
+        },
+        123_456_789,
+    )
+    .with_cached_neuron_stake_e8s(200_000_000)
+    .with_staked_maturity_e8s_equivalent(100_000_000)
+    .build();
+
+    // Create a dissolving neuron (which should not get the bonus).
+    let dissolving_neuron = NeuronBuilder::new(
+        NeuronId { id: 3 },
+        Subaccount::from(&PrincipalId::new_user_test_id(3)),
+        PrincipalId::new_user_test_id(3),
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: 999_999_999_999,
+        },
+        123_456_789,
+    )
+    .with_cached_neuron_stake_e8s(300_000_000)
+    .with_staked_maturity_e8s_equivalent(150_000_000)
+    .build();
+
+    // Add all neurons to the store.
+    store
+        .create(neuron_with_max_dissolve_delay.clone())
+        .unwrap();
+    store
+        .create(neuron_without_max_dissolve_delay.clone())
+        .unwrap();
+    store.create(dissolving_neuron.clone()).unwrap();
+
+    // Run the migration.
+    store.set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
+
+    // Verify the neuron with MAX dissolve delay has the bonus set to stake - fees + staked maturity.
+    let retrieved_neuron_1 = store
+        .read(neuron_with_max_dissolve_delay.id(), NeuronSections::ALL)
+        .unwrap();
+    assert_eq!(
+        retrieved_neuron_1.eight_year_gang_bonus_base_e8s,
+        140_000_000 // 100_000_000 stake - 10_000_000 fees + 50_000_000 staked maturity
+    );
+
+    // Verify the neuron without MAX dissolve delay has the bonus set to 0.
+    let retrieved_neuron_2 = store
+        .read(neuron_without_max_dissolve_delay.id(), NeuronSections::ALL)
+        .unwrap();
+    assert_eq!(retrieved_neuron_2.eight_year_gang_bonus_base_e8s, 0);
+
+    // Verify the dissolving neuron has the bonus set to 0.
+    let retrieved_neuron_3 = store
+        .read(dissolving_neuron.id(), NeuronSections::ALL)
+        .unwrap();
+    assert_eq!(retrieved_neuron_3.eight_year_gang_bonus_base_e8s, 0);
 }

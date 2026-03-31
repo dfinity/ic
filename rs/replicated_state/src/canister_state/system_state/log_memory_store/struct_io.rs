@@ -58,8 +58,7 @@ impl StructIO {
     }
 
     pub fn save_header(&mut self, header: &Header) {
-        self.header_cache = OnceLock::new();
-        let _ = self.header_cache.set(*header);
+        self.header_cache = OnceLock::from(*header);
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
         addr = self.write_raw_u8(addr, header.version);
@@ -78,7 +77,7 @@ impl StructIO {
         let h = self.load_header();
         let pos = h.data_head;
         let front = self
-            .load_record_without_content(pos)
+            .load_record_without_content(&h, pos)
             .map(|record| IndexEntry::new(pos, &record));
         let entries = if h.index_entries_count == 0 {
             vec![]
@@ -151,12 +150,15 @@ impl StructIO {
         (idx, timestamp, len, position)
     }
 
-    pub fn load_record_without_content(&self, position: MemoryPosition) -> Option<LogRecord> {
-        let h = self.load_header();
-        if !h.is_alive(position) {
+    pub fn load_record_without_content(
+        &self,
+        header: &Header,
+        position: MemoryPosition,
+    ) -> Option<LogRecord> {
+        if !header.is_alive(position) {
             return None;
         }
-        let (offset, capacity) = (h.data_offset, h.data_capacity);
+        let (offset, capacity) = (header.data_offset, header.data_capacity);
         let (idx, timestamp, len, _position) = self.load_record_header(position, offset, capacity);
         Some(LogRecord {
             idx,
@@ -166,12 +168,11 @@ impl StructIO {
         })
     }
 
-    pub fn load_record(&self, position: MemoryPosition) -> Option<LogRecord> {
-        let h = self.load_header();
-        if !h.is_alive(position) {
+    pub fn load_record(&self, header: &Header, position: MemoryPosition) -> Option<LogRecord> {
+        if !header.is_alive(position) {
             return None;
         }
-        let (offset, capacity) = (h.data_offset, h.data_capacity);
+        let (offset, capacity) = (header.data_offset, header.data_capacity);
         let (idx, timestamp, len, position) = self.load_record_header(position, offset, capacity);
         let (content, _position) =
             self.read_wrapped_vec(position, MemorySize::new(len as u64), offset, capacity);
@@ -183,9 +184,8 @@ impl StructIO {
         })
     }
 
-    pub fn save_record(&mut self, position: MemoryPosition, record: &LogRecord) {
-        let h = self.load_header();
-        let (offset, capacity) = (h.data_offset, h.data_capacity);
+    pub fn save_record(&mut self, header: &Header, position: MemoryPosition, record: &LogRecord) {
+        let (offset, capacity) = (header.data_offset, header.data_capacity);
         let position = self.write_wrapped_u64(position, record.idx, offset, capacity);
         let position = self.write_wrapped_u64(position, record.timestamp, offset, capacity);
         let position = self.write_wrapped_u32(position, record.len, offset, capacity);
@@ -210,8 +210,8 @@ impl StructIO {
     }
 
     fn remaining(position: MemoryPosition, capacity: MemorySize) -> MemorySize {
-        if position < MemoryPosition::new(capacity.get()) {
-            capacity - position
+        if position.get() < capacity.get() {
+            MemorySize::new(capacity.get() - position.get())
         } else {
             MemorySize::new(0)
         }
@@ -246,20 +246,20 @@ impl StructIO {
         offset: MemoryAddress,
         capacity: MemorySize,
     ) -> ([u8; N], MemoryPosition) {
-        let mut result = [0u8; N];
+        let mut result = [0_u8; N];
         let len = MemorySize::new(N as u64);
         let remaining = Self::remaining(position, capacity);
         if len <= remaining {
-            // No wrap.
-            let (bytes, _addr) = self.read_raw_vec(offset + position, len);
-            result.copy_from_slice(&bytes);
+            // No wrap — read directly into stack array
+            self.buffer
+                .read(&mut result, (offset + position).get() as usize);
         } else {
-            // Wraps around.
-            let first_part_size = remaining.get() as usize;
-            let (first_part, _addr) = self.read_raw_vec(offset + position, remaining);
-            result[..first_part_size].copy_from_slice(&first_part);
-            let (second_part, _addr) = self.read_raw_vec(offset, len - remaining);
-            result[first_part_size..].copy_from_slice(&second_part);
+            // Wraps around — two reads into slices of the stack array
+            let split = remaining.get() as usize;
+            self.buffer
+                .read(&mut result[..split], (offset + position).get() as usize);
+            self.buffer
+                .read(&mut result[split..], offset.get() as usize);
         }
         (result, (position + len) % capacity)
     }
@@ -397,7 +397,7 @@ mod tests {
         let loaded_index = io.load_index_table();
         let loaded = loaded_index.raw_entries();
 
-        // For 10 MB data capacity, 28 bytes per entry = 146 entries
+        // Entry count is fixed by index table size: 4096 / 28 bytes per entry = 146.
         assert_eq!(loaded.len(), 146);
         // All loaded entries are invalid.
         for entry in loaded {
@@ -464,8 +464,10 @@ mod tests {
             header.data_size = size;
             io.save_header(&header);
 
-            io.save_record(position, &original);
-            let loaded = io.load_record(position).expect("record should be present");
+            io.save_record(&header, position, &original);
+            let loaded = io
+                .load_record(&header, position)
+                .expect("record should be present");
 
             assert_eq!(original, loaded);
         }
@@ -486,7 +488,7 @@ mod tests {
             len: 5,
             content: b"hello".to_vec(),
         };
-        io.save_record(MemoryPosition::new(0), &record);
+        io.save_record(&header, MemoryPosition::new(0), &record);
 
         // Update header to make the record "alive"
         let size = MemorySize::new(record.bytes_len() as u64);
@@ -495,7 +497,9 @@ mod tests {
         io.save_header(&header);
 
         // Verify that we can load it back using the header's offset.
-        let loaded = io.load_record(MemoryPosition::new(0)).expect("should load");
+        let loaded = io
+            .load_record(&header, MemoryPosition::new(0))
+            .expect("should load");
         assert_eq!(loaded.content, b"hello");
 
         // Verify that it was actually written at the custom offset.
