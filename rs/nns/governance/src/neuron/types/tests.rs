@@ -40,6 +40,8 @@ fn test_neuron_into_api() {
     )
     .build();
 
+    original_neuron.eight_year_gang_bonus_base_e8s = 500_000_000;
+
     // Add ballots.
     for i in 0..10 {
         let proposal_id = Some(ProposalId { id: 123_000 + i });
@@ -116,6 +118,7 @@ fn test_neuron_into_api() {
             neuron_type: None,
             potential_voting_power,
             deciding_voting_power,
+            eight_year_gang_bonus_base_e8s: Some(500_000_000),
             maturity_disbursements_in_progress: Some(vec![]),
         },
     );
@@ -138,6 +141,56 @@ fn test_neuron_into_api() {
                 }
             })
             .collect::<Vec<_>>(),
+    );
+}
+
+#[test]
+fn test_get_neuron_info() {
+    let controller = PrincipalId::new_user_test_id(42);
+    let dissolve_delay_seconds = TWELVE_MONTHS_SECONDS;
+    let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
+        dissolve_delay_seconds,
+        aging_since_timestamp_seconds: 0,
+    };
+    let neuron = NeuronBuilder::new_for_test(99, dissolve_state_and_age)
+        .with_controller(controller)
+        .with_cached_neuron_stake_e8s(10 * E8)
+        .with_eight_year_gang_bonus_base_e8s(3 * E8)
+        .build();
+
+    let now_seconds = NOW;
+    let potential_voting_power = neuron.potential_voting_power(now_seconds);
+    let deciding_voting_power =
+        neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now_seconds);
+
+    let observed = neuron.get_neuron_info(
+        &VotingPowerEconomics::DEFAULT,
+        now_seconds,
+        controller,
+        false,
+    );
+
+    assert_eq!(
+        observed,
+        NeuronInfo {
+            id: Some(NeuronId { id: 99 }),
+            retrieved_at_timestamp_seconds: now_seconds,
+            state: NeuronState::NotDissolving as i32,
+            age_seconds: now_seconds,
+            dissolve_delay_seconds,
+            recent_ballots: vec![],
+            voting_power: potential_voting_power,
+            created_timestamp_seconds: 0,
+            stake_e8s: 10 * E8,
+            joined_community_fund_timestamp_seconds: None,
+            known_neuron_data: None,
+            neuron_type: None,
+            visibility: Some(Visibility::Private as i32),
+            voting_power_refreshed_timestamp_seconds: Some(0),
+            deciding_voting_power: Some(deciding_voting_power),
+            potential_voting_power: Some(potential_voting_power),
+            eight_year_gang_bonus_base_e8s: Some(3 * E8),
+        },
     );
 }
 
