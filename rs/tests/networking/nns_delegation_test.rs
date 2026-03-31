@@ -69,7 +69,6 @@ use ic_types::{
         HttpQueryResponseReply, HttpReadStateResponse, NodeSignature,
     },
 };
-use ic_utils::interfaces::ManagementCanister;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -157,20 +156,9 @@ fn setup(env: TestEnv) {
             let wasm = wasm.clone();
             async move {
                 let (_subnet, node) = get_subnet_and_node(&env, subnet_type);
-                let agent = node.build_default_agent_async().await;
-                let management_canister = ManagementCanister::create(&agent);
-                let canister_id = management_canister
-                    .create_canister()
-                    .as_provisional_create_with_amount(None)
-                    .with_effective_canister_id(node.effective_canister_id())
-                    .call_and_wait()
-                    .await
-                    .expect("Failed to create the certified variables canister")
-                    .0;
-
-                management_canister
-                    .install_code(&canister_id, &wasm)
-                    .call_and_wait()
+                let canister_id = node
+                    .canister_installer_with_raw_wasm(wasm)
+                    .install()
                     .await
                     .expect("Failed to install the certified variables canister");
 
