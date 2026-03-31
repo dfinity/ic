@@ -155,29 +155,6 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
-  # CI job is also executed in PR on use of 'CI_COVERAGE' label
-  bazel-test-coverage:
-    name: Bazel Test Coverage
-    runs-on: *dind-large-setup
-    container: *container-setup
-    if: false
-    steps:
-      - *checkout
-      - name: Run Bazel Test Coverage
-        shell: bash
-        # TODO: enable when bazel coverage is fixed
-        #run: ./ci/scripts/bazel-coverage.sh
-        run: echo "Disabled until fixed"
-      - name: Upload bazel-coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: bazel-coverage
-          retention-days: 1
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            cov_html.zip
-
   pocket-ic-tests-windows:
     uses: ./.github/workflows/pocket-ic-tests-windows.yml
     with:
