@@ -1304,13 +1304,19 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
+        let (mut heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
         if let Some(rng_seed) = maybe_rng_seed {
             randomness.seed_rng(rng_seed);
         }
+
+        // Migration: reduce neuron_minimum_dissolve_delay_to_vote_seconds to 2 weeks if it is
+        // currently higher, per the mission70 whitepaper.
+        Self::maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(
+            &mut heap_governance_proto,
+        );
 
         let mut governance = Self {
             heap_data: heap_governance_proto,
@@ -4758,6 +4764,42 @@ impl Governance {
         self.voting_power_economics()
             .neuron_minimum_dissolve_delay_to_vote_seconds
             .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS)
+    }
+
+    /// Reduces `neuron_minimum_dissolve_delay_to_vote_seconds` to 2 weeks if it is currently
+    /// higher. This is a one-time migration that takes effect on the first post_upgrade after
+    /// this code is deployed.
+    fn maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(
+        heap_data: &mut HeapGovernanceData,
+    ) {
+        let two_weeks_seconds = 14 * ONE_DAY_SECONDS;
+
+        let Some(voting_power_economics) = heap_data
+            .economics
+            .as_mut()
+            .and_then(|economics| economics.voting_power_economics.as_mut())
+        else {
+            println!(
+                "{}WARNING: Cannot migrate neuron_minimum_dissolve_delay_to_vote_seconds: \
+                 voting_power_economics not set.",
+                LOG_PREFIX,
+            );
+            return;
+        };
+
+        let current = voting_power_economics
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS);
+
+        if current > two_weeks_seconds {
+            println!(
+                "{}Migrating neuron_minimum_dissolve_delay_to_vote_seconds from {} to {} \
+                 (2 weeks).",
+                LOG_PREFIX, current, two_weeks_seconds,
+            );
+            voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds =
+                Some(two_weeks_seconds);
+        }
     }
 
     /// The proposal id of the next proposal.

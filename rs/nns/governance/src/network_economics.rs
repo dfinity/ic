@@ -285,7 +285,7 @@ impl VotingPowerEconomics {
     /// which originate from the time when the minimum dissolve delay to vote was an internal NNS
     /// constant.
     pub const NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS: RangeInclusive<u64> =
-        (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
+        (14 * ONE_DAY_SECONDS)..=(6 * ONE_MONTH_SECONDS);
 
     pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 

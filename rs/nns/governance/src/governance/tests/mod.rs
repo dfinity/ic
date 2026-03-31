@@ -8,7 +8,9 @@ use crate::{
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{E8, assert_is_err, assert_is_ok};
+use ic_nervous_system_common::{
+    E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, assert_is_err, assert_is_ok,
+};
 #[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
@@ -1798,4 +1800,62 @@ fn test_maybe_set_eight_year_gang_bonus_base() {
         .with_neuron(&NeuronId { id: 1 }, |n| n.eight_year_gang_bonus_base_e8s)
         .unwrap();
     assert_eq!(bonus, 140 * E8);
+}
+
+#[test]
+fn test_post_upgrade_migrates_neuron_minimum_dissolve_delay_to_vote_seconds() {
+    let two_weeks_seconds = 14 * ONE_DAY_SECONDS;
+
+    // Simulate the old production state: 6 months.
+    let mut heap_data = HeapGovernanceData {
+        economics: Some(NetworkEconomics {
+            voting_power_economics: Some(VotingPowerEconomics {
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
+                ..VotingPowerEconomics::with_default_values()
+            }),
+            ..NetworkEconomics::with_default_values()
+        }),
+        ..Default::default()
+    };
+
+    Governance::maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(&mut heap_data);
+
+    let actual = heap_data
+        .economics
+        .as_ref()
+        .unwrap()
+        .voting_power_economics
+        .as_ref()
+        .unwrap()
+        .neuron_minimum_dissolve_delay_to_vote_seconds;
+    assert_eq!(actual, Some(two_weeks_seconds));
+}
+
+#[test]
+fn test_post_upgrade_does_not_increase_neuron_minimum_dissolve_delay_to_vote_seconds() {
+    let one_week_seconds = 7 * ONE_DAY_SECONDS;
+
+    // If someone already set it lower than 2 weeks, don't increase it.
+    let mut heap_data = HeapGovernanceData {
+        economics: Some(NetworkEconomics {
+            voting_power_economics: Some(VotingPowerEconomics {
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(one_week_seconds),
+                ..VotingPowerEconomics::with_default_values()
+            }),
+            ..NetworkEconomics::with_default_values()
+        }),
+        ..Default::default()
+    };
+
+    Governance::maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(&mut heap_data);
+
+    let actual = heap_data
+        .economics
+        .as_ref()
+        .unwrap()
+        .voting_power_economics
+        .as_ref()
+        .unwrap()
+        .neuron_minimum_dissolve_delay_to_vote_seconds;
+    assert_eq!(actual, Some(one_week_seconds));
 }
