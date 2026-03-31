@@ -708,6 +708,17 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
+                // Content size must match
+                let calculated_size = entry.response.content.count_bytes() as u32;
+                if calculated_size != entry.proof.content.content_size {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
+                            metadata_size: entry.proof.content.content_size,
+                            calculated_size,
+                        },
+                    );
+                }
+
                 // Metadata consistency (timeout)
                 if entry.proof.content.timeout != entry.response.timeout {
                     return invalid_artifact(InvalidCanisterHttpPayloadReason::InvalidMetadata {

@@ -1545,11 +1545,7 @@ impl SandboxSafeSystemState {
                 (
                     // unwraps: we got the subnet_id from the same collection
                     self.network_topology.get_subnet_size(subnet_id).unwrap(),
-                    self.network_topology
-                        .subnets()
-                        .get(subnet_id)
-                        .unwrap()
-                        .cost_schedule,
+                    self.network_topology.get_cost_schedule(subnet_id).unwrap(),
                     *subnet_id,
                 )
             })

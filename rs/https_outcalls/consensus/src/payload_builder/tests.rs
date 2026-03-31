@@ -37,7 +37,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion, Time,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion, Time,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
@@ -534,14 +534,34 @@ fn hash_validation() {
         },
         &default_validation_context(),
     );
-    match validation_result {
+    assert_matches!(
+        validation_result,
         Err(ValidationError::InvalidArtifact(
             InvalidPayloadReason::InvalidCanisterHttpPayload(
                 InvalidCanisterHttpPayloadReason::ContentHashMismatch { .. },
             ),
-        )) => (),
-        x => panic!("Expected ContentHashMismatch, got {x:?}"),
-    }
+        ))
+    );
+}
+
+/// Test that payloads with wrong content size don't validate
+#[test]
+fn content_size_validation() {
+    let validation_result = run_validatation_test(
+        true,
+        |_response, metadata| {
+            metadata.content_size = metadata.content_size.wrapping_add(1);
+        },
+        &default_validation_context(),
+    );
+    assert_matches!(
+        validation_result,
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::ContentSizeMismatch { .. },
+            ),
+        ))
+    );
 }
 
 /// Test that payloads which are timed out don't validate
@@ -1397,6 +1417,7 @@ fn test_response_and_metadata_full(
         id: response.id,
         timeout: response.timeout,
         content_hash: crypto_hash(&response),
+        content_size: response.content.count_bytes() as u32,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
     };
@@ -2301,6 +2322,42 @@ fn flexible_invalid_content_hash_mismatch() {
                     }
                 )
             )) if metadata_hash == wrong_metadata_hash && calculated_hash == expected_calculated_hash
+        );
+    });
+}
+
+#[test]
+fn flexible_invalid_content_size_mismatch() {
+    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
+        let mut entry = flexible_response(42, 0, b"data");
+        let expected_size = entry.response.content.count_bytes() as u32;
+        entry.proof.content.content_size = expected_size.wrapping_add(1);
+        let wrong_size = entry.proof.content.content_size;
+
+        let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            callback_id,
+            responses: vec![entry],
+        }]);
+
+        let result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
+                        metadata_size,
+                        calculated_size,
+                    }
+                )
+            )) if metadata_size == wrong_size && calculated_size == expected_size
         );
     });
 }

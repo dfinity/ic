@@ -37,6 +37,11 @@ pub enum InvalidCanisterHttpPayloadReason {
         metadata_hash: CryptoHashOf<CanisterHttpResponse>,
         calculated_hash: CryptoHashOf<CanisterHttpResponse>,
     },
+    /// The content size of the signed metadata does not match the actual size of the content
+    ContentSizeMismatch {
+        metadata_size: u32,
+        calculated_size: u32,
+    },
     /// The response has already timed out
     Timeout {
         timed_out_at: Time,

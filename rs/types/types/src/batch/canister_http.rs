@@ -112,6 +112,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                     signature: signature.get().0,
                 })
                 .collect(),
+            content_size: payload.proof.content.content_size,
         }
     }
 }
@@ -155,6 +156,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                     content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(
                         payload.hash,
                     )),
+                    content_size: payload.content_size,
                     registry_version: RegistryVersion::new(payload.registry_version),
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
                         .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
@@ -250,6 +252,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
                 content_hash: share.content.content_hash.clone().get().0,
                 registry_version: share.content.registry_version.get(),
                 replica_version: share.content.replica_version.into(),
+                content_size: share.content.content_size,
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
@@ -279,6 +282,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                 id,
                 timeout,
                 content_hash,
+                content_size: metadata.content_size,
                 registry_version,
                 replica_version,
             },
@@ -432,6 +436,7 @@ mod tests {
                 content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
                     4, 5, 6, 7,
                 ])),
+                content_size: 42,
                 registry_version: RegistryVersion::new(2),
                 replica_version: ReplicaVersion::default(),
             },
