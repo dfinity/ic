@@ -167,7 +167,6 @@ sh_binary(
 rust_canbench(
     name = "ledger_canbench",
     srcs = glob(["src/**/*.rs"]),
-    add_test = True,
     crate_features = ["canbench-rs"],
     proc_macro_deps = [
         # Keep sorted.

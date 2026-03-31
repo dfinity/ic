@@ -98,7 +98,7 @@ where
             .cloned()
             .unwrap_or(T::default());
         let right = values.get(mid).cloned().unwrap_or(T::default());
-        (left + right) / 2u8.into()
+        (left + right) / 2_u8.into()
     } else {
         values.get(mid).cloned().unwrap_or(T::default())
     }
@@ -246,10 +246,7 @@ fn try_aggregate_one_epoch(
     purge_records(replicated_state);
 
     // Get the number of nodes of this subnet
-    let num_nodes = replicated_state
-        .system_metadata()
-        .network_topology
-        .get_subnet_size(&replicated_state.metadata.own_subnet_id);
+    let num_nodes = replicated_state.system_metadata().own_subnet_size();
     debug_assert!(num_nodes.is_some());
     let Some(num_nodes) = num_nodes else {
         metrics.query_stats_critical_error_aggregator_failure.inc();

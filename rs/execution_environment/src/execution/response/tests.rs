@@ -11,15 +11,15 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::NO_DEADLINE;
 use ic_types::{
-    CanisterId, Cycles, Time,
+    CanisterId, Time,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, MessageId},
 };
 use ic_types::{ComputeAllocation, MemoryAllocation};
 use ic_types::{NumInstructions, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_lt};
 
@@ -107,7 +107,7 @@ fn execute_response_refunds_cycles() {
         .originator(a_id)
         .respondent(b_id)
         .originator_reply_callback(CallbackId::from(1))
-        .refund(cycles_sent / 2u64)
+        .refund(cycles_sent / 2_u64)
         .build();
     let response_payload_size = response.payload_size_bytes();
 
@@ -125,18 +125,20 @@ fn execute_response_refunds_cycles() {
     // Compute the response transmission refund.
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mgr = test.cycles_account_manager();
-    let response_transmission_refund = mgr.xnet_call_bytes_transmitted_fee(
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-        test.subnet_size(),
-        cost_schedule,
-    );
+    let response_transmission_refund = mgr
+        .xnet_call_bytes_transmitted_fee(
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            test.subnet_size(),
+            cost_schedule,
+        )
+        .real();
     mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size(), cost_schedule);
     let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
     let execution_refund = mgr
         .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
     assert_eq!(
         balance_after,
-        balance_before + cycles_sent / 2u64 + response_transmission_refund + execution_refund
+        balance_before + cycles_sent / 2_u64 + response_transmission_refund + execution_refund
     );
 }
 
@@ -466,7 +468,7 @@ fn dts_works_in_response_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -485,7 +487,7 @@ fn dts_works_in_response_callback() {
                         .append_and_reply()
                         .build(),
                 ),
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         )
         .build();
 
@@ -549,7 +551,7 @@ fn dts_works_in_cleanup_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -563,7 +565,7 @@ fn dts_works_in_cleanup_callback() {
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_message().reject())
                 .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         )
         .build();
 
@@ -634,7 +636,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -655,7 +657,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
                         .message_payload()
                         .append_and_reply(),
                 ),
-            Cycles::from(2000u128),
+            Cycles::from(2000_u128),
         )
         .build();
 
@@ -746,7 +748,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -766,7 +768,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
                         .stable64_fill(0, 0, 1000)
                         .instruction_counter_is_at_least(1_000_000),
                 ),
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         )
         .build();
 
@@ -850,7 +852,7 @@ fn dts_abort_works_in_response_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -869,7 +871,7 @@ fn dts_abort_works_in_response_callback() {
                         .append_and_reply()
                         .build(),
                 ),
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         )
         .build();
 
@@ -951,7 +953,7 @@ fn dts_abort_works_in_cleanup_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -965,7 +967,7 @@ fn dts_abort_works_in_cleanup_callback() {
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_message().reject())
                 .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         )
         .build();
 
@@ -1040,7 +1042,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -1058,7 +1060,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
                         .message_payload()
                         .append_and_reply(),
                 ),
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         )
         .build();
 
@@ -1335,14 +1337,17 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(980);
 
-    let max_execution_cost = test.cycles_account_manager().execution_cost(
-        NumInstructions::from(instruction_limit),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(a_id),
-    );
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            NumInstructions::from(instruction_limit),
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+            test.canister_wasm_execution_mode(a_id),
+        )
+        .real();
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -1455,14 +1460,17 @@ fn dts_response_concurrent_cycles_change_fails() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(980);
 
-    let max_execution_cost = test.cycles_account_manager().execution_cost(
-        NumInstructions::from(instruction_limit),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(a_id),
-    );
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            NumInstructions::from(instruction_limit),
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+            test.canister_wasm_execution_mode(a_id),
+        )
+        .real();
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -1598,14 +1606,17 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(980);
 
-    let max_execution_cost = test.cycles_account_manager().execution_cost(
-        NumInstructions::from(instruction_limit),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(a_id),
-    );
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            NumInstructions::from(instruction_limit),
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+            test.canister_wasm_execution_mode(a_id),
+        )
+        .real();
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -1784,7 +1795,7 @@ fn cleanup_callback_cannot_accept_cycles() {
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
-                .on_cleanup(wasm().accept_cycles(Cycles::from(0u128))),
+                .on_cleanup(wasm().accept_cycles(Cycles::from(0_u128))),
         )
         .build();
     let err = test.ingress(a_id, "update", a).unwrap_err();
@@ -2010,7 +2021,7 @@ fn response_callback_succeeds_with_memory_reservation() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -2031,7 +2042,7 @@ fn response_callback_succeeds_with_memory_reservation() {
                         .message_payload()
                         .append_and_reply(),
                 ),
-            Cycles::from(2000u128),
+            Cycles::from(2000_u128),
         )
         .build();
 
@@ -2141,7 +2152,7 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -2161,7 +2172,7 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
                         .stable64_fill(0, 0, 1000)
                         .instruction_counter_is_at_least(1_000_000),
                 ),
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         )
         .build();
 
@@ -2274,7 +2285,7 @@ fn subnet_available_memory_does_not_change_on_response_abort() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -2295,7 +2306,7 @@ fn subnet_available_memory_does_not_change_on_response_abort() {
                         .message_payload()
                         .append_and_reply(),
                 ),
-            Cycles::from(2000u128),
+            Cycles::from(2000_u128),
         )
         .build();
 
@@ -2355,7 +2366,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_abort() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -2375,7 +2386,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_abort() {
                         .stable64_fill(0, 0, 1000)
                         .instruction_counter_is_at_least(1_000_000),
                 ),
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         )
         .build();
 
@@ -2430,7 +2441,7 @@ fn subnet_available_memory_does_not_change_on_response_validation_failure() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -2451,7 +2462,7 @@ fn subnet_available_memory_does_not_change_on_response_validation_failure() {
                         .message_payload()
                         .append_and_reply(),
                 ),
-            Cycles::from(2000u128),
+            Cycles::from(2000_u128),
         )
         .build();
 
@@ -2507,7 +2518,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -2528,7 +2539,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
                         .message_payload()
                         .append_and_reply(),
                 ),
-            Cycles::from(2000u128),
+            Cycles::from(2000_u128),
         )
         .build();
 
@@ -2564,7 +2575,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     // Change the cycles balance to force the response resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance_for_uninstall();
+        .burn_remaining_balance_for_uninstall(CanisterCyclesCostSchedule::Normal);
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -2597,7 +2608,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000u128))
+        .accept_cycles(Cycles::from(1_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -2617,7 +2628,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
                         .stable64_fill(0, 0, 1000)
                         .instruction_counter_is_at_least(1_000_000),
                 ),
-            Cycles::from(1000u128),
+            Cycles::from(1000_u128),
         )
         .build();
 
@@ -2653,7 +2664,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     // Change the cycles balance to force the cleanup resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance_for_uninstall();
+        .burn_remaining_balance_for_uninstall(CanisterCyclesCostSchedule::Normal);
 
     test.execute_slice(a_id);
     assert_eq!(

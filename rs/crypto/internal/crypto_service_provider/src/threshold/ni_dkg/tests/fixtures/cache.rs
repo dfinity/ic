@@ -23,7 +23,7 @@ use std::sync::Mutex;
 
 /// Alert: Creating this element costs about 30 seconds on a 2GHz AMD64 CPU.
 pub static STATE_WITH_TRANSCRIPT: LazyLock<Mutex<StateWithTranscript>> = LazyLock::new(|| {
-    let seed = [69u8; 32];
+    let seed = [69_u8; 32];
     let network_size = 4;
     let rng = &mut ChaCha20Rng::from_seed(seed);
     let network = MockNetwork::random(rng, network_size);

@@ -11,13 +11,14 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_timeout_per_test(CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT)
         .with_setup(setup)
-        .without_assert_no_replica_restarts()
         // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
         // belong to, see the recovery CUP, and thus allow the recovery on the same nodes
         .add_test(systest!(test; CupCorruption::CorruptedWithValidNiDkgId))
         // The test corrupts the CUPs, so it's expected that the following error metric will be
         // non-zero.
         .remove_metrics_to_check("orchestrator_cup_deserialization_failed_total")
+        // The replica binary is "broken" and restarted by the orchestrator multiple times
+        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
         .execute_from_args()?;
     Ok(())
 }

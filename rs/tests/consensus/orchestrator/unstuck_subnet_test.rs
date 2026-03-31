@@ -33,10 +33,9 @@ use ic_system_test_driver::driver::{
     test_env_api::*,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::block_on;
+use ic_system_test_driver::util::{JournalStreamer, block_on};
 use ic_types::Height;
 use slog::info;
-use ssh2::Session;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -91,23 +90,15 @@ fn test(test_env: TestEnv) {
     info!(logger, "Upgrade started");
 
     for nns_node in test_env.topology_snapshot().root_subnet().nodes() {
-        let session = nns_node
-            .block_on_ssh_session()
-            .expect("Failed to establish SSH session");
-        ic_system_test_driver::retry_with_msg!(
-            "check for 'hash mismatch' in the replica's log",
-            test_env.logger(),
-            secs(600),
-            secs(20),
-            || {
-                if have_sha_errors(&session) {
-                    Ok(())
-                } else {
-                    bail!("Waiting for hash mismatch!")
-                }
-            }
-        )
-        .expect("No hash mismatch in the logs");
+        assert!(
+            JournalStreamer::new(nns_node.block_on_ssh_session().unwrap())
+                .follow()
+                .max_lines(1)
+                .contains("FileHashMismatchError")
+                .unwrap_or_default(),
+            "No hash mismatch error in the logs of node {}",
+            nns_node.node_id
+        );
     }
 
     info!(logger, "Check that system does not make progress");
@@ -134,7 +125,7 @@ fn test(test_env: TestEnv) {
         sudo chmod 777 /var/lib/ic/data/images
         cd /var/lib/ic/data/images/
         sudo curl {guestos_update_img_url} -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500 --fail
-        SHA256SUM="$(sha256sum image.bin | cut -d' ' -f1)"
+        SHA256SUM="$(sudo sha256sum image.bin | cut -d' ' -f1)"
         if [ "$SHA256SUM" != "{expected_sha256}" ]; then
             echo "Downloaded image.bin has SHA256 hash: $SHA256SUM but expected {expected_sha256}!"
             exit 1
@@ -202,11 +193,6 @@ fn test(test_env: TestEnv) {
         );
     }
     info!(logger, "Could store and read message!");
-}
-
-fn have_sha_errors(session: &Session) -> bool {
-    let cmd = "journalctl | grep -c 'FileHashMismatchError'".to_string();
-    execute_bash_command(session, cmd).is_ok_and(|res| res.trim().parse::<i32>().unwrap() > 0)
 }
 
 fn main() -> Result<()> {

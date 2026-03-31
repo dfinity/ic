@@ -18,7 +18,7 @@ impl MacAddr6Ext for MacAddr6 {
         let mac_octets = self.into_array();
 
         // Create the EUI-64 interface identifier
-        let mut interface_id = [0u8; 8];
+        let mut interface_id = [0_u8; 8];
 
         // Flip the Universal/Local bit in the first octet
         interface_id[0] = mac_octets[0] ^ 0x02;

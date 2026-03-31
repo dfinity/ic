@@ -131,9 +131,9 @@ pub fn test_update_balance(env: TestEnv) {
         // -- beginning of test logic --
 
         // We shouldn't have any new utxo for now.
-        assert_no_new_utxo(&minter_agent, &subaccount0).await;
-        assert_no_new_utxo(&minter_agent, &subaccount1).await;
-        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount0).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount1).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount2).await;
 
         // Mint block to the first sub-account (with single utxo).
         generate_blocks(&btc_rpc, &logger, 3, &btc_address1);
@@ -157,7 +157,7 @@ pub fn test_update_balance(env: TestEnv) {
             .unwrap();
         assert!(!update_result.is_empty());
         // The other subaccount should not be impacted.
-        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount2).await;
         for update_balance_entry in &update_result {
             if let UtxoStatus::Minted { block_index, .. } = &update_balance_entry {
                 assert_mint_transaction(
@@ -175,7 +175,7 @@ pub fn test_update_balance(env: TestEnv) {
 
         // Calling update_balance again will always trigger a NoNewUtxo error.
         upgrade_canister(&mut minter_canister).await;
-        assert_no_new_utxo(&minter_agent, &subaccount1).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount1).await;
 
         // Now triggering a failure on the ledger canister.
         info!(&logger, "Simulating failure on the ledger canister");
@@ -212,7 +212,7 @@ pub fn test_update_balance(env: TestEnv) {
             .unwrap();
         assert!(!update_result.is_empty());
         // The other subaccount should not be impacted.
-        assert_no_new_utxo(&minter_agent, &subaccount1).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount1).await;
 
         for update_balance_entry in &update_result {
             if let UtxoStatus::Minted { block_index, .. } = &update_balance_entry {
@@ -231,7 +231,7 @@ pub fn test_update_balance(env: TestEnv) {
 
         // Calling update_balance again will always trigger a NoNewUtxo error.
         upgrade_canister(&mut minter_canister).await;
-        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount2).await;
 
         // Check that we can update balance in the restricted mode.
         let caller = agent.get_principal().unwrap();
@@ -243,7 +243,7 @@ pub fn test_update_balance(env: TestEnv) {
             },
         )
         .await;
-        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+        assert_no_new_utxo(&minter_agent, &logger, &subaccount2).await;
         upgrade_canister_with_args(
             &mut minter_canister,
             &UpgradeArgs {

@@ -1,7 +1,7 @@
 //! This module contains a collection of types and structs that define the
 //! various types of methods in the IC.
 
-use crate::{Cycles, messages::CallContextId, time::CoarseTime};
+use crate::{messages::CallContextId, time::CoarseTime};
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -9,6 +9,7 @@ use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom},

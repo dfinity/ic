@@ -1,11 +1,9 @@
-use crate::{
-    pb::v1::{
-        AddOrRemoveNodeProvider, GovernanceError, NodeProvider, SelfDescribingValue,
-        add_or_remove_node_provider::Change, governance_error::ErrorType,
-    },
-    proposals::self_describing::LocallyDescribableProposalAction,
+use crate::pb::v1::{
+    AddOrRemoveNodeProvider, GovernanceError, NodeProvider, SelfDescribingValue,
+    add_or_remove_node_provider::Change, governance_error::ErrorType,
 };
 
+use super::self_describing::DocumentedAction;
 use ic_base_types::PrincipalId;
 use ic_nns_governance_derive_self_describing::SelfDescribing;
 use icp_ledger::{AccountIdentifier, protobuf::AccountIdentifier as AccountIdentifierPb};
@@ -75,15 +73,11 @@ impl TryFrom<AddOrRemoveNodeProvider> for ValidAddOrRemoveNodeProvider {
     }
 }
 
-impl LocallyDescribableProposalAction for ValidAddOrRemoveNodeProvider {
-    const TYPE_NAME: &'static str = "Add or Remove Node Provider";
-    const TYPE_DESCRIPTION: &'static str = "Assign (or revoke) an identity to a node provider, \
+impl DocumentedAction for ValidAddOrRemoveNodeProvider {
+    const NAME: &'static str = "Add or Remove Node Provider";
+    const DESCRIPTION: &'static str = "Assign (or revoke) an identity to a node provider, \
         associating key information regarding the legal person associated that should provide a \
         way to uniquely identify it.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
-        SelfDescribingValue::from(self.clone())
-    }
 }
 
 impl From<ValidAccountIdentifier> for SelfDescribingValue {

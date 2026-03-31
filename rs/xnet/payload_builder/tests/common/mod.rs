@@ -41,6 +41,7 @@ pub struct StateManagerFixture {
     pub metrics: MetricsRegistry,
     pub temp_dir: TempDir,
     pub log: ReplicaLogger,
+    pub subnet_type: SubnetType,
 }
 
 impl StateManagerFixture {
@@ -78,6 +79,7 @@ impl StateManagerFixture {
             metrics,
             temp_dir,
             log,
+            subnet_type,
         }
     }
 

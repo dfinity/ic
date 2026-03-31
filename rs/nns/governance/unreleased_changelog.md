@@ -9,25 +9,18 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added an optional field `max_ingress_bytes_per_block` to `CreateSubnetPayload`
-and `UpdateSubnetPayload` which, when present, will set a limit on how big the ingress payload can
-be in blocks produced by the created/updated subnet.
-* A `create_neuron` method to create neurons through staking ICPs using the ICRC2 standard.
+- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
+- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets. 
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
 
 ## Changed
-
-* Lowered the maximum page size of list_neurons to 50. The vast majority (> 95%)
-  have no more than 50 neurons, so for them, this has no noticeable impact.
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
-
-* The Bitcoin and Dogecoin Watchdog canisters are now considered "protocol"
-  canisters; thus, proposals to upgrade these canisters now fall into the
-  "Protocol Canister Management" topic, instead of the "Application Canister
-  Management" topic.
 
 ## Security

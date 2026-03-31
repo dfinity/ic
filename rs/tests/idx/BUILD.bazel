@@ -37,6 +37,7 @@ system_test(
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
+        "@crate_index//:url",
     ],
 )
 
@@ -46,7 +47,7 @@ system_test(
         "long_test",
     ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS | {
-        "II_WASM_PATH": "@ii_dev_canister//file",
+        "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
     },
     deps = [
         # Keep sorted.

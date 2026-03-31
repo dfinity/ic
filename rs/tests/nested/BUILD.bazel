@@ -26,11 +26,9 @@ rust_library(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:nix",
         "@crate_index//:prost",
         "@crate_index//:regex",
         "@crate_index//:reqwest",
-        "@crate_index//:serde",
         "@crate_index//:slog",
     ],
 )
@@ -115,7 +113,6 @@ system_test_nns(
     guestos_update = True,
     hostos = "mainnet_latest_dev",
     tags = [
-        "long_test",
         "manual",
     ],
     test_driver_target = ":guestos_upgrade_test_bin",
@@ -163,4 +160,46 @@ system_test_nns(
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
     },
+)
+
+# Tests if SEV-enabled nodes can be recovered using a recovery GuestOS image
+# This test requires manually injecting the baremetal configuration
+# ict test //rs/tests/nested:sev_recovery -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# zh2-dll01.ini can be retrieved from our 1password
+system_test_nns(
+    name = "sev_recovery",
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
+    guestos = {
+        "default": True,
+        "recovery": "sev_recovery_dev",
+    },
+    hostos = True,
+    tags = [
+        "manual",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/canister_client",
+        "//rs/crypto/tree_hash",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/protobuf",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
 )

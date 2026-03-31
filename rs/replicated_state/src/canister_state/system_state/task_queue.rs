@@ -288,10 +288,8 @@ mod tests {
     use crate::canister_state::system_state::PausedExecutionId;
     use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
     use ic_test_utilities_types::messages::IngressBuilder;
-    use ic_types::{
-        Cycles,
-        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
-    };
+    use ic_types::messages::{CanisterCall, CanisterMessageOrTask, CanisterTask};
+    use ic_types_cycles::Cycles;
 
     #[test]
     fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {

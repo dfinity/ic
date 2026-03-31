@@ -482,7 +482,7 @@ impl<'a> PoolReader<'a> {
             .get_by_height_range(HeightRange::new(from, to))
     }
 
-    /// Get all valid [`CatchUpPackageShares`] at the given height.
+    /// Get all valid [`CatchUpPackageShare`]s at the given height.
     pub fn get_catch_up_package_shares(
         &self,
         h: Height,

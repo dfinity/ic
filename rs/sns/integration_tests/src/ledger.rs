@@ -63,7 +63,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
 
             // Stake a neuron by transferring to a subaccount of the neurons
             // canister and claiming the neuron on the governance canister..
-            let nonce = 12345u64;
+            let nonce = 12345_u64;
             let to_subaccount = {
                 let mut state = Sha256::new();
                 state.write(&[0x0c]);

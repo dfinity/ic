@@ -16,8 +16,10 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",
+    "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
@@ -28,6 +30,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
+    "//rs/interfaces/mocks",
     "//rs/registry/subnet_features",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
@@ -63,6 +66,7 @@ rust_doc(
 
 rust_test(
     name = "ic_https_outcalls_consensus_test",
+    timeout = "long",
     crate = ":consensus",
     crate_features = ["proptest"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

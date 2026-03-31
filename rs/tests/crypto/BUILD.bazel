@@ -12,7 +12,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/ic_os/metrics/fstrim_tool",
+    "//rs/ic_os/os_tools/fstrim_tool",
     "//rs/registry/subnet_type",
     "//rs/tests/consensus/utils",
     "//rs/tests/driver:ic-system-test-driver",
@@ -40,7 +40,7 @@ DEPENDENCIES = [
 system_test(
     name = "canister_sig_verification_cache_test",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
-        "II_WASM_PATH": "@ii_dev_canister//file",
+        "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
     },
     deps = DEPENDENCIES,
 )
