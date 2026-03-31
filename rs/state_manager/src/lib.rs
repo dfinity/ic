@@ -3356,29 +3356,32 @@ impl StateManager for StateManagerImpl {
         // This optimization is skipped every `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING` heights
         // so that we always have a reasonably "recent" state snapshot and
         // its certification metadata available.
-        let states = self.states.read();
-        let maybe_delivered_certification = states.certifications.get(&height).cloned();
-        drop(states);
-        let fast_forward_height = self.fast_forward_height.load(Ordering::Relaxed);
-        if matches!(scope, CertificationScope::Metadata)
-            && height.get() < fast_forward_height
-            && !height
-                .get()
-                .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING)
-            && maybe_delivered_certification.is_some()
-        {
+        let maybe_delivered_certification = {
+            // Scope to drop this lock.
             let mut states = self.states.write();
-            #[cfg(debug_assertions)]
-            check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
+            let maybe_delivered_certification = states.certifications.get(&height).cloned();
+            let fast_forward_height = self.fast_forward_height.load(Ordering::Relaxed);
+            if matches!(scope, CertificationScope::Metadata)
+                && height.get() < fast_forward_height
+                && !height
+                    .get()
+                    .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING)
+                && maybe_delivered_certification.is_some()
+            {
+                // let mut states = self.states.write();
+                #[cfg(debug_assertions)]
+                check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
 
-            assert_tip_is_none(&states);
+                assert_tip_is_none(&states);
 
-            self.metrics.no_state_clone_count.inc();
+                self.metrics.no_state_clone_count.inc();
 
-            states.tip_height = height;
-            states.tip = Some(state);
-            return;
-        }
+                states.tip_height = height;
+                states.tip = Some(state);
+                return;
+            }
+            maybe_delivered_certification
+        };
 
         self.metrics
             .tip_handler_queue_length
