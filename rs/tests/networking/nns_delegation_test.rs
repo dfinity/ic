@@ -38,6 +38,7 @@ use ic_agent::{
     Agent, Identity,
     agent::{Envelope, EnvelopeContent},
 };
+use ic_canonical_state::lazy_tree_conversion::subnet_type_as_string;
 use ic_certification::verify_delegation_certificate;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
@@ -634,7 +635,7 @@ fn validate_delegation(
         LabeledTree::Leaf(value) => {
             assert_eq!(
                 value,
-                subnet_type.as_ref().as_bytes(),
+                subnet_type_as_string(subnet_type).as_bytes(),
                 "Subnet type in the delegation should match the subnet type of the responding node"
             );
         }

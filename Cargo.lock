@@ -18290,6 +18290,7 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-canonical-state",
  "ic-cdk",
  "ic-certification 0.9.0",
  "ic-crypto-tree-hash",
