@@ -104,6 +104,13 @@ const CERTIFIED_VAR_WAT: &str = r#"
 )
 "#;
 
+const TESTED_SUBNET_TYPES: [SubnetType; 4] = [
+    SubnetType::System,
+    SubnetType::Application,
+    SubnetType::VerifiedApplication,
+    SubnetType::CloudEngine,
+];
+
 const INSTALLED_CANISTER_IDS: &str = "installed_canister_ids";
 
 /// How long to wait between subsequent nns delegation fetch requests.
@@ -124,18 +131,12 @@ fn set_installed_canister_ids(env: &TestEnv, canister_ids: BTreeMap<SubnetType, 
 }
 
 fn setup(env: TestEnv) {
-    InternetComputer::new()
-        .with_api_boundary_nodes(1)
-        .add_subnet(
-            Subnet::fast_single_node(SubnetType::System).with_dkg_interval_length(DKG_LENGTH),
-        )
-        .add_subnet(
-            Subnet::fast_single_node(SubnetType::Application).with_dkg_interval_length(DKG_LENGTH),
-        )
-        .add_subnet(
-            Subnet::fast_single_node(SubnetType::CloudEngine).with_dkg_interval_length(DKG_LENGTH),
-        )
-        .setup_and_start(&env)
+    let mut ic = InternetComputer::new().with_api_boundary_nodes(1);
+    for subnet_type in TESTED_SUBNET_TYPES {
+        ic = ic
+            .add_subnet(Subnet::fast_single_node(subnet_type).with_dkg_interval_length(DKG_LENGTH));
+    }
+    ic.setup_and_start(&env)
         .expect("Should be able to set up IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
@@ -146,12 +147,7 @@ fn setup(env: TestEnv) {
     );
     let wasm = wat::parse_str(CERTIFIED_VAR_WAT).expect("Failed to parse certified variables WAT");
     let canister_ids = block_on(futures::future::join_all(
-        [
-            SubnetType::System,
-            SubnetType::Application,
-            SubnetType::CloudEngine,
-        ]
-        .map(|subnet_type| {
+        TESTED_SUBNET_TYPES.iter().copied().map(|subnet_type| {
             let env = env.clone();
             let wasm = wasm.clone();
             async move {
@@ -745,24 +741,21 @@ where
 }
 
 fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
-    let (app_subnet, app_node) = get_subnet_and_node(env, SubnetType::Application);
-    let (_cloud_engine, _cloud_engine_node) = get_subnet_and_node(env, SubnetType::CloudEngine);
-    let nns_node = get_nns_node(&env.topology_snapshot());
-
     let initial_version = get_guestos_img_version();
     let target_version = get_guestos_update_img_version();
 
     if initial_version == target_version {
-        info!(env.logger(), "No need to upgrade the application subnet");
+        info!(env.logger(), "No need to upgrade the subnets");
         return;
     }
 
     info!(
         env.logger(),
-        "Upgrade the application subnet and cloud engine from {initial_version:?} to {target_version:?} to
-        test the protocol compatibility between subnets running different replica versions."
+        "Upgrade the non-NNS subnets from {initial_version:?} to {target_version:?} to test the \
+        protocol compatibility between subnets running different replica versions."
     );
 
+    let nns_node = get_nns_node(&env.topology_snapshot());
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
 
@@ -775,28 +768,34 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
         vec![upgrade_url.to_string()],
     ));
 
-    block_on(deploy_guestos_to_all_subnet_nodes(
-        &nns_node,
-        &target_version,
-        app_subnet.subnet_id,
-    ));
+    for subnet_type in TESTED_SUBNET_TYPES
+        .iter()
+        .copied()
+        .filter(|t| *t != SubnetType::System)
+    {
+        // TODO(CON-1696): Remove me when #9613 reaches mainnet NNS
+        if subnet_type == SubnetType::CloudEngine {
+            continue;
+        }
 
-    // TODO(CON-1696): Uncomment me when #9613 reaches mainnet NNS
-    // block_on(deploy_guestos_to_all_subnet_nodes(
-    //     &nns_node,
-    //     &target_version,
-    //     cloud_engine.subnet_id,
-    // ));
+        let (subnet, node) = get_subnet_and_node(env, subnet_type);
 
-    assert_assigned_replica_version(&app_node, &target_version, env.logger());
-    // TODO(CON-1696): Uncomment me when #9613 reaches mainnet NNS
-    // assert_assigned_replica_version(&cloud_engine_node, &target_version, env.logger());
+        block_on(deploy_guestos_to_all_subnet_nodes(
+            &nns_node,
+            &target_version,
+            subnet.subnet_id,
+        ));
+
+        assert_assigned_replica_version(&node, &target_version, env.logger());
+    }
 }
 
 macro_rules! systest_all_subnet_types {
     ($group: expr, $function_name:path) => {
+        // Keep up to date with `TESTED_SUBNET_TYPES` constant
         $group = $group.add_test(systest!($function_name; SubnetType::System));
         $group = $group.add_test(systest!($function_name; SubnetType::Application));
+        $group = $group.add_test(systest!($function_name; SubnetType::VerifiedApplication));
         // TODO(CON-1696): Remove this condition (and always run the test for cloud engines) when
         // #9613 reaches mainnet NNS
         if get_guestos_img_version() == get_guestos_update_img_version() {
