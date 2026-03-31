@@ -28,7 +28,7 @@
     },
     {
       "image": "letsencrypt/pebble",
-      "repo": "docker.io",
+      "repo": "ghcr.io",
       "sha256": "fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258"
     },
     {
