@@ -49,13 +49,14 @@ use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::{CanisterCyclesCostSchedule, CreateSubnetPayload},
+    do_create_subnet::CreateSubnetPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
 };
+pub use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use slog::{Logger, info};
 use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
