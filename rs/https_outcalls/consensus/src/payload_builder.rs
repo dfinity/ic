@@ -365,6 +365,7 @@ impl CanisterHttpPayloadBuilderImpl {
             timeouts,
             divergence_responses,
             flexible_responses,
+            flexible_errors: vec![],
         }
     }
 
