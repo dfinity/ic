@@ -477,9 +477,10 @@ async fn connect(
 
             let addr = lookup_host((domain.as_str(), 443))
                 .await?
+                .filter(|addr| addr.is_ipv6())
                 .next()
                 .ok_or_else(|| {
-                    format!("API BN domain {domain} does not resolve to any IP address.",)
+                    format!("API BN domain {domain} does not resolve to any IPv6 address.",)
                 })?;
 
             let root_store =
