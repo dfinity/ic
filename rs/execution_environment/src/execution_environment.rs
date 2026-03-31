@@ -4723,7 +4723,7 @@ pub fn execute_canister(
         NextExecution::None | NextExecution::ContinueInstallCode => {
             return ExecuteCanisterResult {
                 canister,
-                instructions_used: None,
+                instructions_used: Some(NumInstructions::new(0)),
                 heap_delta: NumBytes::from(0),
                 ingress_status: None,
                 description: None,
