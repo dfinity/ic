@@ -290,7 +290,7 @@ async fn try_fetch_delegation_from_nns(
     let mut request_sender = timeout(
         CONNECTION_TIMEOUT,
         connect(
-            log,
+            log.clone(),
             rt_handle,
             node_id,
             nns_subnet_id,
@@ -423,7 +423,7 @@ async fn try_fetch_delegation_from_nns(
 }
 
 async fn connect(
-    log: &ReplicaLogger,
+    log: ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
     node_id: NodeId,
     nns_subnet_id: SubnetId,
@@ -498,7 +498,7 @@ async fn connect(
 }
 
 async fn connect_to(
-    log: &ReplicaLogger,
+    log: ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
     peer_id: NodeId,
     addr: SocketAddr,
@@ -529,10 +529,9 @@ async fn connect_to(
         hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
 
     // Spawn a task to poll the connection, driving the HTTP state
-    let log_cl = log.clone();
     rt_handle.spawn(async move {
         if let Err(err) = connection.await {
-            warn!(log_cl, "Polling connection failed: {err:?}.");
+            warn!(log, "Polling connection failed: {err:?}.");
         }
     });
 
