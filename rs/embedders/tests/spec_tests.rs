@@ -374,7 +374,7 @@ impl<'a> TestState<'a> {
         }
     }
 
-    fn try_create_instance(&mut self, wasm: &[u8]) -> Result<Instance, anyhow::Error> {
+    fn try_create_instance(&mut self, wasm: &[u8]) -> Result<Instance, wasmtime::Error> {
         let module = wasmtime::Module::new(&self.engine, wasm).unwrap();
         self.linker.instantiate(&mut self.store, &module)
     }
@@ -784,13 +784,12 @@ fn default_config() -> Config {
 /// Returns the full text representation of the error.
 /// Note that `e.to_string()` returns only the first level error,
 /// which is not sufficient in many cases.
-fn error_to_string(e: anyhow::Error) -> String {
+fn error_to_string(e: wasmtime::Error) -> String {
     format!("{e:?}")
 }
 
 /// These tests run on data from the WebAssembly spec testsuite. The suite is not
-/// included in our repo, but is imported by Bazel using the `new_git_repository`
-/// rule in `WORKSPACE.bazel`.
+/// included in our repo, but is imported by Bazel.
 ///
 /// See BUILD.bazel for inspecting the `wast` files.
 #[test]

@@ -93,7 +93,7 @@ rust_ic_test(
         "//packages/pocket-ic",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
-        "//rs/types/types",
+        "//rs/types/cycles",
         "//rs/universal_canister/lib",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",

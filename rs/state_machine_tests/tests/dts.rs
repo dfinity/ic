@@ -2,7 +2,7 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use std::time::Duration;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);

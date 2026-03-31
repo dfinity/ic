@@ -331,11 +331,11 @@ mod tests {
     use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap, SystemState};
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
-        ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
-        batch::CanisterCyclesCostSchedule,
+        ComputeAllocation, NumBytes, NumInstructions, SubnetId, Time,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
     };
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
     use crate::protocol::{
         id::{ExecId, MemoryId, WasmId},

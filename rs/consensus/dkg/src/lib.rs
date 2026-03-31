@@ -714,7 +714,7 @@ mod tests {
                     )],
                 );
 
-                let target_id = NiDkgTargetId::new([0u8; 32]);
+                let target_id = NiDkgTargetId::new([0_u8; 32]);
                 complement_state_manager_with_setup_initial_dkg_request(
                     state_manager,
                     registry.get_latest_version(),
@@ -827,7 +827,7 @@ mod tests {
                 )],
             );
 
-            let target_id = NiDkgTargetId::new([0u8; 32]);
+            let target_id = NiDkgTargetId::new([0_u8; 32]);
             complement_state_manager_with_setup_initial_dkg_request(
                 state_manager,
                 registry.get_latest_version(),
@@ -1337,7 +1337,7 @@ mod tests {
                     // Return an empty call context when we create the first summary,
                     // so that we later test the case where remote dealing has a different
                     // height than the local dealings.
-                    let target_id = NiDkgTargetId::new([0u8; 32]);
+                    let target_id = NiDkgTargetId::new([0_u8; 32]);
                     [&dependencies_1, &dependencies_2]
                         .iter()
                         .for_each(|dependencies| {
@@ -1544,7 +1544,7 @@ mod tests {
                 )],
             );
 
-            let target_id = NiDkgTargetId::new([0u8; 32]);
+            let target_id = NiDkgTargetId::new([0_u8; 32]);
             complement_state_manager_with_setup_initial_dkg_request(
                 state_manager,
                 registry.get_latest_version(),
@@ -2435,7 +2435,7 @@ mod tests {
                 curve: VetKdCurve::Bls12_381_G2,
                 name: String::from("some_vetkey"),
             };
-            let target_id = NiDkgTargetId::new([0u8; 32]);
+            let target_id = NiDkgTargetId::new([0_u8; 32]);
 
             let Dependencies {
                 mut pool,

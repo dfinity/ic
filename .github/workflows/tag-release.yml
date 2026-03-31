@@ -25,7 +25,6 @@ jobs:
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/ic-admin.gz" -o ic-admin-x86_64-linux.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/ic-admin.gz" -o ic-admin-x86_64-darwin.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/pocket-ic.gz" -o pocket-ic-x86_64-linux.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/pocket-ic.gz" -o pocket-ic-x86_64-darwin.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-linux/pocket-ic.gz" -o pocket-ic-arm64-linux.gz
@@ -81,7 +80,6 @@ jobs:
             setup-os-img.tar.gz
             update-os-img.tar.gz
             ic-admin-x86_64-linux.gz
-            ic-admin-x86_64-darwin.gz
             pocket-ic-x86_64-linux.gz
             pocket-ic-x86_64-darwin.gz
             pocket-ic-arm64-linux.gz

@@ -49,6 +49,7 @@ ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
 ic-nervous-system-lock = { path = "../../nervous_system/lock" }
 ic-nervous-system-long-message = { path = "../../nervous_system/long_message" }
+ic-nervous-system-query-instruction-logger = { path = "../../nervous_system/query_instruction_logger" }
 ic-nervous-system-timer-task = { path = "../../nervous_system/timer_task" }
 ic-nervous-system-rate-limits = { path = "../../nervous_system/rate_limits" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
@@ -61,6 +62,7 @@ ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-governance-api = { path = "./api" }
+ic-nns-governance-conversions = { path = "./conversions" }
 ic-nns-governance-derive-self-describing = { path = "./derive_self_describing" }
 ic-nns-governance-init = { path = "./init" }
 ic-nns-handler-lifeline-interface = { path = "../handlers/lifeline/interface" }

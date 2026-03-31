@@ -15,7 +15,7 @@ use x509_cert::{
     time::Validity,
 };
 
-const DEFAULT_SERIAL: [u8; 19] = [42u8; 19];
+const DEFAULT_SERIAL: [u8; 19] = [42_u8; 19];
 const DEFAULT_CN: &str = "Spock";
 const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "99991231235959Z";
 const SECS_PER_DAY: u64 = 60 * 60 * 24;

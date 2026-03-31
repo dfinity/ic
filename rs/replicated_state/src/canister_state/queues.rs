@@ -28,7 +28,8 @@ use ic_types::messages::{
     CallbackId, Ingress, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext, Request,
     RequestOrResponse, Response,
 };
-use ic_types::{CanisterId, CountBytes, Cycles, NumBytes, Time};
+use ic_types::{CanisterId, CountBytes, NumBytes, Time};
+use ic_types_cycles::Cycles;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use message_pool::ToContext;

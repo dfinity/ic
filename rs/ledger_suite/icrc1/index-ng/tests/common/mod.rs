@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg, Log, Status};
@@ -34,7 +36,6 @@ const NAT_META_VALUE: u128 = u128::MAX;
 const INT_META_KEY: &str = "test:int";
 const INT_META_VALUE: i128 = i128::MIN;
 
-#[allow(dead_code)]
 pub fn account(owner: u64, subaccount: u128) -> Account {
     let mut sub: [u8; 32] = [0; 32];
     sub[..16].copy_from_slice(&subaccount.to_be_bytes());
@@ -57,7 +58,6 @@ pub fn default_archive_options() -> ArchiveOptions {
     }
 }
 
-#[allow(dead_code)]
 pub fn index_ng_wasm() -> Vec<u8> {
     let index_ng_wasm_path = std::env::var("IC_ICRC1_INDEX_NG_WASM_PATH").expect(
         "The Index-ng wasm path must be set using the env variable IC_ICRC1_INDEX_NG_WASM_PATH",
@@ -96,7 +96,7 @@ pub fn install_ledger(
         ledger_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -113,25 +113,23 @@ fn icrc3_test_ledger() -> Vec<u8> {
     })
 }
 
-#[allow(dead_code)]
 pub fn install_icrc3_test_ledger(env: &StateMachine) -> CanisterId {
     env.install_canister_with_cycles(
         icrc3_test_ledger(),
         Encode!(&()).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
     let args = IndexArg::Init(init_arg);
     env.install_canister_with_cycles(
         index_ng_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }

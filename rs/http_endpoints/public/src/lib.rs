@@ -350,6 +350,7 @@ pub fn start_server(
     let canister_read_state_router = |version| {
         CanisterReadStateServiceBuilder::builder(
             log.clone(),
+            metrics.clone(),
             state_reader.clone(),
             registry_client.clone(),
             ingress_verifier.clone(),
@@ -369,6 +370,7 @@ pub fn start_server(
 
     let subnet_read_state_router = |version| {
         SubnetReadStateServiceBuilder::builder(
+            metrics.clone(),
             nns_delegation_reader.clone(),
             state_reader.clone(),
             nns_subnet_id,

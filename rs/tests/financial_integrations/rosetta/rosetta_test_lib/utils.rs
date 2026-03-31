@@ -55,6 +55,28 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+/// Returns `true` if the `ConstructionSubmitResponse` contains any operation
+/// that failed due to the Rosetta server's internal polling timeout.
+fn has_operation_timeout(res: &ConstructionSubmitResponse) -> bool {
+    let Some(metadata) = &res.metadata else {
+        return false;
+    };
+    let Some(Value::Array(operations)) = metadata.get("operations") else {
+        return false;
+    };
+    operations.iter().any(|op| {
+        let status = op.get("status").and_then(Value::as_str);
+        status == Some("FAILED")
+            && op
+                .get("metadata")
+                .and_then(|m| m.get("response"))
+                .and_then(|r| r.get("details"))
+                .and_then(|d| d.get("error_message"))
+                .and_then(Value::as_str)
+                .is_some_and(|msg| msg.contains("Operation took longer than"))
+    })
+}
+
 pub fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
     make_user_ed25519(seed)
 }
@@ -289,10 +311,34 @@ where
         .await
         .unwrap()?;
 
-    let submit_res = ros
-        .construction_submit(SignedTransaction::from_str(&signed.signed_transaction).unwrap())
-        .await
-        .unwrap()?;
+    let submit_res = {
+        let mut res = ros
+            .construction_submit(SignedTransaction::from_str(&signed.signed_transaction).unwrap())
+            .await
+            .unwrap()?;
+        // Retry if the Rosetta server returned a timeout error for any operation.
+        // This can happen when the IC takes longer than the server's internal
+        // polling timeout (20s) to process a neuron management request.
+        // Each construction_submit already blocks up to 20s internally, so no
+        // additional sleep is needed between retries.
+        for _ in 0..3 {
+            if !has_operation_timeout(&res) {
+                break;
+            }
+            res = ros
+                .construction_submit(
+                    SignedTransaction::from_str(&signed.signed_transaction).unwrap(),
+                )
+                .await
+                .unwrap()?;
+        }
+        if has_operation_timeout(&res) {
+            panic!(
+                "construction_submit retries exhausted: operation timeout persisted after retries"
+            );
+        }
+        res
+    };
 
     assert_eq!(
         hash_res.transaction_identifier,

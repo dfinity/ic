@@ -6,7 +6,6 @@ on:
       - completed
     branches:
       - master
-      - master-private
       - rc--*
       - ic-mainnet-revisions
       - ic-nervous-system-wasms

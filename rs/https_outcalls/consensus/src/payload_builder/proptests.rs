@@ -1,6 +1,7 @@
 use crate::payload_builder::tests::{
     add_own_share_to_pool, add_received_shares_to_pool, default_validation_context,
-    metadata_to_share, metadata_to_shares, test_config_with_http_feature, test_proposal_context,
+    inject_request_contexts, metadata_to_share, metadata_to_shares, request_context,
+    test_config_with_http_feature, test_proposal_context,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
@@ -16,6 +17,7 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use proptest::{arbitrary::any, prelude::*};
+use std::collections::HashSet;
 use std::{ops::DerefMut, time::Duration};
 
 const SUBNET_SIZE: usize = 13;
@@ -48,53 +50,73 @@ fn run_proptest(
     shares: Vec<CanisterHttpResponseShare>,
 ) {
     let context = default_validation_context();
-    test_config_with_http_feature(true, SUBNET_SIZE, |payload_builder, canister_http_pool| {
-        {
-            let mut pool_access = canister_http_pool.write().unwrap();
+    test_config_with_http_feature(
+        true,
+        SUBNET_SIZE,
+        |mut payload_builder, canister_http_pool| {
+            // Inject FullyReplicated contexts for all callback_ids that appear in
+            // responses and shares so the payload builder can discover them.
+            let all_callback_ids: HashSet<_> = responses
+                .iter()
+                .map(|(r, _)| r.id)
+                .chain(shares.iter().map(|s| s.content.id))
+                .collect();
+            inject_request_contexts(
+                &mut payload_builder,
+                all_callback_ids.into_iter().map(|callback_id| {
+                    (
+                        callback_id,
+                        request_context(ic_types::canister_http::Replication::FullyReplicated),
+                    )
+                }),
+            );
 
-            for (response, share) in responses {
-                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+
+                for (response, share) in responses {
+                    add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+                }
+
+                add_received_shares_to_pool(pool_access.deref_mut(), shares);
             }
 
-            add_received_shares_to_pool(pool_access.deref_mut(), shares);
-        }
+            let mut past_payloads: Vec<Vec<u8>> = vec![];
 
-        let mut past_payloads: Vec<Vec<u8>> = vec![];
+            for height in 1..=number_of_rounds {
+                let pp = past_payloads
+                    .iter()
+                    .enumerate()
+                    .map(|(height, payload)| PastPayload {
+                        height: Height::new(height as u64 + 1),
+                        time: UNIX_EPOCH,
+                        block_hash: CryptoHashOf::new(CryptoHash([0; 32].to_vec())),
+                        payload,
+                    })
+                    .collect::<Vec<_>>();
 
-        for height in 1..=number_of_rounds {
-            let pp = past_payloads
-                .iter()
-                .enumerate()
-                .map(|(height, payload)| PastPayload {
-                    height: Height::new(height as u64 + 1),
-                    time: UNIX_EPOCH,
-                    block_hash: CryptoHashOf::new(CryptoHash([0; 32].to_vec())),
-                    payload,
-                })
-                .collect::<Vec<_>>();
+                // Build a payload
+                let payload = payload_builder.build_payload(
+                    Height::new(height),
+                    NumBytes::new(MAX_PAYLOAD_SIZE_BYTES as u64),
+                    &pp,
+                    &context,
+                );
 
-            // Build a payload
-            let payload = payload_builder.build_payload(
-                Height::new(height),
-                NumBytes::new(MAX_PAYLOAD_SIZE_BYTES as u64),
-                &pp,
-                &context,
-            );
+                assert!(payload.len() <= MAX_PAYLOAD_SIZE_BYTES);
 
-            assert!(payload_builder.metrics.unique_responses.get() != 0);
-            assert!(payload.len() <= MAX_PAYLOAD_SIZE_BYTES);
+                let validation_result = payload_builder.validate_payload(
+                    Height::new(height),
+                    &test_proposal_context(&context),
+                    &payload,
+                    &pp,
+                );
+                assert!(validation_result.is_ok());
 
-            let validation_result = payload_builder.validate_payload(
-                Height::new(height),
-                &test_proposal_context(&context),
-                &payload,
-                &pp,
-            );
-            assert!(validation_result.is_ok());
-
-            past_payloads.push(payload);
-        }
-    });
+                past_payloads.push(payload);
+            }
+        },
+    );
 }
 
 /// Generate artifacts to put into the pool to simulate a normal production environment

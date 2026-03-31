@@ -28,9 +28,9 @@ use ic_management_canister_types_private::{
 use ic_replicated_state::{
     CanisterState, ExecutionState, metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
-use ic_types::Cycles;
 use ic_types::messages::{CanisterCall, RequestMetadata};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types_cycles::Cycles;
 
 use super::install_code::MemoryHandling;
 
@@ -863,7 +863,11 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        (self.original.message, self.original.call_id, Cycles::zero())
+        (
+            self.original.message,
+            self.original.call_id,
+            self.original.prepaid_execution_cycles,
+        )
     }
 }
 

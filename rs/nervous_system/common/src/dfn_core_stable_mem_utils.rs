@@ -326,7 +326,7 @@ mod test {
     fn test_size_aware_reader_advance_as_buf() {
         // We should be able to call `Buf::advance(cnt)` as long as `cnt < self.remaining()`. More
         // specifically, we try to advance past one buffer size (100).
-        let mut reader = BufferedStableMemReader::new_test(100, (0u8..=255).collect());
+        let mut reader = BufferedStableMemReader::new_test(100, (0_u8..=255).collect());
 
         // Advancing 36 times will get to byte 252.
         for i in 1..=36 {
@@ -340,7 +340,7 @@ mod test {
     #[test]
     #[should_panic]
     fn test_size_aware_reader_should_panic_when_advancing_past_end() {
-        let mut reader = BufferedStableMemReader::new_test(100, [1u8; 1000].to_vec());
+        let mut reader = BufferedStableMemReader::new_test(100, [1_u8; 1000].to_vec());
         reader.advance(1001);
     }
 

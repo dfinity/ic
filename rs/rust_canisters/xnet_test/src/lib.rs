@@ -81,7 +81,7 @@ impl Default for LatencyDistribution {
         // [10ms, 20ms, 50ms, 100ms, 200ms, 500ms, 1s, 2s, 5s, ..., 5000s, i64::MAX]
         Self {
             buckets: (1..6)
-                .flat_map(|p| MUL.iter().map(move |n| n * 10i64.pow(p)))
+                .flat_map(|p| MUL.iter().map(move |n| n * 10_i64.pow(p)))
                 .chain(std::iter::once(i64::MAX))
                 .map(|n| (n, 0))
                 .collect(),

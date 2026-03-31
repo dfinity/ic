@@ -1,8 +1,10 @@
 use super::*;
 
 use crate::{
-    pb::v1::{Motion, Proposal, ProposalData, proposal::Action},
-    proposals::self_describing::LocallyDescribableProposalAction,
+    pb::v1::{
+        Motion, Proposal, ProposalData, SelfDescribingProposalAction, SelfDescribingValue,
+        proposal::Action,
+    },
     test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };
 
@@ -23,6 +25,17 @@ fn new_governance_for_test() -> Governance {
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     )
+}
+
+fn motion_to_self_describing_action(motion: &Motion) -> SelfDescribingProposalAction {
+    SelfDescribingProposalAction {
+        type_name: "Motion".to_string(),
+        type_description: "Propose a text that can be adopted or rejected. \
+            No code is executed when a motion is adopted. An adopted motion should guide the future \
+            strategy of the Internet Computer ecosystem."
+            .to_string(),
+        value: Some(SelfDescribingValue::from(motion.clone())),
+    }
 }
 
 fn add_proposal_without_self_describing(proposal_id: u64, action: Action) {
@@ -48,7 +61,7 @@ fn add_proposal_with_self_describing(proposal_id: u64) {
     let motion = Motion {
         motion_text: "Already backfilled".to_string(),
     };
-    let self_describing_action = motion.to_self_describing_action();
+    let self_describing_action = motion_to_self_describing_action(&motion);
     TEST_GOVERNANCE.with_borrow_mut(|governance| {
         governance.heap_data.proposals.insert(
             proposal_id,
@@ -102,7 +115,7 @@ async fn test_finds_first_proposal_needing_backfill_from_beginning() {
     let motion = Motion {
         motion_text: "Test motion".to_string(),
     };
-    let self_describing_action = motion.to_self_describing_action();
+    let self_describing_action = motion_to_self_describing_action(&motion);
     add_proposal_with_self_describing(1);
     add_proposal_without_self_describing(2, Action::Motion(motion));
     add_proposal_with_self_describing(3);
@@ -134,7 +147,7 @@ async fn test_finds_proposal_after_specified_id() {
         motion_text: "Motion 2".to_string(),
     };
     add_proposal_without_self_describing(2, Action::Motion(motion2.clone()));
-    let motion2_self_describing_action = motion2.to_self_describing_action();
+    let motion2_self_describing_action = motion_to_self_describing_action(&motion2);
     add_proposal_without_self_describing(
         3,
         Action::Motion(Motion {

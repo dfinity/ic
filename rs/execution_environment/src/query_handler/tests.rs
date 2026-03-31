@@ -8,10 +8,11 @@ use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
-    Cycles, NumInstructions,
+    NumInstructions,
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
+use ic_types_cycles::Cycles;
 use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
 
@@ -199,6 +200,21 @@ fn composite_query_call_with_side_effects() {
             .build(),
     );
     assert_eq!(output, Ok(WasmResult::Reply(10_i32.to_le_bytes().to_vec())));
+}
+
+#[test]
+fn composite_query_call_to_the_same_canister() {
+    // In this test we have a single canister that makes a composite self-call.
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let output = test.non_replicated_query(
+        canister_id,
+        "composite_query",
+        wasm().inter_query(canister_id, call_args()).build(),
+    );
+    assert!(matches!(output, Ok(WasmResult::Reply(_))));
 }
 
 #[test]
@@ -464,6 +480,7 @@ fn query_compiled_once() {
                 user_id: user_test_id(2),
                 ingress_expiry: 0,
                 nonce: None,
+                sender_info: None,
             },
             receiver: canister_id,
             method_name: "query".to_string(),
@@ -499,7 +516,7 @@ fn queries_to_frozen_canisters_are_rejected() {
     //          41_070 cycles are needed to cover freeze_threshold_cycles
     //                 of the canister history memory usage (134 bytes)
     let low_cycles = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        Cycles::new(300_008_835_260)
+        Cycles::new(300_012_517_130)
     } else {
         Cycles::new(300_005_633_530)
     };
@@ -557,6 +574,7 @@ fn composite_query_works_in_non_replicated_mode() {
                     user_id: user_test_id(0),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister,
                 method_name: "query".to_string(),
@@ -586,6 +604,7 @@ fn composite_query_fails_if_disabled() {
                     user_id: user_test_id(0),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister,
                 method_name: "query".to_string(),
@@ -654,6 +673,7 @@ fn composite_query_single_user_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -702,6 +722,7 @@ fn composite_query_single_canister_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -749,6 +770,7 @@ fn composite_query_no_user_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -807,6 +829,7 @@ fn composite_query_no_canister_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -849,6 +872,7 @@ fn composite_query_chained_calls() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister_a,
                 method_name: "composite_query".to_string(),
@@ -1256,6 +1280,7 @@ fn query_call_exceeds_instructions_limit() {
                     user_id: user_test_id(1),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister,
                 method_name: "query".to_string(),

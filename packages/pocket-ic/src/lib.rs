@@ -67,11 +67,11 @@ use candid::{
     utils::{ArgumentDecoder, ArgumentEncoder},
 };
 use flate2::read::GzDecoder;
-use ic_management_canister_types::{
+pub use ic_management_canister_types::{
     CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
     Snapshot,
 };
-use ic_transport_types::SubnetMetrics;
+pub use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
 use semver::{Version, VersionReq};
@@ -79,6 +79,8 @@ use serde::{Deserialize, Serialize};
 use slog::Level;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+#[cfg(windows)]
+use std::sync::Once;
 use std::{
     fs::OpenOptions,
     net::{IpAddr, SocketAddr},
@@ -102,11 +104,11 @@ pub mod nonblocking;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
-const MIN_SERVER_VERSION: &str = "12.0.0";
-const MAX_SERVER_VERSION: &str = "13";
+const MIN_SERVER_VERSION: &str = "13.0.0";
+const MAX_SERVER_VERSION: &str = "14";
 
 /// Public to facilitate downloading the PocketIC server.
-pub const LATEST_SERVER_VERSION: &str = "12.0.0";
+pub const LATEST_SERVER_VERSION: &str = "13.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -173,6 +175,7 @@ pub struct PocketIcBuilder {
     icp_features: IcpFeatures,
     initial_time: Option<InitialTime>,
     mainnet_nns_subnet_id: Option<bool>,
+    disable_ingress_validation: Option<bool>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -193,6 +196,7 @@ impl PocketIcBuilder {
             icp_features: IcpFeatures::default(),
             initial_time: None,
             mainnet_nns_subnet_id: None,
+            disable_ingress_validation: None,
         }
     }
 
@@ -218,6 +222,7 @@ impl PocketIcBuilder {
             self.initial_time,
             self.http_gateway_config,
             self.mainnet_nns_subnet_id,
+            self.disable_ingress_validation,
         )
     }
 
@@ -237,6 +242,7 @@ impl PocketIcBuilder {
             self.initial_time,
             self.http_gateway_config,
             self.mainnet_nns_subnet_id,
+            self.disable_ingress_validation,
         )
         .await
     }
@@ -359,6 +365,7 @@ impl PocketIcBuilder {
             SubnetKind::Fiduciary => config.fiduciary = Some(subnet_spec),
             SubnetKind::Bitcoin => config.bitcoin = Some(subnet_spec),
             SubnetKind::Application => config.application.push(subnet_spec),
+            SubnetKind::CloudEngine => config.cloud_engine.push(subnet_spec),
             SubnetKind::System => config.system.push(subnet_spec),
             SubnetKind::VerifiedApplication => config.verified_application.push(subnet_spec),
         };
@@ -492,6 +499,11 @@ impl PocketIcBuilder {
         self.mainnet_nns_subnet_id = Some(true);
         self
     }
+
+    pub fn disable_ingress_validation(mut self) -> Self {
+        self.disable_ingress_validation = Some(true);
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -612,6 +624,7 @@ impl PocketIc {
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
         mainnet_nns_subnet_id: Option<bool>,
+        disable_ingress_validation: Option<bool>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -639,6 +652,7 @@ impl PocketIc {
                 initial_time,
                 http_gateway_config,
                 mainnet_nns_subnet_id,
+                disable_ingress_validation,
             )
             .await
         });
@@ -1965,7 +1979,31 @@ fn wsl_path(path: &PathBuf, desc: &str) -> String {
 }
 
 #[cfg(windows)]
+static WSL_WARM_UP: Once = Once::new();
+
+#[cfg(windows)]
+fn warm_up_wsl() {
+    WSL_WARM_UP.call_once(|| {
+        let output = Command::new("wsl")
+            .arg("bash")
+            .arg("-c")
+            .arg("true")
+            .output()
+            .expect("Failed to warm up WSL");
+        if !output.status.success() {
+            panic!(
+                "Failed to warm up WSL.\nStatus: {}\nStdout: {}\nStderr: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
+    });
+}
+
+#[cfg(windows)]
 fn pocket_ic_server_cmd(bin_path: &PathBuf) -> Command {
+    warm_up_wsl();
     let mut cmd = Command::new("wsl");
     cmd.arg(wsl_path(bin_path, "PocketIC binary"));
     cmd
@@ -2295,25 +2333,25 @@ mod test {
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic 12.0.0")
+            check_pocketic_server_version("pocket-ic 13.0.0")
                 .unwrap_err()
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 12 0 0")
+            check_pocketic_server_version("pocket-ic-server 13 0 0")
                 .unwrap_err()
                 .contains("Failed to parse PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 11.0.0")
+            check_pocketic_server_version("pocket-ic-server 12.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
-        check_pocketic_server_version("pocket-ic-server 12.0.0").unwrap();
-        check_pocketic_server_version("pocket-ic-server 12.0.1").unwrap();
-        check_pocketic_server_version("pocket-ic-server 12.1.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 13.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 13.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 13.1.0").unwrap();
         assert!(
-            check_pocketic_server_version("pocket-ic-server 13.0.0")
+            check_pocketic_server_version("pocket-ic-server 14.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
