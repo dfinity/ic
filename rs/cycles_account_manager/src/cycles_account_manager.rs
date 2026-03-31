@@ -478,7 +478,6 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
         execution_mode: WasmExecutionMode,
     ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
-        // XXX: This is the amount of cycles necessary to execute a message.
         let cost =
             self.execution_cost(num_instructions, subnet_size, cost_schedule, execution_mode);
         self.consume_with_threshold(

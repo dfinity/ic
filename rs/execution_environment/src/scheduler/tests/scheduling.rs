@@ -1287,10 +1287,20 @@ fn frozen_canisters_are_fully_executed() {
 #[test]
 fn frozen_canisters_with_heartbeats_or_timers_are_charged_as_idle() {
     let scheduler_cores = 2;
-    let canisters_per_core = 6;
+    let canisters_per_core = 2;
+    let slice = 100;
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores,
+            max_instructions_per_round: slice.into(),
+            max_instructions_per_message: slice.into(),
+            max_instructions_per_slice: slice.into(),
+            max_instructions_per_install_code_slice: slice.into(),
+            // Set the message execution overhead high enough to ensure that if even one
+            // heartbeat/timer were to be executed, it would exceed the round limit.
+            instruction_overhead_per_execution: slice.into(),
+            instruction_overhead_per_canister: 0.into(),
+            instruction_overhead_per_canister_for_finalization: 0.into(),
             ..SchedulerConfig::application_subnet()
         })
         .build();
