@@ -11,7 +11,7 @@ use crate::invariants::common::{
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::{
-    node::v1::NodeRewardType,
+    node::v1::{NodeRecord, NodeRewardType},
     subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType},
 };
 use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_subnet_record_key};
@@ -124,41 +124,29 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) {
-            // Cloud engines invariants
-            if subnet_record.canister_cycles_cost_schedule
+        if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine)
+            && subnet_record.canister_cycles_cost_schedule
                 != i32::from(CanisterCyclesCostSchedule::Free)
-            {
-                return Err(InvariantCheckError {
-                    msg: format!(
-                        "Subnet {subnet_id:} is a cloud engine subnet but its cycles cost schedule is not free"
-                    ),
-                    source: None,
-                });
-            }
-
-            if node_records
-                .iter()
-                .any(|node| node.node_reward_type != Some(i32::from(NodeRewardType::Type4)))
-            {
-                return Err(InvariantCheckError {
-                    msg: format!(
-                        "Subnet {subnet_id:} is a cloud engine subnet but some nodes do not have reward type 4"
-                    ),
-                    source: None,
-                });
-            }
-        } else if node_records
-            .iter()
-            .any(|node| node.node_reward_type == Some(i32::from(NodeRewardType::Type4)))
         {
             return Err(InvariantCheckError {
                 msg: format!(
-                    "Subnet {subnet_id:} is not a cloud engine subnet but some nodes have reward type 4"
+                    "Subnet {subnet_id:} is a cloud engine subnet but its cycles cost schedule \
+                    is not free"
                 ),
                 source: None,
             });
         }
+
+        check_all_nodes_are_reward_type4_if_is_cloud_engine(
+            subnet_id,
+            &subnet_record,
+            &node_records,
+        )?;
+        check_no_nodes_are_reward_type4_if_is_not_cloud_engine(
+            subnet_id,
+            &subnet_record,
+            &node_records,
+        )?;
 
         // SEV-enabled subnets invariants
         if let Some(features) = subnet_record.features.as_ref()
@@ -272,6 +260,54 @@ fn check_sev_subnet_invariants(
             msg: format!(
                 "Subnet {subnet_id} is SEV-enabled, but the following nodes are missing a chip ID: {:?}",
                 nodes_missing_chip_id
+            ),
+            source: None,
+        });
+    }
+
+    Ok(())
+}
+
+fn check_all_nodes_are_reward_type4_if_is_cloud_engine(
+    subnet_id: SubnetId,
+    subnet_record: &SubnetRecord,
+    node_records: &[NodeRecord],
+) -> Result<(), InvariantCheckError> {
+    if subnet_record.subnet_type != i32::from(SubnetType::CloudEngine) {
+        return Ok(());
+    }
+
+    if node_records
+        .iter()
+        .any(|node| node.node_reward_type != Some(i32::from(NodeRewardType::Type4)))
+    {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id:} is a cloud engine subnet but some nodes do not have reward type 4"
+            ),
+            source: None,
+        });
+    }
+
+    Ok(())
+}
+
+fn check_no_nodes_are_reward_type4_if_is_not_cloud_engine(
+    subnet_id: SubnetId,
+    subnet_record: &SubnetRecord,
+    node_records: &[NodeRecord],
+) -> Result<(), InvariantCheckError> {
+    if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) {
+        return Ok(());
+    }
+
+    if node_records
+        .iter()
+        .any(|node| node.node_reward_type == Some(i32::from(NodeRewardType::Type4)))
+    {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id:} is not a cloud engine subnet but some nodes have reward type 4"
             ),
             source: None,
         });
