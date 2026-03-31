@@ -1205,32 +1205,25 @@ impl IcNodeSnapshot {
     }
 }
 
-enum WasmSource {
-    Path(String),
-    Raw(Vec<u8>),
-}
 pub struct CanisterInstaller<'a> {
     node: &'a IcNodeSnapshot,
-    wasm: WasmSource,
+    wasm: Vec<u8>,
     arg: Option<Vec<u8>>,
     cycles_amount: Option<u128>,
     effective_canister_id: PrincipalId,
 }
 
 impl<'a> CanisterInstaller<'a> {
-    pub fn new(node: &'a IcNodeSnapshot, wasm_name: impl ToString) -> Self {
-        Self {
-            wasm: WasmSource::Path(wasm_name.to_string()),
-            arg: None,
-            cycles_amount: None,
-            effective_canister_id: node.effective_canister_id(),
-            node,
-        }
+    pub fn new<P>(node: &'a IcNodeSnapshot, wasm_name: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self::new_with_raw_wasm(node, load_wasm(wasm_name))
     }
 
-    pub fn new_with_raw_wasm(node: &'a IcNodeSnapshot, raw_wasm: Vec<u8>) -> Self {
+    pub fn new_with_raw_wasm(node: &'a IcNodeSnapshot, wasm: Vec<u8>) -> Self {
         Self {
-            wasm: WasmSource::Raw(raw_wasm),
+            wasm,
             arg: None,
             cycles_amount: None,
             effective_canister_id: node.effective_canister_id(),
@@ -1261,10 +1254,6 @@ impl<'a> CanisterInstaller<'a> {
     }
 
     pub async fn install(self) -> Result<Principal> {
-        let canister_bytes = match self.wasm {
-            WasmSource::Path(path) => load_wasm(path),
-            WasmSource::Raw(bytes) => bytes,
-        };
         let agent = self.node.build_default_agent_async().await;
         // Create a canister.
         let mgr = ManagementCanister::create(&agent);
@@ -1277,7 +1266,7 @@ impl<'a> CanisterInstaller<'a> {
             .map_err(|err| anyhow!("Couldn't create canister with provisional API: {err}"))?
             .0;
 
-        let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+        let mut install_code = mgr.install_code(&canister_id, &self.wasm);
         if let Some(arg) = self.arg {
             install_code = install_code.with_raw_arg(arg)
         }
