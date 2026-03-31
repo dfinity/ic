@@ -46,6 +46,7 @@ use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
+pub use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
@@ -56,7 +57,6 @@ use registry_canister::mutations::{
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
 };
-pub use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use slog::{Logger, info};
 use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
