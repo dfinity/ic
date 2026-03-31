@@ -441,7 +441,7 @@ async fn connect(
         NodeRewardType::Unspecified
     });
 
-    let (peer_id, addr, domain, tls_client_config) = match node_reward_type {
+    let (peer_id, addr, server_name, tls_client_config) = match node_reward_type {
         NodeRewardType::Unspecified
         | NodeRewardType::Type0
         | NodeRewardType::Type1
@@ -467,12 +467,9 @@ async fn connect(
                 .client_config(peer_id, registry_version)
                 .map_err(|err| format!("Retrieving TLS client config failed: {err:?}."))?;
 
-            let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled"
-                .try_into()
-                // TODO: ideally the expect should run at compile time
-                .expect("failed to create domain");
+            let server_name = ServerName::from(ip_addr);
 
-            (peer_id, addr, irrelevant_domain, tls_client_config)
+            (peer_id, addr, server_name, tls_client_config)
         }
         NodeRewardType::Type4 => {
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
@@ -491,16 +488,22 @@ async fn connect(
                 .with_root_certificates(root_store)
                 .with_no_client_auth();
 
-            let domain = domain
-                .clone()
-                .try_into()
+            let server_name = ServerName::try_from(domain.clone())
                 .map_err(|err| format!("Invalid API BN domain {domain}: {err}"))?;
 
-            (api_bn_id, addr, domain, tls_client_config)
+            (api_bn_id, addr, server_name, tls_client_config)
         }
     };
 
-    connect_to(log, rt_handle, peer_id, addr, domain, tls_client_config).await
+    connect_to(
+        log,
+        rt_handle,
+        peer_id,
+        addr,
+        server_name,
+        tls_client_config,
+    )
+    .await
 }
 
 async fn connect_to(
@@ -508,7 +511,7 @@ async fn connect_to(
     rt_handle: &tokio::runtime::Handle,
     peer_id: NodeId,
     addr: SocketAddr,
-    domain: ServerName<'static>,
+    server_name: ServerName<'static>,
     tls_client_config: ClientConfig,
 ) -> Result<SendRequest<Body>, BoxError> {
     info!(log, "Establishing TCP connection to {peer_id} @ {addr}");
@@ -523,7 +526,7 @@ async fn connect_to(
         "Establishing TLS stream to {peer_id}. Tcp stream: {tcp_stream:?}"
     );
     let tls_stream = tls_connector
-        .connect(domain, tcp_stream)
+        .connect(server_name, tcp_stream)
         .await
         .map_err(|err| format!("Could not establish TLS stream to node {addr}. {err:?}."))?;
 
