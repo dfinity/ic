@@ -184,8 +184,9 @@ async fn nns_delegation_updates_async(env: TestEnv, subnet_type: SubnetType) {
         get_nns_delegation_timestamp(&agent, node.effective_canister_id()).await;
 
     let Some(initial_delegation_timestamp) = maybe_initial_delegation_timestamp else {
-        assert!(
-            subnet_type == SubnetType::System,
+        assert_eq!(
+            subnet_type,
+            SubnetType::System,
             "Non-NNS subnet should return an NNS delegation with the response"
         );
 
@@ -193,8 +194,9 @@ async fn nns_delegation_updates_async(env: TestEnv, subnet_type: SubnetType) {
         return;
     };
 
-    assert!(
-        subnet_type != SubnetType::System,
+    assert_ne!(
+        subnet_type,
+        SubnetType::System,
         "NNS subnet should not return an NNS delegation with the response"
     );
 
@@ -589,16 +591,18 @@ fn validate_delegation(
     expected_delegation_format: CertificateDelegationFormat,
 ) {
     let Some(delegation) = maybe_delegation else {
-        assert!(
-            subnet_type == SubnetType::System,
+        assert_eq!(
+            subnet_type,
+            SubnetType::System,
             "Non-NNS subnet should return an NNS delegation with the response"
         );
 
         // We can return, there is nothing more to be checked.
         return;
     };
-    assert!(
-        subnet_type != SubnetType::System,
+    assert_ne!(
+        subnet_type,
+        SubnetType::System,
         "NNS subnet should not return an NNS delegation with the response"
     );
 
