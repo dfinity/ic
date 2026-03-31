@@ -3286,11 +3286,12 @@ impl StateManager for StateManagerImpl {
             // At prev_height 0, we don't have a hash yet, so we have to compute it.
             if prev_height.get() == 0 {
                 let states = self.states.read();
-                let initial_state = &states
+                let initial_snapshot = &states
                     .snapshots
                     .front()
-                    .expect("Initial state should always be present in states.snapshots.")
-                    .state;
+                    .expect("Initial state should always be present in states.snapshots.");
+                debug_assert_eq!(initial_snapshot.height.get(), 0);
+                let initial_state = &initial_snapshot.state;
                 let certification = StateManagerImpl::compute_certification_metadata(
                     initial_state,
                     prev_height,
@@ -3408,7 +3409,6 @@ impl StateManager for StateManagerImpl {
         // - not catching up, so there is no delivered_certification, or there is one but
         // - we are at a height which is a multiple of MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING,
         //   so we hash anyway and compare the result to the delivered hash in order to detect divergence.
-
         let hash_req = HashRequest::HashState {
             state: Arc::clone(&state),
             states: Arc::clone(&self.states),
