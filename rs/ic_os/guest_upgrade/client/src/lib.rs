@@ -299,13 +299,8 @@ fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) ->
     Ok(public_key_der)
 }
 
-fn dump_network_diagnostics(peer_addr: &str) {
-    for cmd in [
-        "ip -6 addr show",
-        "ip -6 route show",
-        "ip -6 neigh show",
-        &format!("ping -6 -c 1 -W 2 {peer_addr}"),
-    ] {
+fn dump_network_diagnostics(_peer_addr: &str) {
+    for cmd in ["ip -6 addr show", "ip -6 route show", "ip -6 neigh show"] {
         println!("=== {cmd} ===");
         match Command::new("sh").args(["-c", cmd]).output() {
             Ok(output) => {
