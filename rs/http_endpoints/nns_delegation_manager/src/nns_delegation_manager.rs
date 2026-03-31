@@ -475,7 +475,7 @@ async fn connect(
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
                 .map_err(|err| format!("Could not find an API BN to talk to. Error: {err}"))?;
 
-            let addr = lookup_host((domain.as_str(), 443_u16))
+            let addr = lookup_host((domain.as_str(), 443))
                 .await?
                 .next()
                 .ok_or_else(|| {
