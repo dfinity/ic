@@ -3318,8 +3318,7 @@ impl StateManager for StateManagerImpl {
         // Write the previous state hash to the state.
         state
             .metadata
-            .prev_state_hash
-            .replace(CryptoHashOfPartialState::from(prev_state_hash));
+            .prev_state_hash = Some(CryptoHashOfPartialState::from(prev_state_hash));
 
         if let CertificationScope::Metadata = scope {
             // We want to balance writing too many overlay files with having too many unflushed pages at
@@ -3359,7 +3358,7 @@ impl StateManager for StateManagerImpl {
         // so that we always have a reasonably "recent" state snapshot and
         // its certification metadata available.
         let states = self.states.read();
-        let hash_at_height_available = states.certifications.contains_key(&height);
+        let maybe_delivered_certification = states.certifications.get(&height).cloned();
         drop(states);
         let fast_forward_height = self.fast_forward_height.load(Ordering::Relaxed);
         if matches!(scope, CertificationScope::Metadata)
@@ -3367,7 +3366,7 @@ impl StateManager for StateManagerImpl {
             && !height
                 .get()
                 .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING)
-            && hash_at_height_available
+            && maybe_delivered_certification.is_some()
         {
             let mut states = self.states.write();
             #[cfg(debug_assertions)]
@@ -3407,19 +3406,22 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        // Kick off hashing of the new state if necessary, i.e., if not available from consensus via states.certifications.
-        if !hash_at_height_available {
-            let hash_req = HashRequest::HashState {
-                state: Arc::clone(&state),
-                states: Arc::clone(&self.states),
-                latest_state_height: Arc::clone(&self.latest_state_height),
-                height,
-                latest_height_update_time: Arc::clone(&self.latest_height_update_time),
-                scope: scope.clone(),
-                state_layout: Box::new(self.state_layout.clone()),
-            };
-            self.hash_channel.send(hash_req).unwrap();
-        }
+        // Kick off hashing of the new state. At this point, we are either
+        // - not catching up, so there is no delivered_certification, or there is one but
+        // - we are at a height which is a multiple of MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING,
+        //   so we hash anyway and compare the result to the delivered hash in order to detect divergence.
+
+        let hash_req = HashRequest::HashState {
+            state: Arc::clone(&state),
+            states: Arc::clone(&self.states),
+            latest_state_height: Arc::clone(&self.latest_state_height),
+            height,
+            latest_height_update_time: Arc::clone(&self.latest_height_update_time),
+            reference_certification: Box::new(maybe_delivered_certification),
+            scope: scope.clone(),
+            state_layout: Box::new(self.state_layout.clone()),
+        };
+        self.hash_channel.send(hash_req).unwrap();
 
         // This step is expensive, so we do it before the write lock for `states`.
         let next_tip = {
@@ -3534,11 +3536,16 @@ enum HashRequest {
         latest_state_height: Arc<AtomicU64>,
         height: Height,
         latest_height_update_time: Arc<Mutex<Instant>>,
+        /// A certification from consensus. If `Some`, we compare it with the state hash
+        /// we calculate and panic on divergence. It should be `Some` whenever we are catching up and could
+        /// skip hashing, but do so anyway because we are at a height which is a multiple of
+        /// `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING`.
+        reference_certification: Box<Option<Certification>>,
         scope: CertificationScope,
-        // Boxed so that variants have similar size and we don't waste space when sending `HashRequest::Wait`.
+        /// Boxed so that variants have similar size and we don't waste space when sending `HashRequest::Wait`.
         state_layout: Box<StateLayout>,
     },
-    /// Wait for the message to be executed and notify back via sender.
+    /// Wait for the message to be executed and notify back via `sender`.
     Wait { sender: Sender<()> },
 }
 
@@ -3560,16 +3567,11 @@ fn spawn_hash_thread(
                             latest_state_height,
                             height,
                             latest_height_update_time,
+                            reference_certification,
                             scope,
                             state_layout,
                         } => {
-                            // If the hash@height is already present via the consensus thread, we can skip calculating it.
-                            let states_read = states.read();
-                            if states_read.certifications.contains_key(&height) {
-                                continue;
-                            }
-                            drop(states_read);
-                            let certification_metadata =
+                            let mut certification_metadata =
                                 StateManagerImpl::compute_certification_metadata(
                                     &state, height, &metrics, &log,
                                 )
@@ -3584,11 +3586,30 @@ fn spawn_hash_thread(
                                     certification_metadata.certified_state_hash
                                 );
                             }
+                            // If a reference hash from consensus is available, check if we agree.
+                            
+                            let hash = &certification_metadata.certified_state_hash;
+                            if let Some(ref cert) = *reference_certification {
+                                let delivered_hash = cert.signed.content.hash.as_ref();
+                                if delivered_hash != hash {
+                                    if let Err(err) = state_layout.create_diverged_state_marker(height) {
+                                        error!(
+                                            log,
+                                            "Failed to mark state @{} diverged: {}", height, err
+                                        );
+                                    }
+                                    panic!(
+                                        "Committed state @{height} with hash {hash:?} which is different from delivered hash {delivered_hash:?}"
+                                    );
+                                }
+                                // If we do agree, write the certification to the metadata, so that consensus does
+                                // not have to deliver it again. 
+                                certification_metadata.certification = *reference_certification;
+                            }
 
                             // It's possible that we already computed this state before. We
                             // validate that hashes agree to spot bugs causing non-determinism as
                             // early as possible. 
-                            let hash = &certification_metadata.certified_state_hash;
                             let mut states = states.write();
                             if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
                                 let prev_hash = &prev_metadata.certified_state_hash;
@@ -3600,7 +3621,7 @@ fn spawn_hash_thread(
                                         );
                                     }
                                     panic!(
-                                        "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
+                                        "Committed state @{height} with hash {hash:?} which is different from previously computed hash {prev_hash:?}"
                                     );
                                 }
                             }
