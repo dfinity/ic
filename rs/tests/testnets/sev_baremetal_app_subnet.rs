@@ -35,6 +35,7 @@ use nested::{
     create_bare_metal_session, create_bare_metal_tee_node, registration,
     util::setup_ic_infrastructure,
 };
+use nns_dapp::set_authorized_subnets;
 use slog::info;
 
 fn main() -> Result<()> {
@@ -126,6 +127,10 @@ fn setup(env: TestEnv) {
         0,
         "no unassigned nodes after subnet creation"
     );
+
+    // Same as `io_perf_benchmark`: authorize application subnets for cycles / toolchains
+    // (e.g. subnet-load-tester) that assume an authorized app subnet list on the NNS.
+    set_authorized_subnets(&env);
 
     info!(
         logger,

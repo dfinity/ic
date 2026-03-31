@@ -291,6 +291,7 @@ system_test_nns(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
+        "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
