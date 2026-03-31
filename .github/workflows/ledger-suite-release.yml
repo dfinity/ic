@@ -51,7 +51,7 @@ jobs:
 
       - name: Parse tag and set release variables
         id: parse_tag
-        uses: actions/github-script@v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             // Get the tag name and commit from the GitHub event context
@@ -88,7 +88,7 @@ jobs:
 
       - name: Set variables
         id: variables
-        uses: actions/github-script@v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             // Set paths, upgrade requirements, and human-readable title for different release types
@@ -154,7 +154,7 @@ jobs:
 
       - name: Download artifacts and SHA256SUMS
         id: download
-        uses: actions/github-script@v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const fs = require('fs');
@@ -311,7 +311,7 @@ jobs:
 
       - name: Get previous release tag
         id: prev_tag
-        uses: actions/github-script@v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const currentTag = '${{ steps.parse_tag.outputs.tag_name }}';
@@ -456,7 +456,7 @@ jobs:
 
       - name: Create release body
         id: release_body
-        uses: actions/github-script@v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const fs = require('fs');
@@ -568,7 +568,7 @@ jobs:
             console.log('Release body length: ' + releaseBody.length + ' characters');
 
       - name: Verify release files
-        uses: actions/github-script@v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const fs = require('fs');
