@@ -11246,6 +11246,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-cycles",
+ "ic-universal-canister",
  "ic-utils-thread",
  "lazy_static",
  "maplit",
