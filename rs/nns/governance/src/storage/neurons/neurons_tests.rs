@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::{
-    governance::MAX_DISSOLVE_DELAY_SECONDS,
+    governance::MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{MaturityDisbursement, Vote},
 };
@@ -870,7 +870,7 @@ fn test_set_eight_year_gang_bonus_base_e8s_for_all_neurons() {
         Subaccount::from(&controller),
         controller,
         DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS,
+            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
             aging_since_timestamp_seconds: 123_456_789,
         },
         123_456_789,
@@ -886,7 +886,7 @@ fn test_set_eight_year_gang_bonus_base_e8s_for_all_neurons() {
         Subaccount::from(&PrincipalId::new_user_test_id(2)),
         PrincipalId::new_user_test_id(2),
         DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS - 1,
+            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70 - 1,
             aging_since_timestamp_seconds: 123_456_789,
         },
         123_456_789,

@@ -1,6 +1,6 @@
 use crate::{
     governance::{
-        Governance, INITIAL_NEURON_DISSOLVE_DELAY, LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS,
+        Governance, INITIAL_NEURON_DISSOLVE_DELAY, LOG_PREFIX, max_dissolve_delay_seconds,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
@@ -73,12 +73,13 @@ impl Governance {
                 ),
             ));
         }
-        if dissolve_delay_seconds > MAX_DISSOLVE_DELAY_SECONDS {
+        if dissolve_delay_seconds > max_dissolve_delay_seconds() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!(
                     "Dissolve delay {dissolve_delay_seconds} is greater than the maximum \
-            dissolve delay {MAX_DISSOLVE_DELAY_SECONDS}"
+            dissolve delay {}",
+                    max_dissolve_delay_seconds()
                 ),
             ));
         }
