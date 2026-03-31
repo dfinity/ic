@@ -401,9 +401,11 @@ impl RosettaTestingEnvironmentBuilder {
         )
         .await;
 
-        let rosetta_client =
-            RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
-                .expect("Unable to parse url");
+        let rosetta_client = RosettaClient::from_str_url_and_timeout(
+            &format!("http://0.0.0.0:{}", rosetta_context.port),
+            Duration::from_secs(120),
+        )
+        .expect("Unable to parse url");
 
         let rosetta_ledger_testing_envs = futures::future::join_all(
             self.rosetta_ledger_testing_env_builders
@@ -1365,7 +1367,7 @@ fn test_metrics() {
         // so that the index of the latest block is non-zero.
         .with_initial_balance(
             sender_keypair.generate_principal_id().unwrap().0,
-            1_000_000_000_000u64,
+            1_000_000_000_000_u64,
         );
     let setup = Setup::builder()
         .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
@@ -1745,7 +1747,7 @@ fn test_continuous_block_sync() {
             from_subaccount: None,
             to: *TEST_ACCOUNT,
             fee: Some(DEFAULT_TRANSFER_FEE.into()),
-            amount: 1u64.into(),
+            amount: 1_u64.into(),
             memo: None,
             created_at_time: None,
         };
@@ -1972,7 +1974,7 @@ fn test_rosetta_client_construction_api_flow() {
         .with_decimals(6)
         .with_initial_balance(
             sender_keypair.generate_principal_id().unwrap().0,
-            1_000_000_000_000u64,
+            1_000_000_000_000_u64,
         );
     let setup = Setup::builder()
         .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
@@ -1996,7 +1998,7 @@ fn test_rosetta_client_construction_api_flow() {
         )
         .await;
 
-        let transfer_amount: Nat = 1_000_000_000u64.into();
+        let transfer_amount: Nat = 1_000_000_000_u64.into();
         let operations = env
             .rosetta_client
             .build_transfer_operations(
@@ -2045,7 +2047,7 @@ fn test_rosetta_client_construction_api_flow() {
             balance_before_transfer - Nat::from(DEFAULT_TRANSFER_FEE) - transfer_amount
         );
 
-        let approve_amount: Nat = 1_000_000_000u64.into();
+        let approve_amount: Nat = 1_000_000_000_u64.into();
         let operations = env
             .rosetta_client
             .build_approve_operations(
@@ -2110,7 +2112,7 @@ fn test_rosetta_client_binary() {
     let rt = Runtime::new().unwrap();
     let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
         .with_symbol("SYM1")
-        .with_initial_balance(sender_account, 1_000_000_000_000u64);
+        .with_initial_balance(sender_account, 1_000_000_000_000_u64);
     let setup = Setup::builder()
         .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
         .build(&rt);
@@ -2132,7 +2134,7 @@ fn test_rosetta_client_binary() {
             0,
         )
         .await;
-        let transfer_amount: Nat = 1_000_000_000u64.into();
+        let transfer_amount: Nat = 1_000_000_000_u64.into();
         let balance_before_transfer = env.rosetta_ledger_testing_envs[0]
             .icrc1_ledger
             .agent
@@ -2163,7 +2165,7 @@ fn test_rosetta_client_binary() {
             balance_before_transfer - Nat::from(DEFAULT_TRANSFER_FEE) - transfer_amount
         );
 
-        let approve_amount: Nat = 1_000_000_000u64.into();
+        let approve_amount: Nat = 1_000_000_000_u64.into();
         let balance_before_approve = env.rosetta_ledger_testing_envs[0]
             .icrc1_ledger
             .agent
@@ -2218,7 +2220,7 @@ fn test_rosetta_transfer_from() {
     let rt = Runtime::new().unwrap();
     let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
         .with_symbol("SYM1")
-        .with_initial_balance(from_account, 1_000_000_000_000u64);
+        .with_initial_balance(from_account, 1_000_000_000_000_u64);
     let setup = Setup::builder()
         .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
         .build(&rt);
@@ -2238,7 +2240,7 @@ fn test_rosetta_transfer_from() {
             0,
         )
         .await;
-        let approve_amount: Nat = 1_000_000_000u64.into();
+        let approve_amount: Nat = 1_000_000_000_u64.into();
         let rosetta_client_args =
             RosettaClientArgsBuilder::new(env.rosetta_client.url.clone().to_string(), "approve")
                 .with_spender_account(spender_account)
@@ -2252,7 +2254,7 @@ fn test_rosetta_transfer_from() {
         )
         .await
         .unwrap();
-        let transfer_amount: Nat = 1_000u64.into();
+        let transfer_amount: Nat = 1_000_u64.into();
         let balance_before_transfer = env.rosetta_ledger_testing_envs[0]
             .icrc1_ledger
             .agent

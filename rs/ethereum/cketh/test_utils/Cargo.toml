@@ -24,6 +24,7 @@ ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestra
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+ic-types-cycles = { path = "../../../types/cycles" }
 ic-types = { path = "../../../types/types" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }

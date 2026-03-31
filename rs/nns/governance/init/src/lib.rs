@@ -78,7 +78,7 @@ impl GovernanceCanisterInitPayloadBuilder {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn make_subaccount(&mut self) -> Subaccount {
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         self.rng.fill_bytes(&mut bytes);
         Subaccount(bytes)
     }

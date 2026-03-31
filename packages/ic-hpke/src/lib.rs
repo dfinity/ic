@@ -201,7 +201,7 @@ impl PublicKey {
     /// Serialize the public key to a bytestring
     pub fn serialize(&self) -> Vec<u8> {
         let len = <V1PublicKey as Serializable>::size();
-        let mut buf = vec![0u8; HEADER_SIZE + len];
+        let mut buf = vec![0_u8; HEADER_SIZE + len];
         buf[0..HEADER_SIZE].copy_from_slice(&MAGIC.to_be_bytes());
         self.pk.write_exact(&mut buf[HEADER_SIZE..]);
         buf
@@ -352,7 +352,7 @@ impl PrivateKey {
     /// Serialize this private key
     pub fn serialize(&self) -> Vec<u8> {
         let len = <V1PrivateKey as Serializable>::size();
-        let mut buf = vec![0u8; HEADER_SIZE + len];
+        let mut buf = vec![0_u8; HEADER_SIZE + len];
         buf[0..HEADER_SIZE].copy_from_slice(&MAGIC.to_be_bytes());
         self.sk.write_exact(&mut buf[HEADER_SIZE..]);
         buf

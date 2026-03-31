@@ -15,7 +15,7 @@ jobs:
       - name: Checkout base
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.repository == 'dfinity/ic-private' && 'master-private' || 'master' }}
+          ref: 'master'
           path: "base"
       - name: Checkout PR
         uses: actions/checkout@v6

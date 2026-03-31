@@ -49,9 +49,9 @@ use ic_management_canister_types_private::{
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_test_utilities::universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
-use ic_types::Cycles;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{MessageId, Payload};
+use ic_types_cycles::Cycles;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use num_traits::ops::saturating::SaturatingSub;
 use std::cmp::max;
@@ -363,7 +363,7 @@ where
         .memory_allocation()
         .allocated_bytes(final_memory_usage);
     let newly_allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
-    // Note. The cycles prepayment in `install_code` is refunded before cycles are reserved
+    // Note. The cycles prepayment in `install_code` and `load_canister_snapshot` is refunded before cycles are reserved
     // and freezing threshold checked and thus we can ignore it here.
     // The cycles prepayment for response callback execution is charged during setup
     // and thus we can also ignore it here.
@@ -1050,7 +1050,7 @@ fn test_memory_suite_take_snapshot_and_uninstall_code() {
 #[test]
 fn test_memory_suite_load_snapshot_growing_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
-        setup_universal_canister(test, canister_id);
+        setup_universal_canister_with_much_memory(test, canister_id);
         let take_canister_snapshot_args =
             TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(

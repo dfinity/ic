@@ -93,7 +93,7 @@ fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> Option<CanisterBacktrace
     }
 }
 
-fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
+fn wasmtime_error_to_hypervisor_error(err: wasmtime::Error) -> HypervisorError {
     let backtrace = err
         .downcast_ref::<wasmtime::WasmBacktrace>()
         .and_then(convert_backtrace);

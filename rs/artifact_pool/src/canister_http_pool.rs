@@ -205,6 +205,13 @@ impl ValidatedPoolReader<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl 
                 response: None,
             })
     }
+
+    fn get_all_for_initial_broadcast(
+        &self,
+    ) -> Box<dyn Iterator<Item = CanisterHttpResponseArtifact> + '_> {
+        // HTTP outcalls artifacts are not persisted.
+        Box::new(std::iter::empty())
+    }
 }
 
 impl HasLabel for CanisterHttpResponse {

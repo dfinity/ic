@@ -12,14 +12,14 @@ use ic_btc_interface::{
 use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities_load_wasm::load_wasm;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use rand::{Rng, thread_rng};
 use std::str::FromStr;
 
 fn generate_tx_id() -> Txid {
     let mut rng = thread_rng();
-    let mut bytes = [1u8; 32];
+    let mut bytes = [1_u8; 32];
     rng.fill(&mut bytes);
     bytes.into()
 }

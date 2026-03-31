@@ -7,14 +7,13 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use anyhow::bail;
 use ic_sys::PAGE_SIZE;
 use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use libc::MAP_FAILED;
 use libc::c_void;
 use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
 use libc::{mmap, munmap};
-use wasmtime::{LinearMemory, MemoryType};
+use wasmtime::{LinearMemory, MemoryType, bail};
 
 use crate::{MAX_WASM_MEMORY_IN_BYTES, MIN_GUARD_REGION_SIZE, WASM_PAGE_SIZE};
 
@@ -233,7 +232,7 @@ unsafe impl LinearMemory for WasmtimeMemory {
         self.reserved_size_in_bytes
     }
 
-    fn grow_to(&mut self, new_size: usize) -> anyhow::Result<()> {
+    fn grow_to(&mut self, new_size: usize) -> wasmtime::Result<()> {
         if !new_size.is_multiple_of(WASM_PAGE_SIZE as usize) {
             bail!(
                 "Requested wasm page size increase wasn't a multiple of the wasm page size: {}",

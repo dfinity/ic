@@ -22,3 +22,16 @@ Xen
 nouveau
 fpga
 jfs
+DRBD
+SCTP
+habanalabs
+NFS
+audio
+UAC3
+smc
+comedi
+ntfs3
+pfr_update
+mei_vsc
+netfs
+btrfs

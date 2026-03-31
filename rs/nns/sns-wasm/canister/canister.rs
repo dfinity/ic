@@ -33,7 +33,8 @@ use ic_sns_wasm::{
     },
     sns_wasm::SnsWasmCanister,
 };
-use ic_types::{CanisterId, Cycles};
+use ic_types::CanisterId;
+use ic_types_cycles::Cycles;
 use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 
 use ic_cdk::{init, post_upgrade, pre_upgrade, println, query, update};

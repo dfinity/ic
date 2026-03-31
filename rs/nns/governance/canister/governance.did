@@ -66,6 +66,7 @@ type CanisterSettings = record {
   freezing_threshold : opt nat64;
   controllers : opt Controllers;
   log_visibility : opt int32;
+  snapshot_visibility : opt int32;
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
@@ -380,6 +381,7 @@ type GovernanceCachedMetrics = record {
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
   spawning_neurons_count : nat64;
+  total_maturity_disbursements_in_progress_e8s_equivalent : nat64;
 
   non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   public_neuron_subset_metrics : opt NeuronSubsetMetrics;

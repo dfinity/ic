@@ -4,10 +4,11 @@
 use ic_embedders::wasmtime_embedder::system_api::ApiType;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
-    Cycles, PrincipalId,
+    PrincipalId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 
 fn run_go_export(wat: &str) {
     const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;

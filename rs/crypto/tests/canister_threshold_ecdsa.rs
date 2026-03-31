@@ -275,7 +275,7 @@ mod sign_share {
             let result = runner.run(
                 &(
                     arb_signer_state_with_at_least_one_retained_transcript(),
-                    vec(0..=255u8, CHACHA_SEED_LEN),
+                    vec(0..=255_u8, CHACHA_SEED_LEN),
                 ),
                 |(signer_state, rng_seed)| {
                     let mut inner_rng = ChaCha20Rng::from_seed(

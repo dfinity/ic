@@ -55,9 +55,9 @@ async fn custom_proposal_criticality_test() {
     let controller3 = PrincipalId::new_user_test_id(103);
 
     // Define neuron stakes proportional to 51%, 17%, 32%.
-    let stake1 = 510_000_000u64;
-    let stake2 = 170_000_000u64;
-    let stake3 = 320_000_000u64;
+    let stake1 = 510_000_000_u64;
+    let stake2 = 170_000_000_u64;
+    let stake3 = 320_000_000_u64;
 
     let dissolve_delay_seconds = ONE_MONTH_SECONDS * 6;
 

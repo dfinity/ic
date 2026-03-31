@@ -29,17 +29,16 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    Cursor, READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes,
+    READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes,
     get_node_certification_share_height, get_ssh_keys_for_user, halt_subnet,
     local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
     remote_recovery, unhalt_subnet,
 };
-use anyhow::bail;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
-    rw_message::{install_nns_and_check_progress, store_message},
+    rw_message::{install_nns_and_check_progress, store_message_with_retries},
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
@@ -76,7 +75,7 @@ use std::{
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
 
-const DKG_INTERVAL: u64 = 20;
+const DKG_INTERVAL: u64 = 49;
 const NNS_NODES: usize = 4;
 const APP_NODES: usize = 4;
 const UNASSIGNED_NODES: usize = 4;
@@ -484,7 +483,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     info!(logger, "Ensure app subnet is functional");
     let init_msg = "subnet recovery works!";
-    let app_can_id = store_message(
+    let app_can_id = store_message_with_retries(
         &download_state_node.get_public_url(),
         download_state_node.effective_canister_id(),
         init_msg,
@@ -691,7 +690,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: cfg.local_recovery,
     };
 
     // Unlike during a production recovery using the CLI, here we already know all parameters ahead
@@ -920,16 +918,12 @@ fn corrupt_latest_cup(
 
     info!(
         logger,
-        "Setting journal cursor on node {:?}",
+        "Getting journal cursor on node {:?}",
         app_node.get_ip_addr()
     );
-    let message_str = app_node
-        .block_on_bash_script_from_session(
-            &session,
-            "journalctl -n1 -o json --output-fields='__CURSOR'",
-        )
-        .expect("journal message");
-    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+    let journal_streamer = JournalStreamer::new(session.clone())
+        .from_now()
+        .expect("Failed to create journal streamer");
 
     info!(logger, "Reading CUP from node {:?}", app_node.get_ip_addr());
     let (mut channel, _) = session.scp_recv(Path::new(CUP_PATH)).unwrap();
@@ -983,27 +977,14 @@ fn corrupt_latest_cup(
             .expect("restart");
     }
 
-    ic_system_test_driver::retry_with_msg!(
-        "check if cup is corrupted",
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || {
-            let res = app_node.block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    "journalctl --after-cursor='{}' | grep -c 'Failed to deserialize CatchUpPackage'",
-                    message.cursor
-                ),
-            );
-            if res.is_ok_and( |r| r.trim().parse::<i32>().unwrap() > 0) {
-                Ok(())
-            } else {
-                bail!("Did not find log entry that cup is corrupted.")
-            }
-        }
-    )
-    .expect("Failed to detect broken subnet.");
+    assert!(
+        journal_streamer
+            .follow()
+            .max_lines(1)
+            .contains("Failed to deserialize CatchUpPackage")
+            .unwrap_or_default(),
+        "Did not find log entry that CUP is corrupted"
+    );
 
     unhalt_subnet(admin_helper, subnet.subnet_id, &[], logger);
 }

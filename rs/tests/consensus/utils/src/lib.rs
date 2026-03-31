@@ -1,8 +1,12 @@
+use anyhow::Context;
+use ic_protobuf::types::v1 as pb;
 use ic_system_test_driver::{
     driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    retry_with_msg_async,
     util::{MetricsFetcher, block_on},
 };
-use ic_types::Height;
+use ic_types::{Height, consensus::CatchUpPackage};
+use prost::Message;
 use slog::{Logger, info, warn};
 
 pub mod impersonate_upstreams;
@@ -84,4 +88,53 @@ fn get_certification_height_from_metrics(node: &IcNodeSnapshot) -> Height {
 
         Height::from(height)
     })
+}
+
+pub async fn get_cup_from_node(
+    node: &IcNodeSnapshot,
+    logger: &Logger,
+) -> anyhow::Result<CatchUpPackage> {
+    let url = node.get_public_url();
+    let cup_url = format!("{url}_/catch_up_package");
+
+    let send_request = || async {
+        let response = reqwest::ClientBuilder::new()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap()
+            .post(cup_url.clone())
+            .header("Content-Type", "application/cbor")
+            .send()
+            .await
+            .with_context(|| format!("Failed to send request to {cup_url}"))?;
+
+        if response.status() != reqwest::StatusCode::OK {
+            anyhow::bail!(
+                "Failed to send request to {cup_url}. Status: {}",
+                response.status()
+            );
+        }
+
+        response
+            .bytes()
+            .await
+            .context("Failed to collect response body")
+    };
+
+    let response = retry_with_msg_async!(
+        "Fetching a CUP",
+        logger,
+        std::time::Duration::from_secs(120),
+        std::time::Duration::from_secs(5),
+        send_request
+    )
+    .await
+    .context("Failed to fetch CUP")?;
+
+    let proto = pb::CatchUpPackage::decode(response).context("Failed to decode the response")?;
+
+    let cup =
+        CatchUpPackage::try_from(&proto).context("Failed to convert proto to CatchUpPackage")?;
+
+    Ok(cup)
 }

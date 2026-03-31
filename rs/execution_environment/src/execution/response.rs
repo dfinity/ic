@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use more_asserts::debug_assert_le;
 
 use ic_embedders::{
@@ -20,7 +19,6 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, error, info};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
-use ic_types::Cycles;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
@@ -28,6 +26,9 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, NonConsumed, RequestAndResponseTransmission,
+};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -172,10 +173,14 @@ impl ResponseHelper {
                 round.log,
                 round.counters.response_cycles_refund_error,
                 &response.response_payload,
-                original.callback.prepayment_for_response_transmission,
+                CompoundCycles::new(
+                    original.callback.prepayment_for_response_transmission,
+                    round.cost_schedule,
+                ),
                 original.subnet_size,
                 round.cost_schedule,
-            );
+            )
+            .real();
 
         let canister = clean_canister.clone();
         let initial_cycles_balance = canister.system_state.balance();
@@ -198,14 +203,19 @@ impl ResponseHelper {
     ///
     /// These are the only state changes to the initial canister state before
     /// executing Wasm code.
-    fn apply_initial_refunds(&mut self) {
+    fn apply_initial_refunds(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
         self.canister
             .system_state
-            .add_cycles(self.refund_for_sent_cycles, CyclesUseCase::NonConsumed);
+            .add_cycles(CompoundCycles::<NonConsumed>::new(
+                self.refund_for_sent_cycles,
+                cost_schedule,
+            ));
 
         self.canister.system_state.add_cycles(
-            self.refund_for_response_transmission,
-            CyclesUseCase::RequestAndResponseTransmission,
+            CompoundCycles::<RequestAndResponseTransmission>::new(
+                self.refund_for_response_transmission,
+                cost_schedule,
+            ),
         );
     }
 
@@ -328,7 +338,7 @@ impl ResponseHelper {
 
         helper.apply_subnet_memory_reservation(round_limits);
 
-        helper.apply_initial_refunds();
+        helper.apply_initial_refunds(round.cost_schedule);
 
         // This validation succeeded in `execute_response()` and we expect it to
         // succeed here too.
@@ -365,6 +375,7 @@ impl ResponseHelper {
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -472,6 +483,7 @@ impl ResponseHelper {
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -568,7 +580,10 @@ impl ResponseHelper {
             &mut self.canister.system_state,
             instructions_left,
             original.message_instruction_limit,
-            original.callback.prepayment_for_response_execution,
+            CompoundCycles::new(
+                original.callback.prepayment_for_response_execution,
+                round.cost_schedule,
+            ),
             round.counters.execution_refund_error,
             original.subnet_size,
             round.cost_schedule,
@@ -960,7 +975,7 @@ pub fn execute_response(
         round_limits,
         deallocation_sender,
     );
-    helper.apply_initial_refunds();
+    helper.apply_initial_refunds(round.cost_schedule);
     let helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
         Err(result) => {

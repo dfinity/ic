@@ -178,7 +178,7 @@ fn create_certificate(
 
     let cert = CertificateBuilder::new(
         profile,
-        SerialNumber::from(1u32),
+        SerialNumber::from(1_u32),
         Validity::from_now(Duration::from_secs(86400 * 365))?,
         Name::from_str(&format!("CN={subject}"))?,
         SubjectPublicKeyInfo::from_key(public_key)?,

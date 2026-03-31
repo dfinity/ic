@@ -2125,7 +2125,7 @@ pub mod test {
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
@@ -2209,7 +2209,7 @@ pub mod test {
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()

@@ -17,8 +17,8 @@ fn uint_to_g2(num: u32) -> G2Affine {
 /// Polynomial evaluation for small polynomials; this will overflow and panic if
 /// used for large values.
 fn evaluate_integer_polynomial(x: u32, polynomial: &[u32]) -> u32 {
-    let mut ans = 0u32;
-    let mut power = 1u32;
+    let mut ans = 0_u32;
+    let mut power = 1_u32;
     for coefficient in polynomial {
         ans += power * coefficient;
         power *= x;

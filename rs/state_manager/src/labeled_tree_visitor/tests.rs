@@ -63,8 +63,8 @@ fn sample_traversal_produces_a_map() {
                 Label::from("deadbeef") => Leaf(vec![0xde, 0xad, 0xbe, 0xef]),
             ]),
             Label::from("nums") => SubTree(flatmap![
-                Label::from("1") => Leaf(1u64.to_be_bytes().to_vec()),
-                Label::from("2") => Leaf(2u64.to_be_bytes().to_vec()),
+                Label::from("1") => Leaf(1_u64.to_be_bytes().to_vec()),
+                Label::from("2") => Leaf(2_u64.to_be_bytes().to_vec()),
             ]),
         ])
     );

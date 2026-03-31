@@ -608,7 +608,7 @@ pub fn store_blocks(
                 None,
                 None,
                 None,
-                Nat::from(0u64),
+                Nat::from(0_u64),
                 None,
                 None,
                 None,

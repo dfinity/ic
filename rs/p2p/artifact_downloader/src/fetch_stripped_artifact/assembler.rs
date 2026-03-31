@@ -74,6 +74,13 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
             .get(id.as_ref())
             .map(Strippable::strip)
     }
+
+    fn get_all_for_initial_broadcast(
+        &self,
+    ) -> Box<dyn Iterator<Item = MaybeStrippedConsensusMessage> + '_> {
+        // Not used for stripped consensus messages.
+        Box::new(std::iter::empty())
+    }
 }
 
 impl<Pool: ValidatedPoolReader<ConsensusMessage>>
