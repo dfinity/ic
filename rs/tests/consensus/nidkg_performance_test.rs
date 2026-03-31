@@ -9,14 +9,13 @@ use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SshSession},
 };
 use ic_system_test_driver::nns::{
     await_proposal_execution, get_software_version_from_snapshot,
-    submit_create_application_subnet_proposal, vote_on_proposal,
+    submit_create_application_subnet_proposal,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url};
@@ -81,7 +80,7 @@ fn test(env: TestEnv) {
         .unassigned_nodes()
         .map(|node| node.node_id)
         .collect::<Vec<_>>();
-    assert_eq!(unassigned_node_ids.len(), UNASSIGNED_NODES_COUNT,);
+    assert_eq!(unassigned_node_ids.len(), UNASSIGNED_NODES_COUNT);
 
     info!(log, "Installing NNS canisters");
     NnsInstallationBuilder::new()
@@ -116,43 +115,36 @@ fn test(env: TestEnv) {
         NODES_PER_NEW_SUBNET,
         unassigned_node_ids.len()
     );
-    let submit_start = Instant::now();
     let node_groups = unassigned_node_ids
         .chunks(NODES_PER_NEW_SUBNET)
         .map(|chunk| chunk.to_vec())
         .collect::<Vec<_>>();
-    let total_proposals = node_groups.len();
-    let mut proposal_ids = Vec::with_capacity(total_proposals);
-    for (idx, node_ids) in node_groups.into_iter().enumerate() {
-        info!(
-            log,
-            "Submitting create-subnet proposal {}/{} for nodes {:?}",
-            idx + 1,
-            total_proposals,
-            node_ids
-        );
-        let proposal_id = block_on(submit_create_application_subnet_proposal(
-            &governance,
-            node_ids,
-            version.clone(),
-            Some(CanisterCyclesCostSchedule::Normal),
-        ));
-        proposal_ids.push(proposal_id);
-    }
-    let submit_elapsed = submit_start.elapsed();
-
+    assert_eq!(node_groups.len(), NEW_SUBNETS_COUNT);
     info!(
         log,
-        "Submitted all {} proposals in {:.2}s; voting and awaiting execution in parallel",
-        proposal_ids.len(),
-        submit_elapsed.as_secs_f64()
+        "Submitting and awaiting {} proposals in parallel", NEW_SUBNETS_COUNT
     );
+
     let execution_results = block_on(async {
-        join_all(proposal_ids.into_iter().map(|proposal_id| {
+        join_all(node_groups.into_iter().enumerate().map(|(idx, node_ids)| {
             let governance = governance.clone();
             let log = log.clone();
+            let version = version.clone();
             async move {
-                vote_on_proposal(&governance, proposal_id).await;
+                info!(
+                    log,
+                    "Submitting create-subnet proposal {}/{} for nodes {:?}",
+                    idx + 1,
+                    NEW_SUBNETS_COUNT,
+                    node_ids
+                );
+                let proposal_id = submit_create_application_subnet_proposal(
+                    &governance,
+                    node_ids,
+                    version,
+                    Some(CanisterCyclesCostSchedule::Normal),
+                )
+                .await;
                 let start = Instant::now();
                 let is_executed = await_proposal_execution(
                     &log,
@@ -162,7 +154,10 @@ fn test(env: TestEnv) {
                     Duration::from_secs(2 * 60),
                 )
                 .await;
-                assert!(is_executed,);
+                assert!(
+                    is_executed,
+                    "proposal {proposal_id} did not execute in time"
+                );
                 (proposal_id, start.elapsed())
             }
         }))
@@ -180,21 +175,21 @@ fn test(env: TestEnv) {
         sum_secs += secs;
         info!(
             log,
-            "Proposal {proposal_id} executed {:.2}s after voting", secs
+            "Proposal {proposal_id} executed {:.2}s after submission", secs
         );
     }
     let avg_secs = sum_secs / count as f64;
 
     info!(
         log,
-        "Execution latency after voting for {} proposals: min {:.2}s, avg {:.2}s, max {:.2}s",
+        "Execution latency after submission for {} proposals: min {:.2}s, avg {:.2}s, max {:.2}s",
         count,
         min_secs,
         avg_secs,
         max_secs
     );
     env.emit_report(format!(
-        "NiDKG performance (vote->execute): proposals={} min={:.2}s avg={:.2}s max={:.2}s",
+        "NiDKG performance (submit->execute): proposals={} min={:.2}s avg={:.2}s max={:.2}s",
         count, min_secs, avg_secs, max_secs
     ));
 
@@ -213,7 +208,7 @@ fn test(env: TestEnv) {
         .subnets()
         .filter(|subnet| !initial_subnet_ids.contains(&subnet.subnet_id))
         .collect::<Vec<_>>();
-    assert_eq!(newly_created_subnets.len(), count,);
+    assert_eq!(newly_created_subnets.len(), count);
 
     info!(
         log,
@@ -230,7 +225,7 @@ fn test(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .with_timeout_per_test(Duration::from_secs(120 * 60))
+        .with_timeout_per_test(Duration::from_secs(600))
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
