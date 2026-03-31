@@ -259,7 +259,9 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Burn { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                Operation::FeeCollector { .. } => None,
+                Operation::FeeCollector { .. }
+                | Operation::AuthorizedMint { .. }
+                | Operation::AuthorizedBurn { .. } => None,
             };
             let btype = match transaction.operation {
                 Operation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
@@ -625,6 +627,9 @@ impl TransactionsAndBalances {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
+            Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
+                panic!("AuthorizedMint/AuthorizedBurn not yet implemented in test_utils")
+            }
         };
         self.transactions.push(tx);
 
@@ -654,6 +659,9 @@ impl TransactionsAndBalances {
             }
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
+            }
+            Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
+                panic!("AuthorizedMint/AuthorizedBurn not yet implemented in test_utils")
             }
         }
     }
