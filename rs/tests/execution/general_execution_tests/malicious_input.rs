@@ -110,6 +110,7 @@ fn test_valid_query_followed_by_garbage(env: TestEnv) {
                 sender: Blob(vec![4]), // the anonymous user.
                 ingress_expiry: expiry_time().as_nanos() as u64,
                 nonce: None,
+                sender_info: None,
             },
         },
         sender_delegation: None,

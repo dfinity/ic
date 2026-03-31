@@ -3809,7 +3809,6 @@ dependencies = [
  "nix 0.24.3",
  "num-bigint 0.4.6",
  "num-bigint-dig 0.9.1",
- "num-rational 0.2.4",
  "num-traits",
  "num_cpus",
  "object 0.37.3",
@@ -8763,7 +8762,7 @@ dependencies = [
  "num-complex",
  "num-integer",
  "num-iter",
- "num-rational 0.4.2",
+ "num-rational",
  "num-traits",
 ]
 
@@ -8868,18 +8867,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1429034a0490724d0075ebb2bc9e875d6503c3cf69e235a8941aa757d83ef5bf"
 dependencies = [
  "autocfg 1.5.0",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-dependencies = [
- "autocfg 1.5.0",
- "num-bigint 0.2.6",
  "num-integer",
  "num-traits",
 ]

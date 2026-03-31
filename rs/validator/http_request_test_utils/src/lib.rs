@@ -108,6 +108,7 @@ fn dummy_query_call_request_content() -> HttpUserQuery {
         sender: Default::default(),
         ingress_expiry: 0,
         nonce: None,
+        sender_info: None,
     }
 }
 
