@@ -46,8 +46,8 @@ pub enum CertificateValidationError {
         provided_subnet_id: SubnetId,
         delegation_subnet_id: SubnetId,
     },
-    /// A delegation was encountered which originated from a subnet which is not trusted for delegations
-    UnacceptableSourceSubnet,
+    /// The delegation originates from a subnet that is not trusted for delegations (e.g., a cloud engine).
+    UntrustedDelegationSubnet(SubnetId),
 }
 
 impl fmt::Display for CertificateValidationError {
@@ -85,8 +85,8 @@ impl fmt::Display for CertificateValidationError {
                 f,
                 "provided subnet id {provided_subnet_id} does not match subnet id in delegation {delegation_subnet_id}",
             ),
-            Self::UnacceptableSourceSubnet => {
-                write!(f, "the source subnet cannot be used for delegations")
+            Self::UntrustedDelegationSubnet(subnet_id) => {
+                write!(f, "the source subnet {subnet_id} is not trusted for delegations")
             }
         }
     }
@@ -355,12 +355,6 @@ pub fn verify_delegation_certificate(
         ))
     })?;
 
-    if let Some(subnet_type) = &subnet_info.r#type
-        && subnet_type == "cloud_engine"
-    {
-        return Err(CertificateValidationError::UnacceptableSourceSubnet);
-    }
-
     // canister ranges could be found in two places. Either in the
     // `/subnet/<subnet_id>/canister_ranges` leaf or in the
     // `/canister_ranges/<subnet_id>` subtree.
@@ -427,6 +421,14 @@ pub fn verify_delegation_certificate(
     let public_key = parse_threshold_sig_key_from_der(&subnet_info.public_key).map_err(|err| {
         CertificateValidationError::DeserError(format!("failed to deserialize public key: {err}"))
     })?;
+
+    // Reject delegations from cloud engine subnets
+    if let Some(subnet_type) = &subnet_info.r#type
+        && subnet_type == "cloud_engine"
+    {
+        return Err(CertificateValidationError::UntrustedDelegationSubnet(subnet_id.clone()));
+    }
+
     Ok(public_key)
 }
 

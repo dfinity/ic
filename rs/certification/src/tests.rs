@@ -1071,7 +1071,7 @@ fn should_reject_delegation_from_cloud_engine_subnet() {
             &subnet_id,
             &root_pk
         ),
-        Err(CertificateValidationError::UnacceptableSourceSubnet)
+        Err(CertificateValidationError::UntrustedDelegationSubnet(_))
     );
 }
 
@@ -1113,7 +1113,7 @@ fn should_reject_delegation_from_cloud_engine_subnet_via_verify_certified_data()
             &root_pk,
             certified_data.as_bytes(),
         ),
-        Err(CertificateValidationError::UnacceptableSourceSubnet)
+        Err(CertificateValidationError::UntrustedDelegationSubnet(_))
     );
 }
 
