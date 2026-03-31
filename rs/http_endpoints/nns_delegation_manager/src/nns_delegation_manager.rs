@@ -15,8 +15,11 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_registry_client_helpers::{
-    api_boundary_node::ApiBoundaryNodeRegistry, crypto::CryptoRegistry, node::NodeRegistry,
-    node_operator::ConnectionEndpoint, subnet::SubnetRegistry,
+    api_boundary_node::ApiBoundaryNodeRegistry,
+    crypto::CryptoRegistry,
+    node::{NodeRecord, NodeRegistry},
+    node_operator::ConnectionEndpoint,
+    subnet::SubnetRegistry,
 };
 use ic_types::{
     NodeId, RegistryVersion, SubnetId,
@@ -27,7 +30,7 @@ use ic_types::{
     },
     time::expiry_time_from_now,
 };
-use rand::Rng;
+use rand::{Rng, seq::SliceRandom};
 use rustls::{ClientConfig, pki_types::ServerName};
 use tokio::{
     net::{TcpStream, lookup_host},
@@ -557,8 +560,6 @@ fn get_random_node_from_nns_subnet(
     registry_client: &dyn RegistryClient,
     nns_subnet_id: SubnetId,
 ) -> Result<(NodeId, ConnectionEndpoint), String> {
-    use rand::seq::SliceRandom;
-
     let nns_nodes = match registry_client
         .get_node_ids_on_subnet(nns_subnet_id, registry_client.get_latest_version())
     {
@@ -567,44 +568,43 @@ fn get_random_node_from_nns_subnet(
         Err(err) => Err(format!("Failed to get NNS nodes from registry: {err}")),
     }?;
 
-    // Randomly choose a node from the nns subnet.
-    let mut rng = rand::thread_rng();
-    let nns_node = nns_nodes.choose(&mut rng).ok_or(format!(
-        "Failed to choose a random NNS node. NNS node list: {nns_nodes:?}"
-    ))?;
-    match registry_client.get_node_record(*nns_node, registry_client.get_latest_version()) {
-        Ok(Some(node)) => Ok((
-            *nns_node,
-            node.http.ok_or("No HTTP endpoint for node {nns_node}")?,
-        )),
-        Ok(None) => Err(format!("No node record found for NNS node {nns_node}")),
-        Err(err) => Err(format!(
-            "Failed to get node record for NNS node {nns_node}. Err: {err}"
-        )),
-    }
+    let (node_id, record) = get_random_node_record_from_ids(registry_client, &nns_nodes)?;
+    let endpoint = record
+        .http
+        .ok_or_else(|| format!("No HTTP endpoint for NNS node {node_id}"))?;
+    Ok((node_id, endpoint))
 }
 
 fn get_random_api_boundary_node(
     registry_client: &dyn RegistryClient,
 ) -> Result<(NodeId, String), String> {
-    use rand::seq::SliceRandom;
-
     let api_bns =
         match registry_client.get_api_boundary_node_ids(registry_client.get_latest_version()) {
             Ok(api_bns) => Ok(api_bns),
             Err(err) => Err(format!("Failed to get API BNs from registry: {err}")),
         }?;
 
-    // Randomly choose a node from the API boundary nodes.
+    let (node_id, record) = get_random_node_record_from_ids(registry_client, &api_bns)?;
+    let domain = record
+        .domain
+        .ok_or_else(|| format!("No domain for API BN {node_id}"))?;
+    Ok((node_id, domain))
+}
+
+fn get_random_node_record_from_ids(
+    registry_client: &dyn RegistryClient,
+    node_ids: &[NodeId],
+) -> Result<(NodeId, NodeRecord), String> {
     let mut rng = rand::thread_rng();
-    let api_bn = api_bns.choose(&mut rng).ok_or(format!(
-        "Failed to choose a random API boundary node. API BN list: {api_bns:?}"
+    let node_id = node_ids.choose(&mut rng).ok_or(format!(
+        "Failed to choose a random node. Node list: {node_ids:?}"
     ))?;
-    match registry_client.get_node_record(*api_bn, registry_client.get_latest_version()) {
-        Ok(Some(node)) => Ok((*api_bn, node.domain.ok_or("No domain for node {api_bn}")?)),
-        Ok(None) => Err(format!("No node record found for API BN {api_bn}")),
+
+    match registry_client.get_node_record(*node_id, registry_client.get_latest_version()) {
+        Ok(Some(record)) => Ok((*node_id, record)),
+        Ok(None) => Err(format!("No node record found for node id {node_id}")),
         Err(err) => Err(format!(
-            "Failed to get node record for API BN {api_bn}. Err: {err}"
+            "Failed to get node record for node id {node_id}. Err: {err}"
         )),
     }
 }
