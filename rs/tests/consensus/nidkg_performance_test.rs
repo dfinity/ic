@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use futures::future::join_all;
@@ -9,6 +10,7 @@ use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::HasPrometheus,
+    simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SshSession},
 };
@@ -22,19 +24,17 @@ use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use slog::info;
 
 const NNS_NODES_COUNT: usize = 40;
-const DEFAULT_UNASSIGNED_NODES_COUNT: usize = 10;
+const NEW_SUBNETS_COUNT: usize = 10;
+const NODES_PER_NEW_SUBNET: usize = 4;
+const UNASSIGNED_NODES_COUNT: usize = NEW_SUBNETS_COUNT * NODES_PER_NEW_SUBNET;
+
 const DEFAULT_NNS_DKG_DEALINGS_PER_BLOCK: usize = 10;
 
-fn setup(env: TestEnv) {
-    let unassigned_nodes_count = std::env::var("UNASSIGNED_NODES_COUNT")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(DEFAULT_UNASSIGNED_NODES_COUNT);
-    let nns_dkg_dealings_per_block = std::env::var("NNS_DKG_DEALINGS_PER_BLOCK")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(DEFAULT_NNS_DKG_DEALINGS_PER_BLOCK);
+const APPLY_NETWORK_SIMULATION: bool = true;
+const BANDWIDTH_MBITS: u32 = 300;
+const LATENCY: Duration = Duration::from_millis(120);
 
+fn setup(env: TestEnv) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
@@ -43,21 +43,21 @@ fn setup(env: TestEnv) {
 
     info!(
         env.logger(),
-        "Deploying nIDKG performance testnet with {} system-subnet nodes, {} unassigned nodes, and {} DKG dealings/block",
+        "Deploying NiDKG performance testnet with {} system-subnet nodes, {} unassigned nodes, and {} DKG dealings/block",
         NNS_NODES_COUNT,
-        unassigned_nodes_count,
-        nns_dkg_dealings_per_block
+        UNASSIGNED_NODES_COUNT,
+        DEFAULT_NNS_DKG_DEALINGS_PER_BLOCK
     );
 
     let mut nns_subnet = Subnet::new(SubnetType::System)
         .with_required_host_features(vec![HostFeature::Performance])
         .with_default_vm_resources(vm_resources)
         .add_nodes(NNS_NODES_COUNT);
-    nns_subnet.dkg_dealings_per_block = Some(nns_dkg_dealings_per_block);
+    nns_subnet.dkg_dealings_per_block = Some(DEFAULT_NNS_DKG_DEALINGS_PER_BLOCK);
 
     InternetComputer::new()
         .add_subnet(nns_subnet)
-        .with_unassigned_nodes(unassigned_nodes_count)
+        .with_unassigned_nodes(UNASSIGNED_NODES_COUNT)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
 
@@ -74,16 +74,14 @@ fn setup(env: TestEnv) {
 fn test(env: TestEnv) {
     let log = env.logger();
     let topology_snapshot = env.topology_snapshot();
+    let initial_subnet_ids: HashSet<_> = topology_snapshot.subnets().map(|s| s.subnet_id).collect();
     let nns_node = topology_snapshot.root_subnet().nodes().next().unwrap();
 
     let unassigned_node_ids = topology_snapshot
         .unassigned_nodes()
         .map(|node| node.node_id)
         .collect::<Vec<_>>();
-    assert!(
-        !unassigned_node_ids.is_empty(),
-        "Expected at least one unassigned node to create single-node subnets"
-    );
+    assert_eq!(unassigned_node_ids.len(), UNASSIGNED_NODES_COUNT,);
 
     info!(log, "Installing NNS canisters");
     NnsInstallationBuilder::new()
@@ -95,24 +93,47 @@ fn test(env: TestEnv) {
     let version = block_on(get_software_version_from_snapshot(&nns_node))
         .expect("Could not obtain replica software version from the NNS node");
 
+    if APPLY_NETWORK_SIMULATION {
+        let network_simulation = FixedNetworkSimulation::new()
+            .with_latency(LATENCY)
+            .with_bandwidth(BANDWIDTH_MBITS);
+        info!(
+            log,
+            "Applying network simulation to NNS subnet: {} Mbit/s, {:?} latency",
+            BANDWIDTH_MBITS,
+            LATENCY
+        );
+        topology_snapshot
+            .root_subnet()
+            .apply_network_settings(network_simulation);
+    } else {
+        info!(log, "Network simulation disabled");
+    }
+
     info!(
         log,
-        "Starting {} create-subnet proposals (one unassigned node per subnet)",
+        "Starting create-subnet proposals with {} nodes per subnet from {} unassigned nodes",
+        NODES_PER_NEW_SUBNET,
         unassigned_node_ids.len()
     );
     let submit_start = Instant::now();
-    let mut proposal_ids = Vec::with_capacity(unassigned_node_ids.len());
-    for (idx, node_id) in unassigned_node_ids.iter().cloned().enumerate() {
+    let node_groups = unassigned_node_ids
+        .chunks(NODES_PER_NEW_SUBNET)
+        .map(|chunk| chunk.to_vec())
+        .collect::<Vec<_>>();
+    let total_proposals = node_groups.len();
+    let mut proposal_ids = Vec::with_capacity(total_proposals);
+    for (idx, node_ids) in node_groups.into_iter().enumerate() {
         info!(
             log,
-            "Submitting create-subnet proposal {}/{} for node {}",
+            "Submitting create-subnet proposal {}/{} for nodes {:?}",
             idx + 1,
-            unassigned_node_ids.len(),
-            node_id
+            total_proposals,
+            node_ids
         );
         let proposal_id = block_on(submit_create_application_subnet_proposal(
             &governance,
-            vec![node_id],
+            node_ids,
             version.clone(),
             Some(CanisterCyclesCostSchedule::Normal),
         ));
@@ -141,7 +162,7 @@ fn test(env: TestEnv) {
                     Duration::from_secs(2 * 60),
                 )
                 .await;
-                assert!(is_executed, "proposal {proposal_id} did not execute in time");
+                assert!(is_executed,);
                 (proposal_id, start.elapsed())
             }
         }))
@@ -157,7 +178,10 @@ fn test(env: TestEnv) {
         min_secs = min_secs.min(secs);
         max_secs = max_secs.max(secs);
         sum_secs += secs;
-        info!(log, "Proposal {proposal_id} executed {:.2}s after voting", secs);
+        info!(
+            log,
+            "Proposal {proposal_id} executed {:.2}s after voting", secs
+        );
     }
     let avg_secs = sum_secs / count as f64;
 
@@ -170,29 +194,36 @@ fn test(env: TestEnv) {
         max_secs
     );
     env.emit_report(format!(
-        "nIDKG performance (vote->execute): proposals={} min={:.2}s avg={:.2}s max={:.2}s",
-        count,
-        min_secs,
-        avg_secs,
-        max_secs
+        "NiDKG performance (vote->execute): proposals={} min={:.2}s avg={:.2}s max={:.2}s",
+        count, min_secs, avg_secs, max_secs
     ));
-}
 
-fn teardown(env: TestEnv) {
-    let should_download_prometheus_data =
-        std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
-    if should_download_prometheus_data {
-        env.download_prometheus_data_dir_if_exists();
-        env.emit_report(String::from(
-            "Downloaded prometheus data to 'prometheus-data-dir.tar.zst' in the test output \
-            directory. You can now use `rs/tests/run-p8s.sh` script to play with the metrics",
-        ));
-    } else {
-        env.emit_report(String::from(
-            "Not downloading the prometheus data. \
-            If you want to download it on the next test run, \
-            please pass `--test_env DOWNLOAD_P8S_DATA=1` as an argument to the `ict` command",
-        ));
+    let expected_total_subnets = initial_subnet_ids.len() + count;
+    info!(
+        log,
+        "Waiting for topology to show {} total subnets", expected_total_subnets
+    );
+    let mut refreshed_snapshot = topology_snapshot;
+    while refreshed_snapshot.subnets().count() < expected_total_subnets {
+        refreshed_snapshot = block_on(refreshed_snapshot.block_for_newer_registry_version())
+            .expect("Failed to fetch updated topology snapshot");
+    }
+
+    let newly_created_subnets = refreshed_snapshot
+        .subnets()
+        .filter(|subnet| !initial_subnet_ids.contains(&subnet.subnet_id))
+        .collect::<Vec<_>>();
+    assert_eq!(newly_created_subnets.len(), count,);
+
+    info!(
+        log,
+        "Asserting health for all {} newly created subnets",
+        newly_created_subnets.len()
+    );
+    for subnet in newly_created_subnets {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap());
     }
 }
 
@@ -201,7 +232,6 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .with_timeout_per_test(Duration::from_secs(120 * 60))
         .add_test(systest!(test))
-        .with_teardown(teardown)
         .execute_from_args()?;
     Ok(())
 }

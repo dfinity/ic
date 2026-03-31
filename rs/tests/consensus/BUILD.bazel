@@ -369,6 +369,15 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
+    colocated_test_driver_vm_required_host_features = [
+        "performance",
+        "spm",
+    ],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 64,
+        "memory_kibibytes": 512142680,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
     enable_head_nns_variant = False,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
