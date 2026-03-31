@@ -51,7 +51,8 @@ fn test_the_anonymous_user_cannot_update_a_subnets_subnet_admins() {
         let response: Result<(), String> = registry
             .update_("update_subnet_admins", candid, (payload.clone(),))
             .await;
-        assert_matches!(response, Err(_));
+        assert_matches!(response,
+                Err(s) if s.contains("Only subnets on a free cycles cost schedule are allowed to have subnet admins"));
 
         // .. And no change should have happened to the subnet's subnet admins
         let subnet_admins = get_value_or_panic::<SubnetRecord>(

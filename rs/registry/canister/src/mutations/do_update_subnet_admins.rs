@@ -4,7 +4,8 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_nns_constants::SUBNET_RENTAL_CANISTER_ID;
 use ic_protobuf::{
-    registry::subnet::v1::CanisterCyclesCostSchedule, types::v1::PrincipalId as PrincipalIdPb,
+    registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord},
+    types::v1::PrincipalId as PrincipalIdPb,
 };
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
@@ -57,6 +58,9 @@ pub enum UpdateSubnetAdminsError {
         subnet_id: SubnetId,
         subnet_type: i32,
     },
+    WouldRemoveAllCloudEngineAdmins {
+        subnet_id: SubnetId,
+    },
 }
 
 impl std::fmt::Display for UpdateSubnetAdminsError {
@@ -102,6 +106,13 @@ impl std::fmt::Display for UpdateSubnetAdminsError {
                     Only Application and CloudEngine subnets are supported."
                 )
             }
+            UpdateSubnetAdminsError::WouldRemoveAllCloudEngineAdmins { subnet_id } => {
+                write!(
+                    f,
+                    "Cannot remove all subnet admins from CloudEngine subnet {subnet_id}. \
+                    At least one admin must remain."
+                )
+            }
         }
     }
 }
@@ -132,43 +143,7 @@ impl Registry {
 
         let mut subnet_record = self.get_subnet_or_panic(subnet_id);
 
-        // Only subnets on a free cycles cost schedule are expected to have subnet admins.
-        assert_eq!(
-            subnet_record.canister_cycles_cost_schedule,
-            i32::from(CanisterCyclesCostSchedule::Free),
-            "Only subnets on a free cycles cost schedule are expected to have subnet admins."
-        );
-
-        // Authorization depends on subnet type:
-        // - Application subnets: caller must be the subnet rental canister.
-        // - CloudEngine subnets: caller must be one of the existing subnet admins.
-        if subnet_record.subnet_type == i32::from(SubnetType::Application) {
-            assert_eq!(
-                caller,
-                PrincipalId::from(SUBNET_RENTAL_CANISTER_ID),
-                "{}do_update_subnet_admins: {}",
-                LOG_PREFIX,
-                UpdateSubnetAdminsError::CallerNotAuthorized { caller, subnet_id },
-            );
-        } else if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) {
-            assert!(
-                subnet_record
-                    .subnet_admins
-                    .contains(&PrincipalIdPb::from(caller)),
-                "{}do_update_subnet_admins: {}",
-                LOG_PREFIX,
-                UpdateSubnetAdminsError::CallerNotAuthorized { caller, subnet_id },
-            );
-        } else {
-            panic!(
-                "{}do_update_subnet_admins: {}",
-                LOG_PREFIX,
-                UpdateSubnetAdminsError::UnsupportedSubnetType {
-                    subnet_id,
-                    subnet_type: subnet_record.subnet_type,
-                },
-            );
-        }
+        self.check_update_subnet_admins_caller_authorization(caller, &subnet_record, subnet_id);
 
         let current_subnet_admins = subnet_record.subnet_admins;
 
@@ -176,21 +151,31 @@ impl Registry {
             Some(operation_type) => {
                 match self.compute_new_subnet_admins(current_subnet_admins, operation_type) {
                     Ok(new_subnet_admins) => {
-                        subnet_record.subnet_admins = new_subnet_admins;
+                        // CloudEngine subnets must always have at least one admin,
+                        // otherwise there is no way to recover.
+                        if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine)
+                            && new_subnet_admins.is_empty()
+                        {
+                            Err(UpdateSubnetAdminsError::WouldRemoveAllCloudEngineAdmins {
+                                subnet_id,
+                            })
+                        } else {
+                            subnet_record.subnet_admins = new_subnet_admins;
 
-                        let subnet_record_mutation = upsert(
-                            make_subnet_record_key(subnet_id).into_bytes(),
-                            subnet_record.encode_to_vec(),
-                        );
-                        let mutations = vec![subnet_record_mutation];
+                            let subnet_record_mutation = upsert(
+                                make_subnet_record_key(subnet_id).into_bytes(),
+                                subnet_record.encode_to_vec(),
+                            );
+                            let mutations = vec![subnet_record_mutation];
 
-                        // Check invariants before applying mutations
-                        self.maybe_apply_mutation_internal(mutations);
+                            // Check invariants before applying mutations
+                            self.maybe_apply_mutation_internal(mutations);
 
-                        UPDATE_SUBNET_ADMINS_RATE_LIMITER
-                            .with_borrow_mut(|limiter| limiter.commit(reservation, now));
+                            UPDATE_SUBNET_ADMINS_RATE_LIMITER
+                                .with_borrow_mut(|limiter| limiter.commit(reservation, now));
 
-                        Ok(())
+                            Ok(())
+                        }
                     }
                     Err(err) => Err(err),
                 }
@@ -203,6 +188,51 @@ impl Registry {
             Err(err) => {
                 panic!(
                     "{LOG_PREFIX}do_update_subnet_admins: Error while updating subnet admins of {subnet_id}: {err}",
+                );
+            }
+        }
+    }
+
+    fn check_update_subnet_admins_caller_authorization(
+        &self,
+        caller: PrincipalId,
+        subnet_record: &SubnetRecord,
+        subnet_id: SubnetId,
+    ) {
+        assert_eq!(
+            subnet_record.canister_cycles_cost_schedule,
+            i32::from(CanisterCyclesCostSchedule::Free),
+            "Only subnets on a free cycles cost schedule are allowed to have subnet admins."
+        );
+
+        // Authorization depends on subnet type:
+        // - Application subnets: caller must be the subnet rental canister.
+        // - CloudEngine subnets: caller must be one of the existing subnet admins.
+        match SubnetType::try_from(subnet_record.subnet_type) {
+            Ok(SubnetType::Application) => {
+                assert_eq!(
+                    caller,
+                    PrincipalId::from(SUBNET_RENTAL_CANISTER_ID),
+                    "{}",
+                    UpdateSubnetAdminsError::CallerNotAuthorized { caller, subnet_id },
+                );
+            }
+            Ok(SubnetType::CloudEngine) => {
+                assert!(
+                    subnet_record
+                        .subnet_admins
+                        .contains(&PrincipalIdPb::from(caller)),
+                    "{}",
+                    UpdateSubnetAdminsError::CallerNotAuthorized { caller, subnet_id },
+                );
+            }
+            _ => {
+                panic!(
+                    "{}",
+                    UpdateSubnetAdminsError::UnsupportedSubnetType {
+                        subnet_id,
+                        subnet_type: subnet_record.subnet_type,
+                    },
                 );
             }
         }
@@ -282,10 +312,6 @@ mod tests {
     use maplit::btreemap;
     use pretty_assertions::assert_eq;
 
-    fn subnet_rental_canister_caller() -> PrincipalId {
-        PrincipalId::from(SUBNET_RENTAL_CANISTER_ID)
-    }
-
     fn prepare_registry_for_update_subnet_admins_test(
         subnet_id: SubnetId,
         subnet_type: SubnetType,
@@ -316,7 +342,7 @@ mod tests {
     }
 
     // For the purposes of the below tests, the updated subnet admins list matches
-    // the expected one if the contain exactly the same elements regardless of order.
+    // the expected one if they contain exactly the same elements regardless of order.
     //
     // Useful in cases the list contains more than 1 element (otherwise direct equality
     // check is enough).
@@ -335,14 +361,149 @@ mod tests {
     }
 
     #[test]
-    fn application_subnet_can_add_or_remove_subnet_admins() {
+    fn rented_subnet_authorizes_subnet_rental_canister() {
+        let subnet_id = subnet_test_id(1);
+        let registry = prepare_registry_for_update_subnet_admins_test(
+            subnet_id,
+            SubnetType::Application,
+            vec![],
+        );
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
+
+        // Should not panic.
+        registry.check_update_subnet_admins_caller_authorization(caller, &subnet_record, subnet_id);
+    }
+
+    #[test]
+    #[should_panic(expected = "is not authorized to update subnet admins")]
+    fn rented_subnet_rejects_non_rental_canister_caller() {
+        let subnet_id = subnet_test_id(1);
+        let registry = prepare_registry_for_update_subnet_admins_test(
+            subnet_id,
+            SubnetType::Application,
+            vec![],
+        );
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        let unauthorized_caller = user_test_id(999).get();
+
+        registry.check_update_subnet_admins_caller_authorization(
+            unauthorized_caller,
+            &subnet_record,
+            subnet_id,
+        );
+    }
+
+    #[test]
+    fn cloud_engine_authorizes_existing_admin() {
+        let subnet_id = subnet_test_id(1);
+        let admin = user_test_id(100).get();
+        let registry = prepare_registry_for_update_subnet_admins_test(
+            subnet_id,
+            SubnetType::CloudEngine,
+            vec![PrincipalIdPb::from(admin)],
+        );
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+
+        // Should not panic.
+        registry.check_update_subnet_admins_caller_authorization(admin, &subnet_record, subnet_id);
+    }
+
+    #[test]
+    #[should_panic(expected = "is not authorized to update subnet admins")]
+    fn cloud_engine_rejects_non_admin_caller() {
+        let subnet_id = subnet_test_id(1);
+        let admin = user_test_id(100).get();
+        let registry = prepare_registry_for_update_subnet_admins_test(
+            subnet_id,
+            SubnetType::CloudEngine,
+            vec![PrincipalIdPb::from(admin)],
+        );
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        let non_admin = user_test_id(999).get();
+
+        registry.check_update_subnet_admins_caller_authorization(
+            non_admin,
+            &subnet_record,
+            subnet_id,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "is not authorized to update subnet admins")]
+    fn cloud_engine_rejects_subnet_rental_canister_caller() {
+        let subnet_id = subnet_test_id(1);
+        let admin = user_test_id(100).get();
+        let registry = prepare_registry_for_update_subnet_admins_test(
+            subnet_id,
+            SubnetType::CloudEngine,
+            vec![PrincipalIdPb::from(admin)],
+        );
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+
+        registry.check_update_subnet_admins_caller_authorization(
+            PrincipalId::from(SUBNET_RENTAL_CANISTER_ID),
+            &subnet_record,
+            subnet_id,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Only subnets on a free cycles cost schedule")]
+    fn non_free_cycles_schedule_rejects_authorization() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+
+        // Override the cycles cost schedule to Normal to simulate a non-rented subnet.
+        let mut subnet_record = registry.get_subnet_or_panic(subnet_id);
+        subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Normal);
+        registry.maybe_apply_mutation_internal(vec![upsert(
+            make_subnet_record_key(subnet_id).into_bytes(),
+            subnet_record.encode_to_vec(),
+        )]);
+
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        registry.check_update_subnet_admins_caller_authorization(
+            PrincipalId::from(SUBNET_RENTAL_CANISTER_ID),
+            &subnet_record,
+            subnet_id,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "unsupported subnet type")]
+    fn unsupported_subnet_type_rejects_authorization() {
+        let subnet_id = subnet_test_id(1);
+        // Create a valid Application subnet, then override its type to
+        // VerifiedApplication to bypass registry invariant checks during setup.
+        let registry = prepare_registry_for_update_subnet_admins_test(
+            subnet_id,
+            SubnetType::Application,
+            vec![],
+        );
+        let mut subnet_record = registry.get_subnet_or_panic(subnet_id);
+        subnet_record.subnet_type = i32::from(SubnetType::VerifiedApplication);
+
+        registry.check_update_subnet_admins_caller_authorization(
+            PrincipalId::from(SUBNET_RENTAL_CANISTER_ID),
+            &subnet_record,
+            subnet_id,
+        );
+    }
+
+    #[test]
+    fn rented_subnet_can_add_or_remove_subnet_admins() {
+        let subnet_id = subnet_test_id(1);
+        let mut registry = prepare_registry_for_update_subnet_admins_test(
+            subnet_id,
+            SubnetType::Application,
+            vec![],
+        );
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let user1 = user_test_id(100).get();
         let user2 = user_test_id(101).get();
@@ -374,14 +535,14 @@ mod tests {
     }
 
     #[test]
-    fn application_subnet_can_clear_subnet_admins() {
+    fn rented_subnet_can_clear_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let user1 = user_test_id(100).get();
         let user2 = user_test_id(101).get();
@@ -419,14 +580,14 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "The list of provided principals cannot be empty")]
-    fn application_subnet_can_not_add_empty_list_of_subnet_admins() {
+    fn can_not_add_empty_list_of_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
@@ -438,14 +599,14 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "The list of provided principals cannot be empty")]
-    fn application_subnet_can_not_remove_empty_list_of_subnet_admins() {
+    fn can_not_remove_empty_list_of_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
@@ -456,14 +617,14 @@ mod tests {
     }
 
     #[test]
-    fn application_subnet_can_dedup_input_when_adding_or_removing_subnet_admins() {
+    fn can_dedup_input_when_adding_or_removing_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let user1 = user_test_id(100).get();
         let payload = UpdateSubnetAdminsPayload {
@@ -493,14 +654,14 @@ mod tests {
     #[should_panic(
         expected = "Too many subnet admins. Provided: 11, Existing: 0, Max allowed: 10."
     )]
-    fn application_subnet_can_not_add_too_many_subnet_admins_no_existing_ones() {
+    fn can_not_add_too_many_subnet_admins_no_existing_ones() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let mut users_to_add = Vec::new();
         for i in 0..(MAX_SUBNET_ADMINS + 1) {
@@ -517,14 +678,14 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "Too many subnet admins. Provided: 3, Existing: 9, Max allowed: 10.")]
-    fn application_subnet_can_not_add_too_many_subnet_admins_with_existing_ones() {
+    fn can_not_add_too_many_subnet_admins_with_existing_ones() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let mut users_to_add = Vec::new();
         let mut expected_subnet_admins = Vec::new();
@@ -561,14 +722,14 @@ mod tests {
     #[should_panic(
         expected = "Too many subnet admins. Provided: 11, Existing: 0, Max allowed: 10."
     )]
-    fn application_subnet_can_not_remove_too_many_subnet_admins() {
+    fn can_not_remove_too_many_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let mut users_to_remove = Vec::new();
         for i in 0..(MAX_SUBNET_ADMINS + 1) {
@@ -584,14 +745,14 @@ mod tests {
     }
 
     #[test]
-    fn application_subnet_can_not_add_existing_subnet_admins() {
+    fn can_not_add_existing_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let user1 = user_test_id(100).get();
         let payload = UpdateSubnetAdminsPayload {
@@ -615,14 +776,14 @@ mod tests {
     }
 
     #[test]
-    fn application_subnet_can_not_remove_non_existing_subnet_admins() {
+    fn can_not_remove_non_existing_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(
             subnet_id,
             SubnetType::Application,
             vec![],
         );
-        let caller = subnet_rental_canister_caller();
+        let caller = PrincipalId::from(SUBNET_RENTAL_CANISTER_ID);
 
         let user1 = user_test_id(100).get();
         let user2 = user_test_id(101).get();
@@ -645,27 +806,16 @@ mod tests {
         );
     }
 
-    #[test]
-    #[should_panic(expected = "is not authorized to update subnet admins")]
-    fn application_subnet_rejects_non_rental_canister_caller() {
-        let subnet_id = subnet_test_id(1);
-        let mut registry = prepare_registry_for_update_subnet_admins_test(
-            subnet_id,
-            SubnetType::Application,
-            vec![],
-        );
-        let unauthorized_caller = user_test_id(999).get();
-
-        let payload = UpdateSubnetAdminsPayload {
-            subnet_id,
-            operation_type: Some(OperationType::Add(vec![user_test_id(100).get()])),
-        };
-
-        registry.do_update_subnet_admins(unauthorized_caller, payload);
-    }
+    // =====================================================================
+    // Core logic tests for CloudEngine subnets
+    //
+    // These tests verify add/remove/clear logic specific to CloudEngine
+    // and do not re-test authorization — they use an existing admin as
+    // the caller.
+    // =====================================================================
 
     #[test]
-    fn cloud_engine_subnet_admin_can_add_or_remove_subnet_admins() {
+    fn cloud_engine_admin_can_add_or_remove_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let admin = user_test_id(100).get();
         let mut registry = prepare_registry_for_update_subnet_admins_test(
@@ -703,7 +853,8 @@ mod tests {
     }
 
     #[test]
-    fn cloud_engine_subnet_admin_can_clear_subnet_admins() {
+    #[should_panic(expected = "Cannot remove all subnet admins from CloudEngine subnet")]
+    fn cloud_engine_cannot_clear_all_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let admin = user_test_id(100).get();
         let mut registry = prepare_registry_for_update_subnet_admins_test(
@@ -718,36 +869,11 @@ mod tests {
         };
 
         registry.do_update_subnet_admins(admin, payload);
-
-        assert_eq!(
-            registry.get_subnet_or_panic(subnet_id).subnet_admins,
-            vec![]
-        );
     }
 
     #[test]
-    #[should_panic(expected = "is not authorized to update subnet admins")]
-    fn cloud_engine_subnet_rejects_non_admin_caller() {
-        let subnet_id = subnet_test_id(1);
-        let admin = user_test_id(100).get();
-        let mut registry = prepare_registry_for_update_subnet_admins_test(
-            subnet_id,
-            SubnetType::CloudEngine,
-            vec![PrincipalIdPb::from(admin)],
-        );
-        let non_admin = user_test_id(999).get();
-
-        let payload = UpdateSubnetAdminsPayload {
-            subnet_id,
-            operation_type: Some(OperationType::Add(vec![user_test_id(200).get()])),
-        };
-
-        registry.do_update_subnet_admins(non_admin, payload);
-    }
-
-    #[test]
-    #[should_panic(expected = "is not authorized to update subnet admins")]
-    fn cloud_engine_subnet_rejects_subnet_rental_canister_caller() {
+    #[should_panic(expected = "Cannot remove all subnet admins from CloudEngine subnet")]
+    fn cloud_engine_cannot_remove_last_admin() {
         let subnet_id = subnet_test_id(1);
         let admin = user_test_id(100).get();
         let mut registry = prepare_registry_for_update_subnet_admins_test(
@@ -758,35 +884,9 @@ mod tests {
 
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
-            operation_type: Some(OperationType::Add(vec![user_test_id(200).get()])),
+            operation_type: Some(OperationType::Remove(vec![admin])),
         };
 
-        registry.do_update_subnet_admins(subnet_rental_canister_caller(), payload);
-    }
-
-    #[test]
-    #[should_panic(expected = "Only subnets on a free cycles cost schedule")]
-    fn non_free_cycles_schedule_rejects_subnet_admin_updates() {
-        let subnet_id = subnet_test_id(1);
-        let mut registry = prepare_registry_for_update_subnet_admins_test(
-            subnet_id,
-            SubnetType::Application,
-            vec![],
-        );
-
-        // Override the cycles cost schedule to Normal to simulate a non-rented subnet.
-        let mut subnet_record = registry.get_subnet_or_panic(subnet_id);
-        subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Normal);
-        registry.maybe_apply_mutation_internal(vec![upsert(
-            make_subnet_record_key(subnet_id).into_bytes(),
-            subnet_record.encode_to_vec(),
-        )]);
-
-        let payload = UpdateSubnetAdminsPayload {
-            subnet_id,
-            operation_type: Some(OperationType::Add(vec![user_test_id(100).get()])),
-        };
-
-        registry.do_update_subnet_admins(subnet_rental_canister_caller(), payload);
+        registry.do_update_subnet_admins(admin, payload);
     }
 }
