@@ -3,7 +3,7 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         self as pb, VotingPowerEconomics,
-        manage_neuron::{SetDissolveTimestamp, StartDissolving},
+        manage_neuron::{Configure, SetDissolveTimestamp, StartDissolving, configure::Operation},
     },
 };
 use ic_cdk::println;
@@ -810,4 +810,43 @@ fn test_ready_to_spawn() {
     )
     .build();
     assert!(!neuron_no_spawn_timestamp.ready_to_spawn(now));
+}
+
+#[test]
+fn test_eight_year_gang_bonus_base_e8s_is_lost_after_dissolving() {
+    let now = 123_456_789;
+    let dissolve_delay_seconds = 8 * ONE_YEAR_SECONDS;
+    let mut neuron = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds,
+            aging_since_timestamp_seconds: now - 1000,
+        },
+        now - 2000,
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .with_eight_year_gang_bonus_base_e8s(100 * E8)
+    .build();
+    let controller = neuron.controller();
+
+    // Verify the neuron is not dissolving and has a non-zero eight year gang bonus.
+    assert_eq!(neuron.state(now), NeuronState::NotDissolving);
+    assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 100 * E8);
+
+    // Start dissolving.
+    neuron
+        .configure(
+            &controller,
+            now,
+            &Configure {
+                operation: Some(Operation::StartDissolving(StartDissolving {})),
+            },
+        )
+        .unwrap();
+
+    // Verify the neuron is dissolving and the eight year gang bonus has been set to 0.
+    assert_eq!(neuron.state(now), NeuronState::Dissolving);
+    assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 0);
 }

@@ -206,6 +206,32 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "cloud_engine",
+    enable_metrics = True,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+        "II_FRONTEND_WASM_PATH": "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
+        "NNS_DAPP_WASM_PATH": "@mainnet_canisters//:nns_dapp_test.wasm.gz",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
+    },
+    deps = [
+        # Keep sorted.
+        "//rs/protobuf",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "//rs/types/cycles",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
     name = "medium",
     enable_metrics = True,
     tags = [
