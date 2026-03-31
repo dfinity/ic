@@ -133,7 +133,7 @@ fn verify_certified_data(
             provided_subnet_id: _,
             delegation_subnet_id: _,
         }
-        | CertificateValidationError::UnacceptableSourceSubnet => {
+        | CertificateValidationError::UntrustedDelegationSubnet(_) => {
             CryptoError::SignatureVerification {
                 algorithm: AlgorithmId::IcCanisterSignature,
                 public_key_bytes: pk.0.clone(),
