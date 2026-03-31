@@ -430,7 +430,7 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                 let metadata_shares = details
                     .metadata_shares
                     .into_iter()
-                    .map(TryFrom::try_from)
+                    .map(CanisterHttpResponseShare::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(FlexibleCanisterHttpError::ResponsesTooLarge {
                     callback_id,
@@ -441,7 +441,7 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                 let reject_responses = details
                     .reject_responses
                     .into_iter()
-                    .map(TryFrom::try_from)
+                    .map(FlexibleCanisterHttpResponseWithProof::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(FlexibleCanisterHttpError::TooManyRequestErrors {
                     callback_id,
