@@ -3316,9 +3316,7 @@ impl StateManager for StateManagerImpl {
             }
         };
         // Write the previous state hash to the state.
-        state
-            .metadata
-            .prev_state_hash = Some(CryptoHashOfPartialState::from(prev_state_hash));
+        state.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(prev_state_hash));
 
         if let CertificationScope::Metadata = scope {
             // We want to balance writing too many overlay files with having too many unflushed pages at
@@ -3587,7 +3585,6 @@ fn spawn_hash_thread(
                                 );
                             }
                             // If a reference hash from consensus is available, check if we agree.
-                            
                             let hash = &certification_metadata.certified_state_hash;
                             if let Some(ref cert) = *reference_certification {
                                 let delivered_hash = cert.signed.content.hash.as_ref();
