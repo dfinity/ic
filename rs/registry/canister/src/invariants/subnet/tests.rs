@@ -300,6 +300,9 @@ fn cloud_engine_subnets_must_have_type4_nodes() {
         Some(NodeRewardType::Type3dot1),
         Some(NodeRewardType::Type1dot1),
     ] {
+        println!(
+            "Ensuring that a node with reward type {reward_type:?} cannot be part of a CloudEngine subnet"
+        );
         set_node_reward_type(&mut snapshot, node_test_id(100), reward_type);
         assert_non_compliant_record(
             &snapshot,
