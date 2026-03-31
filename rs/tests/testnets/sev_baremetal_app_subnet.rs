@@ -4,7 +4,7 @@
 //
 // Prerequisites:
 //   - `BARE_METAL_HOST_SECRETS` must name an INI file with bare-metal login info
-//     (same as `//rs/tests/nested:sev_recovery`). Without it, setup fails immediately.
+//     (same as `//rs/tests/nested:sev_recovery`). Without it, setup fails.
 //
 // Setup example (either export in your shell or pass `--test_env` so the driver sees it):
 //
