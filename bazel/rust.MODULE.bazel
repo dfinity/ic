@@ -539,7 +539,7 @@ crate.spec(
 )
 crate.spec(
     package = "hickory-resolver",
-    version = "0.25.2"
+    version = "0.25.2",
 )
 crate.spec(
     package = "hkdf",
