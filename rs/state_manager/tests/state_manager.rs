@@ -4184,6 +4184,8 @@ fn can_commit_after_prev_state_is_gone() {
             dst_state_manager.flush_deallocation_channel();
 
             assert_eq!(Height(3), dst_state_manager.latest_state_height());
+            // tip_height should be present
+            assert!(matches!(dst_state_manager.get_state_at(Height(1)), Ok(_)));
             assert_eq!(
                 dst_state_manager.get_state_at(Height(2)),
                 Err(StateManagerError::StateRemoved(Height(2)))
@@ -9437,9 +9439,9 @@ fn commit_and_certify_reuses_certification() {
         sm.flush_hash_channel();
         assert_eq!(no_state_clone_count(metrics), 0);
 
-        // `commit_and_certify` did not clone state or calculate a hash -> no entry in cert_metadata
+        // `commit_and_certify` reused certification from `states.certifications`
         assert!(
-            !sm.certifications_metadata_heights()
+            sm.certifications_metadata_heights()
                 .contains(&no_opt_height)
         );
 

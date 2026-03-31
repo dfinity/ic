@@ -3408,10 +3408,8 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        // Kick off hashing of the new state. At this point, we are either
-        // - not catching up, so there is no delivered_certification, or there is one but
-        // - we are at a height which is a multiple of MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING,
-        //   so we hash anyway and compare the result to the delivered hash in order to detect divergence.
+        // Kick off hashing of the new state. This will also compare the result with the 
+        // delivered hash, if present, in order to detect divergence.
         let hash_req = HashRequest::HashState {
             state: Arc::clone(&state),
             states: Arc::clone(&self.states),
