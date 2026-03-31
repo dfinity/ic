@@ -145,37 +145,36 @@ impl Registry {
 
         self.check_update_subnet_admins_caller_authorization(caller, &subnet_record, subnet_id);
 
+        let subnet_type = subnet_record.subnet_type();
         let current_subnet_admins = subnet_record.subnet_admins;
 
         let res = match payload.operation_type {
             Some(operation_type) => {
                 match self.compute_new_subnet_admins(current_subnet_admins, operation_type) {
-                    Ok(new_subnet_admins) => {
+                    Ok(new_subnet_admins)
+                        if subnet_type == SubnetType::CloudEngine.into()
+                            && new_subnet_admins.is_empty() =>
+                    {
                         // CloudEngine subnets must always have at least one admin,
                         // otherwise there is no way to recover.
-                        if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine)
-                            && new_subnet_admins.is_empty()
-                        {
-                            Err(UpdateSubnetAdminsError::WouldRemoveAllCloudEngineAdmins {
-                                subnet_id,
-                            })
-                        } else {
-                            subnet_record.subnet_admins = new_subnet_admins;
+                        Err(UpdateSubnetAdminsError::WouldRemoveAllCloudEngineAdmins { subnet_id })
+                    }
+                    Ok(new_subnet_admins) => {
+                        subnet_record.subnet_admins = new_subnet_admins;
 
-                            let subnet_record_mutation = upsert(
-                                make_subnet_record_key(subnet_id).into_bytes(),
-                                subnet_record.encode_to_vec(),
-                            );
-                            let mutations = vec![subnet_record_mutation];
+                        let subnet_record_mutation = upsert(
+                            make_subnet_record_key(subnet_id).into_bytes(),
+                            subnet_record.encode_to_vec(),
+                        );
+                        let mutations = vec![subnet_record_mutation];
 
-                            // Check invariants before applying mutations
-                            self.maybe_apply_mutation_internal(mutations);
+                        // Check invariants before applying mutations
+                        self.maybe_apply_mutation_internal(mutations);
 
-                            UPDATE_SUBNET_ADMINS_RATE_LIMITER
-                                .with_borrow_mut(|limiter| limiter.commit(reservation, now));
+                        UPDATE_SUBNET_ADMINS_RATE_LIMITER
+                            .with_borrow_mut(|limiter| limiter.commit(reservation, now));
 
-                            Ok(())
-                        }
+                        Ok(())
                     }
                     Err(err) => Err(err),
                 }
