@@ -507,6 +507,17 @@ where
     }
 }
 
+impl<Unit, Repr> std::str::FromStr for AmountOf<Unit, Repr>
+where
+    Repr: std::str::FromStr,
+{
+    type Err = Repr::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<Repr>().map(Self::from)
+    }
+}
+
 // Derived serde `impl Serialize` produces an extra `unit` value for
 // phantom data, e.g. `AmountOf::<Meters>::from(10)` is serialized
 // into json as `[10, null]` by default.

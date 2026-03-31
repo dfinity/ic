@@ -18,6 +18,7 @@ use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_resource_limits::ResourceLimits;
@@ -713,24 +714,18 @@ impl ReplicatedState {
         Arc::clone(self.metadata.network_topology.routing_table())
     }
 
-    /// Returns the cost schedule of this subnet.
-    pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        let subnet_id = self.metadata.own_subnet_id;
+    /// Returns the size of this subnet. Defaults to `SMALL_APP_SUBNET_MAX_SIZE` if
+    /// the network topology is not populated.
+    pub fn get_own_subnet_size(&self) -> usize {
         self.metadata
-            .network_topology
-            .subnets()
-            .get(&subnet_id)
-            .map(|x| x.cost_schedule)
-            .unwrap_or_default()
+            .own_subnet_size()
+            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE)
     }
 
-    /// Returns the cost schedule of the provided subnet, if it exists.
-    pub fn get_cost_schedule(&self, subnet_id: SubnetId) -> Option<CanisterCyclesCostSchedule> {
-        self.metadata
-            .network_topology
-            .subnets()
-            .get(&subnet_id)
-            .map(|x| x.cost_schedule)
+    /// Returns the cost schedule of this subnet. Defaults to `Normal` if the
+    /// network topology is not populated.
+    pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.metadata.own_cost_schedule().unwrap_or_default()
     }
 
     /// Returns the list of subnet admins of this subnet.
@@ -991,11 +986,7 @@ impl ReplicatedState {
         subnet_available_guaranteed_response_memory: &mut i64,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
-        let own_cost_schedule = self
-            .metadata
-            .network_topology
-            .get_cost_schedule(&self.metadata.own_subnet_id)
-            .unwrap_or_default();
+        let own_cost_schedule = self.get_own_cost_schedule();
         let sender = msg.sender();
         let input_queue_type = if sender.get_ref() == self.metadata.own_subnet_id.get_ref()
             || self.canister_states.contains_key(&sender)

@@ -6430,6 +6430,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-nns-data-provider-wrappers",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -9706,7 +9707,6 @@ dependencies = [
  "maplit",
  "memory_tracker",
  "more-asserts",
- "num-rational 0.2.4",
  "num-traits",
  "phantom_newtype",
  "prometheus",
@@ -10159,6 +10159,7 @@ name = "ic-https-outcalls-consensus"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "candid",
  "hex",
  "ic-artifact-pool",
  "ic-consensus-mocks",
@@ -10170,6 +10171,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
+ "ic-management-canister-types-private",
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
@@ -13261,6 +13263,7 @@ name = "ic-registry-resource-limits"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "clap 4.6.0",
  "ic-protobuf",
  "ic-types",
  "serde",
@@ -13821,7 +13824,7 @@ dependencies = [
 
 [[package]]
 name = "ic-signature-verification"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "assert_matches",
  "hex",
@@ -15975,15 +15978,20 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
+ "dfn_candid",
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-canister-client",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-cup-explorer",
  "ic-limits",
  "ic-management-canister-types-private",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-nns-test-utils",
  "ic-protobuf",
  "ic-recovery",
  "ic-registry-routing-table",
@@ -16010,6 +16018,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "xnet-test",
 ]
 
 [[package]]
@@ -18621,7 +18630,7 @@ dependencies = [
  "num-complex",
  "num-integer",
  "num-iter",
- "num-rational 0.4.2",
+ "num-rational",
  "num-traits",
 ]
 
@@ -18726,18 +18735,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1429034a0490724d0075ebb2bc9e875d6503c3cf69e235a8941aa757d83ef5bf"
 dependencies = [
  "autocfg 1.5.0",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-dependencies = [
- "autocfg 1.5.0",
- "num-bigint 0.2.6",
  "num-integer",
  "num-traits",
 ]
@@ -24073,10 +24070,13 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-limits",
+ "ic-protobuf",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-testnet-mainnet-nns",
+ "ic-types",
+ "ic-types-cycles",
  "ic-xrc-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
