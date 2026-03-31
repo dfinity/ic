@@ -17,7 +17,6 @@ pub enum CyclesUseCase {
     ECDSAOutcalls = 8,
     HTTPOutcalls = 9,
     DeletedCanisters = 10,
-    NonConsumed = 11,
     BurnedCycles = 12,
     SchnorrOutcalls = 13,
     VetKd = 14,
@@ -39,7 +38,6 @@ impl CyclesUseCase {
             Self::ECDSAOutcalls => "ECDSAOutcalls",
             Self::HTTPOutcalls => "HTTPOutcalls",
             Self::DeletedCanisters => "DeletedCanisters",
-            Self::NonConsumed => "NonConsumed",
             Self::BurnedCycles => "BurnedCycles",
             Self::SchnorrOutcalls => "SchnorrOutcalls",
             Self::VetKd => "VetKd",
@@ -63,7 +61,6 @@ impl From<CyclesUseCase> for pb::CyclesUseCase {
             CyclesUseCase::ECDSAOutcalls => pb::CyclesUseCase::EcdsaOutcalls,
             CyclesUseCase::HTTPOutcalls => pb::CyclesUseCase::HttpOutcalls,
             CyclesUseCase::DeletedCanisters => pb::CyclesUseCase::DeletedCanisters,
-            CyclesUseCase::NonConsumed => pb::CyclesUseCase::NonConsumed,
             CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
             CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
             CyclesUseCase::VetKd => pb::CyclesUseCase::VetKd,
@@ -93,7 +90,6 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
             pb::CyclesUseCase::EcdsaOutcalls => Ok(Self::ECDSAOutcalls),
             pb::CyclesUseCase::HttpOutcalls => Ok(Self::HTTPOutcalls),
             pb::CyclesUseCase::DeletedCanisters => Ok(Self::DeletedCanisters),
-            pb::CyclesUseCase::NonConsumed => Ok(Self::NonConsumed),
             pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
             pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
             pb::CyclesUseCase::VetKd => Ok(Self::VetKd),
@@ -211,15 +207,6 @@ pub struct DeletedCanisters;
 impl CyclesUseCaseKind for DeletedCanisters {
     fn cycles_use_case() -> CyclesUseCase {
         CyclesUseCase::DeletedCanisters
-    }
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
-pub struct NonConsumed;
-
-impl CyclesUseCaseKind for NonConsumed {
-    fn cycles_use_case() -> CyclesUseCase {
-        CyclesUseCase::NonConsumed
     }
 }
 
