@@ -3587,21 +3587,27 @@ fn spawn_hash_thread(
                                     certification_metadata.certified_state_hash
                                 );
                             }
-                            // If a reference hash from consensus is available, check if we agree.
                             let hash = &certification_metadata.certified_state_hash;
-                            if let Some(ref cert) = *reference_certification {
-                                let delivered_hash = cert.signed.content.hash.as_ref();
-                                if delivered_hash != hash {
+
+                            // Closure to compare computed hash with potential hashes from other sources.
+                            let assert_prev_hash_matches = |prev_hash: &CryptoHash, msg: &str| {
+                                if prev_hash != hash {
                                     if let Err(err) = state_layout.create_diverged_state_marker(height) {
                                         error!(
                                             log,
                                             "Failed to mark state @{} diverged: {}", height, err
                                         );
-                                    }
+                                    }   
                                     panic!(
-                                        "Committed state @{height} with hash {hash:?} which is different from delivered hash {delivered_hash:?}"
+                                        "Committed state @{height} with hash {hash:?} which is different from {msg} hash {prev_hash:?}"
                                     );
                                 }
+                            };
+                            
+                            // If a reference hash from consensus is available, check if we agree.
+                            if let Some(ref cert) = *reference_certification {
+                                let delivered_hash = cert.signed.content.hash.as_ref();
+                                assert_prev_hash_matches(delivered_hash, "delivered");
                                 // If we do agree, write the certification to the metadata, so that consensus does
                                 // not have to deliver it again. 
                                 certification_metadata.certification = *reference_certification;
@@ -3613,17 +3619,7 @@ fn spawn_hash_thread(
                             let mut states = states.write();
                             if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
                                 let prev_hash = &prev_metadata.certified_state_hash;
-                                if prev_hash != hash {
-                                    if let Err(err) = state_layout.create_diverged_state_marker(height) {
-                                        error!(
-                                            log,
-                                            "Failed to mark state @{} diverged: {}", height, err
-                                        );
-                                    }
-                                    panic!(
-                                        "Committed state @{height} with hash {hash:?} which is different from previously computed hash {prev_hash:?}"
-                                    );
-                                }
+                                assert_prev_hash_matches(prev_hash, "previously computed");
                             }
 
                             // Add state and hash to snapshots and certification_metadata
