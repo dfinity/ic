@@ -80,13 +80,15 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
                     )),
                 }
             }))
-            .chain(flexible_errors.into_iter().map(|flex_error| {
-                CanisterHttpResponseMessage {
-                    message_type: Some(MessageType::FlexibleError(
-                        pb::FlexibleCanisterHttpError::from(flex_error),
-                    )),
-                }
-            }));
+            .chain(
+                flexible_errors
+                    .into_iter()
+                    .map(|flex_error| CanisterHttpResponseMessage {
+                        message_type: Some(MessageType::FlexibleError(
+                            pb::FlexibleCanisterHttpError::from(flex_error),
+                        )),
+                    }),
+            );
 
     iterator_to_bytes(message_iterator, max_size)
 }
