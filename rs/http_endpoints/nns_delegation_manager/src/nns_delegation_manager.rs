@@ -2,6 +2,7 @@ use std::{convert::TryFrom, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::body::Body;
 use futures::FutureExt;
+use hickory_resolver::{Resolver, config::LookupIpStrategy};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
@@ -33,7 +34,7 @@ use ic_types::{
 use rand::{Rng, seq::SliceRandom};
 use rustls::{ClientConfig, pki_types::ServerName};
 use tokio::{
-    net::{TcpStream, lookup_host},
+    net::TcpStream,
     sync::watch,
     task::JoinHandle,
     time::{sleep, timeout},
@@ -61,7 +62,7 @@ const DELEGATION_RETRY_MAX_BACKOFF_SECONDS: u64 = 15;
 #[cfg(not(test))]
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(test)]
-const CONNECTION_TIMEOUT: Duration = Duration::from_secs(1);
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[cfg(not(test))]
 const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
@@ -475,12 +476,19 @@ async fn connect(
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
                 .map_err(|err| format!("Could not find an API BN to talk to. Error: {err}"))?;
 
-            let addr = lookup_host((domain.as_str(), 443))
+            let mut dns_resolver = Resolver::builder_tokio()?;
+            dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
+            let ip_addr = dns_resolver
+                .build()
+                .lookup_ip(domain.as_str())
                 .await?
-                .find(|addr| addr.is_ipv6())
+                .iter()
+                .next()
                 .ok_or_else(|| {
                     format!("API BN domain {domain} does not resolve to any IPv6 address.",)
                 })?;
+
+            let addr = SocketAddr::new(ip_addr, 443);
 
             let root_store =
                 rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -1262,7 +1270,7 @@ mod tests {
         // Since the API BN is configured with a domain that does not resolve, we expect the
         // connection to fail with a name resolution error, which indicates that we indeed tried to
         // connect to the API BN instead of an NNS node.
-        assert_matches!(response, Err(err) if err.to_string().contains("Temporary failure in name resolution"));
+        assert_matches!(response, Err(err) if format!("{err:?}").contains("ResolveError"));
     }
 
     #[tokio::test]

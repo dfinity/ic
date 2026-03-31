@@ -13,6 +13,7 @@ harness = false
 [dependencies]
 axum = { workspace = true }
 futures = { workspace = true }
+hickory-resolver = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }

@@ -12003,6 +12003,7 @@ dependencies = [
  "axum-server",
  "criterion",
  "futures",
+ "hickory-resolver",
  "http-body-util",
  "hyper 1.8.1",
  "hyper-util",

@@ -3713,6 +3713,7 @@ dependencies = [
  "hashlink 0.8.3",
  "hex",
  "hex-literal 0.4.1",
+ "hickory-resolver",
  "hkdf",
  "hmac",
  "hpke",
