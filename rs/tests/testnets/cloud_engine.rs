@@ -39,6 +39,7 @@ use anyhow::Result;
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_protobuf::registry::dc::v1::{DataCenterRecord, Gps};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
@@ -52,7 +53,6 @@ use ic_types_cycles::CanisterCyclesCostSchedule;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
-use ic_protobuf::registry::node::v1::NodeRewardType;
 use std::collections::BTreeMap;
 
 struct DcConfig {
