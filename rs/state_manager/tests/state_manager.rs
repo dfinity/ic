@@ -9453,3 +9453,21 @@ fn commit_and_certify_reuses_certification() {
         );
     });
 }
+
+#[test]
+#[should_panic(expected = "failed to wait for hashing thread")]
+// This test fails with the following panic message, but we can't inspect it because is happens in another thread:
+// Committed state @1 with hash CryptoHash(0x4e2d174de5daaeb4622d8f5e426ee09274f7ec4fb01d62fb9a3d36ae50961353) which is different from previously computed or delivered hash CryptoHash(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a)
+fn commit_and_certify_panic_on_delivered_fake_certification() {
+    state_manager_test(|metrics, sm| {
+        // consensus delivers certification for a future height
+        let no_opt_height = Height::new(1);
+        let certification = fake_certification_for_height(no_opt_height);
+        sm.deliver_state_certification(certification);
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
+    });
+}
