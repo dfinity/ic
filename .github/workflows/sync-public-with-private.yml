@@ -11,7 +11,7 @@ jobs:
     if: ${{ github.repository != 'dfinity/ic' }}
     steps:
       - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
           # The app used for this is actually PR_AUTOMATION_BOT_PRIVATE, but because the env
