@@ -1739,6 +1739,9 @@ pub trait SshSession: HasTestEnv {
 
 pub trait RetrieveIpv4Addr {
     /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.
+    fn block_on_ipv4_from_session(&self, session: &Session) -> Result<Ipv4Addr>;
+
+    /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.
     fn block_on_ipv4(&self) -> Result<Ipv4Addr>;
 }
 
