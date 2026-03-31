@@ -222,6 +222,7 @@ fn multiple_payload_test() {
                     timeouts: vec![],
                     divergence_responses: vec![],
                     flexible_responses: vec![],
+                    flexible_errors: vec![],
                 };
                 let past_payload = payload_to_bytes(past_payload, TEST_MAX_PAYLOAD_BYTES);
 
@@ -459,6 +460,7 @@ fn divergence_responses_count_toward_max_responses() {
             timeouts: vec![],
             divergence_responses,
             flexible_responses: vec![],
+            flexible_errors: vec![],
         };
 
         let result = payload_builder.validate_payload(
@@ -637,6 +639,7 @@ fn duplicate_validation() {
             timeouts: vec![],
             divergence_responses: vec![],
             flexible_responses: vec![],
+            flexible_errors: vec![],
         };
         let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let past_payloads = vec![PastPayload {
@@ -692,6 +695,7 @@ fn divergence_response_validation_test() {
                         .collect(),
                 }],
                 flexible_responses: vec![],
+                flexible_errors: vec![],
             };
             let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
@@ -713,6 +717,7 @@ fn divergence_response_validation_test() {
                         .collect(),
                 }],
                 flexible_responses: vec![],
+                flexible_errors: vec![],
             };
             let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
@@ -751,6 +756,7 @@ fn divergence_response_validation_test() {
                         .collect(),
                 }],
                 flexible_responses: vec![],
+                flexible_errors: vec![],
             };
             let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
@@ -1618,6 +1624,7 @@ where
             timeouts: vec![],
             divergence_responses: vec![],
             flexible_responses: vec![],
+            flexible_errors: vec![],
         };
 
         let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
@@ -2999,6 +3006,7 @@ fn flexible_payload(groups: Vec<FlexibleCanisterHttpResponses>) -> CanisterHttpP
         timeouts: vec![],
         divergence_responses: vec![],
         flexible_responses: groups,
+        flexible_errors: vec![],
     }
 }
 
