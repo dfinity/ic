@@ -434,7 +434,10 @@ async fn connect(
     tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Result<SendRequest<Body>, BoxError> {
     let node_reward_type = get_node_reward_type(registry_client, node_id).unwrap_or_else(|err| {
-        warn!(log, "Could not determine the reward type: {err}");
+        warn!(
+            log,
+            "Could not determine the reward type: {err}. Connecting to an NNS node directly."
+        );
         NodeRewardType::Unspecified
     });
 
