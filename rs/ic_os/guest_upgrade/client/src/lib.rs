@@ -92,8 +92,6 @@ impl DiskEncryptionKeyExchangeClientAgent {
         ))
         .context("Could not parse URL")?;
 
-        dump_network_diagnostics(&peer_guest_vm_address.to_string());
-
         println!("Connecting to server at {server_uri}");
         let connect_result = self
             .create_upgrade_service_client(server_uri.clone(), my_certificate)
@@ -101,8 +99,8 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .context(format!("Could not connect to server at {server_uri}"));
 
         if connect_result.is_err() {
-            eprintln!("Connection failed, dumping post-failure network state:");
-            dump_network_diagnostics(&peer_guest_vm_address.to_string());
+            eprintln!("Connection failed, dumping network state:");
+            dump_network_diagnostics();
         }
 
         let (mut upgrade_service_client, server_public_key_der) = connect_result?;
@@ -299,7 +297,7 @@ fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) ->
     Ok(public_key_der)
 }
 
-fn dump_network_diagnostics(_peer_addr: &str) {
+fn dump_network_diagnostics() {
     for cmd in ["ip -6 addr show", "ip -6 route show", "ip -6 neigh show"] {
         println!("=== {cmd} ===");
         match Command::new("sh").args(["-c", cmd]).output() {
