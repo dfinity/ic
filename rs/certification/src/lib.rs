@@ -86,7 +86,10 @@ impl fmt::Display for CertificateValidationError {
                 "provided subnet id {provided_subnet_id} does not match subnet id in delegation {delegation_subnet_id}",
             ),
             Self::UntrustedDelegationSubnet(subnet_id) => {
-                write!(f, "the source subnet {subnet_id} is not trusted for delegations")
+                write!(
+                    f,
+                    "the source subnet {subnet_id} is not trusted for delegations"
+                )
             }
         }
     }
@@ -426,7 +429,9 @@ pub fn verify_delegation_certificate(
     if let Some(subnet_type) = &subnet_info.r#type
         && subnet_type == "cloud_engine"
     {
-        return Err(CertificateValidationError::UntrustedDelegationSubnet(subnet_id.clone()));
+        return Err(CertificateValidationError::UntrustedDelegationSubnet(
+            subnet_id.clone(),
+        ));
     }
 
     Ok(public_key)
