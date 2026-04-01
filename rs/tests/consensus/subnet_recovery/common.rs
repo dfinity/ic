@@ -990,9 +990,13 @@ fn corrupt_latest_cup(
         .expect("replace CUP");
     }
 
-    // Restart all nodes with the corrupted CUPs.
+    // Restart ic-replica on all nodes with the corrupted CUPs.
     for node in subnet.nodes() {
-        info!(logger, "Restarting node {:?}", node.get_ip_addr());
+        info!(
+            logger,
+            "Starting ic-replica on node {:?}",
+            node.get_ip_addr()
+        );
         node.block_on_bash_script("sudo systemctl start ic-replica")
             .expect("start replica");
     }
