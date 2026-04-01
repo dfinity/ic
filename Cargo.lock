@@ -4762,6 +4762,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-registry-nns-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -9707,7 +9708,6 @@ dependencies = [
  "maplit",
  "memory_tracker",
  "more-asserts",
- "num-rational 0.2.4",
  "num-traits",
  "phantom_newtype",
  "prometheus",
@@ -12735,6 +12735,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -14842,6 +14843,7 @@ dependencies = [
  "ic-registry-local-registry",
  "ic-registry-nns-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -18631,7 +18633,7 @@ dependencies = [
  "num-complex",
  "num-integer",
  "num-iter",
- "num-rational 0.4.2",
+ "num-rational",
  "num-traits",
 ]
 
@@ -18736,18 +18738,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1429034a0490724d0075ebb2bc9e875d6503c3cf69e235a8941aa757d83ef5bf"
 dependencies = [
  "autocfg 1.5.0",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-dependencies = [
- "autocfg 1.5.0",
- "num-bigint 0.2.6",
  "num-integer",
  "num-traits",
 ]

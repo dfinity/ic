@@ -30,6 +30,37 @@ pub struct CanisterHttpPayload {
     pub timeouts: Vec<CallbackId>,
     pub divergence_responses: Vec<CanisterHttpResponseDivergence>,
     pub flexible_responses: Vec<FlexibleCanisterHttpResponses>,
+    pub flexible_errors: Vec<FlexibleCanisterHttpError>,
+}
+
+/// An error detected during flexible HTTP outcall processing.
+///
+/// Each variant carries only the data needed for consensus validation
+/// and later Candid encoding into `FlexibleHttpRequestResult::Err`.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub enum FlexibleCanisterHttpError {
+    Timeout {
+        callback_id: CallbackId,
+    },
+    ResponsesTooLarge {
+        callback_id: CallbackId,
+        metadata_shares: Vec<CanisterHttpResponseShare>,
+    },
+    TooManyRequestErrors {
+        callback_id: CallbackId,
+        reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
+    },
+}
+
+impl FlexibleCanisterHttpError {
+    pub fn callback_id(&self) -> CallbackId {
+        match self {
+            Self::Timeout { callback_id }
+            | Self::ResponsesTooLarge { callback_id, .. }
+            | Self::TooManyRequestErrors { callback_id, .. } => *callback_id,
+        }
+    }
 }
 
 /// A group of flexible HTTP outcall responses for a single callback.
@@ -67,8 +98,13 @@ impl CanisterHttpPayload {
             timeouts,
             divergence_responses,
             flexible_responses,
+            flexible_errors,
         } = self;
-        responses.len() + timeouts.len() + divergence_responses.len() + flexible_responses.len()
+        responses.len()
+            + timeouts.len()
+            + divergence_responses.len()
+            + flexible_responses.len()
+            + flexible_errors.len()
     }
 
     /// Returns the number of non_timeout responses
@@ -78,8 +114,12 @@ impl CanisterHttpPayload {
             timeouts: _,
             divergence_responses,
             flexible_responses,
+            flexible_errors,
         } = self;
-        responses.len() + divergence_responses.len() + flexible_responses.len()
+        responses.len()
+            + divergence_responses.len()
+            + flexible_responses.len()
+            + flexible_errors.len()
     }
 
     /// Returns true, if this is an empty payload
@@ -112,6 +152,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                     signature: signature.get().0,
                 })
                 .collect(),
+            content_size: payload.proof.content.content_size,
         }
     }
 }
@@ -155,6 +196,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                     content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(
                         payload.hash,
                     )),
+                    content_size: payload.content_size,
                     registry_version: RegistryVersion::new(payload.registry_version),
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
                         .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
@@ -250,6 +292,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
                 content_hash: share.content.content_hash.clone().get().0,
                 registry_version: share.content.registry_version.get(),
                 replica_version: share.content.replica_version.into(),
+                content_size: share.content.content_size,
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
@@ -279,6 +322,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                 id,
                 timeout,
                 content_hash,
+                content_size: metadata.content_size,
                 registry_version,
                 replica_version,
             },
@@ -337,6 +381,77 @@ impl TryFrom<pb::FlexibleCanisterHttpResponses> for FlexibleCanisterHttpResponse
                 .map(TryFrom::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
         })
+    }
+}
+
+impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
+    fn from(error: FlexibleCanisterHttpError) -> Self {
+        use pb::flexible_canister_http_error::ErrorDetails;
+        let callback_id = error.callback_id().get();
+        let error_details = match error {
+            FlexibleCanisterHttpError::Timeout { .. } => {
+                ErrorDetails::Timeout(pb::FlexibleCanisterHttpTimeout {})
+            }
+            FlexibleCanisterHttpError::ResponsesTooLarge {
+                metadata_shares, ..
+            } => ErrorDetails::ResponsesTooLarge(pb::FlexibleCanisterHttpResponsesTooLarge {
+                metadata_shares: metadata_shares
+                    .into_iter()
+                    .map(pb::CanisterHttpShare::from)
+                    .collect(),
+            }),
+            FlexibleCanisterHttpError::TooManyRequestErrors {
+                reject_responses, ..
+            } => ErrorDetails::TooManyRequestErrors(pb::FlexibleCanisterHttpTooManyRequestErrors {
+                reject_responses: reject_responses
+                    .into_iter()
+                    .map(pb::FlexibleCanisterHttpResponseWithProof::from)
+                    .collect(),
+            }),
+        };
+        pb::FlexibleCanisterHttpError {
+            callback_id,
+            error_details: Some(error_details),
+        }
+    }
+}
+
+impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
+    type Error = ProxyDecodeError;
+
+    fn try_from(error: pb::FlexibleCanisterHttpError) -> Result<Self, Self::Error> {
+        use pb::flexible_canister_http_error::ErrorDetails;
+        let callback_id = CallbackId::new(error.callback_id);
+        match error.error_details {
+            Some(ErrorDetails::Timeout(_)) => {
+                Ok(FlexibleCanisterHttpError::Timeout { callback_id })
+            }
+            Some(ErrorDetails::ResponsesTooLarge(details)) => {
+                let metadata_shares = details
+                    .metadata_shares
+                    .into_iter()
+                    .map(CanisterHttpResponseShare::try_from)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(FlexibleCanisterHttpError::ResponsesTooLarge {
+                    callback_id,
+                    metadata_shares,
+                })
+            }
+            Some(ErrorDetails::TooManyRequestErrors(details)) => {
+                let reject_responses = details
+                    .reject_responses
+                    .into_iter()
+                    .map(FlexibleCanisterHttpResponseWithProof::try_from)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(FlexibleCanisterHttpError::TooManyRequestErrors {
+                    callback_id,
+                    reject_responses,
+                })
+            }
+            None => Err(ProxyDecodeError::MissingField(
+                "FlexibleCanisterHttpError::error_details",
+            )),
+        }
     }
 }
 
@@ -432,6 +547,7 @@ mod tests {
                 content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
                     4, 5, 6, 7,
                 ])),
+                content_size: 42,
                 registry_version: RegistryVersion::new(2),
                 replica_version: ReplicaVersion::default(),
             },
@@ -482,6 +598,7 @@ mod tests {
                 responses,
                 divergence_responses,
                 flexible_responses,
+                flexible_errors,
                 timeouts: _, // skipped because there is no dedicated protobuf conversion for this
             } = payload;
 
@@ -506,6 +623,11 @@ mod tests {
                 let pb = pb::FlexibleCanisterHttpResponses::from(flexible.clone());
                 let roundtripped = FlexibleCanisterHttpResponses::try_from(pb).unwrap();
                 assert_eq!(flexible, roundtripped);
+            }
+            for error in flexible_errors {
+                let pb = pb::FlexibleCanisterHttpError::from(error.clone());
+                let roundtripped = FlexibleCanisterHttpError::try_from(pb).unwrap();
+                assert_eq!(error, roundtripped);
             }
         }
     }

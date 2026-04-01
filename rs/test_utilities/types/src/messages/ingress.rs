@@ -29,6 +29,7 @@ impl Default for IngressBuilder {
                 method_payload: Vec::new(),
                 message_id: MessageId::from([0; 32]),
                 expiry_time: expiry_time_from_now(),
+                sender_info: None,
             },
         }
     }

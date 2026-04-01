@@ -1,12 +1,16 @@
 use crate::driver::resource::BootImage;
 use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
-    farm::{Farm, HostFeature},
+    farm::{DnsRecord, DnsRecordType, Farm, HostFeature},
+    ic_gateway_vm::Playnet,
     nested::UnassignedRecordConfig,
     node_software_version::NodeSoftwareVersion,
     resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
     test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
+    test_env_api::{
+        AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasRegistryLocalStore,
+        HasTopologySnapshot,
+    },
     test_setup::GroupSetup,
 };
 use anyhow::Result;
@@ -15,6 +19,7 @@ use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningS
 use ic_protobuf::registry::{dc::v1::DataCenterRecord, node::v1::NodeRewardType};
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
@@ -51,6 +56,7 @@ pub struct InternetComputer {
     use_specified_ids_allocation_range: bool,
     pub unassigned_record_config: Option<UnassignedRecordConfig>,
     pub api_boundary_nodes: Vec<Node>,
+    pub api_bn_use_playnet: bool,
     pub data_centers: Vec<DataCenterRecord>,
     pub node_operators: Vec<NodeOperatorConfig>,
 }
@@ -187,6 +193,23 @@ impl InternetComputer {
         self
     }
 
+    /// Add the given number of API boundary nodes with playnet support.
+    /// Unlike `with_api_boundary_nodes`, nodes are created without domains here —
+    /// real domains (e.g. `apibn-0.ic50.farm.dfinity.systems`) are assigned during
+    /// `setup_and_start` after a playnet certificate is acquired from Farm.
+    pub fn with_api_boundary_nodes_playnet(mut self, no_of_nodes: usize) -> Self {
+        self.api_bn_use_playnet = true;
+        for _ in 0..no_of_nodes {
+            self.api_boundary_nodes.push(
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone()),
+            );
+        }
+        self
+    }
+
     /// Add an API boundary node with custom settings (domain name)
     pub fn with_api_boundary_node(mut self, node: Node) -> Self {
         self.api_boundary_nodes.push(node);
@@ -301,6 +324,11 @@ impl InternetComputer {
 
         let res_group = allocate_resources(&farm, &res_request, env)?;
         self.propagate_ip_addrs(&res_group);
+
+        if self.api_bn_use_playnet {
+            self.setup_api_bn_playnet(env);
+        }
+
         let init_ic = init_ic(
             self,
             env,
@@ -365,6 +393,42 @@ impl InternetComputer {
                     .ipv6,
             );
         }
+    }
+
+    /// Acquires a playnet certificate from Farm, assigns real domains to API BN
+    /// nodes, creates DNS records, and writes the Playnet attribute for reuse
+    /// by the IC gateway.
+    fn setup_api_bn_playnet(&mut self, env: &TestEnv) {
+        let playnet_cert = env.acquire_playnet_certificate();
+        let fqdn = &playnet_cert.playnet;
+        info!(env.logger(), "Acquired playnet for API BNs: {}", fqdn);
+
+        for (idx, node) in self.api_boundary_nodes.iter_mut().enumerate() {
+            node.domain = Some(format!("apibn-{idx}.{fqdn}"));
+        }
+
+        let dns_records: Vec<DnsRecord> = self
+            .api_boundary_nodes
+            .iter()
+            .enumerate()
+            .map(|(idx, node)| DnsRecord {
+                name: format!("apibn-{idx}"),
+                record_type: DnsRecordType::AAAA,
+                records: vec![node.ipv6.expect("API BN missing IPv6").to_string()],
+            })
+            .collect();
+        let suffix = env.create_playnet_dns_records(dns_records);
+        info!(
+            env.logger(),
+            "Created playnet DNS records for API BNs under {}", suffix
+        );
+
+        let playnet = Playnet {
+            playnet_cert,
+            aaaa_records: vec![],
+            a_records: vec![],
+        };
+        playnet.write_attribute(env);
     }
 
     pub fn has_malicious_behaviors(&self) -> bool {
@@ -528,6 +592,7 @@ pub struct Subnet {
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeatures>,
+    pub resource_limits: Option<ResourceLimits>,
     pub max_number_of_canisters: Option<u64>,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
@@ -570,6 +635,7 @@ impl Subnet {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             subnet_type,
             canister_cycles_cost_schedule,
@@ -743,6 +809,11 @@ impl Subnet {
         self
     }
 
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = Some(resource_limits);
+        self
+    }
+
     pub fn with_max_number_of_canisters(mut self, max_number_of_canisters: u64) -> Self {
         self.max_number_of_canisters = Some(max_number_of_canisters);
         self
@@ -845,6 +916,7 @@ impl Default for Subnet {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],

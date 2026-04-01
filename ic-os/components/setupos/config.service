@@ -1,5 +1,6 @@
 [Unit]
 Description=SetupOS config process
+RequiresMountsFor=/config /data
 Before=generate-network-config.service
 Before=setupos.service
 

@@ -270,6 +270,16 @@ def icos_build(
             # - 16 vCPUs: local dev testing (per deployment.json.template dev_vm_resources.nr_of_vcpus)
             # - 64 vCPUs: production-like environments
             vcpu_configs = "16 64" if "dev" in mode else "64"
+
+            # CPU type flags for sev-snp-measure, one per AMD EPYC generation.
+            # TODO(NODE-1924): Once sev-snp-measure adds EPYC-Turin as a named --vcpu-type,
+            # bump the version and replace --vcpu-sig=0xB00F00 with
+            # --vcpu-type=EPYC-Turin for consistency.
+            # Turin CPUID signature 0xB00F00 = family=26, model=0, stepping=0 encoded
+            # per the AMD CPUID spec. See QEMU EPYC-Turin patch:
+            # https://lists.gnu.org/archive/html/qemu-devel/2025-05/msg02060.html
+            vcpu_type_flags = "--vcpu-type=EPYC-v4 --vcpu-type=EPYC-Genoa --vcpu-sig=0xB00F00"
+
             native.genrule(
                 name = "generate-" + launch_measurements,
                 outs = [launch_measurements],
@@ -279,16 +289,18 @@ def icos_build(
                 tags = ["manual"],
                 cmd = r"""
                     source $(execpath """ + boot_args + """)
-                    # Create GuestLaunchMeasurements JSON
-                    (for vcpus in """ + vcpu_configs + """; do
-                        for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
-                            hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" --vcpu-type=EPYC-v4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
-                            # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
-                            measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
-                            jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
-                              measurement: ($$m | split("\n") | map(tonumber)),
-                              metadata: {kernel_cmdline: $$cmd}
-                            }'
+                    # Create GuestLaunchMeasurements JSON for each CPU generation, vCPU count, and boot slot
+                    (for vcpu_flag in """ + vcpu_type_flags + """; do
+                        for vcpus in """ + vcpu_configs + """; do
+                            for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
+                                hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" $$vcpu_flag --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                                # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
+                                measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
+                                jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
+                                  measurement: ($$m | split("\n") | map(tonumber)),
+                                  metadata: {kernel_cmdline: $$cmd}
+                                }'
+                            done
                         done
                     done) | jq -sc "{guest_launch_measurements: .}" > $@
                 """,
