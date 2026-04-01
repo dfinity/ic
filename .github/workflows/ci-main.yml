@@ -35,12 +35,12 @@ jobs:
     steps:
       - &checkout
         name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
           ref: ${{ inputs.commit-sha }}
       - name: Filter fuzzer related files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         if: github.event_name == 'pull_request'
         id: filter
         with:
@@ -178,7 +178,7 @@ jobs:
             ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
 
       - name: Upload target files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: bazel-targets
           path: |
@@ -304,7 +304,7 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
           cat /tmp/bazel-cache.bazelrc
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
       - name: Build and Test
         run: |
@@ -369,13 +369,13 @@ jobs:
 
       - name: Upload pocket-ic-server x86_64-darwin
         if: ${{ matrix.os == 'darwin' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: pocket-ic-server-x86_64-darwin.gz
           path: ./build/pocket-ic-server-x86_64-darwin.gz
 
       - name: Upload pocket-ic-server
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: pocket-ic-server-arm64-${{ matrix.os }}.gz
           path: ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
@@ -392,7 +392,7 @@ jobs:
     container: *container-setup
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Download pocket-ic-server (arm64-linux)
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -454,7 +454,7 @@ jobs:
     steps:
       - *checkout
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.12'
       - name: Run Python CI Tests
@@ -618,7 +618,7 @@ jobs:
     steps:
       - *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           ref: ${{ inputs.commit-sha }}
@@ -656,7 +656,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
       - name: Check PULL_REQUEST_BAZEL_TARGETS
         uses: ./.github/actions/bazel
@@ -684,7 +684,7 @@ jobs:
     steps:
       - *checkout
       - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           ref: ${{ inputs.commit-sha }}
