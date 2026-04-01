@@ -139,7 +139,7 @@ pub fn setup(env: TestEnv) {
 
     ic = ic
         .add_subnet(cloud_engine_subnet)
-        .with_api_boundary_nodes(1);
+        .with_api_boundary_nodes_playnet(1);
 
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");

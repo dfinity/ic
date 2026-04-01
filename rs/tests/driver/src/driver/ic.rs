@@ -290,8 +290,10 @@ impl InternetComputer {
             // Cloud engines use API boundary nodes to replicate their registry and to fetch
             // delegations since the firewall on the NNS blocks them.
             assert!(
-                !self.api_boundary_nodes.is_empty(),
-                "At least one API boundary node is required when using a cloud engine subnet"
+                !self.api_boundary_nodes.is_empty() && self.api_bn_use_playnet,
+                "At least one API boundary node with valid certificates is required when using \
+                a cloud engine subnet. Add `.with_api_boundary_nodes_playnet(1)` when creating \
+                the `InternetComputer` instance."
             );
         }
 
