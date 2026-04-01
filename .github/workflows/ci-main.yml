@@ -314,8 +314,8 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             build \
-            //publish/binaries:pocket-ic.gz
-            //publish/binaries:ic-admin.gz
+            //publish/binaries:pocket-ic.gz \
+            //publish/binaries:ic-admin.gz \
             //publish/binaries:sns.gz
 
           mkdir -p build
