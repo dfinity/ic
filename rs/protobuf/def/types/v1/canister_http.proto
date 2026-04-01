@@ -83,12 +83,32 @@ message FlexibleCanisterHttpResponses {
   repeated FlexibleCanisterHttpResponseWithProof responses = 2;
 }
 
+message FlexibleCanisterHttpTimeout {}
+
+message FlexibleCanisterHttpResponsesTooLarge {
+  repeated CanisterHttpShare metadata_shares = 1;
+}
+
+message FlexibleCanisterHttpTooManyRequestErrors {
+  repeated FlexibleCanisterHttpResponseWithProof reject_responses = 1;
+}
+
+message FlexibleCanisterHttpError {
+  uint64 callback_id = 1;
+  oneof error_details {
+    FlexibleCanisterHttpTimeout timeout = 2;
+    FlexibleCanisterHttpResponsesTooLarge responses_too_large = 3;
+    FlexibleCanisterHttpTooManyRequestErrors too_many_request_errors = 4;
+  }
+}
+
 message CanisterHttpResponseMessage {
   oneof message_type {
     CanisterHttpResponseWithConsensus response = 1;
     uint64 timeout = 2;
     CanisterHttpResponseDivergence divergence_response = 3;
     FlexibleCanisterHttpResponses flexible_responses = 4;
+    FlexibleCanisterHttpError flexible_error = 5;
   }
 }
 

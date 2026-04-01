@@ -3713,6 +3713,7 @@ dependencies = [
  "hashlink 0.8.3",
  "hex",
  "hex-literal 0.4.1",
+ "hickory-resolver",
  "hkdf",
  "hmac",
  "hpke",
@@ -3983,6 +3984,7 @@ dependencies = [
  "wasmtime",
  "wast",
  "wat",
+ "webpki-roots 1.0.6",
  "which",
  "wirm",
  "wsl",
@@ -5870,7 +5872,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.0",
  "tower-service",
- "webpki-roots 1.0.2",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -11264,7 +11266,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
- "webpki-roots 1.0.2",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -11713,7 +11715,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "webpki-roots 1.0.2",
+ "webpki-roots 1.0.6",
  "x509-parser 0.16.0",
 ]
 
@@ -15425,9 +15427,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.2"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e8983c3ab33d6fb807cfcdad2491c4ea8cbc8ed839181c7dfd9c67c83e261b2"
+checksum = "22cfaf3c063993ff62e73cb4311efde4db1efb31ab78a3e5c457939ad5cc0bed"
 dependencies = [
  "rustls-pki-types",
 ]

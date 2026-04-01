@@ -48,7 +48,6 @@ use ic_system_test_driver::driver::{
     test_env_api::HasTopologySnapshot,
 };
 use ic_types::PrincipalId;
-use ic_types_cycles::CanisterCyclesCostSchedule;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
@@ -105,8 +104,7 @@ pub fn setup(env: TestEnv) {
 
     // Build CloudEngine subnet and unassigned nodes distributed across 4 datacenters.
     // Each datacenter gets its own node operator with 1 CloudEngine node + 1 unassigned node.
-    let mut cloud_engine_subnet =
-        Subnet::new(SubnetType::CloudEngine).with_cost_schedule(CanisterCyclesCostSchedule::Free);
+    let mut cloud_engine_subnet = Subnet::new(SubnetType::CloudEngine);
     for (i, dc) in DATA_CENTERS.iter().enumerate() {
         let operator_principal = PrincipalId::new_user_test_id(1000 + i as u64);
         let provider_principal = PrincipalId::new_user_test_id(2000 + i as u64);
@@ -141,7 +139,7 @@ pub fn setup(env: TestEnv) {
 
     ic = ic
         .add_subnet(cloud_engine_subnet)
-        .with_api_boundary_nodes(1);
+        .with_api_boundary_nodes_playnet(1);
 
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
