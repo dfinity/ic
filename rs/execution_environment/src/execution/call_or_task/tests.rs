@@ -192,9 +192,9 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         )
         .real();
 
-    let call_charge = test.call_fee("update", &b)
+    let call_charge = test.call_fee("update", &b).real()
         + max_execution_cost
-        + test.max_response_fee()
+        + test.max_response_fee().real()
         + transferred_cycles;
 
     let cycles_debit = Cycles::new(1000);
@@ -999,8 +999,8 @@ fn dts_abort_of_replicated_execution_works() {
             Cycles::new(initial_cycles)
                 - transferred_cycles
                 - test.canister_execution_cost(a_id)
-                - test.call_fee(method, &b)
-                - test.reply_fee(&[42])
+                - test.call_fee(method, &b).real()
+                - test.reply_fee(&[42]).real()
         );
 
         assert_eq!(
