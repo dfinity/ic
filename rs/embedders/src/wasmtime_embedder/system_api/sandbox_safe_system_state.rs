@@ -1541,13 +1541,14 @@ impl SandboxSafeSystemState {
         let subnets_with_key = self.network_topology.chain_key_enabled_subnets(&key);
         subnets_with_key
             .iter()
-            .map(|subnet_id| {
-                (
-                    // unwraps: we got the subnet_id from the same collection
-                    self.network_topology.get_subnet_size(subnet_id).unwrap(),
-                    self.network_topology.get_cost_schedule(subnet_id).unwrap(),
-                    *subnet_id,
-                )
+            .filter_map(|subnet_id| {
+                let size = self.network_topology.get_subnet_size(subnet_id)?;
+                let cost_schedule = self
+                    .network_topology
+                    .subnets()
+                    .get(subnet_id)?
+                    .cost_schedule;
+                Some((size, cost_schedule, *subnet_id))
             })
             .max()
     }
