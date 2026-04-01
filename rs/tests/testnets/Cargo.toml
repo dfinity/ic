@@ -94,6 +94,10 @@ name = "small_with_query_stats"
 path = "small_with_query_stats.rs"
 
 [[bin]]
+name = "sev_baremetal_app_subnet"
+path = "sev_baremetal_app_subnet.rs"
+
+[[bin]]
 name = "nns_recovery"
 path = "nns_recovery.rs"
 
