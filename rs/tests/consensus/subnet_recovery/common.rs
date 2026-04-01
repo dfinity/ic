@@ -953,9 +953,7 @@ fn corrupt_latest_cup(
     // from peers that haven't been corrupted yet.
     for node in subnet.nodes() {
         info!(logger, "Stopping replica on node {:?}", node.get_ip_addr());
-        let session = node.block_on_ssh_session().unwrap();
-        app_node
-            .block_on_bash_script_from_session(&session, "sudo systemctl stop ic-replica")
+        node.block_on_bash_script("sudo systemctl stop ic-replica")
             .expect("stop replica");
     }
 
@@ -990,9 +988,7 @@ fn corrupt_latest_cup(
     // Restart all nodes with the corrupted CUPs.
     for node in subnet.nodes() {
         info!(logger, "Restarting node {:?}", node.get_ip_addr());
-        let session = node.block_on_ssh_session().unwrap();
-        app_node
-            .block_on_bash_script_from_session(&session, "sudo systemctl start ic-replica")
+        node.block_on_bash_script("sudo systemctl start ic-replica")
             .expect("start replica");
     }
 
