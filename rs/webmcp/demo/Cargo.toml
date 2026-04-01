@@ -1,0 +1,22 @@
+[package]
+name = "demo-backend"
+version = "0.1.0"
+edition = "2021"
+description = "WebMCP demo e-commerce canister"
+license = "Apache-2.0"
+
+[[bin]]
+name = "demo_backend"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }
+
+[lib]
+name = "demo_backend_lib"
+path = "src/lib.rs"
+
+[dev-dependencies]
+candid = { workspace = true }

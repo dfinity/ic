@@ -1,9 +1,9 @@
 {
   "canisters": {
     "backend": {
-      "type": "custom",
+      "type": "rust",
       "candid": "backend.did",
-      "wasm": "target/wasm32-unknown-unknown/release/demo_backend.wasm",
+      "package": "demo-backend",
       "webmcp": {
         "enabled": true,
         "name": "WebMCP Demo Shop",

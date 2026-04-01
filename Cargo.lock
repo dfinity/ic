@@ -3699,6 +3699,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "demo-backend"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk",
+ "serde",
+]
+
+[[package]]
 name = "depcheck"
 version = "0.1.0"
 dependencies = [
