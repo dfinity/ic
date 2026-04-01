@@ -529,6 +529,7 @@ members = [
     "rs/utils/thread",
     "rs/utils/validate_eq",
     "rs/utils/validate_eq_derive",
+    "rs/webmcp/codegen",
     "rs/validator",
     "rs/validator/http_request_arbitrary",
     "rs/validator/http_request_test_utils",
