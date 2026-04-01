@@ -928,11 +928,6 @@ pub mod testing {
 
         /// Testing only: Publicly exposes `unregister_callback()`.
         fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>>;
-
-        /// Testing only: Publicly exposes `next_callback_id`.
-        //
-        // TODO(DSM-95): Drop when no longer needed.
-        fn set_next_callback_id(&mut self, next_callback_id: u64);
     }
 
     impl CallContextManagerTesting for CallContextManager {
@@ -956,10 +951,6 @@ pub mod testing {
 
         fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
             self.unregister_callback(callback_id)
-        }
-
-        fn set_next_callback_id(&mut self, next_callback_id: u64) {
-            self.next_callback_id = next_callback_id;
         }
     }
 }

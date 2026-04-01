@@ -987,6 +987,7 @@ pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
     pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
+    pub content_size: u32,
     pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }

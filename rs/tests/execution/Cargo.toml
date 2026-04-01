@@ -14,6 +14,7 @@ futures = { workspace = true }
 ic-agent = { workspace = true }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-registry-resource-limits = { path = "../../registry/resource_limits" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 ic-system-test-driver = { path = "../driver" }
@@ -64,6 +65,10 @@ path = "inter_canister_queries_test.rs"
 [[bin]]
 name = "max_number_of_canisters_test"
 path = "max_number_of_canisters_test.rs"
+
+[[bin]]
+name = "resource_limits_test"
+path = "resource_limits_test.rs"
 
 [[bin]]
 name = "system_api_security_test"
