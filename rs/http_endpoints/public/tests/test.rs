@@ -1,3 +1,26 @@
+//! # Traceability
+//! Spec: openspec/capabilities/networking-http-endpoints/spec.md
+//!
+//! REQ-HTTP-002: Call Endpoint
+//!   SCENARIO-HTTP-006: Asynchronous call (v2)
+//!   SCENARIO-HTTP-007: Synchronous call (v3)
+//!   SCENARIO-HTTP-008: Duplicate synchronous call detection
+//!   SCENARIO-HTTP-009: Ingress pool full load shedding
+//!   SCENARIO-HTTP-010: Canister ID mismatch validation
+//!   SCENARIO-HTTP-011: Ingress message size validation
+//!
+//! REQ-HTTP-004: Query Endpoint
+//!   SCENARIO-HTTP-015: Execute query call
+//!   SCENARIO-HTTP-016: Read state request
+//!
+//! REQ-HTTP-007: CORS Support
+//!   SCENARIO-HTTP-022: Preflight CORS request
+//!   SCENARIO-HTTP-023: CORS on regular requests
+//!
+//! REQ-HTTP-008: Content Type Validation
+//!   SCENARIO-HTTP-024: CBOR content type enforcement
+//!   SCENARIO-HTTP-025: Invalid HTTP method rejection
+
 // Using a `pub mod` works around spurious dead code warnings; see
 // https://users.rust-lang.org/t/invalid-dead-code-warning-for-submodule-in-integration-test/80259/2 and
 // https://github.com/rust-lang/rust/issues/46379

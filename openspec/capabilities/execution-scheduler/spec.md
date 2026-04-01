@@ -70,15 +70,15 @@ Canisters MUST be ordered for execution based on accumulated priority and comput
 **Given** canisters are ordered for execution
 **When** the round schedule is built
 **Then** canisters with higher accumulated priority are scheduled first
-**And** accumulated priority increases proportionally to compute allocation
-**And** accumulated priority decreases after execution
+**And** accumulated priority increases by the canister's `compute_allocation` percentage each round (so a canister with 100% allocation gains 100 priority per round)
+**And** accumulated priority decreases by `scheduler_cores * 100` after execution (normalized to the number of cores)
 
 ### SCENARIO-SCHED-007: Heartbeat and global timer tasks
 **Given** the first inner round iteration begins
 **When** tasks are assigned to eligible canisters
 **Then** heartbeat tasks are added for running canisters exporting `canister_heartbeat`
-**And** global timer tasks are added for running canisters exporting `canister_global_timer` with elapsed deadlines
-**And** canisters with long-running executions do NOT receive heartbeat/timer tasks
+**And** global timer tasks are added for running canisters exporting `canister_global_timer` where `timer_deadline <= current_time` (i.e., the timer deadline has been reached or passed)
+**And** canisters with long-running executions (`NextExecution::ContinueLong` or `ContinueInstallCode`) do NOT receive heartbeat/timer tasks
 
 ### SCENARIO-SCHED-008: Rate limiting by heap delta
 **Given** `rate_limiting_of_heap_delta` is enabled

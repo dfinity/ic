@@ -1,3 +1,11 @@
+//! # Traceability
+//! Spec: openspec/capabilities/networking-http-endpoints/spec.md
+//!
+//! REQ-HTTP-006: Request Size and Rate Limiting
+//!   SCENARIO-HTTP-019: Request body size limit
+//!   SCENARIO-HTTP-020: Concurrent request limiting per endpoint
+//!   SCENARIO-HTTP-021: Global request timeout
+
 pub mod common;
 
 use crate::common::{

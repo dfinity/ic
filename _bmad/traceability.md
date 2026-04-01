@@ -1,6 +1,6 @@
 # Traceability Matrix
 
-Last updated: 2026-04-01 (Phase 3: test linkage in progress)
+Last updated: 2026-04-01 (Phase 3 complete; Evaluator pass in progress)
 Methodology: https://github.com/ianblenke/agentic-refactor-rules
 
 ## Status Legend
@@ -22,8 +22,11 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 | REQ-SCHED-005 | Subnet messages | linked | SCENARIO-SCHED-013,014 | scheduler/tests/subnet_messages.rs |
 | REQ-SCHED-006 | Message induction | linked | SCENARIO-SCHED-015 | scheduler/tests/routing.rs |
 | REQ-SCHED-007 | Heap delta | linked | SCENARIO-SCHED-016,017,018 | scheduler/tests/rate_limiting.rs |
-| REQ-SCHED-008 | Ingress lifecycle | narrative | SCENARIO-SCHED-019,020 | scheduler/tests/ |
-| REQ-SCHED-009 | Idle charging | narrative | SCENARIO-SCHED-021 | scheduler/tests/ |
+| REQ-SCHED-008 | Ingress lifecycle | linked | SCENARIO-SCHED-019,020 | scheduler/tests/scheduling.rs |
+| REQ-SCHED-009 | Idle charging | linked | SCENARIO-SCHED-021 | scheduling.rs, charging.rs |
+
+## execution-scheduler — Evaluator Status: PASS (8/10)
+See `.harness/evaluations/execution-scheduler-evaluation.md`
 
 ---
 
@@ -142,4 +145,8 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 
 ---
 
-## Phase 3 Complete: All 28 domains have test linkage
+## networking-http-endpoints
+| REQ-HTTP-001 through REQ-HTTP-009 | HTTP endpoints | linked | rs/http_endpoints/public/tests/ |
+| SCENARIO-HTTP-001 through SCENARIO-HTTP-026 | 26 scenarios | linked | tests/test.rs, tests/load_shed_test.rs |
+
+## Phase 3 Complete: All 29 domains have REQ-*/SCENARIO-* specs (29/29 linked)

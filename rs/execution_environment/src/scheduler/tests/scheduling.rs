@@ -18,6 +18,10 @@
 //!   SCENARIO-SCHED-002: Round instruction budget
 //!   SCENARIO-SCHED-003: Subnet messages instruction budget
 //!
+//! REQ-SCHED-008: Ingress Message Lifecycle
+//!   SCENARIO-SCHED-019: Ingress message expiry
+//!   SCENARIO-SCHED-020: Ingress message deduplication
+//!
 //! REQ-SCHED-009: Idle Canister Charging
 //!   SCENARIO-SCHED-021: Idle canister resource charging
 
