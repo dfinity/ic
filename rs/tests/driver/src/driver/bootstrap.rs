@@ -1,5 +1,4 @@
-use crate::driver::ic_gateway_vm::HasIcGatewayVm;
-use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
+use crate::driver::ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, Playnet};
 use crate::driver::ic_images::try_get_setupos_img_version;
 use crate::driver::nested::NestedVm;
 use crate::driver::resource::BootImage;
@@ -36,8 +35,8 @@ use config_tool::setupos::{
 };
 use config_types::{
     CONFIG_VERSION, DeploymentEnvironment, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
-    GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, Ipv4Config, Ipv6Config,
-    NetworkSettings, RecoveryConfig,
+    GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, IcBoundaryTlsCert,
+    Ipv4Config, Ipv6Config, NetworkSettings, RecoveryConfig,
 };
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -262,6 +261,22 @@ pub fn setup_and_start_vms(
     for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
+    let api_bn_tls_cert: Option<IcBoundaryTlsCert> = if ic.api_bn_use_playnet {
+        let playnet = Playnet::read_attribute(env);
+        let cert = &playnet.playnet_cert.cert;
+        Some(IcBoundaryTlsCert {
+            cert_pem: format!("{}{}", cert.cert_pem, cert.chain_pem),
+            key_pem: cert.priv_key_pem.clone(),
+        })
+    } else {
+        None
+    };
+    let api_bn_node_ids: Vec<NodeId> = initialized_ic
+        .api_boundary_nodes
+        .values()
+        .map(|n| n.node_id)
+        .collect();
+
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     let mut nodes_info = NodesInfo::new();
     for node in nodes {
@@ -275,6 +290,11 @@ pub fn setup_and_start_vms(
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
         let recovery_hash: Option<String> = ic.get_recovery_hash_of_node(node.node_id);
+        let ic_boundary_tls_cert = if api_bn_node_ids.contains(&node.node_id) {
+            api_bn_tls_cert.clone()
+        } else {
+            None
+        };
         nodes_info.insert(node.node_id, malicious_behavior.clone());
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(
@@ -285,6 +305,7 @@ pub fn setup_and_start_vms(
                 ipv4_config,
                 domain,
                 recovery_hash,
+                ic_boundary_tls_cert,
                 &t_env,
             )?;
 
@@ -459,6 +480,7 @@ fn create_config_disk_image(
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
     recovery_hash: Option<String>,
+    ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
     test_env: &TestEnv,
 ) -> anyhow::Result<()> {
     let mut bootstrap_options = BootstrapOptions {
@@ -480,6 +502,7 @@ fn create_config_disk_image(
         ipv4_config,
         domain_name,
         recovery_hash,
+        ic_boundary_tls_cert,
         test_env,
         ic_name,
     )?;
@@ -523,6 +546,7 @@ fn create_guestos_config_for_node(
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
     recovery_hash: Option<String>,
+    ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
     test_env: &TestEnv,
     ic_name: &str,
 ) -> anyhow::Result<GuestOSConfig> {
@@ -597,6 +621,7 @@ fn create_guestos_config_for_node(
             .ok(),
         hostname: Some(node.node_id.to_string()),
         generate_ic_boundary_tls_cert: node.node_config.domain.clone(),
+        ic_boundary_tls_cert,
         nns_pub_key_override,
     };
 
