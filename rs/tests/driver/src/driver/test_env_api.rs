@@ -1057,6 +1057,13 @@ impl IcNodeSnapshot {
         )
     }
 
+    pub fn canister_installer_with_raw_wasm<'a>(
+        &'a self,
+        raw_wasm: Vec<u8>,
+    ) -> CanisterInstaller<'a> {
+        CanisterInstaller::new_with_raw_wasm(self, raw_wasm)
+    }
+
     /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
     /// install it on the target node.
     ///
@@ -1200,16 +1207,23 @@ impl IcNodeSnapshot {
 
 pub struct CanisterInstaller<'a> {
     node: &'a IcNodeSnapshot,
-    wasm_name: String,
+    wasm: Vec<u8>,
     arg: Option<Vec<u8>>,
     cycles_amount: Option<u128>,
     effective_canister_id: PrincipalId,
 }
 
 impl<'a> CanisterInstaller<'a> {
-    pub fn new(node: &'a IcNodeSnapshot, wasm_name: impl ToString) -> Self {
+    pub fn new<P>(node: &'a IcNodeSnapshot, wasm_name: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self::new_with_raw_wasm(node, load_wasm(wasm_name))
+    }
+
+    pub fn new_with_raw_wasm(node: &'a IcNodeSnapshot, wasm: Vec<u8>) -> Self {
         Self {
-            wasm_name: wasm_name.to_string(),
+            wasm,
             arg: None,
             cycles_amount: None,
             effective_canister_id: node.effective_canister_id(),
@@ -1240,7 +1254,6 @@ impl<'a> CanisterInstaller<'a> {
     }
 
     pub async fn install(self) -> Result<Principal> {
-        let canister_bytes = load_wasm(self.wasm_name);
         let agent = self.node.build_default_agent_async().await;
         // Create a canister.
         let mgr = ManagementCanister::create(&agent);
@@ -1253,7 +1266,7 @@ impl<'a> CanisterInstaller<'a> {
             .map_err(|err| anyhow!("Couldn't create canister with provisional API: {err}"))?
             .0;
 
-        let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+        let mut install_code = mgr.install_code(&canister_id, &self.wasm);
         if let Some(arg) = self.arg {
             install_code = install_code.with_raw_arg(arg)
         }

@@ -4718,3 +4718,112 @@ fn get_dynamic_signature_queue_size_idkg_stash_below_floor_returns_floor() {
         50
     );
 }
+
+/// Runbook:
+/// - The proxy canister makes a `stop_canister` call to stop `canister_id` attaching 1T cycles to the call.
+/// - The total cycles balance of the proxy canister and `canister_id` must not increase and can only decrease by at most 1B cycles.
+///
+/// Returns the result of the `stop_canister` call as reported by the proxy canister (universal canister forwarding the call to the mgmt canister).
+fn stop_canister_refunds_cycles(
+    test: &mut ExecutionTest,
+    proxy: CanisterId,
+    canister_id: CanisterId,
+) -> Result<WasmResult, UserError> {
+    let cycles = |test: &mut ExecutionTest| {
+        test.canister_state(proxy).system_state.balance()
+            + test.canister_state(canister_id).system_state.balance()
+    };
+    let cycles_before = cycles(test);
+
+    let canister_id_record: CanisterIdRecord = canister_id.into();
+    let ingress_id = test
+        .ingress_raw(
+            proxy,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    CanisterId::ic_00(),
+                    "stop_canister",
+                    call_args().other_side(Encode!(&canister_id_record).unwrap()),
+                    Cycles::new(1_000_000_000_000),
+                )
+                .build(),
+        )
+        .0;
+    test.process_stopping_canisters();
+    test.execute_all();
+
+    let cycles_after = cycles(test);
+    assert_le!(cycles_after, cycles_before);
+    assert_le!(cycles_before, cycles_after + Cycles::new(1_000_000_000));
+
+    check_ingress_status(test.ingress_status(&ingress_id))
+}
+
+#[test]
+fn stopping_running_canister_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Running
+    );
+    test.set_controller(canister_id, proxy.get()).unwrap();
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reply(res);
+}
+
+#[test]
+fn stopping_stopping_canister_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.stop_canister(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
+    );
+    test.set_controller(canister_id, proxy.get()).unwrap();
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reply(res);
+}
+
+#[test]
+fn stopping_stopped_canister_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopped
+    );
+    test.set_controller(canister_id, proxy.get()).unwrap();
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reply(res);
+}
+
+#[test]
+fn stopping_canister_not_controlled_by_caller_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Running
+    );
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reject(res);
+}
