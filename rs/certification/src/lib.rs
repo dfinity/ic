@@ -2,11 +2,9 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt;
 
-use ic_canonical_state::lazy_tree_conversion::subnet_type_as_string;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_crypto_utils_threshold_sig::{verify_combined, verify_combined_with_cache};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, PrincipalId, SubnetId, Time,
     consensus::certification::CertificationContent,
@@ -164,7 +162,7 @@ pub fn verify_certified_data_with_cache_for_canister_sig(
     let (time, delegation_info) =
         verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, true)?;
     if let Some(info) = delegation_info
-        && info.subnet_type.as_deref() == Some(subnet_type_as_string(SubnetType::CloudEngine))
+        && info.subnet_type.as_deref() == Some("cloud_engine")
     {
         return Err(CertificateValidationError::UntrustedDelegationSubnet(
             info.subnet_id,
