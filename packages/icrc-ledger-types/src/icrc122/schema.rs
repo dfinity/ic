@@ -30,6 +30,7 @@ fn block_validator(
 
     let is_timestamp = is_more_or_equal_to(0);
     let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
+    let is_created_at_time = is_more_or_equal_to(0);
     let is_transaction = and(vec![
         is_map(),
         item("mthd", caller_mthd_req.clone(), is_text()),
@@ -37,6 +38,7 @@ fn block_validator(
         item("amt", Required, is_more_or_equal_to(0)),
         item("caller", caller_mthd_req, is_principal()),
         item("reason", Optional, is_text()),
+        item("created_at_time", Optional, is_created_at_time),
     ]);
     and(vec![
         is_map(),
