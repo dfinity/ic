@@ -18,6 +18,7 @@ mod root_of_trust {
     use ic_validator_http_request_test_utils::{
         DirectAuthenticationScheme, HttpRequestBuilder, all_authentication_schemes,
         canister_signature_with_hard_coded_root_of_trust, hard_coded_root_of_trust,
+        icp_mainnet_root_public_key_for_testing,
     };
     use std::sync::Arc;
 
@@ -96,6 +97,56 @@ mod root_of_trust {
             .expect_mainnet_root_of_trust()
             .times(1)
             .return_const(None);
+        root_of_trust_provider
+            .expect_root_of_trust()
+            .times(1)
+            .return_const(Ok(IcRootOfTrust::from(
+                hard_coded_root_of_trust().public_key,
+            )));
+        let verifier =
+            verifier_at_time_with_root_of_trust_provider(current_time, root_of_trust_provider);
+        let canister_sig_auth_scheme = Direct(canister_signature_with_hard_coded_root_of_trust());
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(current_time)
+            .with_authentication(canister_sig_auth_scheme)
+            .build();
+
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_use_mainnet_root_of_trust_provider_for_canister_signature() {
+        let current_time = GENESIS;
+        let mut root_of_trust_provider = MockRootOfTrustProvider::new();
+        root_of_trust_provider
+            .expect_mainnet_root_of_trust()
+            .times(1)
+            .return_const(Some(IcRootOfTrust::from(
+                hard_coded_root_of_trust().public_key,
+            )));
+        let verifier =
+            verifier_at_time_with_root_of_trust_provider(current_time, root_of_trust_provider);
+        let canister_sig_auth_scheme = Direct(canister_signature_with_hard_coded_root_of_trust());
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(current_time)
+            .with_authentication(canister_sig_auth_scheme)
+            .build();
+
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_ignore_nonmatching_mainnet_root_of_trust_provider_for_canister_signature() {
+        let current_time = GENESIS;
+        let mut root_of_trust_provider = MockRootOfTrustProvider::new();
+        // the mainnet root public key does not match the public key of the canister signature
+        // used in this test
+        root_of_trust_provider
+            .expect_mainnet_root_of_trust()
+            .times(1)
+            .return_const(Some(IcRootOfTrust::from(
+                icp_mainnet_root_public_key_for_testing(),
+            )));
         root_of_trust_provider
             .expect_root_of_trust()
             .times(1)
