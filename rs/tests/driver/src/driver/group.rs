@@ -147,7 +147,7 @@ impl CliArgs {
             }
 
             // Validate gw_ipv4 is a valid IP within the allowed subnet for the DC
-            if let Some(HostFeature::GwIpv4(ref ip_str)) = features
+            if let Some(HostFeature::GwIpv4(ip_str)) = features
                 .iter()
                 .find(|f| matches!(f, HostFeature::GwIpv4(_)))
             {
