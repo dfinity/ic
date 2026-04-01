@@ -7,9 +7,10 @@ on:
       - master
       - 'dev-gh-*'
       - 'public-hotfix-*'
-  pull_request:
-    branches-ignore:
-      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
+      - upload-apple-silicon-binaries
+  # pull_request:
+  #   branches-ignore:
+  #     - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
