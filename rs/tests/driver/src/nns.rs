@@ -710,6 +710,9 @@ pub async fn submit_deploy_guestos_to_all_subnet_nodes_proposal(
 ///   the new subnet
 /// * `replica_version` - Replica software version to install to the new subnet
 ///   nodes (see `get_software_version`)
+/// * `max_number_of_canisters` - Cap on canisters for the new subnet. `None` uses
+///   the historical default of 4. `Some(0)` means no limit (same as ic-prep; see
+///   `SubnetRecord` / canister_manager).
 ///
 /// Eventually returns the identifier of the newly submitted proposal.
 pub async fn submit_create_application_subnet_proposal(
@@ -717,9 +720,11 @@ pub async fn submit_create_application_subnet_proposal(
     node_ids: Vec<NodeId>,
     replica_version: ReplicaVersion,
     cost_schedule: Option<CanisterCyclesCostSchedule>,
+    max_number_of_canisters: Option<u64>,
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
+    let max_number_of_canisters = max_number_of_canisters.unwrap_or(4);
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
@@ -736,7 +741,7 @@ pub async fn submit_create_application_subnet_proposal(
         subnet_type: SubnetType::Application,
         is_halted: false,
         features: Default::default(),
-        max_number_of_canisters: 4,
+        max_number_of_canisters,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
