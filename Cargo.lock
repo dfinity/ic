@@ -9928,6 +9928,7 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-canonical-state",
+ "ic-canonical-state-tree-hash",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-interfaces-sig-verification",
