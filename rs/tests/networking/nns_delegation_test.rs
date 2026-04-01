@@ -51,7 +51,7 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        group::SystemTestGroup,
+        group::{SystemTestGroup, SystemTestSubGroup},
         ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::{
@@ -815,37 +815,32 @@ macro_rules! systest_all_subnet_types {
 }
 
 fn main() -> Result<()> {
-    let mut test_group = SystemTestGroup::new()
+    let mut par_group = SystemTestSubGroup::new();
+    systest_all_subnet_types!(par_group, nns_delegation_updates);
+    systest_all_subnet_types!(par_group, canister_read_state_v2_returns_correct_delegation);
+    systest_all_subnet_types!(par_group, canister_read_state_v3_returns_correct_delegation);
+    systest_all_subnet_types!(
+        par_group,
+        canister_read_state_v3_management_canister_returns_correct_delegation
+    );
+    systest_all_subnet_types!(par_group, subnet_read_state_v2_returns_correct_delegation);
+    systest_all_subnet_types!(par_group, subnet_read_state_v3_returns_correct_delegation);
+    // note: the v2 call endpoint doesn't return an NNS delegation, so there is nothing to test
+    systest_all_subnet_types!(par_group, call_v3_returns_correct_delegation);
+    systest_all_subnet_types!(par_group, call_v4_returns_correct_delegation);
+    systest_all_subnet_types!(
+        par_group,
+        call_v4_management_canister_returns_correct_delegation
+    );
+    systest_all_subnet_types!(par_group, query_v2_passes_correct_delegation_to_canister);
+    systest_all_subnet_types!(par_group, query_v3_passes_correct_delegation_to_canister);
+    systest_all_subnet_types!(par_group, interlaced_v2_and_v3_query_requests);
+
+    SystemTestGroup::new()
         .with_setup(setup)
         // We potentially upgrade subnets in the setup which could take several minutes
         .with_overall_timeout(std::time::Duration::from_secs(20 * 60))
-        .with_timeout_per_test(std::time::Duration::from_secs(10 * 60));
-
-    systest_all_subnet_types!(test_group, nns_delegation_updates);
-    systest_all_subnet_types!(
-        test_group,
-        canister_read_state_v2_returns_correct_delegation
-    );
-    systest_all_subnet_types!(
-        test_group,
-        canister_read_state_v3_returns_correct_delegation
-    );
-    systest_all_subnet_types!(
-        test_group,
-        canister_read_state_v3_management_canister_returns_correct_delegation
-    );
-    systest_all_subnet_types!(test_group, subnet_read_state_v2_returns_correct_delegation);
-    systest_all_subnet_types!(test_group, subnet_read_state_v3_returns_correct_delegation);
-    // note: the v2 call endpoint doesn't return an NNS delegation, so there is nothing to test
-    systest_all_subnet_types!(test_group, call_v3_returns_correct_delegation);
-    systest_all_subnet_types!(test_group, call_v4_returns_correct_delegation);
-    systest_all_subnet_types!(
-        test_group,
-        call_v4_management_canister_returns_correct_delegation
-    );
-    systest_all_subnet_types!(test_group, query_v2_passes_correct_delegation_to_canister);
-    systest_all_subnet_types!(test_group, query_v3_passes_correct_delegation_to_canister);
-    systest_all_subnet_types!(test_group, interlaced_v2_and_v3_query_requests);
-
-    test_group.execute_from_args()
+        .with_timeout_per_test(std::time::Duration::from_secs(10 * 60))
+        .add_parallel(par_group)
+        .execute_from_args()
 }
