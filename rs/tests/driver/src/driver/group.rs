@@ -4,7 +4,7 @@ use crate::driver::{
     context::{GroupContext, ProcessContext},
     dsl::{SubprocessFn, TestFunction},
     event::TaskId,
-    farm::{DM_DMZ_NETWORK, DM_DMZ_PREFIX, Farm, HostFeature},
+    farm::{Farm, HostFeature},
     plan::{EvalOrder, Plan},
     report::Outcome,
     task::{DebugKeepaliveTask, EmptyTask},
@@ -134,36 +134,7 @@ pub struct CliArgs {
 
 impl CliArgs {
     fn validate(self) -> Result<Self> {
-        if let Some(ref features) = self.required_host_features {
-            let has_gw_ipv4 = features.iter().any(|f| matches!(f, HostFeature::GwIpv4(_)));
-            let has_dmz = features.iter().any(|f| matches!(f, HostFeature::DMZ));
-
-            // gw_ipv4 requires dmz
-            if has_gw_ipv4 && !has_dmz {
-                anyhow::bail!("gw_ipv4 requires the dmz host feature to also be set");
-            }
-
-            // Validate gw_ipv4 is a valid IP within the dm-dmz subnet for cloud_engine
-            if let Some(HostFeature::GwIpv4(ip_str)) = features
-                .iter()
-                .find(|f| matches!(f, HostFeature::GwIpv4(_)))
-            {
-                let ip: std::net::Ipv4Addr = ip_str.parse().map_err(|e| {
-                    anyhow::anyhow!("invalid IPv4 address in gw_ipv4: {ip_str}: {e}")
-                })?;
-
-                if self.group_base_name == "cloud_engine" && has_dmz {
-                    let ip_bits = u32::from(ip);
-                    let network = u32::from(DM_DMZ_NETWORK);
-                    let mask: u32 = !((1u32 << (32 - DM_DMZ_PREFIX)) - 1);
-                    if ip_bits & mask != network {
-                        anyhow::bail!(
-                            "gw_ipv4 address {ip} is not within {DM_DMZ_NETWORK}/{DM_DMZ_PREFIX} (required for cloud_engine with dmz)"
-                        );
-                    }
-                }
-            }
-        }
+        // nothing to validate at the moment
         Ok(self)
     }
 

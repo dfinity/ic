@@ -41,11 +41,10 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_protobuf::registry::dc::v1::{DataCenterRecord, Gps};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    farm::{DM_DMZ_GATEWAY, DM_DMZ_PREFIX, HostFeature},
+    farm::HostFeature,
     group::SystemTestGroup,
     ic::{InternetComputer, Node, NodeOperatorConfig, Subnet},
     ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
-    test_env::RequiredHostFeaturesFromCmdLine,
     test_env::TestEnv,
     test_env_api::HasTopologySnapshot,
 };
@@ -103,7 +102,12 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    let mut ic = InternetComputer::new().add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
+    let mut ic = InternetComputer::new()
+        .with_required_host_features(vec![
+            HostFeature::DC("dm1-dmz".to_string()),
+            HostFeature::DMZ,
+        ])
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
 
     // Build CloudEngine subnet and unassigned nodes distributed across 4 datacenters.
     // Each datacenter gets its own node operator with 1 CloudEngine node + 1 unassigned node.
@@ -151,26 +155,13 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         nns_dapp_customizations(),
     );
-    // deploy ic-gateway
-    let mut ic_gateway_vm = IcGatewayVm::new(IC_GATEWAY_VM_NAME);
-    if let Some(gw_ipv4) = env
-        .read_host_features("ic-gateway")
-        .iter()
-        .flatten()
-        .find_map(|f| match f {
-            HostFeature::GwIpv4(ip) => Some(ip.clone()),
-            _ => None,
-        })
-    {
-        let address = format!("{gw_ipv4}/{DM_DMZ_PREFIX}");
-        ic_gateway_vm = ic_gateway_vm
-            .with_required_host_features(vec![
-                HostFeature::DC("dm1-dmz".to_string()),
-                HostFeature::DMZ,
-            ])
-            .with_ipv4_config(&address, DM_DMZ_GATEWAY);
-    }
-    ic_gateway_vm
+    // deploy ic-gateway on dm-dmz with static IPv4
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .with_required_host_features(vec![
+            HostFeature::DC("dm1-dmz".to_string()),
+            HostFeature::DMZ,
+        ])
+        .with_ipv4_config("23.142.184.225/28", "23.142.184.238")
         .start(&env)
         .expect("failed to setup ic-gateway");
     let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();

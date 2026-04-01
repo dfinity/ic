@@ -100,10 +100,7 @@ impl Farm {
         spec.required_host_features = self
             .override_host_features
             .clone()
-            .unwrap_or_else(|| spec.required_host_features.clone())
-            .into_iter()
-            .filter(|f| !matches!(f, HostFeature::GwIpv4(_)))
-            .collect();
+            .unwrap_or_else(|| spec.required_host_features.clone());
         let path = format!("group/{group_name}");
         let ttl = ttl.map(|ttl| ttl.as_secs() as u32);
         let spec = spec.add_meta(group_base_name);
@@ -124,10 +121,7 @@ impl Farm {
         vm.required_host_features = self
             .override_host_features
             .clone()
-            .unwrap_or_else(|| vm.required_host_features.clone())
-            .into_iter()
-            .filter(|f| !matches!(f, HostFeature::GwIpv4(_)))
-            .collect();
+            .unwrap_or_else(|| vm.required_host_features.clone());
         let path = format!("group/{}/vm/{}", group_name, &vm.name);
         let rb = Self::json(self.post(&path), &vm);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
@@ -491,7 +485,6 @@ pub enum HostFeature {
     Dell,
     Supermicro,
     DMZ,
-    GwIpv4(String),
 }
 
 impl Serialize for HostFeature {
@@ -516,11 +509,6 @@ impl Serialize for HostFeature {
             HostFeature::Dell => serializer.serialize_str(DLL),
             HostFeature::Supermicro => serializer.serialize_str(SPM),
             HostFeature::DMZ => serializer.serialize_str(DMZ),
-            HostFeature::GwIpv4(addr) => {
-                let mut host_feature: String = "gw_ipv4=".to_owned();
-                host_feature.push_str(addr);
-                serializer.serialize_str(&host_feature)
-            }
         }
     }
 }
@@ -532,11 +520,6 @@ const DLL: &str = "dll";
 const SPM: &str = "spm";
 const DMZ: &str = "dmz";
 
-/// dm-dmz datacenter network constants.
-pub const DM_DMZ_NETWORK: std::net::Ipv4Addr = std::net::Ipv4Addr::new(23, 142, 184, 224);
-pub const DM_DMZ_PREFIX: u8 = 28;
-pub const DM_DMZ_GATEWAY: &str = "23.142.184.238";
-
 impl<'de> Deserialize<'de> for HostFeature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -546,7 +529,6 @@ impl<'de> Deserialize<'de> for HostFeature {
         match input.split_once('=') {
             Some(("dc", dc)) => Ok(HostFeature::DC(dc.to_owned())),
             Some(("host", host)) => Ok(HostFeature::Host(host.to_owned())),
-            Some(("gw_ipv4", addr)) => Ok(HostFeature::GwIpv4(addr.to_owned())),
             _ => match input.as_str() {
                 AMD_SEV_SNP => Ok(HostFeature::AmdSevSnp),
                 PERFORMANCE => Ok(HostFeature::Performance),
@@ -559,7 +541,6 @@ impl<'de> Deserialize<'de> for HostFeature {
                     &[
                         "dc=<dc-name>",
                         "host=<host-name>",
-                        "gw_ipv4=<ip>",
                         AMD_SEV_SNP,
                         PERFORMANCE,
                         IO_PERFORMANCE,
