@@ -229,10 +229,6 @@ pub mod root_of_trust {
     impl RootOfTrustProvider for RegistryRootOfTrustProvider {
         type Error = RegistryRootOfTrustProviderError;
 
-        fn mainnet_root_of_trust(&self) -> Option<IcRootOfTrust> {
-            None
-        }
-
         fn root_of_trust(&self) -> Result<IcRootOfTrust, Self::Error> {
             let root_subnet_id = self
                 .registry_client

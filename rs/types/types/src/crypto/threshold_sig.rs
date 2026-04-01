@@ -170,7 +170,9 @@ pub trait RootOfTrustProvider {
     /// Provided in test environments in addition to `Self::root_of_trust`
     /// so that canister signatures produced by the ICP mainnet
     /// are valid in the test environments.
-    fn mainnet_root_of_trust(&self) -> Option<IcRootOfTrust>;
+    fn mainnet_root_of_trust(&self) -> Option<IcRootOfTrust> {
+        None
+    }
 
     fn root_of_trust(&self) -> Result<IcRootOfTrust, Self::Error>;
 }
