@@ -170,6 +170,21 @@ The state sync manager MUST handle downloading replicated state from peers using
 
 ---
 
+### SCENARIO-P2P-023: Transport::peers() lists connected nodes
+**Given** `Transport::peers()` is called
+**When** the call executes
+**Then** a list of `(NodeId, ConnId)` tuples is returned for all currently connected peers
+**And** each `ConnId` is a monotonically increasing unique identifier per connection
+
+### SCENARIO-P2P-024: Graceful endpoint shutdown
+**Given** `QuicTransport::shutdown()` is called
+**When** shutdown runs
+**Then** the cancellation token is triggered
+**And** all active tasks are awaited via the task tracker
+**And** the join handle is awaited for completion
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |

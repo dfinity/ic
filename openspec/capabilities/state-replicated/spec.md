@@ -137,15 +137,40 @@ The replicated state MUST support splitting for subnet migration.
 
 ---
 
+### SCENARIO-STATE-015: Output queue round-robin iteration
+**Given** output messages are consumed from canister queues
+**When** message routing iterates output queues
+**Then** subnet queues are processed first (before canister queues)
+**And** within each canister, output queues are iterated round-robin across destinations
+**And** across canisters, output queues are iterated round-robin
+
+---
+
+## REQ-STATE-010: Dropped Message Metrics
+
+The replicated state MUST track metrics for timed-out and shed messages.
+
+### SCENARIO-STATE-016: Message timeout tracking
+**Given** a message times out
+**When** `observe_timed_out_message` is called
+**Then** the metric is recorded categorized by kind (request/response), context (inbound/outbound), and class (guaranteed/best-effort)
+
+### SCENARIO-STATE-017: Message shedding tracking
+**Given** a message is shed (dropped due to load)
+**When** `observe_shed_message` is called
+**Then** the metric is recorded categorized by kind and context, including the byte size
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
 | REQ-STATE-001 | State structure | narrative | rs/replicated_state/tests/ |
 | REQ-STATE-002 | Canister state | narrative | rs/replicated_state/tests/ |
-| REQ-STATE-003 | Status lifecycle | narrative | rs/replicated_state/tests/ |
-| REQ-STATE-004 | Queue management | narrative | rs/replicated_state/tests/ |
-| REQ-STATE-005 | Stream management | narrative | rs/replicated_state/tests/ |
+| REQ-STATE-003 | Status lifecycle | linked | rs/replicated_state/tests/replicated_state.rs |
+| REQ-STATE-004 | Queue management | linked | rs/replicated_state/tests/replicated_state.rs |
+| REQ-STATE-005 | Stream management | linked | rs/replicated_state/tests/replicated_state.rs |
 | REQ-STATE-006 | Ingress history | narrative | rs/replicated_state/tests/ |
 | REQ-STATE-007 | Snapshots | narrative | rs/replicated_state/tests/ |
 | REQ-STATE-008 | Invariants | narrative | rs/replicated_state/tests/ |

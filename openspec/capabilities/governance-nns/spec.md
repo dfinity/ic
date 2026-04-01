@@ -152,11 +152,90 @@ Neuron creation MUST be rate limited to prevent abuse.
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
+## REQ-NNS-009: Network Economics Configuration
+
+The governance canister MUST maintain configurable economic parameters.
+
+### SCENARIO-NNS-017: Default network economics values
+**Given** network economics are initialized with defaults
+**When** the defaults are checked
+**Then** `reject_cost_e8s` = 100,000,000 (1 ICP)
+**And** `neuron_management_fee_per_proposal_e8s` = 1,000,000 (0.01 ICP)
+**And** `neuron_minimum_stake_e8s` = 100,000,000 (1 ICP)
+**And** `neuron_spawn_dissolve_delay_seconds` = 7 days
+**And** `max_proposals_to_keep_per_topic` = 100
+
+### SCENARIO-NNS-018: Network economics validation
+**Given** a `ManageNetworkEconomics` proposal is applied
+**When** validation runs
+**Then** `max_proposals_to_keep_per_topic` must be positive
+**And** `neurons_fund_economics` must be set and valid
+**And** `voting_power_economics` must be set and valid
+
+---
+
+## REQ-NNS-010: Proposal Topics
+
+Each proposal type MUST be assigned a topic that determines eligible voters.
+
+### SCENARIO-NNS-019: Proposal topic assignment by type
+**Given** proposals of various types are submitted
+**When** topic assignment occurs
+**Then** ManageNeuron → `NeuronManagement`
+**And** ManageNetworkEconomics → `NetworkEconomics`
+**And** Motion → `Governance`
+**And** ApproveGenesisKyc → `Kyc`
+**And** AddOrRemoveNodeProvider → `ParticipantManagement`
+**And** RewardNodeProvider → `NodeProviderRewards`
+**And** CreateServiceNervousSystem → `SnsAndCommunityFund`
+
+---
+
+## REQ-NNS-011: Proposal Content Limits
+
+Proposal content MUST respect configurable size limits.
+
+### SCENARIO-NNS-020: Motion text size enforced
+**Given** a Motion proposal is submitted with text exceeding `PROPOSAL_MOTION_TEXT_BYTES_MAX` (10,000 bytes)
+**When** validation runs
+**Then** the proposal is rejected
+
+### SCENARIO-NNS-021: ExecuteNnsFunction payload size enforced
+**Given** an `ExecuteNnsFunction` proposal is submitted with payload exceeding 70,000 bytes
+**When** validation runs
+**Then** the proposal is rejected
+
+---
+
+## REQ-NNS-012: Timer Tasks
+
+The governance canister MUST run periodic timer tasks for background operations.
+
+### SCENARIO-NNS-022: Timer tasks execute periodic operations
+**Given** the governance timer fires
+**When** timer tasks run
+**Then** reward calculations are performed and distributed to neurons
+**And** maturity disbursements are finalized
+**And** neuron data validation runs
+**And** voting power snapshots are taken
+**And** stale following is pruned
+**And** spawning neurons are processed
+
+---
+
+## Traceability
+
+| ID | Description | Status | Tests |
+|----|-------------|--------|-------|
 | REQ-NNS-001 | Canister identity | narrative | rs/nns/governance/tests/ |
 | REQ-NNS-002 | State management | narrative | rs/nns/governance/tests/ |
-| REQ-NNS-003 | Proposal lifecycle | narrative | rs/nns/governance/tests/ |
-| REQ-NNS-004 | Wait for quiet | narrative | rs/nns/governance/tests/ |
-| REQ-NNS-005 | Proposal limits | narrative | rs/nns/governance/tests/ |
-| REQ-NNS-006 | Rejection cost | narrative | rs/nns/governance/tests/ |
+| REQ-NNS-003 | Proposal lifecycle | linked | rs/nns/governance/tests/governance.rs |
+| REQ-NNS-004 | Wait for quiet | linked | rs/nns/governance/tests/governance.rs |
+| REQ-NNS-005 | Proposal limits | linked | rs/nns/governance/tests/governance.rs |
+| REQ-NNS-006 | Rejection cost | linked | rs/nns/governance/tests/governance.rs |
 | REQ-NNS-007 | Obsolete actions | narrative | rs/nns/governance/tests/ |
-| REQ-NNS-008 | Neuron rate limiting | narrative | rs/nns/governance/tests/ |
+| REQ-NNS-008 | Neuron rate limiting | linked | rs/nns/governance/tests/governance.rs |
+| REQ-NNS-009 | Network economics | narrative | rs/nns/governance/tests/ |
+| REQ-NNS-010 | Proposal topics | narrative | rs/nns/governance/tests/ |
+| REQ-NNS-011 | Proposal content limits | narrative | rs/nns/governance/tests/ |
+| REQ-NNS-012 | Timer tasks | narrative | rs/nns/governance/tests/ |

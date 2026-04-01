@@ -115,8 +115,37 @@ The ledger MUST detect duplicate transactions within a configurable time window.
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
 | REQ-ICP-001 | Token representation | narrative | rs/ledger_suite/icp/tests/ |
-| REQ-ICP-002 | Account identification | narrative | rs/ledger_suite/icp/tests/ |
-| REQ-ICP-003 | Transfer operation | narrative | rs/ledger_suite/icp/tests/ |
-| REQ-ICP-004 | Mint and burn | narrative | rs/ledger_suite/icp/tests/ |
-| REQ-ICP-005 | ICRC-2 approvals | narrative | rs/ledger_suite/icp/tests/ |
-| REQ-ICP-006 | Deduplication | narrative | rs/ledger_suite/icp/tests/ |
+## REQ-ICP-007: Transfer Fee Configuration
+
+The ICP ledger MUST expose its configurable transfer fee.
+
+### SCENARIO-ICP-013: Query transfer fee
+**Given** a client queries the transfer fee via `transfer_fee`
+**When** the query executes
+**Then** the configured fee is returned (default: `Tokens::from_e8s(10_000)`, i.e., 0.0001 ICP)
+
+### SCENARIO-ICP-014: Failed approval refunds fee
+**Given** an approval fails (e.g., due to `AllowanceChanged`)
+**When** the failure is handled
+**Then** the approval fee is refunded (minted back) to the approver's account
+**And** the approver's balance is not reduced
+
+### SCENARIO-ICP-015: Approval expires_at invalidates allowance
+**Given** an approval specifies `expires_at` timestamp
+**When** the current time passes `expires_at`
+**Then** the allowance becomes invalid for `transfer_from` operations
+**And** expired approvals are pruned from storage
+
+---
+
+## Traceability
+
+| ID | Description | Status | Tests |
+|----|-------------|--------|-------|
+| REQ-ICP-001 | Token representation | linked | rs/ledger_suite/icp/ledger/src/tests.rs |
+| REQ-ICP-002 | Account identification | linked | rs/ledger_suite/icp/ledger/src/tests.rs |
+| REQ-ICP-003 | Transfer operation | linked | rs/ledger_suite/icp/ledger/src/tests.rs |
+| REQ-ICP-004 | Mint and burn | linked | rs/ledger_suite/icp/ledger/src/tests.rs |
+| REQ-ICP-005 | ICRC-2 approvals | linked | rs/ledger_suite/icp/ledger/src/tests.rs |
+| REQ-ICP-006 | Deduplication | linked | rs/ledger_suite/icp/ledger/src/tests.rs |
+| REQ-ICP-007 | Transfer fee configuration | narrative | rs/ledger_suite/icp/tests/ |

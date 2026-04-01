@@ -99,12 +99,54 @@ The ledger MUST advertise supported standards.
 
 ---
 
+## REQ-ICRC-006: ICRC-1 Total Supply and Minting Account Semantics
+
+The ledger MUST correctly compute total supply and enforce minting account semantics.
+
+### SCENARIO-ICRC-012: Total supply calculation
+**Given** `icrc1_total_supply` is called
+**When** the calculation runs
+**Then** total supply = `Tokens::MAX - token_pool`
+**And** this equals the sum of all non-zero account balances
+
+### SCENARIO-ICRC-013: Minting account transfer semantics
+**Given** the minting account initiates a transfer
+**When** `icrc1_transfer` runs
+**Then** transfers FROM the minting account are treated as mints (no fee, block type "mint")
+**And** transfers TO the minting account are treated as burns (no fee, block type "burn")
+
+### SCENARIO-ICRC-014: Approval with expires_at
+**Given** `icrc2_approve` is called with an `expires_at` timestamp
+**When** the current time passes `expires_at`
+**Then** the allowance is invalid for `icrc2_transfer_from`
+**And** expired approvals are pruned from storage
+
+### SCENARIO-ICRC-015: Bad burn amount rejected
+**Given** a burn amount (transfer to minting account) is below `minimum_burn_amount`
+**When** `icrc1_transfer` runs
+**Then** the transfer fails with `BadBurn { min_burn_amount }`
+
+---
+
+## REQ-ICRC-007: ICRC-3 Transaction Log
+
+The ledger MUST record transactions as ICRC-3 compliant blocks.
+
+### SCENARIO-ICRC-016: Block encoding and types
+**Given** a transaction is recorded
+**When** it is stored as a block
+**Then** the block is CBOR-encoded with self-described tag 55799
+**And** the block type is one of: "xfer" (transfer), "mint" (mint), "burn" (burn), "approve" (approval)
+**And** blocks are available via `icrc3_get_blocks`
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
-| REQ-ICRC-001 | ICRC-1 transfer | narrative | rs/ledger_suite/icrc1/tests/ |
-| REQ-ICRC-002 | ICRC-1 metadata | narrative | rs/ledger_suite/icrc1/tests/ |
+| REQ-ICRC-001 | ICRC-1 transfer | linked | rs/ledger_suite/icrc1/ledger/src/tests.rs |
+| REQ-ICRC-002 | ICRC-1 metadata | linked | rs/ledger_suite/icrc1/ledger/src/tests.rs |
 | REQ-ICRC-003 | ICRC-2 approve | narrative | rs/ledger_suite/icrc1/tests/ |
 | REQ-ICRC-004 | ICRC-2 transfer_from | narrative | rs/ledger_suite/icrc1/tests/ |
 | REQ-ICRC-005 | Supported standards | narrative | rs/ledger_suite/icrc1/tests/ |
