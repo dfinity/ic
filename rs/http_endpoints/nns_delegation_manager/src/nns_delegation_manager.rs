@@ -599,11 +599,9 @@ fn get_random_node_from_nns_subnet(
 fn get_random_api_boundary_node(
     registry_client: &dyn RegistryClient,
 ) -> Result<(NodeId, String), String> {
-    let api_bns =
-        match registry_client.get_api_boundary_node_ids(registry_client.get_latest_version()) {
-            Ok(api_bns) => Ok(api_bns),
-            Err(err) => Err(format!("Failed to get API BNs from registry: {err}")),
-        }?;
+    let api_bns = registry_client
+        .get_api_boundary_node_ids(registry_client.get_latest_version())
+        .map_err(|err| format!("Failed to get API BNs from registry: {err}"))?;
 
     let (node_id, record) = get_random_node_record_from_ids(registry_client, &api_bns)?;
     let domain = record
