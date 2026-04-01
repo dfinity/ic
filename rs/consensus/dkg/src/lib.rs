@@ -18,17 +18,18 @@ use ic_metrics::{
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, ReplicaVersion, SubnetId,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::dkg::{DealingContent, DkgMessageId, DkgSummary, InvalidDkgPayloadReason, Message},
     crypto::{
         Signed,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet, config::NiDkgConfig},
     },
+    messages::CallbackId,
 };
 use prometheus::Histogram;
 use rayon::prelude::*;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     sync::{Arc, Mutex},
 };
 
@@ -36,7 +37,7 @@ pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
 
-use crate::payload_builder::build_target_id_config_map;
+use crate::payload_builder::{ConfigResult, build_callback_id_config_map};
 pub use crate::utils::get_vetkey_public_keys;
 
 #[cfg(test)]
@@ -222,9 +223,12 @@ impl DkgImpl {
         }
 
         // If the dealing refers a config which is not among the ongoing DKGs,
-        // we reject it.
+        // we reject it, unless it is a remote DKG, in which case we skip it.
         let config = match configs.get(message_dkg_id) {
             Some(config) => config,
+            None if message_dkg_id.target_subnet != NiDkgTargetSubnet::Local => {
+                return Mutations::new();
+            }
             None => {
                 return get_handle_invalid_change_action(
                     message,
@@ -304,48 +308,76 @@ fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T)
     ChangeAction::HandleInvalid(DkgMessageId::from(message), reason.as_ref().to_string())
 }
 
-pub(crate) fn get_configs_for_start_height(
-    subnet_id: SubnetId,
-    registry_client: &dyn RegistryClient,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
-    registry_version: RegistryVersion,
-    start_height: Height,
-    dkg_summary: &DkgSummary,
+pub(crate) fn merge_configs(
+    mut summary_configs: BTreeMap<NiDkgId, NiDkgConfig>,
+    config_results: BTreeMap<CallbackId, ConfigResult>,
+    logger: &ReplicaLogger,
 ) -> BTreeMap<NiDkgId, NiDkgConfig> {
-    let mut summary_configs = dkg_summary.configs.clone();
-    let Some(state) = state_manager.get_latest_certified_state() else {
-        return summary_configs;
-    };
-    let map = build_target_id_config_map(
-        subnet_id,
-        start_height,
-        registry_client,
-        state.get_ref(),
-        registry_version,
-        dkg_summary.next_transcripts(),
-        &BTreeSet::new(),
-    );
-    for (_, config_results) in map {
-        let (mut configs, mut errs) = (vec![], vec![]);
-        for config_result in config_results {
-            match config_result {
-                Ok(config) => configs.push(config),
-                Err((dkg_id, err)) => errs.push((dkg_id, err)),
-            }
-        }
-        if !errs.is_empty() {
-            continue;
-        }
-        for config in &configs {
-            if summary_configs.contains_key(&config.dkg_id()) {
+    for (_, config_result) in config_results {
+        let configs = match config_result {
+            Ok(configs) => configs,
+            Err(errs) => {
+                for (dkg_id, err) in errs {
+                    error!(
+                        logger,
+                        "Failed to create DKG config for dkg id {:?}: {}", dkg_id, err
+                    );
+                }
                 continue;
             }
+        };
+        if configs
+            .iter()
+            .any(|config| summary_configs.contains_key(config.dkg_id()))
+        {
+            error!(
+                logger,
+                "Skipping DKG configs {:?} because they already exist in the summary",
+                configs
+                    .iter()
+                    .map(|config| config.dkg_id())
+                    .collect::<Vec<_>>()
+            );
+            continue;
         }
         for config in configs {
             summary_configs.insert(config.dkg_id().clone(), config);
         }
     }
     summary_configs
+}
+
+fn get_configs_for_start_height(
+    subnet_id: SubnetId,
+    registry_client: &dyn RegistryClient,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
+    registry_version: RegistryVersion,
+    start_height: Height,
+    dkg_summary: &DkgSummary,
+    logger: &ReplicaLogger,
+) -> BTreeMap<NiDkgId, NiDkgConfig> {
+    let summary_configs = dkg_summary.configs.clone();
+    // Since early remote transcripts are an optimization, fallback to only the summary configs
+    // if the state is not available. Dealings for received for early remote transcripts will be
+    // rejected.
+    let Some(state) = state_reader.get_latest_certified_state() else {
+        return summary_configs;
+    };
+    // Fallback to the summary configs if we cannot build the configs for early remote transcripts.
+    // Dealings received for early remote transcripts will be rejected.
+    let Ok(map) = build_callback_id_config_map(
+        subnet_id,
+        start_height,
+        registry_client,
+        state.get_ref(),
+        registry_version,
+        dkg_summary.next_transcripts(),
+        logger,
+    ) else {
+        return summary_configs;
+    };
+
+    merge_configs(summary_configs, map, logger)
 }
 
 impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
@@ -370,6 +402,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
             self.registry_client.get_latest_version(),
             start_height,
             dkg_summary,
+            &self.logger,
         );
         let change_set: Mutations = configs
             .par_iter()

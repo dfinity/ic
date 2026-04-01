@@ -1,4 +1,4 @@
-use crate::get_configs_for_start_height;
+use crate::{merge_configs, payload_builder::build_callback_id_config_map};
 
 use self::payload_builder::create_early_remote_transcripts;
 use super::{crypto_validate_dealing, payload_builder, utils};
@@ -17,7 +17,10 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload,
-        dkg::{DkgDataPayload, DkgPayloadValidationFailure, DkgSummary, InvalidDkgPayloadReason},
+        dkg::{
+            DkgDataPayload, DkgPayloadCreationError, DkgPayloadValidationFailure, DkgSummary,
+            InvalidDkgPayloadReason,
+        },
     },
 };
 use prometheus::IntCounterVec;
@@ -189,13 +192,23 @@ fn validate_dealings_payload(
         return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
     }
 
-    let configs = get_configs_for_start_height(
+    let state = state_manager
+        .get_state_at(validation_context.certified_height)
+        .map_err(DkgPayloadCreationError::StateManagerError)?;
+
+    let remote_config_results = build_callback_id_config_map(
         subnet_id,
-        registry_client,
-        state_manager,
-        validation_context.registry_version,
         start_block_height,
-        last_summary,
+        registry_client,
+        state.get_ref(),
+        validation_context.registry_version,
+        last_summary.next_transcripts(),
+        log,
+    )?;
+    let configs = merge_configs(
+        last_summary.configs.clone(),
+        remote_config_results.clone(),
+        log,
     );
 
     // Check that all messages have a valid DKG config from the summary and the
@@ -220,16 +233,11 @@ fn validate_dealings_payload(
     // If we have early transcripts, we compare them
     if !dealings.transcripts_for_remote_subnets.is_empty() {
         let expected_transcripts = create_early_remote_transcripts(
-            subnet_id,
-            start_block_height,
-            registry_client,
             pool_reader,
             crypto,
             parent,
-            last_summary,
-            state_manager,
-            validation_context,
-            log.clone(),
+            remote_config_results,
+            log,
         )?;
 
         if dealings.transcripts_for_remote_subnets != expected_transcripts {
