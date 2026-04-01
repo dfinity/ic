@@ -1,3 +1,24 @@
+//! # Traceability
+//! Spec: openspec/capabilities/state-checkpoint/spec.md
+//!
+//! REQ-CKPT-001: Checkpoint Creation
+//!   SCENARIO-CKPT-001: Making a checkpoint from tip
+//!   SCENARIO-CKPT-002: Parallel page map flushing
+//!   SCENARIO-CKPT-003: Checkpoint protobuf files
+//!
+//! REQ-CKPT-002: Checkpoint Loading
+//!   SCENARIO-CKPT-004: Loading a checkpoint
+//!   SCENARIO-CKPT-005: Loading canister state from checkpoint
+//!   SCENARIO-CKPT-006: Parallel canister loading
+//!
+//! REQ-CKPT-004: Wasm Binary Loading
+//!   SCENARIO-CKPT-009: Memory-mapped Wasm loading
+//!   SCENARIO-CKPT-010: Wasm binary deduplication
+//!
+//! REQ-CKPT-005: Page Map Type Classification
+//!   SCENARIO-CKPT-011: Canister page map types
+//!   SCENARIO-CKPT-012: Snapshot page map types
+
 use crossbeam_channel::{Sender, unbounded};
 use ic_base_types::{CanisterId, SnapshotId, subnet_id_try_from_protobuf};
 use ic_logger::error;

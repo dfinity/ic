@@ -1,3 +1,28 @@
+//! # Traceability
+//! Spec: openspec/capabilities/pocket-ic-server/spec.md
+//!
+//! REQ-PIC-001: PocketIC Instance Lifecycle
+//!   SCENARIO-PIC-001: Create a new PocketIC instance
+//!   SCENARIO-PIC-002: Multiple concurrent instances
+//!
+//! REQ-PIC-003: Deterministic State Machine
+//!   SCENARIO-PIC-005: Tick advances state
+//!   SCENARIO-PIC-006: State is deterministic
+//!
+//! REQ-PIC-004: Canister Operations
+//!   SCENARIO-PIC-007: Submit and await ingress message
+//!   SCENARIO-PIC-008: Query a canister
+//!   SCENARIO-PIC-009: Manage canister resources
+//!
+//! REQ-PIC-005: Time Management
+//!   SCENARIO-PIC-010: Get and set instance time
+//!
+//! REQ-PIC-006: IC HTTP Interface Compatibility
+//!   SCENARIO-PIC-011: v2/v3 API endpoints
+//!
+//! REQ-PIC-007: Canister HTTP Outcalls Mocking
+//!   SCENARIO-PIC-012: Get pending and mock HTTP requests
+
 #![allow(deprecated)]
 use crate::common::{send_signal_to_pic, start_server, start_server_helper};
 use candid::{Encode, Principal};

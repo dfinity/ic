@@ -1,3 +1,15 @@
+//! # Traceability
+//! Spec: openspec/capabilities/execution-wasm/spec.md
+//!
+//! REQ-WASM-004: System API Execution Contexts
+//!   SCENARIO-WASM-020: Non-replicated query API context
+//!   SCENARIO-WASM-021: Composite query API context
+//!
+//! Spec: openspec/capabilities/execution-system-api/spec.md
+//!
+//! REQ-SYSAPI-005: Certified Data
+//!   SCENARIO-SYSAPI-020: Read data certificate
+
 use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
 use ic_heap_bytes::{DeterministicHeapBytes, HeapBytes, total_bytes};

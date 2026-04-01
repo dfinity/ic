@@ -125,15 +125,21 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 ## query-stats
 | REQ-QS-001 through REQ-QS-004 | Query stats | linked | rs/query_stats/src/payload_builder.rs |
 
+## execution-query
+| REQ-QUERY-* | Query execution | linked | rs/execution_environment/src/query_handler/query_cache.rs |
+
+## execution-sandboxing
+| REQ-SAND-* | Canister sandboxing | linked | rs/canister_sandbox/src/dts/tests.rs |
+
+## state-checkpoint
+| REQ-CKPT-001 through REQ-CKPT-005 | Checkpoints | linked | rs/state_manager/src/checkpoint.rs |
+
+## boundary-node
+| REQ-BN-001 through REQ-BN-004 | Boundary node | linked | rs/boundary_node/ic_boundary/src/core.rs |
+
+## pocket-ic-server
+| REQ-PIC-001 through REQ-PIC-008 | PocketIC server | linked | rs/pocket_ic_server/tests/test.rs |
+
 ---
 
-## Domains Still Needing Test Linkage (Phase 3 minimal remaining)
-
-| Domain | REQ Prefix | Status | Notes |
-|--------|------------|--------|-------|
-| execution-query | REQ-QUERY-* | narrative | rs/execution_environment/ query tests |
-| execution-sandboxing | REQ-SAND-* | narrative | rs/canister_sandbox/ |
-| networking-p2p | REQ-P2P-* | narrative | rs/transport/tests/ |
-| state-checkpoint | REQ-CKPT-* | narrative | rs/state_manager/src/checkpoint.rs |
-| boundary-node | REQ-BN-* | narrative | rs/boundary_node/ic_boundary/ |
-| pocket-ic-server | REQ-PIC-* | narrative | rs/pocket_ic_server/tests/ |
+## Phase 3 Complete: All 28 domains have test linkage

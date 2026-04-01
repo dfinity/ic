@@ -1,3 +1,25 @@
+//! # Traceability
+//! Spec: openspec/capabilities/boundary-node/spec.md
+//!
+//! REQ-BN-001: HTTP Gateway Routing
+//!   SCENARIO-BN-001: Route query request to correct subnet
+//!   SCENARIO-BN-002: Route call (update) request
+//!   SCENARIO-BN-003: Route canister read_state request
+//!   SCENARIO-BN-004: Route subnet read_state request
+//!   SCENARIO-BN-005: Canister not found in routing table
+//!   SCENARIO-BN-006: No routing table available
+//!
+//! REQ-BN-002: Request Body Size Limit
+//!   SCENARIO-BN-007: Request body within limit
+//!   SCENARIO-BN-008: Request body exceeds limit
+//!
+//! REQ-BN-003: Status Endpoint
+//!   SCENARIO-BN-009: Healthy status response
+//!
+//! REQ-BN-004: Health Check Endpoint
+//!   SCENARIO-BN-010: Healthy boundary node
+//!   SCENARIO-BN-011: Unhealthy boundary node
+
 #![allow(clippy::disallowed_types)]
 use std::{
     error::Error as StdError,

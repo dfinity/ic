@@ -1,3 +1,18 @@
+//! # Traceability
+//! Spec: openspec/capabilities/execution-dts/spec.md
+//!
+//! REQ-DTS-003: Paused Execution State
+//!   SCENARIO-DTS-007: Paused message execution state
+//!   SCENARIO-DTS-009: Paused execution registry
+//!
+//! REQ-DTS-004: Resuming Paused Executions
+//!   SCENARIO-DTS-010: Resume paused message execution
+//!
+//! Spec: openspec/capabilities/execution-wasm/spec.md
+//!
+//! REQ-WASM-003: Hypervisor Execution
+//!   SCENARIO-WASM-015: Execution with DTS
+
 use std::{
     sync::mpsc::{self, Receiver, Sender},
     thread,
