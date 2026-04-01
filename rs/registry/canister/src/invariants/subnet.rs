@@ -263,7 +263,7 @@ fn check_sev_subnet_invariants(
 }
 
 fn check_node_type4_iff_cloud_engine(
-    subnet_id: SubnetId,
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
     subnet_record: &SubnetRecord,
     node_records: &[NodeRecord],
 ) -> Result<(), InvariantCheckError> {
