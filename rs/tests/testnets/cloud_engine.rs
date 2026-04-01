@@ -162,10 +162,10 @@ pub fn setup(env: TestEnv) {
     // deploy ic-gateway on dm1-dmz with static IPv4
     let mut ic_gateway_vm =
         IcGatewayVm::new(IC_GATEWAY_VM_NAME).with_required_host_features(dm1_dmz_features);
-    if let Ok(gw_ipv4) = std::env::var("IC_GW_IPV4") {
-        let ip: Ipv4Addr = gw_ipv4
+    if let Ok(ic_gw_ipv4) = std::env::var("IC_GW_IPV4") {
+        let ip: Ipv4Addr = ic_gw_ipv4
             .parse()
-            .unwrap_or_else(|e| panic!("invalid IC_GW_IPV4 address '{gw_ipv4}': {e}"));
+            .unwrap_or_else(|e| panic!("invalid IC_GW_IPV4 address '{ic_gw_ipv4}': {e}"));
         let mask: u32 = !((1_u32 << (32 - DM1_DMZ_PREFIX)) - 1);
         assert_eq!(
             u32::from(ip) & mask,
