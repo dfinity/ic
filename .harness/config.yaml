@@ -1,0 +1,75 @@
+# Agentic Refactor Harness Configuration
+# https://github.com/ianblenke/agentic-refactor-rules
+
+harness_version: "1.0"
+project: "dfinity/ic"
+methodology: "BMAD + OpenSpec + context-resets"
+
+agents:
+  planner:
+    model: sonnet
+    mode: auto
+    tools: [read, glob, grep, web_search]
+    context_limit: fresh_per_plan
+    output: epics/stories/
+
+  architect:
+    model: opus
+    mode: auto
+    tools: [read, glob, grep]
+    context_limit: fresh_per_design
+    output: _bmad/
+
+  generator:
+    model: opus
+    mode: auto
+    tools: [read, edit, write, glob, grep, bash]
+    context_limit: fresh_per_story
+    output: openspec/capabilities/
+
+  evaluator:
+    model: opus
+    mode: auto
+    tools: [read, glob, grep, bash]
+    context_limit: fresh_per_evaluation
+    receives: [story_spec, sprint_contract]
+    never_receives: [generator_context]
+
+  orchestrator:
+    type: deterministic_script
+    reads: .harness/handoffs/
+    writes: .harness/handoffs/
+    enforces: .harness/contracts/
+
+coverage_gates:
+  spec_coverage: 100%       # every REQ-* has at least one test
+  scenario_coverage: 100%   # every SCENARIO-* has integration or E2E test
+  code_coverage_new: 80%    # line coverage on new files
+  branch_coverage_new: 70%  # branch coverage on new files
+
+hard_fail_conditions:
+  - spec_contradiction       # implementation contradicts spec.md
+  - broken_build             # bazel build fails
+  - security_regression      # security-relevant invariant broken
+  - data_loss                # canister state can be corrupted/lost
+
+migration_order:
+  - execution-scheduler      # DONE — template
+  - execution-canister-lifecycle
+  - execution-cycles
+  - execution-dts
+  - execution-wasm
+  - execution-system-api
+  - execution-memory
+  - execution-query
+  - consensus
+  - messaging
+  - networking-https-outcalls
+  - state-replicated
+  - state-manager
+  - state-checkpoint
+  - state-certification
+  - crypto-signatures
+  - crypto-dkg
+  - crypto-threshold
+  # ... remaining domains
