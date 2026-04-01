@@ -133,8 +133,6 @@ jobs:
               skip_buf_checks="false"
           fi
 
-          release_build="true"
-
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
