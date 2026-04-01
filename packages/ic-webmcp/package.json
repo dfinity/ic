@@ -1,0 +1,48 @@
+{
+  "name": "@dfinity/webmcp",
+  "version": "0.1.0",
+  "description": "Bridge WebMCP (Web Model Context Protocol) to Internet Computer canisters via @dfinity/agent",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dfinity/agent": "^2.0.0",
+    "@dfinity/candid": "^2.0.0",
+    "@dfinity/identity": "^2.0.0",
+    "@dfinity/principal": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  },
+  "peerDependencies": {
+    "@dfinity/agent": ">=1.0.0",
+    "@dfinity/candid": ">=1.0.0",
+    "@dfinity/principal": ">=1.0.0"
+  },
+  "keywords": [
+    "webmcp",
+    "internet-computer",
+    "dfinity",
+    "candid",
+    "ai-agents",
+    "model-context-protocol"
+  ]
+}
