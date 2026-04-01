@@ -655,7 +655,7 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         node_operator_principal_id: node.node_operator_principal_id,
         secret_key_store: node.secret_key_store.clone(),
         domain: node.domain.clone(),
-        node_reward_type: None,
+        node_reward_type: node.node_reward_type.map(String::from),
     }
 }
 

@@ -16,7 +16,7 @@ use crate::driver::{
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
-use ic_protobuf::registry::dc::v1::DataCenterRecord;
+use ic_protobuf::registry::{dc::v1::DataCenterRecord, node::v1::NodeRewardType};
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_resource_limits::ResourceLimits;
@@ -282,6 +282,21 @@ impl InternetComputer {
         &mut self,
         env: &TestEnv,
     ) -> Result<BTreeMap<String, AllocatedVm>> {
+        if self
+            .subnets
+            .iter()
+            .any(|s| s.subnet_type == SubnetType::CloudEngine)
+        {
+            // Cloud engines use API boundary nodes to replicate their registry and to fetch
+            // delegations since the firewall on the NNS blocks them.
+            assert!(
+                !self.api_boundary_nodes.is_empty() && self.api_bn_use_playnet,
+                "At least one API boundary node with valid certificates is required when using \
+                a cloud engine subnet. Add `.with_api_boundary_nodes_playnet(1)` when creating \
+                the `InternetComputer` instance."
+            );
+        }
+
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for node in self
@@ -559,6 +574,7 @@ pub struct Subnet {
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub boot_image: BootImage,
     pub required_host_features: Vec<HostFeature>,
+    pub default_node_reward_type: Option<NodeRewardType>,
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
@@ -590,11 +606,24 @@ pub struct Subnet {
 
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
+        // Invariants in the registry ensure that
+        //   - Cloud engines have a free cost schedule
+        //   - Cloud engines only have nodes with reward type 4
+        let (canister_cycles_cost_schedule, default_node_reward_type) = match subnet_type {
+            SubnetType::Application | SubnetType::System | SubnetType::VerifiedApplication => {
+                (CanisterCyclesCostSchedule::Normal, None)
+            }
+            SubnetType::CloudEngine => (
+                CanisterCyclesCostSchedule::Free,
+                Some(NodeRewardType::Type4),
+            ),
+        };
         Self {
             vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             boot_image: Default::default(),
             required_host_features: vec![],
+            default_node_reward_type,
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             max_ingress_bytes_per_block: None,
@@ -611,7 +640,7 @@ impl Subnet {
             resource_limits: None,
             max_number_of_canisters: None,
             subnet_type,
-            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
+            canister_cycles_cost_schedule,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
@@ -717,7 +746,13 @@ impl Subnet {
         })
     }
 
-    pub fn add_node(mut self, node: Node) -> Self {
+    pub fn add_node(mut self, mut node: Node) -> Self {
+        if node.node_reward_type.is_none()
+            && let Some(reward_type) = self.default_node_reward_type
+        {
+            node = node.with_node_reward_type(reward_type);
+        }
+
         self.nodes.push(node);
         self
     }
@@ -867,6 +902,7 @@ impl Default for Subnet {
             vm_allocation: Default::default(),
             boot_image: BootImage::GroupDefault,
             required_host_features: vec![],
+            default_node_reward_type: None,
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             max_ingress_bytes_per_block: None,
@@ -966,6 +1002,7 @@ pub struct Node {
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
+    pub node_reward_type: Option<NodeRewardType>,
     pub recovery_hash: Option<String>,
     pub boot_image: BootImage,
     pub node_operator_principal_id: Option<PrincipalId>,
@@ -1023,6 +1060,11 @@ impl Node {
 
     pub fn with_domain(mut self, domain: String) -> Self {
         self.domain = Some(domain);
+        self
+    }
+
+    pub fn with_node_reward_type(mut self, node_reward_type: NodeRewardType) -> Self {
+        self.node_reward_type = Some(node_reward_type);
         self
     }
 

@@ -24079,7 +24079,6 @@ dependencies = [
  "ic-system-test-driver",
  "ic-testnet-mainnet-nns",
  "ic-types",
- "ic-types-cycles",
  "ic-xrc-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",

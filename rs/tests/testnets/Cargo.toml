@@ -14,7 +14,6 @@ ic-limits = { path = "../../limits" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-types = { path = "../../types/types" }
-ic-types-cycles = { path = "../../types/cycles" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-testnet-mainnet-nns = { path = "./mainnet_nns" }
