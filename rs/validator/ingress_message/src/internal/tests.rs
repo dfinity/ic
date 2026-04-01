@@ -26,8 +26,10 @@ mod root_of_trust {
         let root_of_trust = nns_root_public_key();
         let provider = ConstantRootOfTrustProvider::new(root_of_trust);
 
-        let result = provider.root_of_trust();
+        let result = provider.mainnet_root_of_trust();
+        assert_eq!(result, None);
 
+        let result = provider.root_of_trust();
         assert_eq!(result, Ok(root_of_trust));
     }
 
@@ -64,6 +66,10 @@ mod root_of_trust {
         let err_msg = "test: failed to retrieve root of trust";
         let root_of_trust_provider_error = MockRootOfTrustProviderError::new(err_msg);
         root_of_trust_provider
+            .expect_mainnet_root_of_trust()
+            .times(1)
+            .return_const(None);
+        root_of_trust_provider
             .expect_root_of_trust()
             .times(1)
             .return_const(Err(root_of_trust_provider_error));
@@ -86,6 +92,10 @@ mod root_of_trust {
     fn should_query_root_of_trust_provider_for_canister_signature() {
         let current_time = GENESIS;
         let mut root_of_trust_provider = MockRootOfTrustProvider::new();
+        root_of_trust_provider
+            .expect_mainnet_root_of_trust()
+            .times(1)
+            .return_const(None);
         root_of_trust_provider
             .expect_root_of_trust()
             .times(1)

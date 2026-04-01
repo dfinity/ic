@@ -309,6 +309,10 @@ impl ConstantRootOfTrustProvider {
 impl RootOfTrustProvider for ConstantRootOfTrustProvider {
     type Error = Infallible;
 
+    fn mainnet_root_of_trust(&self) -> Option<IcRootOfTrust> {
+        None
+    }
+
     fn root_of_trust(&self) -> Result<IcRootOfTrust, Self::Error> {
         Ok(self.root_of_trust)
     }
