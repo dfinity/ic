@@ -3,8 +3,7 @@ use crate::{
     RoundLimits, as_num_instructions,
     canister_manager::{
         CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
-        InstallCodeContext, MAX_SLICE_SIZE_BYTES, StopCanisterResult, WasmSource,
-        uninstall_canister,
+        InstallCodeContext, MAX_SLICE_SIZE_BYTES, WasmSource, uninstall_canister,
     },
     canister_settings::CanisterSettings,
     execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
@@ -88,7 +87,7 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     SubnetId, UserId,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
+    messages::{CanisterCall, StopCanisterCallId, StopCanisterContext},
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{
@@ -958,17 +957,13 @@ fn stop_a_stopped_canister() {
             CanisterStatusType::Stopped
         );
 
-        let stop_context = StopCanisterContext::Ingress {
-            sender,
-            message_id: message_test_id(0),
-            call_id: Some(StopCanisterCallId::new(0)),
-        };
-        assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state, subnet_admins),
-            StopCanisterResult::AlreadyStopped {
-                cycles_to_return: Cycles::zero()
-            }
-        );
+        let mut msg = CanisterCall::Ingress(Arc::new(IngressBuilder::new().source(sender).build()));
+        let call_id = StopCanisterCallId::new(0);
+        let response = canister_manager
+            .stop_canister(canister_id, &mut msg, call_id, &mut state, subnet_admins)
+            .unwrap();
+        assert!(response.reply.is_some());
+        assert!(response.stop_call_id_to_remove.is_some());
 
         // Canister should still be stopped.
         assert_eq!(
@@ -992,20 +987,13 @@ fn stop_a_stopped_canister_from_another_canister() {
             CanisterStatusType::Stopped
         );
 
-        let cycles = 20_u128;
-        let stop_context = StopCanisterContext::Canister {
-            sender: controller,
-            reply_callback: CallbackId::from(0),
-            call_id: Some(StopCanisterCallId::new(0)),
-            cycles: Cycles::from(cycles),
-            deadline: NO_DEADLINE,
-        };
-        assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state, subnet_admins),
-            StopCanisterResult::AlreadyStopped {
-                cycles_to_return: Cycles::from(cycles)
-            }
-        );
+        let mut msg = CanisterCall::Request(Arc::new(RequestBuilder::new().build()));
+        let call_id = StopCanisterCallId::new(0);
+        let response = canister_manager
+            .stop_canister(canister_id, &mut msg, call_id, &mut state, subnet_admins)
+            .unwrap();
+        assert!(response.reply.is_some());
+        assert!(response.stop_call_id_to_remove.is_some());
 
         // Canister should still be stopped.
         assert_eq!(
@@ -3176,7 +3164,7 @@ fn creating_canisters_always_works_if_limit_is_set_to_zero() {
         test.inject_call_to_ic00(
             Method::CreateCanister,
             EmptyBlob.encode(),
-            test.canister_creation_fee(),
+            test.canister_creation_fee().real(),
         );
         test.execute_all();
     }
@@ -7515,7 +7503,7 @@ fn create_canister_memory_allocation_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+            test.canister_creation_fee().real() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -7539,7 +7527,7 @@ fn create_canister_memory_allocation_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+            test.canister_creation_fee().real() + Cycles::new(1_000_000_000),
         )
         .build();
 
@@ -7575,7 +7563,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+            test.canister_creation_fee().real() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -7597,7 +7585,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+            test.canister_creation_fee().real() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -7620,7 +7608,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::new(1_000_000_000),
+            test.canister_creation_fee().real() + Cycles::new(1_000_000_000),
         )
         .build();
 
@@ -7655,7 +7643,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
             CanisterId::ic_00(),
             Method::CreateCanister,
             call_args().other_side(args.encode()),
-            test.canister_creation_fee(),
+            test.canister_creation_fee().real(),
         )
         .build();
 
@@ -7678,7 +7666,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
+            test.canister_creation_fee().real(),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -7700,7 +7688,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
+            test.canister_creation_fee().real(),
         )
         .build();
     test.ingress(uc, "update", create_canister)
@@ -7775,7 +7763,7 @@ fn create_canister_insufficient_cycles_for_memory_allocation() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
+            test.canister_creation_fee().real(),
         )
         .build();
 
