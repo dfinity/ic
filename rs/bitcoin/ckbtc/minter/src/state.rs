@@ -585,6 +585,13 @@ pub struct CkBtcMinterState {
 
     /// All OutPoints ever minted.
     pub minted_outpoints: BTreeSet<OutPoint>,
+
+    /// OutPoints that were found to be duplicated during update_balance.
+    ///
+    /// Any entry in that set is a sign of a CRITICAL bug.
+    /// Rather than panicking, which makes debugging difficult,
+    /// we track the size of that set via a metric and have alerts in place.
+    pub duplicated_outpoints: BTreeSet<OutPoint>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
@@ -2070,6 +2077,7 @@ impl From<InitArgs> for CkBtcMinterState {
             pending_withdrawal_reimbursements: Default::default(),
             reimbursed_withdrawals: Default::default(),
             minted_outpoints: Default::default(),
+            duplicated_outpoints: Default::default(),
         }
     }
 }

@@ -4762,6 +4762,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-registry-nns-data-provider",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -9707,7 +9708,6 @@ dependencies = [
  "maplit",
  "memory_tracker",
  "more-asserts",
- "num-rational 0.2.4",
  "num-traits",
  "phantom_newtype",
  "prometheus",
@@ -10160,6 +10160,7 @@ name = "ic-https-outcalls-consensus"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "candid",
  "hex",
  "ic-artifact-pool",
  "ic-consensus-mocks",
@@ -10171,6 +10172,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
+ "ic-management-canister-types-private",
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
@@ -11245,6 +11247,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-cycles",
+ "ic-universal-canister",
  "ic-utils-thread",
  "lazy_static",
  "maplit",
@@ -12002,6 +12005,7 @@ dependencies = [
  "axum-server",
  "criterion",
  "futures",
+ "hickory-resolver",
  "http-body-util",
  "hyper 1.8.1",
  "hyper-util",
@@ -12016,10 +12020,12 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-nns-delegation-manager-test-utils",
+ "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
  "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
@@ -12035,6 +12041,7 @@ dependencies = [
  "tokio-rustls 0.26.4",
  "tokio-util",
  "tower 0.5.3",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -12733,6 +12740,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -14840,6 +14848,7 @@ dependencies = [
  "ic-registry-local-registry",
  "ic-registry-nns-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-resource-limits",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -18287,6 +18296,7 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-canonical-state",
  "ic-cdk",
  "ic-certification 0.9.0",
  "ic-crypto-tree-hash",
@@ -18629,7 +18639,7 @@ dependencies = [
  "num-complex",
  "num-integer",
  "num-iter",
- "num-rational 0.4.2",
+ "num-rational",
  "num-traits",
 ]
 
@@ -18734,18 +18744,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1429034a0490724d0075ebb2bc9e875d6503c3cf69e235a8941aa757d83ef5bf"
 dependencies = [
  "autocfg 1.5.0",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-dependencies = [
- "autocfg 1.5.0",
- "num-bigint 0.2.6",
  "num-integer",
  "num-traits",
 ]
@@ -24081,10 +24079,12 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-limits",
+ "ic-protobuf",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-testnet-mainnet-nns",
+ "ic-types",
  "ic-xrc-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",

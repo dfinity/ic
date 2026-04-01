@@ -111,6 +111,13 @@ pub struct IngressHistoryState {
     pub next_terminal_time: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SenderInfo {
+    #[prost(bytes = "vec", tag = "1")]
+    pub info: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub signer: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Ingress {
     #[prost(message, optional, tag = "1")]
     pub source: ::core::option::Option<super::super::super::types::v1::UserId>,
@@ -128,6 +135,8 @@ pub struct Ingress {
     /// Represents the id of the canister that the message is targeting.
     #[prost(message, optional, tag = "7")]
     pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(message, optional, tag = "8")]
+    pub sender_info: ::core::option::Option<SenderInfo>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

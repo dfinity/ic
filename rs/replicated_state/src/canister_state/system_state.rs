@@ -36,7 +36,7 @@ use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
     Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, StopCanisterContext,
+    Response, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
@@ -591,7 +591,6 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 
@@ -603,7 +602,6 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
-        log_memory_store: LogMemoryStore,
     ) -> Self {
         Self {
             canister_id,
@@ -634,7 +632,7 @@ impl SystemState {
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
-            log_memory_store,
+            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
         }
@@ -667,6 +665,7 @@ impl SystemState {
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
         canister_log: CanisterLog,
+        next_canister_log_record_idx: u64,
         log_memory_store_data: Option<PageMap>,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
@@ -704,6 +703,7 @@ impl SystemState {
             log_memory_store: LogMemoryStore::from_checkpoint(
                 LOG_MEMORY_STORE_FEATURE,
                 log_memory_store_data,
+                next_canister_log_record_idx,
             ),
             wasm_memory_limit,
             next_snapshot_id,
@@ -778,7 +778,6 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 
@@ -1341,33 +1340,41 @@ impl SystemState {
 
     /// Transitions the canister into `Stopping` state.
     ///
-    /// If the canister was `Running` or `Stopping`, remembers the stop context, so
+    /// If the canister was `Running` or `Stopping`, creates and remembers the stop context, so
     /// that it can be responded to once the canister has fully stopped. If the
-    /// canister was already `Stopped`, returns the stop context.
-    pub fn begin_stopping(
-        &mut self,
-        stop_context: StopCanisterContext,
-    ) -> Option<StopCanisterContext> {
+    /// canister was already `Stopped`, this function is a no-op.
+    ///
+    /// The function returns `true` if and only if a stop context with the given `call_id`
+    /// was inserted into the canister state.
+    pub fn begin_stopping(&mut self, msg: &mut CanisterCall, call_id: StopCanisterCallId) -> bool {
         match &mut self.status {
-            // Return the stop context, nothing to do here.
-            CanisterStatus::Stopped => Some(stop_context),
+            // Nothing to do here.
+            CanisterStatus::Stopped => false,
 
             CanisterStatus::Stopping { stop_contexts, .. } => {
+                // Constructing a stop context moves the cycles from the message
+                // to the stop context and thus we must only do so if we store the call context
+                // in `SystemState` to not lose those cycles.
+                let stop_context = StopCanisterContext::from((msg, call_id));
                 // Add the message so we can respond to it once the canister has fully stopped.
                 stop_contexts.push(stop_context);
-                None
+                true
             }
 
             CanisterStatus::Running {
                 call_context_manager,
             } => {
+                // Constructing a stop context moves the cycles from the message
+                // to the stop context and thus we must only do so if we store the call context
+                // in `SystemState` to not lose those cycles.
+                let stop_context = StopCanisterContext::from((msg, call_id));
                 // Transition the canister into the stopping state.
                 self.status = CanisterStatus::Stopping {
                     call_context_manager: std::mem::take(call_context_manager),
                     // Track the stop message to respond to it once the canister is fully stopped.
                     stop_contexts: vec![stop_context],
                 };
-                None
+                true
             }
         }
     }

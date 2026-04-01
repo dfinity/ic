@@ -14,7 +14,6 @@ use crate::{
         split_governance_proto,
     },
     is_comprehensive_neuron_list_enabled, is_neuron_follow_restrictions_enabled,
-    is_self_describing_proposal_actions_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -1312,7 +1311,7 @@ impl Governance {
             randomness.seed_rng(rng_seed);
         }
 
-        Self {
+        let mut governance = Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored(),
             env,
@@ -1324,7 +1323,23 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             rate_limiter: new_rate_limiter(),
+        };
+
+        // A one-time data migration.
+        governance.maybe_set_eight_year_gang_bonus_base();
+
+        governance
+    }
+
+    fn maybe_set_eight_year_gang_bonus_base(&mut self) {
+        if self.heap_data.eight_year_gang_bonus_migration_done {
+            return;
         }
+
+        self.neuron_store
+            .set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
+
+        self.heap_data.eight_year_gang_bonus_migration_done = true;
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -2275,12 +2290,17 @@ impl Governance {
         }
 
         // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
-        let (parent_maturity_e8s, parent_staked_maturity_e8s) = self
+        let (
+            parent_maturity_e8s,
+            parent_staked_maturity_e8s,
+            parent_eight_year_gang_bonus_base_e8s,
+        ) = self
             .neuron_store
             .with_neuron(id, |neuron| {
                 (
                     neuron.maturity_e8s_equivalent,
                     neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
+                    neuron.eight_year_gang_bonus_base_e8s,
                 )
             })
             .expect("Expected the parent neuron to exist");
@@ -2291,11 +2311,13 @@ impl Governance {
         let SplitNeuronEffect {
             transfer_maturity_e8s,
             transfer_staked_maturity_e8s,
+            transfer_eight_year_gang_bonus_base_e8s,
         } = calculate_split_neuron_effect(
             split_amount_e8s,
             minted_stake_e8s,
             parent_maturity_e8s,
             parent_staked_maturity_e8s,
+            parent_eight_year_gang_bonus_base_e8s,
         );
 
         // Decrease maturity and staked maturity of the parent neuron.
@@ -2314,6 +2336,10 @@ impl Governance {
             } else {
                 None
             };
+            parent_neuron.eight_year_gang_bonus_base_e8s = parent_neuron
+                .eight_year_gang_bonus_base_e8s
+                .checked_sub(transfer_eight_year_gang_bonus_base_e8s)
+                .expect("Eight year gang bonus base underflows");
         })
         .expect("Expected the parent neuron to exist");
 
@@ -2337,6 +2363,10 @@ impl Governance {
             } else {
                 None
             };
+            child_neuron.eight_year_gang_bonus_base_e8s = child_neuron
+                .eight_year_gang_bonus_base_e8s
+                .checked_add(transfer_eight_year_gang_bonus_base_e8s)
+                .expect("Eight year gang bonus base overflows");
         })
         .expect("Expected the child neuron to exist");
 
@@ -3383,10 +3413,9 @@ impl Governance {
     ) -> Vec<ProposalInfo> {
         let now = self.env.now();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
-            && req
-                .and_then(|r| r.return_self_describing_action)
-                .unwrap_or(false);
+        let return_self_describing_action = req
+            .and_then(|r| r.return_self_describing_action)
+            .unwrap_or(false);
         self.heap_data
             .proposals
             .values()
@@ -3504,8 +3533,7 @@ impl Governance {
             req.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
-            && req.return_self_describing_action.unwrap_or(false);
+        let return_self_describing_action = req.return_self_describing_action.unwrap_or(false);
         let now = self.env.now();
         let proposal_matches_request = |data: &ProposalData| -> bool {
             let topic = data.topic();
@@ -5052,16 +5080,21 @@ impl Governance {
             ));
         }
 
-        let self_describing_action = if is_self_describing_proposal_actions_enabled()
-            && cfg!(target_arch = "wasm32")
-            && !cfg!(feature = "canbench-rs")
-        {
-            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-            // implemented.
-            action.to_self_describing(self.env.clone()).await.ok()
-        } else {
-            None
-        };
+        let self_describing_action =
+            if cfg!(target_arch = "wasm32") && !cfg!(feature = "canbench-rs") {
+                match action.to_self_describing(self.env.clone()).await {
+                    Ok(self_describing_action) => Some(self_describing_action),
+                    Err(e) => {
+                        println!(
+                            "{}Failed to get self_describing_action for proposal: {:?}",
+                            LOG_PREFIX, e
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the

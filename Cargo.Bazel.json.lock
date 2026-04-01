@@ -1,5 +1,5 @@
 {
-  "checksum": "0ba87757d4da3c2ebfe6fd44de769bfadb974303e7929c18ba45e6002d5f1b62",
+  "checksum": "1d88faead9fe3d4ca18cc2287397ac1457604de13e94aded554c8104ad506e69",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21687,6 +21687,10 @@
               "target": "hex_literal"
             },
             {
+              "id": "hickory-resolver 0.25.2",
+              "target": "hickory_resolver"
+            },
+            {
               "id": "hkdf 0.12.4",
               "target": "hkdf"
             },
@@ -22065,10 +22069,6 @@
             {
               "id": "num-bigint-dig 0.9.1",
               "target": "num_bigint_dig"
-            },
-            {
-              "id": "num-rational 0.2.4",
-              "target": "num_rational"
             },
             {
               "id": "num-traits 0.2.19",
@@ -22739,6 +22739,10 @@
             {
               "id": "wat 1.244.0",
               "target": "wat"
+            },
+            {
+              "id": "webpki-roots 1.0.6",
+              "target": "webpki_roots"
             },
             {
               "id": "which 4.4.0",
@@ -34025,7 +34029,7 @@
               "target": "tower_service"
             },
             {
-              "id": "webpki-roots 1.0.2",
+              "id": "webpki-roots 1.0.6",
               "target": "webpki_roots"
             }
           ],
@@ -51781,108 +51785,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num-rational 0.2.4": {
-      "name": "num-rational",
-      "version": "0.2.4",
-      "package_url": "https://github.com/rust-num/num-rational",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num-rational/0.2.4/download",
-          "sha256": "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num_rational",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num_rational",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "bigint",
-            "bigint-std",
-            "default",
-            "num-bigint",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-bigint 0.2.6",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-integer 0.1.46",
-              "target": "num_integer"
-            },
-            {
-              "id": "num-rational 0.2.4",
-              "target": "build_script_build"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.2.4"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.5.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "num-rational 0.4.2": {
       "name": "num-rational",
       "version": "0.4.2",
@@ -66433,7 +66335,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ],
@@ -66483,7 +66385,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ],
@@ -66603,7 +66505,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ],
@@ -66653,7 +66555,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ]
@@ -69606,7 +69508,7 @@
               "target": "thiserror"
             },
             {
-              "id": "webpki-roots 1.0.2",
+              "id": "webpki-roots 1.0.6",
               "target": "webpki_roots"
             },
             {
@@ -91896,14 +91798,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "webpki-roots 1.0.2": {
+    "webpki-roots 1.0.6": {
       "name": "webpki-roots",
-      "version": "1.0.2",
+      "version": "1.0.6",
       "package_url": "https://github.com/rustls/webpki-roots",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/webpki-roots/1.0.2/download",
-          "sha256": "7e8983c3ab33d6fb807cfcdad2491c4ea8cbc8ed839181c7dfd9c67c83e261b2"
+          "url": "https://static.crates.io/crates/webpki-roots/1.0.6/download",
+          "sha256": "22cfaf3c063993ff62e73cb4311efde4db1efb31ab78a3e5c457939ad5cc0bed"
         }
       },
       "targets": [
@@ -91936,7 +91838,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.2"
+        "version": "1.0.6"
       },
       "license": "CDLA-Permissive-2.0",
       "license_ids": [
@@ -98748,6 +98650,7 @@
     "hashlink 0.8.3",
     "hex 0.4.3",
     "hex-literal 0.4.1",
+    "hickory-resolver 0.25.2",
     "hkdf 0.12.4",
     "hmac 0.12.1",
     "hpke 0.12.0",
@@ -98844,7 +98747,6 @@
     "nix 0.24.3",
     "num-bigint 0.4.6",
     "num-bigint-dig 0.9.1",
-    "num-rational 0.2.4",
     "num-traits 0.2.19",
     "num_cpus 1.16.0",
     "object 0.37.3",
@@ -99019,6 +98921,7 @@
     "wasmtime 42.0.1",
     "wast 244.0.0",
     "wat 1.244.0",
+    "webpki-roots 1.0.6",
     "which 4.4.0",
     "wirm 2.1.0",
     "wsl 0.1.0",

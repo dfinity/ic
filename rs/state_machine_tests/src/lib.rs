@@ -2603,6 +2603,7 @@ impl StateMachine {
                 timeout,
                 registry_version,
                 content_hash: ic_types::crypto::crypto_hash(&response),
+                content_size: content.count_bytes() as u32,
                 replica_version: ReplicaVersion::default(),
             };
             let signature = CryptoReturningOk::default()
@@ -4371,6 +4372,7 @@ impl StateMachine {
                 user_id: UserId::from(sender),
                 ingress_expiry: 0,
                 nonce: None,
+                sender_info: None,
             },
             receiver,
             method_name: method.to_string(),

@@ -43,6 +43,8 @@ const STABLE_OP_BYTES: u64 = 37;
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
+
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
         SubnetAvailableMemory::new_for_testing(
@@ -60,7 +62,9 @@ fn test_api_for_update(
     instruction_limit: NumInstructions,
 ) -> SystemApiImpl {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
-    let system_state = SystemStateBuilder::default().build();
+    let system_state = SystemStateBuilder::default()
+        .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+        .build();
     let cycles_account_manager = Arc::new(
         CyclesAccountManagerBuilder::new()
             .with_subnet_type(subnet_type)

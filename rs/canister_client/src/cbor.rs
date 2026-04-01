@@ -113,6 +113,7 @@ pub fn prepare_query(
             sender: sender_field,
             nonce: None,
             ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
+            sender_info: None,
         },
     };
 
@@ -388,6 +389,7 @@ mod tests {
                 sender: Blob(sender.get().into_vec()),
                 nonce: None,
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         // Workaround because HttpQueryContent is not cloneable
@@ -432,6 +434,7 @@ mod tests {
                 sender: Blob(sender_id.get().into_vec()),
                 nonce: None,
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                sender_info: None,
             },
         };
         // Workaround because HttpQueryContent is not cloneable

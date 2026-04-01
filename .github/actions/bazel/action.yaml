@@ -94,7 +94,7 @@ runs:
       # runs only if previous steps succeeded or failed;
       # we avoid collecting artifacts of jobs that were cancelled
       if: success() || failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ inputs.bazel-bep-artifact-name }}
         retention-days: 14
@@ -168,7 +168,7 @@ runs:
 
     - name: Upload execution log
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ inputs.execlogs-artifact-name }}
         path: |
