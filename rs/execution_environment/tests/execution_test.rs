@@ -1,3 +1,30 @@
+//! # Traceability
+//! Spec: openspec/capabilities/execution-canister-lifecycle/spec.md
+//!
+//! REQ-EXEC-001: Canister Creation
+//!   SCENARIO-EXEC-001: Successful canister creation
+//!   SCENARIO-EXEC-002: Canister creation with settings
+//!
+//! REQ-EXEC-002: Code Installation
+//!   SCENARIO-EXEC-005: Fresh install mode
+//!   SCENARIO-EXEC-007: Reinstall mode
+//!   SCENARIO-EXEC-008: Upgrade mode stages
+//!   SCENARIO-EXEC-011: Install code with DTS
+//!   SCENARIO-EXEC-012: Install code validation
+//!
+//! REQ-EXEC-003: Canister Uninstallation
+//!   SCENARIO-EXEC-014: Uninstall code
+//!
+//! REQ-EXEC-004: Canister Start and Stop
+//!   SCENARIO-EXEC-015: Stop canister
+//!   SCENARIO-EXEC-017: Start canister
+//!
+//! Spec: openspec/capabilities/execution-wasm/spec.md
+//!
+//! REQ-WASM-005: Instruction Limits
+//!   SCENARIO-WASM-025: Message instruction limit exceeded
+//!   SCENARIO-WASM-026: Slice instruction limit with DTS
+
 use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::CanisterInstallMode;

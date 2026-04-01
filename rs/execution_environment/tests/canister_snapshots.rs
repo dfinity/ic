@@ -1,3 +1,16 @@
+//! # Traceability
+//! Spec: openspec/capabilities/state-replicated/spec.md
+//!
+//! REQ-STATE-007: Canister Snapshots
+//!   SCENARIO-STATE-011: Snapshot contents
+//!
+//! Spec: openspec/capabilities/execution-canister-lifecycle/spec.md
+//!
+//! REQ-EXEC-007: Wasm Chunk Store
+//!   SCENARIO-EXEC-029: Upload chunk
+//!   SCENARIO-EXEC-030: List stored chunks
+//!   SCENARIO-EXEC-031: Clear chunk store
+
 use candid::{Decode, Reserved};
 use canister_test::WasmResult;
 use ic_base_types::SnapshotId;

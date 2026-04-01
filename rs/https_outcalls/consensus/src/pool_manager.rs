@@ -2,6 +2,13 @@
 //! responsible for managing the flow of requests from execution to the
 //! networking component, and ensuring that the resulting responses are signed
 //! and eventually make it into consensus.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/networking-https-outcalls/spec.md
+//!
+//! REQ-HTTPS-004: HTTPS Outcalls Pool Manager
+//!   SCENARIO-HTTPS-014: Response share validation and promotion
+//!   SCENARIO-HTTPS-015: Pool garbage collection
 use crate::metrics::CanisterHttpPoolManagerMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, is_current_protocol_version, membership::Membership,

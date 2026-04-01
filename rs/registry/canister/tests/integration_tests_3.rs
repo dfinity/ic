@@ -1,3 +1,22 @@
+//! # Traceability
+//! Spec: openspec/capabilities/registry/spec.md
+//!
+//! REQ-REG-001: Versioned Key-Value Store
+//!   SCENARIO-REG-001: Insert requires key absence
+//!   SCENARIO-REG-002: Update requires key presence
+//!   SCENARIO-REG-003: Upsert has no presence requirement
+//!   SCENARIO-REG-004: Atomic mutate applies all or none
+//!   SCENARIO-REG-005: Version increments on each mutation batch
+//!
+//! REQ-REG-002: Registry Certification
+//!   SCENARIO-REG-006: Hash tree structure for certification
+//!   SCENARIO-REG-007: Certified data updated on each mutation
+//!
+//! REQ-REG-003: Invariant Checks
+//!   SCENARIO-REG-009: Invariant checks prevent invalid mutations
+//!   SCENARIO-REG-010: Routing table invariant
+//!   SCENARIO-REG-012: Free cycles schedule restriction
+
 mod common;
 
 use assert_matches::assert_matches;

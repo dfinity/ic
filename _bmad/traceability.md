@@ -43,25 +43,60 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 | REQ-WASM-001 through REQ-WASM-006 | Wasm execution | narrative | rs/embedders/tests/ |
 | SCENARIO-WASM-001 through SCENARIO-WASM-028 | 28 scenarios | narrative | rs/embedders/tests/ |
 
+## execution-canister-lifecycle
+| REQ-EXEC-001 through REQ-EXEC-007 | Canister lifecycle | linked | execution_test.rs, canister_settings.rs, canister_snapshots.rs |
+
 ## execution-system-api
-| REQ-SYSAPI-001 through REQ-SYSAPI-013 | System API | narrative | rs/embedders/tests/ |
-| SCENARIO-SYSAPI-001 through SCENARIO-SYSAPI-031 | 31 scenarios | narrative | rs/embedders/tests/ |
+| REQ-SYSAPI-001 through REQ-SYSAPI-013 | System API | linked | rs/execution_environment/tests/hypervisor.rs |
+| SCENARIO-SYSAPI-001 through SCENARIO-SYSAPI-031 | 31 scenarios | linked | hypervisor.rs |
 
 ## execution-memory
-| REQ-MEM-001 through REQ-MEM-006 | Memory management | narrative | rs/execution_environment/tests/ |
-| SCENARIO-MEM-001 through SCENARIO-MEM-025 | 25 scenarios | narrative | rs/execution_environment/tests/ |
+| REQ-MEM-001 through REQ-MEM-006 | Memory management | linked | rs/execution_environment/tests/ |
+| SCENARIO-MEM-001 through SCENARIO-MEM-025 | 25 scenarios | linked | hypervisor.rs, storage_reservation.rs |
 
 ## messaging
 | REQ-MSG-001 through REQ-MSG-006 | Message routing | linked | rs/messaging/tests/ |
 | SCENARIO-MSG-001 through SCENARIO-MSG-022 | 22 scenarios | linked | rs/messaging/tests/messaging.rs |
 
 ## networking-https-outcalls
-| REQ-HTTPS-001 through REQ-HTTPS-005 | HTTPS outcalls | narrative | rs/https_outcalls/ |
-| SCENARIO-HTTPS-001 through SCENARIO-HTTPS-016 | 16 scenarios | narrative | rs/https_outcalls/ |
+| REQ-HTTPS-001 through REQ-HTTPS-005 | HTTPS outcalls | linked | rs/https_outcalls/consensus/ |
+| SCENARIO-HTTPS-001 through SCENARIO-HTTPS-016 | 16 scenarios | linked | payload_builder/tests.rs, pool_manager.rs |
 
 ## state-manager
-| REQ-STMGR-001 through REQ-STMGR-009 | State manager | narrative | rs/state_manager/tests/ |
-| SCENARIO-STMGR-001 through SCENARIO-STMGR-028 | 28 scenarios | narrative | rs/state_manager/tests/ |
+| REQ-STMGR-001 through REQ-STMGR-009 | State manager | linked | rs/state_manager/tests/ |
+| SCENARIO-STMGR-001 through SCENARIO-STMGR-028 | 28 scenarios | linked | state_manager/tests/state_manager.rs |
+
+## consensus
+| REQ-CONS-001 through REQ-CONS-010 | Consensus | linked | rs/consensus/tests/ |
+| SCENARIO-CONS-001 through SCENARIO-CONS-022 | 22 scenarios | linked | consensus/tests/integration.rs |
+
+## governance-nns
+| REQ-NNS-001 through REQ-NNS-008 | NNS governance | linked | rs/nns/governance/tests/ |
+| SCENARIO-NNS-001 through SCENARIO-NNS-016 | 16 scenarios | linked | governance/tests/governance.rs |
+
+## ledger-icp
+| REQ-ICP-001 through REQ-ICP-006 | ICP ledger | linked | rs/ledger_suite/icp/ |
+| SCENARIO-ICP-001 through SCENARIO-ICP-012 | 12 scenarios | linked | ledger_suite/icp/ledger/src/tests.rs |
+
+## ledger-icrc
+| REQ-ICRC-001 through REQ-ICRC-005 | ICRC standards | linked | rs/ledger_suite/icrc1/ |
+| SCENARIO-ICRC-001 through SCENARIO-ICRC-011 | 11 scenarios | linked | ledger_suite/icrc1/ledger/src/tests.rs |
+
+## crypto-signatures
+| REQ-SIG-001 through REQ-SIG-006 | Crypto signatures | linked | rs/crypto/tests/ |
+| SCENARIO-SIG-001 through SCENARIO-SIG-012 | 12 scenarios | linked | crypto/tests/integration_test.rs |
+
+## crypto-dkg
+| REQ-DKG-001 through REQ-DKG-008 | DKG | linked | rs/crypto/tests/ |
+| SCENARIO-DKG-001 through SCENARIO-DKG-014 | 14 scenarios | linked | crypto/tests/integration_test.rs |
+
+## crypto-threshold
+| REQ-THRESH-001 through REQ-THRESH-006 | Threshold signatures | linked | rs/crypto/tests/ |
+| SCENARIO-THRESH-001 through SCENARIO-THRESH-013 | 13 scenarios | linked | crypto/tests/integration_test.rs |
+
+## registry
+| REQ-REG-001 through REQ-REG-003 | Registry | linked | rs/registry/canister/tests/ |
+| SCENARIO-REG-001 through SCENARIO-REG-012 | 12 scenarios | linked | registry/canister/tests/integration_tests_3.rs |
 
 ## ingress-manager
 | REQ-ING-001 through REQ-ING-004 | Ingress manager | linked | rs/ingress_manager/ |
@@ -69,30 +104,19 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 
 ---
 
-## Domains Pending Migration (17 remaining)
+## Domains Still Needing Test Linkage (Phase 3 remaining)
 
-| Domain | Narrative Spec | REQ Prefix | Priority |
-|--------|----------------|------------|----------|
-| execution-canister-lifecycle | execution/canister-lifecycle.md | REQ-EXEC-* | high |
-| execution-cycles | execution/cycles.md | REQ-CYC-* | high |
-| execution-dts | execution/deterministic-time-slicing.md | REQ-DTS-* | high |
-| execution-wasm | execution/wasm-execution.md | REQ-WASM-* | high |
-| execution-system-api | execution/system-api.md | REQ-SYSAPI-* | high |
-| execution-memory | execution/memory-management.md | REQ-MEM-* | high |
-| execution-query | execution/query-execution.md | REQ-QUERY-* | high |
-| execution-sandboxing | execution/canister-sandboxing.md | REQ-SAND-* | medium |
-| consensus | consensus/spec.md | REQ-CONS-* | high |
-| networking-p2p | networking/p2p.md | REQ-P2P-* | medium |
-| networking-xnet | networking/xnet.md | REQ-XNET-* | medium |
-| state-replicated | state-management/replicated-state.md | REQ-STATE-* | high |
-| state-checkpoint | state-management/checkpoint.md | REQ-CKPT-* | high |
-| state-certification | state-management/certification.md | REQ-CERT-* | high |
-| crypto-signatures | crypto/signatures.md | REQ-SIG-* | high |
-| crypto-dkg | crypto/dkg.md | REQ-DKG-* | high |
-| crypto-threshold | crypto/canister_threshold_signatures.md | REQ-THRESH-* | high |
-| governance-nns | governance/nns-governance.md | REQ-NNS-* | medium |
-| governance-sns | governance/sns/ | REQ-SNS-* | medium |
-| ledger-icp | ledger/icp-ledger.md | REQ-ICP-* | medium |
-| ledger-icrc | ledger/icrc-standards.md | REQ-ICRC-* | medium |
-| registry | registry/spec.md | REQ-REG-* | medium |
-| boundary-node | boundary-node/spec.md | REQ-BN-* | medium |
+| Domain | REQ Prefix | Status | Notes |
+|--------|------------|--------|-------|
+| execution-wasm | REQ-WASM-* | narrative | rs/embedders/tests/ not yet linked |
+| execution-query | REQ-QUERY-* | narrative | rs/execution_environment/ query tests |
+| execution-sandboxing | REQ-SAND-* | narrative | rs/canister_sandbox/ |
+| networking-p2p | REQ-P2P-* | narrative | rs/transport/tests/ |
+| networking-xnet | REQ-XNET-* | narrative | rs/xnet/tests/ |
+| state-replicated | REQ-STATE-* | narrative | rs/replicated_state/tests/ |
+| state-checkpoint | REQ-CKPT-* | narrative | rs/state_manager/src/checkpoint.rs |
+| state-certification | REQ-CERT-* | narrative | rs/certification/tests/ |
+| governance-sns | REQ-SNS-* | narrative | rs/sns/governance/tests/ |
+| boundary-node | REQ-BN-* | narrative | rs/boundary_node/ic_boundary/tests/ |
+| query-stats | REQ-QS-* | narrative | rs/query_stats/tests/ |
+| pocket-ic-server | REQ-PIC-* | narrative | rs/pocket_ic_server/tests/ |

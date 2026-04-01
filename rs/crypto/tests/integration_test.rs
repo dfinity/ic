@@ -1,3 +1,33 @@
+//! # Traceability
+//! Spec: openspec/capabilities/crypto-signatures/spec.md
+//!
+//! REQ-SIG-001: Basic Signature Signing
+//!   SCENARIO-SIG-001: Signing a message
+//! REQ-SIG-002: Basic Signature Verification
+//!   SCENARIO-SIG-002: Verifying a basic signature
+//!   SCENARIO-SIG-003: Signer public key not in registry
+//! REQ-SIG-004: Multi-Signature
+//!   SCENARIO-SIG-006: Creating a multi-signature share
+//!   SCENARIO-SIG-007: Combining individual multi-signatures
+//! REQ-SIG-005: Threshold Signature
+//!   SCENARIO-SIG-009: Creating a threshold signature share
+//!   SCENARIO-SIG-010: Combining threshold signature shares
+//!   SCENARIO-SIG-011: Verify combined threshold signature by subnet public key
+//!
+//! Spec: openspec/capabilities/crypto-dkg/spec.md
+//!
+//! REQ-DKG-001: NI-DKG Dealing Creation
+//!   SCENARIO-DKG-001: Creating an NI-DKG dealing
+//! REQ-DKG-004: NI-DKG Transcript Loading
+//!   SCENARIO-DKG-004: Loading an NI-DKG transcript
+//!
+//! Spec: openspec/capabilities/crypto-threshold/spec.md
+//!
+//! REQ-THRESH-002: Threshold ECDSA Signing
+//!   SCENARIO-THRESH-003: Creating an ECDSA signature share
+//! REQ-THRESH-005: Threshold Schnorr Signing
+//!   SCENARIO-THRESH-009: Creating a Schnorr signature share
+
 use assert_matches::assert_matches;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;

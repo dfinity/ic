@@ -1,3 +1,24 @@
+//! # Traceability
+//! Spec: openspec/capabilities/ledger-icrc/spec.md
+//!
+//! REQ-ICRC-001: ICRC-1 Transfer
+//!   SCENARIO-ICRC-001: Successful icrc1_transfer
+//!   SCENARIO-ICRC-002: Transfer with explicit fee mismatch
+//!   SCENARIO-ICRC-003: Burn via transfer to minting account
+//!   SCENARIO-ICRC-004: Mint from minting account
+//!
+//! REQ-ICRC-002: ICRC-1 Metadata
+//!   SCENARIO-ICRC-005: Query standard metadata
+//!
+//! REQ-ICRC-003: ICRC-2 Approve
+//!   SCENARIO-ICRC-006: Successful icrc2_approve
+//!   SCENARIO-ICRC-007: Self-approval rejected
+//!   SCENARIO-ICRC-008: Approve with expected_allowance
+//!
+//! REQ-ICRC-004: ICRC-2 Transfer From
+//!   SCENARIO-ICRC-009: Successful icrc2_transfer_from
+//!   SCENARIO-ICRC-010: Insufficient allowance
+
 use crate::{InitArgs, Ledger, StorableAllowance, UpgradeArgs};
 use ic_base_types::PrincipalId;
 use ic_canister_log::Sink;

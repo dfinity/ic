@@ -1,3 +1,35 @@
+//! # Traceability
+//! Spec: openspec/capabilities/state-manager/spec.md
+//!
+//! REQ-STMGR-001: State Initialization
+//!   SCENARIO-STMGR-001: Fresh initialization with no checkpoints
+//!   SCENARIO-STMGR-002: Initialization with existing verified checkpoints
+//!   SCENARIO-STMGR-003: Initialization archives unverified checkpoints
+//!
+//! REQ-STMGR-002: State Tip Management
+//!   SCENARIO-STMGR-005: Taking the tip
+//!   SCENARIO-STMGR-006: Taking tip after state sync advances
+//!
+//! REQ-STMGR-003: State Commit and Certification
+//!   SCENARIO-STMGR-008: Commit with metadata scope
+//!   SCENARIO-STMGR-009: Commit with full scope (checkpoint)
+//!   SCENARIO-STMGR-012: Detect state divergence at commit
+//!
+//! REQ-STMGR-005: State Certification Delivery
+//!   SCENARIO-STMGR-016: Delivering a certification
+//!   SCENARIO-STMGR-018: Certification hash mismatch
+//!
+//! REQ-STMGR-007: State Sync (Fetch)
+//!   SCENARIO-STMGR-022: Initiating state fetch
+//!   SCENARIO-STMGR-023: Local checkpoint matches hash
+//!
+//! Spec: openspec/capabilities/state-checkpoint/spec.md
+//!
+//! REQ-CKPT-001: Checkpoint Creation
+//!   SCENARIO-CKPT-001: Making a checkpoint from tip
+//! REQ-CKPT-003: Checkpoint Validation
+//!   SCENARIO-CKPT-007: Full validation and finalization
+
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
 use ic_canonical_state::encoding::encode_subnet_canister_ranges;

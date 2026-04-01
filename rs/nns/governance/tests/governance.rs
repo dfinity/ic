@@ -1,6 +1,32 @@
 //! The unit tests for `Governance` use *test fixtures*. The fixtures
 //! are defi data_source: (), timestamp_seconds: ()ned as small but
 //! complex/weird configurations of neurons and proposals against which several
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/governance-nns/spec.md
+//!
+//! REQ-NNS-003: Proposal Lifecycle
+//!   SCENARIO-NNS-003: Proposal created and enters Open state
+//!   SCENARIO-NNS-004: Proposal adopted by absolute majority
+//!   SCENARIO-NNS-005: Proposal rejected
+//!   SCENARIO-NNS-006: Proposal execution succeeds
+//!   SCENARIO-NNS-007: Proposal execution fails
+//!
+//! REQ-NNS-004: Wait For Quiet
+//!   SCENARIO-NNS-008: Deadline extended on vote flip
+//!   SCENARIO-NNS-009: Deadline not extended when no flip
+//!   SCENARIO-NNS-010: Minimum participation for simple majority
+//!
+//! REQ-NNS-005: Proposal Limits
+//!   SCENARIO-NNS-011: Maximum unsettled proposals enforced
+//!   SCENARIO-NNS-012: Maximum open manage neuron proposals
+//!
+//! REQ-NNS-006: Rejection Cost
+//!   SCENARIO-NNS-013: Rejection cost applied
+//!
+//! REQ-NNS-008: Neuron Rate Limiting
+//!   SCENARIO-NNS-015: Neuron creation rate limited
+//!   SCENARIO-NNS-016: Maximum neurons enforced
 //! tests are run.
 use crate::fake::{
     DAPP_CANISTER_ID, DEVELOPER_PRINCIPAL_ID, NODE_PROVIDER_REWARD, SNS_GOVERNANCE_CANISTER_ID,

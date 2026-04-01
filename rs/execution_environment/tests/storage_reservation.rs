@@ -1,3 +1,16 @@
+//! # Traceability
+//! Spec: openspec/capabilities/execution-cycles/spec.md
+//!
+//! REQ-CYC-008: Resource Reservation
+//!   SCENARIO-CYC-018: Resource saturation scaling
+//!   SCENARIO-CYC-019: Storage reservation on memory growth
+//!   SCENARIO-CYC-020: Reserved cycles limit
+//!
+//! Spec: openspec/capabilities/execution-memory/spec.md
+//!
+//! REQ-MEM-003: Memory Allocation
+//!   SCENARIO-MEM-017: Memory allocation validation
+
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;

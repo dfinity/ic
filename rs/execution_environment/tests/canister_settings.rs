@@ -1,3 +1,16 @@
+//! # Traceability
+//! Spec: openspec/capabilities/execution-canister-lifecycle/spec.md
+//!
+//! REQ-EXEC-006: Canister Settings Updates
+//!   SCENARIO-EXEC-021: Update controllers
+//!   SCENARIO-EXEC-022: Update compute allocation
+//!   SCENARIO-EXEC-023: Update memory allocation
+//!   SCENARIO-EXEC-024: Update freezing threshold
+//!   SCENARIO-EXEC-025: Update wasm_memory_limit
+//!   SCENARIO-EXEC-026: Update log_visibility
+//!   SCENARIO-EXEC-027: Update reserved_cycles_limit
+//!   SCENARIO-EXEC-028: Update environment variables
+
 use candid::Nat;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{

@@ -1,3 +1,27 @@
+//! # Traceability
+//! Spec: openspec/capabilities/consensus/spec.md
+//!
+//! REQ-CONS-001: Subcomponent Execution Order
+//!   SCENARIO-CONS-001: Round-robin invocation
+//!   SCENARIO-CONS-002: DKG key manager runs first
+//!   SCENARIO-CONS-003: Subnet halt by registry record
+//!
+//! REQ-CONS-002: Block Maker Election
+//!   SCENARIO-CONS-004: Node elected as block maker
+//!   SCENARIO-CONS-005: Duplicate proposal prevention
+//!   SCENARIO-CONS-006: Better block suppression
+//!
+//! REQ-CONS-004: Notarization
+//!   SCENARIO-CONS-011: Notarization share creation
+//!   SCENARIO-CONS-012: Notarization aggregate creation
+//!
+//! REQ-CONS-005: Finalization
+//!   SCENARIO-CONS-013: Finalization share creation
+//!   SCENARIO-CONS-014: Finalization aggregate creation
+//!
+//! REQ-CONS-010: Batch Delivery
+//!   SCENARIO-CONS-022: Deliver finalized block as batch
+
 #[cfg(test)]
 mod framework;
 

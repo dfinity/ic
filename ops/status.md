@@ -54,11 +54,27 @@ All 28 domains migrated to REQ-*/SCENARIO-* capability specs.
 - `rs/messaging/tests/messaging.rs` → REQ-MSG-001 through 005
 - `rs/ingress_manager/src/ingress_selector.rs` → REQ-ING-002,003
 
+- `rs/execution_environment/tests/execution_test.rs` → REQ-EXEC-*, REQ-WASM-*
+- `rs/execution_environment/tests/dts.rs` → REQ-DTS-002,003,004,006
+- `rs/execution_environment/tests/canister_settings.rs` → REQ-EXEC-006
+- `rs/execution_environment/tests/canister_snapshots.rs` → REQ-STATE-007, REQ-EXEC-007
+- `rs/execution_environment/tests/storage_reservation.rs` → REQ-CYC-008, REQ-MEM-003
+- `rs/execution_environment/tests/hypervisor.rs` → REQ-WASM-001,003,004, REQ-SYSAPI-*, REQ-MEM-001,002
+- `rs/state_manager/tests/state_manager.rs` → REQ-STMGR-001..007, REQ-CKPT-001,003
+- `rs/https_outcalls/consensus/src/payload_builder/tests.rs` → REQ-HTTPS-003
+- `rs/https_outcalls/consensus/src/pool_manager.rs` → REQ-HTTPS-004
+- `rs/consensus/tests/integration.rs` → REQ-CONS-001..005,010
+- `rs/nns/governance/tests/governance.rs` → REQ-NNS-003..008
+- `rs/ledger_suite/icp/ledger/src/tests.rs` → REQ-ICP-001..006
+- `rs/ledger_suite/icrc1/ledger/src/tests.rs` → REQ-ICRC-001..004
+- `rs/crypto/tests/integration_test.rs` → REQ-SIG-*, REQ-DKG-001,004, REQ-THRESH-002,005
+- `rs/registry/canister/tests/integration_tests_3.rs` → REQ-REG-001..003
+
 ### Remaining (Phase 3 continues)
-- rs/execution_environment/tests/execution_test.rs → REQ-EXEC-*, REQ-DTS-*
-- rs/state_manager/tests/ → REQ-STMGR-*
-- rs/https_outcalls/consensus/ → REQ-HTTPS-*
-- rs/p2p/tests/ → REQ-P2P-*
-- rs/consensus/tests/ → REQ-CONS-*
-- rs/nns/governance/tests/ → REQ-NNS-*
-- rs/ledger_suite/ → REQ-ICP-*, REQ-ICRC-*
+- rs/embedders/tests/ → REQ-WASM-002 (compilation/caching)
+- rs/transport/tests/ → REQ-P2P-*
+- rs/xnet/tests/ → REQ-XNET-*
+- rs/replicated_state/tests/ → REQ-STATE-*
+- rs/sns/governance/tests/ → REQ-SNS-*
+- rs/certification/tests/ → REQ-CERT-*
+- rs/query_stats/tests/ → REQ-QS-*

@@ -2,6 +2,15 @@
 //! of the canister http feature.
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/networking-https-outcalls/spec.md
+//!
+//! REQ-HTTPS-003: HTTPS Outcalls Consensus
+//!   SCENARIO-HTTPS-010: Payload building with threshold agreement
+//!   SCENARIO-HTTPS-011: Timeout handling
+//!   SCENARIO-HTTPS-012: Divergence detection
+//!   SCENARIO-HTTPS-013: Payload validation
 
 use super::{CanisterHttpPayloadBuilderImpl, parse};
 use crate::payload_builder::{

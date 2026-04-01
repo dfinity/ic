@@ -1,3 +1,30 @@
+//! # Traceability
+//! Spec: openspec/capabilities/ledger-icp/spec.md
+//!
+//! REQ-ICP-001: Token Representation
+//!   SCENARIO-ICP-001: Construct tokens from whole and fractional parts
+//!   SCENARIO-ICP-002: Reject fractional part ≥ one token
+//!
+//! REQ-ICP-002: Account Identification
+//!   SCENARIO-ICP-003: Derive account identifier from principal
+//!
+//! REQ-ICP-003: Transfer Operation
+//!   SCENARIO-ICP-004: Successful transfer
+//!   SCENARIO-ICP-005: Insufficient funds
+//!
+//! REQ-ICP-004: Minting and Burning
+//!   SCENARIO-ICP-006: Successful mint
+//!   SCENARIO-ICP-007: Successful burn
+//!
+//! REQ-ICP-005: ICRC-2 Approvals
+//!   SCENARIO-ICP-008: Successful approval
+//!   SCENARIO-ICP-009: Approval with expected_allowance check
+//!   SCENARIO-ICP-010: Successful transfer_from
+//!   SCENARIO-ICP-011: Insufficient allowance
+//!
+//! REQ-ICP-006: Transaction Deduplication
+//!   SCENARIO-ICP-012: Duplicate detection within window
+
 use crate::{AccountIdentifier, Ledger, StorableAllowance, balances_len};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_canister_core::{

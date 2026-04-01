@@ -1,3 +1,41 @@
+//! # Traceability
+//! Spec: openspec/capabilities/execution-wasm/spec.md
+//!
+//! REQ-WASM-001: Wasm Module Validation
+//!   SCENARIO-WASM-001: Valid system function exports accepted
+//!   SCENARIO-WASM-002: Reserved symbol exports rejected
+//!   SCENARIO-WASM-003: Function complexity limit
+//!   SCENARIO-WASM-006: 32-bit memory limit enforcement
+//!
+//! REQ-WASM-003: Hypervisor Execution
+//!   SCENARIO-WASM-013: Creating an execution state
+//!   SCENARIO-WASM-014: Executing a Wasm function
+//!
+//! REQ-WASM-004: System API Execution Contexts
+//!   SCENARIO-WASM-016: Start API context
+//!   SCENARIO-WASM-018: Update API context
+//!   SCENARIO-WASM-020: Non-replicated query API context
+//!
+//! Spec: openspec/capabilities/execution-system-api/spec.md
+//!
+//! REQ-SYSAPI-001: Message Operations
+//!   SCENARIO-SYSAPI-003: Reply to a message
+//!   SCENARIO-SYSAPI-004: Reject a message
+//!
+//! REQ-SYSAPI-002: Inter-Canister Calls
+//!   SCENARIO-SYSAPI-009: Perform the call
+//!
+//! REQ-SYSAPI-005: Certified Data
+//!   SCENARIO-SYSAPI-019: Set certified data
+//!
+//! Spec: openspec/capabilities/execution-memory/spec.md
+//!
+//! REQ-MEM-001: Wasm Heap Memory
+//!   SCENARIO-MEM-002: Heap memory growth
+//! REQ-MEM-002: Stable Memory
+//!   SCENARIO-MEM-010: Stable memory growth
+//!   SCENARIO-MEM-011: Stable memory out-of-bounds access
+
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
 use ic_base_types::NumSeconds;

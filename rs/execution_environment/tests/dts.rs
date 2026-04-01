@@ -1,3 +1,26 @@
+//! # Traceability
+//! Spec: openspec/capabilities/execution-dts/spec.md
+//!
+//! REQ-DTS-002: Instruction Limits
+//!   SCENARIO-DTS-003: Message instruction limit
+//!   SCENARIO-DTS-004: Slice instruction limit
+//!   SCENARIO-DTS-005: Slicing enabled check
+//!   SCENARIO-DTS-006: Install code slice limits
+//!
+//! REQ-DTS-003: Paused Execution State
+//!   SCENARIO-DTS-007: Paused message execution state
+//!   SCENARIO-DTS-008: Paused install_code execution state
+//!
+//! REQ-DTS-004: Resuming Paused Executions
+//!   SCENARIO-DTS-010: Resume paused message execution
+//!   SCENARIO-DTS-011: Resume paused install_code
+//!   SCENARIO-DTS-012: Resume with updated round context
+//!
+//! REQ-DTS-006: Multi-Stage DTS Operations
+//!   SCENARIO-DTS-015: Upgrade with DTS across stages
+//!   SCENARIO-DTS-016: Install with DTS across stages
+//!   SCENARIO-DTS-017: Response callback with DTS
+
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use assert_matches::assert_matches;
