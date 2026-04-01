@@ -32,13 +32,14 @@ Last updated: 2026-04-01
 8. registry/spec.md, boundary-node/spec.md
 
 ## Metrics
-- Domains with capability specs: 24 / 28 (86%)
-- Total REQs: ~150
-- Total SCENARIOs: ~450
+- Domains with capability specs: 28 / 28 (100%)
+- Total REQs: ~185
+- Total SCENARIOs: ~530
 - REQs with tests linked: 0 (phase 3 work)
 
-## Remaining (4 domains)
-- consensus (large — needs full read of 37KB spec)
-- governance-sns (multiple sub-specs)
-- crypto-dkg
-- crypto-threshold-signatures
+## Phase 2 Complete
+All 28 domains migrated to REQ-*/SCENARIO-* capability specs.
+
+## Phase 3: Link Tests to REQ-* IDs
+Add traceability headers to existing test files referencing their REQ-*/SCENARIO-* IDs.
+Start with: rs/execution_environment/src/scheduler/tests/ and rs/cycles_account_manager/
