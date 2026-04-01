@@ -569,13 +569,14 @@ where
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.signature.clone()));
-            if let Some(mainnet_root_of_trust) = root_of_trust_provider.mainnet_root_of_trust()
-                && validator
-                    .verify_canister_sig(&canister_sig, message_id, &pk, &mainnet_root_of_trust)
-                    .is_ok()
-            {
-                Ok(targets)
-            } else {
+            let verified_with_mainnet = root_of_trust_provider.mainnet_root_of_trust().is_some_and(
+                |mainnet_root_of_trust| {
+                    validator
+                        .verify_canister_sig(&canister_sig, message_id, &pk, &mainnet_root_of_trust)
+                        .is_ok()
+                },
+            );
+            if !verified_with_mainnet {
                 let root_of_trust = root_of_trust_provider
                     .root_of_trust()
                     .map_err(|e| InvalidCanisterSignature(e.to_string()))
@@ -584,8 +585,8 @@ where
                     .verify_canister_sig(&canister_sig, message_id, &pk, &root_of_trust)
                     .map_err(|e| InvalidCanisterSignature(e.to_string()))
                     .map_err(InvalidSignature)?;
-                Ok(targets)
             }
+            Ok(targets)
         }
         KeyBytesContentType::RsaSha256PublicKeyDer => {
             Err(RequestValidationError::InvalidSignature(
@@ -713,12 +714,14 @@ where
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.to_vec()));
-            if let Some(mainnet_root_of_trust) = root_of_trust_provider.mainnet_root_of_trust()
-                && validator
-                    .verify_canister_sig(&canister_sig, delegation, &pk, &mainnet_root_of_trust)
-                    .is_ok()
-            {
-            } else {
+            let verified_with_mainnet = root_of_trust_provider.mainnet_root_of_trust().is_some_and(
+                |mainnet_root_of_trust| {
+                    validator
+                        .verify_canister_sig(&canister_sig, delegation, &pk, &mainnet_root_of_trust)
+                        .is_ok()
+                },
+            );
+            if !verified_with_mainnet {
                 let root_of_trust = root_of_trust_provider
                     .root_of_trust()
                     .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
