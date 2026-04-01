@@ -957,7 +957,7 @@ fn corrupt_latest_cup(
             .expect("stop replica");
     }
 
-    // Upload corrupted CUPs and delete consensus pool data on all nodes.
+    // Upload corrupted CUPs on all nodes.
     for node in subnet.nodes() {
         info!(
             logger,
@@ -966,12 +966,11 @@ fn corrupt_latest_cup(
             node.get_ip_addr()
         );
         let session = node.block_on_ssh_session().unwrap();
-        app_node
-            .block_on_bash_script_from_session(
-                &session,
-                &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
-            )
-            .expect("touch");
+        node.block_on_bash_script_from_session(
+            &session,
+            &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
+        )
+        .expect("touch");
         let mut channel = session
             .scp_send(Path::new(NEW_CUP_PATH), 0o666, bytes.len() as u64, None)
             .unwrap();
