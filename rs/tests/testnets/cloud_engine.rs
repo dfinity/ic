@@ -41,9 +41,11 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_protobuf::registry::dc::v1::{DataCenterRecord, Gps};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
+    farm::{DM_DMZ_GATEWAY, DM_DMZ_PREFIX, HostFeature},
     group::SystemTestGroup,
     ic::{InternetComputer, Node, NodeOperatorConfig, Subnet},
     ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
+    test_env::RequiredHostFeaturesFromCmdLine,
     test_env::TestEnv,
     test_env_api::HasTopologySnapshot,
 };
@@ -150,7 +152,20 @@ pub fn setup(env: TestEnv) {
         nns_dapp_customizations(),
     );
     // deploy ic-gateway
-    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+    let mut ic_gateway_vm = IcGatewayVm::new(IC_GATEWAY_VM_NAME);
+    if let Some(gw_ipv4) = env
+        .read_host_features("ic-gateway")
+        .iter()
+        .flatten()
+        .find_map(|f| match f {
+            HostFeature::GwIpv4(ip) => Some(ip.clone()),
+            _ => None,
+        })
+    {
+        let address = format!("{gw_ipv4}/{DM_DMZ_PREFIX}");
+        ic_gateway_vm = ic_gateway_vm.with_ipv4_config(&address, DM_DMZ_GATEWAY);
+    }
+    ic_gateway_vm
         .start(&env)
         .expect("failed to setup ic-gateway");
     let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
