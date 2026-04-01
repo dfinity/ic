@@ -41,7 +41,9 @@ fn make_governance_for_neuron_index() -> Governance {
         .with_controller(PrincipalId::new_user_test_id(id))
         .build();
 
-        governance.add_neuron(id, neuron).unwrap();
+        governance
+            .add_neuron_without_reservation(id, neuron)
+            .unwrap();
     }
 
     governance

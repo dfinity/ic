@@ -3,7 +3,7 @@ use crate::{
     benches_util::check_projected_instructions,
     governance::{
         MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS, MAX_NEURONS_FUND_PARTICIPANTS,
-        MAX_NUM_HOT_KEYS_PER_NEURON, MAX_NUMBER_OF_NEURONS,
+        MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_data_validation::NeuronDataValidator,
