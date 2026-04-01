@@ -949,6 +949,17 @@ fn corrupt_latest_cup(
     };
     let bytes = corrupted_proto_cup.encode_to_vec();
 
+    // Stop all replicas first to prevent restarted nodes from fetching valid CUPs
+    // from peers that haven't been corrupted yet.
+    for node in subnet.nodes() {
+        info!(logger, "Stopping replica on node {:?}", node.get_ip_addr());
+        let session = node.block_on_ssh_session().unwrap();
+        app_node
+            .block_on_bash_script_from_session(&session, "sudo systemctl stop ic-replica")
+            .expect("stop replica");
+    }
+
+    // Upload corrupted CUPs and delete consensus pool data on all nodes.
     for node in subnet.nodes() {
         info!(
             logger,
@@ -968,13 +979,21 @@ fn corrupt_latest_cup(
             .unwrap();
         channel.write_all(&bytes).unwrap();
 
-        info!(logger, "Restarting node {:?}", node.get_ip_addr());
         app_node
             .block_on_bash_script_from_session(
                 &session,
-                &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"),
+                &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}"),
             )
-            .expect("restart");
+            .expect("replace CUP");
+    }
+
+    // Restart all nodes with the corrupted CUPs.
+    for node in subnet.nodes() {
+        info!(logger, "Restarting node {:?}", node.get_ip_addr());
+        let session = node.block_on_ssh_session().unwrap();
+        app_node
+            .block_on_bash_script_from_session(&session, "sudo systemctl start ic-replica")
+            .expect("start replica");
     }
 
     assert!(
