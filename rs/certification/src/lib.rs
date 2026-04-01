@@ -126,6 +126,7 @@ pub fn verify_certified_data(
     certified_data: &[u8],
 ) -> Result<Time, CertificateValidationError> {
     verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, false)
+        .map(|(time, _subnet_type)| time)
 }
 
 /// Does the same as [`verify_certified_data`] but keeps some verified signatures in cache
@@ -137,6 +138,37 @@ pub fn verify_certified_data_with_cache(
     certified_data: &[u8],
 ) -> Result<Time, CertificateValidationError> {
     verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, true)
+        .map(|(time, _subnet_type)| time)
+}
+
+/// Does the same as [`verify_certified_data_with_cache`] but additionally rejects
+/// delegations from cloud engine subnets.
+///
+/// This is intended for use in canister signature verification (ICCSA), where
+/// delegations from cloud engine subnets must not be accepted.
+pub fn verify_certified_data_with_cache_for_canister_sig(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+    certified_data: &[u8],
+) -> Result<Time, CertificateValidationError> {
+    let (time, delegation_subnet_type) =
+        verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, true)?;
+    if delegation_subnet_type.as_deref() == Some("cloud_engine") {
+        let cert: Certificate = parse_certificate(certificate)?;
+        let delegation = cert.delegation.expect("subnet type implies a delegation");
+        let subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
+            .map(SubnetId::from)
+            .map_err(|err| {
+                CertificateValidationError::DeserError(format!(
+                    "failed to parse delegation subnet id: {err}"
+                ))
+            })?;
+        return Err(CertificateValidationError::UntrustedDelegationSubnet(
+            subnet_id,
+        ));
+    }
+    Ok(time)
 }
 
 /// Verifies a certificate and its certified data with optional signature cache.
@@ -148,7 +180,7 @@ fn verify_certified_data_internal(
     root_pk: &ThresholdSigPublicKey,
     certified_data: &[u8],
     use_signature_cache: bool,
-) -> Result<Time, CertificateValidationError> {
+) -> Result<(Time, Option<String>), CertificateValidationError> {
     #[derive(Debug, Deserialize)]
     struct CanisterView {
         certified_data: Blob,
@@ -160,7 +192,7 @@ fn verify_certified_data_internal(
         canister: BTreeMap<CanisterId, CanisterView>,
     }
 
-    let verified_certificate =
+    let (verified_certificate, delegation_subnet_type) =
         verify_certificate_internal(certificate, canister_id, root_pk, use_signature_cache)?;
 
     let replica_labeled_tree = parse_tree(verified_certificate.tree)?;
@@ -190,7 +222,10 @@ fn verify_certified_data_internal(
         });
     }
 
-    Ok(Time::from_nanos_since_unix_epoch(replica_state.time.0))
+    Ok((
+        Time::from_nanos_since_unix_epoch(replica_state.time.0),
+        delegation_subnet_type,
+    ))
 }
 
 /// Verifies a certificate.
@@ -220,6 +255,7 @@ pub fn verify_certificate(
     root_pk: &ThresholdSigPublicKey,
 ) -> Result<Certificate, CertificateValidationError> {
     verify_certificate_internal(certificate, canister_id, root_pk, false)
+        .map(|(cert, _subnet_type)| cert)
 }
 
 /// Does the same as [`verify_certificate`] but keeps some verified signatures in cache
@@ -230,6 +266,7 @@ pub fn verify_certificate_with_cache(
     root_pk: &ThresholdSigPublicKey,
 ) -> Result<Certificate, CertificateValidationError> {
     verify_certificate_internal(certificate, canister_id, root_pk, true)
+        .map(|(cert, _subnet_type)| cert)
 }
 
 /// Verifies a certificate for a read state on the subnet endpoint (i.e. a
@@ -264,7 +301,14 @@ pub fn verify_certificate_for_subnet_read_state(
             });
         }
 
-        verify_delegation_certificate(&delegation.certificate, subnet_id, root_pk, None, false)?
+        let (key, _subnet_type) = verify_delegation_certificate(
+            &delegation.certificate,
+            subnet_id,
+            root_pk,
+            None,
+            false,
+        )?;
+        key
     } else {
         *root_pk
     };
@@ -281,9 +325,9 @@ fn verify_certificate_internal(
     canister_id: &CanisterId,
     root_pk: &ThresholdSigPublicKey,
     use_signature_cache: bool,
-) -> Result<Certificate, CertificateValidationError> {
+) -> Result<(Certificate, Option<String>), CertificateValidationError> {
     let certificate: Certificate = parse_certificate(certificate)?;
-    let key = if let Some(delegation) = &certificate.delegation {
+    let (key, delegation_subnet_type) = if let Some(delegation) = &certificate.delegation {
         let subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
             .map(SubnetId::from)
             .map_err(|err| {
@@ -299,11 +343,11 @@ fn verify_certificate_internal(
             use_signature_cache,
         )?
     } else {
-        *root_pk
+        (*root_pk, None)
     };
 
     verify_certificate_signature(&certificate, &key, use_signature_cache)?;
-    Ok(certificate)
+    Ok((certificate, delegation_subnet_type))
 }
 
 /// Verifies a delegation certificate.
@@ -315,7 +359,7 @@ pub fn verify_delegation_certificate(
     root_pk: &ThresholdSigPublicKey,
     canister_id: Option<&CanisterId>,
     use_signature_cache: bool,
-) -> Result<ThresholdSigPublicKey, CertificateValidationError> {
+) -> Result<(ThresholdSigPublicKey, Option<String>), CertificateValidationError> {
     #[derive(Debug, Deserialize)]
     struct SubnetView {
         canister_ranges: Option<Blob>,
@@ -425,16 +469,7 @@ pub fn verify_delegation_certificate(
         CertificateValidationError::DeserError(format!("failed to deserialize public key: {err}"))
     })?;
 
-    // Reject delegations from cloud engine subnets
-    if let Some(subnet_type) = &subnet_info.r#type
-        && subnet_type == "cloud_engine"
-    {
-        return Err(CertificateValidationError::UntrustedDelegationSubnet(
-            subnet_id.clone(),
-        ));
-    }
-
-    Ok(public_key)
+    Ok((public_key, subnet_info.r#type.clone()))
 }
 
 /// Validates a subnet delegation certificate.
@@ -448,8 +483,7 @@ pub fn validate_subnet_delegation_certificate(
     subnet_id: &SubnetId,
     root_pk: &ThresholdSigPublicKey,
 ) -> Result<(), CertificateValidationError> {
-    verify_delegation_certificate(certificate, subnet_id, root_pk, None, false)
-        .map(|_public_key| ())
+    verify_delegation_certificate(certificate, subnet_id, root_pk, None, false).map(|_| ())
 }
 
 /// Does the same as [`validate_subnet_delegation_certificate`] but keeps some
@@ -459,7 +493,7 @@ pub fn validate_subnet_delegation_certificate_with_cache(
     subnet_id: &SubnetId,
     root_pk: &ThresholdSigPublicKey,
 ) -> Result<(), CertificateValidationError> {
-    verify_delegation_certificate(certificate, subnet_id, root_pk, None, true).map(|_public_key| ())
+    verify_delegation_certificate(certificate, subnet_id, root_pk, None, true).map(|_| ())
 }
 
 fn parse_certificate(certificate: &[u8]) -> Result<Certificate, CertificateValidationError> {
