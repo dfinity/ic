@@ -282,7 +282,7 @@ jobs:
               eval "bazel test $bazel_args --target_pattern_file=$test_targets"
             fi
 
-  # Build & upload the arm64-{linux,darwin} variant of the PocketIC server,
+  # Build & upload arm64-{linux,darwin} binaries,
   # build the entire codebase on arm64-darwin,
   # and run tests tagged to run on all platforms.
   # NOTE: uses 'namespace.so' runners.
@@ -315,11 +315,19 @@ jobs:
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             build \
             //publish/binaries:pocket-ic.gz
+            //publish/binaries:ic-admin.gz
+            //publish/binaries:sns.gz
 
           mkdir -p build
           cp \
             ./bazel-bin/publish/binaries/pocket-ic.gz \
             ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
+          cp \
+            ./bazel-bin/publish/binaries/ic-admin.gz \
+            ./build/ic-admin-arm64-${{ matrix.os }}.gz
+          cp \
+            ./bazel-bin/publish/binaries/sns.gz \
+            ./build/sns-arm64-${{ matrix.os }}.gz
 
       - name: Build pocket-ic-server x86_64-darwin
         if: ${{ matrix.os == 'darwin' }}
@@ -374,11 +382,14 @@ jobs:
           name: pocket-ic-server-x86_64-darwin.gz
           path: ./build/pocket-ic-server-x86_64-darwin.gz
 
-      - name: Upload pocket-ic-server
+      - name: Upload arm64-${{ matrix.os }} artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pocket-ic-server-arm64-${{ matrix.os }}.gz
-          path: ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
+          name: arm64-binaries-${{ matrix.os }}.gz
+          path: |
+            ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
+            ./build/ic-admin-arm64-${{ matrix.os }}.gz
+            ./build/sns-arm64-${{ matrix.os }}.gz
 
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
   upload-external-artifacts:
