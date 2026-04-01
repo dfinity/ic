@@ -65,5 +65,8 @@ rust_test(
         # Note: management_canister_types/tests/ic.did is not publicly exported;
         # the integration test skips it gracefully when not present.
     ],
-    deps = [":ic_webmcp_codegen"] + DEV_DEPENDENCIES,
+    deps = [
+        ":ic_webmcp_codegen",
+        "@crate_index//:serde_json",
+    ] + DEV_DEPENDENCIES,
 )
