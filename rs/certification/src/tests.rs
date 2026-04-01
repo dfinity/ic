@@ -18,7 +18,7 @@ use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use rstest::rstest;
 
 use crate::{
-    CertificateValidationError, validate_subnet_delegation_certificate,
+    CertificateValidationError, DelegationSubnetInfo, validate_subnet_delegation_certificate,
     validate_subnet_delegation_certificate_with_cache, verify_certified_data,
     verify_certified_data_with_cache, verify_certified_data_with_cache_for_canister_sig,
     verify_delegation_certificate,
@@ -67,7 +67,7 @@ fn verify_subnet_delegation_certificate_with_and_without_cache(
     subnet_id: &SubnetId,
     canister_id: &CanisterId,
     root_pk: &ThresholdSigPublicKey,
-) -> Result<(ThresholdSigPublicKey, Option<String>), CertificateValidationError> {
+) -> Result<(ThresholdSigPublicKey, DelegationSubnetInfo), CertificateValidationError> {
     let verification_result_without_cache =
         verify_delegation_certificate(certificate, subnet_id, root_pk, Some(canister_id), false);
     let verification_result_with_cache =
