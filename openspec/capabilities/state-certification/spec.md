@@ -116,6 +116,24 @@ Certificate verification MUST support caching for efficiency.
 
 ---
 
+## REQ-CERT-006: Tree Diff Computation
+
+Hash trees MUST be comparable to detect changes between certified states.
+
+### SCENARIO-CERT-014: Converting HashTree to RoseHashTree
+**Given** a `HashTree` is converted to a `RoseHashTree`
+**When** conversion runs
+**Then** binary forks are flattened into a labeled rose tree
+**And** each node carries its digest for comparison
+
+### SCENARIO-CERT-015: Computing tree diffs
+**Given** two `RoseHashTree` instances are compared
+**When** diff computation runs
+**Then** changed subtrees are identified by digest comparison
+**And** paths to changed leaves are reported
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |

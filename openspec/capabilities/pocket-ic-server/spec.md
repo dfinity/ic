@@ -123,15 +123,95 @@ PocketIC MUST provide topology information about the emulated network.
 
 ---
 
+## REQ-PIC-009: Blob Store
+
+PocketIC MUST provide a blob store for storing and retrieving binary data.
+
+### SCENARIO-PIC-016: Store and fetch blob
+**Given** a binary blob is stored via the blob store API
+**When** storage completes
+**Then** a `BlobId` is returned
+**And** subsequent fetch with that `BlobId` returns the original binary data
+
+---
+
+## REQ-PIC-010: Canister Snapshots
+
+PocketIC MUST support downloading and uploading canister snapshots.
+
+### SCENARIO-PIC-017: Download canister snapshot
+**Given** a client sends POST `/canister_snapshot_download` with a canister ID and snapshot ID
+**When** the request is handled
+**Then** the server returns the binary snapshot data
+
+### SCENARIO-PIC-018: Upload canister snapshot
+**Given** a client sends POST `/canister_snapshot_upload` with snapshot data
+**When** the request is handled
+**Then** the snapshot is applied to the target canister
+
+---
+
+## REQ-PIC-011: Public Key Retrieval
+
+PocketIC MUST expose subnet threshold signing public keys.
+
+### SCENARIO-PIC-019: Get subnet public key
+**Given** a client sends POST `/pub_key` with a subnet ID
+**When** the request is handled
+**Then** the threshold signing public key for the subnet is returned
+
+---
+
+## REQ-PIC-012: Auto-Progress Mode
+
+PocketIC MUST support automatic time and tick advancement.
+
+### SCENARIO-PIC-020: Enable auto-progress
+**Given** a client configures auto-progress with `AutoProgressConfig`
+**When** auto-progress is active
+**Then** the instance automatically advances time and executes ticks at the configured rate
+
+---
+
+## REQ-PIC-013: HTTP Gateway Integration
+
+PocketIC MUST support an optional HTTP gateway for serving canister HTTP interfaces.
+
+### SCENARIO-PIC-021: Configure and query HTTP gateway
+**Given** a client provides `HttpGatewayConfig` during instance creation
+**When** the gateway starts
+**Then** the instance starts an HTTP gateway that translates HTTP requests to canister calls
+**And** `HttpGatewayDetails` including the listening address are available
+
+---
+
+## REQ-PIC-014: Operation Model
+
+PocketIC MUST use an operation-based model with retry semantics and timeouts.
+
+### SCENARIO-PIC-022: Operation retry on busy
+**Given** an operation is submitted while the instance is busy
+**And** the operation's `retry_if_busy()` returns true
+**When** the operation is received
+**Then** the operation is retried automatically
+
+### SCENARIO-PIC-023: Processing timeout header
+**Given** a client specifies the `processing-timeout-ms` header
+**When** the server processes the request
+**Then** the server respects the specified timeout for long-running operations
+**And** the default retry timeout is 300 seconds
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
-| REQ-PIC-001 | Instance lifecycle | narrative | rs/pocket_ic_server/tests/ |
-| REQ-PIC-002 | Configuration | narrative | rs/pocket_ic_server/tests/ |
-| REQ-PIC-003 | Deterministic state machine | narrative | rs/pocket_ic_server/tests/ |
-| REQ-PIC-004 | Canister operations | narrative | rs/pocket_ic_server/tests/ |
-| REQ-PIC-005 | Time management | narrative | rs/pocket_ic_server/tests/ |
+| REQ-PIC-001 | Instance lifecycle | linked | rs/pocket_ic_server/tests/test.rs |
+| REQ-PIC-002 | Configuration | linked | rs/pocket_ic_server/tests/test.rs |
+| REQ-PIC-003 | Deterministic state machine | linked | rs/pocket_ic_server/tests/test.rs |
+| REQ-PIC-004 | Canister operations | linked | rs/pocket_ic_server/tests/test.rs |
+| REQ-PIC-005 | Time management | linked | rs/pocket_ic_server/tests/test.rs |
 | REQ-PIC-006 | IC HTTP interface | narrative | rs/pocket_ic_server/tests/ |
 | REQ-PIC-007 | HTTP outcall mocking | narrative | rs/pocket_ic_server/tests/ |
 | REQ-PIC-008 | Topology info | narrative | rs/pocket_ic_server/tests/ |

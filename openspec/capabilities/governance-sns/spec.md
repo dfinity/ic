@@ -152,7 +152,28 @@ Neurons MUST be able to follow other neurons for automatic vote delegation.
 |----|-------------|--------|-------|
 | REQ-SNS-001 | Governance initialization | narrative | rs/sns/governance/tests/ |
 | REQ-SNS-002 | Mode management | narrative | rs/sns/governance/tests/ |
-| REQ-SNS-003 | Neuron management | narrative | rs/sns/governance/tests/ |
-| REQ-SNS-004 | Proposal lifecycle | narrative | rs/sns/governance/tests/ |
-| REQ-SNS-005 | Voting and decision | narrative | rs/sns/governance/tests/ |
-| REQ-SNS-006 | Following (delegation) | narrative | rs/sns/governance/tests/ |
+## REQ-SNS-007: Native Proposal Action Types
+
+The governance canister MUST support a defined set of native proposal actions with stable numeric IDs.
+
+### SCENARIO-SNS-019: Native action types available
+**Given** the governance canister is initialized
+**When** action types are queried
+**Then** the following native actions are available with their IDs:
+  - Motion (1), ManageNervousSystemParameters (2), UpgradeSnsControlledCanister (3)
+  - AddGenericNervousSystemFunction (4), RemoveGenericNervousSystemFunction (5)
+  - ExecuteGenericNervousSystemFunction (6), UpgradeSnsToNextVersion (7)
+
+---
+
+## Traceability
+
+| ID | Description | Status | Tests |
+|----|-------------|--------|-------|
+| REQ-SNS-001 | Governance initialization | narrative | rs/sns/governance/tests/ |
+| REQ-SNS-002 | Mode management | linked | rs/sns/governance/tests/governance.rs |
+| REQ-SNS-003 | Neuron management | linked | rs/sns/governance/tests/governance.rs |
+| REQ-SNS-004 | Proposal lifecycle | linked | rs/sns/governance/tests/governance.rs |
+| REQ-SNS-005 | Voting and decision | linked | rs/sns/governance/tests/governance.rs |
+| REQ-SNS-006 | Following (delegation) | linked | rs/sns/governance/tests/governance.rs |
+| REQ-SNS-007 | Native action types | narrative | rs/sns/governance/tests/ |

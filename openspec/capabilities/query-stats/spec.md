@@ -113,11 +113,39 @@ The payload builder MUST validate payloads proposed by other nodes.
 
 ---
 
+## REQ-QS-005: State Machine Delivery
+
+Query statistics MUST be aggregated from consensus blocks into replicated state.
+
+### SCENARIO-QS-016: Deliver and aggregate stats
+**Given** query stats payloads are finalized in consensus blocks
+**When** `deliver_query_stats` is called
+**Then** the statistics are aggregated into the replicated state
+**And** the highest aggregated epoch is updated accordingly
+
+---
+
+## REQ-QS-006: Metrics
+
+The query stats subsystem MUST report comprehensive metrics.
+
+### SCENARIO-QS-017: Collector metrics
+**Given** statistics are collected
+**When** metrics are reported
+**Then** current epoch, number of tracked canister IDs, and accumulated stats (calls, instructions, payload sizes) are exposed
+
+### SCENARIO-QS-018: Payload builder operation metrics
+**Given** payloads are built or validated
+**When** metrics are recorded
+**Then** duration metrics are recorded for both `build` and `validate` operations
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
 | REQ-QS-001 | Stats collection | narrative | rs/query_stats/tests/ |
 | REQ-QS-002 | Epoch management | narrative | rs/query_stats/tests/ |
-| REQ-QS-003 | Payload building | narrative | rs/query_stats/tests/ |
+| REQ-QS-003 | Payload building | linked | rs/query_stats/src/payload_builder.rs |
 | REQ-QS-004 | Payload validation | narrative | rs/query_stats/tests/ |

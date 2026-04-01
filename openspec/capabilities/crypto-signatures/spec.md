@@ -117,7 +117,54 @@ The `ThresholdSigDataStoreImpl` MUST limit the number of DKG IDs stored per tag.
 |----|-------------|--------|-------|
 | REQ-SIG-001 | Basic signing | narrative | rs/crypto/tests/ |
 | REQ-SIG-002 | Basic verification | narrative | rs/crypto/tests/ |
+## REQ-SIG-007: Basic Signature Batch Combining
+
+Individual basic signatures MUST be combinable into a `BasicSignatureBatch`.
+
+### SCENARIO-SIG-013: Combining basic signatures
+**Given** `combine_basic_sig` is called with a non-empty map of NodeId → BasicSigOf
+**When** combining runs
+**Then** a `BasicSignatureBatch` is returned containing all signatures
+
+### SCENARIO-SIG-014: Combining with empty signatures
+**Given** `combine_basic_sig` is called with an empty map
+**When** combining runs
+**Then** `CryptoError::InvalidArgument` is returned
+
+---
+
+## REQ-SIG-008: Basic Signature Batch Verification
+
+A `BasicSignatureBatch` MUST be verifiable using Ed25519 batch verification.
+
+### SCENARIO-SIG-015: Batch verification success
+**Given** `verify_basic_sig_batch` is called with a non-empty batch, message, and registry version
+**When** verification runs
+**Then** all signers' Ed25519 public keys are retrieved from the registry
+**And** a public random seed is generated from the vault for batch verification
+**And** `ic_ed25519::PublicKey::batch_verify` is called with all messages, signatures, and keys
+
+### SCENARIO-SIG-016: Empty batch verification error
+**Given** `verify_basic_sig_batch` is called with an empty batch
+**When** verification runs
+**Then** `CryptoError::InvalidArgument` is returned
+
+### SCENARIO-SIG-017: Non-Ed25519 key in batch error
+**Given** any signer in the batch has a non-Ed25519 public key algorithm
+**When** verification runs
+**Then** `CryptoError::AlgorithmNotSupported` is returned
+
+---
+
+## Traceability
+
+| ID | Description | Status | Tests |
+|----|-------------|--------|-------|
+| REQ-SIG-001 | Basic signing | linked | rs/crypto/tests/integration_test.rs |
+| REQ-SIG-002 | Basic verification | linked | rs/crypto/tests/integration_test.rs |
 | REQ-SIG-003 | Verification by public key | narrative | rs/crypto/tests/ |
-| REQ-SIG-004 | Multi-signature | narrative | rs/crypto/tests/ |
-| REQ-SIG-005 | Threshold signature | narrative | rs/crypto/tests/ |
+| REQ-SIG-004 | Multi-signature | linked | rs/crypto/tests/integration_test.rs |
+| REQ-SIG-005 | Threshold signature | linked | rs/crypto/tests/integration_test.rs |
 | REQ-SIG-006 | Data store capacity | narrative | rs/crypto/tests/ |
+| REQ-SIG-007 | Batch combining | narrative | rs/crypto/tests/ |
+| REQ-SIG-008 | Batch verification | narrative | rs/crypto/tests/ |
