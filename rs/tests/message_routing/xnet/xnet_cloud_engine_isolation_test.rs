@@ -62,6 +62,7 @@ fn main() -> Result<()> {
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
+        .with_api_boundary_nodes_playnet(1)
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))
         .add_subnet(Subnet::fast_single_node(SubnetType::CloudEngine))

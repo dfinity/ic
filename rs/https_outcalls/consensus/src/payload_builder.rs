@@ -365,6 +365,7 @@ impl CanisterHttpPayloadBuilderImpl {
             timeouts,
             divergence_responses,
             flexible_responses,
+            flexible_errors: vec![],
         }
     }
 
@@ -704,6 +705,17 @@ impl CanisterHttpPayloadBuilderImpl {
                         InvalidCanisterHttpPayloadReason::ContentHashMismatch {
                             metadata_hash: entry.proof.content.content_hash.clone(),
                             calculated_hash,
+                        },
+                    );
+                }
+
+                // Content size must match
+                let calculated_size = entry.response.content.count_bytes() as u32;
+                if calculated_size != entry.proof.content.content_size {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
+                            metadata_size: entry.proof.content.content_size,
+                            calculated_size,
                         },
                     );
                 }

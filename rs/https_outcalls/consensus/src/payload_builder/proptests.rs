@@ -7,7 +7,7 @@ use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    Height, NumBytes, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NumBytes, RegistryVersion, ReplicaVersion,
     canister_http::{
         CanisterHttpReject, CanisterHttpResponse, CanisterHttpResponseContent,
         CanisterHttpResponseMetadata, CanisterHttpResponseShare,
@@ -182,6 +182,7 @@ fn prop_response_with_shares(
                 id: response.id,
                 timeout: response.timeout,
                 content_hash: crypto_hash(&response),
+                content_size: response.content.count_bytes() as u32,
                 registry_version: RegistryVersion::new(1),
                 replica_version: ReplicaVersion::default(),
             };
@@ -224,15 +225,16 @@ fn prop_response(max_timeout: u64, max_size: usize) -> impl Strategy<Value = Can
 /// Generate a random metadata with a timeout and registry version value between 0 and
 /// the specified value
 fn prop_random_metadata(max_timeout: u64) -> impl Strategy<Value = CanisterHttpResponseMetadata> {
-    (any::<(u64, [u8; 32])>(), 100..max_timeout).prop_map(|((id, hash), timeout)| {
-        CanisterHttpResponseMetadata {
+    (any::<(u64, [u8; 32], u32)>(), 100..max_timeout).prop_map(
+        |((id, hash, content_size), timeout)| CanisterHttpResponseMetadata {
             id: CallbackId::new(id),
             timeout: UNIX_EPOCH + Duration::from_millis(timeout),
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
+            content_size,
             registry_version: RegistryVersion::new(1),
             replica_version: ReplicaVersion::default(),
-        }
-    })
+        },
+    )
 }
 
 /// Generate random content that is either a success message of `max_size` length
