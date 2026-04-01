@@ -987,6 +987,7 @@ pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
     pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
+    pub content_size: u32,
     pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }
@@ -1035,12 +1036,6 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 /// A signature of of [`CanisterHttpResponseMetadata`].
 pub type CanisterHttpResponseProof =
     Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
-
-impl CountBytes for CanisterHttpResponseProof {
-    fn count_bytes(&self) -> usize {
-        size_of::<CanisterHttpResponseProof>()
-    }
-}
 
 #[cfg(test)]
 mod tests {

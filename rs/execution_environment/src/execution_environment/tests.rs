@@ -23,7 +23,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
-use ic_test_utilities_consensus::idkg::fake_pre_signature_stash;
+use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
     get_reject, get_reply,
@@ -32,7 +32,7 @@ use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
     CanisterId, CountBytes, PrincipalId, RegistryVersion,
     canister_http::{CanisterHttpMethod, Transform},
-    consensus::idkg::IDkgMasterPublicKeyId,
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
@@ -830,6 +830,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * test
                 .cycles_account_manager()
                 .gib_storage_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .real()
                 .get())
             / one_gib
     );
@@ -4671,13 +4672,25 @@ fn get_dynamic_signature_queue_size_idkg_empty_stash_returns_min_of_registry_and
     );
 }
 
+/// Efficiently creates a pre-signature stash of the given size, for testing.
+/// All pre-signatures are identical, but this is fine for our purposes.
+fn make_pre_signature_stash(key_id: &IDkgMasterPublicKeyId, size: u64) -> PreSignatureStash {
+    let pre_signature = pre_signature_for_tests(key_id);
+    PreSignatureStash {
+        key_transcript: Arc::new(key_transcript_for_tests(key_id)),
+        pre_signatures: BTreeMap::from_iter(
+            (0..size).map(|i| (PreSigId(i), pre_signature.clone())),
+        ),
+    }
+}
+
 #[test]
 fn get_dynamic_signature_queue_size_idkg_stash_size_within_range() {
     // Stash size in [max_queue_size, MAX_PAIRED_PRE_SIGNATURES] is returned as-is.
     let ecdsa_key_id = IDkgMasterPublicKeyId::try_from(make_ecdsa_key("ecdsa_stash_test")).unwrap();
     let key_id = ecdsa_key_id.inner();
     let pre_signature_count = 30;
-    let stash = fake_pre_signature_stash(&ecdsa_key_id, pre_signature_count);
+    let stash = make_pre_signature_stash(&ecdsa_key_id, pre_signature_count);
     let stashes = BTreeMap::from([(ecdsa_key_id.clone(), stash)]);
 
     // Registry 20, stash 30 → max_queue_size=20, result = clamp(30, 20, 100) = 30.
@@ -4693,9 +4706,8 @@ fn get_dynamic_signature_queue_size_idkg_stash_size_capped_at_max_paired() {
     let ecdsa_key_id =
         IDkgMasterPublicKeyId::try_from(make_ecdsa_key("ecdsa_large_stash")).unwrap();
     let key_id = ecdsa_key_id.inner();
-    let stash = fake_pre_signature_stash(&ecdsa_key_id, 150);
+    let stash = make_pre_signature_stash(&ecdsa_key_id, MAX_PAIRED_PRE_SIGNATURES as u64 + 3);
     let stashes = BTreeMap::from([(ecdsa_key_id.clone(), stash)]);
-
     assert_eq!(
         super::get_dynamic_signature_queue_size(&stashes, 20, key_id),
         MAX_PAIRED_PRE_SIGNATURES
@@ -4708,7 +4720,7 @@ fn get_dynamic_signature_queue_size_idkg_stash_below_floor_returns_floor() {
     let ecdsa_key_id =
         IDkgMasterPublicKeyId::try_from(make_ecdsa_key("ecdsa_small_stash")).unwrap();
     let key_id = ecdsa_key_id.inner();
-    let stash = fake_pre_signature_stash(&ecdsa_key_id, 5);
+    let stash = make_pre_signature_stash(&ecdsa_key_id, 5);
     let stashes = BTreeMap::from([(ecdsa_key_id.clone(), stash)]);
 
     // Registry 50, stash 5 → max_queue_size=50, result = clamp(5, 50, 100) = 50.
@@ -4716,4 +4728,113 @@ fn get_dynamic_signature_queue_size_idkg_stash_below_floor_returns_floor() {
         super::get_dynamic_signature_queue_size(&stashes, 50, key_id),
         50
     );
+}
+
+/// Runbook:
+/// - The proxy canister makes a `stop_canister` call to stop `canister_id` attaching 1T cycles to the call.
+/// - The total cycles balance of the proxy canister and `canister_id` must not increase and can only decrease by at most 1B cycles.
+///
+/// Returns the result of the `stop_canister` call as reported by the proxy canister (universal canister forwarding the call to the mgmt canister).
+fn stop_canister_refunds_cycles(
+    test: &mut ExecutionTest,
+    proxy: CanisterId,
+    canister_id: CanisterId,
+) -> Result<WasmResult, UserError> {
+    let cycles = |test: &mut ExecutionTest| {
+        test.canister_state(proxy).system_state.balance()
+            + test.canister_state(canister_id).system_state.balance()
+    };
+    let cycles_before = cycles(test);
+
+    let canister_id_record: CanisterIdRecord = canister_id.into();
+    let ingress_id = test
+        .ingress_raw(
+            proxy,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    CanisterId::ic_00(),
+                    "stop_canister",
+                    call_args().other_side(Encode!(&canister_id_record).unwrap()),
+                    Cycles::new(1_000_000_000_000),
+                )
+                .build(),
+        )
+        .0;
+    test.process_stopping_canisters();
+    test.execute_all();
+
+    let cycles_after = cycles(test);
+    assert_le!(cycles_after, cycles_before);
+    assert_le!(cycles_before, cycles_after + Cycles::new(1_000_000_000));
+
+    check_ingress_status(test.ingress_status(&ingress_id))
+}
+
+#[test]
+fn stopping_running_canister_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Running
+    );
+    test.set_controller(canister_id, proxy.get()).unwrap();
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reply(res);
+}
+
+#[test]
+fn stopping_stopping_canister_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.stop_canister(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
+    );
+    test.set_controller(canister_id, proxy.get()).unwrap();
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reply(res);
+}
+
+#[test]
+fn stopping_stopped_canister_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopped
+    );
+    test.set_controller(canister_id, proxy.get()).unwrap();
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reply(res);
+}
+
+#[test]
+fn stopping_canister_not_controlled_by_caller_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Running
+    );
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reject(res);
 }

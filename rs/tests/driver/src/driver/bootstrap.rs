@@ -1,7 +1,7 @@
-use crate::driver::ic_gateway_vm::HasIcGatewayVm;
-use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
+use crate::driver::ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, Playnet};
 use crate::driver::ic_images::try_get_setupos_img_version;
 use crate::driver::nested::NestedVm;
+use crate::driver::resource::BootImage;
 use crate::driver::test_env_api::{
     SshSession, get_guestos_img_url, get_guestos_launch_measurements,
     get_hostos_initial_update_img_url,
@@ -35,8 +35,8 @@ use config_tool::setupos::{
 };
 use config_types::{
     CONFIG_VERSION, DeploymentEnvironment, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
-    GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, Ipv4Config, Ipv6Config,
-    NetworkSettings, RecoveryConfig,
+    GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, IcBoundaryTlsCert,
+    Ipv4Config, Ipv6Config, NetworkSettings, RecoveryConfig,
 };
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -168,6 +168,7 @@ pub fn init_ic(
                 subnet.max_instructions_per_round,
                 subnet.max_instructions_per_install_code,
                 subnet.features,
+                subnet.resource_limits,
                 subnet.chain_key_config.clone().map(|c| c.into()),
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),
@@ -218,6 +219,20 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
+    for dc_record in &ic.data_centers {
+        ic_config.add_data_center_record(dc_record.clone());
+    }
+    for no in &ic.node_operators {
+        ic_config.add_node_operator_record(
+            no.name.clone(),
+            no.principal_id,
+            no.node_provider_principal_id,
+            no.node_allowance,
+            no.dc_id.clone(),
+            no.rewardable_nodes.clone(),
+        );
+    }
+
     if let Some(UnassignedRecordConfig::Skip) = ic.unassigned_record_config {
         ic_config.skip_unassigned_record();
     }
@@ -246,6 +261,22 @@ pub fn setup_and_start_vms(
     for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
+    let api_bn_tls_cert: Option<IcBoundaryTlsCert> = if ic.api_bn_use_playnet {
+        let playnet = Playnet::read_attribute(env);
+        let cert = &playnet.playnet_cert.cert;
+        Some(IcBoundaryTlsCert {
+            cert_pem: format!("{}{}", cert.cert_pem, cert.chain_pem),
+            key_pem: cert.priv_key_pem.clone(),
+        })
+    } else {
+        None
+    };
+    let api_bn_node_ids: Vec<NodeId> = initialized_ic
+        .api_boundary_nodes
+        .values()
+        .map(|n| n.node_id)
+        .collect();
+
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     let mut nodes_info = NodesInfo::new();
     for node in nodes {
@@ -259,6 +290,11 @@ pub fn setup_and_start_vms(
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
         let recovery_hash: Option<String> = ic.get_recovery_hash_of_node(node.node_id);
+        let ic_boundary_tls_cert = if api_bn_node_ids.contains(&node.node_id) {
+            api_bn_tls_cert.clone()
+        } else {
+            None
+        };
         nodes_info.insert(node.node_id, malicious_behavior.clone());
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(
@@ -269,6 +305,7 @@ pub fn setup_and_start_vms(
                 ipv4_config,
                 domain,
                 recovery_hash,
+                ic_boundary_tls_cert,
                 &t_env,
             )?;
 
@@ -443,6 +480,7 @@ fn create_config_disk_image(
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
     recovery_hash: Option<String>,
+    ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
     test_env: &TestEnv,
 ) -> anyhow::Result<()> {
     let mut bootstrap_options = BootstrapOptions {
@@ -464,6 +502,7 @@ fn create_config_disk_image(
         ipv4_config,
         domain_name,
         recovery_hash,
+        ic_boundary_tls_cert,
         test_env,
         ic_name,
     )?;
@@ -507,6 +546,7 @@ fn create_guestos_config_for_node(
     ipv4_config: Option<IPv4Config>,
     domain_name: Option<String>,
     recovery_hash: Option<String>,
+    ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
     test_env: &TestEnv,
     ic_name: &str,
 ) -> anyhow::Result<GuestOSConfig> {
@@ -581,6 +621,7 @@ fn create_guestos_config_for_node(
             .ok(),
         hostname: Some(node.node_id.to_string()),
         generate_ic_boundary_tls_cert: node.node_config.domain.clone(),
+        ic_boundary_tls_cert,
         nns_pub_key_override,
     };
 
@@ -610,11 +651,11 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     NodeConfiguration {
         xnet_api,
         public_api,
-        // this value will be overridden by IcConfig::with_node_operator()
-        node_operator_principal_id: None,
+        // If not set per-node, this will be overridden by IcConfig's initial_node_operator
+        node_operator_principal_id: node.node_operator_principal_id,
         secret_key_store: node.secret_key_store.clone(),
         domain: node.domain.clone(),
-        node_reward_type: None,
+        node_reward_type: node.node_reward_type.map(String::from),
     }
 }
 
@@ -629,11 +670,17 @@ pub fn setup_baremetal_instance(
         .join(SSH_USERNAME);
 
     let hostos_url = get_hostos_initial_update_img_url().as_str().parse()?;
-    let guestos_url = get_guestos_img_url().as_str().parse()?;
+
+    let nested_vm_config = nested_vm.get_nested_vm_config()?;
+    let guestos_image_source = match &nested_vm_config.boot_image {
+        BootImage::GroupDefault => ImageSource::Url(get_guestos_img_url().as_str().parse()?),
+        BootImage::Image(disk_image) => ImageSource::Url(disk_image.url.as_str().parse()?),
+        BootImage::File(_) => bail!("BootImage::File is not supported for bare metal deployment"),
+    };
 
     let config = DeploymentConfig {
         hostos_upgrade_image: Some(ImageSource::Url(hostos_url)),
-        guestos_image: Some(ImageSource::Url(guestos_url)),
+        guestos_image: Some(guestos_image_source),
         setupos_config_image: Some(ImageSource::File(config_image.to_path_buf())),
     };
 

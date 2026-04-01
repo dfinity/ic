@@ -5,8 +5,8 @@ use ic_types::{
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses, ValidationContext,
     },
     canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
-        CanisterHttpResponseWithConsensus,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
     crypto::crypto_hash,
     messages::CallbackId,
@@ -22,6 +22,7 @@ use std::{
 /// Consistency means:
 /// - The signed metadata is the same as the metadata of the response
 /// - The content_hash is the same as the hash of the content
+/// - The content_size is the same as the size of the content
 ///
 /// **NOTE**: The signature is not checked
 pub(crate) fn check_response_consistency(
@@ -52,6 +53,15 @@ pub(crate) fn check_response_consistency(
         return Err(InvalidCanisterHttpPayloadReason::ContentHashMismatch {
             metadata_hash: metadata.content_hash.clone(),
             calculated_hash,
+        });
+    }
+
+    // Check the calculated size matches the metadata size
+    let calculated_size = content.content.count_bytes() as u32;
+    if calculated_size != metadata.content_size {
+        return Err(InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
+            metadata_size: metadata.content_size,
+            calculated_size,
         });
     }
 
@@ -217,10 +227,28 @@ pub(crate) fn find_non_replicated_response(
     })
 }
 
-/// Collects distinct HTTP outcall responses from flexible committee members.
+/// Estimates the byte size of a [`CanisterHttpResponseWithConsensus`] before
+/// the proof has been aggregated.
 ///
-/// Gathers up to `max_responses` individually-signed `(response, share)` pairs
-/// from unique committee members, skipping any that would exceed `max_payload_size`.
+/// This function mirrors the implementation of
+/// `CanisterHttpResponseWithConsensus::count_bytes()`:
+///   proof.count_bytes()  → metadata.count_bytes() + Σ share.count_bytes()
+///   content.count_bytes() → content.count_bytes()
+pub(crate) fn estimate_response_with_consensus_size(
+    metadata: &CanisterHttpResponseMetadata,
+    shares: &BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
+    content: &CanisterHttpResponse,
+) -> usize {
+    metadata.count_bytes()
+        + shares.iter().map(|s| s.count_bytes()).sum::<usize>()
+        + content.count_bytes()
+}
+
+/// Collects distinct HTTP outcall OK-responses from flexible committee members.
+///
+/// Gathers up to `max_responses` individually-signed `(ok-response, share)` pairs
+/// from unique committee members while disregarding rejects, and skipping any
+/// that would exceed `max_payload_size`.
 /// Returns the group and its accumulated byte size if at least `min_responses`
 /// were collected.
 pub(crate) fn find_flexible_responses(
@@ -250,6 +278,13 @@ pub(crate) fn find_flexible_responses(
             if let Some(http_response) =
                 pool_access.get_response_content_by_hash(&metadata.content_hash)
             {
+                if matches!(
+                    http_response.content,
+                    CanisterHttpResponseContent::Reject(_)
+                ) {
+                    // Disregard rejects, as we are collecting ok-responses.
+                    continue;
+                }
                 let response = FlexibleCanisterHttpResponseWithProof {
                     response: http_response,
                     proof: (*share).clone(),

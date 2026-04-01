@@ -32,10 +32,6 @@ pub(crate) fn update_signature_request_contexts(
     metrics: &SchedulerMetrics,
     logger: &ReplicaLogger,
 ) {
-    let _timer = metrics
-        .round_update_signature_request_contexts_duration
-        .start_timer();
-
     // Assign a random nonce to the context in the round immediately subsequent to its successful
     // match with a pre-signature.
     for context in &mut contexts {

@@ -310,6 +310,13 @@ impl NetworkTopology {
             .map(|subnet_topology| subnet_topology.nodes.len())
     }
 
+    /// Returns the cycles cost schedule of the given subnet.
+    pub fn get_cost_schedule(&self, subnet_id: &SubnetId) -> Option<CanisterCyclesCostSchedule> {
+        self.subnets
+            .get(subnet_id)
+            .map(|subnet_topology| subnet_topology.cost_schedule)
+    }
+
     /// Returns the subnets map used for the certified state tree.
     ///
     /// On the NNS subnet this returns the full, unfiltered map (including cloud
@@ -522,6 +529,18 @@ impl SystemMetadata {
     /// Returns a reference to the streams.
     pub fn streams(&self) -> &StreamMap {
         &self.streams
+    }
+
+    /// Returns the size of this subnet, `None` if `network_topology` is not
+    /// populated.
+    pub fn own_subnet_size(&self) -> Option<usize> {
+        self.network_topology.get_subnet_size(&self.own_subnet_id)
+    }
+
+    /// Returns the cost schedule of this subnet, `None` if `network_topology` is
+    /// not populated.
+    pub fn own_cost_schedule(&self) -> Option<CanisterCyclesCostSchedule> {
+        self.network_topology.get_cost_schedule(&self.own_subnet_id)
     }
 
     /// One-off initialization: populate `canister_allocation_ranges` with the only
