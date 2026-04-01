@@ -171,7 +171,7 @@ pub fn setup(env: TestEnv) {
         let ip: Ipv4Addr = gw_ipv4
             .parse()
             .unwrap_or_else(|e| panic!("invalid GW_IPV4 address '{gw_ipv4}': {e}"));
-        let mask: u32 = !((1u32 << (32 - DM1_DMZ_PREFIX)) - 1);
+        let mask: u32 = !((1_u32 << (32 - DM1_DMZ_PREFIX)) - 1);
         assert_eq!(
             u32::from(ip) & mask,
             u32::from(DM1_DMZ_NETWORK),
