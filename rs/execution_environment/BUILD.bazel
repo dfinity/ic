@@ -433,6 +433,7 @@ rust_ic_bench(
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:lazy_static",
+        "@crate_index//:pprof",
     ],
 )
 
