@@ -315,15 +315,25 @@ async fn call_sync(
         );
     };
 
-    let status_label = match parsed_message_status(&tree, &message_id) {
+    let message_status = parsed_message_status(&tree, &message_id);
+
+    let status_label = match &message_status {
         ParsedMessageStatus::Known(status) => status,
-        ParsedMessageStatus::Unknown => "unknown".to_string(),
+        ParsedMessageStatus::Unknown => "unknown",
     };
 
     metrics
         .sync_call_certificate_status_total
-        .with_label_values(&[&status_label])
+        .with_label_values(&[status_label])
         .inc();
+
+    // TODO(DSM-121): ensure that `ParsedMessageStatus::Unknown` never occurs
+    // and trigger a critical error here if it does.
+    if let ParsedMessageStatus::Unknown = message_status {
+        return SyncCallResponse::Accepted(
+            "Certified state does not contain request status. Please try /read_state.",
+        );
+    }
 
     let delegation_from_nns = match version {
         Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
