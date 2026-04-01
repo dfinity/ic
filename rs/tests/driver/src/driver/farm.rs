@@ -100,7 +100,10 @@ impl Farm {
         spec.required_host_features = self
             .override_host_features
             .clone()
-            .unwrap_or_else(|| spec.required_host_features.clone());
+            .unwrap_or_else(|| spec.required_host_features.clone())
+            .into_iter()
+            .filter(|f| !matches!(f, HostFeature::GwIpv4(_)))
+            .collect();
         let path = format!("group/{group_name}");
         let ttl = ttl.map(|ttl| ttl.as_secs() as u32);
         let spec = spec.add_meta(group_base_name);
@@ -121,7 +124,10 @@ impl Farm {
         vm.required_host_features = self
             .override_host_features
             .clone()
-            .unwrap_or_else(|| vm.required_host_features.clone());
+            .unwrap_or_else(|| vm.required_host_features.clone())
+            .into_iter()
+            .filter(|f| !matches!(f, HostFeature::GwIpv4(_)))
+            .collect();
         let path = format!("group/{}/vm/{}", group_name, &vm.name);
         let rb = Self::json(self.post(&path), &vm);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
