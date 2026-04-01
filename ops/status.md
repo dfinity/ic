@@ -7,23 +7,32 @@ Last updated: 2026-04-01
 ## What's Done
 - _bmad/ bootstrapped (prd.md, architecture.md, traceability.md)
 - .harness/ scaffolded (config.yaml, generator/evaluator prompts)
-- openspec/capabilities/execution-scheduler/spec.md — first domain migrated
-  - 9 REQs (REQ-SCHED-001 through REQ-SCHED-009)
-  - 21 SCENARIOs (SCENARIO-SCHED-001 through SCENARIO-SCHED-021)
-  - All status: "narrative" (spec exists, not yet linked in tests)
 - ops/ tracking created
+- **11 domains migrated to capability specs:**
+  - execution-scheduler: 9 REQs, 21 SCENARIOs
+  - execution-canister-lifecycle: 7 REQs, 31 SCENARIOs
+  - execution-cycles: 18 REQs, 42 SCENARIOs
+  - execution-dts: 8 REQs, 21 SCENARIOs
+  - execution-wasm: 6 REQs, 28 SCENARIOs
+  - execution-system-api: 13 REQs, 31 SCENARIOs
+  - execution-memory: 6 REQs, 25 SCENARIOs
+  - messaging: 6 REQs, 22 SCENARIOs
+  - networking-https-outcalls: 5 REQs, 16 SCENARIOs
+  - state-manager: 9 REQs, 28 SCENARIOs
+  - ingress-manager: 4 REQs, 22 SCENARIOs
 
 ## What's Next
-1. Migrate execution-canister-lifecycle → openspec/capabilities/execution-canister-lifecycle/
-2. Migrate execution-cycles
-3. Migrate execution-dts
-4. Continue through migration_order in .harness/config.yaml
-
-## Blocked
-- Nothing currently blocked
+1. consensus (large — 37KB spec)
+2. state-management/replicated-state.md
+3. state-management/checkpoint.md, certification.md
+4. crypto/signatures.md, dkg.md, canister_threshold_signatures.md
+5. networking/p2p.md, xnet.md
+6. governance/nns-governance.md, sns/
+7. ledger/icp-ledger.md, icrc-standards.md
+8. registry/spec.md, boundary-node/spec.md
 
 ## Metrics
-- Domains with capability specs: 1 / 28 (3.6%)
-- Total REQs: 9
-- Total SCENARIOs: 21
+- Domains with capability specs: 11 / 28 (39%)
+- Total REQs: ~91
+- Total SCENARIOs: ~287
 - REQs with tests linked: 0 (phase 3 work)
