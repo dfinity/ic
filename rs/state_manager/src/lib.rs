@@ -3307,12 +3307,10 @@ impl StateManager for StateManagerImpl {
                 if let Some(cert_md) = states.certifications_metadata.get(&prev_height) {
                     cert_md.certified_state_hash.clone()
                 } else {
-                    error!(
+                    fatal!(
                         self.log,
                         "Previous state hash was not available after awaiting the hash thread. This is a bug."
                     );
-                    // Continue nevertheless, this (impossible situation) should self-heal.
-                    return;
                 }
             }
         };

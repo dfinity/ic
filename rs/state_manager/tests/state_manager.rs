@@ -4185,7 +4185,7 @@ fn can_commit_after_prev_state_is_gone() {
 
             assert_eq!(Height(3), dst_state_manager.latest_state_height());
             // tip_height should be present
-            assert!(matches!(dst_state_manager.get_state_at(Height(1)), Ok(_)));
+            assert!(dst_state_manager.get_state_at(Height(1)).is_ok());
             assert_eq!(
                 dst_state_manager.get_state_at(Height(2)),
                 Err(StateManagerError::StateRemoved(Height(2)))
