@@ -79,8 +79,6 @@ pub struct FeeCollector {
 pub struct AuthorizedMint {
     pub amount: Nat,
     pub to: Account,
-    pub memo: Option<Memo>,
-    pub created_at_time: Option<u64>,
     pub caller: Option<Principal>,
     pub mthd: Option<String>,
     pub reason: Option<String>,
@@ -90,8 +88,6 @@ pub struct AuthorizedMint {
 pub struct AuthorizedBurn {
     pub amount: Nat,
     pub from: Account,
-    pub memo: Option<Memo>,
-    pub created_at_time: Option<u64>,
     pub caller: Option<Principal>,
     pub mthd: Option<String>,
     pub reason: Option<String>,

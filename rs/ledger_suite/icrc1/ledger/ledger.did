@@ -233,8 +233,6 @@ type Transaction = record {
 
 type AuthorizedMint = record {
   to : Account;
-  memo : opt blob;
-  created_at_time : opt Timestamp;
   amount : nat;
   caller : opt principal;
   mthd : opt text;
@@ -243,8 +241,6 @@ type AuthorizedMint = record {
 
 type AuthorizedBurn = record {
   from : Account;
-  memo : opt blob;
-  created_at_time : opt Timestamp;
   amount : nat;
   caller : opt principal;
   mthd : opt text;

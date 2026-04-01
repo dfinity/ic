@@ -81,8 +81,6 @@ type Transaction = record {
 
 type AuthorizedMint = record {
   to : Account;
-  memo : opt vec nat8;
-  created_at_time : opt nat64;
   amount : nat;
   caller : opt principal;
   mthd : opt text;
@@ -91,8 +89,6 @@ type AuthorizedMint = record {
 
 type AuthorizedBurn = record {
   from : Account;
-  memo : opt vec nat8;
-  created_at_time : opt nat64;
   amount : nat;
   caller : opt principal;
   mthd : opt text;

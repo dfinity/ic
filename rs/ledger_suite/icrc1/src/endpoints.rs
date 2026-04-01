@@ -262,8 +262,6 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 tx.authorized_mint = Some(AuthorizedMint {
                     to,
                     amount: amount.into(),
-                    created_at_time,
-                    memo,
                     caller,
                     mthd,
                     reason,
@@ -280,8 +278,6 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 tx.authorized_burn = Some(AuthorizedBurn {
                     from,
                     amount: amount.into(),
-                    created_at_time,
-                    memo,
                     caller,
                     mthd,
                     reason,
