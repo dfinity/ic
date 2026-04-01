@@ -365,6 +365,8 @@ impl SchedulerImpl {
     ) -> BTreeSet<CanisterId> {
         let mut heartbeat_and_timer_canisters = BTreeSet::new();
         let now = state.time();
+        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_size = state.get_own_subnet_size();
 
         for canister in state.canisters_iter_mut() {
             // Add `Heartbeat` or `GlobalTimer` for running canisters only.
@@ -387,6 +389,20 @@ impl SchedulerImpl {
                     // Do not add a heartbeat task if a long execution is pending.
                 }
                 NextExecution::None | NextExecution::StartNew => {
+                    // Skip canisters that don't have enough cycles to execute a heartbeat/timer.
+                    if self
+                        .cycles_account_manager
+                        .can_prepay_execution_cycles(
+                            canister,
+                            self.config.max_instructions_per_message,
+                            subnet_size,
+                            cost_schedule,
+                        )
+                        .is_err()
+                    {
+                        continue;
+                    }
+
                     let canister = Arc::make_mut(canister);
                     maybe_add_heartbeat_or_global_timer_tasks(
                         canister,
