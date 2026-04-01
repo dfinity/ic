@@ -1,7 +1,9 @@
 import { Actor, HttpAgent, type QueryResponseStatus } from "@dfinity/agent";
+import type { QueryResponseReplied } from "@dfinity/agent";
 import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
 import { candidToJson } from "./candid-json.js";
+import { wrapCertifiedResponse } from "./certified-response.js";
 import type { WebMCPToolDefinition, ToolExecuteResult } from "./types.js";
 
 /**
@@ -53,7 +55,15 @@ async function executeViaActor(
   const args = buildActorArgs(params);
   const result = await method(...args);
 
-  return { value: result };
+  // For update calls and non-certified queries, return the value directly.
+  if (!tool.certified || tool.method_type !== "query") {
+    return { value: result, certified: false };
+  }
+
+  // For certified queries via Actor, we need the raw response to access
+  // node signatures. Actor.createActor wraps calls and loses the raw response,
+  // so fall through to the raw query path for certified tools.
+  return executeCertifiedQuery(agent, canisterId, tool);
 }
 
 async function executeRawCall(
@@ -62,8 +72,17 @@ async function executeRawCall(
   tool: WebMCPToolDefinition,
   params: Record<string, unknown>,
 ): Promise<ToolExecuteResult> {
-  // Without an IDL factory, we encode with an empty type list
-  // and pass the params as-is. This is a best-effort fallback.
+  // Without an IDL factory we can only safely call zero-argument methods.
+  // For any method that accepts parameters the caller must supply an idlFactory
+  // so we can encode the Candid payload correctly.
+  const hasParams = Object.keys(params).length > 0;
+  if (hasParams) {
+    throw new Error(
+      `Tool "${tool.canister_method}" requires an idlFactory to encode parameters. ` +
+        `Pass an IDL factory via ICWebMCP.setIdlFactory() or the idlFactory option.`,
+    );
+  }
+
   const arg = IDL.encode([], []);
 
   if (tool.method_type === "query") {
@@ -80,11 +99,19 @@ async function executeRawCall(
     }
 
     const replied = response as { reply?: { arg: ArrayBuffer } };
-    return {
-      value: replied.reply?.arg
-        ? candidToJson(replied.reply.arg, [])
-        : null,
-    };
+    const value = replied.reply?.arg
+      ? candidToJson(replied.reply.arg, [])
+      : null;
+
+    // Propagate signature metadata for certified tools.
+    // The agent verifies signatures automatically (verifyQuerySignatures: true
+    // by default) and throws before we reach here if verification fails.
+    if (tool.certified) {
+      const signatures = (response as Partial<QueryResponseReplied>).signatures;
+      return wrapCertifiedResponse(value, signatures);
+    }
+
+    return { value };
   } else {
     const { response } = await agent.call(canisterId, {
       methodName: tool.canister_method,
@@ -96,13 +123,53 @@ async function executeRawCall(
 }
 
 /**
+ * Execute a certified query directly via the raw agent to access node signatures.
+ *
+ * Actor calls wrap the response and lose the signatures array, so for
+ * `certified: true` tools we drop back to raw agent.query() which exposes
+ * the full QueryResponseReplied including signatures.
+ *
+ * @dfinity/agent verifies signatures before returning (verifyQuerySignatures
+ * defaults to true), so if we reach here the response is already verified.
+ */
+async function executeCertifiedQuery(
+  agent: HttpAgent,
+  canisterId: Principal,
+  tool: WebMCPToolDefinition,
+): Promise<ToolExecuteResult> {
+  const arg = IDL.encode([], []);
+  const response = await agent.query(canisterId, {
+    methodName: tool.canister_method,
+    arg,
+  });
+
+  if (response.status === ("rejected" as unknown as QueryResponseStatus)) {
+    const rejected = response as { reject_message?: string };
+    throw new Error(
+      `Certified query "${tool.canister_method}" rejected: ${rejected.reject_message ?? "unknown error"}`,
+    );
+  }
+
+  const replied = response as Partial<QueryResponseReplied>;
+  const value = replied.reply?.arg ? candidToJson(replied.reply.arg, []) : null;
+  return wrapCertifiedResponse(value, replied.signatures);
+}
+
+/**
  * Convert JSON params into positional args for an Actor method call.
  *
- * If params have positional keys (arg0, arg1, ...), extract them in order.
- * Otherwise, pass the entire params object as a single argument (record).
+ * - Zero-argument methods: params will be `{}` from the empty inputSchema;
+ *   return `[]` so the Actor call receives no arguments.
+ * - Positional-arg methods: params have `arg0`, `arg1`, … keys; extract in order.
+ * - Single record-arg methods: pass the whole params object directly.
  */
 function buildActorArgs(params: Record<string, unknown>): unknown[] {
-  // Check if params use positional arg naming
+  // Zero-argument method — don't pass anything
+  if (Object.keys(params).length === 0) {
+    return [];
+  }
+
+  // Positional arg naming (multi-arg methods)
   if ("arg0" in params) {
     const args: unknown[] = [];
     let i = 0;

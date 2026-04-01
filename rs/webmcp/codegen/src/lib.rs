@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+#![deny(clippy::unwrap_used)]
 //! # ic-webmcp-codegen
 //!
 //! Generate [WebMCP](https://webmcp.link/) tool manifests from Internet Computer

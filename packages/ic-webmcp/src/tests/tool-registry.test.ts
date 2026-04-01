@@ -110,10 +110,12 @@ describe("registerTool", () => {
       onAuthRequired,
     });
 
-    // Trigger the execute callback
+    // Auth check fires first; the call then fails because no idlFactory was
+    // provided — but the important assertion is that onAuthRequired ran.
     const registeredCall = ctx.registerTool.mock.calls[0][0] as ModelContextTool;
-    await registeredCall.execute({ amount: "100" });
-
+    await expect(registeredCall.execute({ amount: "100" })).rejects.toThrow(
+      "idlFactory",
+    );
     expect(onAuthRequired).toHaveBeenCalledOnce();
   });
 

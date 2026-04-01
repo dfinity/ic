@@ -13,6 +13,7 @@
           "get_product",
           "get_cart",
           "add_to_cart",
+          "remove_from_cart",
           "checkout"
         ],
         "require_auth": ["add_to_cart", "remove_from_cart", "checkout"],

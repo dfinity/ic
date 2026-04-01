@@ -8,6 +8,21 @@ fn init() {
     demo_backend_lib::init_products();
 }
 
+/// Serialise mutable state to stable memory before an upgrade.
+#[ic_cdk::pre_upgrade]
+fn pre_upgrade() {
+    let stable = demo_backend_lib::take_stable_state();
+    ic_cdk::storage::stable_save((stable,)).expect("pre_upgrade: stable_save failed");
+}
+
+/// Restore state from stable memory after an upgrade.
+#[ic_cdk::post_upgrade]
+fn post_upgrade() {
+    let (stable,): (demo_backend_lib::StableState,) =
+        ic_cdk::storage::stable_restore().expect("post_upgrade: stable_restore failed");
+    demo_backend_lib::restore_stable_state(stable);
+}
+
 #[ic_cdk::query]
 fn list_products() -> Vec<Product> {
     demo_backend_lib::list_products()

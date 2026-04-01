@@ -15,9 +15,19 @@ pub fn emit_js(manifest: &WebMCPManifest) -> String {
  * Or import directly:
  *   import {{ initWebMCP }} from './webmcp.js';
  *   await initWebMCP();
+ *
+ * SECURITY NOTE: This script must import @dfinity/webmcp from a source you
+ * control. Replace the import below with your bundled/local copy before
+ * deploying to production. Loading from a third-party CDN without Subresource
+ * Integrity (SRI) is a supply-chain risk.
+ *
+ * For local usage:   import {{ ICWebMCP }} from '@dfinity/webmcp';
+ * For bundled usage: import {{ ICWebMCP }} from './vendor/ic-webmcp.js';
  */
 
-import {{ ICWebMCP }} from 'https://esm.sh/@dfinity/webmcp';
+// TODO: Replace with your bundled copy of @dfinity/webmcp before production deployment.
+// See the security note above.
+import {{ ICWebMCP }} from '@dfinity/webmcp';
 
 export async function initWebMCP(options = {{}}) {{
   const webmcp = new ICWebMCP({{
@@ -32,10 +42,11 @@ export async function initWebMCP(options = {{}}) {{
   return webmcp;
 }}
 
-// Auto-initialize if loaded as a script tag
-if (document.currentScript) {{
-  initWebMCP().catch(console.error);
-}}
+// Auto-initialize when this module is loaded directly as a script.
+// `document.currentScript` is null for ES modules, so we use top-level await
+// which runs unconditionally when the module is first evaluated. Import the
+// module with `{{ registerAll: false }}` or call `initWebMCP` manually to opt out.
+await initWebMCP().catch(console.error);
 "#,
         name = manifest.canister.name,
         canister_id = manifest

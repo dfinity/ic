@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+#![deny(clippy::unwrap_used)]
 //! # ic-webmcp-asset-middleware
 //!
 //! Helpers for serving [WebMCP](https://webmcp.link/) manifests from IC canisters

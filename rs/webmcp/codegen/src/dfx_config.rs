@@ -219,7 +219,7 @@ mod tests {
         assert_eq!(config.name.as_deref(), Some("My App"));
         assert_eq!(config.description.as_deref(), Some("Test app"));
         assert_eq!(
-            config.expose_methods.as_ref().map(|v| v.as_slice()),
+            config.expose_methods.as_deref(),
             Some(["greet".to_string(), "transfer".to_string()].as_slice())
         );
         assert_eq!(config.require_auth, ["transfer"]);

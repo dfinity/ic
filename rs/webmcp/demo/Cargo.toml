@@ -1,8 +1,10 @@
 [package]
 name = "demo-backend"
 version = "0.1.0"
-edition = "2021"
-description = "WebMCP demo e-commerce canister"
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 license = "Apache-2.0"
 
 [[bin]]

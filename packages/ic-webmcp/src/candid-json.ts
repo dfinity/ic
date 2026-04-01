@@ -67,13 +67,36 @@ function convertValue(value: unknown, type: IDL.Type): unknown {
   // Fixed-width nat types (Nat8, Nat16, Nat32, Nat64)
   if (type instanceof IDL.FixedNatClass) {
     const bits = (type as IDL.FixedNatClass & { _bits: number })._bits;
-    // Nat64 → bigint, smaller → number
-    return bits >= 64 ? BigInt(value as string | number) : Number(value);
+    if (bits >= 64) {
+      const n = BigInt(value as string | number);
+      const max = (1n << BigInt(bits)) - 1n;
+      if (n < 0n || n > max)
+        throw new RangeError(`Nat${bits} value ${n} is out of range [0, ${max}]`);
+      return n;
+    }
+    const n = Number(value);
+    const max = 2 ** bits - 1;
+    if (!Number.isInteger(n) || n < 0 || n > max)
+      throw new RangeError(`Nat${bits} value ${n} is out of range [0, ${max}]`);
+    return n;
   }
   // Fixed-width int types (Int8, Int16, Int32, Int64)
   if (type instanceof IDL.FixedIntClass) {
     const bits = (type as IDL.FixedIntClass & { _bits: number })._bits;
-    return bits >= 64 ? BigInt(value as string | number) : Number(value);
+    if (bits >= 64) {
+      const n = BigInt(value as string | number);
+      const min = -(1n << BigInt(bits - 1));
+      const max = (1n << BigInt(bits - 1)) - 1n;
+      if (n < min || n > max)
+        throw new RangeError(`Int${bits} value ${n} is out of range [${min}, ${max}]`);
+      return n;
+    }
+    const n = Number(value);
+    const min = -(2 ** (bits - 1));
+    const max = 2 ** (bits - 1) - 1;
+    if (!Number.isInteger(n) || n < min || n > max)
+      throw new RangeError(`Int${bits} value ${n} is out of range [${min}, ${max}]`);
+    return n;
   }
   if (type instanceof IDL.FloatClass) {
     return Number(value);
@@ -199,6 +222,11 @@ function toJsonValue(value: unknown): unknown {
   if (typeof value === "object") {
     const result: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      // Guard against prototype pollution: skip keys that would mutate
+      // Object.prototype or Function.prototype via property assignment.
+      if (k === "__proto__" || k === "constructor" || k === "prototype") {
+        continue;
+      }
       result[k] = toJsonValue(v);
     }
     return result;

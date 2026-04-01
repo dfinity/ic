@@ -85,7 +85,7 @@ pub fn init_products() {
             },
             Product {
                 id: 3,
-                name: "Dfinity Sticker Pack".to_string(),
+                name: "DFINITY Sticker Pack".to_string(),
                 description: "10 high-quality vinyl stickers for your laptop".to_string(),
                 price_e8s: 100_000_000, // 1 ICP
                 in_stock: true,
@@ -195,6 +195,39 @@ pub fn checkout(caller: Principal) -> CheckoutResult {
         order_id,
         total_paid_e8s,
     })
+}
+
+// ── Stable memory: upgrade hooks ─────────────────────────────────────
+
+/// Serialisable snapshot of the mutable parts of canister state.
+///
+/// Products are hard-coded at init and do not need to survive upgrades;
+/// only carts and the order counter do.
+#[derive(CandidType, Deserialize)]
+pub struct StableState {
+    pub carts: BTreeMap<Principal, Cart>,
+    pub next_order_id: u64,
+}
+
+/// Extract the state that must survive a canister upgrade.
+pub fn take_stable_state() -> StableState {
+    STATE.with(|s| {
+        let state = s.borrow();
+        StableState {
+            carts: state.carts.clone(),
+            next_order_id: state.next_order_id,
+        }
+    })
+}
+
+/// Restore state after a canister upgrade and re-seed the product catalog.
+pub fn restore_stable_state(stable: StableState) {
+    STATE.with(|s| {
+        let mut state = s.borrow_mut();
+        state.carts = stable.carts;
+        state.next_order_id = stable.next_order_id;
+    });
+    init_products();
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

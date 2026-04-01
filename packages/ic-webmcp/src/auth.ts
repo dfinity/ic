@@ -36,17 +36,28 @@ export async function createScopedDelegation(
 ): Promise<DelegationIdentity> {
   const { baseIdentity, targets = [], maxTtlSeconds = 3600 } = options;
 
+  // Require at least one target canister. An empty targets list would produce
+  // an unrestricted delegation valid for ALL canisters on the IC, which is a
+  // significant over-privilege. Callers must explicitly scope the delegation.
+  if (targets.length === 0) {
+    throw new Error(
+      "createScopedDelegation requires at least one target canister. " +
+        "An empty targets list would create an unrestricted delegation " +
+        "valid for all canisters. Use getDelegationTargets() to build " +
+        "the correct target list from your manifest.",
+    );
+  }
+
   // Generate an ephemeral key pair for the delegated identity
   const sessionKey = Ed25519KeyIdentity.generate();
 
-  // Create delegation chain from the base identity to the session key
+  // Create delegation chain from the base identity to the session key,
+  // scoped to the specified target canisters only.
   const chain = await DelegationChain.create(
     baseIdentity,
     sessionKey.getPublicKey(),
     new Date(Date.now() + maxTtlSeconds * 1000),
-    {
-      targets: targets.length > 0 ? targets : undefined,
-    },
+    { targets },
   );
 
   return DelegationIdentity.fromDelegation(sessionKey, chain);

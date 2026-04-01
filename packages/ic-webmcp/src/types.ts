@@ -65,9 +65,10 @@ export interface ICWebMCPConfig {
 
 export interface ToolExecuteResult {
   value: unknown;
+  /** True when node signatures were present and verified by @dfinity/agent. */
   certified?: boolean;
-  certificate?: ArrayBuffer;
-  tree?: ArrayBuffer;
+  /** Signing node metadata from the query response, when certified is true. */
+  signatures?: Array<{ nodeId: string; timestampNanos: bigint }>;
 }
 
 // ── navigator.modelContext types (Chrome 146+) ──────────────────────

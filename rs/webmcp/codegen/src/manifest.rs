@@ -136,6 +136,7 @@ fn build_input_schema(method: &CanisterMethod, config: &Config, env: &TypeEnv) -
 
     // Multiple args → wrap in object with positional names
     let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
     for (i, ty) in method.args.iter().enumerate() {
         let arg_name = format!("arg{}", i);
         let mut schema = candid_to_json_schema(ty, env);
@@ -144,13 +145,22 @@ fn build_input_schema(method: &CanisterMethod, config: &Config, env: &TypeEnv) -
         if let Some(desc) = config.param_descriptions.get(&key) {
             schema["description"] = serde_json::json!(desc);
         }
+        // All positional args are required (optional args use opt T in Candid)
+        if !matches!(ty.as_ref(), candid::types::TypeInner::Opt(_)) {
+            required.push(serde_json::json!(arg_name));
+        }
         properties.insert(arg_name, schema);
     }
 
-    serde_json::json!({
+    let mut schema = serde_json::json!({
         "type": "object",
-        "properties": serde_json::Value::Object(properties)
-    })
+        "properties": serde_json::Value::Object(properties),
+        "additionalProperties": false
+    });
+    if !required.is_empty() {
+        schema["required"] = serde_json::Value::Array(required);
+    }
+    schema
 }
 
 /// Enrich a flattened record schema with param_descriptions from config.
