@@ -787,8 +787,7 @@ pub fn hard_coded_root_of_trust() -> RootOfTrust {
 pub fn icp_mainnet_root_public_key_for_testing() -> ThresholdSigPublicKey {
     use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 
-    // This should only be used for testing as the content has been decoded by Gemini
-    // from the DER-encoded public key hard-coded in IC agent.
+    // Copied from https://github.com/dfinity/ic/blob/d4a83a9e33b49efd80141d593fbc97157055f0b8/rs/crypto/utils/threshold_sig_der/tests/tests.rs#L29
     const ICP_MAINNET_ROOT_PUBLIC_KEY_BYTES_FOR_TESTING: [u8; 96] = [
         0x81, 0x4C, 0x0E, 0x6E, 0xC7, 0x1F, 0xAB, 0x58, 0x3B, 0x08, 0xBD, 0x81, 0x37, 0x3C, 0x25,
         0x5C, 0x3C, 0x37, 0x1B, 0x2E, 0x84, 0x86, 0x3C, 0x98, 0xA4, 0xF1, 0xE0, 0x8B, 0x74, 0x23,
