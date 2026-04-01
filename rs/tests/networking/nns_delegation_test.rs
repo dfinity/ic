@@ -51,7 +51,7 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        group::{SystemTestGroup, SystemTestSubGroup},
+        group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::{
@@ -802,18 +802,15 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
 
 macro_rules! systest_all_subnet_types {
     ($group: expr, $function_name:path) => {
-        let mut par_group = SystemTestSubGroup::new();
         // Keep up to date with `TESTED_SUBNET_TYPES` constant
-        par_group = par_group.add_test(systest!($function_name; SubnetType::System));
-        par_group = par_group.add_test(systest!($function_name; SubnetType::Application));
-        par_group = par_group.add_test(systest!($function_name; SubnetType::VerifiedApplication));
+        $group = $group.add_test(systest!($function_name; SubnetType::System));
+        $group = $group.add_test(systest!($function_name; SubnetType::Application));
+        $group = $group.add_test(systest!($function_name; SubnetType::VerifiedApplication));
         // TODO(CON-1696): Remove this condition (and always run the test for cloud engines) when
         // #9613 reaches mainnet NNS
         if get_guestos_img_version() == get_guestos_update_img_version() {
-            par_group = par_group.add_test(systest!($function_name; SubnetType::CloudEngine));
+            $group = $group.add_test(systest!($function_name; SubnetType::CloudEngine));
         }
-
-        $group = $group.add_parallel(par_group);
     };
 }
 
