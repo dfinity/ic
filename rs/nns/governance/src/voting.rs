@@ -1395,18 +1395,22 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_pre_mission_70() {
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_pre_mission_70()
+     {
         let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
         test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(5474);
     }
 
     #[tokio::test]
-    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_with_mission_70() {
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_with_mission_70()
+     {
         let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
         test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(3476);
     }
 
-    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(expected_neuron_1_maturity: u64) {
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(
+        expected_neuron_1_maturity: u64,
+    ) {
         let now = 1733433219;
         let topic = Topic::Governance;
         let environment = MockEnvironment::new(
