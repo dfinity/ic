@@ -978,7 +978,7 @@ fn canister_metadata_as_tree(
 /// Helper function to turn a subnet type into a string.
 /// This is intentionally explicitly implemented here, so that the state tree representation cannot be changed outside this crate, as opposed
 /// to calling something like `subnet_type.to_string()`.
-fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
+pub fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
     match subnet_type {
         SubnetType::Application => "application",
         SubnetType::System => "system",
