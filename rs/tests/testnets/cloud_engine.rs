@@ -108,11 +108,10 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
+    let dm1_dmz_features = vec![HostFeature::DC(DM1_DMZ_DC.to_string()), HostFeature::DMZ];
+
     let mut ic = InternetComputer::new()
-        .with_required_host_features(vec![
-            HostFeature::DC(DM1_DMZ_DC.to_string()),
-            HostFeature::DMZ,
-        ])
+        .with_required_host_features(dm1_dmz_features.clone())
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
 
     // Build CloudEngine subnet and unassigned nodes distributed across 4 datacenters.
@@ -161,19 +160,17 @@ pub fn setup(env: TestEnv) {
         nns_dapp_customizations(),
     );
     // deploy ic-gateway on dm1-dmz with static IPv4
-    let mut ic_gateway_vm = IcGatewayVm::new(IC_GATEWAY_VM_NAME).with_required_host_features(vec![
-        HostFeature::DC(DM1_DMZ_DC.to_string()),
-        HostFeature::DMZ,
-    ]);
-    if let Ok(gw_ipv4) = std::env::var("GW_IPV4") {
+    let mut ic_gateway_vm =
+        IcGatewayVm::new(IC_GATEWAY_VM_NAME).with_required_host_features(dm1_dmz_features);
+    if let Ok(gw_ipv4) = std::env::var("IC_GW_IPV4") {
         let ip: Ipv4Addr = gw_ipv4
             .parse()
-            .unwrap_or_else(|e| panic!("invalid GW_IPV4 address '{gw_ipv4}': {e}"));
+            .unwrap_or_else(|e| panic!("invalid IC_GW_IPV4 address '{gw_ipv4}': {e}"));
         let mask: u32 = !((1_u32 << (32 - DM1_DMZ_PREFIX)) - 1);
         assert_eq!(
             u32::from(ip) & mask,
             u32::from(DM1_DMZ_NETWORK),
-            "GW_IPV4 address {ip} is not within {DM1_DMZ_NETWORK}/{DM1_DMZ_PREFIX}"
+            "IC_GW_IPV4 address {ip} is not within {DM1_DMZ_NETWORK}/{DM1_DMZ_PREFIX}"
         );
         let address = format!("{ip}/{DM1_DMZ_PREFIX}");
         ic_gateway_vm = ic_gateway_vm.with_ipv4_config(&address, &DM1_DMZ_GATEWAY.to_string());
