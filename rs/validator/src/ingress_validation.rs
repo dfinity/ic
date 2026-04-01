@@ -574,17 +574,18 @@ where
                     .verify_canister_sig(&canister_sig, message_id, &pk, &mainnet_root_of_trust)
                     .is_ok()
             {
-                return Ok(targets);
+                Ok(targets)
+            } else {
+                let root_of_trust = root_of_trust_provider
+                    .root_of_trust()
+                    .map_err(|e| InvalidCanisterSignature(e.to_string()))
+                    .map_err(InvalidSignature)?;
+                validator
+                    .verify_canister_sig(&canister_sig, message_id, &pk, &root_of_trust)
+                    .map_err(|e| InvalidCanisterSignature(e.to_string()))
+                    .map_err(InvalidSignature)?;
+                Ok(targets)
             }
-            let root_of_trust = root_of_trust_provider
-                .root_of_trust()
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))
-                .map_err(InvalidSignature)?;
-            validator
-                .verify_canister_sig(&canister_sig, message_id, &pk, &root_of_trust)
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))
-                .map_err(InvalidSignature)?;
-            Ok(targets)
         }
         KeyBytesContentType::RsaSha256PublicKeyDer => {
             Err(RequestValidationError::InvalidSignature(
