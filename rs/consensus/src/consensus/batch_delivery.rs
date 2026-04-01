@@ -32,14 +32,13 @@ use ic_types::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
         ConsensusResponse,
     },
-    consensus::{
-        Block, BlockPayload, HasVersion,
-        idkg::{self},
-    },
-    crypto::randomness_from_crypto_hashable,
-    crypto::threshold_sig::{
-        ThresholdSigPublicKey,
-        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    consensus::{Block, BlockPayload, HasVersion, idkg},
+    crypto::{
+        randomness_from_crypto_hashable,
+        threshold_sig::{
+            ThresholdSigPublicKey,
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        },
     },
     messages::{CallbackId, Payload, RejectContext},
 };
@@ -137,6 +136,20 @@ pub(crate) fn deliver_batches_with_result_processor(
             }
         );
 
+        // Retrieve the dkg summary block
+        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "Do not deliver height {} because no summary block was found. \
+                Finalized height: {}",
+                height,
+                finalized_height
+            );
+            break;
+        };
+        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+
         if block.payload.is_summary() {
             info!(
                 log,
@@ -145,13 +158,19 @@ pub(crate) fn deliver_batches_with_result_processor(
         }
         // When we are not delivering CUP block, we must check if the subnet is halted.
         else {
-            match status::get_status(height, registry_client, subnet_id, pool, log) {
+            match status::get_status(
+                height,
+                &summary_block,
+                registry_client,
+                subnet_id,
+                pool,
+                log,
+            ) {
                 Some(Status::Halting | Status::Halted) => {
-                    debug!(
-                        every_n_seconds => 5,
+                    info!(
+                        every_n_seconds => 30,
                         log,
-                        "Batch of height {} is not delivered because replica is halted",
-                        height,
+                        "Batch of height {height} is not delivered because replica is halted"
                     );
                     return Ok(last_delivered_batch_height);
                 }
@@ -167,20 +186,6 @@ pub(crate) fn deliver_batches_with_result_processor(
         }
 
         let randomness = randomness_from_crypto_hashable(&tape);
-
-        // Retrieve the dkg summary block
-        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
-            warn!(
-                every_n_seconds => 30,
-                log,
-                "Do not deliver height {} because no summary block was found. \
-                Finalized height: {}",
-                height,
-                finalized_height
-            );
-            break;
-        };
-        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
         let (mut idkg_subnet_public_keys, idkg_pre_signatures) =

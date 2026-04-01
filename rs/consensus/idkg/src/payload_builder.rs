@@ -775,6 +775,7 @@ mod tests {
                 Height::from(100),
                 height,
                 BTreeMap::new(),
+                None,
             ),
             idkg: Some(idkg_summary),
         })

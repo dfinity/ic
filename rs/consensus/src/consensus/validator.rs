@@ -99,6 +99,7 @@ enum ValidationFailure {
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
+#[allow(clippy::large_enum_variant)]
 enum InvalidArtifactReason {
     CryptoError(CryptoError),
     MismatchedRank(Rank, Option<Rank>),
@@ -1213,6 +1214,7 @@ impl Validator {
 
         let Some(status) = status::get_status(
             proposal.height(),
+            &last_summary_block,
             self.registry_client.as_ref(),
             self.replica_config.subnet_id,
             pool_reader,

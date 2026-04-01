@@ -28,7 +28,7 @@ use ic_types::{
         Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
         HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
         block_maker::SubnetRecords,
-        dkg::{DkgDataPayload, DkgPayload},
+        dkg::{DkgDataPayload, DkgPayload, SubnetSplittingStatus},
         hashed,
     },
     replica_config::ReplicaConfig,
@@ -348,6 +348,13 @@ impl BlockMaker {
                     .ok()
                     .flatten();
 
+                    if matches!(
+                        summary.subnet_splitting_status.as_ref(),
+                        Some(&SubnetSplittingStatus::Scheduled { .. })
+                    ) {
+                        info!(self.log, "Proposing a Splitting block at height {height}.");
+                    }
+
                     BlockPayload::Summary(SummaryPayload {
                         dkg: summary,
                         idkg: idkg_summary,
@@ -356,21 +363,34 @@ impl BlockMaker {
                 DkgPayload::Data(dkg) => {
                     let (batch_payload, dkg, idkg_data) = match status::get_status(
                         height,
+                        last_summary_block,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
                         pool,
                         &self.log,
                     )? {
-                        // Don't propose any block if the replica is halted.
                         Status::Halted => {
+                            info!(
+                              every_n_seconds => 30,
+                              self.log,
+                              "Not proposing any block at height {height} \
+                              because the replica is halted"
+                            );
                             return None;
                         }
-                        // Use empty payload and empty DKG dealings if the replica is halting.
-                        Status::Halting => (
-                            BatchPayload::default(),
-                            DkgDataPayload::new_empty(dkg.start_height),
-                            /*idkg_data=*/ None,
-                        ),
+                        Status::Halting => {
+                            info!(
+                              every_n_seconds => 30,
+                              self.log,
+                              "Proposing an empty block at height {height} \
+                              because the replica is halting"
+                            );
+                            (
+                                BatchPayload::default(),
+                                DkgDataPayload::new_empty(dkg.start_height),
+                                /*idkg_data=*/ None,
+                            )
+                        }
                         Status::Running => {
                             let batch_payload = self.build_batch_payload(
                                 pool,
@@ -545,7 +565,8 @@ impl BlockMaker {
                     info!(
                         every_n_seconds => 30,
                         self.log,
-                        "Subnet splitting schedulled. Freezing registry version."
+                        "Subnet splitting schedulled at registry version {scheduled_at} \
+                        and height {next_summary_block_height}. Freezing registry version."
                     );
 
                     if parents_height.increment() == next_summary_block_height {

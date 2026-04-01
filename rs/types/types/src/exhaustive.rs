@@ -2,6 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::batch::ChainKeyAgreement;
+use crate::consensus::BackwardsCompatibleOption;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
@@ -230,6 +231,21 @@ impl ExhaustiveSet for bool {
 impl ExhaustiveSet for String {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
         vec!["0123abcd!@#$.,;()[]<>".to_string(), "".to_string()]
+    }
+}
+
+impl<T: Clone + Default> ExhaustiveSet for BackwardsCompatibleOption<T, false> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_rng: &mut R) -> Vec<Self> {
+        vec![Self::default()]
+    }
+}
+
+impl<T: Clone + ExhaustiveSet> ExhaustiveSet for BackwardsCompatibleOption<T, true> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        Option::<T>::exhaustive_set(rng)
+            .into_iter()
+            .map(From::from)
+            .collect()
     }
 }
 
