@@ -47,8 +47,8 @@ export function candidToJson(
 ): unknown {
   const decoded = IDL.decode(retTypes, data);
   if (decoded.length === 0) return null;
-  if (decoded.length === 1) return toJsonValue(decoded[0]);
-  return decoded.map(toJsonValue);
+  if (decoded.length === 1) return toJsonValueTyped(decoded[0], retTypes[0]);
+  return decoded.map((v, i) => toJsonValueTyped(v, retTypes[i]));
 }
 
 /**
@@ -144,7 +144,51 @@ function convertValue(value: unknown, type: IDL.Type): unknown {
 }
 
 /**
- * Convert a decoded Candid value into a JSON-safe representation.
+ * Type-aware converter: uses IDL type to correctly unwrap Opt, Vec, Record, etc.
+ */
+function toJsonValueTyped(value: unknown, type: IDL.Type): unknown {
+  // Opt is decoded as [] (none) or [value] (some)
+  if (type instanceof IDL.OptClass) {
+    if (!Array.isArray(value) || value.length === 0) return null;
+    const innerType = (type as IDL.OptClass<IDL.Type> & { _type: IDL.Type })._type;
+    return toJsonValueTyped(value[0], innerType);
+  }
+  // blob (vec nat8) → base64
+  if (type instanceof IDL.VecClass) {
+    const innerType = (type as IDL.VecClass<IDL.Type> & { _type: IDL.Type })._type;
+    if (innerType instanceof IDL.FixedNatClass) {
+      const bits = (innerType as IDL.FixedNatClass & { _bits: number })._bits;
+      if (bits === 8 && value instanceof Uint8Array) return uint8ArrayToBase64(value);
+    }
+    if (Array.isArray(value)) return value.map((v) => toJsonValueTyped(v, innerType));
+  }
+  // Record: recurse per-field
+  if (type instanceof IDL.RecordClass) {
+    const fields = (type as IDL.RecordClass & { _fields: [string, IDL.Type][] })._fields;
+    const obj = value as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const [name, fieldType] of fields) {
+      result[name] = toJsonValueTyped(obj[name], fieldType);
+    }
+    return result;
+  }
+  // Variant: unwrap the single key
+  if (type instanceof IDL.VariantClass) {
+    const fields = (type as unknown as { _fields: [string, IDL.Type][] })._fields;
+    const obj = value as Record<string, unknown>;
+    const tag = Object.keys(obj)[0];
+    const fieldType = fields.find(([n]) => n === tag);
+    if (fieldType) {
+      const inner = toJsonValueTyped(obj[tag], fieldType[1]);
+      return inner === null ? tag : { [tag]: inner };
+    }
+  }
+  // Fallback to untyped
+  return toJsonValue(value);
+}
+
+/**
+ * Convert a decoded Candid value into a JSON-safe representation (untyped fallback).
  */
 function toJsonValue(value: unknown): unknown {
   if (value === null || value === undefined) return null;

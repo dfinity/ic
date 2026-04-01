@@ -23,12 +23,13 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@dfinity/agent": "^2.0.0",
-    "@dfinity/candid": "^2.0.0",
+    "@dfinity/agent": ">=1.0.0",
+    "@dfinity/candid": ">=1.0.0",
     "@dfinity/identity": "^2.0.0",
-    "@dfinity/principal": "^2.0.0"
+    "@dfinity/principal": ">=1.0.0"
   },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "typescript": "^5.4.0",
     "vitest": "^2.0.0"
   },
