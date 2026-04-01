@@ -4,6 +4,7 @@ use assert_matches::assert_matches;
 use rand::{Rng, thread_rng};
 
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_canonical_state::lazy_tree_conversion::subnet_type_as_string;
 use ic_certification_test_utils::{
     CanisterRangesFormat, CertificateBuilder,
     CertificateData::{CanisterData, CustomTree, SubnetData},
@@ -13,6 +14,7 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::Public
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::{Digest, Label, LabeledTree, flatmap};
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_der, public_key_to_der};
+use ic_registry_subnet_type::SubnetType;
 use ic_types::Time;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use rstest::rstest;
@@ -1056,7 +1058,7 @@ fn should_accept_delegation_from_cloud_engine_subnet_in_generic_path() {
             },
             rng,
         )
-        .with_subnet_type("cloud_engine"),
+        .with_subnet_type(subnet_type_as_string(SubnetType::CloudEngine)),
     )
     .build();
     let delegation = cert.delegation.expect("missing delegation");
@@ -1093,7 +1095,7 @@ fn should_accept_cloud_engine_delegation_via_verify_certified_data() {
             },
             rng,
         )
-        .with_subnet_type("cloud_engine"),
+        .with_subnet_type(subnet_type_as_string(SubnetType::CloudEngine)),
     )
     .build();
 
@@ -1131,7 +1133,7 @@ fn should_reject_cloud_engine_delegation_via_canister_sig_path() {
             },
             rng,
         )
-        .with_subnet_type("cloud_engine"),
+        .with_subnet_type(subnet_type_as_string(SubnetType::CloudEngine)),
     )
     .build();
 
