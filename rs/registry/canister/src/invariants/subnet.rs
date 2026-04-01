@@ -140,16 +140,7 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        check_all_nodes_are_reward_type4_if_is_cloud_engine(
-            subnet_id,
-            &subnet_record,
-            &node_records,
-        )?;
-        check_no_nodes_are_reward_type4_if_is_not_cloud_engine(
-            subnet_id,
-            &subnet_record,
-            &node_records,
-        )?;
+        check_node_type4_iff_cloud_engine(subnet_id, &subnet_record, &node_records)?;
 
         // SEV-enabled subnets invariants
         if let Some(features) = subnet_record.features.as_ref()
@@ -271,47 +262,25 @@ fn check_sev_subnet_invariants(
     Ok(())
 }
 
-fn check_all_nodes_are_reward_type4_if_is_cloud_engine(
+fn check_node_type4_iff_cloud_engine(
     subnet_id: SubnetId,
     subnet_record: &SubnetRecord,
     node_records: &[NodeRecord],
 ) -> Result<(), InvariantCheckError> {
-    if subnet_record.subnet_type != i32::from(SubnetType::CloudEngine) {
-        return Ok(());
-    }
+    let is_cloud_engine = subnet_record.subnet_type == i32::from(SubnetType::CloudEngine);
+    let is_node_type4 =
+        |node: &NodeRecord| node.node_reward_type == Some(i32::from(NodeRewardType::Type4));
+    let is_node_ok = |node: &NodeRecord| is_cloud_engine == is_node_type4(node);
 
-    if node_records
-        .iter()
-        .any(|node| node.node_reward_type != Some(i32::from(NodeRewardType::Type4)))
-    {
+    let ok = node_records.iter().all(is_node_ok);
+    if !ok {
+        let msg = if is_cloud_engine {
+            "is a cloud engine subnet but some nodes do not have reward type 4"
+        } else {
+            "is not a cloud engine subnet but some nodes have reward type 4"
+        };
         return Err(InvariantCheckError {
-            msg: format!(
-                "Subnet {subnet_id:} is a cloud engine subnet but some nodes do not have reward type 4"
-            ),
-            source: None,
-        });
-    }
-
-    Ok(())
-}
-
-fn check_no_nodes_are_reward_type4_if_is_not_cloud_engine(
-    subnet_id: SubnetId,
-    subnet_record: &SubnetRecord,
-    node_records: &[NodeRecord],
-) -> Result<(), InvariantCheckError> {
-    if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) {
-        return Ok(());
-    }
-
-    if node_records
-        .iter()
-        .any(|node| node.node_reward_type == Some(i32::from(NodeRewardType::Type4)))
-    {
-        return Err(InvariantCheckError {
-            msg: format!(
-                "Subnet {subnet_id:} is not a cloud engine subnet but some nodes have reward type 4"
-            ),
+            msg: format!("Subnet {subnet_id:} {msg}"),
             source: None,
         });
     }
