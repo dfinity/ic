@@ -1351,6 +1351,10 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
         );
 
         let message_id = message.message_id();
+
+        // set the ingress to the terminal state in the certified state
+        // we can only do that now, otherwise the second call would get OK
+        // for a completed request
         let (height, mut state) = {
             let state_and_height = latest_state.lock().unwrap();
             (
@@ -1443,6 +1447,8 @@ fn test_sync_call_endpoint_responds_with_certificate(
         };
         assert_eq!(sent_message.id(), message_clone.message_id());
 
+        // set the ingress to the terminal state in the certified state
+        // this is needed since the HTTP handler would return 202 otherwise
         let (_height, mut state) = {
             let state_and_height = latest_state.lock().unwrap();
             (
