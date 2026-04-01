@@ -39,6 +39,7 @@ use anyhow::Result;
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_protobuf::registry::dc::v1::{DataCenterRecord, Gps};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
@@ -127,16 +128,22 @@ pub fn setup(env: TestEnv) {
                 node_provider_principal_id: Some(provider_principal),
                 node_allowance: 2,
                 dc_id: dc.id.to_string(),
-                rewardable_nodes: BTreeMap::from([("type4.1".to_string(), 2)]),
+                rewardable_nodes: BTreeMap::from([(NodeRewardType::Type4dot1.to_string(), 2)]),
             });
 
         // 1 CloudEngine node per DC
-        cloud_engine_subnet = cloud_engine_subnet
-            .add_node(Node::new().with_node_operator_principal_id(operator_principal));
+        cloud_engine_subnet = cloud_engine_subnet.add_node(
+            Node::new()
+                .with_node_operator_principal_id(operator_principal)
+                .with_node_reward_type(NodeRewardType::Type4dot1),
+        );
 
         // 1 unassigned node per DC
-        ic = ic
-            .with_unassigned_node(Node::new().with_node_operator_principal_id(operator_principal));
+        ic = ic.with_unassigned_node(
+            Node::new()
+                .with_node_operator_principal_id(operator_principal)
+                .with_node_reward_type(NodeRewardType::Type4dot1),
+        );
     }
 
     ic = ic

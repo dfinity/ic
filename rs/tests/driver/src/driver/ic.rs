@@ -13,6 +13,7 @@ use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
@@ -897,6 +898,7 @@ pub struct Node {
     pub recovery_hash: Option<String>,
     pub boot_image: BootImage,
     pub node_operator_principal_id: Option<PrincipalId>,
+    pub node_reward_type: Option<NodeRewardType>,
 }
 
 impl Node {
@@ -956,6 +958,11 @@ impl Node {
 
     pub fn with_recovery_hash(mut self, recovery_hash: String) -> Self {
         self.recovery_hash = Some(recovery_hash);
+        self
+    }
+
+    pub fn with_node_reward_type(mut self, reward_type: NodeRewardType) -> Self {
+        self.node_reward_type = Some(reward_type);
         self
     }
 }
