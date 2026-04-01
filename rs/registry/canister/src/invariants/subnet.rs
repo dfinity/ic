@@ -73,8 +73,11 @@ pub(crate) fn check_subnet_invariants(
         let node_records = subnet_members
             .iter()
             .map(|&node_id| {
-                get_node_record_from_snapshot(node_id, snapshot).map(|opt| {
-                    opt.unwrap_or_else(|| panic!("Node {node_id} does not exist in the registry"))
+                get_node_record_from_snapshot(node_id, snapshot).and_then(|opt| {
+                    opt.ok_or_else(|| InvariantCheckError {
+                        msg: format!("Node {node_id} does not exist in the registry"),
+                        source: None,
+                    })
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
