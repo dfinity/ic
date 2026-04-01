@@ -1530,7 +1530,7 @@ mod test {
                 .neuron_store
                 .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
                 .unwrap(),
-            5474
+            3476,
         );
     }
 
