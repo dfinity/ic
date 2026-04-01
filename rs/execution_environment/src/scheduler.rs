@@ -1889,23 +1889,25 @@ fn can_execute_subnet_msg(
     };
 
     // Adding a full match here to catch any further task queue changes.
-    let (effective_canister_is_paused, effective_canister_is_aborted) =
+    let effective_canister_is_aborted =
         match effective_canister_state.system_state.task_queue.front() {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory) => (false, false),
+            | Some(ExecutionTask::OnLowWasmMemory) => false,
+            Some(ExecutionTask::AbortedExecution { .. }) => true,
             Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::PausedInstallCode(_)) => (true, false),
-            Some(ExecutionTask::AbortedExecution { .. })
-            | Some(ExecutionTask::AbortedInstallCode { .. }) => (false, true),
+            | Some(ExecutionTask::PausedInstallCode(_)) => {
+                // If there is a DTS execution in progress, we can't execute the subnet message.
+                // Note, this does NOT include aborted executions.
+                return false;
+            }
+            Some(ExecutionTask::AbortedInstallCode { .. }) => {
+                // If there is an aborted install code in progress, we can't execute the subnet message.
+                // This is to prevent out-of-order subnet message execution.
+                return false;
+            }
         };
-
-    if effective_canister_is_paused {
-        // If there is a DTS execution in progress, we can't execute the subnet message.
-        // Note, this does NOT include aborted executions.
-        return false;
-    }
 
     // Some heavy methods use round instructions.
     let instructions_reached = round_limits.instructions_reached();
