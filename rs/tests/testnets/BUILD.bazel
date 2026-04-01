@@ -1,4 +1,10 @@
-load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
+load(
+    "//rs/tests:common.bzl",
+    "IC_GATEWAY_RUNTIME_DEPS",
+    "MAINNET_ENV",
+    "NNS_CANISTER_RUNTIME_DEPS",
+    "SNS_CANISTER_RUNTIME_DEPS",
+)
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -286,6 +292,31 @@ system_test_nns(
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "sev_baremetal_app_subnet",
+    enable_metrics = True,
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
+    env_inherit = ["BARE_METAL_HOST_SECRETS"],
+    guestos = True,
+    hostos = True,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested",
         "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
         "@crate_index//:slog",

@@ -4721,9 +4721,10 @@ pub fn execute_canister(
 ) -> ExecuteCanisterResult {
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
+            debug_assert!(false, "execute_canister called with no next execution");
             return ExecuteCanisterResult {
                 canister,
-                instructions_used: None,
+                instructions_used: Some(NumInstructions::new(0)),
                 heap_delta: NumBytes::from(0),
                 ingress_status: None,
                 description: None,

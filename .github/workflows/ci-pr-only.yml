@@ -266,29 +266,3 @@ jobs:
           fi
 
           exit "${EXIT_STATUS}"
-
-  # CI job is also executed in Schedule Hourly
-  bazel-test-coverage:
-    name: Bazel Test Coverage
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 90
-    if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - *checkout
-      - name: Run Bazel Test Coverage
-        shell: bash
-        run: |
-          ./ci/scripts/bazel-coverage.sh
-      - name: Upload bazel-coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: bazel-coverage
-          retention-days: 1
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            cov_html.zip

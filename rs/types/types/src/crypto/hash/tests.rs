@@ -1072,13 +1072,14 @@ mod crypto_hash_stability {
             id: CallbackId::from(42),
             timeout: UNIX_EPOCH,
             content_hash: test_crypto_hash_of(0x42),
+            content_size: 0,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "5b1f5808c5e36cb70254914aeb76682e158889b6071c2c1c7b2a6667b2d5a699",
+            "be14ad8b8f7fe064b74586e784c669ddc0878c700076ba8bd186cfbd42701bfd",
             "Hash of CanisterHttpResponseMetadata changed"
         );
     }
@@ -1090,6 +1091,7 @@ mod crypto_hash_stability {
             id: CallbackId::from(42),
             timeout: UNIX_EPOCH,
             content_hash: test_crypto_hash_of(0x42),
+            content_size: 0,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
@@ -1103,7 +1105,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "e1f245d7fafe2fc4db847ac67141ebe869dcc1901c6779fe46c876341c797b68",
+            "bfc544c49bfab42d9d2d153a9e840c68fd8b49a3ce70f361b1646e89d360184d",
             "Hash of CanisterHttpResponseShare changed"
         );
     }
