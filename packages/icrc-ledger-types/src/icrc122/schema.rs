@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::icrc::generic_value_predicate::{
     ItemRequirement, ValuePredicate, ValuePredicateFailures, and, is, is_blob, is_equal_to, is_map,
-    is_more_or_equal_to, is_nat, is_principal, is_text, item, len, or,
+    is_more_or_equal_to, is_principal, is_text, item, len, or,
 };
 use crate::icrc::{generic_value::Value, generic_value_predicate::is_account};
 
@@ -34,7 +34,7 @@ fn block_validator(
         is_map(),
         item("mthd", caller_mthd_req.clone(), is_text()),
         item(account_field, Required, is_account()),
-        item("amt", Required, is_nat()),
+        item("amt", Required, is_more_or_equal_to(0)),
         item("caller", caller_mthd_req, is_principal()),
         item("reason", Optional, is_text()),
     ]);
