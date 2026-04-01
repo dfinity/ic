@@ -245,7 +245,7 @@ impl RoundSchedule {
     ) -> IterationSchedule {
         // Sum of all scheduled canisters' compute allocations.
         let mut total_compute_allocation = ZERO;
-        let mut long_executions_count = 0usize;
+        let mut long_executions_count = 0;
         // Sum of all long executions' compute allocations.
         let mut long_executions_compute_allocation = ZERO;
 
@@ -468,9 +468,7 @@ impl RoundSchedule {
             // beginning of the round.
             if canister_priority.priority_credit != ZERO
                 && (canister.next_execution() != NextExecution::ContinueLong
-                    || self
-                        .canisters_with_completed_messages
-                        .contains(&canister_id))
+                    || self.canisters_with_completed_messages.contains(canister_id))
             {
                 canister_priority.accumulated_priority -=
                     std::mem::take(&mut canister_priority.priority_credit);
