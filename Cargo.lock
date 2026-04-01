@@ -12004,6 +12004,7 @@ dependencies = [
  "axum-server",
  "criterion",
  "futures",
+ "hickory-resolver",
  "http-body-util",
  "hyper 1.8.1",
  "hyper-util",
@@ -12018,10 +12019,12 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-nns-delegation-manager-test-utils",
+ "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
  "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
@@ -12037,6 +12040,7 @@ dependencies = [
  "tokio-rustls 0.26.4",
  "tokio-util",
  "tower 0.5.3",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -18291,6 +18295,7 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-canonical-state",
  "ic-cdk",
  "ic-certification 0.9.0",
  "ic-crypto-tree-hash",
