@@ -13,7 +13,6 @@ use ic_protobuf::{
 };
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
-use strum::IntoEnumIterator;
 
 #[test]
 fn only_application_subnets_and_engines_can_be_free_cycles_cost_schedule() {
@@ -291,14 +290,16 @@ fn cloud_engine_subnets_must_have_type4_nodes() {
     check_subnet_invariants(&snapshot).unwrap();
 
     // Sad case: CloudEngine subnet with nodes that have a non-Type4 reward type.
-    for reward_type in NodeRewardType::iter()
-        .map(Some)
-        .chain(std::iter::once(None))
-    {
-        if reward_type == Some(NodeRewardType::Type4) {
-            continue;
-        }
-
+    for reward_type in [
+        None,
+        Some(NodeRewardType::Unspecified),
+        Some(NodeRewardType::Type0),
+        Some(NodeRewardType::Type1),
+        Some(NodeRewardType::Type2),
+        Some(NodeRewardType::Type3),
+        Some(NodeRewardType::Type3dot1),
+        Some(NodeRewardType::Type1dot1),
+    ] {
         println!(
             "Ensuring that a node with reward type {reward_type:?} cannot be part of a CloudEngine subnet"
         );

@@ -72,7 +72,6 @@ pub struct NodeRecord {
 #[derive(
     serde::Serialize,
     serde::Deserialize,
-    strum::EnumIter,
     Clone,
     Copy,
     Debug,
