@@ -26,19 +26,19 @@ fn block_validator(
     strict: bool,
 ) -> ValuePredicate {
     use ItemRequirement::*;
-    let caller_mthd_req = if strict { Required } else { Optional };
+    let strict_req = if strict { Required } else { Optional };
 
     let is_timestamp = is_more_or_equal_to(0);
     let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
     let is_created_at_time = is_more_or_equal_to(0);
     let is_transaction = and(vec![
         is_map(),
-        item("mthd", caller_mthd_req.clone(), is_text()),
+        item("mthd", strict_req.clone(), is_text()),
         item(account_field, Required, is_account()),
         item("amt", Required, is_more_or_equal_to(0)),
-        item("caller", caller_mthd_req, is_principal()),
+        item("caller", strict_req.clone(), is_principal()),
         item("reason", Optional, is_text()),
-        item("created_at_time", Optional, is_created_at_time),
+        item("ts", strict_req, is_created_at_time),
     ]);
     and(vec![
         is_map(),
@@ -144,6 +144,7 @@ mod tests {
                     ("to", account_value()),
                     ("amt", Value::Nat(1000_u64.into())),
                     ("caller", principal_blob()),
+                    ("ts", Value::Nat(999_000_000_u64.into())),
                 ]),
             ),
         ])
@@ -161,6 +162,7 @@ mod tests {
                     ("from", account_value()),
                     ("amt", Value::Nat(1000_u64.into())),
                     ("caller", principal_blob()),
+                    ("ts", Value::Nat(999_000_000_u64.into())),
                 ]),
             ),
         ])

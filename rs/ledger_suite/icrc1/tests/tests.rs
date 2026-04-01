@@ -354,6 +354,7 @@ mod authorized_mint_burn_tests {
         caller: Option<Principal>,
         mthd: Option<String>,
         reason: Option<String>,
+        created_at_time: Option<u64>,
     ) -> Block<U64> {
         let transaction = Transaction {
             operation: Operation::AuthorizedMint {
@@ -363,7 +364,7 @@ mod authorized_mint_burn_tests {
                 mthd,
                 reason,
             },
-            created_at_time: None,
+            created_at_time,
             memo: None,
         };
         Block::from_transaction(
@@ -379,6 +380,7 @@ mod authorized_mint_burn_tests {
         caller: Option<Principal>,
         mthd: Option<String>,
         reason: Option<String>,
+        created_at_time: Option<u64>,
     ) -> Block<U64> {
         let transaction = Transaction {
             operation: Operation::AuthorizedBurn {
@@ -388,7 +390,7 @@ mod authorized_mint_burn_tests {
                 mthd,
                 reason,
             },
-            created_at_time: None,
+            created_at_time,
             memo: None,
         };
         Block::from_transaction(
@@ -402,12 +404,15 @@ mod authorized_mint_burn_tests {
 
     // --- CBOR round-trip tests ---
 
+    // --- CBOR round-trip tests ---
+
     #[test]
     fn test_authorized_mint_cbor_round_trip() {
         let block = make_authorized_mint_block(
             Some(Principal::anonymous()),
             Some("152mint".to_string()),
             Some("test reason".to_string()),
+            Some(1_000_000_000),
         );
         let encoded = block.clone().encode();
         let decoded = Block::<U64>::decode(encoded).unwrap();
@@ -420,6 +425,7 @@ mod authorized_mint_burn_tests {
             Some(Principal::anonymous()),
             Some("152burn".to_string()),
             None,
+            Some(1_000_000_000),
         );
         let encoded = block.clone().encode();
         let decoded = Block::<U64>::decode(encoded).unwrap();
@@ -428,13 +434,13 @@ mod authorized_mint_burn_tests {
 
     #[test]
     fn test_authorized_mint_btype_set_correctly() {
-        let block = make_authorized_mint_block(None, None, None);
+        let block = make_authorized_mint_block(None, None, None, None);
         assert_eq!(block.btype.as_deref(), Some(BTYPE_122_MINT));
     }
 
     #[test]
     fn test_authorized_burn_btype_set_correctly() {
-        let block = make_authorized_burn_block(None, None, None);
+        let block = make_authorized_burn_block(None, None, None, None);
         assert_eq!(block.btype.as_deref(), Some(BTYPE_122_BURN));
     }
 
@@ -444,6 +450,7 @@ mod authorized_mint_burn_tests {
             Some(Principal::anonymous()),
             Some("152mint".to_string()),
             None,
+            Some(1_000_000_000),
         );
         let generic_block = encoded_block_to_generic_block(&block.clone().encode());
         let encoded_block = generic_block_to_encoded_block(generic_block.clone()).unwrap();
@@ -457,6 +464,7 @@ mod authorized_mint_burn_tests {
             Some(Principal::anonymous()),
             Some("152mint".to_string()),
             None,
+            Some(1_000_000_000),
         );
         let generic_block = encoded_block_to_generic_block(&block.clone().encode());
         assert_eq!(
@@ -475,6 +483,7 @@ mod authorized_mint_burn_tests {
             Some(Principal::anonymous()),
             Some("152mint".to_string()),
             Some("reason".to_string()),
+            Some(1_000_000_000),
         );
         let tx: icrc_ledger_types::icrc3::transactions::Transaction = block.into();
 
@@ -490,6 +499,7 @@ mod authorized_mint_burn_tests {
         let am = tx.authorized_mint.unwrap();
         assert_eq!(am.to, test_account(1));
         assert_eq!(am.amount, candid::Nat::from(1_000_000u64));
+        assert_eq!(am.created_at_time, Some(1_000_000_000));
         assert_eq!(am.caller, Some(Principal::anonymous()));
         assert_eq!(am.mthd, Some("152mint".to_string()));
         assert_eq!(am.reason, Some("reason".to_string()));
@@ -501,6 +511,7 @@ mod authorized_mint_burn_tests {
             Some(Principal::anonymous()),
             Some("152burn".to_string()),
             None,
+            Some(1_000_000_000),
         );
         let tx: icrc_ledger_types::icrc3::transactions::Transaction = block.into();
 
@@ -512,6 +523,7 @@ mod authorized_mint_burn_tests {
         let ab = tx.authorized_burn.unwrap();
         assert_eq!(ab.from, test_account(1));
         assert_eq!(ab.amount, candid::Nat::from(500_000u64));
+        assert_eq!(ab.created_at_time, Some(1_000_000_000));
         assert_eq!(ab.caller, Some(Principal::anonymous()));
         assert_eq!(ab.mthd, Some("152burn".to_string()));
         assert_eq!(ab.reason, None);
@@ -525,6 +537,7 @@ mod authorized_mint_burn_tests {
             Some(Principal::anonymous()),
             Some("152mint".to_string()),
             None,
+            Some(1_000_000_000),
         );
         let generic_block = encoded_block_to_generic_block(&block.encode());
         assert!(validate_152_mint(&generic_block).is_ok());
@@ -537,6 +550,7 @@ mod authorized_mint_burn_tests {
             Some(Principal::anonymous()),
             Some("152burn".to_string()),
             None,
+            Some(1_000_000_000),
         );
         let generic_block = encoded_block_to_generic_block(&block.encode());
         assert!(validate_152_burn(&generic_block).is_ok());
@@ -545,7 +559,7 @@ mod authorized_mint_burn_tests {
 
     #[test]
     fn test_authorized_mint_without_caller_passes_icrc122_but_fails_icrc152() {
-        let block = make_authorized_mint_block(None, None, None);
+        let block = make_authorized_mint_block(None, None, None, None);
         let generic_block = encoded_block_to_generic_block(&block.encode());
         assert!(validate_mint(&generic_block).is_ok());
         assert!(validate_152_mint(&generic_block).is_err());
@@ -553,7 +567,7 @@ mod authorized_mint_burn_tests {
 
     #[test]
     fn test_authorized_burn_without_caller_passes_icrc122_but_fails_icrc152() {
-        let block = make_authorized_burn_block(None, None, None);
+        let block = make_authorized_burn_block(None, None, None, None);
         let generic_block = encoded_block_to_generic_block(&block.encode());
         assert!(validate_burn(&generic_block).is_ok());
         assert!(validate_152_burn(&generic_block).is_err());
