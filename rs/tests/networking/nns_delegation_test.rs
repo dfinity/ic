@@ -817,9 +817,9 @@ macro_rules! systest_all_subnet_types {
 fn main() -> Result<()> {
     let mut test_group = SystemTestGroup::new()
         .with_setup(setup)
-        // We potentially upgrade the app subnet in the setup which could take several minutes
-        .with_overall_timeout(std::time::Duration::from_secs(25 * 60))
-        .with_timeout_per_test(std::time::Duration::from_secs(15 * 60));
+        // We potentially upgrade subnets in the setup which could take several minutes
+        .with_overall_timeout(std::time::Duration::from_secs(20 * 60))
+        .with_timeout_per_test(std::time::Duration::from_secs(10 * 60));
 
     systest_all_subnet_types!(test_group, nns_delegation_updates);
     systest_all_subnet_types!(
