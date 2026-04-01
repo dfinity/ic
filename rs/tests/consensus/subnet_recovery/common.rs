@@ -971,17 +971,23 @@ fn corrupt_latest_cup(
             &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
         )
         .expect("touch");
+
         let mut channel = session
             .scp_send(Path::new(NEW_CUP_PATH), 0o666, bytes.len() as u64, None)
             .unwrap();
         channel.write_all(&bytes).unwrap();
+        // Ensure the SCP upload has fully completed before moving the CUP file.
+        channel.flush().unwrap();
+        channel.send_eof().unwrap();
+        channel.wait_eof().unwrap();
+        channel.close().unwrap();
+        channel.wait_close().unwrap();
 
-        app_node
-            .block_on_bash_script_from_session(
-                &session,
-                &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}"),
-            )
-            .expect("replace CUP");
+        node.block_on_bash_script_from_session(
+            &session,
+            &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}"),
+        )
+        .expect("replace CUP");
     }
 
     // Restart all nodes with the corrupted CUPs.
