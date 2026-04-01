@@ -3,11 +3,21 @@
 use candid::TypeEnv;
 use candid::types::{Type, TypeInner};
 use serde_json::{Value as JsonValue, json};
+use std::collections::HashSet;
 
 /// Convert a Candid type to a JSON Schema value.
 ///
 /// The `env` is used to resolve `Var` references (type aliases defined in the .did file).
 pub fn candid_to_json_schema(ty: &Type, env: &TypeEnv) -> JsonValue {
+    let mut visited = HashSet::new();
+    candid_to_json_schema_inner(ty, env, &mut visited)
+}
+
+fn candid_to_json_schema_inner(
+    ty: &Type,
+    env: &TypeEnv,
+    visited: &mut HashSet<String>,
+) -> JsonValue {
     match ty.as_ref() {
         TypeInner::Bool => json!({ "type": "boolean" }),
         TypeInner::Nat => {
@@ -25,7 +35,9 @@ pub fn candid_to_json_schema(ty: &Type, env: &TypeEnv) -> JsonValue {
             json!({ "type": "string", "pattern": "^[0-9]+$", "description": "64-bit natural number" })
         }
         TypeInner::Int8 => json!({ "type": "integer", "minimum": -128, "maximum": 127 }),
-        TypeInner::Int16 => json!({ "type": "integer", "minimum": -32768, "maximum": 32767 }),
+        TypeInner::Int16 => {
+            json!({ "type": "integer", "minimum": -32768, "maximum": 32767 })
+        }
         TypeInner::Int32 => {
             json!({ "type": "integer", "minimum": -2_147_483_648_i64, "maximum": 2_147_483_647 })
         }
@@ -51,12 +63,12 @@ pub fn candid_to_json_schema(ty: &Type, env: &TypeEnv) -> JsonValue {
             } else {
                 json!({
                     "type": "array",
-                    "items": candid_to_json_schema(inner, env)
+                    "items": candid_to_json_schema_inner(inner, env, visited)
                 })
             }
         }
         TypeInner::Opt(inner) => {
-            let inner_schema = candid_to_json_schema(inner, env);
+            let inner_schema = candid_to_json_schema_inner(inner, env, visited);
             json!({
                 "oneOf": [inner_schema, { "type": "null" }]
             })
@@ -67,8 +79,7 @@ pub fn candid_to_json_schema(ty: &Type, env: &TypeEnv) -> JsonValue {
 
             for field in fields {
                 let field_name = field.id.to_string();
-                let field_schema = candid_to_json_schema(&field.ty, env);
-                // All record fields are required unless they're opt
+                let field_schema = candid_to_json_schema_inner(&field.ty, env, visited);
                 if !matches!(field.ty.as_ref(), TypeInner::Opt(_)) {
                     required.push(JsonValue::String(field_name.clone()));
                 }
@@ -90,11 +101,9 @@ pub fn candid_to_json_schema(ty: &Type, env: &TypeEnv) -> JsonValue {
                 .map(|v| {
                     let name = v.id.to_string();
                     if matches!(v.ty.as_ref(), TypeInner::Null) {
-                        // Unit variant
                         json!({ "const": name })
                     } else {
-                        // Variant with payload
-                        let payload = candid_to_json_schema(&v.ty, env);
+                        let payload = candid_to_json_schema_inner(&v.ty, env, visited);
                         json!({
                             "type": "object",
                             "properties": { name.clone(): payload },
@@ -107,13 +116,19 @@ pub fn candid_to_json_schema(ty: &Type, env: &TypeEnv) -> JsonValue {
             json!({ "oneOf": one_of })
         }
         TypeInner::Var(name) => {
-            // Resolve type alias from the environment
-            if let Ok(resolved) = env.rec_find_type(name) {
-                candid_to_json_schema(resolved, env)
-            } else {
-                // Unresolvable — emit opaque schema
-                json!({ "description": format!("Unresolved type: {}", name) })
+            // Cycle detection: if we're already resolving this type, emit a ref
+            if !visited.insert(name.clone()) {
+                return json!({
+                    "description": format!("Recursive type: {}", name)
+                });
             }
+            let result = if let Ok(resolved) = env.rec_find_type(name) {
+                candid_to_json_schema_inner(resolved, env, visited)
+            } else {
+                json!({ "description": format!("Unresolved type: {}", name) })
+            };
+            visited.remove(name);
+            result
         }
         // Reserved, Empty, Unknown, Knot, Func, Service, Class, Future
         _ => json!({}),
@@ -209,7 +224,6 @@ mod tests {
         assert_eq!(schema["type"], "object");
         assert!(schema["properties"]["owner"].is_object());
         assert!(schema["properties"]["subaccount"].is_object());
-        // owner is required, subaccount (opt) is not
         let required = schema["required"].as_array().unwrap();
         assert!(required.contains(&serde_json::json!("owner")));
         assert!(!required.contains(&serde_json::json!("subaccount")));
@@ -236,5 +250,32 @@ mod tests {
         let schema = candid_to_json_schema(&ty, &empty_env());
         let one_of = schema["oneOf"].as_array().unwrap();
         assert_eq!(one_of.len(), 2);
+    }
+
+    #[test]
+    fn test_recursive_type_does_not_stack_overflow() {
+        // Simulate: type Value = variant { Text: text; Array: vec Value }
+        // This requires a TypeEnv with the recursive definition
+        let did = r#"
+            type Value = variant { Text : text; Array : vec Value; Leaf : null };
+            service : { get : (text) -> (Value) query }
+        "#;
+        let ast = did.parse::<candid_parser::IDLProg>().unwrap();
+        let mut env = TypeEnv::new();
+        let actor = candid_parser::check_prog(&mut env, &ast).unwrap().unwrap();
+
+        // Get the return type of `get` method
+        let func = env.get_method(&actor, "get").unwrap();
+        let ret_type = &func.rets[0];
+
+        // This should NOT stack overflow
+        let schema = candid_to_json_schema(ret_type, &env);
+        // The recursive occurrence should be replaced with a description
+        let json_str = serde_json::to_string(&schema).unwrap();
+        assert!(
+            json_str.contains("Recursive type"),
+            "Expected recursive type marker in: {}",
+            json_str
+        );
     }
 }

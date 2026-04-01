@@ -15721,6 +15721,7 @@ dependencies = [
  "anyhow",
  "candid",
  "candid_parser",
+ "clap 4.6.0",
  "pretty_assertions",
  "serde",
  "serde_json",

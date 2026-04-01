@@ -11,6 +11,7 @@ candid = { workspace = true }
 serde = { workspace = true }
 serde_json = "1"
 anyhow = "1"
+clap = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1"

@@ -3,7 +3,7 @@ use ic_webmcp_codegen::schema_mapper::candid_to_json_schema;
 use ic_webmcp_codegen::{Config, generate_manifest};
 use std::path::PathBuf;
 
-fn ledger_did_path() -> PathBuf {
+fn repo_root() -> PathBuf {
     // CARGO_MANIFEST_DIR = .../rs/webmcp/codegen
     // repo root = .../  (3 levels up)
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -14,7 +14,11 @@ fn ledger_did_path() -> PathBuf {
         .unwrap() // rs
         .parent()
         .unwrap() // repo root
-        .join("rs/ledger_suite/icp/ledger.did")
+        .to_path_buf()
+}
+
+fn ledger_did_path() -> PathBuf {
+    repo_root().join("rs/ledger_suite/icp/ledger.did")
 }
 
 #[test]
@@ -182,4 +186,78 @@ fn test_js_emitter() {
         js.contains("initWebMCP"),
         "JS should define initWebMCP function"
     );
+}
+
+/// Test that complex .did files with recursive types, deeply nested variants, etc.
+/// all parse and generate manifests without panicking.
+#[test]
+fn test_complex_did_files() {
+    let fixtures = [
+        ("ICRC-1 Ledger", "rs/ledger_suite/icrc1/ledger/ledger.did"),
+        (
+            "NNS Governance",
+            "rs/nns/governance/canister/governance.did",
+        ),
+        ("SNS Swap", "rs/sns/swap/canister/swap.did"),
+        ("CMC", "rs/nns/cmc/cmc.did"),
+        (
+            "Management Canister",
+            "rs/types/management_canister_types/tests/ic.did",
+        ),
+        ("ckBTC Minter", "rs/bitcoin/ckbtc/minter/ckbtc_minter.did"),
+    ];
+
+    let root = repo_root();
+    for (name, rel_path) in &fixtures {
+        let path = root.join(rel_path);
+        if !path.exists() {
+            // Skip fixtures that don't exist (e.g., in partial checkouts)
+            continue;
+        }
+
+        let parsed =
+            parse_did_file(&path).unwrap_or_else(|e| panic!("Failed to parse {}: {}", name, e));
+        assert!(
+            !parsed.methods.is_empty(),
+            "{} should have at least one method",
+            name
+        );
+
+        // Generate schemas for all args and rets — should not panic or stack overflow
+        for method in &parsed.methods {
+            for arg in &method.args {
+                let _schema = candid_to_json_schema(arg, &parsed.env);
+            }
+            for ret in &method.rets {
+                let _schema = candid_to_json_schema(ret, &parsed.env);
+            }
+        }
+
+        // Full manifest generation should succeed
+        let config = Config {
+            did_file: path,
+            canister_id: None,
+            name: Some(name.to_string()),
+            description: None,
+            expose_methods: None,
+            require_auth: vec![],
+            certified_queries: vec![],
+            method_descriptions: Default::default(),
+            param_descriptions: Default::default(),
+        };
+        let manifest = generate_manifest(&config)
+            .unwrap_or_else(|e| panic!("Failed to generate manifest for {}: {}", name, e));
+
+        // Serialization roundtrip
+        let json = serde_json::to_string(&manifest)
+            .unwrap_or_else(|e| panic!("Failed to serialize manifest for {}: {}", name, e));
+        assert!(json.contains("schema_version"));
+
+        println!(
+            "{}: {} methods, {} tools",
+            name,
+            parsed.methods.len(),
+            manifest.tools.len()
+        );
+    }
 }
