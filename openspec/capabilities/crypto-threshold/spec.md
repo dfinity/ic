@@ -116,13 +116,52 @@ The `IngressSigVerifier` MUST support verification of all ingress message signat
 
 ---
 
+## REQ-THRESH-007: Threshold ECDSA Share Verification
+
+The system MUST verify individual ECDSA signature shares.
+
+### SCENARIO-THRESH-014: Verifying an ECDSA signature share
+**Given** `verify_sig_share` is called with a signer NodeId, inputs, and share
+**When** verification runs
+**Then** all relevant transcripts are deserialized
+**And** the signer's index in the key transcript is looked up
+**And** the internal `verify_ecdsa_signature_share` function verifies the share
+
+### SCENARIO-THRESH-015: Missing signer in ECDSA transcript
+**Given** the signer NodeId is not found in the key transcript's receiver set
+**When** verification runs
+**Then** `ThresholdEcdsaVerifySigShareError::InvalidArgumentMissingSignerInTranscript` is returned
+
+---
+
+## REQ-THRESH-008: Threshold Schnorr Share Verification
+
+The system MUST verify individual Schnorr signature shares for both BIP-340 and Ed25519.
+
+### SCENARIO-THRESH-016: Verifying a BIP-340 Schnorr signature share
+**Given** `verify_sig_share` is called with algorithm `ThresholdSchnorrBip340`
+**When** verification runs
+**Then** the share is deserialized as `ThresholdBip340SignatureShareInternal`
+**And** `verify_bip340_signature_share` is called with presignature, key transcript, message, taproot tree root, nonce, and signer index
+
+### SCENARIO-THRESH-017: Verifying an Ed25519 threshold signature share
+**Given** `verify_sig_share` is called with algorithm `ThresholdEd25519`
+**When** verification runs
+**Then** the share is deserialized as `ThresholdEd25519SignatureShareInternal`
+**And** `verify_ed25519_signature_share` is called
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
 | REQ-THRESH-001 | Canister signature (ICCSA) | narrative | rs/crypto/tests/ |
-| REQ-THRESH-002 | Threshold ECDSA signing | narrative | rs/crypto/tests/ |
+| REQ-THRESH-002 | Threshold ECDSA signing | linked | rs/crypto/tests/integration_test.rs |
 | REQ-THRESH-003 | ECDSA share combination | narrative | rs/crypto/tests/ |
 | REQ-THRESH-004 | Master public key extraction | narrative | rs/crypto/tests/ |
-| REQ-THRESH-005 | Threshold Schnorr signing | narrative | rs/crypto/tests/ |
+| REQ-THRESH-005 | Threshold Schnorr signing | linked | rs/crypto/tests/integration_test.rs |
+| REQ-THRESH-006 | Ingress signature verification | narrative | rs/crypto/tests/ |
+| REQ-THRESH-007 | ECDSA share verification | narrative | rs/crypto/tests/ |
+| REQ-THRESH-008 | Schnorr share verification | narrative | rs/crypto/tests/ |
 | REQ-THRESH-006 | Ingress signature verification | narrative | rs/crypto/tests/ |

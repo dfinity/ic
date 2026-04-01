@@ -154,7 +154,25 @@ The ingress manager MUST maintain a cache of past payload message IDs to prevent
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
-| REQ-ING-001 | Message validation | narrative | rs/ingress_manager/tests/ |
-| REQ-ING-002 | Payload selection | narrative | rs/ingress_manager/src/ingress_selector.rs |
-| REQ-ING-003 | Payload validation | narrative | rs/ingress_manager/src/ingress_selector.rs |
+## REQ-ING-005: Ingress Bouncer
+
+The ingress bouncer MUST determine whether ingress messages should be retained or dropped in the artifact pool.
+
+### SCENARIO-ING-023: Bouncer determines message retention
+**Given** the bouncer evaluates an ingress message in the artifact pool
+**When** the evaluation runs
+**Then** it determines whether the message should be retained or dropped based on validity and freshness
+**And** messages past their expiry are dropped
+
+---
+
+## Traceability
+
+| ID | Description | Status | Tests |
+|----|-------------|--------|-------|
+| REQ-ING-001 | Message validation | linked | rs/ingress_manager/src/ingress_selector.rs |
+| REQ-ING-002 | Payload selection | linked | rs/ingress_manager/src/ingress_selector.rs |
+| REQ-ING-003 | Payload validation | linked | rs/ingress_manager/src/ingress_selector.rs |
+| REQ-ING-004 | Payload cache | narrative | rs/ingress_manager/tests/ |
+| REQ-ING-005 | Ingress bouncer | narrative | rs/ingress_manager/src/bouncer.rs |
 | REQ-ING-004 | Payload cache | narrative | rs/ingress_manager/tests/ |

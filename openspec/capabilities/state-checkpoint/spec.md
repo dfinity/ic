@@ -125,8 +125,29 @@ Different page map types MUST be correctly classified for flushing and tracking.
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
-| REQ-CKPT-001 | Checkpoint creation | narrative | rs/state_manager/tests/ |
-| REQ-CKPT-002 | Checkpoint loading | narrative | rs/state_manager/tests/ |
+## REQ-CKPT-006: Split Marker Handling
+
+Checkpoints resulting from subnet splits MUST carry a split marker.
+
+### SCENARIO-CKPT-013: Split marker presence in checkpoint
+**Given** a checkpoint was created from a subnet split
+**When** the checkpoint directory is examined
+**Then** `split_from.pbuf` exists containing the original subnet ID that was split
+
+### SCENARIO-CKPT-014: Loading a split checkpoint
+**Given** a checkpoint with a split marker is loaded
+**When** loading runs
+**Then** the `SplitFrom` metadata is read and stored in system metadata
+**And** this information is used to properly initialize the split subnet's state
+
+---
+
+## Traceability
+
+| ID | Description | Status | Tests |
+|----|-------------|--------|-------|
+| REQ-CKPT-001 | Checkpoint creation | linked | rs/state_manager/src/checkpoint.rs |
+| REQ-CKPT-002 | Checkpoint loading | linked | rs/state_manager/src/checkpoint.rs |
 | REQ-CKPT-003 | Checkpoint validation | narrative | rs/state_manager/tests/ |
 | REQ-CKPT-004 | Wasm binary loading | narrative | rs/state_manager/tests/ |
 | REQ-CKPT-005 | Page map types | narrative | rs/state_manager/tests/ |

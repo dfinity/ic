@@ -143,14 +143,33 @@ The system MUST support Random, ReshareOfMasked, ReshareOfUnmasked, and Unmasked
 
 ---
 
+### SCENARIO-DKG-015: IDkg complaint verification
+**Given** `verify_complaint` is called with a transcript, complainer NodeId, and complaint
+**When** verification runs
+**Then** the proof of discrete log equivalence in the complaint is verified
+**And** using the revealed DH tuple, the verifier re-decrypts the complainer's shares and confirms the dealing is faulty
+
+### SCENARIO-DKG-016: IDkg transcript opening
+**Given** `open_transcript` is called with a transcript, complainer NodeId, and complaint
+**When** opening runs
+**Then** the opener decrypts its own shares for the faulty dealing
+**And** returns an `IDkgOpening` containing the revealed shares
+
+### SCENARIO-DKG-017: IDkg opening verification
+**Given** `verify_opening` is called with a transcript, opener NodeId, opening, and complaint
+**When** verification runs
+**Then** the opening's shares are verified against the dealing's polynomial commitment
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
-| REQ-DKG-001 | NI-DKG dealing creation | narrative | rs/crypto/tests/ |
+| REQ-DKG-001 | NI-DKG dealing creation | linked | rs/crypto/tests/integration_test.rs |
 | REQ-DKG-002 | NI-DKG dealing verification | narrative | rs/crypto/tests/ |
 | REQ-DKG-003 | NI-DKG transcript creation | narrative | rs/crypto/tests/ |
-| REQ-DKG-004 | NI-DKG transcript loading | narrative | rs/crypto/tests/ |
+| REQ-DKG-004 | NI-DKG transcript loading | linked | rs/crypto/tests/integration_test.rs |
 | REQ-DKG-005 | Active key retention | narrative | rs/crypto/tests/ |
 | REQ-DKG-006 | IDkg dealing creation | narrative | rs/crypto/tests/ |
 | REQ-DKG-007 | IDkg transcript management | narrative | rs/crypto/tests/ |

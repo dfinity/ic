@@ -89,7 +89,7 @@ The stream builder MUST route canister output messages into XNet streams for rem
 ### SCENARIO-MSG-012: Infinite loop detection
 **Given** the stream builder detects an infinite routing loop
 **When** the loop is detected
-**Then** a critical error is logged to prevent unbounded resource consumption
+**Then** a `fatal!` macro is invoked (causing replica crash/panic) to prevent unbounded resource consumption
 
 ---
 
@@ -143,7 +143,7 @@ The messaging system MUST enforce that batch times are strictly non-decreasing.
 ### SCENARIO-MSG-020: Non-increasing batch time
 **Given** a batch arrives with a time not greater than the previous batch time
 **When** the batch is processed
-**Then** a critical error is logged (`mr_non_increasing_batch_time`)
+**Then** the `mr_non_increasing_batch_time` counter is incremented and a `fatal!` is invoked (replica crashes)
 
 ---
 

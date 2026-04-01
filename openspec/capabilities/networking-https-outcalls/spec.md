@@ -42,14 +42,25 @@ The adapter MUST execute HTTP requests on behalf of canisters in an isolated out
 **When** the response is received
 **Then** the request fails with `LimitExceeded` indicating the size limit exceeded
 
-### SCENARIO-HTTPS-006: Header validation limits
+### SCENARIO-HTTPS-006: Too many headers rejected
 **Given** a request includes more than 1024 headers (`HEADERS_LIMIT`)
 **When** the request is received
 **Then** it is rejected with "Too many headers"
 
+### SCENARIO-HTTPS-017: Header name or value too large
 **Given** a header name or value exceeds 8192 bytes (`HEADER_NAME_VALUE_LIMIT`)
 **When** the request is received
 **Then** it is rejected with "Header name or value exceeds size limit"
+
+### SCENARIO-HTTPS-018: Default User-Agent header
+**Given** the request does not include a `User-Agent` header
+**When** the request is sent to the target
+**Then** the adapter adds `User-Agent: ic/1.0` as a fallback header
+
+### SCENARIO-HTTPS-019: Duplicate header name preservation
+**Given** multiple headers share the same name (case-insensitive)
+**When** the request is processed
+**Then** all values are preserved under the same header name (not deduplicated)
 
 ---
 
@@ -69,6 +80,12 @@ The client MUST communicate with the adapter from within the replica process via
 **When** the adapter returns a response
 **Then** the transform function is executed as a query on the canister
 **And** the transformed response is returned as the final result
+
+### SCENARIO-HTTPS-020: Client-side response validation
+**Given** the adapter returns a response
+**When** the client validates it
+**Then** headers and body are checked against IC constraints
+**And** invalid headers or oversized responses are rejected with appropriate error codes
 
 ### SCENARIO-HTTPS-009: Adapter connection failure
 **Given** the gRPC connection to the adapter cannot be established
