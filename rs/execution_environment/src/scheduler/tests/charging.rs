@@ -1,4 +1,21 @@
 //! Tests for resource use charging.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/execution-scheduler/spec.md
+//!       openspec/capabilities/execution-cycles/spec.md
+//!
+//! REQ-SCHED-009: Idle Canister Charging
+//!   SCENARIO-SCHED-021: Idle canister resource charging
+//!
+//! REQ-CYC-003: Freezing Threshold
+//!   SCENARIO-CYC-007: Freezing threshold calculation
+//!   SCENARIO-CYC-008: Operations blocked by freezing threshold
+//!
+//! REQ-CYC-007: Storage Fees
+//!   SCENARIO-CYC-016: Idle cycles burn rate components
+//!
+//! REQ-CYC-018: Message Memory Billing
+//!   SCENARIO-CYC-041: Idle burn rate includes message memory
 
 use super::super::test_utilities::{
     SchedulerTest, SchedulerTestBuilder, ingress, on_response, other_side,

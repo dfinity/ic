@@ -1,3 +1,35 @@
+//! # Traceability
+//! Spec: openspec/capabilities/execution-cycles/spec.md
+//!
+//! REQ-CYC-001: Fee Scaling by Subnet Size
+//!   SCENARIO-CYC-001: Fee scaling calculation
+//!   SCENARIO-CYC-002: Free cost schedule
+//!
+//! REQ-CYC-002: Execution Cycles
+//!   SCENARIO-CYC-003: Prepay execution cycles
+//!   SCENARIO-CYC-004: Refund unused execution cycles
+//!   SCENARIO-CYC-005: Insufficient cycles for execution
+//!   SCENARIO-CYC-006: Execution cost calculation
+//!
+//! REQ-CYC-003: Freezing Threshold
+//!   SCENARIO-CYC-007: Freezing threshold calculation
+//!   SCENARIO-CYC-008: Operations blocked by freezing threshold
+//!
+//! REQ-CYC-004: Ingress Message Fees
+//!   SCENARIO-CYC-010: Ingress induction cost
+//!   SCENARIO-CYC-011: Delayed ingress cost for update_settings
+//!
+//! REQ-CYC-007: Storage Fees
+//!   SCENARIO-CYC-016: Idle cycles burn rate components
+//!   SCENARIO-CYC-017: Memory cost calculation
+//!
+//! REQ-CYC-011: System Subnet Free Execution
+//!   SCENARIO-CYC-026: System subnet free execution
+//!
+//! REQ-CYC-016: Reserved Balance Draining
+//!   SCENARIO-CYC-036: Resource charges drain reserved balance first
+//!   SCENARIO-CYC-037: Non-resource charges use main balance only
+
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};

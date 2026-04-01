@@ -2,6 +2,25 @@
 //! Consensus batches (PayloadBuilder). It is also used to validate the Ingress
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/ingress-manager/spec.md
+//!
+//! REQ-ING-002: Ingress Payload Selection
+//!   SCENARIO-ING-008: Select messages within byte limit
+//!   SCENARIO-ING-009: Fair per-canister round-robin selection
+//!   SCENARIO-ING-010: Message ordering by pool arrival time
+//!   SCENARIO-ING-011: Maximum messages per block limit
+//!   SCENARIO-ING-013: Duplicate detection via past payloads
+//!   SCENARIO-ING-014: Duplicate detection via ingress history
+//!   SCENARIO-ING-015: Message expiry validation during selection
+//!   SCENARIO-ING-016: Cycles cost validation
+//!
+//! REQ-ING-003: Ingress Payload Validation
+//!   SCENARIO-ING-017: Valid payload accepted
+//!   SCENARIO-ING-018: Payload with duplicate message rejected
+//!   SCENARIO-ING-019: Payload exceeds size limit rejected
+//!   SCENARIO-ING-020: Payload exceeds message count limit rejected
 use crate::{CustomRandomState, IngressManager};
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{

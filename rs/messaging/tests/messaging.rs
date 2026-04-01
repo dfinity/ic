@@ -1,3 +1,28 @@
+//! # Traceability
+//! Spec: openspec/capabilities/messaging/spec.md
+//!
+//! REQ-MSG-001: Batch Processing
+//!   SCENARIO-MSG-001: Deliver batch at expected height
+//!   SCENARIO-MSG-002: Batch at unexpected height ignored
+//!   SCENARIO-MSG-003: Batch queue full
+//!   SCENARIO-MSG-004: Successful batch processing
+//!
+//! REQ-MSG-002: State Machine Round Execution
+//!   SCENARIO-MSG-006: Execute round phases in order
+//!
+//! REQ-MSG-003: Stream Builder
+//!   SCENARIO-MSG-009: Route request to correct subnet stream
+//!   SCENARIO-MSG-010: Route response to correct subnet stream
+//!   SCENARIO-MSG-011: Generate reject for canister not found
+//!
+//! REQ-MSG-004: Stream Handler
+//!   SCENARIO-MSG-013: Induct valid XNet request
+//!   SCENARIO-MSG-014: Induct valid XNet response
+//!   SCENARIO-MSG-018: Garbage collect acknowledged messages
+//!
+//! REQ-MSG-005: Batch Time Monotonicity
+//!   SCENARIO-MSG-020: Non-increasing batch time
+
 pub mod common;
 
 use assert_matches::assert_matches;

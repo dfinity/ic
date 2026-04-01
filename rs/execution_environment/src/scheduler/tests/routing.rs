@@ -1,4 +1,10 @@
 //! Tests for `induct_messages_on_same_subnet()`.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/execution-scheduler/spec.md
+//!
+//! REQ-SCHED-006: Same-Subnet Message Induction
+//!   SCENARIO-SCHED-015: Same-subnet message induction
 
 use super::super::test_utilities::{SchedulerTestBuilder, ingress, on_response, other_side};
 use super::super::*;

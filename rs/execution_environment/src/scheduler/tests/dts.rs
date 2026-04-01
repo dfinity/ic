@@ -1,4 +1,25 @@
-//! Tests for deterministic time slicing..
+//! Tests for deterministic time slicing.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/execution-dts/spec.md
+//!
+//! REQ-DTS-001: DTS Overview and Transparency
+//!   SCENARIO-DTS-002: DTS is transparent to canisters
+//!
+//! REQ-DTS-004: Resuming Paused Executions
+//!   SCENARIO-DTS-010: Resume paused message execution
+//!   SCENARIO-DTS-011: Resume paused install_code
+//!
+//! REQ-DTS-005: Aborting Paused Executions
+//!   SCENARIO-DTS-013: Abort on state sync
+//!   SCENARIO-DTS-014: Abort returns original message
+//!
+//! REQ-DTS-008: DTS Canister Blocking
+//!   SCENARIO-DTS-020: Message blocking during paused execution
+//!   SCENARIO-DTS-021: Install_code blocking during paused execution
+//!
+//! REQ-DTS-007: DTS Slice Counter
+//!   SCENARIO-DTS-019: Slice count exhaustion
 
 use super::super::test_utilities::{
     SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions,

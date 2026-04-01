@@ -1,4 +1,25 @@
 //! Tests for canister scheduling.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/execution-scheduler/spec.md
+//!
+//! REQ-SCHED-002: Inner Round Iterations
+//!   SCENARIO-SCHED-004: Inner round iteration steps
+//!   SCENARIO-SCHED-005: Canister execution on threads
+//!
+//! REQ-SCHED-003: Round Schedule and Canister Ordering
+//!   SCENARIO-SCHED-006: Priority-based scheduling
+//!   SCENARIO-SCHED-007: Heartbeat and global timer tasks
+//!   SCENARIO-SCHED-008: Rate limiting by heap delta
+//!   SCENARIO-SCHED-009: Rate limiting by instructions
+//!
+//! REQ-SCHED-001: Execution Round Structure
+//!   SCENARIO-SCHED-001: Round execution phases
+//!   SCENARIO-SCHED-002: Round instruction budget
+//!   SCENARIO-SCHED-003: Subnet messages instruction budget
+//!
+//! REQ-SCHED-009: Idle Canister Charging
+//!   SCENARIO-SCHED-021: Idle canister resource charging
 
 use super::test_utilities::{
     SchedulerTest, SchedulerTestBuilder, ingress, instructions, on_response, other_side,

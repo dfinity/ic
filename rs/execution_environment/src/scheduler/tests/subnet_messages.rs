@@ -1,4 +1,11 @@
 //! Tests for subnet message execution.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/execution-scheduler/spec.md
+//!
+//! REQ-SCHED-005: Subnet Message Execution
+//!   SCENARIO-SCHED-013: Subnet message routing
+//!   SCENARIO-SCHED-014: Subnet message blocking by long-running install_code
 
 use super::super::test_utilities::{
     SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions,

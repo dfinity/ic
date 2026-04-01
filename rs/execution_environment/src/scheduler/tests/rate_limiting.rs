@@ -1,4 +1,16 @@
 //! Tests for heap delta and install code instruction rate limiting.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/execution-scheduler/spec.md
+//!
+//! REQ-SCHED-007: Heap Delta Management
+//!   SCENARIO-SCHED-016: Heap delta accumulation
+//!   SCENARIO-SCHED-017: Heap delta rate limiting
+//!   SCENARIO-SCHED-018: Scheduled heap delta limit per round
+//!
+//! REQ-SCHED-003: Round Schedule and Canister Ordering
+//!   SCENARIO-SCHED-008: Rate limiting by heap delta
+//!   SCENARIO-SCHED-009: Rate limiting by instructions
 
 use super::super::test_utilities::{
     SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response,

@@ -1,6 +1,6 @@
 # Traceability Matrix
 
-Last updated: 2026-04-01
+Last updated: 2026-04-01 (Phase 3: test linkage in progress)
 Methodology: https://github.com/ianblenke/agentic-refactor-rules
 
 ## Status Legend
@@ -15,13 +15,13 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 
 | REQ ID | Description | Status | Scenarios | Test Files |
 |--------|-------------|--------|-----------|-----------|
-| REQ-SCHED-001 | Round structure phases | narrative | SCENARIO-SCHED-001,002,003 | scheduler/tests/ |
-| REQ-SCHED-002 | Inner round iterations | narrative | SCENARIO-SCHED-004,005 | scheduler/tests/scheduling.rs |
-| REQ-SCHED-003 | Canister ordering | narrative | SCENARIO-SCHED-006,007,008,009 | scheduler/tests/scheduling.rs |
-| REQ-SCHED-004 | Long-running / DTS | narrative | SCENARIO-SCHED-010,011,012 | execution_test.rs |
-| REQ-SCHED-005 | Subnet messages | narrative | SCENARIO-SCHED-013,014 | scheduler/tests/ |
-| REQ-SCHED-006 | Message induction | narrative | SCENARIO-SCHED-015 | messaging/tests/ |
-| REQ-SCHED-007 | Heap delta | narrative | SCENARIO-SCHED-016,017,018 | scheduler/tests/ |
+| REQ-SCHED-001 | Round structure phases | linked | SCENARIO-SCHED-001,002,003 | scheduler/tests/scheduling.rs |
+| REQ-SCHED-002 | Inner round iterations | linked | SCENARIO-SCHED-004,005 | scheduler/tests/scheduling.rs |
+| REQ-SCHED-003 | Canister ordering | linked | SCENARIO-SCHED-006,007,008,009 | scheduling.rs, timers.rs, rate_limiting.rs |
+| REQ-SCHED-004 | Long-running / DTS | linked | SCENARIO-SCHED-010,011,012 | scheduler/tests/dts.rs |
+| REQ-SCHED-005 | Subnet messages | linked | SCENARIO-SCHED-013,014 | scheduler/tests/subnet_messages.rs |
+| REQ-SCHED-006 | Message induction | linked | SCENARIO-SCHED-015 | scheduler/tests/routing.rs |
+| REQ-SCHED-007 | Heap delta | linked | SCENARIO-SCHED-016,017,018 | scheduler/tests/rate_limiting.rs |
 | REQ-SCHED-008 | Ingress lifecycle | narrative | SCENARIO-SCHED-019,020 | scheduler/tests/ |
 | REQ-SCHED-009 | Idle charging | narrative | SCENARIO-SCHED-021 | scheduler/tests/ |
 
@@ -32,12 +32,12 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 | SCENARIO-EXEC-001 through SCENARIO-EXEC-031 | 31 scenarios | narrative | canister_manager/tests.rs |
 
 ## execution-cycles
-| REQ-CYC-001 through REQ-CYC-018 | Cycles accounting | narrative | rs/cycles_account_manager/ |
-| SCENARIO-CYC-001 through SCENARIO-CYC-042 | 42 scenarios | narrative | rs/cycles_account_manager/ |
+| REQ-CYC-001 through REQ-CYC-018 | Cycles accounting | linked | rs/cycles_account_manager/ |
+| SCENARIO-CYC-001 through SCENARIO-CYC-042 | 42 scenarios | linked | tests/cycles_account_manager.rs |
 
 ## execution-dts
-| REQ-DTS-001 through REQ-DTS-008 | Deterministic Time Slicing | narrative | execution_test.rs |
-| SCENARIO-DTS-001 through SCENARIO-DTS-021 | 21 scenarios | narrative | execution_test.rs |
+| REQ-DTS-001 through REQ-DTS-008 | Deterministic Time Slicing | linked | execution_test.rs |
+| SCENARIO-DTS-001 through SCENARIO-DTS-021 | 21 scenarios | linked | scheduler/tests/dts.rs |
 
 ## execution-wasm
 | REQ-WASM-001 through REQ-WASM-006 | Wasm execution | narrative | rs/embedders/tests/ |
@@ -52,8 +52,8 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 | SCENARIO-MEM-001 through SCENARIO-MEM-025 | 25 scenarios | narrative | rs/execution_environment/tests/ |
 
 ## messaging
-| REQ-MSG-001 through REQ-MSG-006 | Message routing | narrative | rs/messaging/tests/ |
-| SCENARIO-MSG-001 through SCENARIO-MSG-022 | 22 scenarios | narrative | rs/messaging/tests/ |
+| REQ-MSG-001 through REQ-MSG-006 | Message routing | linked | rs/messaging/tests/ |
+| SCENARIO-MSG-001 through SCENARIO-MSG-022 | 22 scenarios | linked | rs/messaging/tests/messaging.rs |
 
 ## networking-https-outcalls
 | REQ-HTTPS-001 through REQ-HTTPS-005 | HTTPS outcalls | narrative | rs/https_outcalls/ |
@@ -64,8 +64,8 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 | SCENARIO-STMGR-001 through SCENARIO-STMGR-028 | 28 scenarios | narrative | rs/state_manager/tests/ |
 
 ## ingress-manager
-| REQ-ING-001 through REQ-ING-004 | Ingress manager | narrative | rs/ingress_manager/ |
-| SCENARIO-ING-001 through SCENARIO-ING-022 | 22 scenarios | narrative | rs/ingress_manager/ |
+| REQ-ING-001 through REQ-ING-004 | Ingress manager | linked | rs/ingress_manager/ |
+| SCENARIO-ING-001 through SCENARIO-ING-022 | 22 scenarios | linked | rs/ingress_manager/src/ingress_selector.rs |
 
 ---
 

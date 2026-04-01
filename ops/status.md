@@ -40,6 +40,25 @@ Last updated: 2026-04-01
 ## Phase 2 Complete
 All 28 domains migrated to REQ-*/SCENARIO-* capability specs.
 
-## Phase 3: Link Tests to REQ-* IDs
-Add traceability headers to existing test files referencing their REQ-*/SCENARIO-* IDs.
-Start with: rs/execution_environment/src/scheduler/tests/ and rs/cycles_account_manager/
+## Phase 3: Link Tests to REQ-* IDs (In Progress)
+
+### Linked so far
+- `rs/execution_environment/src/scheduler/tests/scheduling.rs` → REQ-SCHED-001,002,003,009
+- `rs/execution_environment/src/scheduler/tests/dts.rs` → REQ-DTS-001,004,005,007,008
+- `rs/execution_environment/src/scheduler/tests/charging.rs` → REQ-SCHED-009, REQ-CYC-003,007,018
+- `rs/execution_environment/src/scheduler/tests/rate_limiting.rs` → REQ-SCHED-003,007
+- `rs/execution_environment/src/scheduler/tests/subnet_messages.rs` → REQ-SCHED-005
+- `rs/execution_environment/src/scheduler/tests/routing.rs` → REQ-SCHED-006
+- `rs/execution_environment/src/scheduler/tests/timers.rs` → REQ-SCHED-003, REQ-SYSAPI-006
+- `rs/cycles_account_manager/tests/cycles_account_manager.rs` → REQ-CYC-001 through 016
+- `rs/messaging/tests/messaging.rs` → REQ-MSG-001 through 005
+- `rs/ingress_manager/src/ingress_selector.rs` → REQ-ING-002,003
+
+### Remaining (Phase 3 continues)
+- rs/execution_environment/tests/execution_test.rs → REQ-EXEC-*, REQ-DTS-*
+- rs/state_manager/tests/ → REQ-STMGR-*
+- rs/https_outcalls/consensus/ → REQ-HTTPS-*
+- rs/p2p/tests/ → REQ-P2P-*
+- rs/consensus/tests/ → REQ-CONS-*
+- rs/nns/governance/tests/ → REQ-NNS-*
+- rs/ledger_suite/ → REQ-ICP-*, REQ-ICRC-*

@@ -1,4 +1,15 @@
 //! Tests for heartbeats and global timers.
+//!
+//! # Traceability
+//! Spec: openspec/capabilities/execution-scheduler/spec.md
+//!
+//! REQ-SCHED-003: Round Schedule and Canister Ordering
+//!   SCENARIO-SCHED-007: Heartbeat and global timer tasks
+//!
+//! Spec: openspec/capabilities/execution-system-api/spec.md
+//!
+//! REQ-SYSAPI-006: Global Timer
+//!   SCENARIO-SYSAPI-021: Set global timer
 
 use super::super::test_utilities::{SchedulerTestBuilder, ingress, instructions};
 use super::super::*;
