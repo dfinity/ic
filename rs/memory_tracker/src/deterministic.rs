@@ -330,7 +330,7 @@ pub(crate) struct DeterministicMemoryTracker {
     checksum: RefCell<checksum::SigsegChecksum>,
     pub metrics: MemoryTrackerMetrics,
     state: RefCell<DeterministicState>,
-    decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
+    subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
 }
 
 impl DeterministicMemoryTracker {
@@ -353,7 +353,7 @@ impl DeterministicMemoryTracker {
         }
 
         // Charge 1 instruction per OS page accessed.
-        if let Ok(mut counter) = self.decrement_instruction_counter.lock() {
+        if let Ok(mut counter) = self.subtract_instruction_counter.lock() {
             counter(num_os_pages);
         }
     }
@@ -366,7 +366,7 @@ impl DeterministicMemoryTracker {
         // Charge 1 instruction per OS page dirtied.
         let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
         let num_os_pages = os_page_range.end.get() - os_page_range.start.get();
-        if let Ok(mut counter) = self.decrement_instruction_counter.lock() {
+        if let Ok(mut counter) = self.subtract_instruction_counter.lock() {
             counter(num_os_pages);
         }
     }
@@ -477,7 +477,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         memory_limits: MemoryLimits,
-        decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
+        subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized,
@@ -510,7 +510,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
             checksum: RefCell::new(checksum::SigsegChecksum::default()),
             metrics: MemoryTrackerMetrics::default(),
             state: RefCell::new(state),
-            decrement_instruction_counter,
+            subtract_instruction_counter,
         };
 
         let mut instructions = tracker.page_map.get_base_memory_instructions();

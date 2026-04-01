@@ -381,7 +381,7 @@ pub trait MemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         memory_limits: MemoryLimits,
-        decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
+        subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized;
@@ -437,7 +437,7 @@ pub fn new(
     page_map: PageMap,
     missing_page_handler_kind: Option<MissingPageHandlerKind>,
     memory_limits: MemoryLimits,
-    decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
+    subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
 ) -> nix::Result<SigsegvMemoryTracker> {
     match missing_page_handler_kind {
         Some(MissingPageHandlerKind::Deterministic) => {
@@ -448,7 +448,7 @@ pub fn new(
                 dirty_page_tracking,
                 page_map,
                 memory_limits,
-                decrement_instruction_counter,
+                subtract_instruction_counter,
             )?))
         }
         _ => Ok(Box::new(PrefetchingMemoryTracker::new(
@@ -458,7 +458,7 @@ pub fn new(
             dirty_page_tracking,
             page_map,
             memory_limits,
-            decrement_instruction_counter,
+            subtract_instruction_counter,
         )?)),
     }
 }
