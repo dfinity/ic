@@ -88,7 +88,8 @@ fn test(env: TestEnv) {
         info!(
             logger,
             "II installed on CloudEngine subnet {} with id {}",
-            cloud_node.subnet_id().unwrap(), ii_canister_id,
+            cloud_node.subnet_id().unwrap(),
+            ii_canister_id,
         );
 
         // Install the universal canister on the app subnet
@@ -97,7 +98,8 @@ fn test(env: TestEnv) {
             "Installing universal canister on Application subnet..."
         );
         let app_agent = app_node.build_default_agent_async().await;
-        let universal_canister = install_universal_canister(&app_agent, app_node.effective_canister_id()).await;
+        let universal_canister =
+            install_universal_canister(&app_agent, app_node.effective_canister_id()).await;
         info!(
             logger,
             "Universal canister {universal_canister} installed on Application subnet {}",
