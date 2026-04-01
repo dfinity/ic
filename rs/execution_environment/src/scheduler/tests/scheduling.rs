@@ -1100,9 +1100,9 @@ fn frozen_canisters_are_fully_executed() {
 }
 
 /// Canisters with heartbeats or timers but without enough cycles to execute them
-/// do not get executed, but are charged as idle.
+/// do not get scheduled.
 #[test]
-fn frozen_canisters_with_heartbeats_or_timers_are_charged_as_idle() {
+fn frozen_canisters_with_heartbeats_or_timers_are_not_scheduled() {
     let scheduler_cores = 2;
     let canisters_per_core = 2;
     let slice = 100;
@@ -1163,11 +1163,15 @@ fn frozen_canisters_with_heartbeats_or_timers_are_charged_as_idle() {
         0
     );
 
-    // But all canisters were marked as fully executed, because they were idle.
-    for (i, canister) in canisters.iter().enumerate() {
-        assert!(
-            test.was_fully_executed(*canister),
-            "Canister {i} should have been charged as idle",
+    // Or scheduled.
+    assert_eq!(test.state().metadata.subnet_schedule.len(), 0);
+    for canister in canisters.iter() {
+        assert_eq!(
+            test.canister_state(*canister)
+                .system_state
+                .canister_metrics()
+                .rounds_scheduled(),
+            0
         );
     }
 }
