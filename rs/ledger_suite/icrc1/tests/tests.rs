@@ -404,8 +404,6 @@ mod authorized_mint_burn_tests {
 
     // --- CBOR round-trip tests ---
 
-    // --- CBOR round-trip tests ---
-
     #[test]
     fn test_authorized_mint_cbor_round_trip() {
         let block = make_authorized_mint_block(
