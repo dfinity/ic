@@ -541,8 +541,11 @@ where
                 Operation::FeeCollector { .. } => {
                     panic!("FeeCollector107 not implemented")
                 }
-                Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
-                    panic!("AuthorizedMint/AuthorizedBurn not yet implemented in in_memory_ledger")
+                Operation::AuthorizedMint { to, amount, .. } => {
+                    self.process_mint(to, amount);
+                }
+                Operation::AuthorizedBurn { from, amount, .. } => {
+                    self.process_burn(from, &None, amount, index);
                 }
             }
         }

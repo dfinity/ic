@@ -540,8 +540,11 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     return Err(e);
                 }
             }
-            Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
-                panic!("AuthorizedMint/AuthorizedBurn not yet implemented")
+            Operation::AuthorizedMint { to, amount, .. } => {
+                context.balances_mut().mint(to, amount.clone())?;
+            }
+            Operation::AuthorizedBurn { from, amount, .. } => {
+                context.balances_mut().burn(from, amount.clone())?;
             }
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")

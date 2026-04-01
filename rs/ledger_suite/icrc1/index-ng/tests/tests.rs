@@ -969,6 +969,8 @@ fn test_get_account_transactions_pagination() {
                     approve: None,
                     timestamp: 0,
                     fee_collector: None,
+                    authorized_mint: None,
+                    authorized_burn: None,
                 },
                 transaction,
             );

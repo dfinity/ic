@@ -627,8 +627,11 @@ impl TransactionsAndBalances {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
-            Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
-                panic!("AuthorizedMint/AuthorizedBurn not yet implemented in test_utils")
+            Operation::AuthorizedMint { to, amount, .. } => {
+                self.credit(to, amount.get_e8s());
+            }
+            Operation::AuthorizedBurn { from, amount, .. } => {
+                self.debit(from, amount.get_e8s());
             }
         };
         self.transactions.push(tx);
@@ -660,8 +663,11 @@ impl TransactionsAndBalances {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
-            Operation::AuthorizedMint { .. } | Operation::AuthorizedBurn { .. } => {
-                panic!("AuthorizedMint/AuthorizedBurn not yet implemented in test_utils")
+            Operation::AuthorizedMint { to, .. } => {
+                self.check_and_update_account_validity(*to, default_fee);
+            }
+            Operation::AuthorizedBurn { from, .. } => {
+                self.check_and_update_account_validity(*from, default_fee);
             }
         }
     }
