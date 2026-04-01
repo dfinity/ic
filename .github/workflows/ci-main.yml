@@ -176,8 +176,8 @@ jobs:
 
             # creates a list of targets suitable for --target_pattern_file and list
             # the targets on the step summary
-            ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
-            ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
+            # ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
+            # ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
 
       - name: Upload target files
         uses: actions/upload-artifact@v4
