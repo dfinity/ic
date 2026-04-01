@@ -263,8 +263,15 @@ async fn test_async(env: TestEnv) {
         "Step 9. Assert adding two rate-limit rules to the rate-limit canister now succeeds"
     );
 
+    // Use nns_agent (direct to NNS node) instead of api_bn_agent to avoid a race condition:
+    // call_and_wait() first submits the update (which adds a self-blocking rule for the
+    // rate-limit canister), then polls for the result. If the API boundary node picks up
+    // the new self-blocking rule before polling completes, the poll is rejected with 403.
+    let mut nns_agent = nns_node.build_default_agent_async().await;
+    nns_agent.set_identity(full_access_identity);
+
     set_rate_limit_rules(
-        &api_bn_agent,
+        &nns_agent,
         rate_limit_id,
         vec![
             InputRule {
@@ -334,9 +341,6 @@ async fn test_async(env: TestEnv) {
     );
 
     // api_bn_agent can't communicate with canister after blocking, hence we use nns_agent
-    let mut nns_agent = nns_node.build_default_agent_async().await;
-    nns_agent.set_identity(full_access_identity);
-
     set_rate_limit_rules(
         &nns_agent,
         rate_limit_id,
