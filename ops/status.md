@@ -32,7 +32,13 @@ Last updated: 2026-04-01
 8. registry/spec.md, boundary-node/spec.md
 
 ## Metrics
-- Domains with capability specs: 11 / 28 (39%)
-- Total REQs: ~91
-- Total SCENARIOs: ~287
+- Domains with capability specs: 24 / 28 (86%)
+- Total REQs: ~150
+- Total SCENARIOs: ~450
 - REQs with tests linked: 0 (phase 3 work)
+
+## Remaining (4 domains)
+- consensus (large — needs full read of 37KB spec)
+- governance-sns (multiple sub-specs)
+- crypto-dkg
+- crypto-threshold-signatures
