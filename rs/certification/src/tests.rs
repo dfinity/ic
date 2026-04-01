@@ -1,3 +1,22 @@
+//! # Traceability
+//! Spec: openspec/capabilities/state-certification/spec.md
+//!
+//! REQ-CERT-001: Hash Tree Computation
+//!   SCENARIO-CERT-001: Computing the hash tree
+//!   SCENARIO-CERT-002: HashingVisitor behavior
+//!
+//! REQ-CERT-002: Certificate Verification
+//!   SCENARIO-CERT-003: Verify certificate without delegation
+//!   SCENARIO-CERT-004: Verify certificate with delegation
+//!   SCENARIO-CERT-005: Nested delegation rejected
+//!   SCENARIO-CERT-006: Canister ID out of range
+//!   SCENARIO-CERT-007: Certified data mismatch
+//!   SCENARIO-CERT-008: Invalid signature
+//!
+//! REQ-CERT-004: Witness Generation
+//!   SCENARIO-CERT-011: Generating a witness for a partial tree
+//!   SCENARIO-CERT-012: Certified state read with witness
+
 use std::str::FromStr;
 
 use assert_matches::assert_matches;

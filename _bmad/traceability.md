@@ -104,19 +104,36 @@ Methodology: https://github.com/ianblenke/agentic-refactor-rules
 
 ---
 
-## Domains Still Needing Test Linkage (Phase 3 remaining)
+## execution-wasm
+| REQ-WASM-001 through REQ-WASM-006 | Wasm execution | linked | rs/embedders/tests/ |
+| SCENARIO-WASM-001 through SCENARIO-WASM-028 | 28 scenarios | linked | embedders/tests/misc_tests.rs |
+
+## networking-xnet
+| REQ-XNET-001 through REQ-XNET-002 | XNet | linked | rs/xnet/payload_builder/src/tests.rs |
+
+## state-replicated
+| REQ-STATE-001 through REQ-STATE-009 | Replicated state | linked | rs/replicated_state/tests/ |
+| SCENARIO-STATE-001 through SCENARIO-STATE-014 | 14 scenarios | linked | replicated_state/tests/replicated_state.rs |
+
+## state-certification
+| REQ-CERT-001 through REQ-CERT-005 | State certification | linked | rs/certification/src/tests.rs |
+
+## governance-sns
+| REQ-SNS-001 through REQ-SNS-006 | SNS governance | linked | rs/sns/governance/tests/ |
+| SCENARIO-SNS-001 through SCENARIO-SNS-017 | 17 scenarios | linked | sns/governance/tests/governance.rs |
+
+## query-stats
+| REQ-QS-001 through REQ-QS-004 | Query stats | linked | rs/query_stats/src/payload_builder.rs |
+
+---
+
+## Domains Still Needing Test Linkage (Phase 3 minimal remaining)
 
 | Domain | REQ Prefix | Status | Notes |
 |--------|------------|--------|-------|
-| execution-wasm | REQ-WASM-* | narrative | rs/embedders/tests/ not yet linked |
 | execution-query | REQ-QUERY-* | narrative | rs/execution_environment/ query tests |
 | execution-sandboxing | REQ-SAND-* | narrative | rs/canister_sandbox/ |
 | networking-p2p | REQ-P2P-* | narrative | rs/transport/tests/ |
-| networking-xnet | REQ-XNET-* | narrative | rs/xnet/tests/ |
-| state-replicated | REQ-STATE-* | narrative | rs/replicated_state/tests/ |
 | state-checkpoint | REQ-CKPT-* | narrative | rs/state_manager/src/checkpoint.rs |
-| state-certification | REQ-CERT-* | narrative | rs/certification/tests/ |
-| governance-sns | REQ-SNS-* | narrative | rs/sns/governance/tests/ |
-| boundary-node | REQ-BN-* | narrative | rs/boundary_node/ic_boundary/tests/ |
-| query-stats | REQ-QS-* | narrative | rs/query_stats/tests/ |
+| boundary-node | REQ-BN-* | narrative | rs/boundary_node/ic_boundary/ |
 | pocket-ic-server | REQ-PIC-* | narrative | rs/pocket_ic_server/tests/ |

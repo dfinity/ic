@@ -1,3 +1,30 @@
+//! # Traceability
+//! Spec: openspec/capabilities/governance-sns/spec.md
+//!
+//! REQ-SNS-002: Governance Mode Management
+//!   SCENARIO-SNS-003: PreInitializationSwap mode limits operations
+//!   SCENARIO-SNS-004: Swap canister transitions to Normal mode
+//!   SCENARIO-SNS-005: Non-swap caller cannot set mode
+//!
+//! REQ-SNS-003: Neuron Management
+//!   SCENARIO-SNS-006: Neuron state determination
+//!   SCENARIO-SNS-007: Neuron voting power calculation
+//!   SCENARIO-SNS-008: Neuron permission authorization
+//!
+//! REQ-SNS-004: Proposal Lifecycle
+//!   SCENARIO-SNS-010: Proposal submission validation
+//!   SCENARIO-SNS-011: Maximum proposals with ballots
+//!   SCENARIO-SNS-012: Proposal rejection cost
+//!
+//! REQ-SNS-005: Voting and Decision Making
+//!   SCENARIO-SNS-013: Wait-for-quiet mechanism
+//!   SCENARIO-SNS-014: Normal proposal adoption thresholds
+//!   SCENARIO-SNS-015: Critical proposal adoption thresholds
+//!
+//! REQ-SNS-006: Following
+//!   SCENARIO-SNS-016: Topic-based following
+//!   SCENARIO-SNS-017: Catch-all following does not apply to critical proposals
+
 use crate::fixtures::{
     GovernanceCanisterFixture, GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger,
     environment_fixture::CanisterCallRequest, neuron_id,

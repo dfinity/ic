@@ -70,11 +70,12 @@ All 28 domains migrated to REQ-*/SCENARIO-* capability specs.
 - `rs/crypto/tests/integration_test.rs` → REQ-SIG-*, REQ-DKG-001,004, REQ-THRESH-002,005
 - `rs/registry/canister/tests/integration_tests_3.rs` → REQ-REG-001..003
 
-### Remaining (Phase 3 continues)
-- rs/embedders/tests/ → REQ-WASM-002 (compilation/caching)
-- rs/transport/tests/ → REQ-P2P-*
-- rs/xnet/tests/ → REQ-XNET-*
-- rs/replicated_state/tests/ → REQ-STATE-*
-- rs/sns/governance/tests/ → REQ-SNS-*
-- rs/certification/tests/ → REQ-CERT-*
-- rs/query_stats/tests/ → REQ-QS-*
+- `rs/embedders/tests/misc_tests.rs` → REQ-WASM-001,002
+- `rs/replicated_state/tests/replicated_state.rs` → REQ-STATE-003,004,005,008
+- `rs/sns/governance/tests/governance.rs` → REQ-SNS-002..006
+- `rs/xnet/payload_builder/src/tests.rs` → REQ-XNET-002
+- `rs/query_stats/src/payload_builder.rs` → REQ-QS-003,004
+- `rs/certification/src/tests.rs` → REQ-CERT-001,002,004
+
+### Phase 3 Status: 22/28 domains linked
+Remaining 6: execution-query, execution-sandboxing, networking-p2p, state-checkpoint, boundary-node, pocket-ic-server

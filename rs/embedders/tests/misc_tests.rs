@@ -1,3 +1,20 @@
+//! # Traceability
+//! Spec: openspec/capabilities/execution-wasm/spec.md
+//!
+//! REQ-WASM-001: Wasm Module Validation
+//!   SCENARIO-WASM-001: Valid system function exports accepted
+//!   SCENARIO-WASM-002: Reserved symbol exports rejected
+//!   SCENARIO-WASM-003: Function complexity limit
+//!   SCENARIO-WASM-004: Function size limit
+//!   SCENARIO-WASM-005: Code section size limit
+//!
+//! REQ-WASM-002: Wasm Compilation and Caching
+//!   SCENARIO-WASM-008: First compilation of new module
+//!   SCENARIO-WASM-009: Cache hit on subsequent installation
+//!   SCENARIO-WASM-010: Compilation cost charging
+//!   SCENARIO-WASM-011: Compilation cache eviction
+//!   SCENARIO-WASM-012: Compilation error caching
+
 mod wasmtime_simple;
 
 use ic_config::embedders::Config as EmbeddersConfig;

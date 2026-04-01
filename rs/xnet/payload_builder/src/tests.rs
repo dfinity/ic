@@ -1,3 +1,13 @@
+//! # Traceability
+//! Spec: openspec/capabilities/networking-xnet/spec.md
+//!
+//! REQ-XNET-002: XNet Payload Builder
+//!   SCENARIO-XNET-007: Payload construction from remote subnets
+//!   SCENARIO-XNET-008: Certified slice pool management
+//!   SCENARIO-XNET-009: Proximity-based subnet ordering
+//!   SCENARIO-XNET-010: Payload validation
+//!   SCENARIO-XNET-011: Stream message limits per subnet type
+
 use super::test_fixtures::*;
 use super::*;
 use crate::certified_slice_pool::CertifiedSliceError;

@@ -1,3 +1,23 @@
+//! # Traceability
+//! Spec: openspec/capabilities/state-replicated/spec.md
+//!
+//! REQ-STATE-003: Canister Status Lifecycle
+//!   SCENARIO-STATE-003: Running canister accepts all messages
+//!   SCENARIO-STATE-004: Stopping canister rejects new requests
+//!   SCENARIO-STATE-005: Stopped canister rejects all messages
+//!
+//! REQ-STATE-004: Message Queue Management
+//!   SCENARIO-STATE-006: Round-robin input queue sources
+//!   SCENARIO-STATE-007: Queue full error
+//!   SCENARIO-STATE-008: Guaranteed response memory limit
+//!
+//! REQ-STATE-005: Stream Management
+//!   SCENARIO-STATE-009: Stream message ordering
+//!
+//! REQ-STATE-008: State Invariants
+//!   SCENARIO-STATE-012: Hard invariant violation on deserialization
+//!   SCENARIO-STATE-013: Soft invariant violation on deserialization
+
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_btc_replica_types::{

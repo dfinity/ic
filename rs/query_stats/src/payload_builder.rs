@@ -1,3 +1,19 @@
+//! # Traceability
+//! Spec: openspec/capabilities/query-stats/spec.md
+//!
+//! REQ-QS-003: Query Stats Payload Building
+//!   SCENARIO-QS-007: Build payload with current stats
+//!   SCENARIO-QS-008: Respect size limit
+//!   SCENARIO-QS-009: Exclude previously reported canister IDs
+//!
+//! REQ-QS-004: Query Stats Payload Validation
+//!   SCENARIO-QS-010: Empty payload always valid
+//!   SCENARIO-QS-011: Non-empty payload when feature disabled
+//!   SCENARIO-QS-012: Invalid node ID
+//!   SCENARIO-QS-013: Epoch too high
+//!   SCENARIO-QS-014: Duplicate canister ID in payload
+//!   SCENARIO-QS-015: Different nodes can report same canister
+
 use crate::{
     metrics::QueryStatsPayloadBuilderMetrics, state_machine::get_stats_for_node_id_and_epoch,
 };
