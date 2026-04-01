@@ -132,7 +132,7 @@ fn set_installed_canister_ids(env: &TestEnv, canister_ids: BTreeMap<SubnetType, 
 }
 
 fn setup(env: TestEnv) {
-    let mut ic = InternetComputer::new().with_api_boundary_nodes(1);
+    let mut ic = InternetComputer::new().with_api_boundary_nodes_playnet(1);
     for subnet_type in TESTED_SUBNET_TYPES {
         ic = ic
             .add_subnet(Subnet::fast_single_node(subnet_type).with_dkg_interval_length(DKG_LENGTH));
