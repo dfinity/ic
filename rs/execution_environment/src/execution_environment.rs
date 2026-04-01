@@ -4,7 +4,7 @@ use crate::{
         CanisterManager,
         types::{
             CanisterManagerError, CanisterManagerResponse, DtsInstallCodeResult,
-            InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
+            InstallCodeContext, PausedInstallCodeExecution, UploadChunkResult,
         },
     },
     canister_settings::CanisterSettings,
@@ -818,30 +818,28 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::UninstallCode) => {
-                let res = UninstallCodeArgs::decode(payload).and_then(|args| {
-                    let subnet_admins = state.get_own_subnet_admins();
-                    let time = state.time();
-                    let result = self.canister_manager.uninstall_code(
-                        msg.canister_change_origin(args.get_sender_canister_version()),
-                        args.get_canister_id(),
-                        &mut state,
-                        round_limits,
-                        subnet_admins,
-                        time,
-                    );
-                    match result {
-                        Ok(response) => {
-                            let bytes =
-                                self.process_canister_manager_response(response, &mut state);
-                            Ok((bytes, Some(args.get_canister_id())))
+                let res =
+                    UninstallCodeArgs::decode(payload).and_then(|args| {
+                        let subnet_admins = state.get_own_subnet_admins();
+                        let time = state.time();
+                        let result = self.canister_manager.uninstall_code(
+                            msg.canister_change_origin(args.get_sender_canister_version()),
+                            args.get_canister_id(),
+                            &mut state,
+                            round_limits,
+                            subnet_admins,
+                            time,
+                        );
+                        match result {
+                            Ok(response) => Ok(self
+                                .process_canister_manager_response(response, &mut state, &mut msg)),
+                            Err(err) => Err(err.into()),
                         }
-                        Err(err) => Err(err.into()),
-                    }
-                });
-                ExecuteSubnetMessageResult::Finished {
-                    response: res,
+                    });
+                res.unwrap_or_else(|err| ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
                     refund: msg.take_cycles(),
-                }
+                })
             }
 
             Ok(Ic00Method::UpdateSettings) => {
@@ -1004,7 +1002,7 @@ impl ExecutionEnvironment {
                 },
                 Ok(args) => {
                     let subnet_admins = state.get_own_subnet_admins();
-                    self.stop_canister(args.get_canister_id(), &msg, &mut state, subnet_admins)
+                    self.stop_canister(args.get_canister_id(), &mut msg, &mut state, subnet_admins)
                 }
             },
 
@@ -1912,13 +1910,14 @@ impl ExecutionEnvironment {
     }
 
     /// Applies changes to `ReplicatedState` according to `CanisterManagerResponse`
-    /// and returns the reply (success) contained in that `CanisterManagerResponse`
-    /// (that reply is supposed to be handled by the caller).
+    /// and constructs `ExecuteSubnetMessageResult` based on the reply (success)
+    /// contained in that `CanisterManagerResponse`.
     fn process_canister_manager_response(
         &self,
         response: CanisterManagerResponse,
         state: &mut ReplicatedState,
-    ) -> Vec<u8> {
+        msg: &mut CanisterCall,
+    ) -> ExecuteSubnetMessageResult {
         state.metadata.heap_delta_estimate += response.heap_delta_increase;
         if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
             state
@@ -1938,7 +1937,16 @@ impl ExecutionEnvironment {
             response.stop_contexts_to_reject,
             state,
         );
-        response.reply
+        if let Some(call_id) = response.stop_call_id_to_remove {
+            self.remove_stop_canister_call(state, response.canister_id, Some(call_id));
+        }
+        match response.reply {
+            Some(reply) => ExecuteSubnetMessageResult::Finished {
+                response: Ok((reply, Some(response.canister_id))),
+                refund: msg.take_cycles(),
+            },
+            None => ExecuteSubnetMessageResult::Processing,
+        }
     }
 
     fn try_add_http_context_to_replicated_state(
@@ -2481,7 +2489,7 @@ impl ExecutionEnvironment {
     fn stop_canister(
         &self,
         canister_id: CanisterId,
-        msg: &CanisterCall,
+        msg: &mut CanisterCall,
         state: &mut ReplicatedState,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> ExecuteSubnetMessageResult {
@@ -2493,24 +2501,16 @@ impl ExecutionEnvironment {
                 effective_canister_id: canister_id,
                 time: state.time(),
             });
-        match self.canister_manager.stop_canister(
-            canister_id,
-            StopCanisterContext::from((msg.clone(), call_id)),
-            state,
-            subnet_admins,
-        ) {
-            StopCanisterResult::RequestAccepted => ExecuteSubnetMessageResult::Processing,
-            StopCanisterResult::Failure {
-                error,
-                cycles_to_return,
-            } => ExecuteSubnetMessageResult::Finished {
-                response: Err(error.into()),
-                refund: cycles_to_return,
-            },
-            StopCanisterResult::AlreadyStopped { cycles_to_return } => {
+        let result =
+            self.canister_manager
+                .stop_canister(canister_id, msg, call_id, state, subnet_admins);
+        match result {
+            Ok(response) => self.process_canister_manager_response(response, state, msg),
+            Err(err) => {
+                self.remove_stop_canister_call(state, canister_id, Some(call_id));
                 ExecuteSubnetMessageResult::Finished {
-                    response: Ok((EmptyBlob.encode(), Some(canister_id))),
-                    refund: cycles_to_return,
+                    response: Err(err.into()),
+                    refund: msg.take_cycles(),
                 }
             }
         }
