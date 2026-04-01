@@ -103,7 +103,7 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    let mut ic = InternetComputer::new().add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
+    let mut ic = InternetComputer::new().add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
 
     // Build CloudEngine subnet and unassigned nodes distributed across 4 datacenters.
     // Each datacenter gets its own node operator with 1 CloudEngine node + 1 unassigned node.
@@ -163,7 +163,12 @@ pub fn setup(env: TestEnv) {
         })
     {
         let address = format!("{gw_ipv4}/{DM_DMZ_PREFIX}");
-        ic_gateway_vm = ic_gateway_vm.with_ipv4_config(&address, DM_DMZ_GATEWAY);
+        ic_gateway_vm = ic_gateway_vm
+            .with_required_host_features(vec![
+                HostFeature::DC("dm-dmz".to_string()),
+                HostFeature::DMZ,
+            ])
+            .with_ipv4_config(&address, DM_DMZ_GATEWAY);
     }
     ic_gateway_vm
         .start(&env)
