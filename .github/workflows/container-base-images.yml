@@ -55,7 +55,7 @@ jobs:
             BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Get Current Date
         id: date
@@ -90,7 +90,7 @@ jobs:
             > artifacts/${{ matrix.REFFILE }}
 
       - name: Upload SHA256 Digest Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: sha256-${{ matrix.IMAGE }}
           path: artifacts
@@ -105,14 +105,14 @@ jobs:
     if: ${{ github.ref_name == 'master' }}
     steps:
       - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
           app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.app-token.outputs.token }}
 
