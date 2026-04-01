@@ -957,7 +957,7 @@ fn corrupt_latest_cup(
             .expect("stop replica");
     }
 
-    // Upload corrupted CUPs on all nodes.
+    // Upload corrupted CUPs to all nodes.
     for node in subnet.nodes() {
         info!(
             logger,
