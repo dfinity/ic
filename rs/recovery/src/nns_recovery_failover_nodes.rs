@@ -87,6 +87,10 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long)]
     pub download_node: Option<IpAddr>,
 
+    /// Height of the checkpoint to download. If not provided, the latest checkpoint is used.
+    #[clap(long)]
+    pub download_state_height: Option<u64>,
+
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
@@ -182,8 +186,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
         match step_type {
             StepType::StopReplica | StepType::DownloadConsensusPool | StepType::DownloadState => {
                 if self.params.download_node.is_none() {
-                    // We could pick a node with highest finalization height automatically, but we
-                    // might have a preference between nodes of the same finalization height.
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes of same heights.
                     print_height_info(
                         &self.logger,
                         &self.recovery.registry_helper,
@@ -196,6 +200,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             _ => {}
         }
         match step_type {
+            StepType::DownloadState => {
+                if self.params.download_state_height.is_none() {
+                    self.params.download_state_height = read_optional(
+                        &self.logger,
+                        "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
+                    );
+                }
+            }
             StepType::ProposeToCreateSubnet => {
                 if self.params.replica_version.is_none() {
                     self.params.replica_version = read_optional(
@@ -298,6 +310,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         SshUser::Admin,
                         self.recovery.admin_key_file.clone(),
                         /*keep_downloaded_state=*/ false,
+                        self.params.download_state_height,
                     )?))
                 } else {
                     Err(RecoveryError::StepSkipped)

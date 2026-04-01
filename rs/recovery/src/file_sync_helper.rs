@@ -2,7 +2,7 @@ use crate::{
     cli::{consent_given, wait_for_confirmation},
     command_helper::exec_cmd,
     error::{RecoveryError, RecoveryResult},
-    ssh_helper,
+    ssh_helper::{self, SshHelper},
 };
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_types::ReplicaVersion;
@@ -242,6 +242,21 @@ pub fn read_dir(path: &Path) -> RecoveryResult<ReadDir> {
 pub fn path_exists(path: &Path) -> RecoveryResult<bool> {
     path.try_exists()
         .map_err(|e| RecoveryError::IoError(String::from("Cannot check if the path exists"), e))
+}
+
+pub fn path_exists_remotely(path: &Path, ssh_helper: &SshHelper) -> RecoveryResult<bool> {
+    let command = format!("test -e {} && echo y || echo n", path.display());
+    Ok(ssh_helper
+        .ssh(command.clone())?
+        .ok_or_else(|| {
+            RecoveryError::cmd_error(
+                &ssh_helper.get_command(command),
+                None,
+                "Could not check if path exists remotely".to_string(),
+            )
+        })?
+        .trim()
+        == "y")
 }
 
 pub fn remove_dir(path: &Path) -> RecoveryResult<()> {

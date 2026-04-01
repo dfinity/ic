@@ -6,8 +6,11 @@
 //! reproducible) description of the step, as well as its potential automatic
 //! execution.
 use crate::{
-    cli::wait_for_confirmation, file_sync_helper::remove_dir, registry_helper::RegistryHelper,
-    ssh_helper::SshHelper, util::SshUser,
+    cli::wait_for_confirmation,
+    file_sync_helper::{path_exists, path_exists_remotely, remove_dir},
+    registry_helper::RegistryHelper,
+    ssh_helper::SshHelper,
+    util::SshUser,
 };
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
@@ -83,9 +86,11 @@ pub struct NeuronArgs {
 #[derive(Debug)]
 pub struct NodeMetrics {
     _ip: IpAddr,
+    pub catch_up_package_height: Height,
     pub finalization_height: Height,
     pub certification_height: Height,
     pub certification_share_height: Height,
+    pub manifest_height: Height,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -383,16 +388,50 @@ impl Recovery {
     /// One of them is the latest checkpoint, which is looked up remotely via ssh if an `ssh_helper`
     /// is given, or locally on disk otherwise.
     ///
+    /// If `download_height` is given, the checkpoint at that height is downloaded. If it does not
+    /// exist, an error is returned.
+    /// Otherwise, the latest checkpoint on the remote node is downloaded.
+    ///
     /// If there are no checkpoints, this function returns an empty list and does not consider it
     /// an error, as the subnet could have stalled in its first DKG interval before producing any
     /// checkpoint.
-    pub fn get_ic_state_includes(ssh_helper: Option<&SshHelper>) -> RecoveryResult<Vec<PathBuf>> {
+    pub fn get_ic_state_includes(
+        ssh_helper: Option<&SshHelper>,
+        download_height: Option<u64>,
+    ) -> RecoveryResult<Vec<PathBuf>> {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
-        let maybe_latest_checkpoint_name = if let Some(ssh_helper) = ssh_helper {
-            Self::get_maybe_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
-        } else {
-            Self::get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
-                .map(|(name, _height)| name)
+        let maybe_latest_checkpoint_name = match (ssh_helper, download_height) {
+            (Some(ssh_helper), Some(height)) => {
+                let name = format!("{:016x}", height);
+                if !path_exists_remotely(&ic_checkpoints_path.join(&name), &ssh_helper)? {
+                    return Err(RecoveryError::invalid_output_error(format!(
+                        "Checkpoint {} at height {} does not exist at {}",
+                        name,
+                        height,
+                        ic_checkpoints_path.display()
+                    )));
+                }
+                Some(name)
+            }
+            (None, Some(height)) => {
+                let name = format!("{:016x}", height);
+                if !path_exists(&ic_checkpoints_path.join(&name))? {
+                    return Err(RecoveryError::invalid_output_error(format!(
+                        "Checkpoint {} at height {} does not exist at {}",
+                        name,
+                        height,
+                        ic_checkpoints_path.display()
+                    )));
+                }
+                Some(name)
+            }
+            (Some(ssh_helper), None) => {
+                Self::get_maybe_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
+            }
+            (None, None) => {
+                Self::get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
+                    .map(|(name, _height)| name)
+            }
         };
 
         let Some(latest_checkpoint_name) = maybe_latest_checkpoint_name else {
@@ -424,6 +463,7 @@ impl Recovery {
         ssh_user: SshUser,
         key_file: Option<PathBuf>,
         keep_downloaded_state: bool,
+        download_height: Option<u64>,
     ) -> RecoveryResult<impl Step + use<>> {
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
@@ -433,7 +473,7 @@ impl Recovery {
             key_file,
         );
 
-        let includes = Self::get_ic_state_includes(Some(&ssh_helper))?;
+        let includes = Self::get_ic_state_includes(Some(&ssh_helper), download_height)?;
 
         self.get_download_data_step(
             ssh_helper,
@@ -477,11 +517,12 @@ impl Recovery {
 
     /// Return a [CopyLocalIcStateStep] copying the ic_state of the current
     /// node to the recovery data directory.
-    pub fn get_copy_local_state_step(&self) -> impl Step + use<> {
+    pub fn get_copy_local_state_step(&self, download_height: Option<u64>) -> impl Step + use<> {
         CopyLocalIcStateStep {
             logger: self.logger.clone(),
             working_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
+            download_height,
         }
     }
 
@@ -1119,15 +1160,25 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
         }
     };
     let mut node_heights = NodeMetrics {
+        catch_up_package_height: Height::from(0),
         finalization_height: Height::from(0),
         certification_height: Height::from(0),
         certification_share_height: Height::from(0),
+        manifest_height: Height::from(0),
         _ip: *ip,
     };
     for line in body.split('\n') {
         let mut parts = line.split(' ');
         if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
             match prefix {
+                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="catch_up_package"}"# => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.catch_up_package_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
                 r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# => {
                     match height.trim().parse::<u64>() {
                         Ok(val) => node_heights.certification_height = Height::from(val),
@@ -1147,6 +1198,14 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
                 r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => {
                     match height.trim().parse::<u64>() {
                         Ok(val) => node_heights.finalization_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
+                "state_manager_last_computed_manifest_height" => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.manifest_height = Height::from(val),
                         error => {
                             warn!(logger, "Couldn't parse height {}: {:?}", height, error)
                         }
@@ -1247,7 +1306,8 @@ mod tests {
     use crate::error::GracefulExpect;
     use ic_test_utilities_tmpdir::tmpdir;
 
-    #[test]
+    // TODO: add tests
+
     fn get_latest_checkpoint_name_and_height_test() {
         let checkpoints_dir = tmpdir("checkpoints");
         create_fake_checkpoint_dirs(
