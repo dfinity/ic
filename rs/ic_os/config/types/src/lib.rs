@@ -40,7 +40,7 @@ use std::str::FromStr;
 use strum::{Display, EnumString};
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.14.0";
+pub const CONFIG_VERSION: &str = "1.15.0";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
@@ -219,6 +219,16 @@ pub struct GuestOSSettings {
     pub guestos_dev_settings: GuestOSDevSettings,
 }
 
+/// Pre-generated TLS certificate and key for ic-boundary.
+/// Used in system tests to inject a Farm-issued certificate.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct IcBoundaryTlsCert {
+    /// PEM-encoded certificate (leaf + chain concatenated).
+    pub cert_pem: String,
+    /// PEM-encoded private key.
+    pub key_pem: String,
+}
+
 /// GuestOS development configuration. These settings are strictly used for development images.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSDevSettings {
@@ -234,6 +244,9 @@ pub struct GuestOSDevSettings {
     /// Generate and inject a self-signed TLS certificate and key for ic-boundary
     /// for the given domain name. To be used in system tests only.
     pub generate_ic_boundary_tls_cert: Option<String>,
+    /// Pre-generated TLS certificate and key for ic-boundary.
+    #[serde(default)]
+    pub ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
     /// PEM-encoded NNS public key.
     /// Overrides the hardcoded NNS public key on the rootfs.
     pub nns_pub_key_override: Option<String>,

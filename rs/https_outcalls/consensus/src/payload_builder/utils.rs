@@ -22,6 +22,7 @@ use std::{
 /// Consistency means:
 /// - The signed metadata is the same as the metadata of the response
 /// - The content_hash is the same as the hash of the content
+/// - The content_size is the same as the size of the content
 ///
 /// **NOTE**: The signature is not checked
 pub(crate) fn check_response_consistency(
@@ -52,6 +53,15 @@ pub(crate) fn check_response_consistency(
         return Err(InvalidCanisterHttpPayloadReason::ContentHashMismatch {
             metadata_hash: metadata.content_hash.clone(),
             calculated_hash,
+        });
+    }
+
+    // Check the calculated size matches the metadata size
+    let calculated_size = content.content.count_bytes() as u32;
+    if calculated_size != metadata.content_size {
+        return Err(InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
+            metadata_size: metadata.content_size,
+            calculated_size,
         });
     }
 
