@@ -327,7 +327,7 @@ async fn call_sync(
         .with_label_values(&[status_label])
         .inc();
 
-    // TODO: ensure that `ParsedMessageStatus::Unknown` never occurs
+    // TODO(DSM-121): ensure that `ParsedMessageStatus::Unknown` never occurs
     // and trigger a critical error here if it does.
     if let ParsedMessageStatus::Unknown = message_status {
         return SyncCallResponse::Accepted(
