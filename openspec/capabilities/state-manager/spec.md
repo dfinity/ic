@@ -159,7 +159,7 @@ The State Manager MUST provide read access to committed states.
 ### SCENARIO-STMGR-019: Reading the latest state
 **Given** `get_latest_state()` is called
 **When** the state is retrieved
-**Then** the most recent snapshot in memory is returned
+**Then** the most recently committed snapshot in memory is returned
 
 ### SCENARIO-STMGR-020: Falling back to checkpoint on disk
 **Given** `get_state_at(height)` is called for a height not in memory but existing on disk
@@ -239,16 +239,34 @@ The State Manager MUST provide certified stream slices for cross-subnet communic
 
 ---
 
+## REQ-STMGR-010: Overlay Merge Strategy
+
+The tip thread MUST merge overlay files to control storage overhead.
+
+### SCENARIO-STMGR-029: Merge triggered by file count (hard limit)
+**Given** a page map shard has more than `NUMBER_OF_FILES_HARD_LIMIT` (20) overlay files
+**When** the merge check runs
+**Then** the shard is merged regardless of the soft budget
+
+### SCENARIO-STMGR-030: Merge within soft budget
+**Given** the total estimated merge write size is within `MERGE_SOFT_BUDGET_BYTES` (250 GiB)
+**When** merges are scheduled
+**Then** shards with the highest storage overhead are merged first
+**And** merging stops once the budget is exhausted
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
-| REQ-STMGR-001 | Initialization | narrative | rs/state_manager/tests/ |
-| REQ-STMGR-002 | Tip management | narrative | rs/state_manager/tests/ |
-| REQ-STMGR-003 | Commit/checkpoint | narrative | rs/state_manager/tests/ |
-| REQ-STMGR-004 | Hash retrieval | narrative | rs/state_manager/tests/ |
-| REQ-STMGR-005 | Certification delivery | narrative | rs/state_manager/tests/ |
-| REQ-STMGR-006 | State reading | narrative | rs/state_manager/tests/ |
-| REQ-STMGR-007 | State sync/fetch | narrative | rs/state_manager/tests/ |
+| REQ-STMGR-001 | Initialization | linked | rs/state_manager/tests/state_manager.rs |
+| REQ-STMGR-002 | Tip management | linked | rs/state_manager/tests/state_manager.rs |
+| REQ-STMGR-003 | Commit/checkpoint | linked | rs/state_manager/tests/state_manager.rs |
+| REQ-STMGR-004 | Hash retrieval | linked | rs/state_manager/tests/state_manager.rs |
+| REQ-STMGR-005 | Certification delivery | linked | rs/state_manager/tests/state_manager.rs |
+| REQ-STMGR-006 | State reading | linked | rs/state_manager/tests/state_manager.rs |
+| REQ-STMGR-007 | State sync/fetch | linked | rs/state_manager/tests/state_manager.rs |
 | REQ-STMGR-008 | Diverged state | narrative | rs/state_manager/tests/ |
 | REQ-STMGR-009 | Certified streams | narrative | rs/state_manager/tests/ |
+| REQ-STMGR-010 | Overlay merge strategy | narrative | rs/state_manager/tests/ |

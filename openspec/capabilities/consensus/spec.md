@@ -27,6 +27,17 @@ Consensus subcomponents MUST be invoked in a specific round-robin order ensuring
 **Then** consensus returns empty `Mutations` (no progress)
 **And** no subcomponents are invoked
 
+### SCENARIO-CONS-023: Protocol version check
+**Given** an artifact's replica version does not match the expected default protocol version
+**When** the artifact is processed
+**Then** the artifact is rejected with `ReplicaVersionMismatch`
+
+### SCENARIO-CONS-024: DKG availability check
+**Given** `on_state_change` checks DKG transcript availability
+**When** the check runs
+**Then** the node verifies it is listed as a receiver in every current transcript type
+**And** if the node is not listed in all transcript committees, DKGs are considered unavailable
+
 ---
 
 ## REQ-CONS-002: Block Maker Election
@@ -36,7 +47,7 @@ Each round MUST elect a subset of nodes as block makers using a deterministic ps
 ### SCENARIO-CONS-004: Node elected as block maker
 **Given** a new round begins (notarized height advances)
 **When** `get_block_maker_rank` is called
-**Then** if the node's rank is within the top `f+1` nodes, the node is eligible to propose
+**Then** if the node's rank is within the top `f+1` nodes (where `f = max_malicious_nodes` from the subnet registry record), the node is eligible to propose
 
 ### SCENARIO-CONS-005: Duplicate proposal prevention
 **Given** the validated pool already contains a block proposal from this node at the target height
@@ -69,7 +80,7 @@ Block makers MUST wait a rank-dependent delay before proposing.
 **Given** a block maker has rank `r`
 **When** the delay is computed
 **Then** the base delay is `unit_delay * r`
-**And** a dynamic delay is added if rank > 0 and sufficient non-rank-0 finalized blocks exist recently
+**And** a dynamic delay is added if rank > 0 and more than 10 non-rank-0 blocks have been finalized in the last 30 heights
 
 ### SCENARIO-CONS-010: Time to make block
 **Given** the relative time since round start exceeds the block maker delay
@@ -190,17 +201,122 @@ Finalized blocks MUST be delivered as batches to the message routing layer.
 
 ---
 
+## REQ-CONS-011: Random Tape
+
+The random tape subcomponent MUST generate per-height randomness for canister execution.
+
+### SCENARIO-CONS-025: Random tape share creation
+**Given** a node needs to contribute to the random tape at a given height
+**When** the random tape maker runs
+**Then** the node creates a threshold BLS signature share over the height value
+**And** the share is added to the validated pool
+
+### SCENARIO-CONS-026: Random tape aggregate creation
+**Given** sufficient random tape shares exist for a height
+**When** the aggregator runs
+**Then** a random tape is created by combining the threshold shares
+**And** the tape value is used as randomness seed for canister execution at that height
+
+---
+
+## REQ-CONS-012: Share Aggregation
+
+The aggregator subcomponent MUST combine threshold shares into full consensus artifacts.
+
+### SCENARIO-CONS-027: Aggregation threshold check
+**Given** shares of a given type (notarization, finalization, random beacon, random tape) accumulate in the validated pool
+**When** the aggregator checks for completeness
+**Then** it waits until the number of shares meets or exceeds the threshold (typically `f+1` for random beacon/tape, or a majority for notarization)
+**And** once the threshold is met, a combined artifact is created and added to the pool
+
+### SCENARIO-CONS-028: Share deduplication
+**Given** multiple shares from the same node for the same artifact arrive
+**When** the aggregator processes them
+**Then** only the first valid share from each node is counted
+**And** duplicates are discarded
+
+---
+
+## REQ-CONS-013: Artifact Validation
+
+The validator subcomponent MUST verify artifacts before promoting them from unvalidated to validated pool.
+
+### SCENARIO-CONS-029: Block proposal validation
+**Given** a block proposal arrives in the unvalidated pool
+**When** the validator processes it
+**Then** the block's rank is checked against the expected block maker
+**And** the parent hash references a known finalized or notarized block
+**And** the validation context is monotonically increasing relative to the parent
+**And** the payload is validated by all payload building components
+**And** if valid, the block is moved to the validated pool
+
+### SCENARIO-CONS-030: Notarization share validation
+**Given** a notarization share arrives in the unvalidated pool
+**When** the validator processes it
+**Then** the share's block hash must match a valid block proposal in the pool
+**And** the signer's BLS threshold signature is verified
+**And** if valid, the share is moved to the validated pool
+
+### SCENARIO-CONS-031: Invalid artifact rejection
+**Given** an artifact fails any validation check
+**When** the validator processes it
+**Then** the artifact is moved to the invalid section of the pool
+**And** a validation error is recorded with the reason
+
+---
+
+## REQ-CONS-014: Pool Bounds
+
+The consensus pool MUST enforce bounds on artifact retention.
+
+### SCENARIO-CONS-032: Unvalidated pool size limit
+**Given** the unvalidated pool exceeds its maximum size
+**When** new artifacts arrive
+**Then** low-priority artifacts are evicted to stay within bounds
+**And** the pool size metric is updated
+
+### SCENARIO-CONS-033: Minimum chain length enforcement
+**Given** the purger computes the purge threshold
+**When** the threshold is calculated
+**Then** at least `MINIMUM_CHAIN_LENGTH` (50) heights of artifacts are retained below the finalized height
+**And** this ensures peers can catch up without needing a CUP
+
+---
+
+## REQ-CONS-015: Membership
+
+Consensus MUST determine subnet membership from the registry.
+
+### SCENARIO-CONS-034: Membership derived from registry
+**Given** a consensus round begins
+**When** membership is determined
+**Then** it is derived from the subnet record at the appropriate registry version
+**And** nodes added to or removed from the subnet are reflected within the consensus latency bound
+
+### SCENARIO-CONS-035: Node verifies own membership
+**Given** a node processes a subnet record update
+**When** the node checks its own membership
+**Then** if the node is no longer in the subnet, it stops participating in consensus
+**And** if the node is newly added, it begins participating after loading the appropriate DKG transcripts
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |
 |----|-------------|--------|-------|
-| REQ-CONS-001 | Subcomponent order | narrative | rs/consensus/tests/ |
-| REQ-CONS-002 | Block maker election | narrative | rs/consensus/tests/ |
-| REQ-CONS-003 | Block proposal timing | narrative | rs/consensus/tests/ |
-| REQ-CONS-004 | Notarization | narrative | rs/consensus/tests/ |
-| REQ-CONS-005 | Finalization | narrative | rs/consensus/tests/ |
+| REQ-CONS-001 | Subcomponent order | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-002 | Block maker election | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-003 | Block proposal timing | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-004 | Notarization | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-005 | Finalization | linked | rs/consensus/tests/integration.rs |
 | REQ-CONS-006 | Random beacon | narrative | rs/consensus/tests/ |
 | REQ-CONS-007 | Catch-up packages | narrative | rs/consensus/tests/ |
 | REQ-CONS-008 | Block payload | narrative | rs/consensus/tests/ |
 | REQ-CONS-009 | Pool purging | narrative | rs/consensus/tests/ |
-| REQ-CONS-010 | Batch delivery | narrative | rs/consensus/tests/ |
+| REQ-CONS-010 | Batch delivery | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-011 | Random tape | narrative | rs/consensus/tests/ |
+| REQ-CONS-012 | Share aggregation | narrative | rs/consensus/tests/ |
+| REQ-CONS-013 | Artifact validation | narrative | rs/consensus/tests/ |
+| REQ-CONS-014 | Pool bounds | narrative | rs/consensus/tests/ |
+| REQ-CONS-015 | Membership | narrative | rs/consensus/tests/ |

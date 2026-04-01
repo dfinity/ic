@@ -203,11 +203,22 @@ Canisters MUST be able to send and receive cycles via inter-canister calls.
 
 HTTP outcalls MUST have specific pricing based on request/response sizes and subnet size.
 
-### SCENARIO-CYC-025: HTTP request fee
-**Given** a canister makes an HTTP outcall
-**When** the fee is charged
-**Then** it is based on request size, response size limit, and subnet size
-**And** it covers both the request and the maximum possible response
+### SCENARIO-CYC-025: HTTP request fee (v1)
+**Given** a canister makes an HTTP outcall using the v1 fee model
+**When** the fee is computed
+**Then** fee = `(http_request_linear_baseline_fee + http_request_quadratic_baseline_fee * subnet_size + http_request_per_byte_fee * request_size + http_response_per_byte_fee * response_size) * subnet_size`
+**And** if no response size limit is specified, `MAX_CANISTER_HTTP_RESPONSE_BYTES` is used
+
+### SCENARIO-CYC-043: HTTP request fee (v2 — with roundtrip time)
+**Given** a canister makes an HTTP outcall using the v2 fee model
+**When** the fee is computed
+**Then** fee = `(1_000_000 + 50 * request_size + 140_000 * n + 800 * n^2 + 50 * raw_response_size + 300 * roundtrip_time_ms + transform_instructions / 13 + (10 * n + 650) * transformed_response_size) * n` where `n = subnet_size`
+
+### SCENARIO-CYC-044: HTTP request fee (beta — payload-based)
+**Given** a canister makes an HTTP outcall using the beta fee model
+**When** the fee is computed
+**Then** fee = `(4_000_000 + 50_000 * subnet_size + 50 * request_size + 50 * max_response_size + 750 * payload_size + 30 * subnet_size * payload_size) * subnet_size`
+**And** if no response size limit is specified, `MAX_CANISTER_HTTP_RESPONSE_BYTES` is used
 
 ---
 
@@ -279,6 +290,19 @@ Fetching canister logs MUST incur a response-size-based fee.
 **Given** the maximum log fetch fee is computed
 **When** prepayment is calculated
 **Then** it uses `MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES` as the response size
+
+---
+
+## REQ-CYC-014b: Canister Deletion Leftover Cycles
+
+When a canister is deleted, remaining cycles MUST be accounted for.
+
+### SCENARIO-CYC-045: Compute leftover cycles on deletion
+**Given** a canister is being deleted
+**When** leftover cycles are computed
+**Then** leftover = `balance + reserved_balance`
+**And** the leftover is converted to `NominalCycles` for accounting purposes
+**And** these cycles are destroyed (not transferred elsewhere)
 
 ---
 
