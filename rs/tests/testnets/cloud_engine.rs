@@ -165,7 +165,7 @@ pub fn setup(env: TestEnv) {
         let address = format!("{gw_ipv4}/{DM_DMZ_PREFIX}");
         ic_gateway_vm = ic_gateway_vm
             .with_required_host_features(vec![
-                HostFeature::DC("dm-dmz".to_string()),
+                HostFeature::DC("dm1-dmz".to_string()),
                 HostFeature::DMZ,
             ])
             .with_ipv4_config(&address, DM_DMZ_GATEWAY);
