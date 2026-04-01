@@ -4,10 +4,14 @@ use ic_webmcp_codegen::{Config, generate_manifest};
 use std::path::PathBuf;
 
 fn repo_root() -> PathBuf {
-    // CARGO_MANIFEST_DIR = .../rs/webmcp/codegen
-    // repo root = .../  (3 levels up)
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest_dir
+    // Under Bazel, TEST_SRCDIR points to the runfiles tree root.
+    // Data files are at $TEST_SRCDIR/<workspace>/rs/...
+    if let Ok(src_dir) = std::env::var("TEST_SRCDIR") {
+        let workspace = std::env::var("TEST_WORKSPACE").unwrap_or_else(|_| "ic".to_string());
+        return PathBuf::from(src_dir).join(workspace);
+    }
+    // Under Cargo, CARGO_MANIFEST_DIR = .../rs/webmcp/codegen → 3 levels up
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap() // rs/webmcp
         .parent()
