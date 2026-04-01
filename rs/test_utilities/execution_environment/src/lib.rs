@@ -82,7 +82,8 @@ use ic_types::{
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
+    CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
+    HTTPOutcalls, NominalCycles, RequestAndResponseTransmission,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
@@ -503,68 +504,64 @@ impl ExecutionTest {
         )
     }
 
-    pub fn call_fee<S: ToString>(&self, method_name: S, payload: &[u8]) -> Cycles {
-        let fee = self
-            .cycles_account_manager
+    pub fn call_fee<S: ToString>(
+        &self,
+        method_name: S,
+        payload: &[u8],
+    ) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager
             .xnet_call_performed_fee(self.subnet_size(), self.cost_schedule())
             + self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
                 NumBytes::from((payload.len() + method_name.to_string().len()) as u64),
                 self.subnet_size(),
                 self.cost_schedule(),
-            );
-        fee.real()
-    }
-
-    pub fn max_response_fee(&self) -> Cycles {
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(
-                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-                self.subnet_size(),
-                self.cost_schedule(),
             )
-            .real()
     }
 
-    pub fn reply_fee(&self, payload: &[u8]) -> Cycles {
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(
-                NumBytes::from(payload.len() as u64),
-                self.subnet_size(),
-                self.cost_schedule(),
-            )
-            .real()
+    pub fn max_response_fee(&self) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 
-    pub fn reject_fee<S: ToString>(&self, reject_message: S) -> Cycles {
+    pub fn reply_fee(&self, payload: &[u8]) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            NumBytes::from(payload.len() as u64),
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
+    }
+
+    pub fn reject_fee<S: ToString>(
+        &self,
+        reject_message: S,
+    ) -> CompoundCycles<RequestAndResponseTransmission> {
         let bytes = reject_message.to_string().len() + std::mem::size_of::<RejectCode>();
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(
-                NumBytes::from(bytes as u64),
-                self.subnet_size(),
-                self.cost_schedule(),
-            )
-            .real()
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            NumBytes::from(bytes as u64),
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 
-    pub fn canister_creation_fee(&self) -> Cycles {
+    pub fn canister_creation_fee(&self) -> CompoundCycles<CanisterCreation> {
         self.cycles_account_manager
             .canister_creation_fee(self.subnet_size(), self.cost_schedule())
-            .real()
     }
 
     pub fn http_request_fee(
         &self,
         request_size: NumBytes,
         response_size_limit: Option<NumBytes>,
-    ) -> Cycles {
-        self.cycles_account_manager
-            .http_request_fee(
-                request_size,
-                response_size_limit,
-                self.subnet_size(),
-                self.cost_schedule(),
-            )
-            .real()
+    ) -> CompoundCycles<HTTPOutcalls> {
+        self.cycles_account_manager.http_request_fee(
+            request_size,
+            response_size_limit,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 
     pub fn reduced_wasm_compilation_fee(&self, wasm: &[u8]) -> Cycles {
