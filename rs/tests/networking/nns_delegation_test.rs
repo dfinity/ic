@@ -773,26 +773,31 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
         vec![upgrade_url.to_string()],
     ));
 
-    for subnet_type in TESTED_SUBNET_TYPES
-        .iter()
-        .copied()
-        .filter(|t| *t != SubnetType::System)
-    {
-        // TODO(CON-1696): Remove me when #9613 reaches mainnet NNS
-        if subnet_type == SubnetType::CloudEngine {
-            continue;
-        }
+    block_on(futures::future::join_all(
+        TESTED_SUBNET_TYPES
+            .iter()
+            .copied()
+            .filter(|t| *t != SubnetType::System)
+            // TODO(CON-1696): Remove next line when #9613 reaches mainnet NNS
+            .filter(|t| *t != SubnetType::CloudEngine)
+            .map(|subnet_type| {
+                let env = env.clone();
+                let nns_node = nns_node.clone();
+                let target_version = target_version.clone();
+                async move {
+                    let (subnet, node) = get_subnet_and_node(&env, subnet_type);
 
-        let (subnet, node) = get_subnet_and_node(env, subnet_type);
+                    deploy_guestos_to_all_subnet_nodes(
+                        &nns_node,
+                        &target_version,
+                        subnet.subnet_id,
+                    )
+                    .await;
 
-        block_on(deploy_guestos_to_all_subnet_nodes(
-            &nns_node,
-            &target_version,
-            subnet.subnet_id,
-        ));
-
-        assert_assigned_replica_version(&node, &target_version, env.logger());
-    }
+                    assert_assigned_replica_version(&node, &target_version, env.logger());
+                }
+            }),
+    ));
 }
 
 macro_rules! systest_all_subnet_types {
