@@ -18,7 +18,7 @@ mock! {
     impl ic_types::crypto::threshold_sig::RootOfTrustProvider for RootOfTrustProvider {
         type Error = MockRootOfTrustProviderError;
 
-        fn mainnet_root_of_trust(&self) -> Option<IcRootOfTrust>;
+        fn additional_root_of_trust(&self) -> Option<IcRootOfTrust>;
 
         fn root_of_trust(&self) -> Result<IcRootOfTrust, MockRootOfTrustProviderError>;
     }

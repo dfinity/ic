@@ -76,7 +76,7 @@ fn should_retrieve_root_of_trust() {
         .build();
     let provider = RegistryRootOfTrustProvider::new(registry, registry_version);
 
-    let result = provider.mainnet_root_of_trust();
+    let result = provider.additional_root_of_trust();
     assert_eq!(result, None);
 
     let result = provider.root_of_trust();

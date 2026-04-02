@@ -27,7 +27,7 @@ mod root_of_trust {
         let root_of_trust = nns_root_public_key();
         let provider = ConstantRootOfTrustProvider::new(root_of_trust);
 
-        let result = provider.mainnet_root_of_trust();
+        let result = provider.additional_root_of_trust();
         assert_eq!(result, None);
 
         let result = provider.root_of_trust();
@@ -67,7 +67,7 @@ mod root_of_trust {
         let err_msg = "test: failed to retrieve root of trust";
         let root_of_trust_provider_error = MockRootOfTrustProviderError::new(err_msg);
         root_of_trust_provider
-            .expect_mainnet_root_of_trust()
+            .expect_additional_root_of_trust()
             .times(1)
             .return_const(None);
         root_of_trust_provider
@@ -94,7 +94,7 @@ mod root_of_trust {
         let current_time = GENESIS;
         let mut root_of_trust_provider = MockRootOfTrustProvider::new();
         root_of_trust_provider
-            .expect_mainnet_root_of_trust()
+            .expect_additional_root_of_trust()
             .times(1)
             .return_const(None);
         root_of_trust_provider
@@ -115,11 +115,11 @@ mod root_of_trust {
     }
 
     #[test]
-    fn should_use_mainnet_root_of_trust_provider_for_canister_signature() {
+    fn should_use_additional_root_of_trust_provider_for_canister_signature() {
         let current_time = GENESIS;
         let mut root_of_trust_provider = MockRootOfTrustProvider::new();
         root_of_trust_provider
-            .expect_mainnet_root_of_trust()
+            .expect_additional_root_of_trust()
             .times(1)
             .return_const(Some(IcRootOfTrust::from(
                 hard_coded_root_of_trust().public_key,
@@ -136,13 +136,13 @@ mod root_of_trust {
     }
 
     #[test]
-    fn should_ignore_nonmatching_mainnet_root_of_trust_provider_for_canister_signature() {
+    fn should_ignore_nonmatching_additional_root_of_trust_provider_for_canister_signature() {
         let current_time = GENESIS;
         let mut root_of_trust_provider = MockRootOfTrustProvider::new();
         // the mainnet root public key does not match the public key of the canister signature
         // used in this test
         root_of_trust_provider
-            .expect_mainnet_root_of_trust()
+            .expect_additional_root_of_trust()
             .times(1)
             .return_const(Some(IcRootOfTrust::from(
                 icp_mainnet_root_public_key_for_testing(),

@@ -569,13 +569,18 @@ where
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.signature.clone()));
-            let verified_with_mainnet = root_of_trust_provider.mainnet_root_of_trust().is_some_and(
-                |mainnet_root_of_trust| {
+            let verified_with_mainnet = root_of_trust_provider
+                .additional_root_of_trust()
+                .is_some_and(|additional_root_of_trust| {
                     validator
-                        .verify_canister_sig(&canister_sig, message_id, &pk, &mainnet_root_of_trust)
+                        .verify_canister_sig(
+                            &canister_sig,
+                            message_id,
+                            &pk,
+                            &additional_root_of_trust,
+                        )
                         .is_ok()
-                },
-            );
+                });
             if !verified_with_mainnet {
                 let root_of_trust = root_of_trust_provider
                     .root_of_trust()
@@ -714,13 +719,18 @@ where
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.to_vec()));
-            let verified_with_mainnet = root_of_trust_provider.mainnet_root_of_trust().is_some_and(
-                |mainnet_root_of_trust| {
+            let verified_with_mainnet = root_of_trust_provider
+                .additional_root_of_trust()
+                .is_some_and(|additional_root_of_trust| {
                     validator
-                        .verify_canister_sig(&canister_sig, delegation, &pk, &mainnet_root_of_trust)
+                        .verify_canister_sig(
+                            &canister_sig,
+                            delegation,
+                            &pk,
+                            &additional_root_of_trust,
+                        )
                         .is_ok()
-                },
-            );
+                });
             if !verified_with_mainnet {
                 let root_of_trust = root_of_trust_provider
                     .root_of_trust()
