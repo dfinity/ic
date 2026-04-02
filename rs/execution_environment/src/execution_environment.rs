@@ -2427,7 +2427,7 @@ impl ExecutionEnvironment {
                     sender,
                     cost_schedule,
                 );
-                self.process_canister_manager_response(response, state, msg)
+                self.process_canister_manager_result(Ok(response), state, msg)
             }
         }
     }
