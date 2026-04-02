@@ -67,6 +67,7 @@ impl From<AnonymousContent> for HttpQueryContent {
                 sender,
                 ingress_expiry: content.ingress_expiry,
                 nonce: content.nonce,
+                sender_info: content.sender_info,
             },
         }
     }

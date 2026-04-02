@@ -46,15 +46,16 @@ use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{
         Environment, Governance, HeapGrowthPotential, INITIAL_NEURON_DISSOLVE_DELAY,
-        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
+        MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
         REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
-        get_node_provider_reward,
+        get_node_provider_reward, max_dissolve_delay_seconds,
         test_data::{
             CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
     },
     governance_proto_builder::GovernanceProtoBuilder,
+    is_mission_70_voting_rewards_enabled,
     pb::v1::{
         AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
         ExecuteNnsFunction, Followees, GovernanceError, IdealMatchedParticipationFunction,
@@ -169,9 +170,11 @@ const NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE: Option<api::neuron::DissolveStat
         VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
     ));
 
-const NOTDISSOLVING_MAX_DISSOLVE_DELAY: Option<api::neuron::DissolveState> = Some(
-    api::neuron::DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS),
-);
+fn not_dissolving_max_dissolve_delay() -> Option<api::neuron::DissolveState> {
+    Some(api::neuron::DissolveState::DissolveDelaySeconds(
+        max_dissolve_delay_seconds(),
+    ))
+}
 
 const MANAGER_ID: u64 = 1000;
 const NEURON_1_CONTROLLER: u64 = 100;
@@ -422,7 +425,7 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             api::Neuron {
-                dissolve_state: NOTDISSOLVING_MAX_DISSOLVE_DELAY,
+                dissolve_state: not_dissolving_max_dissolve_delay(),
                 cached_neuron_stake_e8s: 1,
                 ..api::Neuron::default()
             },
@@ -439,7 +442,7 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             api::Neuron {
-                dissolve_state: NOTDISSOLVING_MAX_DISSOLVE_DELAY,
+                dissolve_state: not_dissolving_max_dissolve_delay(),
                 cached_neuron_stake_e8s: 21,
                 ..api::Neuron::default()
             },
@@ -456,7 +459,7 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             api::Neuron {
-                dissolve_state: NOTDISSOLVING_MAX_DISSOLVE_DELAY,
+                dissolve_state: not_dissolving_max_dissolve_delay(),
                 cached_neuron_stake_e8s: 21,
                 ..api::Neuron::default()
             },
@@ -2751,7 +2754,15 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         });
     let expected_distributed_e8s_equivalent =
         (expected_available_e8s_equivalent as f64 * neuron_share) as u64;
-    assert_eq!(expected_distributed_e8s_equivalent, 15);
+    // The value depends on the dissolve delay bonus:
+    // - With 2-year max (mission 70): 1 year → 50% bonus → higher voting power ratio → 16
+    // - With 8-year max (pre mission 70): 1 year → 12.5% bonus → lower voting power ratio → 15
+    let expected_value = if is_mission_70_voting_rewards_enabled() {
+        16
+    } else {
+        15
+    };
+    assert_eq!(expected_distributed_e8s_equivalent, expected_value);
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -4380,10 +4391,14 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, api::
     );
 
     // Make sure the neuron was created with the right details.
-    let expected_voting_power = neuron_stake_e8s
-        // Age bonus.
-        * 17
-        / 16;
+    // Voting power = stake * (1 + dissolve_delay_bonus).
+    // With 2-year max (mission 70): 6 months / 2 years = 25% bonus → multiplier = 1.25 = 5/4
+    // With 8-year max (pre mission 70): 6 months / 8 years = 6.25% bonus → multiplier = 1.0625 = 17/16
+    let expected_voting_power = if is_mission_70_voting_rewards_enabled() {
+        neuron_stake_e8s * 5 / 4
+    } else {
+        neuron_stake_e8s * 17 / 16
+    };
     assert_eq!(
         gov.get_full_neuron(&id, &from).unwrap(),
         api::Neuron {
@@ -8844,8 +8859,8 @@ fn test_increase_dissolve_delay() {
         &mut gov,
         principal_id,
         1,
-        u32::try_from(MAX_DISSOLVE_DELAY_SECONDS + 1)
-            .expect("MAX_DISSOLVE_DELAY_SECONDS larger than u32"),
+        u32::try_from(max_dissolve_delay_seconds() + 1)
+            .expect("max_dissolve_delay_seconds larger than u32"),
     );
     let neuron_info = gov
         .get_neuron_info(&NeuronId { id: 1 }, *RANDOM_PRINCIPAL_ID)
@@ -8853,7 +8868,7 @@ fn test_increase_dissolve_delay() {
     assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
         neuron_info.dissolve_delay_seconds,
-        MAX_DISSOLVE_DELAY_SECONDS
+        max_dissolve_delay_seconds()
     );
 
     // Tests for neuron 2. Dissolving.
@@ -8871,8 +8886,8 @@ fn test_increase_dissolve_delay() {
         &mut gov,
         principal_id,
         2,
-        u32::try_from(MAX_DISSOLVE_DELAY_SECONDS + 1)
-            .expect("MAX_DISSOLVE_DELAY_SECONDS larger than u32"),
+        u32::try_from(max_dissolve_delay_seconds() + 1)
+            .expect("max_dissolve_delay_seconds larger than u32"),
     );
     let neuron_info = gov
         .get_neuron_info(&NeuronId { id: 2 }, *RANDOM_PRINCIPAL_ID)
@@ -8880,7 +8895,7 @@ fn test_increase_dissolve_delay() {
     assert_eq!(neuron_info.state, NeuronState::Dissolving as i32);
     assert_eq!(
         neuron_info.dissolve_delay_seconds,
-        MAX_DISSOLVE_DELAY_SECONDS
+        max_dissolve_delay_seconds()
     );
 
     // Tests for neuron 3. Dissolved.
@@ -10760,7 +10775,7 @@ async fn test_known_neurons() {
             controller: Some(principal(1)),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(
-                MAX_DISSOLVE_DELAY_SECONDS,
+                max_dissolve_delay_seconds(),
             )),
             ..Default::default()
         },
@@ -10773,7 +10788,7 @@ async fn test_known_neurons() {
             controller: Some(principal(2)),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(
-                MAX_DISSOLVE_DELAY_SECONDS,
+                max_dissolve_delay_seconds(),
             )),
             ..Default::default()
         },
@@ -10786,7 +10801,7 @@ async fn test_known_neurons() {
             controller: Some(principal(3)),
             cached_neuron_stake_e8s: 100_000_000_000,
             dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(
-                MAX_DISSOLVE_DELAY_SECONDS,
+                max_dissolve_delay_seconds(),
             )),
             ..Default::default()
         },
@@ -11130,7 +11145,7 @@ lazy_static! {
         let neuron_base = api::Neuron {
             cached_neuron_stake_e8s: 100_000 * E8,
             dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(
-                MAX_DISSOLVE_DELAY_SECONDS,
+                max_dissolve_delay_seconds(),
             )),
             ..Default::default()
         };

@@ -1,7 +1,8 @@
 use ic_crypto_tree_hash::Path;
 use ic_http_endpoints_public::{query, read_state};
 use ic_types::{
-    PrincipalId,
+    PrincipalId, UserId,
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
         HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedIngress,
@@ -134,6 +135,15 @@ impl IngressMessage {
         let signed_ingress: SignedIngress = self.envelope().try_into().unwrap();
         signed_ingress.id()
     }
+
+    pub fn known_ingress_status(&self) -> IngressStatus {
+        IngressStatus::Known {
+            receiver: self.canister_id,
+            user_id: UserId::new(SENDER),
+            time: current_time(),
+            state: IngressState::Completed(WasmResult::Reply(vec![])),
+        }
+    }
 }
 
 impl Call {
@@ -196,6 +206,7 @@ impl Query {
                 sender: Blob(SENDER.into_vec()),
                 ingress_expiry,
                 nonce: None,
+                sender_info: None,
             },
         };
 

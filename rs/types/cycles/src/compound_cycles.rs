@@ -4,6 +4,7 @@ use crate::{
     cycles_use_case::{CyclesUseCase, CyclesUseCaseKind},
     nominal_cycles::NominalCycles,
 };
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 
@@ -72,7 +73,7 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// let total = cc_instructions + cc_memory;
 /// assert_eq!(total.real(), Cycles::new(30));
 /// ```
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
     nominal: NominalCycles,

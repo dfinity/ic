@@ -285,6 +285,7 @@ pub fn construct_ic_stack(
         config.http_handler.clone(),
         log.clone(),
         rt_handle_http.clone(),
+        node_id,
         subnet_id,
         root_subnet_id,
         registry.clone(),
