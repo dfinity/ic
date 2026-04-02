@@ -198,7 +198,7 @@ pub fn test_update_balance(env: TestEnv) {
             &logger,
             "Calling update balance on second subaccount with missing ledger."
         );
-        assert_temporarily_unavailable(&minter_agent, &subaccount2).await;
+        assert_temporarily_unavailable(&minter_agent, &logger, &subaccount2).await;
 
         // The ledger canister is back online.
         start_canister(&ledger_canister).await;

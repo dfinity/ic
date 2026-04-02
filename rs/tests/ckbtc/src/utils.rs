@@ -23,11 +23,12 @@ use crate::{ADDRESS_LENGTH, IcRpcClientType};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
+use ic_agent::AgentError;
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Amount, Txid},
     rpc_client::{Auth, RpcClient, RpcClientType},
 };
-use ic_ckbtc_agent::CkBtcMinterAgent;
+use ic_ckbtc_agent::{CkBtcMinterAgent, CkBtcMinterAgentError};
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
 use ic_ckbtc_minter::updates::update_balance::UtxoStatus::Checked;
@@ -631,24 +632,46 @@ pub async fn assert_no_new_utxo(
 }
 
 /// Assert that calling update_balance returns a transient error.
-pub async fn assert_temporarily_unavailable(agent: &CkBtcMinterAgent, subaccount: &Subaccount) {
-    let result = agent
-        .update_balance(UpdateBalanceArgs {
-            owner: None,
-            subaccount: Some(*subaccount),
-        })
-        .await
-        .expect("Error while calling update_balance");
-    match result {
-        Ok(utxos_statues) => {
-            for status in utxos_statues {
-                assert_matches!(status, Checked(_));
+/// Retries on transient transport errors.
+pub async fn assert_temporarily_unavailable(
+    agent: &CkBtcMinterAgent,
+    logger: &Logger,
+    subaccount: &Subaccount,
+) {
+    ic_system_test_driver::retry_with_msg_async!(
+        "assert_temporarily_unavailable",
+        logger,
+        SHORT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            let result = match agent
+                .update_balance(UpdateBalanceArgs {
+                    owner: None,
+                    subaccount: Some(*subaccount),
+                })
+                .await
+            {
+                Err(CkBtcMinterAgentError::AgentError(AgentError::TransportError(e))) => {
+                    return Err(anyhow::anyhow!("transport error: {e}"));
+                }
+                other => other.expect("Error while calling update_balance"),
+            };
+            match result {
+                Ok(utxos_statues) => {
+                    for status in utxos_statues {
+                        assert_matches!(status, Checked(_));
+                    }
+                }
+                Err(UpdateBalanceError::TemporarilyUnavailable(..)) => {}
+                Err(error) => {
+                    panic!("Expected TemporarilyUnavailable or Checked but got: {error:?}")
+                }
             }
+            Ok(())
         }
-        Err(error) => {
-            assert_matches!(error, UpdateBalanceError::TemporarilyUnavailable(..));
-        }
-    }
+    )
+    .await
+    .expect("assert_temporarily_unavailable failed");
 }
 
 /// Get transactions log from the ledger canister.
