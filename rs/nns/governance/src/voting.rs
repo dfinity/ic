@@ -595,7 +595,6 @@ mod test {
     use crate::test_utils::MockRandomness;
     use crate::{
         governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
-        is_mission_70_voting_rewards_enabled,
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
@@ -603,6 +602,8 @@ mod test {
             VotingPowerEconomics, WaitForQuietState, proposal::Action,
         },
         storage::with_voting_state_machines_mut,
+        temporarily_disable_mission_70_voting_rewards,
+        temporarily_enable_mission_70_voting_rewards,
         test_utils::{
             ExpectedCallCanisterMethodCallArguments, MockEnvironment, StubCMC, StubIcpLedger,
         },
@@ -1397,15 +1398,15 @@ mod test {
     #[tokio::test]
     async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_pre_mission_70()
      {
-        let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
-        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(5474);
+        let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(5474).await;
     }
 
     #[tokio::test]
     async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_with_mission_70()
      {
-        let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
-        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(3476);
+        let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(3476).await;
     }
 
     async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(
