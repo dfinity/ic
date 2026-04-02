@@ -5,8 +5,8 @@
  * - BigInt/integer range validation in jsonToCandid
  */
 import { describe, it, expect } from "vitest";
-import { Principal } from "@dfinity/principal";
-import { IDL } from "@dfinity/candid";
+import { Principal } from "@icp-sdk/core/principal";
+import { IDL } from "@icp-sdk/core/candid";
 import { getDelegationTargets } from "../auth.js";
 import { candidToJson, jsonToCandid } from "../candid-json.js";
 

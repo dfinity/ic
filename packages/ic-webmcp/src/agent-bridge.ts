@@ -1,7 +1,7 @@
-import { Actor, HttpAgent, type QueryResponseStatus } from "@dfinity/agent";
-import type { QueryResponseReplied } from "@dfinity/agent";
-import { IDL } from "@dfinity/candid";
-import { Principal } from "@dfinity/principal";
+import { Actor, HttpAgent, type QueryResponseStatus } from "@icp-sdk/core/agent";
+import type { QueryResponseReplied } from "@icp-sdk/core/agent";
+import { IDL } from "@icp-sdk/core/candid";
+import { Principal } from "@icp-sdk/core/principal";
 import { candidToJson } from "./candid-json.js";
 import { wrapCertifiedResponse } from "./certified-response.js";
 import type { WebMCPToolDefinition, ToolExecuteResult } from "./types.js";
@@ -10,7 +10,7 @@ import type { WebMCPToolDefinition, ToolExecuteResult } from "./types.js";
  * Execute a canister call for a WebMCP tool invocation.
  *
  * Maps the JSON parameters from a tool call into a Candid-encoded
- * canister call via @dfinity/agent, then decodes the response back to JSON.
+ * canister call via @icp-sdk/core/agent, then decodes the response back to JSON.
  */
 export async function executeToolCall(
   agent: HttpAgent,
@@ -98,7 +98,7 @@ async function executeRawCall(
       );
     }
 
-    const replied = response as { reply?: { arg: ArrayBuffer } };
+    const replied = response as { reply?: { arg: Uint8Array } };
     const value = replied.reply?.arg
       ? candidToJson(replied.reply.arg, [])
       : null;
@@ -129,7 +129,7 @@ async function executeRawCall(
  * `certified: true` tools we drop back to raw agent.query() which exposes
  * the full QueryResponseReplied including signatures.
  *
- * @dfinity/agent verifies signatures before returning (verifyQuerySignatures
+ * @icp-sdk/core/agent verifies signatures before returning (verifyQuerySignatures
  * defaults to true), so if we reach here the response is already verified.
  */
 async function executeCertifiedQuery(

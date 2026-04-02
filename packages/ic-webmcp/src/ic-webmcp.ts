@@ -1,6 +1,6 @@
-import { HttpAgent, type Identity, type SignIdentity } from "@dfinity/agent";
-import type { IDL } from "@dfinity/candid";
-import { Principal } from "@dfinity/principal";
+import { HttpAgent, type Identity, type SignIdentity } from "@icp-sdk/core/agent";
+import type { IDL } from "@icp-sdk/core/candid";
+import { Principal } from "@icp-sdk/core/principal";
 import {
   createScopedDelegation,
   getDelegationTargets,

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Principal } from "@dfinity/principal";
+import { Principal } from "@icp-sdk/core/principal";
 import {
   registerTool,
   unregisterTool,
@@ -45,7 +45,7 @@ function makeAgent(isAnonymous = true) {
       reply: { arg: new ArrayBuffer(0) },
     }),
     call: vi.fn().mockResolvedValue({ response: {} }),
-  } as unknown as import("@dfinity/agent").HttpAgent;
+  } as unknown as import("@icp-sdk/core/agent").HttpAgent;
 }
 
 function makeModelContext() {

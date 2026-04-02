@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { WebMCPManifest } from "../types.js";
 
 // vi.mock must be at module top-level so vitest can hoist it
-vi.mock("@dfinity/agent", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@dfinity/agent")>();
+vi.mock("@icp-sdk/core/agent", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@icp-sdk/core/agent")>();
   return {
     ...actual,
     HttpAgent: {
@@ -172,7 +172,7 @@ describe("ICWebMCP", () => {
 
     const mockIdentity = {
       getPrincipal: vi.fn(),
-    } as unknown as import("@dfinity/agent").Identity;
+    } as unknown as import("@icp-sdk/core/agent").Identity;
     webmcp.setIdentity(mockIdentity);
 
     expect(agent.replaceIdentity).toHaveBeenCalledWith(mockIdentity);

@@ -1,10 +1,10 @@
-import type { SignIdentity } from "@dfinity/agent";
+import type { SignIdentity } from "@icp-sdk/core/agent";
 import {
   DelegationChain,
   DelegationIdentity,
   Ed25519KeyIdentity,
-} from "@dfinity/identity";
-import { Principal } from "@dfinity/principal";
+} from "@icp-sdk/core/identity";
+import { Principal } from "@icp-sdk/core/principal";
 import type { AuthenticationInfo } from "./types.js";
 
 export interface CreateDelegationOptions {

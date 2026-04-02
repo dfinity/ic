@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { IDL } from "@dfinity/candid";
-import { Principal } from "@dfinity/principal";
+import { IDL } from "@icp-sdk/core/candid";
+import { Principal } from "@icp-sdk/core/principal";
 import { jsonToCandid, candidToJson } from "../candid-json.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────

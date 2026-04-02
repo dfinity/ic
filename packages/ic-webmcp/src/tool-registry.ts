@@ -1,6 +1,6 @@
-import type { HttpAgent } from "@dfinity/agent";
-import type { IDL } from "@dfinity/candid";
-import { Principal } from "@dfinity/principal";
+import type { HttpAgent } from "@icp-sdk/core/agent";
+import type { IDL } from "@icp-sdk/core/candid";
+import { Principal } from "@icp-sdk/core/principal";
 import { executeToolCall } from "./agent-bridge.js";
 import type { WebMCPToolDefinition } from "./types.js";
 
@@ -9,7 +9,7 @@ import type { WebMCPToolDefinition } from "./types.js";
  *
  * This creates the bridge between the browser's WebMCP API and an IC canister
  * method: when an AI agent calls the tool, the execute callback translates
- * the JSON params into a canister call via @dfinity/agent.
+ * the JSON params into a canister call via @icp-sdk/core/agent.
  */
 export async function registerTool(
   tool: WebMCPToolDefinition,

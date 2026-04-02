@@ -1,5 +1,5 @@
-import { IDL } from "@dfinity/candid";
-import { Principal } from "@dfinity/principal";
+import { IDL } from "@icp-sdk/core/candid";
+import { Principal } from "@icp-sdk/core/principal";
 
 /**
  * Encode JSON parameters into Candid binary format.
@@ -15,7 +15,7 @@ import { Principal } from "@dfinity/principal";
 export function jsonToCandid(
   params: Record<string, unknown>,
   argTypes: IDL.Type[],
-): ArrayBuffer {
+): Uint8Array {
   if (argTypes.length === 0) {
     return IDL.encode([], []);
   }
@@ -42,17 +42,18 @@ export function jsonToCandid(
  * Decode a Candid binary response into a JSON-friendly value.
  */
 export function candidToJson(
-  data: ArrayBuffer,
+  data: Uint8Array | ArrayBuffer,
   retTypes: IDL.Type[],
 ): unknown {
-  const decoded = IDL.decode(retTypes, data);
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  const decoded = IDL.decode(retTypes, bytes);
   if (decoded.length === 0) return null;
   if (decoded.length === 1) return toJsonValueTyped(decoded[0], retTypes[0]);
   return decoded.map((v, i) => toJsonValueTyped(v, retTypes[i]));
 }
 
 /**
- * Convert a JSON value into the shape expected by @dfinity/candid IDL encoding.
+ * Convert a JSON value into the shape expected by @icp-sdk/core/candid IDL encoding.
  */
 function convertValue(value: unknown, type: IDL.Type): unknown {
   if (type instanceof IDL.BoolClass) {

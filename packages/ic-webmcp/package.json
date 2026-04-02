@@ -1,7 +1,7 @@
 {
   "name": "@dfinity/webmcp",
   "version": "0.1.0",
-  "description": "Bridge WebMCP (Web Model Context Protocol) to Internet Computer canisters via @dfinity/agent",
+  "description": "Bridge WebMCP (Web Model Context Protocol) to Internet Computer canisters via @icp-sdk/core",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -23,10 +23,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@dfinity/agent": ">=1.0.0",
-    "@dfinity/candid": ">=1.0.0",
-    "@dfinity/identity": "^2.0.0",
-    "@dfinity/principal": ">=1.0.0"
+    "@icp-sdk/auth": "^5.0.0",
+    "@icp-sdk/core": "^5.2.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
@@ -34,9 +32,7 @@
     "vitest": "^2.0.0"
   },
   "peerDependencies": {
-    "@dfinity/agent": ">=1.0.0",
-    "@dfinity/candid": ">=1.0.0",
-    "@dfinity/principal": ">=1.0.0"
+    "@icp-sdk/core": ">=5.0.0"
   },
   "keywords": [
     "webmcp",

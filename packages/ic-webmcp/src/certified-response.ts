@@ -3,7 +3,7 @@
  *
  * IC query responses include `signatures` — an array of BLS-based node
  * signatures produced by the subnet nodes that handled the request.
- * `@dfinity/agent`'s HttpAgent verifies these by default
+ * `@icp-sdk/core/agent`'s HttpAgent verifies these by default
  * (`verifyQuerySignatures: true`), throwing if verification fails.
  *
  * When a WebMCP tool is marked `certified: true`, the bridge:
@@ -16,16 +16,16 @@
  * `readState` after the query — see `readCertifiedData()` below.
  */
 
-import { Certificate, lookupResultToBuffer } from "@dfinity/agent";
-import type { HttpAgent } from "@dfinity/agent";
-import type { NodeSignature } from "@dfinity/agent";
-import { Principal } from "@dfinity/principal";
+import { Certificate, lookupResultToBuffer } from "@icp-sdk/core/agent";
+import type { HttpAgent } from "@icp-sdk/core/agent";
+import type { NodeSignature } from "@icp-sdk/core/agent";
+import { Principal } from "@icp-sdk/core/principal";
 
 /** Verified query response with signature metadata. */
 export interface CertifiedQueryResult {
   /** The decoded value returned by the canister. */
   value: unknown;
-  /** True when node signatures were present and verified by @dfinity/agent. */
+  /** True when node signatures were present and verified by @icp-sdk/core/agent. */
   certified: true;
   /** Signing node identities and timestamps from the query response. */
   signatures: Array<{
@@ -74,32 +74,33 @@ export async function readCertifiedData(
   agent: HttpAgent,
   canisterId: Principal,
 ): Promise<{
-  data: ArrayBuffer | undefined;
-  certificate: ArrayBuffer;
+  data: Uint8Array | undefined;
+  certificate: Uint8Array;
   timestampNanos: bigint;
 }> {
-  const canisterIdBytes = canisterId.toUint8Array().buffer as ArrayBuffer;
+  const canisterIdBytes = canisterId.toUint8Array();
   const enc = new TextEncoder();
-  const toAB = (s: string): ArrayBuffer => enc.encode(s).buffer as ArrayBuffer;
 
   // Request the certified_data path from the state tree
   const response = await agent.readState(canisterId, {
-    paths: [[toAB("canister"), canisterIdBytes, toAB("certified_data")]],
+    paths: [[enc.encode("canister"), canisterIdBytes, enc.encode("certified_data")]],
   });
 
   const cert = await Certificate.create({
     certificate: response.certificate,
     rootKey: await getRootKey(agent),
-    canisterId,
+    principal: { canisterId },
   });
 
-  const dataResult = cert.lookup(["canister", canisterIdBytes, "certified_data"]);
-  const timeResult = cert.lookup(["time"]);
+  const dataResult = cert.lookup_path([
+    "canister",
+    canisterIdBytes,
+    "certified_data",
+  ]);
+  const timeResult = cert.lookup_path(["time"]);
 
   const timeBytes = lookupResultToBuffer(timeResult);
-  const timestampNanos = timeBytes
-    ? decodeLeb128(new Uint8Array(timeBytes))
-    : 0n;
+  const timestampNanos = timeBytes ? decodeLeb128(timeBytes) : 0n;
 
   return {
     data: lookupResultToBuffer(dataResult),
@@ -110,11 +111,11 @@ export async function readCertifiedData(
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-async function getRootKey(agent: HttpAgent): Promise<ArrayBuffer> {
-  // @dfinity/agent caches the root key after fetchRootKey() is called.
+async function getRootKey(agent: HttpAgent): Promise<Uint8Array> {
+  // @icp-sdk/core/agent caches the root key after fetchRootKey() is called.
   // For mainnet the default IC root key is built in; this only matters
   // for local replicas where fetchRootKey() must be called first.
-  return (agent as unknown as { rootKey?: ArrayBuffer }).rootKey ?? new ArrayBuffer(0);
+  return (agent as unknown as { rootKey?: Uint8Array }).rootKey ?? new Uint8Array(0);
 }
 
 function bufferToHex(buf: ArrayBuffer | Uint8Array): string {

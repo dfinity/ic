@@ -1,4 +1,4 @@
-import type { Identity } from "@dfinity/agent";
+import type { Identity } from "@icp-sdk/core/agent";
 
 // ── WebMCP Manifest (mirrors webmcp.json from codegen) ──────────────
 
@@ -65,7 +65,7 @@ export interface ICWebMCPConfig {
 
 export interface ToolExecuteResult {
   value: unknown;
-  /** True when node signatures were present and verified by @dfinity/agent. */
+  /** True when node signatures were present and verified by @icp-sdk/core/agent. */
   certified?: boolean;
   /** Signing node metadata from the query response, when certified is true. */
   signatures?: Array<{ nodeId: string; timestampNanos: bigint }>;
