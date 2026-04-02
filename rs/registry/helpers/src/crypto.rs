@@ -198,10 +198,12 @@ pub mod root_of_trust {
 
     /// Implementation of [`RootOfTrustProvider`] that uses the registry to
     /// obtain the root of trust.
+    /// An additional root of trust can be provided for use in test environments.
     #[derive(Clone)]
     pub struct RegistryRootOfTrustProvider {
         registry_client: Arc<dyn RegistryClient>,
         registry_version: RegistryVersion,
+        additional_root_of_trust: Option<IcRootOfTrust>,
     }
 
     impl RegistryRootOfTrustProvider {
@@ -212,6 +214,19 @@ pub mod root_of_trust {
             Self {
                 registry_client,
                 registry_version,
+                additional_root_of_trust: None,
+            }
+        }
+
+        pub fn new_for_testing(
+            registry_client: Arc<dyn RegistryClient>,
+            registry_version: RegistryVersion,
+            additional_root_of_trust: Option<IcRootOfTrust>,
+        ) -> Self {
+            Self {
+                registry_client,
+                registry_version,
+                additional_root_of_trust,
             }
         }
     }
@@ -228,6 +243,10 @@ pub mod root_of_trust {
 
     impl RootOfTrustProvider for RegistryRootOfTrustProvider {
         type Error = RegistryRootOfTrustProviderError;
+
+        fn additional_root_of_trust(&self) -> Option<IcRootOfTrust> {
+            self.additional_root_of_trust
+        }
 
         fn root_of_trust(&self) -> Result<IcRootOfTrust, Self::Error> {
             let root_subnet_id = self

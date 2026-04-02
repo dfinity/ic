@@ -1159,20 +1159,20 @@ impl SandboxSafeSystemState {
         amount_to_accept
     }
 
-    pub fn prepayment_for_response_execution(&self) -> Cycles {
+    pub fn prepayment_for_response_execution(&self) -> CompoundCycles<Instructions> {
         self.cycles_account_manager
             .prepayment_for_response_execution(
                 self.subnet_size,
                 self.cost_schedule,
                 WasmExecutionMode::from_is_wasm64(self.is_wasm64_execution),
             )
-            .real()
     }
 
-    pub fn prepayment_for_response_transmission(&self) -> Cycles {
+    pub fn prepayment_for_response_transmission(
+        &self,
+    ) -> CompoundCycles<RequestAndResponseTransmission> {
         self.cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size, self.cost_schedule)
-            .real()
     }
 
     pub(super) fn withdraw_cycles_for_transfer(
@@ -1210,8 +1210,8 @@ impl SandboxSafeSystemState {
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
         msg: Request,
-        prepayment_for_response_execution: Cycles,
-        prepayment_for_response_transmission: Cycles,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     ) -> Result<(), Request> {
         if self.available_callbacks == 0 {
             return Err(msg);
@@ -1229,8 +1229,8 @@ impl SandboxSafeSystemState {
                 canister_current_message_memory_usage,
                 self.compute_allocation,
                 &msg,
-                CompoundCycles::new(prepayment_for_response_execution, self.cost_schedule),
-                CompoundCycles::new(prepayment_for_response_transmission, self.cost_schedule),
+                prepayment_for_response_execution,
+                prepayment_for_response_transmission,
                 self.subnet_size,
                 self.cost_schedule,
                 self.reserved_balance(),

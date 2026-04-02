@@ -26,6 +26,7 @@ use ic_embedders::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{MessageMemoryUsage, SubnetAvailableMemory};
+use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
@@ -893,7 +894,7 @@ impl CanisterManager {
         context: InstallCodeContext,
         message: CanisterCall,
         call_id: InstallCodeCallId,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         mut canister: CanisterState,
         time: Time,
         canister_layout_path: PathBuf,
@@ -936,7 +937,7 @@ impl CanisterManager {
                     reveal_top_up,
                     wasm_execution_mode,
                 ) {
-                    Ok(cycles) => cycles.real(),
+                    Ok(cycles) => cycles,
                     Err(err) => {
                         return DtsInstallCodeResult::Finished {
                             canister,
@@ -1610,6 +1611,40 @@ impl CanisterManager {
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
         })
+    }
+
+    pub(crate) fn deposit_cycles(
+        &self,
+        canister: &mut CanisterState,
+        cycles: Cycles,
+        sender: PrincipalId,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> CanisterManagerResponse {
+        let canister_id = canister.canister_id();
+
+        canister
+            .system_state
+            .add_cycles(CompoundCycles::<NonConsumed>::new(cycles, cost_schedule));
+
+        if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+            info!(
+                self.log,
+                "Canister {} deposited {} cycles to canister {}.",
+                sender,
+                cycles,
+                canister_id.get(),
+            );
+        }
+
+        CanisterManagerResponse {
+            canister_id,
+            reply: Some(EmptyBlob.encode()),
+            heap_delta_increase: NumBytes::new(0),
+            unflushed_checkpoint_op: None,
+            deleted_call_context_responses: vec![],
+            stop_call_id_to_remove: None,
+            stop_contexts_to_reject: vec![],
+        }
     }
 
     fn validate_canister_is_stopped(

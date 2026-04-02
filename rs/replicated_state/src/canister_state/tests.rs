@@ -132,8 +132,8 @@ impl CanisterStateFixture {
                 call_context_id,
                 respondent,
                 Cycles::zero(),
-                Cycles::new(42),
-                Cycles::new(84),
+                CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+                CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
@@ -987,8 +987,8 @@ fn canister_state_callback_round_trip() {
         CallContextId::new(1),
         OTHER_CANISTER_ID,
         Cycles::zero(),
-        Cycles::zero(),
-        Cycles::zero(),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,
@@ -998,8 +998,8 @@ fn canister_state_callback_round_trip() {
         CallContextId::new(1),
         OTHER_CANISTER_ID,
         Cycles::new(21),
-        Cycles::new(42),
-        Cycles::new(84),
+        CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 2),
         WasmClosure::new(1, 2),
         Some(WasmClosure::new(2, 2)),
@@ -1009,8 +1009,14 @@ fn canister_state_callback_round_trip() {
         CallContextId::new(u64::MAX - 1),
         CanisterId::from_u64(u64::MAX - 3),
         Cycles::new(u128::MAX - 4),
-        Cycles::new(u128::MAX - 5),
-        Cycles::new(u128::MAX - 6),
+        CompoundCycles::new(
+            Cycles::new(u128::MAX - 5),
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        CompoundCycles::new(
+            Cycles::new(u128::MAX - 6),
+            CanisterCyclesCostSchedule::Normal,
+        ),
         WasmClosure::new(u32::MAX - 7, u64::MAX - 8),
         WasmClosure::new(u32::MAX - 9, u64::MAX - 10),
         Some(WasmClosure::new(u32::MAX - 11, u64::MAX - 12)),
@@ -1281,7 +1287,10 @@ fn drops_aborted_canister_install_after_split() {
         .enqueue(ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
             call_id: InstallCodeCallId::new(0),
-            prepaid_execution_cycles: Cycles::from(0_u128),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         });
 
     // Expected canister state is identical, minus the `AbortedInstallCode` task.

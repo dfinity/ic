@@ -2426,12 +2426,12 @@ fn ingress_deducts_execution_cost_from_canister_balance() {
     let execution_cost_after = test.canister_execution_cost(canister);
     assert_eq!(
         balance_before - balance_after,
-        execution_cost_after - execution_cost_before
+        (execution_cost_after - execution_cost_before).real()
     );
     // Ensure that we charged some cycles. The actual value is unknown to us at
     // this point but it is definitely larger that 1000.
     assert_gt!(
-        execution_cost_after - execution_cost_before,
+        (execution_cost_after - execution_cost_before).real(),
         Cycles::new(1_000)
     );
 }
@@ -3642,7 +3642,7 @@ fn replicated_query_refunds_all_sent_cycles() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
+            - test.canister_execution_cost(a_id).real()
             - test.call_fee("query", &b_callback).real()
             - test.reply_fee(&b_callback).real()
     );
@@ -3650,7 +3650,7 @@ fn replicated_query_refunds_all_sent_cycles() {
     // Canister B doesn't get the transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -3726,7 +3726,7 @@ fn replicated_query_can_accept_cycles() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
+            - test.canister_execution_cost(a_id).real()
             - test.call_fee("query", &b_callback).real()
             - test.reply_fee(&response_payload).real()
             - transferred_cycles
@@ -3735,7 +3735,7 @@ fn replicated_query_can_accept_cycles() {
     // Canister B gets the transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id) + transferred_cycles
+        initial_cycles - test.canister_execution_cost(b_id).real() + transferred_cycles
     );
 }
 
@@ -3812,7 +3812,7 @@ fn replicated_query_does_not_accept_cycles_on_trap() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
+            - test.canister_execution_cost(a_id).real()
             - test.call_fee("query", &b_callback).real()
             - test.reject_fee(reject_message).real()
     );
@@ -3820,7 +3820,7 @@ fn replicated_query_does_not_accept_cycles_on_trap() {
     // Canister B does not get any cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -3848,7 +3848,7 @@ fn replicated_query_can_burn_cycles() {
     // Canister A loses `cycles_to_burn` from its balance (in addition to execution cost)...
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(canister_id) - cycles_to_burn
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
     );
 
     // ...and the burned cycles are accounted for in the canister's metrics.
@@ -3888,7 +3888,7 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     // Canister A only loses cycles due to executing but not `cycles_to_burn` (since it trapped)...
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(canister_id)
+        initial_cycles - test.canister_execution_cost(canister_id).real()
     );
 
     // ...and no burned cycles are accounted for in the canister's metrics.
@@ -4002,7 +4002,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that canister A's balance is updated correctly.
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
-        initial_cycles - execution_cost - transmission_cost.real() - transferred_cycles
+        initial_cycles - execution_cost.real() - transmission_cost.real() - transferred_cycles
     );
 
     assert_eq!(
@@ -4037,7 +4037,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
     assert_eq!(
         instruction_consumption_after_response,
-        NominalCycles::new(execution_cost.get())
+        execution_cost.nominal(),
     );
 
     // Consumed cycles after the response should be smaller than before
@@ -4054,7 +4054,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that canister B's balance is updated correctly.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id) + transferred_cycles
+        initial_cycles - test.canister_execution_cost(b_id).real() + transferred_cycles
     );
 
     // Check that consumed cycles are correct only for the `Instructions` use case.
@@ -4075,7 +4075,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
-        NominalCycles::new(test.canister_execution_cost(b_id).get())
+        test.canister_execution_cost(b_id).nominal(),
     );
 }
 
