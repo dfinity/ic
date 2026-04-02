@@ -17,8 +17,8 @@ A minimal e-commerce canister that demonstrates the full WebMCP pipeline:
 
 ```bash
 # From this directory:
-dfx start --background
-dfx deploy
+icp start --background
+icp deploy
 
 # Generate the WebMCP manifest from dfx.json:
 ic-webmcp-codegen dfx --dfx-json dfx.json --out-dir assets/
@@ -29,10 +29,10 @@ cp assets/backend.webmcp.json assets/.well-known/webmcp.json
 cp assets/backend.webmcp.js assets/webmcp.js
 
 # Redeploy assets:
-dfx deploy frontend
+icp deploy frontend
 ```
 
-Open `http://localhost:4943?canisterId=<frontend-id>` in Chrome 146+ with
+Open the canister URL shown by `icp deploy` in Chrome 146+ with
 WebMCP enabled. An AI agent can then discover and call:
 
 - `list_products` — browse the catalog (certified query)

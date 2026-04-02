@@ -18,7 +18,7 @@ AI Agent (Chrome 146+)
         ▼ (tool registration)
 @dfinity/webmcp  (packages/ic-webmcp/)
   ├── Fetches /.well-known/webmcp.json
-  ├── Maps execute() → @dfinity/agent query/call
+  ├── Maps execute() → @icp-sdk/core/agent query/call
   └── Handles Internet Identity delegation
         │
         ▼ (HTTPS boundary node)
@@ -73,7 +73,7 @@ ic-webmcp-codegen dfx --dfx-json rs/webmcp/demo/dfx.json --out-dir /tmp/webmcp-d
 
 ### [`../../packages/ic-webmcp/`](../../packages/ic-webmcp/)
 
-TypeScript npm package (`@dfinity/webmcp`) — the browser-side library that bridges `navigator.modelContext` to `@dfinity/agent`.
+TypeScript npm package (`@dfinity/webmcp`) — the browser-side library that bridges `navigator.modelContext` to `@icp-sdk/core/agent`.
 
 ```typescript
 import { ICWebMCP } from "@dfinity/webmcp";
@@ -136,9 +136,9 @@ Running `ic-webmcp-codegen dfx` produces:
 2. **`backend.webmcp.js`** — served at `/webmcp.js`:
 
 ```javascript
-import { ICWebMCP } from "https://esm.sh/@dfinity/webmcp";
+import { ICWebMCP } from '@dfinity/webmcp';
 export async function initWebMCP(options = {}) { ... }
-if (document.currentScript) initWebMCP().catch(console.error);
+await initWebMCP().catch(console.error);
 ```
 
 AI agents using Chrome 146+ can then discover and call these tools automatically.
