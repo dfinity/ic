@@ -3,7 +3,7 @@ use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::TrustedExecutionEnvironmentConfig;
 use guest_upgrade_shared::DEFAULT_SERVER_PORT;
 use ic_interfaces_registry::RegistryClient;
-use ic_registry_client_helpers::blessed_replica_version::BlessedReplicaVersionRegistry;
+use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
 use server::DiskEncryptionKeyExchangeServer;
 use sev_guest::firmware::SevGuestFirmware;
 use std::sync::Arc;
@@ -97,12 +97,12 @@ impl DiskEncryptionKeyExchangeServerAgent {
             })?;
 
         let registry_version = self.registry_client.get_latest_version();
-        let blessed_measurements = self
+        let elected_measurements = self
             .registry_client
-            .get_blessed_guest_launch_measurements(registry_version)
+            .get_guest_launch_measurements(registry_version)
             .map_err(|err| {
                 DiskEncryptionKeyExchangeError::ServerStartError(format!(
-                    "Failed to get blessed measurements: {err}"
+                    "Failed to get elected measurements: {err}"
                 ))
             })?;
         let upgrade_service = Arc::new(DiskEncryptionKeyExchangeServiceImpl::new(
@@ -111,7 +111,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
             certified_key.key_pair.public_key_der(),
             self.trusted_execution_environment_config.clone(),
             status_sender,
-            blessed_measurements,
+            elected_measurements,
         ));
 
         // Start the server that the Upgrade VM can connect to for getting the keys.

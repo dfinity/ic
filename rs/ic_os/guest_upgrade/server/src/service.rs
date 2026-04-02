@@ -28,7 +28,7 @@ pub struct DiskEncryptionKeyExchangeServiceImpl {
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
     my_public_key: Vec<u8>,
     status_sender: Sender<Result<(), String>>,
-    blessed_measurements: Vec<Vec<u8>>,
+    elected_measurements: Vec<Vec<u8>>,
     sev_root_certificate_verification: SevRootCertificateVerification,
 }
 
@@ -39,14 +39,14 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         my_public_key: Vec<u8>,
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
         status_sender: Sender<Result<(), String>>,
-        blessed_measurements: Vec<Vec<u8>>,
+        elected_measurements: Vec<Vec<u8>>,
     ) -> Self {
         Self {
             sev_firmware_factory,
             my_public_key,
             trusted_execution_environment_config,
             status_sender,
-            blessed_measurements,
+            elected_measurements,
             sev_root_certificate_verification,
         }
     }
@@ -134,7 +134,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             client_attestation_package,
             self.sev_root_certificate_verification,
         )
-        .verify_measurement(&self.blessed_measurements)
+        .verify_measurement(&self.elected_measurements)
         .verify_custom_data(&custom_data)
         .verify_chip_id(&[my_attestation_report.chip_id])
         .map_err(|e| {

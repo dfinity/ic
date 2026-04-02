@@ -16,7 +16,7 @@ use ic_protobuf::registry::replica_version::v1::{
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities_registry::{add_blessed_replica_versions, add_replica_version_record};
+use ic_test_utilities_registry::add_replica_version_record;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
@@ -101,8 +101,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-        add_blessed_replica_versions(&registry_data_provider, 1, &[REPLICA_VERSION]);
 
         add_replica_version_record(
             &registry_data_provider,
