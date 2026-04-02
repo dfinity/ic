@@ -833,15 +833,7 @@ impl ExecutionEnvironment {
                         subnet_admins,
                         time,
                     );
-                    match result {
-                        Ok(response) => {
-                            self.process_canister_manager_response(response, &mut state, &mut msg)
-                        }
-                        Err(err) => ExecuteSubnetMessageResult::Finished {
-                            response: Err(err.into()),
-                            refund: msg.take_cycles(),
-                        },
-                    }
+                    self.process_canister_manager_result(result, &mut state, &mut msg)
                 }
             },
 
@@ -1910,43 +1902,50 @@ impl ExecutionEnvironment {
         self.finish_subnet_message_execution(state, msg, result, since)
     }
 
-    /// Applies changes to `ReplicatedState` according to `CanisterManagerResponse`
-    /// and constructs `ExecuteSubnetMessageResult` based on the reply (success)
-    /// contained in that `CanisterManagerResponse`.
-    fn process_canister_manager_response(
+    /// Applies changes to `ReplicatedState` and constructs `ExecuteSubnetMessageResult`
+    /// according to `CanisterManagerResponse` or `CanisterManagerError`.
+    fn process_canister_manager_result(
         &self,
-        response: CanisterManagerResponse,
+        result: Result<CanisterManagerResponse, CanisterManagerError>,
         state: &mut ReplicatedState,
         msg: &mut CanisterCall,
     ) -> ExecuteSubnetMessageResult {
-        state.metadata.heap_delta_estimate += response.heap_delta_increase;
-        if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
-            state
-                .metadata
-                .unflushed_checkpoint_ops
-                .push(unflushed_checkpoint_op);
-        }
-        crate::util::process_responses(
-            response.deleted_call_context_responses,
-            state,
-            Arc::clone(&self.ingress_history_writer),
-            self.log.clone(),
-            &self.metrics.canister_not_found_error,
-        );
-        self.reject_stop_requests(
-            response.canister_id,
-            response.stop_contexts_to_reject,
-            state,
-        );
-        if let Some(call_id) = response.stop_call_id_to_remove {
-            self.remove_stop_canister_call(state, response.canister_id, Some(call_id));
-        }
-        match response.reply {
-            Some(reply) => ExecuteSubnetMessageResult::Finished {
-                response: Ok((reply, Some(response.canister_id))),
+        match result {
+            Ok(response) => {
+                state.metadata.heap_delta_estimate += response.heap_delta_increase;
+                if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
+                    state
+                        .metadata
+                        .unflushed_checkpoint_ops
+                        .push(unflushed_checkpoint_op);
+                }
+                crate::util::process_responses(
+                    response.deleted_call_context_responses,
+                    state,
+                    Arc::clone(&self.ingress_history_writer),
+                    self.log.clone(),
+                    &self.metrics.canister_not_found_error,
+                );
+                self.reject_stop_requests(
+                    response.canister_id,
+                    response.stop_contexts_to_reject,
+                    state,
+                );
+                if let Some(call_id) = response.stop_call_id_to_remove {
+                    self.remove_stop_canister_call(state, response.canister_id, Some(call_id));
+                }
+                match response.reply {
+                    Some(reply) => ExecuteSubnetMessageResult::Finished {
+                        response: Ok((reply, Some(response.canister_id))),
+                        refund: msg.take_cycles(),
+                    },
+                    None => ExecuteSubnetMessageResult::Processing,
+                }
+            }
+            Err(err) => ExecuteSubnetMessageResult::Finished {
+                response: Err(err.into()),
                 refund: msg.take_cycles(),
             },
-            None => ExecuteSubnetMessageResult::Processing,
         }
     }
 
@@ -2366,14 +2365,7 @@ impl ExecutionEnvironment {
             subnet_size,
             cost_schedule,
         );
-
-        match result {
-            Ok(response) => self.process_canister_manager_response(response, state, msg),
-            Err(err) => ExecuteSubnetMessageResult::Finished {
-                response: Err(err.into()),
-                refund: msg.take_cycles(),
-            },
-        }
+        self.process_canister_manager_result(result, state, msg)
     }
 
     fn start_canister(
@@ -2398,13 +2390,7 @@ impl ExecutionEnvironment {
             .canister_manager
             .start_canister(sender, canister, subnet_admins);
 
-        match result {
-            Ok(response) => self.process_canister_manager_response(response, state, msg),
-            Err(err) => ExecuteSubnetMessageResult::Finished {
-                response: Err(err.into()),
-                refund: msg.take_cycles(),
-            },
-        }
+        self.process_canister_manager_result(result, state, msg)
     }
 
     fn deposit_cycles(
@@ -2527,16 +2513,10 @@ impl ExecutionEnvironment {
         let result =
             self.canister_manager
                 .stop_canister(canister_id, msg, call_id, state, subnet_admins);
-        match result {
-            Ok(response) => self.process_canister_manager_response(response, state, msg),
-            Err(err) => {
-                self.remove_stop_canister_call(state, canister_id, Some(call_id));
-                ExecuteSubnetMessageResult::Finished {
-                    response: Err(err.into()),
-                    refund: msg.take_cycles(),
-                }
-            }
+        if result.is_err() {
+            self.remove_stop_canister_call(state, canister_id, Some(call_id));
         }
+        self.process_canister_manager_result(result, state, msg)
     }
 
     fn add_cycles(
@@ -2566,13 +2546,7 @@ impl ExecutionEnvironment {
             cost_schedule,
         );
 
-        match result {
-            Ok(response) => self.process_canister_manager_response(response, state, msg),
-            Err(err) => ExecuteSubnetMessageResult::Finished {
-                response: Err(err.into()),
-                refund: msg.take_cycles(),
-            },
-        }
+        self.process_canister_manager_result(result, state, msg)
     }
 
     fn upload_chunk(
@@ -2605,13 +2579,7 @@ impl ExecutionEnvironment {
             resource_saturation,
         );
 
-        match result {
-            Ok(response) => self.process_canister_manager_response(response, state, msg),
-            Err(err) => ExecuteSubnetMessageResult::Finished {
-                response: Err(err.into()),
-                refund: msg.take_cycles(),
-            },
-        }
+        self.process_canister_manager_result(result, state, msg)
     }
 
     fn clear_chunk_store(
@@ -2643,13 +2611,7 @@ impl ExecutionEnvironment {
             resource_saturation,
         );
 
-        match result {
-            Ok(response) => self.process_canister_manager_response(response, state, msg),
-            Err(err) => ExecuteSubnetMessageResult::Finished {
-                response: Err(err.into()),
-                refund: msg.take_cycles(),
-            },
-        }
+        self.process_canister_manager_result(result, state, msg)
     }
 
     fn stored_chunks(
