@@ -51,30 +51,29 @@ pub(super) struct CanisterRoundState {
     compute_allocation: AccumulatedPriority,
     /// Copy of the canister's `CanisterPriority::long_execution_mode`.
     long_execution_mode: LongExecutionMode,
-    /// The canister's next execution. We're interested in whether that's
-    /// `StartNew`, `ContinueLong`, or something else (both `None` and
-    /// `ContinueInstallCode` count as idle).
-    next_execution: NextExecution,
+    /// Whether the canister has a long execution.
+    has_long_execution: bool,
 }
 
 impl CanisterRoundState {
-    pub fn new(canister: &CanisterState, canister_priority: &CanisterPriority) -> Self {
+    pub fn new(
+        canister: &CanisterState,
+        canister_priority: &CanisterPriority,
+        next_execution: NextExecution,
+    ) -> Self {
+        debug_assert_eq!(next_execution, canister.next_execution());
         let compute_allocation = from_ca(canister.compute_allocation());
         Self {
             canister_id: canister.canister_id(),
             accumulated_priority: canister_priority.accumulated_priority + compute_allocation,
             compute_allocation,
             long_execution_mode: canister_priority.long_execution_mode,
-            next_execution: canister.next_execution(),
+            has_long_execution: next_execution == NextExecution::ContinueLong,
         }
     }
 
     pub(super) fn canister_id(&self) -> CanisterId {
         self.canister_id
-    }
-
-    fn has_long_execution(&self) -> bool {
-        self.next_execution == NextExecution::ContinueLong
     }
 }
 
@@ -86,7 +85,7 @@ impl Ord for CanisterRoundState {
             .long_execution_mode
             .cmp(&self.long_execution_mode)
             //  2. Long execution (long execution -> new execution)
-            .then(other.has_long_execution().cmp(&self.has_long_execution()))
+            .then(other.has_long_execution.cmp(&self.has_long_execution))
             //  3. Accumulated priority, descending.
             .then(other.accumulated_priority.cmp(&self.accumulated_priority))
             //  4. Canister ID, ascending.
@@ -262,7 +261,8 @@ impl RoundSchedule {
                     return None;
                 }
 
-                let canister_round_state = match canister.next_execution() {
+                let next_execution = canister.next_execution();
+                let canister_round_state = match next_execution {
                     NextExecution::StartNew => {
                         // Don't schedule canisters that started the round with a long execution and
                         // completed it. We need canisters to move between the long execution and new
@@ -270,14 +270,22 @@ impl RoundSchedule {
                         if self.long_execution_canisters.contains(canister_id) {
                             return None;
                         }
-                        CanisterRoundState::new(canister, subnet_schedule.get(canister_id))
+                        CanisterRoundState::new(
+                            canister,
+                            subnet_schedule.get(canister_id),
+                            next_execution,
+                        )
                     }
                     NextExecution::ContinueLong => {
+                        // XXX: Does this filter make sense?
                         if is_first_iteration {
                             self.long_execution_canisters.insert(*canister_id);
                         }
-                        let rs =
-                            CanisterRoundState::new(canister, subnet_schedule.get(canister_id));
+                        let rs = CanisterRoundState::new(
+                            canister,
+                            subnet_schedule.get(canister_id),
+                            next_execution,
+                        );
                         long_executions_count += 1;
                         long_executions_compute_allocation += rs.compute_allocation;
                         rs
@@ -467,7 +475,7 @@ impl RoundSchedule {
             // Apply the priority credit if not in the same long execution as at the
             // beginning of the round.
             if canister_priority.priority_credit != ZERO
-                && (canister.next_execution() != NextExecution::ContinueLong
+                && (!canister.has_long_execution()
                     || self.canisters_with_completed_messages.contains(canister_id))
             {
                 canister_priority.accumulated_priority -=

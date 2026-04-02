@@ -47,6 +47,10 @@ impl TaskQueue {
         })
     }
 
+    pub fn paused_or_aborted_task(&self) -> &Option<ExecutionTask> {
+        &self.paused_or_aborted_task
+    }
+
     pub fn has_paused_or_aborted_task(&self) -> bool {
         self.paused_or_aborted_task.is_some()
     }

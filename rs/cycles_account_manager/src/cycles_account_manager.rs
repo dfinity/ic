@@ -348,7 +348,7 @@ impl CyclesAccountManager {
             cost_schedule,
             canister.system_state.reserved_balance(),
         );
-        if canister.has_paused_execution() || canister.has_paused_install_code() {
+        if canister.has_paused_execution_or_install_code() {
             if canister.system_state.debited_balance() < cycles + threshold {
                 return Err(CanisterOutOfCyclesError {
                     canister_id: canister.canister_id(),

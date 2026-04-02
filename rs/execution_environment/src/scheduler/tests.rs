@@ -67,7 +67,7 @@ fn state_sync_clears_paused_execution_registry() {
     // state with the clean copy. The registry still holds the orphaned paused
     // execution entry.
     test.state_mut().put_canister_state(clean_canister);
-    assert!(!test.canister_state(canister).has_paused_execution());
+    assert!(!test.canister_state(canister).has_long_execution());
 
     // Execute another round. The scheduler detects that no canister has a paused
     // execution and calls `abandon_paused_executions()` to clear the paused
