@@ -101,5 +101,5 @@ name = "nns_recovery"
 path = "nns_recovery.rs"
 
 [[bin]]
-name = "mainnet_nns"
-path = "mainnet_nns.rs"
+name = "mainnet_nns_state"
+path = "mainnet_nns_state.rs"
