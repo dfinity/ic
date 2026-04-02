@@ -6,7 +6,7 @@ use crate::{
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateReader};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_protobuf::registry::subnet::v1::{
     CatchUpPackageContents, chain_key_initialization::Initialization,
@@ -48,7 +48,7 @@ pub fn create_payload(
     pool_reader: &PoolReader<'_>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     parent: &Block,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_manager: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
     max_dealings_per_block: usize,
@@ -355,7 +355,7 @@ pub(super) fn create_summary_payload(
     last_summary: &DkgSummary,
     parent: &Block,
     registry_version: RegistryVersion,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_manager: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
@@ -528,7 +528,7 @@ fn compute_remote_dkg_data(
     subnet_id: SubnetId,
     height: Height,
     registry_client: &dyn RegistryClient,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_manager: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     mut new_transcripts: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
     previous_transcripts: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
