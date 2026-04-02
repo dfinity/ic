@@ -536,7 +536,7 @@ fn random_label<R: Rng + CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) 
 
 fn random_bytes<R: Rng + CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) -> Vec<u8> {
     let len = rng.gen_range(range);
-    let mut result = vec![0u8; len];
+    let mut result = vec![0_u8; len];
     rng.fill_bytes(&mut result[..]);
     result
 }

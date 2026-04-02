@@ -63,7 +63,7 @@ fn stream_encode_with_size_limit(
         10, // max_signal_count
     ))]
     stream: Stream,
-    #[strategy(0..1000usize)] size_limit: usize,
+    #[strategy(0..1000_usize)] size_limit: usize,
 ) {
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 

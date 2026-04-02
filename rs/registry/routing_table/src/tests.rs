@@ -362,7 +362,7 @@ fn can_insert_valid_route() {
     assert_eq!(rt.insert(new_range, new_subnet_id), Ok(()));
     assert_eq!(rt.well_formed(), Ok(()));
     assert_eq!(
-        rt.lookup_entry(CanisterId::from(1001u64)),
+        rt.lookup_entry(CanisterId::from(1001_u64)),
         Some((new_range, new_subnet_id))
     );
 }
@@ -384,7 +384,7 @@ fn cannot_insert_invalid_route() {
         end: CanisterId::from(1000_u64),
     };
     assert_eq!(
-        rt.lookup_entry(CanisterId::from(101u64)),
+        rt.lookup_entry(CanisterId::from(101_u64)),
         Some((original_range, subnet_test_id(1)))
     );
     assert_eq!(rt.well_formed(), Ok(()));
@@ -395,18 +395,18 @@ fn can_remove_subnet() {
     let mut rt = new_routing_table(vec![((1, 1000), 1), ((2000, 3000), 2)]);
     assert_eq!(rt.well_formed(), Ok(()));
     assert_eq!(
-        rt.lookup_entry(CanisterId::from(100u64)),
+        rt.lookup_entry(CanisterId::from(100_u64)),
         Some((
             CanisterIdRange {
-                start: CanisterId::from(1u64),
-                end: CanisterId::from(1000u64),
+                start: CanisterId::from(1_u64),
+                end: CanisterId::from(1000_u64),
             },
             subnet_test_id(1)
         ))
     );
     rt.remove_subnet(subnet_test_id(1));
     assert_eq!(rt.well_formed(), Ok(()));
-    assert_eq!(rt.lookup_entry(CanisterId::from(100u64)), None);
+    assert_eq!(rt.lookup_entry(CanisterId::from(100_u64)), None);
 }
 
 #[test]

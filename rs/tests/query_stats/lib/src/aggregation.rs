@@ -108,15 +108,15 @@ fn query_stats_fault_tolerance(
             .query_stats;
 
         if expect_success {
-            assert_eq!(query_stats.num_calls_total, 4u64);
-            assert_ne!(query_stats.num_instructions_total, 0u64);
-            assert_ne!(query_stats.request_payload_bytes_total, 0u64);
-            assert_eq!(query_stats.response_payload_bytes_total, 16u64);
+            assert_eq!(query_stats.num_calls_total, 4_u64);
+            assert_ne!(query_stats.num_instructions_total, 0_u64);
+            assert_ne!(query_stats.request_payload_bytes_total, 0_u64);
+            assert_eq!(query_stats.response_payload_bytes_total, 16_u64);
         } else {
-            assert_eq!(query_stats.num_calls_total, 0u64);
-            assert_eq!(query_stats.num_instructions_total, 0u64);
-            assert_eq!(query_stats.request_payload_bytes_total, 0u64);
-            assert_eq!(query_stats.response_payload_bytes_total, 0u64);
+            assert_eq!(query_stats.num_calls_total, 0_u64);
+            assert_eq!(query_stats.num_instructions_total, 0_u64);
+            assert_eq!(query_stats.request_payload_bytes_total, 0_u64);
+            assert_eq!(query_stats.response_payload_bytes_total, 0_u64);
         }
     })
 }

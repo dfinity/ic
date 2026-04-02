@@ -51,6 +51,20 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
+            full_topology: item
+                .full_topology
+                .as_ref()
+                .map(|ft| pb_metadata::FullTopology {
+                    subnets: ft
+                        .subnets
+                        .iter()
+                        .map(|(subnet_id, subnet_topology)| pb_metadata::SubnetsEntry {
+                            subnet_id: Some(subnet_id_into_protobuf(*subnet_id)),
+                            subnet_topology: Some(subnet_topology.into()),
+                        })
+                        .collect(),
+                    routing_table: Some(ft.routing_table.as_ref().into()),
+                }),
         }
     }
 }
@@ -109,6 +123,28 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
+            full_topology: match item.full_topology {
+                None => None,
+                Some(ft) => {
+                    let mut ft_subnets = BTreeMap::new();
+                    for entry in ft.subnets {
+                        ft_subnets.insert(
+                            subnet_id_try_from_option(entry.subnet_id, "FullTopology::subnets::K")?,
+                            try_from_option_field(
+                                entry.subnet_topology,
+                                "FullTopology::subnets::V",
+                            )?,
+                        );
+                    }
+                    let ft_routing_table: Arc<RoutingTable> =
+                        try_from_option_field(ft.routing_table, "FullTopology::routing_table")
+                            .map(Arc::new)?;
+                    Some(FullTopology {
+                        subnets: ft_subnets,
+                        routing_table: ft_routing_table,
+                    })
+                }
+            },
         })
     }
 }
@@ -298,6 +334,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
             own_subnet_features: Some(item.own_subnet_features.into()),
+            own_resource_limits: Some(item.own_resource_limits.into()),
             subnet_metrics: Some((&item.subnet_metrics).into()),
             bitcoin_get_successors_follow_up_responses: item
                 .bitcoin_get_successors_follow_up_responses
@@ -426,6 +463,7 @@ impl
             // properly set this value.
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
+            own_resource_limits: item.own_resource_limits.unwrap_or_default().into(),
             node_public_keys,
             api_boundary_nodes,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,

@@ -426,6 +426,107 @@ fn system_metadata_roundtrip_encoding() {
 }
 
 #[test]
+fn network_topology_roundtrip_encoding() {
+    use ic_protobuf::state::system_metadata::v1 as pb;
+
+    fn range(start: u64, end: u64) -> CanisterIdRange {
+        CanisterIdRange {
+            start: start.into(),
+            end: end.into(),
+        }
+    }
+
+    let nns_subnet_id = subnet_test_id(42);
+    let app_subnet_id = SUBNET_1;
+    let engine_subnet_id = SUBNET_2;
+
+    let app_subnet_topo = SubnetTopology {
+        public_key: vec![1, 2, 3],
+        nodes: [node_test_id(1), node_test_id(2)].into_iter().collect(),
+        subnet_type: SubnetType::Application,
+        ..Default::default()
+    };
+
+    let engine_subnet_topo = SubnetTopology {
+        public_key: vec![4, 5, 6],
+        nodes: [node_test_id(3)].into_iter().collect(),
+        subnet_type: SubnetType::CloudEngine,
+        ..Default::default()
+    };
+
+    let filtered_routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            range(10, 19) => app_subnet_id,
+        })
+        .unwrap(),
+    );
+
+    let full_routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            range(10, 19) => app_subnet_id,
+            range(20, 29) => engine_subnet_id,
+        })
+        .unwrap(),
+    );
+
+    let canister_migrations = Arc::new(
+        CanisterMigrations::try_from(btreemap! {
+            range(10, 12) => vec![app_subnet_id, nns_subnet_id],
+        })
+        .unwrap(),
+    );
+
+    let ecdsa_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "test_key".to_string(),
+    });
+    let chain_key_enabled_subnets = btreemap! {
+        ecdsa_key_id => vec![app_subnet_id],
+    };
+
+    let bitcoin_testnet_canister_id = Some(canister_test_id(100));
+    let bitcoin_mainnet_canister_id = Some(canister_test_id(101));
+
+    // NetworkTopology without full_topology (non-NNS subnet).
+    let network_topology = NetworkTopology::new(
+        btreemap! { app_subnet_id => app_subnet_topo.clone() },
+        filtered_routing_table.clone(),
+        canister_migrations.clone(),
+        nns_subnet_id,
+        chain_key_enabled_subnets.clone(),
+        bitcoin_testnet_canister_id,
+        bitcoin_mainnet_canister_id,
+        None,
+    );
+
+    let proto = pb::NetworkTopology::from(&network_topology);
+    let round_trip = NetworkTopology::try_from(proto).unwrap();
+    assert_eq!(network_topology, round_trip);
+
+    // NetworkTopology with full_topology (NNS subnet).
+    let network_topology_with_full = NetworkTopology::new(
+        btreemap! { app_subnet_id => app_subnet_topo.clone() },
+        filtered_routing_table,
+        canister_migrations,
+        nns_subnet_id,
+        chain_key_enabled_subnets,
+        bitcoin_testnet_canister_id,
+        bitcoin_mainnet_canister_id,
+        Some(FullTopology {
+            subnets: btreemap! {
+                app_subnet_id => app_subnet_topo,
+                engine_subnet_id => engine_subnet_topo,
+            },
+            routing_table: full_routing_table,
+        }),
+    );
+
+    let proto = pb::NetworkTopology::from(&network_topology_with_full);
+    let round_trip = NetworkTopology::try_from(proto).unwrap();
+    assert_eq!(network_topology_with_full, round_trip);
+}
+
+#[test]
 fn system_metadata_split() {
     // We will be splitting subnet A into A' and B. C is a third-party subnet.
     const SUBNET_A: SubnetId = SUBNET_0;
@@ -1098,6 +1199,130 @@ fn network_topology_ecdsa_subnets() {
     assert_eq!(
         network_topology.chain_key_enabled_subnets(&key),
         &[subnet_test_id(1)]
+    );
+}
+
+#[test]
+fn network_topology_route_uses_filtered_topology() {
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2);
+
+    // The filtered routing table only contains subnet_a's range.
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+        })
+        .unwrap(),
+    );
+
+    // The filtered subnets map only contains subnet_a.
+    // subnet_b exists in the network but is not visible to this subnet.
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            subnet_a => SubnetTopology::default(),
+        },
+        routing_table,
+        canister_migrations: Arc::new(CanisterMigrations::default()),
+        nns_subnet_id: subnet_test_id(42),
+        ..Default::default()
+    };
+
+    // --- Canister ID routing ---
+
+    // Canister on subnet_a: resolvable via the filtered routing table.
+    assert_eq!(
+        network_topology.route(canister_test_id(50).get()),
+        Some(subnet_a),
+    );
+    // Canister 150 is not in the filtered routing table at all.
+    assert_eq!(network_topology.route(canister_test_id(150).get()), None);
+
+    // --- Subnet ID routing ---
+
+    // subnet_a is in the filtered subnets map.
+    assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a));
+    // subnet_b is NOT in the filtered subnets map.
+    assert_eq!(network_topology.route(subnet_b.get()), None);
+}
+
+#[test]
+fn subnets_for_certification_falls_back_to_filtered() {
+    let subnet_a = subnet_test_id(1);
+
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+        })
+        .unwrap(),
+    );
+
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            subnet_a => SubnetTopology::default(),
+        },
+        routing_table: routing_table.clone(),
+        ..Default::default()
+    };
+
+    // Without full_topology, subnets_for_certification returns the filtered map.
+    assert_eq!(
+        network_topology.subnets_for_certification(),
+        network_topology.subnets()
+    );
+    assert_eq!(network_topology.routing_table(), &routing_table);
+    assert_eq!(
+        network_topology.routing_table_for_certification(),
+        network_topology.routing_table()
+    );
+}
+
+#[test]
+fn subnets_for_certification_returns_full_topology_when_set() {
+    use crate::metadata_state::testing::NetworkTopologyTesting;
+
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2); // e.g., a cloud engine
+
+    let full_subnets = btreemap! {
+        subnet_a => SubnetTopology::default(),
+        subnet_b => SubnetTopology::default(),
+    };
+    let full_routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+            CanisterIdRange { start: CanisterId::from(100_u64), end: CanisterId::from(199_u64) } => subnet_b,
+        })
+        .unwrap(),
+    );
+
+    let filtered_subnets = btreemap! {
+        subnet_a => SubnetTopology::default(),
+    };
+    let filtered_routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+        })
+        .unwrap(),
+    );
+
+    let mut network_topology = NetworkTopology {
+        subnets: filtered_subnets.clone(),
+        routing_table: filtered_routing_table.clone(),
+        ..Default::default()
+    };
+    network_topology.set_full_topology(Some(FullTopology {
+        subnets: full_subnets.clone(),
+        routing_table: full_routing_table.clone(),
+    }));
+
+    // subnets() and routing_table() return the filtered view.
+    assert_eq!(network_topology.subnets(), &filtered_subnets);
+    assert_eq!(network_topology.routing_table(), &filtered_routing_table);
+    // subnets_for_certification() and routing_table_for_certification() return the full view.
+    assert_eq!(network_topology.subnets_for_certification(), &full_subnets);
+    assert_eq!(
+        network_topology.routing_table_for_certification(),
+        &full_routing_table
     );
 }
 

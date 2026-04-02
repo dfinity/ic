@@ -42,7 +42,7 @@ pub fn init_args() -> InitArgs {
         check_fee: None,
         kyt_principal: None,
         kyt_fee: None,
-        get_utxos_cache_expiration_seconds: None,
+        get_utxos_cache_expiration_seconds: Some(60),
         utxo_consolidation_threshold: None,
         max_num_inputs_in_transaction: None,
     }
@@ -463,7 +463,7 @@ pub mod arbitrary {
             amount: amount,
             address: address(),
             block_index: any::<u64>(),
-            received_at: 1569975147000..2069975147000u64,
+            received_at: 1569975147000..2069975147000_u64,
             kyt_provider: option::of(principal()),
             reimbursement_account: option::of(account()),
         })
