@@ -547,7 +547,7 @@ impl RoundSchedule {
                 const AP_ROUNDS_MAX: i64 = 5;
                 let canister_free_allocation = std::cmp::min(
                     canister_free_allocation,
-                    ONE_HUNDRED_PERCENT * AP_ROUNDS_MAX - canister_priority.true_priority(),
+                    ONE_HUNDRED_PERCENT * AP_ROUNDS_MAX - canister_priority.accumulated_priority,
                 );
 
                 canister_priority.accumulated_priority += canister_free_allocation;
