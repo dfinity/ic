@@ -194,6 +194,7 @@ mod tests {
                 download_pool_node: None,
                 download_state_method: None,
                 keep_downloaded_state: Some(false),
+                download_state_height: None,
                 upload_method: None,
                 wait_for_cup_node: None,
                 chain_key_subnet_id: Some(fake_subnet_id()),
