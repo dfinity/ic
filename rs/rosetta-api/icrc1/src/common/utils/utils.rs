@@ -156,6 +156,8 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         Transfer,
         Approve,
         FeeCollector,
+        AuthorizedMint,
+        AuthorizedBurn,
     }
 
     // A builder which helps depict the icrc1 Operation and allows for an arbitrary order of rosetta_core Operations
@@ -172,6 +174,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         fee_collector: Option<Account>,
         caller: Option<Principal>,
         mthd: Option<String>,
+        reason: Option<String>,
     }
 
     impl IcrcOperationBuilder {
@@ -189,6 +192,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 fee_collector: None,
                 caller: None,
                 mthd: None,
+                reason: None,
             }
         }
 
@@ -252,6 +256,11 @@ pub fn rosetta_core_operations_to_icrc1_operation(
             self
         }
 
+        pub fn with_reason(mut self, reason: Option<String>) -> Self {
+            self.reason = reason;
+            self
+        }
+
         pub fn build(self) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
             Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer or Approve")? {
                 IcrcOperation::Mint => {
@@ -299,6 +308,36 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     fee_collector: self.fee_collector,
                     caller: self.caller,
                     mthd: self.mthd,
+                },
+                IcrcOperation::AuthorizedMint => {
+                    if self.from.is_some() {
+                        bail!("From AccountIdentifier field is not allowed for AuthorizedMint operation")
+                    }
+                    if self.spender.is_some() {
+                        bail!("Spender AccountIdentifier field is not allowed for AuthorizedMint operation")
+                    }
+                    crate::common::storage::types::IcrcOperation::AuthorizedMint {
+                        to: self.to.context("Account field needs to be populated for AuthorizedMint operation")?.try_into()?,
+                        amount: self.amount.context("Amount field needs to be populated for AuthorizedMint operation")?,
+                        caller: self.caller,
+                        mthd: self.mthd,
+                        reason: self.reason,
+                    }
+                },
+                IcrcOperation::AuthorizedBurn => {
+                    if self.to.is_some() {
+                        bail!("To AccountIdentifier field is not allowed for AuthorizedBurn operation")
+                    }
+                    if self.spender.is_some() {
+                        bail!("Spender AccountIdentifier field is not allowed for AuthorizedBurn operation")
+                    }
+                    crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+                        from: self.from.context("From AccountIdentifier field needs to be populated for AuthorizedBurn operation")?.try_into()?,
+                        amount: self.amount.context("Amount field needs to be populated for AuthorizedBurn operation")?,
+                        caller: self.caller,
+                        mthd: self.mthd,
+                        reason: self.reason,
+                    }
                 },
             })
         }
@@ -416,6 +455,58 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     .with_fee_collector(fc_metadata.fee_collector)
                     .with_caller(fc_metadata.caller)
                     .with_mthd(fc_metadata.mthd)
+            }
+            OperationType::AuthorizedMint => {
+                let amount = operation
+                    .amount
+                    .context("Amount field needs to be populated for AuthorizedMint operation")?;
+                let to_account = operation.account.context(
+                    "To AccountIdentifier field needs to be populated for AuthorizedMint operation",
+                )?;
+                let metadata = crate::common::types::AuthorizedOperationMetadata::try_from(
+                    operation.metadata,
+                )?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::AuthorizedMint)
+                    .with_to_accountidentifier(to_account)
+                    .with_amount(Nat::try_from(amount)?)
+                    .with_caller(
+                        metadata
+                            .caller
+                            .map(|c| {
+                                let bytes = hex::decode(&c)?;
+                                Ok::<_, anyhow::Error>(Principal::from_slice(&bytes))
+                            })
+                            .transpose()?,
+                    )
+                    .with_mthd(metadata.mthd)
+                    .with_reason(metadata.reason)
+            }
+            OperationType::AuthorizedBurn => {
+                let amount = operation
+                    .amount
+                    .context("Amount field needs to be populated for AuthorizedBurn operation")?;
+                let from_account = operation.account.context(
+                    "From AccountIdentifier field needs to be populated for AuthorizedBurn operation",
+                )?;
+                let metadata = crate::common::types::AuthorizedOperationMetadata::try_from(
+                    operation.metadata,
+                )?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::AuthorizedBurn)
+                    .with_from_accountidentifier(from_account)
+                    .with_amount(Nat::try_from(amount)?)
+                    .with_caller(
+                        metadata
+                            .caller
+                            .map(|c| {
+                                let bytes = hex::decode(&c)?;
+                                Ok::<_, anyhow::Error>(Principal::from_slice(&bytes))
+                            })
+                            .transpose()?,
+                    )
+                    .with_mthd(metadata.mthd)
+                    .with_reason(metadata.reason)
             }
         };
     }
@@ -665,6 +756,58 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                         fee_collector,
                         caller,
                         mthd,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedMint {
+            to,
+            amount,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::AuthorizedMint.to_string(),
+                Some(to.into()),
+                Some(rosetta_core::objects::Amount::new(
+                    BigInt::from(amount.0),
+                    currency.clone(),
+                )),
+                None,
+                Some(
+                    crate::common::types::AuthorizedOperationMetadata {
+                        caller: caller.map(|c| hex::encode(c.as_slice())),
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+            from,
+            amount,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::AuthorizedBurn.to_string(),
+                Some(from.into()),
+                Some(rosetta_core::objects::Amount::new(
+                    BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
+                    currency.clone(),
+                )),
+                None,
+                Some(
+                    crate::common::types::AuthorizedOperationMetadata {
+                        caller: caller.map(|c| hex::encode(c.as_slice())),
+                        mthd,
+                        reason,
                     }
                     .try_into()?,
                 ),

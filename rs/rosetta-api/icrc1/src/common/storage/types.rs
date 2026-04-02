@@ -8,6 +8,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
+use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
 use icrc_ledger_types::{
     icrc::generic_value::Value,
     icrc1::{account::Account, transfer::Memo},
@@ -138,7 +139,9 @@ impl RosettaBlock {
                 IcrcOperation::Transfer { fee, .. } => fee,
                 IcrcOperation::Approve { fee, .. } => fee,
                 IcrcOperation::Burn { fee, .. } => fee,
-                IcrcOperation::FeeCollector { .. } => None,
+                IcrcOperation::FeeCollector { .. }
+                | IcrcOperation::AuthorizedMint { .. }
+                | IcrcOperation::AuthorizedBurn { .. } => None,
             }))
     }
 
@@ -378,6 +381,20 @@ pub enum IcrcOperation {
         caller: Option<Principal>,
         mthd: Option<String>,
     },
+    AuthorizedMint {
+        to: Account,
+        amount: Nat,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    AuthorizedBurn {
+        from: Account,
+        amount: Nat,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
 }
 
 impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
@@ -453,6 +470,36 @@ impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
                         fee_collector,
                         caller,
                         mthd,
+                    })
+                }
+                BTYPE_122_MINT => {
+                    let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::AuthorizedMint {
+                        to,
+                        amount: amount.ok_or_else(|| {
+                            anyhow!("Missing field 'amt' for AuthorizedMint operation")
+                        })?,
+                        caller,
+                        mthd,
+                        reason,
+                    })
+                }
+                BTYPE_122_BURN => {
+                    let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    let reason: Option<String> = get_opt_field(&map, FIELD_PREFIX, "reason")?;
+                    Ok(Self::AuthorizedBurn {
+                        from,
+                        amount: amount.ok_or_else(|| {
+                            anyhow!("Missing field 'amt' for AuthorizedBurn operation")
+                        })?,
+                        caller,
+                        mthd,
+                        reason,
                     })
                 }
                 found => {
@@ -552,6 +599,44 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 }
                 if let Some(mthd) = mthd {
                     map.insert("mthd".to_string(), Value::text(mthd));
+                }
+            }
+            Op::AuthorizedMint {
+                to,
+                amount,
+                caller,
+                mthd,
+                reason,
+            } => {
+                map.insert("to".to_string(), Value::from(to));
+                map.insert("amt".to_string(), Value::Nat(amount));
+                if let Some(caller) = caller {
+                    map.insert("caller".to_string(), Value::from(caller));
+                }
+                if let Some(mthd) = mthd {
+                    map.insert("mthd".to_string(), Value::text(mthd));
+                }
+                if let Some(reason) = reason {
+                    map.insert("reason".to_string(), Value::text(reason));
+                }
+            }
+            Op::AuthorizedBurn {
+                from,
+                amount,
+                caller,
+                mthd,
+                reason,
+            } => {
+                map.insert("from".to_string(), Value::from(from));
+                map.insert("amt".to_string(), Value::Nat(amount));
+                if let Some(caller) = caller {
+                    map.insert("caller".to_string(), Value::from(caller));
+                }
+                if let Some(mthd) = mthd {
+                    map.insert("mthd".to_string(), Value::text(mthd));
+                }
+                if let Some(reason) = reason {
+                    map.insert("reason".to_string(), Value::text(reason));
                 }
             }
         }
@@ -676,9 +761,32 @@ where
                 caller,
                 mthd,
             },
-            Op::AuthorizedMint { .. } | Op::AuthorizedBurn { .. } => {
-                panic!("AuthorizedMint/AuthorizedBurn not yet supported in Rosetta")
-            }
+            Op::AuthorizedMint {
+                to,
+                amount,
+                caller,
+                mthd,
+                reason,
+            } => Self::AuthorizedMint {
+                to,
+                amount: amount.into(),
+                caller,
+                mthd,
+                reason,
+            },
+            Op::AuthorizedBurn {
+                from,
+                amount,
+                caller,
+                mthd,
+                reason,
+            } => Self::AuthorizedBurn {
+                from,
+                amount: amount.into(),
+                caller,
+                mthd,
+                reason,
+            },
         }
     }
 }
@@ -1099,6 +1207,50 @@ mod tests {
                 assert_eq!(fee_collector, rosetta_fee_collector, "fee_collector");
                 assert_eq!(caller, rosetta_caller, "caller");
                 assert_eq!(mthd, rosetta_mthd, "mthd");
+            }
+            (
+                ic_icrc1::Operation::AuthorizedMint {
+                    to,
+                    amount,
+                    caller,
+                    mthd,
+                    reason,
+                },
+                IcrcOperation::AuthorizedMint {
+                    to: rosetta_to,
+                    amount: rosetta_amount,
+                    caller: rosetta_caller,
+                    mthd: rosetta_mthd,
+                    reason: rosetta_reason,
+                },
+            ) => {
+                assert_eq!(to, rosetta_to, "to");
+                assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(caller, rosetta_caller, "caller");
+                assert_eq!(mthd, rosetta_mthd, "mthd");
+                assert_eq!(reason, rosetta_reason, "reason");
+            }
+            (
+                ic_icrc1::Operation::AuthorizedBurn {
+                    from,
+                    amount,
+                    caller,
+                    mthd,
+                    reason,
+                },
+                IcrcOperation::AuthorizedBurn {
+                    from: rosetta_from,
+                    amount: rosetta_amount,
+                    caller: rosetta_caller,
+                    mthd: rosetta_mthd,
+                    reason: rosetta_reason,
+                },
+            ) => {
+                assert_eq!(from, rosetta_from, "from");
+                assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(caller, rosetta_caller, "caller");
+                assert_eq!(mthd, rosetta_mthd, "mthd");
+                assert_eq!(reason, rosetta_reason, "reason");
             }
             (l, r) => panic!(
                 "Found different type of operations. Operation:{l:?} rosetta's Operation:{r:?}"
