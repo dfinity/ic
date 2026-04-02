@@ -26,13 +26,14 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_types::{
-    Height, PrincipalId, SubnetId,
+    Height, NodeId, PrincipalId, SubnetId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
         ConsensusResponse,
     },
-    consensus::{Block, BlockPayload, HasVersion, idkg},
+    consensus::{Block, BlockPayload, HasVersion, dkg::SubnetSplittingStatus, idkg},
     crypto::{
         randomness_from_crypto_hashable,
         threshold_sig::{
@@ -65,6 +66,7 @@ pub fn deliver_batches(
         pool,
         registry_client,
         subnet_id,
+        /*maybe_node_id=*/ None,
         log,
         max_batch_height_to_deliver,
         /*result_processor=*/ None,
@@ -81,6 +83,7 @@ pub(crate) fn deliver_batches_with_result_processor(
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
+    maybe_node_id: Option<NodeId>,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
@@ -223,12 +226,56 @@ pub(crate) fn deliver_batches_with_result_processor(
         let persist_batch = Some(height) == max_batch_height_to_deliver;
         let requires_full_state_hash = block.payload.is_summary() || persist_batch;
         let batch_content = match block.payload.as_ref() {
-            BlockPayload::Summary(_summary_payload) => BatchContent::Data {
-                batch_messages: BatchMessages::default(),
-                chain_key_data,
-                consensus_responses,
-                requires_full_state_hash,
-            },
+            BlockPayload::Summary(summary_payload) => {
+                match summary_payload.dkg.subnet_splitting_status() {
+                    SubnetSplittingStatus::Scheduled {
+                        destination_subnet_id,
+                        source_subnet_id,
+                    } => {
+                        let Ok(Some(subnet_id)) = registry_client
+                            .get_subnet_id_from_node_id(
+                                maybe_node_id
+                                    .expect("Subnet splitting not yet enabled in ic-replay"),
+                                block.context.registry_version,
+                            )
+                            .inspect_err(|err| {
+                                error!(
+                                    every_n_seconds => 30,
+                                    log,
+                                    "Failed to determine the new subnet assignment: {err:?}"
+                                )
+                            })
+                        else {
+                            break;
+                        };
+
+                        let (new_subnet_id, other_subnet_id) = if subnet_id == destination_subnet_id
+                        {
+                            (destination_subnet_id, source_subnet_id)
+                        } else {
+                            (source_subnet_id, destination_subnet_id)
+                        };
+
+                        info!(
+                            log,
+                            "Deliverying splitting block. New subnet assignment: {new_subnet_id}"
+                        );
+
+                        BatchContent::Splitting {
+                            new_subnet_id,
+                            other_subnet_id,
+                        }
+                    }
+                    SubnetSplittingStatus::Done { .. } | SubnetSplittingStatus::NotScheduled => {
+                        BatchContent::Data {
+                            batch_messages: BatchMessages::default(),
+                            chain_key_data,
+                            consensus_responses,
+                            requires_full_state_hash,
+                        }
+                    }
+                }
+            }
             BlockPayload::Data(data_payload) => {
                 batch_stats.add_from_payload(&data_payload.batch);
                 BatchContent::Data {

@@ -349,8 +349,8 @@ impl BlockMaker {
                     .flatten();
 
                     if matches!(
-                        summary.subnet_splitting_status.as_ref(),
-                        Some(&SubnetSplittingStatus::Scheduled { .. })
+                        summary.subnet_splitting_status(),
+                        SubnetSplittingStatus::Scheduled { .. }
                     ) {
                         info!(self.log, "Proposing a Splitting block at height {height}.");
                     }

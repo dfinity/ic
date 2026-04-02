@@ -4,6 +4,7 @@ use super::*;
 use crate::{
     ReplicaVersion,
     artifact::PbArtifact,
+    consensus::backwards_compatibility::BackwardsCompatibleOption,
     crypto::threshold_sig::ni_dkg::{
         NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
         config::NiDkgConfig,
@@ -231,7 +232,9 @@ impl DkgSummary {
             next_interval_length,
             height,
             initial_dkg_attempts,
-            subnet_splitting_status: BackwardsCompatibleOption(subnet_splitting_status),
+            subnet_splitting_status: BackwardsCompatibleOption::new_for_test_only(
+                subnet_splitting_status,
+            ),
         }
     }
 
@@ -313,6 +316,13 @@ impl DkgSummary {
             .map(|transcript| transcript.registry_version)
             .min()
             .expect("No current transcripts available")
+    }
+
+    pub fn subnet_splitting_status(&self) -> SubnetSplittingStatus {
+        self.subnet_splitting_status
+            .as_ref()
+            .copied()
+            .unwrap_or_default()
     }
 }
 

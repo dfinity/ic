@@ -2,7 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::batch::ChainKeyAgreement;
-use crate::consensus::BackwardsCompatibleOption;
+use crate::consensus::backwards_compatibility::BackwardsCompatibleOption;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};

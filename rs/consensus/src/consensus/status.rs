@@ -95,14 +95,12 @@ pub(crate) fn should_halt(
                 .as_ref()
                 .as_summary()
                 .dkg
-                .subnet_splitting_status
-                .as_ref()
+                .subnet_splitting_status()
             {
-                Some(&SubnetSplittingStatus::NotScheduled) => false,
+                SubnetSplittingStatus::NotScheduled => false,
                 // After the split, don't produce any blocks until we are on the right subnet.
-                Some(&SubnetSplittingStatus::Done { new_subnet_id }) => subnet_id != new_subnet_id,
-                Some(&SubnetSplittingStatus::Scheduled { .. }) => height >= summary_block.height,
-                None => false,
+                SubnetSplittingStatus::Done { new_subnet_id } => subnet_id != new_subnet_id,
+                SubnetSplittingStatus::Scheduled { .. } => height >= summary_block.height,
             }
         })
         .unwrap_or_default();
@@ -318,7 +316,7 @@ mod tests {
     fn status_test(#[case] test_case: TestCase) {
         with_test_replica_logger(|logger| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                use ic_types::consensus::BackwardsCompatibleOption;
+                use ic_types::consensus::backwards_compatibility::BackwardsCompatibleOption;
 
                 let (pool, registry_client) = set_up(
                     pool_config,
@@ -331,7 +329,7 @@ mod tests {
                     PoolReader::new(&pool).get_highest_finalized_summary_block();
                 let mut payload = last_summary_block.payload.as_ref().as_summary().clone();
                 payload.dkg.subnet_splitting_status =
-                    BackwardsCompatibleOption(test_case.subnet_splitting_status);
+                    BackwardsCompatibleOption::new_for_test_only(test_case.subnet_splitting_status);
                 last_summary_block.payload =
                     Payload::new(crypto_hash, BlockPayload::Summary(payload));
 
