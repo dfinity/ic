@@ -23,11 +23,12 @@ use ic_nns_governance_api::{
 };
 use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
-    subnet::v1::{SubnetRecord, SubnetType},
+    subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
 };
 use ic_registry_client_helpers::subnet::get_node_ids_from_subnet_record;
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
+    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_transport::{
     pb::v1::{Precondition, RegistryMutation, registry_mutation},
@@ -319,6 +320,21 @@ pub fn cmd_add_ledger_account(
     ])
 }
 
+/// Creates an ingress message that updates the subnet list record in the registry to contain only
+/// the player's subnet id.
+pub(crate) fn cmd_overwrite_subnet_list_with_singleton(
+    agent: &Agent,
+    player: &crate::player::Player,
+    time: Time,
+) -> Result<Vec<SignedIngress>, String> {
+    let subnet_list_record = SubnetListRecord {
+        subnets: vec![player.subnet_id.get().into_vec()],
+    };
+
+    let msg = update_subnet_list_record(agent, subnet_list_record, time)?;
+    Ok(vec![msg])
+}
+
 /// Creates signed ingress messages to potentially add a new blessed replica
 /// version and updates the subnet record with this replica version.
 pub(crate) fn cmd_upgrade_subnet_to_replica_version(
@@ -536,6 +552,30 @@ pub fn update_subnet_record(
     let mut mutation = RegistryMutation::default();
     mutation.set_mutation_type(registry_mutation::Type::Update);
     mutation.key = make_subnet_record_key(subnet_id).as_bytes().to_vec();
+
+    let mut buf = Vec::new();
+    match record.encode(&mut buf) {
+        Ok(_) => mutation.value = buf,
+        Err(error) => panic!("Error encoding the value to protobuf: {error:?}"),
+    }
+    atomic_mutate(
+        agent,
+        REGISTRY_CANISTER_ID,
+        vec![mutation],
+        vec![],
+        context_time,
+    )
+}
+
+/// Update subnet list record.
+pub fn update_subnet_list_record(
+    agent: &Agent,
+    record: SubnetListRecord,
+    context_time: Time,
+) -> Result<SignedIngress, String> {
+    let mut mutation = RegistryMutation::default();
+    mutation.set_mutation_type(registry_mutation::Type::Update);
+    mutation.key = make_subnet_list_record_key().as_bytes().to_vec();
 
     let mut buf = Vec::new();
     match record.encode(&mut buf) {
