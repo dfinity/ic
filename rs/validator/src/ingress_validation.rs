@@ -569,14 +569,28 @@ where
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.signature.clone()));
-            let root_of_trust = root_of_trust_provider
-                .root_of_trust()
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))
-                .map_err(InvalidSignature)?;
-            validator
-                .verify_canister_sig(&canister_sig, message_id, &pk, &root_of_trust)
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))
-                .map_err(InvalidSignature)?;
+            let verified_with_mainnet = root_of_trust_provider
+                .additional_root_of_trust()
+                .is_some_and(|additional_root_of_trust| {
+                    validator
+                        .verify_canister_sig(
+                            &canister_sig,
+                            message_id,
+                            &pk,
+                            &additional_root_of_trust,
+                        )
+                        .is_ok()
+                });
+            if !verified_with_mainnet {
+                let root_of_trust = root_of_trust_provider
+                    .root_of_trust()
+                    .map_err(|e| InvalidCanisterSignature(e.to_string()))
+                    .map_err(InvalidSignature)?;
+                validator
+                    .verify_canister_sig(&canister_sig, message_id, &pk, &root_of_trust)
+                    .map_err(|e| InvalidCanisterSignature(e.to_string()))
+                    .map_err(InvalidSignature)?;
+            }
             Ok(targets)
         }
         KeyBytesContentType::RsaSha256PublicKeyDer => {
@@ -705,12 +719,26 @@ where
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.to_vec()));
-            let root_of_trust = root_of_trust_provider
-                .root_of_trust()
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
-            validator
-                .verify_canister_sig(&canister_sig, delegation, &pk, &root_of_trust)
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
+            let verified_with_mainnet = root_of_trust_provider
+                .additional_root_of_trust()
+                .is_some_and(|additional_root_of_trust| {
+                    validator
+                        .verify_canister_sig(
+                            &canister_sig,
+                            delegation,
+                            &pk,
+                            &additional_root_of_trust,
+                        )
+                        .is_ok()
+                });
+            if !verified_with_mainnet {
+                let root_of_trust = root_of_trust_provider
+                    .root_of_trust()
+                    .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
+                validator
+                    .verify_canister_sig(&canister_sig, delegation, &pk, &root_of_trust)
+                    .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
+            }
         }
     }
 

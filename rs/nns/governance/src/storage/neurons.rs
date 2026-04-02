@@ -1,10 +1,10 @@
 use crate::{
-    governance::MAX_DISSOLVE_DELAY_SECONDS,
+    governance::MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
     neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
         AbridgedNeuron, BallotInfo, Followees, KnownNeuronData, MaturityDisbursement,
-        NeuronStakeTransfer, Topic, abridged_neuron::DissolveState,
+        NeuronDissolveStateSnapshot, NeuronStakeTransfer, Topic, abridged_neuron::DissolveState,
     },
     storage::validate_stable_btree_map,
 };
@@ -768,7 +768,7 @@ where
             self.with_main_part_mut(neuron_id, |abridged_neuron| {
                 let has_maximum_dissolve_delay = abridged_neuron.dissolve_state
                     == Some(DissolveState::DissolveDelaySeconds(
-                        MAX_DISSOLVE_DELAY_SECONDS,
+                        MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
                     ));
                 abridged_neuron.eight_year_gang_bonus_base_e8s = if has_maximum_dissolve_delay {
                     abridged_neuron
@@ -781,6 +781,26 @@ where
             })
             .expect("Failed to set eight year gang bonus base for neuron");
         }
+    }
+
+    pub fn clamp_dissolve_delay_for_all_neurons_or_panic(
+        &mut self,
+        now_seconds: u64,
+    ) -> HashMap<u64, NeuronDissolveStateSnapshot> {
+        let neuron_ids = self.main.keys().collect::<Vec<NeuronId>>();
+        let mut pre_clamp_dissolve_states = HashMap::new();
+        for neuron_id in neuron_ids {
+            let mut snapshot = None;
+            self.with_main_part_mut(neuron_id, |abridged_neuron| {
+                snapshot = Some(abridged_neuron.clamp_dissolve_delay_or_panic(now_seconds));
+            })
+            .expect("Failed to clamp dissolve delay for neuron");
+            pre_clamp_dissolve_states.insert(
+                neuron_id.id,
+                snapshot.expect("snapshot must be set inside with_main_part_mut"),
+            );
+        }
+        pre_clamp_dissolve_states
     }
 }
 

@@ -84,7 +84,7 @@ use ic_types::{
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, ECDSAOutcalls,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, ECDSAOutcalls, Instructions,
     NominalCycles, NonConsumed, SchnorrOutcalls, VetKd,
 };
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
@@ -326,7 +326,10 @@ pub trait PausedExecution: std::fmt::Debug + Send {
 
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles);
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>);
 
     /// Returns a reference to the message or task being executed.
     fn input(&self) -> CanisterMessageOrTask;
@@ -2074,7 +2077,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         max_instructions_per_query_message: NumInstructions,
         input: CanisterMessageOrTask,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
@@ -2242,7 +2245,7 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         task: CanisterTask,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         instruction_limits: InstructionLimits,
         round: RoundContext,
         round_limits: &mut RoundLimits,
@@ -3778,7 +3781,7 @@ impl ExecutionEnvironment {
         &self,
         mut msg: CanisterCall,
         call_id: Option<InstallCodeCallId>,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         dts_status: DtsInstallCodeStatus,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
@@ -4639,7 +4642,7 @@ pub struct ExecuteCanisterResult {
 /// This is a helper for `execute_canister()`.
 fn execute_canister_input(
     input: CanisterMessageOrTask,
-    prepaid_execution_cycles: Option<Cycles>,
+    prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
     exec_env: &ExecutionEnvironment,
     mut canister: CanisterState,
     instruction_limits: InstructionLimits,
