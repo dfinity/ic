@@ -169,6 +169,10 @@ impl CanisterState {
     }
 
     /// Returns what the canister is going to execute next.
+    ///
+    /// Only use this when the difference between `StartNew` and `None` is relevant.
+    /// Otherwise, use `next_task()` or one of the `has_*` methods, they are
+    /// slightly more efficient.
     pub fn next_execution(&self) -> NextExecution {
         match self.system_state.task_queue.front() {
             Some(ExecutionTask::Heartbeat)
@@ -194,58 +198,78 @@ impl CanisterState {
 
     /// Returns true if the canister has an aborted execution.
     pub fn has_aborted_execution(&self) -> bool {
-        match self.system_state.task_queue.front() {
-            Some(ExecutionTask::AbortedExecution { .. }) => true,
-            None
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
-            | Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::PausedInstallCode(..))
-            | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
-        }
+        use ExecutionTask::*;
+        matches!(
+            self.system_state.task_queue.paused_or_aborted_task(),
+            Some(AbortedExecution { .. })
+        )
     }
 
     /// Returns true if the canister has a paused execution.
     pub fn has_paused_execution(&self) -> bool {
-        match self.system_state.task_queue.front() {
-            Some(ExecutionTask::PausedExecution { .. }) => true,
-            None
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
-            | Some(ExecutionTask::PausedInstallCode(..))
-            | Some(ExecutionTask::AbortedExecution { .. })
-            | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
-        }
+        use ExecutionTask::*;
+        matches!(
+            self.system_state.task_queue.paused_or_aborted_task(),
+            Some(PausedExecution { .. })
+        )
+    }
+
+    /// Returns true if the canister has a paused or aborted execution.
+    pub fn has_long_execution(&self) -> bool {
+        use ExecutionTask::*;
+        matches!(
+            self.system_state.task_queue.paused_or_aborted_task(),
+            Some(PausedExecution { .. }) | Some(AbortedExecution { .. })
+        )
     }
 
     /// Returns true if the canister has a paused install code.
     pub fn has_paused_install_code(&self) -> bool {
-        match self.system_state.task_queue.front() {
-            Some(ExecutionTask::PausedInstallCode(..)) => true,
-            None
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
-            | Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::AbortedExecution { .. })
-            | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
-        }
+        use ExecutionTask::*;
+        matches!(
+            self.system_state.task_queue.paused_or_aborted_task(),
+            Some(PausedInstallCode(_))
+        )
     }
 
     /// Returns true if the canister has an aborted install code.
     pub fn has_aborted_install_code(&self) -> bool {
-        match self.system_state.task_queue.front() {
-            Some(ExecutionTask::AbortedInstallCode { .. }) => true,
-            None
-            | Some(ExecutionTask::Heartbeat)
-            | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
-            | Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::PausedInstallCode(..))
-            | Some(ExecutionTask::AbortedExecution { .. }) => false,
-        }
+        use ExecutionTask::*;
+        matches!(
+            self.system_state.task_queue.paused_or_aborted_task(),
+            Some(AbortedInstallCode { .. })
+        )
+    }
+
+    /// Returns true if the canister has a paused or aborted install code.
+    pub fn has_long_install_code(&self) -> bool {
+        use ExecutionTask::*;
+        matches!(
+            self.system_state.task_queue.paused_or_aborted_task(),
+            Some(ExecutionTask::PausedInstallCode { .. }) | Some(AbortedInstallCode { .. })
+        )
+    }
+
+    /// Returns true if the canister has a paused or aborted execution or install
+    /// code.
+    pub fn has_long_execution_or_install_code(&self) -> bool {
+        use ExecutionTask::*;
+        matches!(
+            self.system_state.task_queue.paused_or_aborted_task(),
+            Some(ExecutionTask::PausedExecution { .. })
+                | Some(PausedInstallCode(_))
+                | Some(AbortedExecution { .. })
+                | Some(AbortedInstallCode { .. })
+        )
+    }
+
+    /// Returns true if the canister has a paused execution or paused install code.
+    pub fn has_paused_execution_or_install_code(&self) -> bool {
+        use ExecutionTask::*;
+        matches!(
+            self.system_state.task_queue.paused_or_aborted_task(),
+            Some(PausedExecution { .. }) | Some(PausedInstallCode(_))
+        )
     }
 
     /// Returns true if there is at least one message in the canister's output

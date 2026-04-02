@@ -2038,7 +2038,7 @@ impl SystemState {
     /// Returns the aborted or paused `Request` at the head of the task queue, if
     /// any.
     fn aborted_or_paused_request(&self) -> Option<&Request> {
-        match self.task_queue.front() {
+        match self.task_queue.paused_or_aborted_task() {
             Some(ExecutionTask::AbortedExecution {
                 input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
                 ..
