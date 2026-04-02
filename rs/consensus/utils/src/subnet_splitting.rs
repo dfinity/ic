@@ -2,9 +2,11 @@ use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{
     proxy::ProxyDecodeError, registry::subnet::v1::catch_up_package_contents::CupType,
 };
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{
-    RegistryVersion, SubnetId, consensus::SubnetSplittingArgs, registry::RegistryClientError,
+    NodeId, RegistryVersion, SubnetId,
+    consensus::{Block, SubnetSplittingArgs, dkg::SubnetSplittingStatus},
+    registry::RegistryClientError,
 };
 use thiserror::Error;
 
@@ -68,6 +70,70 @@ pub fn get_status(
     Ok(Status::Scheduled {
         destination_subnet_id: subnet_splitting_args.destination_subnet_id,
         scheduled_at: versioned_record.version,
+    })
+}
+
+pub struct PostSplitAssignment {
+    pub new_subnet_id: SubnetId,
+    // for debugging purposes
+    pub other_subnet_id: SubnetId,
+}
+
+#[derive(Debug, Error)]
+pub enum PostSplitAssignmentError {
+    #[error("Error while getting the subnet id from the registry at version {0}: {1}")]
+    FailedToGetSubnetIdFromTheRegistry(RegistryVersion, RegistryClientError),
+    #[error("The node is unassigned to any subnet at registry version {0}")]
+    Unassigned(RegistryVersion),
+    #[error("The subnet is not being split according to the summary block")]
+    NotSplitting,
+    #[error("The node changed subnets during subnet splitting")]
+    DisallowedMembershipChange(SubnetId),
+}
+
+pub fn get_post_split_subnet_assignment(
+    node_id: NodeId,
+    summary_block: &Block,
+    registry_client: &dyn RegistryClient,
+) -> Result<PostSplitAssignment, PostSplitAssignmentError> {
+    let SubnetSplittingStatus::Scheduled {
+        destination_subnet_id,
+        source_subnet_id,
+    } = summary_block
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .subnet_splitting_status()
+    else {
+        return Err(PostSplitAssignmentError::NotSplitting);
+    };
+
+    let new_subnet_id = registry_client
+        .get_subnet_id_from_node_id(node_id, summary_block.context.registry_version)
+        .map_err(|err| {
+            PostSplitAssignmentError::FailedToGetSubnetIdFromTheRegistry(
+                summary_block.context.registry_version,
+                err,
+            )
+        })?
+        .ok_or(PostSplitAssignmentError::Unassigned(
+            summary_block.context.registry_version,
+        ))?;
+
+    let other_subnet_id = if new_subnet_id == destination_subnet_id {
+        source_subnet_id
+    } else if new_subnet_id == source_subnet_id {
+        destination_subnet_id
+    } else {
+        return Err(PostSplitAssignmentError::DisallowedMembershipChange(
+            new_subnet_id,
+        ));
+    };
+
+    Ok(PostSplitAssignment {
+        new_subnet_id,
+        other_subnet_id,
     })
 }
 

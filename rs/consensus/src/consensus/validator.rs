@@ -2,15 +2,16 @@
 //! artifacts.
 #![allow(clippy::result_large_err)]
 use crate::consensus::{
-    ConsensusMessageId, check_protocol_version,
+    ConsensusMessageId,
+    catchup_package_maker::{self, CatchUpPackageType},
+    check_protocol_version,
     metrics::ValidatorMetrics,
     status::{self, Status},
 };
 use ic_consensus_dkg as dkg;
 use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
-    MINIMUM_CHAIN_LENGTH, RoundRobin, active_high_threshold_nidkg_id,
-    active_low_threshold_nidkg_id,
+    MINIMUM_CHAIN_LENGTH, RoundRobin, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
@@ -28,7 +29,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager};
-use ic_logger::{ReplicaLogger, trace, warn};
+use ic_logger::{ReplicaLogger, info, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -42,7 +43,10 @@ use ic_types::{
         RandomTape, RandomTapeShare, Rank,
         dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
     },
-    crypto::{CryptoError, CryptoHashOf, Signed, threshold_sig::ni_dkg::NiDkgId},
+    crypto::{
+        CryptoError, CryptoHashOf, Signed,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag},
+    },
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
@@ -92,6 +96,8 @@ enum ValidationFailure {
     CatchUpHeightNegligible,
     MissingPastPayloads,
     SubnetSplittingStatusError(subnet_splitting::StatusError),
+    CatchUpPackageTypeError(String),
+    SubnetSplittingError(String),
 }
 
 /// Possible reasons for invalid artifacts.
@@ -122,6 +128,7 @@ enum InvalidArtifactReason {
     RepeatedSigner,
     ReplicaVersionMismatch,
     NotABlockmaker,
+    InvalidHeightInSplittingCatchUpPackageShare,
     RegistryVersionNotFrozenDuringSubnetSplitting {
         context_registry_version: RegistryVersion,
     },
@@ -290,12 +297,24 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        _pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let dkg_id = active_high_threshold_nidkg_id(pool.as_cache(), height)
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
+        let dkg_id = self
+            .content
+            .block
+            .as_ref()
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .current_transcript(&NiDkgTag::HighThreshold)
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?
+            .dkg_id
+            .clone();
+        //let dkg_id = active_high_threshold_nidkg_id(pool.as_cache(), height)
+        //.ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -1286,7 +1305,7 @@ impl Validator {
             .into());
         }
 
-        // if it's not a summary block sure, make sure that the registry version is 'frozen' during
+        // if it's not a summary block, make sure that the registry version is 'frozen' during
         // subnet splitting
         if !proposal.payload.is_summary() {
             match subnet_splitting::get_status(
@@ -1718,10 +1737,70 @@ impl Validator {
         pool_reader: &PoolReader<'_>,
         share_content: &CatchUpShareContent,
     ) -> Result<Block, ValidatorError> {
-        let height = share_content.height();
-        let block = pool_reader
-            .get_finalized_block(height)
-            .ok_or(ValidationFailure::FinalizedBlockNotFound(height))?;
+        let share_height = share_content.height();
+
+        let dkg_summary_block = pool_reader.get_highest_finalized_summary_block();
+        let dkg_summary = &dkg_summary_block.payload.as_ref().as_summary().dkg;
+
+        let (block, beacon, hash) = match catchup_package_maker::get_catch_up_package_type(
+            self.registry_client.as_ref(),
+            self.replica_config.node_id,
+            &dkg_summary_block,
+        )
+        .map_err(|err| {
+            ValidationFailure::CatchUpPackageTypeError(format!(
+                "Failed to determine the cup type: {err}"
+            ))
+        })? {
+            CatchUpPackageType::PostSplit { new_subnet_id }
+                if dkg_summary.get_next_start_height() == share_height =>
+            {
+                info!(
+                    self.log,
+                    "Validating post-split cup share at height {share_height}"
+                );
+                let post_split_block = catchup_package_maker::create_post_split_summary_block(
+                    &dkg_summary_block,
+                    new_subnet_id,
+                    self.registry_client.as_ref(),
+                )
+                .map_err(ValidationFailure::SubnetSplittingError)?;
+
+                let post_split_random_beacon =
+                    catchup_package_maker::create_post_split_random_beacon(&post_split_block)
+                        .map_err(ValidationFailure::SubnetSplittingError)?;
+
+                let hash = self
+                    .state_manager
+                    .get_state_hash_at(dkg_summary_block.height())
+                    .map_err(ValidationFailure::StateHashError)?;
+
+                (post_split_block, post_split_random_beacon, hash)
+            }
+            // We don't produce CUPs for the height at which a subnet splitting is happening.
+            CatchUpPackageType::PostSplit { .. } if dkg_summary.height == share_height => {
+                return Err(
+                    InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare.into(),
+                );
+            }
+            CatchUpPackageType::PostSplit { .. } | CatchUpPackageType::Normal => {
+                let block = pool_reader
+                    .get_finalized_block(share_height)
+                    .ok_or(ValidationFailure::FinalizedBlockNotFound(share_height))?;
+
+                let beacon = pool_reader
+                    .get_random_beacon(share_height)
+                    .ok_or(ValidationFailure::RandomBeaconNotFound(share_height))?;
+
+                let hash = self
+                    .state_manager
+                    .get_state_hash_at(share_height)
+                    .map_err(ValidationFailure::StateHashError)?;
+
+                (block, beacon, hash)
+            }
+        };
+
         if ic_types::crypto::crypto_hash(&block) != share_content.block {
             return Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare.into());
         }
@@ -1733,17 +1812,10 @@ impl Validator {
             }
         };
 
-        let beacon = pool_reader
-            .get_random_beacon(height)
-            .ok_or(ValidationFailure::RandomBeaconNotFound(height))?;
         if &beacon != share_content.random_beacon.get_value() {
             return Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare.into());
         }
 
-        let hash = self
-            .state_manager
-            .get_state_hash_at(height)
-            .map_err(ValidationFailure::StateHashError)?;
         if hash != share_content.state_hash {
             return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
@@ -1752,7 +1824,7 @@ impl Validator {
             // Should succeed as we already got the hash above
             let state = self
                 .state_manager
-                .get_state_at(height)
+                .get_state_at(block.height())
                 .map_err(ValidationFailure::StateManagerError)?;
             get_oldest_idkg_state_registry_version(state.get_ref())
         } else {
@@ -4536,5 +4608,228 @@ pub mod test {
                 );
             })
         });
+    }
+
+    mod subnet_splitting {
+        use super::*;
+
+        use crate::consensus::catchup_package_maker::CatchUpPackageMaker;
+        use ic_consensus_mocks::DependenciesBuilder;
+        use ic_test_utilities::message_routing::FakeMessageRouting;
+        use ic_test_utilities_logger::with_test_replica_logger;
+        use ic_test_utilities_registry::insert_initial_dkg_transcript;
+        use ic_types::consensus::{
+            backwards_compatibility::BackwardsCompatibleOption, dkg::SubnetSplittingStatus,
+        };
+        use ic_types_test_utils::ids::{NODE_3, NODE_4, SUBNET_1, SUBNET_2};
+        use std::str::FromStr;
+
+        enum MalformShare {
+            StateHash,
+            RandomBeacon,
+            RegistryVersion,
+            Height,
+        }
+        #[rstest]
+        #[case(NODE_1, None, Ok(()))]
+        #[case(NODE_2, None, Ok(()))]
+        // after the split, nodes NODE_3 and NODE_4 will be on a different subnet than the validator
+        // (NODE_1)
+        #[case::wrong_subnet(NODE_3, None, Err("MismatchedBlockInCatchUpPackageShare"))]
+        #[case::wrong_subnet(NODE_4, None, Err("MismatchedBlockInCatchUpPackageShare"))]
+        #[case::wrong_state_hash(
+            NODE_1,
+            Some(MalformShare::StateHash),
+            Err("MismatchedStateHashInCatchUpPackageShare")
+        )]
+        #[case::wrong_random_beacon(
+            NODE_1,
+            Some(MalformShare::RandomBeacon),
+            Err("MismatchedRandomBeaconInCatchUpPackageShare")
+        )]
+        #[case::wrong_registry_version(
+            NODE_1,
+            Some(MalformShare::RegistryVersion),
+            Err("MismatchedOldestRegistryVersionInCatchUpPackageShare")
+        )]
+        #[case::wrong_height(
+            NODE_1,
+            Some(MalformShare::Height),
+            Err("InvalidHeightInSplittingCatchUpPackageShare")
+        )]
+        fn validate_post_split_cup_share_test(
+            #[case] cup_share_node_id: NodeId,
+            #[case] malform_share: Option<MalformShare>,
+            #[case] expected_validation_result: Result<(), &str>,
+        ) {
+            with_test_replica_logger(|log| {
+                ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+                    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
+                    const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+                    const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
+                    const INTERVAL_LENGTH: Height = Height::new(9);
+                    let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+
+                    let ValidatorAndDependencies {
+                        mut pool,
+                        membership,
+                        registry_client: registry,
+                        crypto,
+                        validator,
+                        state_manager,
+                        ..
+                    } = ValidatorAndDependencies::new(
+                        DependenciesBuilder::new(
+                            pool_config,
+                            vec![
+                                (
+                                    INITIAL_REGISTRY_VERSION.get(),
+                                    SOURCE_SUBNET_ID,
+                                    SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                                        .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                                        .build(),
+                                ),
+                                (
+                                    SPLITTING_REGISTRY_VERSION.get(),
+                                    SOURCE_SUBNET_ID,
+                                    SubnetRecordBuilder::from(&[NODE_1, NODE_2])
+                                        .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                                        .build(),
+                                ),
+                                (
+                                    SPLITTING_REGISTRY_VERSION.get(),
+                                    DESTINATION_SUBNET_ID,
+                                    SubnetRecordBuilder::from(&[NODE_3, NODE_4])
+                                        .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                                        .build(),
+                                ),
+                            ],
+                        )
+                        .add_additional_registry_mutation(|registry_data_provider| {
+                            insert_initial_dkg_transcript(
+                                SPLITTING_REGISTRY_VERSION.get(),
+                                SOURCE_SUBNET_ID,
+                                &SubnetRecordBuilder::from(&[NODE_1, NODE_2])
+                                    .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                                    .build(),
+                                registry_data_provider,
+                            )
+                        })
+                        .with_replica_config(ReplicaConfig {
+                            node_id: NODE_1,
+                            subnet_id: SOURCE_SUBNET_ID,
+                        })
+                        .with_mocked_state_manager()
+                        .build(),
+                    );
+
+                    state_manager
+                        .get_mut()
+                        .expect_get_state_hash_at()
+                        .return_const(Ok(fake_state_hash.clone()));
+
+                    let message_routing = FakeMessageRouting::new();
+                    *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+                    let message_routing = Arc::new(message_routing);
+
+                    let cup_maker = CatchUpPackageMaker::new(
+                        ReplicaConfig {
+                            node_id: cup_share_node_id,
+                            subnet_id: SOURCE_SUBNET_ID,
+                        },
+                        membership,
+                        crypto,
+                        state_manager,
+                        message_routing,
+                        registry,
+                        log,
+                    );
+
+                    pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
+
+                    let subnet_splitting_status = SubnetSplittingStatus::Scheduled {
+                        source_subnet_id: SOURCE_SUBNET_ID,
+                        destination_subnet_id: DESTINATION_SUBNET_ID,
+                    };
+                    let mut proposal = pool.make_next_block();
+                    let block = proposal.content.as_mut();
+                    block.context.certified_height = block.height;
+                    block.context.registry_version = SPLITTING_REGISTRY_VERSION;
+                    let mut payload = block.payload.as_ref().as_summary().clone();
+                    payload.dkg.subnet_splitting_status =
+                        BackwardsCompatibleOption::new_for_test_only(Some(subnet_splitting_status));
+                    block.payload = Payload::new(
+                        ic_types::crypto::crypto_hash,
+                        BlockPayload::Summary(payload),
+                    );
+                    proposal.content =
+                        HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+                    pool.insert_validated(proposal.clone());
+                    pool.notarize(&proposal);
+                    pool.finalize(&proposal);
+
+                    let mut share = cup_maker
+                        .consider_block(&PoolReader::new(&pool), proposal.content.as_ref().clone())
+                        .expect("Should succeed with valid inputs");
+
+                    match malform_share {
+                        Some(MalformShare::StateHash) => {
+                            share.content.state_hash =
+                                CryptoHashOfState::from(CryptoHash(vec![3, 1, 4]));
+                        }
+                        Some(MalformShare::RandomBeacon) => {
+                            let mut invalid_beacon = share.content.random_beacon.into_inner();
+                            invalid_beacon.content.version =
+                                ReplicaVersion::from_str("invalid_replica_version").unwrap();
+
+                            share.content.random_beacon = HashedRandomBeacon::new(
+                                ic_types::crypto::crypto_hash,
+                                invalid_beacon,
+                            );
+                        }
+                        Some(MalformShare::RegistryVersion) => {
+                            share
+                                .content
+                                .oldest_registry_version_in_use_by_replicated_state =
+                                Some(INITIAL_REGISTRY_VERSION);
+                        }
+                        Some(MalformShare::Height) => {
+                            let mut beacon = share.content.random_beacon.into_inner();
+                            beacon.content.height = proposal.height();
+
+                            share.content.random_beacon =
+                                HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon);
+                        }
+                        None => {}
+                    }
+
+                    pool.insert_unvalidated(share.clone());
+
+                    let pool_reader = PoolReader::new(&pool);
+                    let change_set = validator.validate_catch_up_package_shares(&pool_reader);
+
+                    match expected_validation_result {
+                        Ok(()) => {
+                            assert_eq!(
+                                change_set,
+                                vec![ChangeAction::MoveToValidated(
+                                    ConsensusMessage::CatchUpPackageShare(share)
+                                )]
+                            );
+                        }
+                        Err(err) => {
+                            assert_eq!(
+                                change_set,
+                                vec![ChangeAction::HandleInvalid(
+                                    ConsensusMessage::CatchUpPackageShare(share),
+                                    String::from(err),
+                                )]
+                            );
+                        }
+                    }
+                })
+            })
+        }
     }
 }

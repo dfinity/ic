@@ -170,6 +170,8 @@ impl ReplayValidator {
             self.consensus_crypto.clone(),
             self.log.clone(),
             pool_reader,
+            self.registry.clone(),
+            self.replica_cfg.clone(),
         )
     }
 

@@ -548,6 +548,8 @@ fn start_consensus(
         Arc::clone(&consensus_crypto),
         log.clone(),
         &PoolReader::new(&*consensus_pool.read().unwrap()),
+        registry_client.clone(),
+        replica_config.clone(),
     )));
 
     let mut join_handles = vec![];

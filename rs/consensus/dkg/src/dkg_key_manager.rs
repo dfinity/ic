@@ -3,8 +3,13 @@
 //! there is something to do. On high-level, it's responsible of spawning
 //! threads triggering long-running CSP operation and book-keeping of
 //! thread-handles.
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto,
+    pool_reader::PoolReader,
+    subnet_splitting::{self, PostSplitAssignment},
+};
 use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_types::{
@@ -14,6 +19,7 @@ use ic_types::{
         NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
         errors::load_transcript_error::DkgLoadTranscriptError,
     },
+    replica_config::ReplicaConfig,
 };
 use prometheus::{HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
 use std::{
@@ -24,6 +30,8 @@ use std::{
     },
     time::Instant,
 };
+
+use crate::payload_builder::get_post_split_dkg_summary;
 
 struct Metrics {
     pub dkg_ops_duration: HistogramVec,
@@ -94,6 +102,8 @@ pub struct DkgKeyManager {
     >,
     // This is a thread handle used to keep track of asynchronous key removals.
     pending_key_removal: Option<std::thread::JoinHandle<()>>,
+    registry: Arc<dyn RegistryClient>,
+    replica_config: ReplicaConfig,
 }
 
 impl DkgKeyManager {
@@ -103,6 +113,8 @@ impl DkgKeyManager {
         crypto: Arc<dyn ConsensusCrypto>,
         logger: ReplicaLogger,
         pool_reader: &PoolReader<'_>,
+        registry: Arc<dyn RegistryClient>,
+        replica_config: ReplicaConfig,
     ) -> Self {
         let mut manager = Self {
             crypto,
@@ -112,6 +124,8 @@ impl DkgKeyManager {
             last_cup_height: Default::default(),
             pending_transcript_loads: Default::default(),
             pending_key_removal: Default::default(),
+            registry,
+            replica_config,
         };
 
         // By calling on state change during initialization, we make sure, that the key store is
@@ -232,6 +246,25 @@ impl DkgKeyManager {
             // next transcript key irrelevant and remove it).
             self.delete_inactive_keys(pool_reader);
             self.load_transcripts_from_summary(&summary.dkg);
+
+            if let Ok(PostSplitAssignment {
+                new_subnet_id,
+                other_subnet_id: _,
+            }) = subnet_splitting::get_post_split_subnet_assignment(
+                self.replica_config.node_id,
+                &summary_block,
+                self.registry.as_ref(),
+            ) {
+                let next_summary = get_post_split_dkg_summary(
+                    new_subnet_id,
+                    self.registry.as_ref(),
+                    &summary_block,
+                )
+                .expect("FIXME");
+                info!(self.logger, "Adding post split dkg transcripts");
+                self.load_transcripts_from_summary(&next_summary);
+            }
+
             self.last_dkg_summary_height = Some(summary_block.height);
         }
     }
@@ -570,7 +603,12 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let nodes: Vec<_> = (0..1).map(node_test_id).collect();
                 let dkg_interval_len = 3;
-                let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+                let Dependencies {
+                    mut pool,
+                    registry,
+                    replica_config,
+                    ..
+                } = dependencies_with_subnet_params(
                     pool_config,
                     subnet_test_id(222),
                     vec![(
@@ -586,6 +624,8 @@ mod tests {
                     csp.clone(),
                     logger,
                     &PoolReader::new(&pool),
+                    registry,
+                    replica_config,
                 );
 
                 // Emulate the first invocation of the dkg key manager and make sure all

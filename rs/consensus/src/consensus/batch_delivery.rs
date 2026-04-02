@@ -12,7 +12,11 @@ use ic_consensus_idkg::utils::{
     generate_responses_to_signature_request_contexts,
     get_idkg_subnet_public_keys_and_pre_signatures,
 };
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::{
+    membership::Membership,
+    pool_reader::PoolReader,
+    subnet_splitting::{self, PostSplitAssignment, PostSplitAssignmentError},
+};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
@@ -26,7 +30,6 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
-use ic_registry_client_helpers::node::NodeRegistry;
 use ic_types::{
     Height, NodeId, PrincipalId, SubnetId,
     batch::{
@@ -228,32 +231,25 @@ pub(crate) fn deliver_batches_with_result_processor(
         let batch_content = match block.payload.as_ref() {
             BlockPayload::Summary(summary_payload) => {
                 match summary_payload.dkg.subnet_splitting_status() {
-                    SubnetSplittingStatus::Scheduled {
-                        destination_subnet_id,
-                        source_subnet_id,
-                    } => {
-                        let Ok(Some(subnet_id)) = registry_client
-                            .get_subnet_id_from_node_id(
-                                maybe_node_id
-                                    .expect("Subnet splitting not yet enabled in ic-replay"),
-                                block.context.registry_version,
-                            )
-                            .inspect_err(|err| {
-                                error!(
+                    SubnetSplittingStatus::Scheduled { .. } => {
+                        let PostSplitAssignment {
+                            new_subnet_id,
+                            other_subnet_id,
+                        } = match subnet_splitting::get_post_split_subnet_assignment(
+                            maybe_node_id.expect("Subnet splitting not yet enabled in ic-replay"),
+                            &block,
+                            registry_client,
+                        ) {
+                            Ok(assignment) => assignment,
+                            Err(PostSplitAssignmentError::NotSplitting) => unreachable!(),
+                            Err(err) => {
+                                warn!(
                                     every_n_seconds => 30,
                                     log,
-                                    "Failed to determine the new subnet assignment: {err:?}"
-                                )
-                            })
-                        else {
-                            break;
-                        };
-
-                        let (new_subnet_id, other_subnet_id) = if subnet_id == destination_subnet_id
-                        {
-                            (destination_subnet_id, source_subnet_id)
-                        } else {
-                            (source_subnet_id, destination_subnet_id)
+                                    "Error getting new subnet assignment: {err}"
+                                );
+                                break;
+                            }
                         };
 
                         info!(

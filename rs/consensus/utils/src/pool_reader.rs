@@ -558,6 +558,15 @@ impl<'a> PoolReader<'a> {
             .dkg
             .get_next_start_height()
     }
+
+    pub fn get_next_summary_height(&self) -> Height {
+        self.get_highest_finalized_summary_block()
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .get_next_start_height()
+    }
 }
 
 /// Take a slice returned by [`PoolReader::get_payloads_from_height`]
